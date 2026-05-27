@@ -1,122 +1,67 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useMemo } from 'react'
+import { differenceInDays } from 'date-fns'
+import { AppProvider, useApp } from './context/AppContext'
+import Sidebar from './components/Layout/Sidebar'
+import Header from './components/Layout/Header'
+import DashboardPanel from './components/Dashboard/DashboardPanel'
+import AccountsPanel from './components/Accounts/AccountsPanel'
+import TransactionsPanel from './components/Transactions/TransactionsPanel'
+import CreditCardPanel from './components/CreditCard/CreditCardPanel'
+import SchedulePanel from './components/Schedule/SchedulePanel'
+import ImportPanel from './components/Import/ImportPanel'
+import CashFlowPanel from './components/CashFlow/CashFlowPanel'
+import BudgetPanel from './components/Budget/BudgetPanel'
+import ReportsPanel from './components/Reports/ReportsPanel'
+import AlertsPanel from './components/Alerts/AlertsPanel'
+import SettingsPanel from './components/Settings/SettingsPanel'
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const [activePage, setActivePage] = useState('dashboard')
+  const { accounts, getFinancialPeriod } = useApp()
+
+  const alertCount = useMemo(() => {
+    const today = new Date()
+    return accounts.filter(a => {
+      if (a.type !== 'credit') return false
+      let due = new Date(today.getFullYear(), today.getMonth(), a.dueDay || 10)
+      if (due < today) due = new Date(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
+      return differenceInDays(due, today) <= 5
+    }).length
+  }, [accounts])
+
+  const financialPeriod = getFinancialPeriod()
+
+  const panels = {
+    dashboard: <DashboardPanel setActivePage={setActivePage} />,
+    accounts: <AccountsPanel />,
+    transactions: <TransactionsPanel />,
+    credit: <CreditCardPanel />,
+    schedule: <SchedulePanel />,
+    import: <ImportPanel />,
+    cashflow: <CashFlowPanel />,
+    budget: <BudgetPanel />,
+    reports: <ReportsPanel />,
+    alerts: <AlertsPanel />,
+    settings: <SettingsPanel />,
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <div className="flex h-screen overflow-hidden bg-gray-950">
+      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header page={activePage} financialPeriod={financialPeriod} />
+        <main className="flex-1 overflow-y-auto p-6">
+          {panels[activePage] ?? panels.dashboard}
+        </main>
+      </div>
+    </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  )
+}
