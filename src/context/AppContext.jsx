@@ -385,6 +385,76 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // --- Gerencial Processing ---
+  const processarLancamentoGerencial = useCallback((lancamento, grupoId) => {
+    const grupo = data.gerencialGroups?.find(g => g.id === grupoId)
+    if (!grupo) return { needsResgate: false }
+
+    if (grupo.number === 'D') return { needsResgate: false }
+
+    if (grupo.number === 1) {
+      update(d => {
+        const cartao = d.accounts.find(a => a.id === lancamento.accountId)
+        const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
+        const subcontaName = `Ger. ${apelido}`
+
+        const contaPrincipal =
+          d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+          d.accounts.find(a => a.isMain && a.type !== 'credit') ||
+          d.accounts.find(a => a.type === 'checking')
+
+        if (!contaPrincipal) return d
+
+        let accounts = [...d.accounts]
+        let subcontaId = d.accounts.find(a => a.name === subcontaName)?.id
+
+        if (!subcontaId) {
+          subcontaId = 'acc_ger_' + Date.now()
+          accounts = [...accounts, {
+            id: subcontaId,
+            name: subcontaName,
+            type: 'savings',
+            balance: lancamento.amount,
+            bank: '',
+            apelido: `G${apelido}`.slice(0, 8),
+            fluxoCaixaPrincipal: false,
+            isMain: false,
+            contaCorrentePrincipal: false,
+            grupoGerencial: grupoId,
+          }]
+        } else {
+          accounts = accounts.map(a =>
+            a.id === subcontaId ? { ...a, balance: (a.balance || 0) + lancamento.amount } : a
+          )
+        }
+
+        accounts = accounts.map(a =>
+          a.id === contaPrincipal.id ? { ...a, balance: (a.balance || 0) - lancamento.amount } : a
+        )
+
+        const txId = 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+        const newTx = {
+          id: txId,
+          type: 'transfer',
+          accountId: contaPrincipal.id,
+          toAccountId: subcontaId,
+          amount: lancamento.amount,
+          date: lancamento.date,
+          description: `Provisão ${subcontaName}`,
+          grupoGerencial: grupoId,
+          createdAt: new Date().toISOString(),
+        }
+
+        return { ...d, accounts, transactions: [...d.transactions, newTx] }
+      })
+      return { needsResgate: false }
+    }
+
+    // Grupo personalizado (2..N) — retorna flag para o UI perguntar sobre resgate
+    const contaResgate = data.accounts.find(a => a.id === grupo.defaultAccountId)
+    return { needsResgate: true, grupo, contaResgate: contaResgate || null }
+  }, [data.gerencialGroups, data.accounts, update])
+
   return (
     <AppContext.Provider value={{
       data,
@@ -408,6 +478,7 @@ export function AppProvider({ children }) {
       addRule, updateRule, deleteRule,
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
+      processarLancamentoGerencial,
       getFinancialPeriod,
       getNextOccurrences,
       classifyByRules,

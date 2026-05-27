@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Upload, FileText, Check, AlertCircle, Wand2, Save } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
@@ -56,17 +56,28 @@ function normalizeAmount(val) {
 }
 
 export default function ImportPanel() {
-  const { accounts, categories, classificationRules, addTransaction, addRule, classifyByRules, learnClassification } = useApp()
+  const {
+    accounts, categories, classificationRules,
+    gerencialGroups, processarLancamentoGerencial,
+    addTransaction, addRule, classifyByRules, learnClassification,
+  } = useApp()
+
   const [rows, setRows] = useState([])
   const [cols, setCols] = useState({})
   const [selectedAccount, setSelectedAccount] = useState(accounts[0]?.id || '')
-  const [importing, setImporting] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef()
 
-  const creditAccounts = accounts.filter(a => a.type === 'credit')
-  const allAccounts = accounts
+  const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+  const selectedAccountObj = accounts.find(a => a.id === selectedAccount)
+  const isSelectedCredit = selectedAccountObj?.type === 'credit'
+
+  const sortedGrupos = useMemo(() => [...gerencialGroups].sort((a, b) => {
+    if (a.number === 'D') return 1
+    if (b.number === 'D') return -1
+    return typeof a.number === 'number' && typeof b.number === 'number' ? a.number - b.number : 0
+  }), [gerencialGroups])
 
   const handleFile = async (e) => {
     const file = e.target.files[0]
@@ -94,6 +105,7 @@ export default function ImportPanel() {
           payee: classified?.payee || '',
           type: 'expense',
           selected: amount > 0,
+          grupoGerencial: defaultGrupoId,
         }
       }).filter(r => r.amount > 0 && r.date)
 
@@ -120,9 +132,16 @@ export default function ImportPanel() {
         description: row.description,
         categoryId: row.categoryId,
         payee: row.payee,
+        grupoGerencial: isSelectedCredit ? row.grupoGerencial : null,
       })
-      if (row.categoryId) {
-        learnClassification(row.description, row.categoryId, row.payee)
+      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee)
+
+      // Para cartão de crédito, processa automação gerencial (sem prompt de resgate no batch)
+      if (isSelectedCredit && row.grupoGerencial) {
+        processarLancamentoGerencial(
+          { accountId: selectedAccount, amount: row.amount, date: row.date },
+          row.grupoGerencial
+        )
       }
     })
     setDone(true)
@@ -148,13 +167,13 @@ export default function ImportPanel() {
             <label className="label">Conta de Destino</label>
             <select className="input" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
               <option value="">Selecione a conta...</option>
-              {allAccounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.type === 'credit' ? 'Cartão' : 'Conta'})</option>)}
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.type === 'credit' ? 'Cartão' : 'Conta'})</option>)}
             </select>
           </div>
           <div>
             <label className="label">Arquivo (CSV ou Excel)</label>
             <div
-              className="border-2 border-dashed border-gray-700 rounded-lg p-4 text-center cursor-pointer hover:border-indigo-500 transition-colors"
+              className="border-2 border-dashed border-gray-700 rounded-lg p-4 text-center cursor-pointer hover:border-[#0F6E56] transition-colors"
               onClick={() => fileRef.current?.click()}
             >
               <Upload size={20} className="text-gray-500 mx-auto mb-1" />
@@ -169,7 +188,6 @@ export default function ImportPanel() {
             <AlertCircle size={14} /> {error}
           </div>
         )}
-
         {done && (
           <div className="mt-3 flex items-center gap-2 text-emerald-400 text-sm">
             <Check size={14} /> Importação concluída com sucesso!
@@ -180,7 +198,9 @@ export default function ImportPanel() {
       {rows.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-400">{rows.length} transações detectadas · {selected.length} selecionadas · Total: {fmt(selected.reduce((s, r) => s + r.amount, 0))}</p>
+            <p className="text-sm text-gray-400">
+              {rows.length} transações · {selected.length} selecionadas · Total: {fmt(selected.reduce((s, r) => s + r.amount, 0))}
+            </p>
             <div className="flex gap-2">
               <button className="btn-secondary flex items-center gap-2" onClick={autoClassify}>
                 <Wand2 size={13} /> Classificar Auto
@@ -191,21 +211,25 @@ export default function ImportPanel() {
             </div>
           </div>
 
-          <div className="card p-0 overflow-hidden">
+          <div className="card p-0 overflow-hidden overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
                   <th className="px-3 py-3 w-8">
-                    <input type="checkbox"
+                    <input
+                      type="checkbox"
                       checked={rows.every(r => r.selected)}
                       onChange={e => setRows(prev => prev.map(r => ({ ...r, selected: e.target.checked })))}
-                      className="accent-indigo-600"
+                      className="accent-[#0F6E56]"
                     />
                   </th>
                   <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Data</th>
                   <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
                   <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Categoria</th>
                   <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Favorecido</th>
+                  {isSelectedCredit && (
+                    <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Ger.</th>
+                  )}
                   <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Valor</th>
                 </tr>
               </thead>
@@ -213,9 +237,16 @@ export default function ImportPanel() {
                 {rows.map(row => (
                   <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''}`}>
                     <td className="px-3 py-2">
-                      <input type="checkbox" checked={row.selected} onChange={e => updateRow(row._id, { selected: e.target.checked })} className="accent-indigo-600" />
+                      <input
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={e => updateRow(row._id, { selected: e.target.checked })}
+                        className="accent-[#0F6E56]"
+                      />
                     </td>
-                    <td className="px-3 py-2 text-gray-400 whitespace-nowrap text-xs">{row.date?.split('-').reverse().join('/')}</td>
+                    <td className="px-3 py-2 text-gray-400 whitespace-nowrap text-xs">
+                      {row.date?.split('-').reverse().join('/')}
+                    </td>
                     <td className="px-3 py-2 text-gray-200 max-w-xs">
                       <input
                         className="bg-transparent w-full text-sm focus:outline-none focus:bg-gray-800 rounded px-1 -mx-1"
@@ -225,7 +256,7 @@ export default function ImportPanel() {
                     </td>
                     <td className="px-3 py-2">
                       <select
-                        className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 w-36"
+                        className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                         value={row.categoryId}
                         onChange={e => {
                           updateRow(row._id, { categoryId: e.target.value })
@@ -244,7 +275,22 @@ export default function ImportPanel() {
                         placeholder="Favorecido"
                       />
                     </td>
-                    <td className="px-3 py-2 text-right text-red-400 font-medium whitespace-nowrap">{fmt(row.amount)}</td>
+                    {isSelectedCredit && (
+                      <td className="px-3 py-2">
+                        <select
+                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-28"
+                          value={row.grupoGerencial}
+                          onChange={e => updateRow(row._id, { grupoGerencial: e.target.value })}
+                        >
+                          {sortedGrupos.map(g => (
+                            <option key={g.id} value={g.id}>{g.number} · {g.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
+                    <td className="px-3 py-2 text-right text-red-400 font-medium whitespace-nowrap">
+                      {fmt(row.amount)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -254,7 +300,9 @@ export default function ImportPanel() {
       )}
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">Regras de Classificação ({classificationRules.length})</h3>
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">
+          Regras de Classificação ({classificationRules.length})
+        </h3>
         {classificationRules.length === 0 ? (
           <p className="text-xs text-gray-500">Nenhuma regra. O sistema aprende ao classificar transações manualmente.</p>
         ) : (
@@ -264,7 +312,9 @@ export default function ImportPanel() {
               return (
                 <div key={rule.id} className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2 text-sm">
                   <FileText size={12} className="text-gray-500 shrink-0" />
-                  <span className="text-gray-300">Contém <span className="text-indigo-400 font-medium">"{rule.contains}"</span></span>
+                  <span className="text-gray-300">
+                    Contém <span className="text-[#0F6E56] font-medium">"{rule.contains}"</span>
+                  </span>
                   <span className="text-gray-500">→</span>
                   <span className="text-gray-300">{cat ? `${cat.icon} ${cat.name}` : rule.categoryId}</span>
                   {rule.payee && <span className="text-gray-500 text-xs">({rule.payee})</span>}

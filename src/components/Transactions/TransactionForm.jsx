@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today } from '../shared/utils'
+import { today, fmt } from '../shared/utils'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -8,8 +9,33 @@ const TYPE_OPTIONS = [
   { value: 'transfer', label: 'Transferência' },
 ]
 
+function GerencialSelect({ value, onChange, grupos }) {
+  const sorted = useMemo(() => [...grupos].sort((a, b) => {
+    if (a.number === 'D') return 1
+    if (b.number === 'D') return -1
+    return typeof a.number === 'number' && typeof b.number === 'number' ? a.number - b.number : 0
+  }), [grupos])
+
+  return (
+    <select className="input" value={value} onChange={e => onChange(e.target.value)}>
+      {sorted.map(g => (
+        <option key={g.id} value={g.id}>
+          {g.number} · {g.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export default function TransactionForm({ initial, onClose }) {
-  const { accounts, categories, costCenters, payees, addTransaction, updateTransaction, addPayee, addCostCenter } = useApp()
+  const {
+    accounts, categories, costCenters, payees,
+    gerencialGroups, processarLancamentoGerencial,
+    addTransaction, updateTransaction, addPayee, addCostCenter,
+  } = useApp()
+
+  const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+
   const [form, setForm] = useState({
     type: initial?.type || 'expense',
     accountId: initial?.accountId || accounts[0]?.id || '',
@@ -21,16 +47,24 @@ export default function TransactionForm({ initial, onClose }) {
     payee: initial?.payee || '',
     costCenter: initial?.costCenter || '',
     notes: initial?.notes || '',
+    grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
   })
+
+  const [step, setStep] = useState('form') // 'form' | 'resgate'
+  const [resgateInfo, setResgateInfo] = useState(null)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
+  const showGerencial = isCredit && form.type === 'expense'
 
-  const relevantCategories = categories.filter(c =>
-    c.type === 'both' || c.type === form.type
-  )
+  const relevantCategories = categories.filter(c => c.type === 'both' || c.type === form.type)
+
+  const contaPrincipal =
+    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+    accounts.find(a => a.isMain && a.type !== 'credit') ||
+    accounts.find(a => a.type === 'checking')
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -38,20 +72,84 @@ export default function TransactionForm({ initial, onClose }) {
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
-    const data = {
+    const txData = {
       ...form,
       amount: Number(form.amount),
       accountType: selectedAccount?.type,
+      grupoGerencial: showGerencial ? form.grupoGerencial : null,
     }
 
     if (initial) {
-      updateTransaction(initial.id, data)
-    } else {
-      addTransaction(data)
+      updateTransaction(initial.id, txData)
+      onClose()
+      return
+    }
+
+    addTransaction(txData)
+
+    if (showGerencial && form.grupoGerencial) {
+      const resultado = processarLancamentoGerencial(
+        { accountId: form.accountId, amount: Number(form.amount), date: form.date },
+        form.grupoGerencial
+      )
+      if (resultado.needsResgate && resultado.contaResgate) {
+        setResgateInfo({ ...resultado, amount: Number(form.amount), date: form.date })
+        setStep('resgate')
+        return
+      }
+    }
+
+    onClose()
+  }
+
+  const handleResgate = () => {
+    if (resgateInfo?.contaResgate && contaPrincipal) {
+      addTransaction({
+        type: 'transfer',
+        accountId: resgateInfo.contaResgate.id,
+        toAccountId: contaPrincipal.id,
+        amount: resgateInfo.amount,
+        date: resgateInfo.date,
+        description: `Resgate ${resgateInfo.grupo.name}`,
+        grupoGerencial: resgateInfo.grupo.id,
+      })
     }
     onClose()
   }
 
+  // ── Tela de confirmação de resgate ──────────────────────────────────────────
+  if (step === 'resgate') {
+    return (
+      <div className="space-y-5 py-2">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-blue-500/15 flex items-center justify-center mx-auto">
+            <ArrowLeftRight size={22} className="text-blue-400" />
+          </div>
+          <h3 className="font-semibold text-gray-100">Fazer resgate?</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Deseja resgatar{' '}
+            <span className="text-white font-semibold">{fmt(resgateInfo.amount)}</span> da conta{' '}
+            <span className="text-white font-semibold">{resgateInfo.contaResgate.name}</span>
+            {contaPrincipal ? (
+              <> para <span className="text-white font-semibold">{contaPrincipal.name}</span></>
+            ) : null}
+            ?
+          </p>
+          {resgateInfo.grupo && (
+            <p className="text-xs text-gray-600">
+              Grupo {resgateInfo.grupo.alias} · {resgateInfo.grupo.name}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button className="btn-secondary flex-1" onClick={onClose}>Não agora</button>
+          <button className="btn-primary flex-1" onClick={handleResgate}>Sim, resgatar</button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Formulário principal ────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -156,9 +254,31 @@ export default function TransactionForm({ initial, onClose }) {
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observações adicionais..." />
       </div>
 
-      {isCredit && form.type === 'expense' && (
-        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 text-xs text-purple-300">
-          Este lançamento será adicionado à fatura do cartão de crédito.
+      {showGerencial && (
+        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg space-y-2">
+          <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
+          <GerencialSelect
+            value={form.grupoGerencial}
+            onChange={v => set('grupoGerencial', v)}
+            grupos={gerencialGroups}
+          />
+          {form.grupoGerencial && (() => {
+            const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
+            if (!g || g.number === 'D') return (
+              <p className="text-xs text-gray-500">Lançamento registrado como despesa normal.</p>
+            )
+            if (g.number === 1) return (
+              <p className="text-xs text-purple-300">
+                Transferência automática será criada para a subconta "Ger. {selectedAccount?.apelido || selectedAccount?.name || 'CC'}".
+              </p>
+            )
+            const acc = accounts.find(a => a.id === g.defaultAccountId)
+            return (
+              <p className="text-xs text-blue-300">
+                Após registrar, você poderá resgatar da conta{acc ? ` "${acc.name}"` : ' padrão do grupo'}.
+              </p>
+            )
+          })()}
         </div>
       )}
 
