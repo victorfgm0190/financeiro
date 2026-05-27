@@ -1,0 +1,299 @@
+import { useState, useMemo } from 'react'
+import { Download, FileBarChart } from 'lucide-react'
+import { useApp } from '../../context/AppContext'
+import { fmt, fmtDate } from '../shared/utils'
+
+function getBillPeriod(dateStr, closingDay) {
+  const d = new Date(dateStr + 'T00:00:00')
+  const day = d.getDate()
+  let startMonth, startYear
+  if (day >= closingDay) {
+    startYear = d.getFullYear()
+    startMonth = d.getMonth()
+  } else {
+    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+    startYear = prev.getFullYear()
+    startMonth = prev.getMonth()
+  }
+  const start = new Date(startYear, startMonth, closingDay)
+  const end = new Date(startYear, startMonth + 1, closingDay - 1)
+  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+  return {
+    key: start.toISOString().split('T')[0],
+    label: `${months[startMonth]}/${startYear}`,
+    start: start.toISOString().split('T')[0],
+    end: end.toISOString().split('T')[0],
+  }
+}
+
+export default function RelatorioFatura({ initialCardId }) {
+  const { accounts, transactions, categories, gerencialGroups } = useApp()
+
+  const creditCards = accounts.filter(a => a.type === 'credit')
+  const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')
+  const [selectedBillKey, setSelectedBillKey] = useState('')
+
+  const card = accounts.find(a => a.id === selectedCardId)
+  const closingDay = card?.closingDay || 1
+
+  const grp1 = gerencialGroups.find(g => g.number === 1)
+  const grpD = gerencialGroups.find(g => g.number === 'D')
+  const customGroups = useMemo(() =>
+    gerencialGroups
+      .filter(g => typeof g.number === 'number' && g.number !== 1)
+      .sort((a, b) => a.number - b.number),
+    [gerencialGroups]
+  )
+
+  // Derive billing periods from card transactions
+  const billPeriods = useMemo(() => {
+    if (!selectedCardId) return []
+    const map = {}
+    for (const tx of transactions) {
+      if (tx.accountId !== selectedCardId || tx.type !== 'expense' || !tx.date) continue
+      const p = getBillPeriod(tx.date, closingDay)
+      if (!map[p.key]) map[p.key] = p
+    }
+    return Object.values(map).sort((a, b) => b.key.localeCompare(a.key))
+  }, [transactions, selectedCardId, closingDay])
+
+  const selectedBill = billPeriods.find(p => p.key === selectedBillKey) || billPeriods[0] || null
+
+  const billTxs = useMemo(() => {
+    if (!selectedBill || !selectedCardId) return []
+    return transactions
+      .filter(tx =>
+        tx.accountId === selectedCardId &&
+        tx.type === 'expense' &&
+        tx.date >= selectedBill.start &&
+        tx.date <= selectedBill.end
+      )
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [transactions, selectedCardId, selectedBill])
+
+  const totals = useMemo(() => {
+    const t = { total: 0 }
+    if (grp1) t[grp1.id] = 0
+    if (grpD) t[grpD.id] = 0
+    for (const g of customGroups) t[g.id] = 0
+    for (const tx of billTxs) {
+      t.total += tx.amount
+      const gid = tx.grupoGerencial
+      if (gid && t[gid] !== undefined) {
+        t[gid] += tx.amount
+      } else if (grpD) {
+        t[grpD.id] += tx.amount
+      }
+    }
+    return t
+  }, [billTxs, grp1, grpD, customGroups])
+
+  const handleExportCSV = () => {
+    const headers = [
+      'Data', 'Descrição', 'Categoria', 'Valor',
+      grp1 ? grp1.alias : 'G',
+      ...customGroups.map(g => g.alias),
+      'D',
+    ]
+    const csvRows = billTxs.map(tx => {
+      const cat = categories.find(c => c.id === tx.categoryId)
+      const gid = tx.grupoGerencial
+      const isGrp1 = gid === grp1?.id
+      const isGrpD = !gid || gid === grpD?.id
+      const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
+      return [
+        q(tx.date),
+        q(tx.description),
+        q(cat ? `${cat.icon} ${cat.name}` : ''),
+        q(tx.amount.toFixed(2).replace('.', ',')),
+        q(isGrp1 ? tx.amount.toFixed(2).replace('.', ',') : ''),
+        ...customGroups.map(g => q(gid === g.id ? tx.amount.toFixed(2).replace('.', ',') : '')),
+        q(isGrpD ? tx.amount.toFixed(2).replace('.', ',') : ''),
+      ].join(';')
+    })
+    const csv = [headers.join(';'), ...csvRows].join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `fatura_${card?.apelido || card?.name || 'cartao'}_${selectedBill?.label || 'relatorio'}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filtros */}
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
+          <FileBarChart size={14} style={{ color: '#0F6E56' }} /> Relatório de Fatura
+        </h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-36">
+            <label className="label">Cartão</label>
+            <select
+              className="input"
+              value={selectedCardId}
+              onChange={e => { setSelectedCardId(e.target.value); setSelectedBillKey('') }}
+            >
+              <option value="">Selecione...</option>
+              {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-52">
+            <label className="label">Fatura</label>
+            <select
+              className="input"
+              value={selectedBill?.key || ''}
+              onChange={e => setSelectedBillKey(e.target.value)}
+            >
+              <option value="">Selecione a fatura...</option>
+              {billPeriods.map(p => (
+                <option key={p.key} value={p.key}>
+                  {p.label} · {p.start.split('-').reverse().join('/')} – {p.end.split('-').reverse().join('/')}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="btn-primary flex items-center gap-2"
+            onClick={handleExportCSV}
+            disabled={billTxs.length === 0}
+          >
+            <Download size={14} /> Exportar CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Cards de resumo */}
+      {selectedBill && billTxs.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="card">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Fatura</p>
+            <p className="text-xl font-bold text-red-400">{fmt(totals.total)}</p>
+          </div>
+          {grp1 && totals[grp1.id] > 0 && (
+            <div className="card" style={{ borderColor: 'rgba(16,185,129,0.25)', borderWidth: 1 }}>
+              <p className="text-xs text-emerald-400 uppercase tracking-wide mb-1">{grp1.alias} · {grp1.name}</p>
+              <p className="text-xl font-bold text-emerald-400">{fmt(totals[grp1.id])}</p>
+              {totals.total > 0 && (
+                <p className="text-xs text-emerald-600 mt-0.5">{((totals[grp1.id] / totals.total) * 100).toFixed(0)}%</p>
+              )}
+            </div>
+          )}
+          {customGroups.filter(g => totals[g.id] > 0).map(g => (
+            <div key={g.id} className="card" style={{ borderColor: 'rgba(59,130,246,0.25)', borderWidth: 1 }}>
+              <p className="text-xs text-blue-400 uppercase tracking-wide mb-1">{g.alias} · {g.name}</p>
+              <p className="text-xl font-bold text-blue-400">{fmt(totals[g.id])}</p>
+              {totals.total > 0 && (
+                <p className="text-xs text-blue-600 mt-0.5">{((totals[g.id] / totals.total) * 100).toFixed(0)}%</p>
+              )}
+            </div>
+          ))}
+          {grpD && totals[grpD.id] > 0 && (
+            <div className="card">
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">D · Despesas</p>
+              <p className="text-xl font-bold text-gray-300">{fmt(totals[grpD.id])}</p>
+              {totals.total > 0 && (
+                <p className="text-xs text-gray-600 mt-0.5">{((totals[grpD.id] / totals.total) * 100).toFixed(0)}%</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tabela principal */}
+      {!selectedCardId || !selectedBill ? (
+        <div className="card text-center py-12">
+          <FileBarChart size={32} className="text-gray-700 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Selecione um cartão e uma fatura para visualizar o relatório</p>
+        </div>
+      ) : billTxs.length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
+        </div>
+      ) : (
+        <div className="card p-0 overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
+                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
+                {grp1 && (
+                  <th className="text-right px-3 py-3 text-xs text-emerald-400 font-medium whitespace-nowrap">{grp1.alias}</th>
+                )}
+                {customGroups.map(g => (
+                  <th key={g.id} className="text-right px-3 py-3 text-xs text-blue-400 font-medium whitespace-nowrap">{g.alias}</th>
+                ))}
+                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">D</th>
+              </tr>
+            </thead>
+            <tbody>
+              {billTxs.map(tx => {
+                const cat = categories.find(c => c.id === tx.categoryId)
+                const gid = tx.grupoGerencial
+                const isGrp1 = gid === grp1?.id
+                const isGrpD = !gid || gid === grpD?.id
+                const rowCls = isGrp1
+                  ? 'border-b border-gray-800/50 bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors'
+                  : !isGrpD
+                  ? 'border-b border-gray-800/50 bg-blue-500/5 hover:bg-blue-500/10 transition-colors'
+                  : 'border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors'
+                return (
+                  <tr key={tx.id} className={rowCls}>
+                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
+                    <td className="px-3 py-2.5 text-gray-200 max-w-xs">
+                      <p className="truncate">{tx.description}</p>
+                      {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                    </td>
+                    <td className="px-3 py-2.5 hidden md:table-cell">
+                      {cat && (
+                        <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">{cat.icon} {cat.name}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-red-400 whitespace-nowrap">{fmt(tx.amount)}</td>
+                    {grp1 && (
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {isGrp1 && <span className="text-emerald-400 font-medium">{fmt(tx.amount)}</span>}
+                      </td>
+                    )}
+                    {customGroups.map(g => (
+                      <td key={g.id} className="px-3 py-2.5 text-right whitespace-nowrap">
+                        {gid === g.id && <span className="text-blue-400 font-medium">{fmt(tx.amount)}</span>}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {isGrpD && <span className="text-gray-300 font-medium">{fmt(tx.amount)}</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-700 bg-gray-800/60">
+                <td className="px-3 py-3 text-xs text-gray-300 font-bold" colSpan={2}>Total</td>
+                <td className="hidden md:table-cell" />
+                <td className="px-3 py-3 text-right font-bold text-red-400 whitespace-nowrap">{fmt(totals.total)}</td>
+                {grp1 && (
+                  <td className="px-3 py-3 text-right font-bold text-emerald-400 whitespace-nowrap">
+                    {totals[grp1.id] > 0 ? fmt(totals[grp1.id]) : <span className="text-gray-700">—</span>}
+                  </td>
+                )}
+                {customGroups.map(g => (
+                  <td key={g.id} className="px-3 py-3 text-right font-bold text-blue-400 whitespace-nowrap">
+                    {totals[g.id] > 0 ? fmt(totals[g.id]) : <span className="text-gray-700">—</span>}
+                  </td>
+                ))}
+                <td className="px-3 py-3 text-right font-bold text-gray-300 whitespace-nowrap">
+                  {grpD && totals[grpD.id] > 0 ? fmt(totals[grpD.id]) : <span className="text-gray-700">—</span>}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}

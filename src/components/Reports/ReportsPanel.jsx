@@ -5,8 +5,10 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { CreditCard, ArrowLeft } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import RelatorioFatura from '../CreditCard/RelatorioFatura'
 
 const COLORS = ['#6366f1', '#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#84cc16']
 
@@ -23,8 +25,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { transactions, categories } = useApp()
+  const { transactions, categories, accounts } = useApp()
   const [selectedMonth, setSelectedMonth] = useState(0)
+  const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
+
+  const hasCredit = accounts.some(a => a.type === 'credit')
 
   const last6Months = useMemo(() => {
     const months = []
@@ -66,8 +71,38 @@ export default function ReportsPanel() {
   const totalIncome = last6Months.reduce((s, m) => s + m.income, 0) / 6
   const totalExpense = last6Months.reduce((s, m) => s + m.expense, 0) / 6
 
+  if (showRelatorioFatura) {
+    return (
+      <div className="space-y-4">
+        <button
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          onClick={() => setShowRelatorioFatura(false)}
+        >
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <RelatorioFatura />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      {hasCredit && (
+        <button
+          className="w-full card flex items-center gap-3 text-left hover:bg-gray-800 transition-colors group"
+          onClick={() => setShowRelatorioFatura(true)}
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(15,110,86,0.15)' }}>
+            <CreditCard size={16} style={{ color: '#0F6E56' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">Relatório de Fatura</p>
+            <p className="text-xs text-gray-500 mt-0.5">Análise gerencial de faturas do cartão de crédito com exportação CSV</p>
+          </div>
+          <span className="text-gray-600 group-hover:text-gray-400 transition-colors text-lg">›</span>
+        </button>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Média Receitas (6m)</p>

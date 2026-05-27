@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
-import { CreditCard, DollarSign, Calendar, FileText, ArrowLeft } from 'lucide-react'
+import { CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ExtratoGerencial from './ExtratoGerencial'
+import RelatorioFatura from './RelatorioFatura'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -29,6 +30,8 @@ export default function CreditCardPanel() {
   const [payFromAccount, setPayFromAccount] = useState('')
   const [showExtrato, setShowExtrato] = useState(false)
   const [extratoCardId, setExtratoCardId] = useState(null)
+  const [showRelatorio, setShowRelatorio] = useState(false)
+  const [relatorioCardId, setRelatorioCardId] = useState(null)
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const bankAccounts = accounts.filter(a => a.type !== 'credit')
@@ -100,6 +103,20 @@ export default function CreditCardPanel() {
     )
   }
 
+  if (showRelatorio) {
+    return (
+      <div className="space-y-4">
+        <button
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          onClick={() => setShowRelatorio(false)}
+        >
+          <ArrowLeft size={14} /> Voltar ao Cartão
+        </button>
+        <RelatorioFatura initialCardId={relatorioCardId} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {creditCards.map(card => {
@@ -119,13 +136,22 @@ export default function CreditCardPanel() {
                     <span className="text-sm">{card.name}</span>
                     {card.apelido && <span className="text-xs text-gray-500">· {card.apelido}</span>}
                   </div>
-                  <button
-                    onClick={() => { setExtratoCardId(card.id); setShowExtrato(true) }}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-                    title="Extrato Gerencial"
-                  >
-                    <FileText size={12} /> Extrato
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => { setExtratoCardId(card.id); setShowExtrato(true) }}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      title="Extrato Gerencial"
+                    >
+                      <FileText size={12} /> Extrato
+                    </button>
+                    <button
+                      onClick={() => { setRelatorioCardId(card.id); setShowRelatorio(true) }}
+                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      title="Relatório de Fatura"
+                    >
+                      <FileBarChart size={12} /> Relatório
+                    </button>
+                  </div>
                 </div>
                 <p className="text-xs text-gray-500 mb-1">Dívida Total</p>
                 <p className="text-3xl font-bold mb-4 text-white">{fmt(card.creditDebt || 0)}</p>
