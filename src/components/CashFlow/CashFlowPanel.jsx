@@ -22,12 +22,16 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function CashFlowPanel() {
   const { accounts, transactions, schedules, getNextOccurrences } = useApp()
   const [groupBy, setGroupBy] = useState('day')
-  const [filterAccount, setFilterAccount] = useState('main')
+  const [filterAccount, setFilterAccount] = useState('fluxo')
   const [horizon, setHorizon] = useState(30)
 
   const mainAccount = accounts.find(a => a.isMain) || accounts[0]
 
   const filteredAccounts = useMemo(() => {
+    if (filterAccount === 'fluxo') {
+      const fluxo = accounts.filter(a => a.type !== 'credit' && a.fluxoCaixaPrincipal)
+      return fluxo.length > 0 ? fluxo : accounts.filter(a => a.type !== 'credit')
+    }
     if (filterAccount === 'main') return mainAccount ? [mainAccount] : accounts.filter(a => a.type !== 'credit')
     if (filterAccount === 'all') return accounts.filter(a => a.type !== 'credit')
     return accounts.filter(a => a.id === filterAccount)
@@ -133,6 +137,7 @@ export default function CashFlowPanel() {
           <h2 className="text-sm font-semibold text-gray-300">Fluxo de Caixa Projetado</h2>
           <div className="flex gap-2 flex-wrap">
             <select className="input w-auto text-xs py-1.5" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+              <option value="fluxo">Fluxo de Caixa Principal</option>
               <option value="main">Conta Principal</option>
               <option value="all">Todas as Contas</option>
               {accounts.filter(a => a.type !== 'credit').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

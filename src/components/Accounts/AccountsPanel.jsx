@@ -83,6 +83,25 @@ export default function AccountsPanel() {
                     <span className="text-xs opacity-70">{ACCOUNT_LABELS[account.type]}</span>
                   </div>
                   <h3 className="font-semibold">{account.name}</h3>
+                  {(account.apelido || account.fluxoCaixaPrincipal || account.contaCorrentePrincipal) && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {account.apelido && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-white/10 text-white/60">
+                          {account.apelido}
+                        </span>
+                      )}
+                      {account.fluxoCaixaPrincipal && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-blue-200">
+                          FC
+                        </span>
+                      )}
+                      {account.contaCorrentePrincipal && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-emerald-200">
+                          CC Princ.
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-1">
                   <button

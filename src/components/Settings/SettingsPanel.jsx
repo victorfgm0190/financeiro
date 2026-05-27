@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -9,6 +9,8 @@ export default function SettingsPanel() {
     categories, addCategory, deleteCategory,
     classificationRules, addRule, deleteRule,
     costCenters, addCostCenter,
+    gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
+    accounts,
     data,
   } = useApp()
 
@@ -18,6 +20,12 @@ export default function SettingsPanel() {
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+
+  // Gerencial group form state
+  const [showGroupForm, setShowGroupForm] = useState(false)
+  const [editingGroup, setEditingGroup] = useState(null)
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null)
+  const [groupForm, setGroupForm] = useState({ name: '', alias: '', defaultAccountId: '' })
 
   const handleSaveSettings = () => {
     updateSettings({ financialMonthStartDay: Number(startDay) })
@@ -55,7 +63,7 @@ export default function SettingsPanel() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
-        const imported = JSON.parse(ev.target.result)
+        JSON.parse(ev.target.result)
         localStorage.setItem('finapp_data', ev.target.result)
         window.location.reload()
       } catch {
@@ -65,10 +73,48 @@ export default function SettingsPanel() {
     reader.readAsText(file)
   }
 
+  const openGroupEdit = (group) => {
+    setEditingGroup(group)
+    setGroupForm({ name: group.name, alias: group.alias, defaultAccountId: group.defaultAccountId || '' })
+    setShowGroupForm(true)
+  }
+
+  const handleGroupSubmit = (e) => {
+    e.preventDefault()
+    if (!groupForm.name.trim() || !groupForm.alias.trim()) return
+    const payload = {
+      name: groupForm.name,
+      alias: groupForm.alias.slice(0, 4),
+      defaultAccountId: groupForm.defaultAccountId || null,
+    }
+    if (editingGroup) {
+      updateGerencialGroup(editingGroup.id, payload)
+    } else {
+      addGerencialGroup(payload)
+    }
+    setShowGroupForm(false)
+    setEditingGroup(null)
+    setGroupForm({ name: '', alias: '', defaultAccountId: '' })
+  }
+
+  const cancelGroupForm = () => {
+    setShowGroupForm(false)
+    setEditingGroup(null)
+    setGroupForm({ name: '', alias: '', defaultAccountId: '' })
+  }
+
   const expenseCategories = categories.filter(c => c.type === 'expense' || c.type === 'both')
+  const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
+
+  // Compute next group number for display in "new group" button
+  const nextGroupNumber = (() => {
+    const nums = gerencialGroups.filter(g => typeof g.number === 'number').map(g => g.number)
+    return nums.length > 0 ? Math.max(...nums) + 1 : 2
+  })()
 
   return (
     <div className="space-y-6">
+      {/* Mês Financeiro */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Mês Financeiro</h2>
         <div className="flex items-end gap-4">
@@ -92,6 +138,7 @@ export default function SettingsPanel() {
         </div>
       </div>
 
+      {/* Categorias */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Categorias ({categories.length})</h2>
         <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
@@ -100,7 +147,9 @@ export default function SettingsPanel() {
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full" style={{ background: cat.color }} />
                 <span className="text-sm text-gray-200">{cat.icon} {cat.name}</span>
-                <span className="badge bg-gray-700 text-gray-400 text-xs">{cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}</span>
+                <span className="badge bg-gray-700 text-gray-400 text-xs">
+                  {cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}
+                </span>
               </div>
               <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
                 <Trash2 size={12} />
@@ -120,6 +169,7 @@ export default function SettingsPanel() {
         </form>
       </div>
 
+      {/* Regras de Classificação */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Regras de Classificação ({classificationRules.length})</h2>
         <div className="space-y-2 mb-4">
@@ -131,7 +181,7 @@ export default function SettingsPanel() {
             return (
               <div key={rule.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2 text-sm">
                 <span className="text-gray-300">
-                  Contém <span className="text-indigo-400 font-medium">"{rule.contains}"</span>
+                  Contém <span className="text-[#0F6E56] font-medium">"{rule.contains}"</span>
                   {' → '}
                   <span className="text-gray-200">{cat ? `${cat.icon} ${cat.name}` : rule.categoryId}</span>
                   {rule.payee && <span className="text-gray-500 text-xs ml-1">({rule.payee})</span>}
@@ -153,6 +203,7 @@ export default function SettingsPanel() {
         </form>
       </div>
 
+      {/* Centros de Custo */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Centros de Custo</h2>
         <div className="flex flex-wrap gap-2 mb-4">
@@ -162,12 +213,136 @@ export default function SettingsPanel() {
         </div>
         <div className="flex gap-2">
           <input className="input" placeholder="Novo centro de custo..." value={newCC} onChange={e => setNewCC(e.target.value)} />
-          <button className="btn-secondary flex items-center gap-1" onClick={() => { if (newCC.trim()) { addCostCenter(newCC.trim()); setNewCC('') } }}>
+          <button
+            className="btn-secondary flex items-center gap-1"
+            onClick={() => { if (newCC.trim()) { addCostCenter(newCC.trim()); setNewCC('') } }}
+          >
             <Plus size={13} /> Adicionar
           </button>
         </div>
       </div>
 
+      {/* Controle Gerencial de Cartão */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300">Controle Gerencial de Cartão</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Grupos usados para classificação gerencial das contas</p>
+          </div>
+          {!showGroupForm && (
+            <button
+              className="btn-primary flex items-center gap-2"
+              onClick={() => { setEditingGroup(null); setGroupForm({ name: '', alias: '', defaultAccountId: '' }); setShowGroupForm(true) }}
+            >
+              <Plus size={14} /> Grupo {nextGroupNumber}
+            </button>
+          )}
+        </div>
+
+        {/* Formulário inline de criação/edição */}
+        {showGroupForm && (
+          <form onSubmit={handleGroupSubmit} className="mb-4 p-4 bg-gray-800 rounded-xl border border-gray-700 space-y-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+              {editingGroup ? `Editar Grupo ${editingGroup.number}` : `Novo Grupo ${nextGroupNumber}`}
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="label">Nome do Grupo *</label>
+                <input
+                  className="input"
+                  value={groupForm.name}
+                  onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Ex: Contas Anuais"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Apelido *</label>
+                <input
+                  className="input"
+                  value={groupForm.alias}
+                  onChange={e => setGroupForm(f => ({ ...f, alias: e.target.value.slice(0, 4) }))}
+                  placeholder="Ex: CA"
+                  maxLength={4}
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label">Conta de Resgate Padrão</label>
+              <select
+                className="input"
+                value={groupForm.defaultAccountId}
+                onChange={e => setGroupForm(f => ({ ...f, defaultAccountId: e.target.value }))}
+              >
+                <option value="">Nenhuma</option>
+                {nonCreditAccounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}{a.apelido ? ` (${a.apelido})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" className="btn-secondary flex items-center gap-1" onClick={cancelGroupForm}>
+                <X size={13} /> Cancelar
+              </button>
+              <button type="submit" className="btn-primary flex items-center gap-1">
+                <Check size={13} /> {editingGroup ? 'Salvar' : 'Criar'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Lista de grupos */}
+        <div className="space-y-2">
+          {gerencialGroups.map(group => (
+            <div
+              key={group.id}
+              className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${group.fixed ? 'bg-gray-800/50' : 'bg-gray-800'}`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gray-700 text-xs font-bold text-gray-300">
+                  {group.number}
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-200">{group.name}</span>
+                    <span className="badge bg-gray-700 text-gray-400 text-xs">{group.alias}</span>
+                    {group.fixed && (
+                      <span className="badge bg-gray-700/50 text-gray-600 text-xs flex items-center gap-1">
+                        <Lock size={9} /> fixo
+                      </span>
+                    )}
+                  </div>
+                  {group.defaultAccountId && (() => {
+                    const acc = accounts.find(a => a.id === group.defaultAccountId)
+                    return acc ? (
+                      <p className="text-xs text-gray-500 mt-0.5">Resgate: {acc.name}{acc.apelido ? ` (${acc.apelido})` : ''}</p>
+                    ) : null
+                  })()}
+                </div>
+              </div>
+              {!group.fixed && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => openGroupEdit(group)}
+                    className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded transition-colors"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteGroup(group)}
+                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Backup */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Backup de Dados</h2>
         <div className="flex gap-3">
@@ -182,6 +357,7 @@ export default function SettingsPanel() {
         <p className="text-xs text-gray-500 mt-2">Os dados são armazenados localmente no seu navegador (localStorage).</p>
       </div>
 
+      {/* Zona de Perigo */}
       <div className="card border border-red-900/40">
         <h2 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
           <AlertTriangle size={14} /> Zona de Perigo
@@ -196,6 +372,15 @@ export default function SettingsPanel() {
         onConfirm={() => { localStorage.removeItem('finapp_data'); window.location.reload() }}
         title="Apagar Todos os Dados"
         message="Tem certeza? Todos os dados (contas, lançamentos, agendamentos) serão apagados permanentemente."
+        danger
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteGroup}
+        onClose={() => setConfirmDeleteGroup(null)}
+        onConfirm={() => deleteGerencialGroup(confirmDeleteGroup.id)}
+        title="Excluir Grupo Gerencial"
+        message={`Excluir o grupo "${confirmDeleteGroup?.name}"?`}
         danger
       />
     </div>

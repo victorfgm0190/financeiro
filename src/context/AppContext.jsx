@@ -31,6 +31,10 @@ const defaultData = {
   classificationRules: [],
   costCenters: ['Pessoal', 'Família', 'Trabalho', 'Casa'],
   payees: [],
+  gerencialGroups: [
+    { id: 'grp_1', number: 1, name: 'Gerencial', alias: 'G', fixed: true, defaultAccountId: null },
+    { id: 'grp_D', number: 'D', name: 'Despesa', alias: 'D', fixed: true, defaultAccountId: null },
+  ],
 }
 
 function loadData() {
@@ -344,6 +348,24 @@ export function AppProvider({ children }) {
     return null
   }, [data.classificationRules])
 
+  // --- Gerencial Groups ---
+  const addGerencialGroup = useCallback((group) => {
+    update(d => {
+      const nums = d.gerencialGroups.filter(g => typeof g.number === 'number').map(g => g.number)
+      const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 2
+      const id = 'grp_' + Date.now()
+      return { ...d, gerencialGroups: [...d.gerencialGroups, { ...group, id, number: nextNum, fixed: false }] }
+    })
+  }, [update])
+
+  const updateGerencialGroup = useCallback((id, changes) => {
+    update(d => ({ ...d, gerencialGroups: d.gerencialGroups.map(g => g.id === id ? { ...g, ...changes } : g) }))
+  }, [update])
+
+  const deleteGerencialGroup = useCallback((id) => {
+    update(d => ({ ...d, gerencialGroups: d.gerencialGroups.filter(g => g.id !== id) }))
+  }, [update])
+
   const learnClassification = useCallback((description, categoryId, payee) => {
     const words = description.toLowerCase().split(/\s+/).filter(w => w.length > 3)
     if (words.length === 0) return
@@ -375,6 +397,7 @@ export function AppProvider({ children }) {
       classificationRules: data.classificationRules,
       costCenters: data.costCenters,
       payees: data.payees,
+      gerencialGroups: data.gerencialGroups,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount,
       addTransaction, updateTransaction, deleteTransaction,
@@ -384,6 +407,7 @@ export function AppProvider({ children }) {
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,
       addPayee, addCostCenter,
+      addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       getFinancialPeriod,
       getNextOccurrences,
       classifyByRules,
