@@ -35,6 +35,7 @@ const defaultData = {
     { id: 'grp_1', number: 1, name: 'Gerencial', alias: 'G', fixed: true, defaultAccountId: null },
     { id: 'grp_D', number: 'D', name: 'Despesa', alias: 'D', fixed: true, defaultAccountId: null },
   ],
+  payables: [],
 }
 
 function loadData() {
@@ -42,7 +43,11 @@ function loadData() {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
       const parsed = JSON.parse(stored)
-      return { ...defaultData, ...parsed, settings: { ...defaultData.settings, ...(parsed.settings || {}) } }
+      return {
+        ...defaultData, ...parsed,
+        settings: { ...defaultData.settings, ...(parsed.settings || {}) },
+        payables: parsed.payables || [],
+      }
     }
   } catch {}
   return defaultData
@@ -366,6 +371,79 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, gerencialGroups: d.gerencialGroups.filter(g => g.id !== id) }))
   }, [update])
 
+  // --- Payables ---
+  const addPayable = useCallback((payable) => {
+    const id = 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    update(d => ({ ...d, payables: [...(d.payables || []), { ...payable, id }] }))
+  }, [update])
+
+  const updatePayable = useCallback((id, changes) => {
+    update(d => ({ ...d, payables: (d.payables || []).map(p => p.id === id ? { ...p, ...changes } : p) }))
+  }, [update])
+
+  const deletePayable = useCallback((id) => {
+    update(d => ({ ...d, payables: (d.payables || []).filter(p => p.id !== id) }))
+  }, [update])
+
+  const gerarContasPagarFatura = useCallback((cartaoId, billStart, billEnd, mesAno) => {
+    update(d => {
+      const card = d.accounts.find(a => a.id === cartaoId)
+      if (!card) return d
+
+      const grpDId = d.gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+      const existingKeys = new Set(
+        (d.payables || []).map(p => `${p.cartaoId}|${p.mesAno}|${p.grupoGerencialId}`)
+      )
+
+      const gerencialTxs = d.transactions.filter(tx =>
+        tx.accountId === cartaoId &&
+        tx.type === 'expense' &&
+        tx.grupoGerencial &&
+        tx.grupoGerencial !== grpDId &&
+        tx.date >= billStart &&
+        tx.date <= billEnd
+      )
+
+      if (gerencialTxs.length === 0) return d
+
+      const startDay = d.settings.financialMonthStartDay || 1
+      const billEndDate = new Date(billEnd + 'T00:00:00')
+      const dueDate = new Date(billEndDate.getFullYear(), billEndDate.getMonth() + 1, startDay)
+      const dueDateStr = dueDate.toISOString().split('T')[0]
+
+      const groups = {}
+      for (const tx of gerencialTxs) {
+        groups[tx.grupoGerencial] = (groups[tx.grupoGerencial] || 0) + tx.amount
+      }
+
+      const newPayables = []
+      for (const [grupoId, amount] of Object.entries(groups)) {
+        const key = `${cartaoId}|${mesAno}|${grupoId}`
+        if (existingKeys.has(key)) continue
+        const grupo = d.gerencialGroups.find(g => g.id === grupoId)
+        const cardName = card.apelido || card.name
+        const grupoAlias = grupo?.alias || grupoId
+        newPayables.push({
+          id: 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          cartaoId,
+          mesAno,
+          grupoGerencialId: grupoId,
+          origin: grupo?.number === 1 ? 'gerencial' : 'invoice',
+          description: `Fatura ${cardName} ${grupoAlias} · ${mesAno}`,
+          amount,
+          dueDate: dueDateStr,
+          status: 'pending',
+          paidAt: null,
+          billStart,
+          billEnd,
+        })
+      }
+
+      if (newPayables.length === 0) return d
+      return { ...d, payables: [...(d.payables || []), ...newPayables] }
+    })
+  }, [update])
+
   const learnClassification = useCallback((description, categoryId, payee) => {
     const words = description.toLowerCase().split(/\s+/).filter(w => w.length > 3)
     if (words.length === 0) return
@@ -468,6 +546,7 @@ export function AppProvider({ children }) {
       costCenters: data.costCenters,
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,
+      payables: data.payables || [],
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount,
       addTransaction, updateTransaction, deleteTransaction,
@@ -479,6 +558,7 @@ export function AppProvider({ children }) {
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
+      addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
       getFinancialPeriod,
       getNextOccurrences,
       classifyByRules,

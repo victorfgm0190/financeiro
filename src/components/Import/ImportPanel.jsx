@@ -60,6 +60,7 @@ export default function ImportPanel() {
     accounts, categories, classificationRules,
     gerencialGroups, processarLancamentoGerencial,
     addTransaction, addRule, classifyByRules, learnClassification,
+    gerarContasPagarFatura,
   } = useApp()
 
   const [rows, setRows] = useState([])
@@ -144,6 +145,17 @@ export default function ImportPanel() {
         )
       }
     })
+
+    // Gera contas a pagar para lançamentos gerenciais do cartão
+    if (isSelectedCredit && selected.length > 0) {
+      const dates = selected.map(r => r.date).filter(Boolean).sort()
+      const billStart = dates[0]
+      const billEnd = dates[dates.length - 1]
+      const d = new Date(billStart + 'T00:00:00')
+      const mesAno = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      gerarContasPagarFatura(selectedAccount, billStart, billEnd, mesAno)
+    }
+
     setDone(true)
     setRows([])
   }

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
-import { CreditCard, DollarSign, Calendar } from 'lucide-react'
+import { CreditCard, DollarSign, Calendar, FileText, ArrowLeft } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today } from '../shared/utils'
 import Modal from '../shared/Modal'
+import ExtratoGerencial from './ExtratoGerencial'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -26,6 +27,8 @@ export default function CreditCardPanel() {
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState(today())
   const [payFromAccount, setPayFromAccount] = useState('')
+  const [showExtrato, setShowExtrato] = useState(false)
+  const [extratoCardId, setExtratoCardId] = useState(null)
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const bankAccounts = accounts.filter(a => a.type !== 'credit')
@@ -83,6 +86,20 @@ export default function CreditCardPanel() {
     )
   }
 
+  if (showExtrato) {
+    return (
+      <div className="space-y-4">
+        <button
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          onClick={() => setShowExtrato(false)}
+        >
+          <ArrowLeft size={14} /> Voltar ao Cartão
+        </button>
+        <ExtratoGerencial initialCardId={extratoCardId} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {creditCards.map(card => {
@@ -95,19 +112,28 @@ export default function CreditCardPanel() {
           <div key={card.id} className="space-y-4">
             {/* Cabeçalho do cartão */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="col-span-1 rounded-xl bg-gradient-to-br from-purple-700 to-purple-900 p-5 text-white shadow-lg">
-                <div className="flex items-center gap-2 mb-4 opacity-80">
-                  <CreditCard size={16} />
-                  <span className="text-sm">{card.name}</span>
-                  {card.apelido && <span className="text-xs opacity-60">· {card.apelido}</span>}
+              <div className="col-span-1 rounded-xl bg-gray-800 border border-gray-700 p-5 text-white shadow-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <CreditCard size={16} style={{ color: '#0F6E56' }} />
+                    <span className="text-sm">{card.name}</span>
+                    {card.apelido && <span className="text-xs text-gray-500">· {card.apelido}</span>}
+                  </div>
+                  <button
+                    onClick={() => { setExtratoCardId(card.id); setShowExtrato(true) }}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    title="Extrato Gerencial"
+                  >
+                    <FileText size={12} /> Extrato
+                  </button>
                 </div>
-                <p className="text-xs opacity-70 mb-1">Dívida Total</p>
-                <p className="text-3xl font-bold mb-4">{fmt(card.creditDebt || 0)}</p>
-                <div className="h-1.5 bg-white/20 rounded-full mb-1">
-                  <div className="h-1.5 bg-white rounded-full" style={{ width: `${Math.min(100, usage)}%` }} />
+                <p className="text-xs text-gray-500 mb-1">Dívida Total</p>
+                <p className="text-3xl font-bold mb-4 text-white">{fmt(card.creditDebt || 0)}</p>
+                <div className="h-1.5 bg-gray-700 rounded-full mb-1">
+                  <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, usage)}%`, backgroundColor: '#0F6E56' }} />
                 </div>
-                <p className="text-xs opacity-70">{fmt(card.creditDebt || 0)} / {fmt(card.creditLimit || 0)}</p>
-                <div className="mt-4 flex justify-between text-xs opacity-70">
+                <p className="text-xs text-gray-500">{fmt(card.creditDebt || 0)} / {fmt(card.creditLimit || 0)}</p>
+                <div className="mt-4 flex justify-between text-xs text-gray-500">
                   <span>Fecha dia {card.closingDay}</span>
                   <span>Vence dia {card.dueDay}</span>
                 </div>
