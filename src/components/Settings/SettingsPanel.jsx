@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import CategorySelect from '../shared/CategorySelect'
 
 export default function SettingsPanel() {
   const {
@@ -52,7 +53,7 @@ export default function SettingsPanel() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `finapp_backup_${new Date().toISOString().split('T')[0]}.json`
+    a.download = `finup_backup_${new Date().toISOString().split('T')[0]}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -195,10 +196,12 @@ export default function SettingsPanel() {
         </div>
         <form onSubmit={handleAddRule} className="grid grid-cols-3 gap-2">
           <input className="input" placeholder="Contém texto..." value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
-          <select className="input" value={newRule.categoryId} onChange={e => setNewRule(f => ({ ...f, categoryId: e.target.value }))}>
-            <option value="">Categoria...</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-          </select>
+          <CategorySelect
+            categories={categories}
+            value={newRule.categoryId}
+            onChange={e => setNewRule(f => ({ ...f, categoryId: e.target.value }))}
+            placeholder="Categoria..."
+          />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
       </div>

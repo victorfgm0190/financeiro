@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react'
 import { ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt } from '../shared/utils'
+import ScheduleMatchModal from '../shared/ScheduleMatchModal'
+import CategorySelect from '../shared/CategorySelect'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -32,6 +34,7 @@ export default function TransactionForm({ initial, onClose }) {
     accounts, categories, costCenters, payees,
     gerencialGroups, processarLancamentoGerencial,
     addTransaction, updateTransaction, addPayee, addCostCenter,
+    findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
   } = useApp()
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
@@ -50,8 +53,9 @@ export default function TransactionForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
   })
 
-  const [step, setStep] = useState('form') // 'form' | 'resgate'
+  const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match'
   const [resgateInfo, setResgateInfo] = useState(null)
+  const [scheduleMatch, setScheduleMatch] = useState(null) // { schedule, tx }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -99,6 +103,16 @@ export default function TransactionForm({ initial, onClose }) {
       }
     }
 
+    // Verifica agendamento recorrente para cartão de crédito
+    if (isCredit && form.type === 'expense') {
+      const match = findMatchingSchedule(txData)
+      if (match) {
+        setScheduleMatch({ schedule: match, tx: txData })
+        setStep('schedule-match')
+        return
+      }
+    }
+
     onClose()
   }
 
@@ -115,6 +129,29 @@ export default function TransactionForm({ initial, onClose }) {
       })
     }
     onClose()
+  }
+
+  // ── Tela de match com agendamento recorrente ─────────────────────────────────
+  if (step === 'schedule-match' && scheduleMatch) {
+    const handleRegister = () => {
+      const nextOccs = getNextOccurrences(scheduleMatch.schedule, 3)
+      const dateToMark = nextOccs[0] || scheduleMatch.tx.date
+      markScheduleRegistered(scheduleMatch.schedule.id, dateToMark)
+      onClose()
+    }
+    return (
+      <ScheduleMatchModal
+        schedule={scheduleMatch.schedule}
+        tx={scheduleMatch.tx}
+        categories={categories}
+        onRegister={handleRegister}
+        onKeep={onClose}
+        onNeverAsk={() => {
+          addRecurringMatchException(scheduleMatch.tx.payee || scheduleMatch.tx.description)
+          onClose()
+        }}
+      />
+    )
   }
 
   // ── Tela de confirmação de resgate ──────────────────────────────────────────
@@ -214,10 +251,12 @@ export default function TransactionForm({ initial, onClose }) {
         <>
           <div>
             <label className="label">Categoria</label>
-            <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
-              <option value="">Sem categoria</option>
-              {relevantCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-            </select>
+            <CategorySelect
+              categories={categories}
+              type={form.type}
+              value={form.categoryId}
+              onChange={e => set('categoryId', e.target.value)}
+            />
           </div>
 
           <div>
