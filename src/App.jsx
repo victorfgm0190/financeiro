@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { differenceInDays } from 'date-fns'
+import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
@@ -17,17 +17,26 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
-  const { accounts, getFinancialPeriod } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
 
   const alertCount = useMemo(() => {
     const today = new Date()
-    return accounts.filter(a => {
+    const creditCount = accounts.filter(a => {
       if (a.type !== 'credit') return false
       let due = new Date(today.getFullYear(), today.getMonth(), a.dueDay || 10)
       if (due < today) due = new Date(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
       return differenceInDays(due, today) <= 5
     }).length
-  }, [accounts])
+    const schedCount = schedules.filter(s => {
+      const remindDays = s.remindDaysBefore ?? 3
+      if (remindDays <= 0) return false
+      const next = getNextOccurrences(s, 1)
+      if (!next.length) return false
+      const days = differenceInDays(parseISO(next[0]), today)
+      return days >= 0 && days <= remindDays
+    }).length
+    return creditCount + schedCount
+  }, [accounts, schedules, getNextOccurrences])
 
   const financialPeriod = getFinancialPeriod()
 
@@ -38,7 +47,7 @@ function AppContent() {
     credit: <CreditCardPanel />,
     schedule: <SchedulePanel />,
     import: <ImportPanel />,
-    cashflow: <CashFlowPanel />,
+    cashflow: <CashFlowPanel setActivePage={setActivePage} />,
     budget: <BudgetPanel />,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel />,
