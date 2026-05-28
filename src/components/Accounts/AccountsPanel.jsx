@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank, DollarSign } from 'lucide-react'
+import { Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank, DollarSign, FileText } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
+import ExtratoContaPanel from './ExtratoContaPanel'
 
 const ACCOUNT_ICONS = {
   checking: Landmark,
@@ -32,6 +33,7 @@ export default function AccountsPanel() {
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [extratoAccount, setExtratoAccount] = useState(null)
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit')
@@ -83,7 +85,7 @@ export default function AccountsPanel() {
                     <span className="text-xs opacity-70">{ACCOUNT_LABELS[account.type]}</span>
                   </div>
                   <h3 className="font-semibold">{account.name}</h3>
-                  {(account.apelido || account.fluxoCaixaPrincipal || account.contaCorrentePrincipal) && (
+                  {(account.apelido || account.fluxoCaixaPrincipal || account.contaCorrentePrincipal || account.contaAplicacao) && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {account.apelido && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-white/10 text-white/60">
@@ -98,6 +100,11 @@ export default function AccountsPanel() {
                       {account.contaCorrentePrincipal && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-emerald-200">
                           CC Princ.
+                        </span>
+                      )}
+                      {account.contaAplicacao && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/30 text-amber-200">
+                          Aplic.
                         </span>
                       )}
                     </div>
@@ -150,6 +157,12 @@ export default function AccountsPanel() {
                 <div>
                   <p className="text-xs opacity-70 mb-1">Saldo</p>
                   <p className="text-2xl font-bold">{fmt(account.balance || 0)}</p>
+                  <button
+                    onClick={() => setExtratoAccount(account)}
+                    className="mt-2 text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity"
+                  >
+                    <FileText size={11} /> Ver Extrato
+                  </button>
                 </div>
               )}
 
@@ -192,6 +205,15 @@ export default function AccountsPanel() {
         message={`Tem certeza que deseja excluir a conta "${confirmDelete?.name}"? Esta ação não pode ser desfeita.`}
         danger
       />
+
+      <Modal
+        open={!!extratoAccount}
+        onClose={() => setExtratoAccount(null)}
+        title={`Extrato — ${extratoAccount?.name || ''}`}
+        size="xl"
+      >
+        {extratoAccount && <ExtratoContaPanel account={extratoAccount} />}
+      </Modal>
     </div>
   )
 }

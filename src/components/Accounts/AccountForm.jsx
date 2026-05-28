@@ -48,6 +48,7 @@ export default function AccountForm({ initial, onClose }) {
     isMain: initial?.isMain || false,
     fluxoCaixaPrincipal: initial?.fluxoCaixaPrincipal || false,
     contaCorrentePrincipal: initial?.contaCorrentePrincipal || false,
+    contaAplicacao: initial?.contaAplicacao || false,
     grupoGerencial: initial?.grupoGerencial || null,
   })
 
@@ -82,6 +83,7 @@ export default function AccountForm({ initial, onClose }) {
       isMain: form.isMain,
       fluxoCaixaPrincipal: form.fluxoCaixaPrincipal,
       contaCorrentePrincipal: isChecking ? form.contaCorrentePrincipal : false,
+      contaAplicacao: !isCredit ? form.contaAplicacao : false,
       grupoGerencial: form.grupoGerencial,
     }
 
@@ -227,6 +229,15 @@ export default function AccountForm({ initial, onClose }) {
           label="Fluxo de Caixa Principal"
           tooltip="Esta conta aparece no painel de Fluxo de Caixa geral"
         />
+
+        {!isCredit && (
+          <Toggle
+            checked={form.contaAplicacao}
+            onChange={e => set('contaAplicacao', e.target.checked)}
+            label="Conta de Aplicação Financeira"
+            tooltip="Ativa a netização de transferências opostas na mesma data (resgate + aplicação → saldo líquido)"
+          />
+        )}
 
         {isChecking && (
           <>

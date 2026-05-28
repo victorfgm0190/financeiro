@@ -86,6 +86,8 @@ export default function CashFlowPanel({ setActivePage }) {
     if (accountIds.length === 0) return []
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const endDateStr = format(addDays(new Date(), horizon), 'yyyy-MM-dd')
+    const selectedAcc = accounts.find(a => a.id === filterAccount)
+    const shouldNetize = selectedAcc?.contaAplicacao === true
     const events = []
 
     // Future-dated actual transactions
@@ -101,7 +103,11 @@ export default function CashFlowPanel({ setActivePage }) {
           else if (accountIds.includes(tx.accountId) && !accountIds.includes(tx.toAccountId)) saida = tx.amount
         }
         if (entrada === 0 && saida === 0) return
-        events.push({ date: tx.date, description: tx.description || 'Lançamento', entrada, saida, scheduled: false })
+        events.push({
+          date: tx.date, description: tx.description || 'Lançamento', entrada, saida, scheduled: false,
+          isTransfer: tx.type === 'transfer', fromAccountId: tx.accountId, toAccountId: tx.toAccountId,
+          _key: tx.id,
+        })
       })
 
     // Scheduled future occurrences
@@ -111,18 +117,52 @@ export default function CashFlowPanel({ setActivePage }) {
         if (date < todayStr || date > endDateStr) return
         const entrada = s.transactionType === 'income' ? s.amount : 0
         const saida = s.transactionType === 'expense' ? s.amount : 0
-        events.push({ date, description: s.description, entrada, saida, scheduled: true })
+        events.push({
+          date, description: s.description, entrada, saida, scheduled: true,
+          isTransfer: s.transactionType === 'transfer', fromAccountId: s.accountId, toAccountId: s.toAccountId,
+          _key: s.id + '_' + date,
+        })
       })
     })
 
     events.sort((a, b) => a.date.localeCompare(b.date) || (a.scheduled ? 1 : -1))
 
+    let finalEvents = events
+    if (shouldNetize) {
+      const processed = new Set()
+      const netized = []
+      events.forEach(ev => {
+        if (processed.has(ev._key)) return
+        if (ev.isTransfer) {
+          const opposing = events.find(o =>
+            !processed.has(o._key) && o._key !== ev._key &&
+            o.isTransfer && o.date === ev.date &&
+            o.fromAccountId === ev.toAccountId && o.toAccountId === ev.fromAccountId
+          )
+          if (opposing) {
+            processed.add(ev._key)
+            processed.add(opposing._key)
+            const net = Math.round(((ev.entrada - ev.saida) + (opposing.entrada - opposing.saida)) * 100) / 100
+            netized.push({
+              date: ev.date, description: 'Transf. líquida',
+              entrada: net > 0 ? net : 0, saida: net < 0 ? -net : 0,
+              scheduled: ev.scheduled && opposing.scheduled, isNetized: true, _key: ev._key + '_net',
+            })
+            return
+          }
+        }
+        processed.add(ev._key)
+        netized.push(ev)
+      })
+      finalEvents = netized
+    }
+
     let balance = currentBalance
-    return events.map(ev => {
+    return finalEvents.map(ev => {
       balance = Math.round((balance + ev.entrada - ev.saida) * 100) / 100
       return { ...ev, saldo: balance }
     })
-  }, [transactions, schedules, accountIds, currentBalance, getNextOccurrences, horizon])
+  }, [transactions, schedules, accounts, accountIds, currentBalance, getNextOccurrences, horizon, filterAccount])
 
   const finalBalance = chartData[chartData.length - 1]?.balance ?? currentBalance
   const minBalance = chartData.length > 0 ? Math.min(...chartData.map(d => d.balance)) : currentBalance
@@ -301,8 +341,11 @@ export default function CashFlowPanel({ setActivePage }) {
                           : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
                         }
                         <span className="text-gray-200 text-xs truncate max-w-xs">{row.description}</span>
-                        {!row.scheduled && (
+                        {!row.scheduled && !row.isNetized && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 shrink-0">lançamento</span>
+                        )}
+                        {row.isNetized && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">líquido</span>
                         )}
                       </div>
                     </td>
