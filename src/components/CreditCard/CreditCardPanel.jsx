@@ -16,7 +16,7 @@ function GerBadge({ grupoId, gerencialGroups }) {
   } else if (grupo.number === 'D') {
     cls += ' bg-gray-700/60 text-gray-500'
   } else {
-    cls += ' bg-blue-500/20 text-blue-400'
+    cls += ' bg-orange-500/20 text-orange-600'
   }
 
   return <span className={cls}>{grupo.alias}</span>
@@ -202,7 +202,7 @@ export default function CreditCardPanel() {
                 {showGer && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold">G</span> Gerencial
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-xs font-bold">2+</span> Grupo
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-xs font-bold">2+</span> Grupo
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span> Despesa
                   </div>
                 )}
@@ -248,7 +248,7 @@ export default function CreditCardPanel() {
                                 : <span className="text-gray-700 text-xs">—</span>}
                             </td>
                           )}
-                          <td className="px-4 py-3 text-right font-semibold text-red-400 whitespace-nowrap">
+                          <td className="px-4 py-3 text-right font-semibold text-orange-600 whitespace-nowrap">
                             {fmt(tx.amount)}
                           </td>
                         </tr>

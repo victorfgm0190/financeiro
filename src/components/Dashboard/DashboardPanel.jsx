@@ -105,18 +105,18 @@ export default function DashboardPanel({ setActivePage }) {
           <p className="text-xl font-bold text-red-400">{fmt(totalDebt)}</p>
         </div>
         <div className="card">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
-            <ArrowUpCircle size={14} />
-            <span className="text-xs uppercase tracking-wide">Receitas Mês</span>
+          <div className="flex items-center gap-2 mb-2 text-blue-600">
+            <ArrowDownCircle size={14} />
+            <span className="text-xs uppercase tracking-wide text-gray-400">Receitas Mês</span>
           </div>
-          <p className="text-xl font-bold text-emerald-400">{fmt(income)}</p>
+          <p className="text-xl font-bold text-blue-600">{fmt(income)}</p>
         </div>
         <div className="card">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
-            <ArrowDownCircle size={14} />
-            <span className="text-xs uppercase tracking-wide">Despesas Mês</span>
+          <div className="flex items-center gap-2 mb-2 text-orange-600">
+            <ArrowUpCircle size={14} />
+            <span className="text-xs uppercase tracking-wide text-gray-400">Despesas Mês</span>
           </div>
-          <p className="text-xl font-bold text-red-400">{fmt(expense)}</p>
+          <p className="text-xl font-bold text-orange-600">{fmt(expense)}</p>
         </div>
       </div>
 
@@ -129,8 +129,8 @@ export default function DashboardPanel({ setActivePage }) {
               <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={v => fmt(v)} contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="income" name="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="expense" name="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="income" name="Receitas" fill="#2563EB" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="expense" name="Despesas" fill="#EA580C" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -147,7 +147,7 @@ export default function DashboardPanel({ setActivePage }) {
                     <p className="text-gray-300 font-medium">{schedule.description}</p>
                     <p className="text-gray-500">{fmtDate(date)}</p>
                   </div>
-                  <span className={`font-bold ${schedule.transactionType === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span className={`font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
                     {fmt(schedule.amount)}
                   </span>
                 </div>
@@ -175,7 +175,7 @@ export default function DashboardPanel({ setActivePage }) {
                         <p className="text-xs text-gray-500">{fmtDate(tx.date)}</p>
                       </div>
                     </div>
-                    <span className={`text-xs font-bold shrink-0 ml-2 ${tx.type === 'income' ? 'text-emerald-400' : tx.type === 'transfer' ? 'text-blue-400' : 'text-red-400'}`}>
+                    <span className={`text-xs font-bold shrink-0 ml-2 ${tx.type === 'income' ? 'text-blue-600' : tx.type === 'transfer' ? 'text-blue-400' : 'text-orange-600'}`}>
                       {tx.type === 'income' ? '+' : '-'}{fmt(tx.amount)}
                     </span>
                   </div>

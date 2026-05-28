@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CreditCard, ArrowLeft } from 'lucide-react'
+import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
@@ -105,16 +105,22 @@ export default function ReportsPanel() {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Média Receitas (6m)</p>
-          <p className="text-xl font-bold text-emerald-400 mt-1">{fmt(totalIncome)}</p>
+          <div className="flex items-center gap-2 mb-1 text-blue-600">
+            <ArrowDownCircle size={14} />
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Média Receitas (6m)</p>
+          </div>
+          <p className="text-xl font-bold text-blue-600">{fmt(totalIncome)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Média Despesas (6m)</p>
-          <p className="text-xl font-bold text-red-400 mt-1">{fmt(totalExpense)}</p>
+          <div className="flex items-center gap-2 mb-1 text-orange-600">
+            <ArrowUpCircle size={14} />
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Média Despesas (6m)</p>
+          </div>
+          <p className="text-xl font-bold text-orange-600">{fmt(totalExpense)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Média Saldo (6m)</p>
-          <p className={`text-xl font-bold mt-1 ${totalIncome - totalExpense >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-xl font-bold mt-1 ${totalIncome - totalExpense >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
             {fmt(totalIncome - totalExpense)}
           </p>
         </div>
@@ -129,8 +135,8 @@ export default function ReportsPanel() {
             <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip content={<CustomTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
-            <Bar dataKey="income" name="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expense" name="Despesas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="income" name="Receitas" fill="#2563EB" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="expense" name="Despesas" fill="#EA580C" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

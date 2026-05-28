@@ -1,27 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Bell, BellOff, CreditCard, Calendar, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
-import { differenceInDays, format } from 'date-fns'
+import { differenceInDays, format, parseISO } from 'date-fns'
 
 function getDueAlerts(accounts) {
   const today = new Date()
   const alerts = []
-
   accounts
     .filter(a => a.type === 'credit')
     .forEach(account => {
-      const currentDay = today.getDate()
       const dueDay = account.dueDay || 10
-
       let dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay)
       if (dueDate < today) dueDate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay)
-
       const daysUntilDue = differenceInDays(dueDate, today)
-
       if (daysUntilDue <= 5) {
         alerts.push({
           id: `credit_${account.id}`,
+          kind: 'credit',
           type: daysUntilDue === 0 ? 'due_today' : daysUntilDue < 0 ? 'overdue' : 'upcoming',
           account,
           dueDate,
@@ -30,16 +26,41 @@ function getDueAlerts(accounts) {
         })
       }
     })
+  return alerts
+}
 
+function getScheduleAlerts(schedules, getNextOccurrences) {
+  const today = new Date()
+  const alerts = []
+  for (const schedule of schedules) {
+    const remindDays = schedule.remindDaysBefore ?? 3
+    if (remindDays <= 0) continue
+    const nextOccs = getNextOccurrences(schedule, 1)
+    if (nextOccs.length === 0) continue
+    const dueDate = parseISO(nextOccs[0])
+    const daysUntilDue = differenceInDays(dueDate, today)
+    if (daysUntilDue < 0 || daysUntilDue > remindDays) continue
+    alerts.push({
+      id: `sched_${schedule.id}_${nextOccs[0]}`,
+      kind: 'schedule',
+      type: daysUntilDue === 0 ? 'due_today' : 'upcoming',
+      schedule,
+      dueDate,
+      daysUntilDue,
+      amount: schedule.amount,
+    })
+  }
   return alerts
 }
 
 export default function AlertsPanel() {
-  const { accounts } = useApp()
+  const { accounts, schedules, getNextOccurrences } = useApp()
   const [notificationsEnabled, setNotificationsEnabled] = useState(Notification?.permission === 'granted')
   const [dismissed, setDismissed] = useState([])
 
-  const alerts = getDueAlerts(accounts).filter(a => !dismissed.includes(a.id))
+  const creditAlerts = getDueAlerts(accounts).filter(a => !dismissed.includes(a.id))
+  const scheduleAlerts = getScheduleAlerts(schedules, getNextOccurrences).filter(a => !dismissed.includes(a.id))
+  const alerts = [...scheduleAlerts, ...creditAlerts]
 
   const requestNotifications = async () => {
     if (!('Notification' in window)) return
@@ -51,33 +72,37 @@ export default function AlertsPanel() {
     if (!notificationsEnabled) return
     alerts.forEach(alert => {
       if (alert.type === 'due_today') {
-        new Notification(`Fatura vence hoje! — ${alert.account.name}`, {
+        const name = alert.kind === 'schedule' ? alert.schedule.description : alert.account.name
+        new Notification(`Vence hoje! — ${name}`, {
           body: `Valor: ${fmt(alert.amount)}`,
-          icon: '/favicon.ico',
+          icon: '/favicon.svg',
         })
       }
     })
-  }, [notificationsEnabled])
+  }, [notificationsEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const alertColor = (type) => {
-    switch (type) {
-      case 'overdue': return 'border-red-500/50 bg-red-500/5'
-      case 'due_today': return 'border-amber-500/50 bg-amber-500/5'
-      default: return 'border-indigo-500/30 bg-indigo-500/5'
-    }
+    if (type === 'overdue') return 'border-red-500/50 bg-red-500/5'
+    if (type === 'due_today') return 'border-amber-500/50 bg-amber-500/5'
+    return 'border-violet-500/30 bg-violet-500/5'
   }
 
-  const alertIcon = (type) => {
-    switch (type) {
-      case 'overdue': return <AlertTriangle size={18} className="text-red-400" />
-      case 'due_today': return <AlertTriangle size={18} className="text-amber-400" />
-      default: return <Bell size={18} className="text-indigo-400" />
-    }
+  const alertBadgeColor = (type) => {
+    if (type === 'overdue') return 'bg-red-500/20 text-red-400'
+    if (type === 'due_today') return 'bg-amber-500/20 text-amber-400'
+    return 'bg-violet-500/20 text-violet-600'
+  }
+
+  const alertIcon = (alert) => {
+    if (alert.type === 'overdue') return <AlertTriangle size={18} className="text-red-400" />
+    if (alert.type === 'due_today') return <AlertTriangle size={18} className="text-amber-400" />
+    if (alert.kind === 'schedule') return <Calendar size={18} className="text-violet-600" />
+    return <Bell size={18} className="text-violet-600" />
   }
 
   const alertLabel = (a) => {
-    if (a.type === 'overdue') return `Atrasada há ${Math.abs(a.daysUntilDue)} dias!`
-    if (a.type === 'due_today') return 'Vence HOJE!'
+    if (a.daysUntilDue < 0) return `Atrasada há ${Math.abs(a.daysUntilDue)} dias!`
+    if (a.daysUntilDue === 0) return 'Vence HOJE!'
     return `Vence em ${a.daysUntilDue} ${a.daysUntilDue === 1 ? 'dia' : 'dias'}`
   }
 
@@ -103,31 +128,49 @@ export default function AlertsPanel() {
 
       <div>
         <h2 className="text-sm font-semibold text-gray-300 mb-3">
-          Alertas de Vencimento ({alerts.length})
+          Alertas ({alerts.length})
         </h2>
 
         {alerts.length === 0 ? (
           <div className="card text-center py-12">
             <CheckCircle size={32} className="text-emerald-600 mx-auto mb-3" />
             <p className="text-gray-400">Nenhum alerta no momento</p>
-            <p className="text-xs text-gray-600 mt-1">Você receberá alertas 5 dias antes do vencimento</p>
+            <p className="text-xs text-gray-600 mt-1">Alertas aparecem conforme configurado em cada agendamento e cartão</p>
           </div>
         ) : (
           <div className="space-y-3">
             {alerts.map(alert => (
               <div key={alert.id} className={`card border ${alertColor(alert.type)} flex items-start justify-between gap-4`}>
                 <div className="flex items-start gap-3">
-                  {alertIcon(alert.type)}
+                  {alertIcon(alert)}
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-100">{alert.account.name}</p>
-                      <span className={`badge ${alert.type === 'overdue' ? 'bg-red-500/20 text-red-400' : alert.type === 'due_today' ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
-                        {alertLabel(alert)}
-                      </span>
+                      <p className="font-semibold text-gray-100">
+                        {alert.kind === 'schedule' ? alert.schedule.description : alert.account.name}
+                      </p>
+                      <span className={`badge ${alertBadgeColor(alert.type)}`}>{alertLabel(alert)}</span>
+                      {alert.kind === 'schedule' && (
+                        <span className="badge bg-violet-500/20 text-violet-600">Agendamento</span>
+                      )}
+                      {alert.kind === 'credit' && (
+                        <span className="badge bg-gray-700/60 text-gray-400">Cartão</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Fatura: <span className="text-gray-300 font-medium">{fmt(alert.amount)}</span>
-                      {' · '}Vencimento: {format(alert.dueDate, 'dd/MM/yyyy')}
+                      {alert.kind === 'schedule' ? (
+                        <>
+                          {alert.schedule.transactionType === 'income' ? 'Receita' : 'Despesa'}
+                          {': '}
+                          <span className="text-gray-300 font-medium">{fmt(alert.amount)}</span>
+                          {' · '}Próximo: {format(alert.dueDate, 'dd/MM/yyyy')}
+                          {alert.schedule.payee ? ` · ${alert.schedule.payee}` : ''}
+                        </>
+                      ) : (
+                        <>
+                          Fatura: <span className="text-gray-300 font-medium">{fmt(alert.amount)}</span>
+                          {' · '}Vencimento: {format(alert.dueDate, 'dd/MM/yyyy')}
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -144,7 +187,7 @@ export default function AlertsPanel() {
       </div>
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">Calendário de Vencimentos</h3>
+        <h3 className="text-sm font-semibold text-gray-300 mb-3">Calendário de Vencimentos — Cartões</h3>
         <div className="space-y-2">
           {accounts.filter(a => a.type === 'credit').map(acc => {
             const today = new Date()
@@ -154,7 +197,7 @@ export default function AlertsPanel() {
             return (
               <div key={acc.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <CreditCard size={14} className="text-purple-400" />
+                  <CreditCard size={14} className="text-violet-600" />
                   <span className="text-sm text-gray-300">{acc.name}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
@@ -171,6 +214,18 @@ export default function AlertsPanel() {
             <p className="text-xs text-gray-500 text-center py-4">Nenhum cartão de crédito cadastrado</p>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap size={14} className="text-emerald-400" />
+          <h3 className="text-sm font-semibold text-gray-300">Registro Automático</h3>
+        </div>
+        <p className="text-xs text-gray-500">
+          Agendamentos com <span className="text-gray-300">Registrar Automático</span> ativado são baixados automaticamente
+          na data de vencimento ao abrir o app. Agendamentos com <span className="text-gray-300">Lembrar com Antecedência</span> geram alertas
+          acima X dias antes da próxima ocorrência.
+        </p>
       </div>
     </div>
   )

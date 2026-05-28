@@ -9,7 +9,7 @@ function GerBadge({ grupoId, gerencialGroups }) {
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-emerald-500/20 text-emerald-400'
   else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
-  else cls += ' bg-blue-500/20 text-blue-400'
+  else cls += ' bg-orange-500/20 text-orange-600'
   return <span className={cls}>{grupo.alias}</span>
 }
 
@@ -140,9 +140,9 @@ export default function ExtratoGerencial({ initialCardId }) {
                     </td>
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        tx.type === 'expense' ? 'bg-red-500/15 text-red-400'
-                        : tx.type === 'income' ? 'bg-emerald-500/15 text-emerald-400'
-                        : tx.type === 'credit_payment' ? 'bg-blue-500/15 text-blue-400'
+                        tx.type === 'expense' ? 'bg-orange-500/15 text-orange-600'
+                        : tx.type === 'income' ? 'bg-blue-500/15 text-blue-600'
+                        : tx.type === 'credit_payment' ? 'bg-blue-500/15 text-blue-600'
                         : 'bg-gray-700 text-gray-400'
                       }`}>{movLabel}</span>
                     </td>
@@ -166,13 +166,13 @@ export default function ExtratoGerencial({ initialCardId }) {
                           : <Square size={14} />}
                       </button>
                     </td>
-                    <td className="px-3 py-2.5 text-right text-red-400 font-medium whitespace-nowrap text-xs">
+                    <td className="px-3 py-2.5 text-right text-orange-600 font-medium whitespace-nowrap text-xs">
                       {tx._pagamento > 0 ? fmt(tx._pagamento) : ''}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-emerald-400 font-medium whitespace-nowrap text-xs">
+                    <td className="px-3 py-2.5 text-right text-blue-600 font-medium whitespace-nowrap text-xs">
                       {tx._deposito > 0 ? fmt(tx._deposito) : ''}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap text-xs ${tx._balance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    <td className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap text-xs ${tx._balance < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
                       {fmt(Math.abs(tx._balance))}{tx._balance < 0 ? ' D' : ' C'}
                     </td>
                   </tr>

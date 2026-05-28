@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import CategorySelect from '../shared/CategorySelect'
 
 export default function BudgetPanel() {
   const { budgets, categories, transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod } = useApp()
@@ -65,7 +66,7 @@ export default function BudgetPanel() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total Gasto</p>
-          <p className="text-xl font-bold text-red-400 mt-1">{fmt(totalSpent)}</p>
+          <p className="text-xl font-bold text-orange-600 mt-1">{fmt(totalSpent)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo do Orçamento</p>
@@ -141,10 +142,14 @@ export default function BudgetPanel() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Categoria *</label>
-            <select className="input" value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))} required>
-              <option value="">Selecione a categoria...</option>
-              {availableCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-            </select>
+            <CategorySelect
+              categories={availableCategories}
+              type="expense"
+              value={form.categoryId}
+              onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
+              placeholder="Selecione a categoria..."
+              required
+            />
           </div>
           <div>
             <label className="label">Valor Orçado (R$) *</label>

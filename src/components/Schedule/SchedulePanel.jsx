@@ -19,13 +19,21 @@ const FREQ_LABELS = {
 }
 
 function GerBadge({ grupoId, gerencialGroups }) {
+  if (!grupoId) {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/20 text-blue-400">
+        G
+      </span>
+    )
+  }
   const grupo = gerencialGroups.find(g => g.id === grupoId)
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-emerald-500/20 text-emerald-400'
-  else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
-  else cls += ' bg-blue-500/20 text-blue-400'
-  return <span className={cls}>{grupo.alias}</span>
+  else if (grupo.number === 'D') cls += ' bg-gray-700/50 text-gray-500'
+  else cls += ' bg-orange-500/20 text-orange-400'
+  const label = grupo.number === 1 ? '1' : grupo.alias
+  return <span className={cls}>{label}</span>
 }
 
 function TabButton({ active, onClick, children, badge }) {
@@ -76,7 +84,7 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <p className="text-lg font-bold text-red-400">{fmt(payable.amount)}</p>
+          <p className="text-lg font-bold text-orange-600">{fmt(payable.amount)}</p>
           <div className="flex gap-1">
             {payable.status === 'pending' && (
               <button
@@ -99,11 +107,54 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
   )
 }
 
-function SchedulesTab({ schedules, categories, accounts, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
+function SchedulesTab({ schedules, categories, accounts, gerencialGroups, addTransaction, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
   const [expanded, setExpanded] = useState({})
   const toggleExpanded = (id) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
   const getCategory = (id) => categories.find(c => c.id === id)
   const getAccount = (id) => accounts.find(a => a.id === id)
+
+  const contaPrincipal =
+    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+    accounts.find(a => a.isMain && a.type !== 'credit') ||
+    accounts.find(a => a.type === 'checking')
+
+  const handleRegister = (schedule, date) => {
+    registerScheduleOccurrence(schedule.id, date)
+    if (!schedule.grupoGerencial) return
+    const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
+    if (!grupo || grupo.number === 'D') return
+
+    if (grupo.number === 1) {
+      // Reserva: transfere da conta do agendamento para a conta de reserva do grupo
+      const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
+      if (schedule.accountId && contaReserva) {
+        addTransaction({
+          type: 'transfer',
+          accountId: schedule.accountId,
+          toAccountId: contaReserva.id,
+          amount: schedule.amount,
+          date,
+          description: `Reserva ${grupo.name}`,
+          grupoGerencial: grupo.id,
+        })
+      }
+      return
+    }
+
+    // Grupos 2..N: resgate automático da conta do grupo para a conta principal
+    const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
+    if (contaResgate && contaPrincipal) {
+      addTransaction({
+        type: 'transfer',
+        accountId: contaResgate.id,
+        toAccountId: contaPrincipal.id,
+        amount: schedule.amount,
+        date,
+        description: `Resgate ${grupo.name}`,
+        grupoGerencial: grupo.id,
+      })
+    }
+  }
 
   if (schedules.length === 0) {
     return (
@@ -135,12 +186,15 @@ function SchedulesTab({ schedules, categories, accounts, deleteSchedule, registe
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`badge ${schedule.transactionType === 'income' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                  <span className={`badge ${schedule.transactionType === 'income' ? 'bg-blue-500/20 text-blue-600' : 'bg-orange-500/20 text-orange-600'}`}>
                     {schedule.transactionType === 'income' ? 'Receita' : 'Despesa'}
                   </span>
                   <span className="badge bg-gray-800 text-gray-300">{FREQ_LABELS[schedule.frequency]}</span>
                   {schedule.occurrenceType === 'installment' && (
                     <span className="badge bg-blue-500/20 text-blue-400">{totalDone}/{schedule.installments}x</span>
+                  )}
+                  {schedule.transactionType === 'expense' && (
+                    <GerBadge grupoId={schedule.grupoGerencial} gerencialGroups={gerencialGroups} />
                   )}
                 </div>
                 <h3 className="font-semibold text-gray-100 mt-1">{schedule.description}</h3>
@@ -165,13 +219,13 @@ function SchedulesTab({ schedules, categories, accounts, deleteSchedule, registe
                 )}
               </div>
               <div className="flex flex-col items-end gap-2">
-                <p className={`text-lg font-bold ${schedule.transactionType === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-lg font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
                   {fmt(schedule.amount)}
                 </p>
                 {nextDate && (
                   <div className="flex gap-1">
                     <button
-                      onClick={() => registerScheduleOccurrence(schedule.id, nextDate)}
+                      onClick={() => handleRegister(schedule, nextDate)}
                       className="flex items-center gap-1 px-2 py-1 text-xs bg-emerald-600/20 text-emerald-400 rounded-lg hover:bg-emerald-600/30 transition-colors"
                     >
                       <CheckCircle size={11} /> Registrar
@@ -224,7 +278,7 @@ export default function SchedulePanel() {
   const {
     schedules, categories, accounts,
     payables, updatePayable, deletePayable,
-    gerencialGroups,
+    gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences,
   } = useApp()
 
@@ -282,6 +336,8 @@ export default function SchedulePanel() {
           schedules={schedules}
           categories={categories}
           accounts={accounts}
+          gerencialGroups={gerencialGroups}
+          addTransaction={addTransaction}
           deleteSchedule={deleteSchedule}
           registerScheduleOccurrence={registerScheduleOccurrence}
           skipScheduleOccurrence={skipScheduleOccurrence}

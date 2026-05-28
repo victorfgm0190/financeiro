@@ -7,10 +7,10 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import TransactionForm from './TransactionForm'
 
 const TYPE_CONFIG = {
-  income: { label: 'Receita', icon: ArrowUpCircle, color: 'text-emerald-400' },
-  expense: { label: 'Despesa', icon: ArrowDownCircle, color: 'text-red-400' },
+  income: { label: 'Receita', icon: ArrowDownCircle, color: 'text-blue-600' },
+  expense: { label: 'Despesa', icon: ArrowUpCircle, color: 'text-orange-600' },
   transfer: { label: 'Transferência', icon: ArrowLeftRight, color: 'text-blue-400' },
-  credit_payment: { label: 'Pgto Cartão', icon: ArrowDownCircle, color: 'text-purple-400' },
+  credit_payment: { label: 'Pgto Cartão', icon: ArrowUpCircle, color: 'text-orange-400' },
 }
 
 export default function TransactionsPanel() {
@@ -57,16 +57,25 @@ export default function TransactionsPanel() {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Receitas</p>
-          <p className="text-xl font-bold text-emerald-400 mt-1">{fmt(totals.income)}</p>
+          <div className="flex items-center gap-2 mb-1 text-blue-600">
+            <ArrowDownCircle size={14} />
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Receitas</p>
+          </div>
+          <p className="text-xl font-bold text-blue-600">{fmt(totals.income)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Despesas</p>
-          <p className="text-xl font-bold text-red-400 mt-1">{fmt(totals.expense)}</p>
+          <div className="flex items-center gap-2 mb-1 text-orange-600">
+            <ArrowUpCircle size={14} />
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Despesas</p>
+          </div>
+          <p className="text-xl font-bold text-orange-600">{fmt(totals.expense)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo do Período</p>
-          <p className={`text-xl font-bold mt-1 ${totals.income - totals.expense >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <ArrowLeftRight size={14} className="text-gray-400" />
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo do Período</p>
+          </div>
+          <p className={`text-xl font-bold mt-1 ${totals.income - totals.expense >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
             {fmt(totals.income - totals.expense)}
           </p>
         </div>
@@ -157,7 +166,7 @@ export default function TransactionsPanel() {
                       {acc?.name || '—'}
                       {tx.toAccountId && <span className="text-gray-600"> → {getAccount(tx.toAccountId)?.name}</span>}
                     </td>
-                    <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-emerald-400' : tx.type === 'transfer' ? 'text-blue-400' : 'text-red-400'}`}>
+                    <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-blue-600' : tx.type === 'transfer' ? 'text-blue-400' : 'text-orange-600'}`}>
                       {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '' : '-'}{fmt(tx.amount)}
                     </td>
                     <td className="px-4 py-3">
