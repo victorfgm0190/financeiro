@@ -81,7 +81,7 @@ export default function ExtratoGerencial({ initialCardId }) {
     <div className="space-y-4">
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Extrato Gerencial</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Cartão</label>
             <select className="input" value={selectedCardId} onChange={e => setSelectedCardId(e.target.value)}>

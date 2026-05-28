@@ -55,7 +55,7 @@ export default function TransactionsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <div className="flex items-center gap-2 mb-1 text-blue-600">
             <ArrowDownCircle size={14} />
@@ -95,7 +95,7 @@ export default function TransactionsPanel() {
       </div>
 
       {showFilters && (
-        <div className="card grid grid-cols-3 gap-3">
+        <div className="card grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Período</label>
             <select className="input" value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}>
@@ -130,6 +130,7 @@ export default function TransactionsPanel() {
             <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Registrar primeiro lançamento</button>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800">
@@ -184,6 +185,7 @@ export default function TransactionsPanel() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

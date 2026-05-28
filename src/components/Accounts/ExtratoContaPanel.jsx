@@ -289,7 +289,7 @@ export default function ExtratoContaPanel({ account, onClose }) {
       </div>
 
       {/* KPI summary */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={13} /><p className="text-xs text-gray-400 uppercase">Entradas</p></div>
           <p className="text-lg font-bold text-blue-600">{fmt(totals.entrada)}</p>

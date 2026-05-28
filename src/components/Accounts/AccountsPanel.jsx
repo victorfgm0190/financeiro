@@ -45,7 +45,7 @@ export default function AccountsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
           <p className="text-2xl font-bold text-emerald-400 mt-1">{fmt(totalAssets)}</p>

@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
 import Sidebar from './components/Layout/Sidebar'
+import BottomNav from './components/Layout/BottomNav'
 import Header from './components/Layout/Header'
+import Modal from './components/shared/Modal'
+import TransactionForm from './components/Transactions/TransactionForm'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
 import AccountsPanel from './components/Accounts/AccountsPanel'
 import TransactionsPanel from './components/Transactions/TransactionsPanel'
@@ -18,6 +21,7 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
+  const [showQuickAdd, setShowQuickAdd] = useState(false)
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
 
   const alertCount = useMemo(() => {
@@ -61,10 +65,14 @@ function AppContent() {
       <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {panels[activePage] ?? panels.dashboard}
         </main>
       </div>
+      <BottomNav active={activePage} setActive={setActivePage} onFab={() => setShowQuickAdd(true)} />
+      <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
+        <TransactionForm onClose={() => setShowQuickAdd(false)} />
+      </Modal>
     </div>
   )
 }

@@ -43,7 +43,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
   const { dbStatus } = useApp()
 
   return (
-    <aside className="w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex flex-col h-screen sticky top-0">
+    <aside className="hidden md:flex w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex-col h-screen sticky top-0">
       <div className="px-4 py-5 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#0F6E56' }}>
