@@ -10,6 +10,7 @@ import CreditCardPanel from './components/CreditCard/CreditCardPanel'
 import SchedulePanel from './components/Schedule/SchedulePanel'
 import ImportPanel from './components/Import/ImportPanel'
 import CashFlowPanel from './components/CashFlow/CashFlowPanel'
+import ReservasPanel from './components/Reservas/ReservasPanel'
 import BudgetPanel from './components/Budget/BudgetPanel'
 import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
@@ -48,6 +49,7 @@ function AppContent() {
     schedule: <SchedulePanel />,
     import: <ImportPanel />,
     cashflow: <CashFlowPanel setActivePage={setActivePage} />,
+    reservas: <ReservasPanel />,
     budget: <BudgetPanel />,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel />,

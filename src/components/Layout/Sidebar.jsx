@@ -1,8 +1,9 @@
 import {
   LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, ChevronRight
+  Wallet, Wifi, WifiOff, AlertTriangle, Loader, Layers,
 } from 'lucide-react'
+import { useApp } from '../../context/AppContext'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -12,13 +13,35 @@ const NAV = [
   { id: 'schedule', label: 'Agendamentos', icon: Calendar },
   { id: 'import', label: 'Importar Fatura', icon: Upload },
   { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
+  { id: 'reservas', label: 'Reservas', icon: Layers },
   { id: 'budget', label: 'Orçamento', icon: PieChart },
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ]
 
+const STATUS_CONFIG = {
+  connecting:      { icon: Loader,        color: 'text-gray-500',   label: 'Conectando...',      spin: true  },
+  connected:       { icon: Wifi,          color: 'text-emerald-500', label: 'Supabase',           spin: false },
+  seeded:          { icon: Wifi,          color: 'text-emerald-500', label: 'Supabase',           spin: false },
+  'schema-missing':{ icon: AlertTriangle, color: 'text-amber-400',  label: 'Schema não criado',  spin: false },
+  error:           { icon: WifiOff,       color: 'text-red-500',    label: 'Erro de conexão',    spin: false },
+}
+
+function DbStatusBadge({ status }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.error
+  const Icon = cfg.icon
+  return (
+    <div className={`flex items-center gap-1.5 ${cfg.color}`} title={`Banco de dados: ${cfg.label}`}>
+      <Icon size={11} className={cfg.spin ? 'animate-spin' : ''} />
+      <span className="text-xs">{cfg.label}</span>
+    </div>
+  )
+}
+
 export default function Sidebar({ active, setActive, alertCount }) {
+  const { dbStatus } = useApp()
+
   return (
     <aside className="w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex flex-col h-screen sticky top-0">
       <div className="px-4 py-5 border-b border-gray-800">
@@ -26,7 +49,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#0F6E56' }}>
             <TrendingUp size={14} className="text-white" />
           </div>
-          <span className="font-bold text-sm text-white">FinApp</span>
+          <span className="font-bold text-sm text-white">Finup</span>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
@@ -44,8 +67,14 @@ export default function Sidebar({ active, setActive, alertCount }) {
           </button>
         ))}
       </nav>
-      <div className="px-4 py-3 border-t border-gray-800">
-        <p className="text-xs text-gray-600">v1.0 · Dados locais</p>
+      <div className="px-4 py-3 border-t border-gray-800 space-y-1">
+        <DbStatusBadge status={dbStatus} />
+        {dbStatus === 'schema-missing' && (
+          <p className="text-xs text-amber-500/70 leading-tight">
+            Execute <code className="bg-gray-800 px-1 rounded">supabase/schema.sql</code> no Supabase
+          </p>
+        )}
+        <p className="text-xs text-gray-700">v1.0</p>
       </div>
     </aside>
   )
