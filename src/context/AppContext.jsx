@@ -17,7 +17,7 @@ const EMPTY_PREV = {
   settings: {}, costCenters: [],
 }
 
-const DEFAULT_ACCOUNT_GROUPS = [
+export const DEFAULT_ACCOUNT_GROUPS = [
   { id: 'grp_acc_1', name: 'Conta Corrente',          type: 'financeiro',  order: 0, behavior: null },
   { id: 'grp_acc_2', name: 'Poupança',                type: 'financeiro',  order: 1, behavior: null },
   { id: 'grp_acc_3', name: 'Investimentos',           type: 'financeiro',  order: 2, behavior: null },
@@ -724,6 +724,16 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  const reorderAccountGroups = useCallback((orderedIds) => {
+    update(d => ({
+      ...d,
+      accountGroups: (d.accountGroups || []).map(g => {
+        const idx = orderedIds.indexOf(g.id)
+        return idx !== -1 ? { ...g, order: idx } : { ...g, order: orderedIds.length + (g.order ?? 0) }
+      }),
+    }))
+  }, [update])
+
   const moveAccount = useCallback((id, direction) => {
     update(d => {
       const account = d.accounts.find(a => a.id === id)
@@ -1048,7 +1058,7 @@ export function AppProvider({ children }) {
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
-      addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, moveAccount,
+      addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,

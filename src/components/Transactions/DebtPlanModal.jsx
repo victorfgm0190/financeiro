@@ -3,6 +3,7 @@ import { format, addMonths, parseISO } from 'date-fns'
 import { DollarSign, Calendar, User, CreditCard, Tag } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import AccountOptions from '../shared/AccountOptions'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -18,7 +19,7 @@ function firstDueAfterToday(dueDay) {
 }
 
 export default function DebtPlanModal({ account, group, amount, date, onClose }) {
-  const { accounts, categories, addPayable, setDebtPlan } = useApp()
+  const { accounts, accountGroups, categories, addPayable, setDebtPlan } = useApp()
 
   const isEmprestimo = group?.behavior === 'emprestimo'
 
@@ -198,8 +199,7 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
           onChange={e => set('debitAccountId', e.target.value)}
           required
         >
-          <option value="">Selecione...</option>
-          {checkingAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          <AccountOptions accounts={checkingAccounts} accountGroups={accountGroups} />
         </select>
       </div>
 

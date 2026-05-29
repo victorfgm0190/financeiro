@@ -4,7 +4,7 @@ import {
   ChevronRight, Edit2, Trash2, ArrowUpCircle,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import TransactionForm from './TransactionForm'
@@ -36,31 +36,39 @@ function getBillLabel(key) {
 
 // ─── Account picker (step 1 of new-tx modal) ───────────────────────────────
 
-function AccountPicker({ accounts, onSelect }) {
+function AccountPicker({ accounts, accountGroups, onSelect }) {
+  const groups = groupedAccountOptions(accounts, accountGroups)
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <p className="text-sm text-gray-400 mb-3">Selecione a conta para o lançamento:</p>
-      {accounts.map(a => (
-        <button
-          key={a.id}
-          onClick={() => onSelect(a)}
-          className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors shrink-0">
-              {a.type === 'credit'
-                ? <CreditCard size={14} className="text-purple-400" />
-                : <Wallet size={14} className="text-emerald-400" />}
-            </div>
-            <div>
-              <p className="text-sm text-gray-200 font-medium">{a.apelido || a.name}</p>
-              <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
-            </div>
-          </div>
-          <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
-            {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
-          </span>
-        </button>
+      {groups.map(({ group, accounts: accs }) => (
+        <div key={group?.id || 'ungrouped'}>
+          {group && (
+            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-1 pt-2 pb-1">{group.name}</p>
+          )}
+          {accs.map(a => (
+            <button
+              key={a.id}
+              onClick={() => onSelect(a)}
+              className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left group mb-1"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors shrink-0">
+                  {a.type === 'credit'
+                    ? <CreditCard size={14} className="text-purple-400" />
+                    : <Wallet size={14} className="text-emerald-400" />}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-200 font-medium">{a.apelido || a.name}</p>
+                  <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
+                </div>
+              </div>
+              <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
+              </span>
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   )
@@ -342,7 +350,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
 // ─── Root panel ─────────────────────────────────────────────────────────────
 
 export default function TransactionsPanel() {
-  const { accounts } = useApp()
+  const { accounts, accountGroups } = useApp()
 
   // view: null | { type: 'account', account } | { type: 'fatura', card, billKey }
   const [view, setView] = useState(null)
@@ -452,6 +460,7 @@ export default function TransactionsPanel() {
         {modalStep === 'pick' ? (
           <AccountPicker
             accounts={accounts}
+            accountGroups={accountGroups}
             onSelect={a => { setModalAccount(a); setModalStep('form') }}
           />
         ) : (

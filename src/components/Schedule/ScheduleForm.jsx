@@ -3,6 +3,7 @@ import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
+import AccountOptions from '../shared/AccountOptions'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -164,7 +165,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
 }
 
 export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, categories, payees, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
+  const { accounts, accountGroups, categories, payees, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -279,8 +280,7 @@ export default function ScheduleForm({ initial, onClose }) {
         <div>
           <LabelTip tip={TIPS.account} required>Conta</LabelTip>
           <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)} required>
-            <option value="">Selecione...</option>
-            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <AccountOptions accounts={accounts} accountGroups={accountGroups} />
           </select>
         </div>
 

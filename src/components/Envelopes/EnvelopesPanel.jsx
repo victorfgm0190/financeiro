@@ -4,6 +4,7 @@ import { Package, Plus, Edit2, Trash2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
+import AccountOptions from '../shared/AccountOptions'
 
 // ── Period logic ──────────────────────────────────────────────────────────────
 // period runs from (dueDay+1) of one month to (dueDay) of the next
@@ -25,7 +26,7 @@ export function getEnvelopePeriod(dueDay) {
 }
 
 // ── EnvelopeForm ──────────────────────────────────────────────────────────────
-function EnvelopeForm({ initial, onSave, onCancel, categories, accounts }) {
+function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, accountGroups }) {
   const [name,        setName]        = useState(initial?.name        ?? '')
   const [limitAmount, setLimitAmount] = useState(initial?.limitAmount ?? '')
   const [dueDay,      setDueDay]      = useState(initial?.dueDay      ?? 13)
@@ -80,10 +81,12 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts }) {
       <div>
         <label className="label">Conta Vinculada</label>
         <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
-          <option value="">Nenhuma</option>
-          {nonCreditAc.map(a => (
-            <option key={a.id} value={a.id}>{a.apelido || a.name}</option>
-          ))}
+          <AccountOptions
+            accounts={nonCreditAc}
+            accountGroups={accountGroups}
+            placeholder="Nenhuma"
+            labelFn={a => a.apelido || a.name}
+          />
         </select>
       </div>
 
@@ -252,7 +255,7 @@ function DetailModal({ data, categories, accounts, onClose }) {
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, transactions, categories, accounts } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, transactions, categories, accounts, accountGroups } = useApp()
   const [showForm,  setShowForm]  = useState(false)
   const [editEnv,   setEditEnv]   = useState(null)
   const [detailId,  setDetailId]  = useState(null)
@@ -390,6 +393,7 @@ export default function EnvelopesPanel() {
           initial={editEnv}
           categories={categories}
           accounts={accounts}
+          accountGroups={accountGroups}
           onSave={handleSave}
           onCancel={() => { setShowForm(false); setEditEnv(null) }}
         />

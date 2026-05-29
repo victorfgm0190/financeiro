@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
@@ -11,6 +12,8 @@ export default function SettingsPanel() {
     classificationRules, addRule, deleteRule,
     costCenters, addCostCenter,
     gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
+    accountGroups, addAccountGroup, updateAccountGroup, deleteAccountGroup,
+    moveAccountGroup, reorderAccountGroups,
     accounts,
     data,
   } = useApp()
@@ -21,6 +24,50 @@ export default function SettingsPanel() {
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+
+  // Account groups (conta) management state
+  const [agDragId, setAgDragId] = useState(null)
+  const [agDragOverId, setAgDragOverId] = useState(null)
+  const [agEditId, setAgEditId] = useState(null)
+  const [agEditName, setAgEditName] = useState('')
+  const [agConfirmDeleteId, setAgConfirmDeleteId] = useState(null)
+  const [agNewName, setAgNewName] = useState('')
+  const [agNewType, setAgNewType] = useState('financeiro')
+
+  const sortedAccountGroups = [...(accountGroups || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  const handleAgDragStart = (e, id) => {
+    setAgDragId(id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  const handleAgDragOver = (e, id) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (id !== agDragId) setAgDragOverId(id)
+  }
+  const handleAgDrop = (e, targetId) => {
+    e.preventDefault()
+    if (!agDragId || agDragId === targetId) { setAgDragId(null); setAgDragOverId(null); return }
+    const from = sortedAccountGroups.findIndex(g => g.id === agDragId)
+    const to = sortedAccountGroups.findIndex(g => g.id === targetId)
+    const reordered = [...sortedAccountGroups]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(to, 0, moved)
+    reorderAccountGroups(reordered.map(g => g.id))
+    setAgDragId(null)
+    setAgDragOverId(null)
+  }
+  const handleAgDragEnd = () => { setAgDragId(null); setAgDragOverId(null) }
+
+  const handleAgRestoreOrder = () => {
+    const defaultMap = new Map(DEFAULT_ACCOUNT_GROUPS.map((g, i) => [g.id, i]))
+    const sorted = [...(accountGroups || [])].sort((a, b) => {
+      const aO = defaultMap.has(a.id) ? defaultMap.get(a.id) : 100 + (a.order ?? 0)
+      const bO = defaultMap.has(b.id) ? defaultMap.get(b.id) : 100 + (b.order ?? 0)
+      return aO - bO
+    })
+    reorderAccountGroups(sorted.map(g => g.id))
+  }
 
   // Gerencial group form state
   const [showGroupForm, setShowGroupForm] = useState(false)
@@ -223,6 +270,161 @@ export default function SettingsPanel() {
             <Plus size={13} /> Adicionar
           </button>
         </div>
+      </div>
+
+      {/* Grupos de Contas */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-300">Grupos de Contas</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Arraste ⠿ ou use ↑↓ para definir a ordem exibida em todos os seletores</p>
+          </div>
+          <button
+            className="btn-secondary flex items-center gap-1.5 text-xs"
+            onClick={handleAgRestoreOrder}
+            title="Restaurar ordem padrão"
+          >
+            <RotateCcw size={12} /> Padrão
+          </button>
+        </div>
+
+        <div className="space-y-1 mb-4" onDragOver={e => e.preventDefault()}>
+          {sortedAccountGroups.map((g, i) => (
+            <div
+              key={g.id}
+              draggable
+              onDragStart={e => handleAgDragStart(e, g.id)}
+              onDragOver={e => handleAgDragOver(e, g.id)}
+              onDrop={e => handleAgDrop(e, g.id)}
+              onDragEnd={handleAgDragEnd}
+              className={`flex items-center gap-2 px-2.5 py-2 rounded-lg transition-all border ${
+                agDragId === g.id ? 'opacity-40 border-transparent bg-gray-800' :
+                agDragOverId === g.id ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
+                'border-transparent bg-gray-800 hover:bg-gray-750'
+              }`}
+            >
+              {/* Drag handle */}
+              <span
+                className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing select-none text-base leading-none shrink-0"
+                title="Arrastar para reordenar"
+              >⠿</span>
+
+              {/* Type badge */}
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                g.type === 'financeiro' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
+              }`}>
+                {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
+              </span>
+
+              {/* Name (inline edit) */}
+              {agEditId === g.id ? (
+                <>
+                  <input
+                    className="input flex-1 py-1 text-sm"
+                    value={agEditName}
+                    onChange={e => setAgEditName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { updateAccountGroup(g.id, { name: agEditName }); setAgEditId(null) }
+                      if (e.key === 'Escape') setAgEditId(null)
+                    }}
+                    autoFocus
+                  />
+                  <button className="btn-primary text-xs py-1 px-2" onClick={() => { updateAccountGroup(g.id, { name: agEditName }); setAgEditId(null) }}>
+                    <Check size={11} />
+                  </button>
+                  <button className="btn-secondary text-xs py-1 px-2" onClick={() => setAgEditId(null)}>
+                    <X size={11} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm text-gray-200 min-w-0 truncate">{g.name}</span>
+                  {g.behavior && (
+                    <span className="text-xs text-gray-600 shrink-0 italic">
+                      {g.behavior === 'divida' ? 'dívidas' : 'empréstimos'}
+                    </span>
+                  )}
+                  {/* ↑↓ reorder */}
+                  <div className="flex gap-0.5 shrink-0">
+                    <button
+                      onClick={() => moveAccountGroup(g.id, 'up')}
+                      disabled={i === 0}
+                      className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                    >
+                      <ArrowUp size={11} />
+                    </button>
+                    <button
+                      onClick={() => moveAccountGroup(g.id, 'down')}
+                      disabled={i === sortedAccountGroups.length - 1}
+                      className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                    >
+                      <ArrowDown size={11} />
+                    </button>
+                  </div>
+                  {/* Edit */}
+                  <button
+                    onClick={() => { setAgEditId(g.id); setAgEditName(g.name) }}
+                    className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+                  >
+                    <Edit2 size={11} />
+                  </button>
+                  {/* Delete */}
+                  <button
+                    onClick={() => setAgConfirmDeleteId(g.id)}
+                    className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add new group */}
+        <div className="flex gap-2 pt-2 border-t border-gray-700">
+          <select
+            className="input w-36 text-sm"
+            value={agNewType}
+            onChange={e => setAgNewType(e.target.value)}
+          >
+            <option value="financeiro">Financeiro</option>
+            <option value="patrimonial">Patrimonial</option>
+          </select>
+          <input
+            className="input flex-1 text-sm"
+            value={agNewName}
+            onChange={e => setAgNewName(e.target.value)}
+            placeholder="Nome do novo grupo..."
+            onKeyDown={e => {
+              if (e.key === 'Enter' && agNewName.trim()) {
+                addAccountGroup({ name: agNewName.trim(), type: agNewType })
+                setAgNewName('')
+              }
+            }}
+          />
+          <button
+            className="btn-primary px-3"
+            onClick={() => {
+              if (!agNewName.trim()) return
+              addAccountGroup({ name: agNewName.trim(), type: agNewType })
+              setAgNewName('')
+            }}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        {agConfirmDeleteId && (
+          <ConfirmDialog
+            open
+            onClose={() => setAgConfirmDeleteId(null)}
+            onConfirm={() => { deleteAccountGroup(agConfirmDeleteId); setAgConfirmDeleteId(null) }}
+            title="Excluir Grupo"
+            message="As contas deste grupo ficarão sem grupo atribuído. Continuar?"
+            danger
+          />
+        )}
       </div>
 
       {/* Controle Gerencial de Cartão */}

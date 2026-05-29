@@ -6,6 +6,7 @@ import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
+import AccountOptions from '../shared/AccountOptions'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -266,16 +267,14 @@ export default function TransactionForm({ initial, onClose }) {
         <div>
           <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *</label>
           <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)} required>
-            <option value="">Selecione...</option>
-            {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <AccountOptions accounts={accounts} accountGroups={accountGroups} />
           </select>
         </div>
         {form.type === 'transfer' ? (
           <div>
             <label className="label">Conta Destino *</label>
             <select className="input" value={form.toAccountId} onChange={e => set('toAccountId', e.target.value)} required>
-              <option value="">Selecione...</option>
-              {accounts.filter(a => a.id !== form.accountId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <AccountOptions accounts={accounts} accountGroups={accountGroups} filter={a => a.id !== form.accountId} />
             </select>
           </div>
         ) : (

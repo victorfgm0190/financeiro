@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
+import AccountOptions from '../shared/AccountOptions'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ const TYPE_ICON = {
 
 // ─── ABA 1: CONTA CORRENTE ────────────────────────────────────────────────────
 
-function ContaCorrenteTab({ accounts, transactions }) {
+function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   const [parsedRows, setParsedRows] = useState([])
   const [accountNames, setAccountNames] = useState([])
   const [accountMapping, setAccountMapping] = useState({})
@@ -297,8 +298,7 @@ function ContaCorrenteTab({ accounts, transactions }) {
                   value={accountMapping[name] || ''}
                   onChange={e => setAccountMapping(m => ({ ...m, [name]: e.target.value }))}
                 >
-                  <option value="">— Selecione a conta —</option>
-                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  <AccountOptions accounts={accounts} accountGroups={accountGroups} placeholder="— Selecione a conta —" />
                 </select>
               </div>
             ))}
@@ -474,7 +474,7 @@ function addMonthSafe(dateStr, n) {
   return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(td).padStart(2, '0')}`
 }
 
-function CartaoCreditoTab({ accounts, transactions }) {
+function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
     addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura,
@@ -678,8 +678,7 @@ function CartaoCreditoTab({ accounts, transactions }) {
               <div>
                 <label className="label">Cartão de Destino</label>
                 <select className="input" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
-                  <option value="">Selecione o cartão...</option>
-                  {creditAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
                 </select>
               </div>
               {(cardInfo.cardName || cardInfo.faturaStr) && (
@@ -810,7 +809,7 @@ function CartaoCreditoTab({ accounts, transactions }) {
 // ─── Painel principal ─────────────────────────────────────────────────────────
 
 export default function ImportPanel() {
-  const { accounts, transactions } = useApp()
+  const { accounts, accountGroups, transactions } = useApp()
   const [tab, setTab] = useState('corrente')
 
   return (
@@ -832,8 +831,8 @@ export default function ImportPanel() {
         ))}
       </div>
 
-      {tab === 'corrente' && <ContaCorrenteTab accounts={accounts} transactions={transactions} />}
-      {tab === 'cartao' && <CartaoCreditoTab accounts={accounts} transactions={transactions} />}
+      {tab === 'corrente' && <ContaCorrenteTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
+      {tab === 'cartao' && <CartaoCreditoTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
     </div>
   )
 }
