@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
+import { useAutoBackup } from './hooks/useAutoBackup'
+import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
 import BottomNav from './components/Layout/BottomNav'
 import Header from './components/Layout/Header'
@@ -26,7 +28,11 @@ function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
-  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
+  const [backupToast, setBackupToast] = useState(false)
+  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, data } = useApp()
+
+  const handleAutoBackup = useCallback(() => setBackupToast(true), [])
+  useAutoBackup(data, handleAutoBackup)
 
   const saldoPrincipal = activeProfileId
     ? profileAccounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
@@ -86,6 +92,12 @@ function AppContent() {
       <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Posição Financeira" size="lg">
         <PosicaoFinanceiraModal />
       </Modal>
+      {backupToast && (
+        <Toast
+          message="Backup automático salvo na pasta Downloads"
+          onClose={() => setBackupToast(false)}
+        />
+      )}
     </div>
   )
 }

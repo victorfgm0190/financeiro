@@ -1,4 +1,5 @@
-const KEY = 'finup_v1'
+export const STORAGE_KEY = 'finup_v1'
+const KEY = STORAGE_KEY
 
 export function saveLocal(data) {
   try {

@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
+import { STORAGE_KEY } from '../../lib/storage'
+import { triggerBackupDownload, getLastBackupTs } from '../../hooks/useAutoBackup'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
@@ -135,30 +137,38 @@ export default function SettingsPanel() {
     setNewRule({ contains: '', categoryId: '', payee: '' })
   }
 
-  const handleExport = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `finup_backup_${new Date().toISOString().split('T')[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const importInputRef = useRef(null)
+  const [pendingImport, setPendingImport] = useState(null) // { parsed, fileName }
+  const [confirmImport, setConfirmImport] = useState(false)
 
-  const handleImport = (e) => {
+  const handleExport = () => triggerBackupDownload(data)
+
+  const handleImportFileChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
-        JSON.parse(ev.target.result)
-        localStorage.setItem('finapp_data', ev.target.result)
-        window.location.reload()
+        const parsed = JSON.parse(ev.target.result)
+        if (!parsed.accounts || !parsed.transactions) {
+          alert('Este arquivo não parece ser um backup válido do Finup.')
+          return
+        }
+        setPendingImport({ parsed, fileName: file.name })
+        setConfirmImport(true)
       } catch {
-        alert('Arquivo inválido')
+        alert('Arquivo inválido — não é um JSON válido.')
       }
     }
     reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handleImportConfirm = () => {
+    if (!pendingImport) return
+    const { _exportedAt, _app, ...cleanData } = pendingImport.parsed
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData))
+    window.location.reload()
   }
 
   const openGroupEdit = (group) => {
@@ -697,18 +707,63 @@ export default function SettingsPanel() {
       </div>
 
       {/* Backup */}
-      <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Backup de Dados</h2>
-        <div className="flex gap-3">
-          <button className="btn-secondary flex items-center gap-2" onClick={handleExport}>
-            <Download size={14} /> Exportar Backup
+      <div className="card space-y-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={15} className="text-emerald-400" />
+          <h2 className="text-sm font-semibold text-gray-300">Backup de Dados</h2>
+        </div>
+
+        {/* Status */}
+        {(() => {
+          const ts = getLastBackupTs()
+          return ts ? (
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-800/60 rounded-lg px-3 py-2">
+              <Clock size={12} className="text-emerald-500 shrink-0" />
+              <span>
+                Último backup baixado:{' '}
+                <span className="text-gray-300">
+                  {new Date(ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-amber-500/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+              <AlertTriangle size={12} className="shrink-0" />
+              <span>Nenhum backup baixado ainda. Recomendamos exportar regularmente.</span>
+            </div>
+          )
+        })()}
+
+        {/* Counts */}
+        <div className="grid grid-cols-3 gap-2 text-xs text-center">
+          {[
+            ['Contas', data.accounts?.length ?? 0],
+            ['Lançamentos', data.transactions?.length ?? 0],
+            ['Agendamentos', data.schedules?.length ?? 0],
+          ].map(([label, count]) => (
+            <div key={label} className="bg-gray-800 rounded-lg py-2 px-1">
+              <p className="text-gray-200 font-bold text-base">{count}</p>
+              <p className="text-gray-500">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button className="btn-primary flex items-center justify-center gap-2 flex-1" onClick={handleExport}>
+            <Download size={14} /> Exportar backup completo
           </button>
-          <label className="btn-secondary flex items-center gap-2 cursor-pointer">
-            <Upload size={14} /> Importar Backup
-            <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+          <label className="btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer">
+            <Upload size={14} /> Importar backup
+            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} />
           </label>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Os dados são armazenados localmente no seu navegador (localStorage).</p>
+
+        <p className="text-xs text-gray-600 leading-relaxed">
+          Os dados são salvos automaticamente no navegador a cada alteração.
+          O backup periódico (a cada 24h com o app aberto) é baixado automaticamente para a pasta Downloads.
+          Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
+        </p>
       </div>
 
       {/* Zona de Perigo */}
@@ -723,9 +778,18 @@ export default function SettingsPanel() {
       <ConfirmDialog
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        onConfirm={() => { localStorage.removeItem('finapp_data'); window.location.reload() }}
+        onConfirm={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload() }}
         title="Apagar Todos os Dados"
         message="Tem certeza? Todos os dados (contas, lançamentos, agendamentos) serão apagados permanentemente."
+        danger
+      />
+
+      <ConfirmDialog
+        open={confirmImport}
+        onClose={() => { setConfirmImport(false); setPendingImport(null) }}
+        onConfirm={handleImportConfirm}
+        title="Restaurar Backup"
+        message={`Importar "${pendingImport?.fileName}"? Todos os dados atuais (${data.accounts?.length ?? 0} contas, ${data.transactions?.length ?? 0} lançamentos) serão substituídos pelo backup. Esta ação não pode ser desfeita.`}
         danger
       />
 
