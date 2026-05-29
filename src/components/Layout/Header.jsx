@@ -28,7 +28,7 @@ export default function Header({ page, financialPeriod, saldoPrincipal, onShowPo
       {/* Title + period */}
       <div className="min-w-0">
         <h1 className="text-base font-semibold text-gray-100 leading-tight">{PAGE_TITLES[page] || page}</h1>
-        {financialPeriod && (
+        {financialPeriod && page !== 'schedule' && (
           <p className="text-xs text-gray-500 leading-tight">
             {format(financialPeriod.start, 'dd/MM/yyyy')} – {format(financialPeriod.end, 'dd/MM/yyyy')}
           </p>

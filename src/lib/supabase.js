@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+// Diagnóstico — remover após confirmar conexão em produção
+console.log('[finup] SUPABASE_URL:', SUPABASE_URL ?? '⚠️ UNDEFINED')
+console.log('[finup] KEY prefix:', SUPABASE_KEY ? SUPABASE_KEY.slice(0, 30) + '…' : '⚠️ UNDEFINED')
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ─── Transformadores camelCase ↔ snake_case ───────────────────────────────────
@@ -307,8 +311,6 @@ export const rowToEnvelope = (r) => ({
 export async function loadFromSupabase(defaultData) {
   // Ping: testa conectividade e existência do schema
   const ping = await supabase.from('configuracoes').select('id').limit(1)
-
-  console.log('[Supabase] ping result:', JSON.stringify({ error: ping.error, status: ping.status }))
 
   if (ping.error) {
     const msg = ping.error.message || ''
