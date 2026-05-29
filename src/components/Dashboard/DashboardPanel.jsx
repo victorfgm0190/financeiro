@@ -1,13 +1,22 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
-  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight,
+  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight, X,
 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import Modal from '../shared/Modal'
+
+const PIE_COLORS = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899']
+
+const PERIOD_OPTS = [
+  { value: 'current', label: 'Mês atual' },
+  { value: 'prev', label: 'Mês anterior' },
+  { value: '3m', label: 'Últimos 3m' },
+]
 
 function Delta({ abs, pct, goodWhenPositive = true }) {
   if (abs === null || abs === undefined) return null
@@ -124,11 +133,42 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       .slice(0, 5)
   }, [periodTxs, categories])
 
-  const recentTxs = [...transactions]
-    .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''))
-    .slice(0, 5)
-
   const today = new Date().toISOString().split('T')[0]
+
+  // ── P17: Pie chart state ─────────────────────────────────────────────────
+  const [pieFilter, setPieFilter] = useState('current')
+  const [catModal, setCatModal] = useState(null) // { name, cat, txs, value, color }
+
+  const pieRange = useMemo(() => {
+    const now = new Date()
+    if (pieFilter === 'prev') {
+      const d = subMonths(now, 1)
+      return { start: startOfMonth(d).toISOString().split('T')[0], end: endOfMonth(d).toISOString().split('T')[0] }
+    }
+    if (pieFilter === '3m') {
+      return { start: startOfMonth(subMonths(now, 2)).toISOString().split('T')[0], end: endOfMonth(now).toISOString().split('T')[0] }
+    }
+    return { start: periodStr.start, end: periodStr.end }
+  }, [pieFilter, periodStr])
+
+  const topCatData = useMemo(() => {
+    const totals = {}
+    const txMap = {}
+    transactions
+      .filter(tx => tx.type === 'expense' && tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId)
+      .forEach(tx => {
+        totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
+        ;(txMap[tx.categoryId] = txMap[tx.categoryId] || []).push(tx)
+      })
+    const total = Object.values(totals).reduce((s, v) => s + v, 0)
+    return Object.entries(totals)
+      .map(([id, value]) => {
+        const cat = categories.find(c => c.id === id)
+        return { id, cat, name: cat ? `${cat.icon} ${cat.name}` : id, value, pct: total > 0 ? (value / total) * 100 : 0, txs: txMap[id] || [] }
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+  }, [transactions, categories, pieRange])
 
   return (
     <div className="space-y-4">
@@ -309,39 +349,79 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
         </div>
       </div>
 
-      {/* Recent transactions + top expenses */}
+      {/* Maiores Despesas (pizza) + ranking de categorias */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+        {/* Left: pizza interativa */}
         <div className="card">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Últimos Lançamentos</h3>
-          {recentTxs.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-4">Nenhum lançamento registrado</p>
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <h3 className="text-sm font-semibold text-gray-300 shrink-0">Maiores Despesas</h3>
+            <div className="flex gap-1 shrink-0">
+              {PERIOD_OPTS.map(o => (
+                <button
+                  key={o.value}
+                  onClick={() => setPieFilter(o.value)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${pieFilter === o.value ? 'bg-gray-700 text-gray-200' : 'text-gray-600 hover:text-gray-400'}`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {topCatData.length === 0 ? (
+            <p className="text-xs text-gray-500 text-center py-10">Sem despesas no período</p>
           ) : (
-            <div className="space-y-2">
-              {recentTxs.map(tx => {
-                const cat = categories.find(c => c.id === tx.categoryId)
-                return (
-                  <div key={tx.id} className="flex items-center justify-between">
+            <div>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={topCatData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={48}
+                    outerRadius={78}
+                    paddingAngle={2}
+                    dataKey="value"
+                    onClick={(d, i) => setCatModal({ ...d, color: PIE_COLORS[i % PIE_COLORS.length] })}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {topCatData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={v => fmt(v)}
+                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* Legend */}
+              <div className="space-y-1 mt-1">
+                {topCatData.map((item, i) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setCatModal({ ...item, color: PIE_COLORS[i % PIE_COLORS.length] })}
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-gray-800/60 transition-colors text-left group"
+                  >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base shrink-0">
-                        {cat?.icon || (tx.type === 'income' ? '💙' : tx.type === 'transfer' ? '🔄' : '🟠')}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-300 font-medium truncate">{tx.description || cat?.name || tx.type}</p>
-                        <p className="text-xs text-gray-500">{fmtDate(tx.date)}</p>
-                      </div>
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                      <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">{item.name}</span>
                     </div>
-                    <span className={`text-xs font-bold shrink-0 ml-2 ${tx.type === 'income' ? 'text-blue-600' : tx.type === 'transfer' ? 'text-blue-400' : 'text-orange-600'}`}>
-                      {tx.type === 'income' ? '+' : '-'}{fmt(tx.amount)}
+                    <span className="text-xs text-gray-500 shrink-0 ml-2 tabular-nums">
+                      {item.pct.toFixed(0)}% — {fmt(item.value)}
                     </span>
-                  </div>
-                )
-              })}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
 
+        {/* Right: ranking de categorias com barra */}
         <div className="card">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Top Despesas por Categoria</h3>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3">Ranking por Categoria</h3>
           {topExpenses.length === 0 ? (
             <p className="text-xs text-gray-500 text-center py-4">Sem despesas no período atual</p>
           ) : (
@@ -364,6 +444,32 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
           )}
         </div>
       </div>
+
+      {/* Category drill-down modal */}
+      {catModal && (
+        <Modal open={!!catModal} onClose={() => setCatModal(null)} title={catModal.name} size="md">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-gray-800">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Total da categoria</span>
+              <span className="text-lg font-bold" style={{ color: catModal.color }}>{fmt(catModal.value)}</span>
+            </div>
+            <div className="space-y-0 max-h-80 overflow-y-auto">
+              {[...catModal.txs]
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .map(tx => (
+                  <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-200 truncate">{tx.description || catModal.name}</p>
+                      <p className="text-xs text-gray-500">{fmtDate(tx.date)}{tx.payee ? ` · ${tx.payee}` : ''}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-orange-600 shrink-0 ml-3">{fmt(tx.amount)}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Accounts grid */}
       <div className="card">
