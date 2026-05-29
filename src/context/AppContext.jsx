@@ -18,13 +18,15 @@ const EMPTY_PREV = {
 }
 
 const DEFAULT_ACCOUNT_GROUPS = [
-  { id: 'grp_acc_1', name: 'Conta Corrente',   type: 'financeiro',  order: 0 },
-  { id: 'grp_acc_2', name: 'Poupança',          type: 'financeiro',  order: 1 },
-  { id: 'grp_acc_3', name: 'Investimentos',     type: 'financeiro',  order: 2 },
-  { id: 'grp_acc_4', name: 'Cartão de Crédito', type: 'financeiro',  order: 3 },
-  { id: 'grp_acc_5', name: 'Dinheiro',          type: 'financeiro',  order: 4 },
-  { id: 'grp_acc_6', name: 'Imóveis',           type: 'patrimonial', order: 5 },
-  { id: 'grp_acc_7', name: 'Veículos',          type: 'patrimonial', order: 6 },
+  { id: 'grp_acc_1', name: 'Conta Corrente',          type: 'financeiro',  order: 0, behavior: null },
+  { id: 'grp_acc_2', name: 'Poupança',                type: 'financeiro',  order: 1, behavior: null },
+  { id: 'grp_acc_3', name: 'Investimentos',           type: 'financeiro',  order: 2, behavior: null },
+  { id: 'grp_acc_4', name: 'Cartão de Crédito',       type: 'financeiro',  order: 3, behavior: null },
+  { id: 'grp_acc_5', name: 'Dinheiro',                type: 'financeiro',  order: 4, behavior: null },
+  { id: 'grp_acc_6', name: 'Imóveis',                 type: 'patrimonial', order: 5, behavior: null },
+  { id: 'grp_acc_7', name: 'Veículos',                type: 'patrimonial', order: 6, behavior: null },
+  { id: 'grp_acc_8', name: 'Principais Dívidas',      type: 'patrimonial', order: 7, behavior: 'divida' },
+  { id: 'grp_acc_9', name: 'Empréstimos a Terceiros', type: 'patrimonial', order: 8, behavior: 'emprestimo' },
 ]
 
 const AppContext = createContext(null)
@@ -170,6 +172,12 @@ export function AppProvider({ children }) {
     const local = loadLocal()
     if (local) {
       const merged = { ...defaultData, ...local, settings: { ...defaultData.settings, ...(local.settings || {}) } }
+      // Migração: garante grupos de dívida/empréstimo mesmo em dados existentes
+      const groups = merged.accountGroups || []
+      const missingGroups = DEFAULT_ACCOUNT_GROUPS.filter(
+        dg => dg.behavior && !groups.some(g => g.behavior === dg.behavior)
+      )
+      if (missingGroups.length > 0) merged.accountGroups = [...groups, ...missingGroups]
       setData(merged)
       prevDataRef.current = merged
     } else {
@@ -733,6 +741,75 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // ── Debt Plan ─────────────────────────────────────────────────────────────────
+  const setDebtPlan = useCallback((accountId, plan) => {
+    update(d => ({
+      ...d,
+      accounts: d.accounts.map(a => a.id === accountId ? { ...a, debtPlan: plan } : a),
+    }))
+  }, [update])
+
+  const payDebtInstallment = useCallback(({
+    debtAccountId, sourceAccountId, payableId,
+    paidAmount, principalAmount, interestAmount,
+    interestCategoryId, date, description,
+  }) => {
+    update(d => {
+      const sourceAcc = d.accounts.find(a => a.id === sourceAccountId)
+      const now = new Date().toISOString()
+      const newTxs = []
+
+      // Update account balances
+      const accounts = d.accounts.map(a => {
+        if (a.id === sourceAccountId) {
+          return { ...a, balance: (a.balance || 0) - paidAmount }
+        }
+        if (a.id === debtAccountId) {
+          const newPlan = a.debtPlan ? {
+            ...a.debtPlan,
+            paidInstallments: (a.debtPlan.paidInstallments || 0) + 1,
+          } : a.debtPlan
+          return { ...a, balance: Math.max(0, (a.balance || 0) - principalAmount), debtPlan: newPlan }
+        }
+        return a
+      })
+
+      // Expense transaction for principal
+      newTxs.push({
+        id: 'tx_dprinc_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+        type: 'expense',
+        accountId: sourceAccountId,
+        accountType: sourceAcc?.type,
+        amount: principalAmount,
+        date,
+        description: description || 'Pagamento de parcela',
+        createdAt: now,
+      })
+
+      // Expense transaction for interest
+      if (interestAmount > 0 && interestCategoryId) {
+        newTxs.push({
+          id: 'tx_dint_' + (Date.now() + 1) + '_' + Math.random().toString(36).slice(2),
+          type: 'expense',
+          accountId: sourceAccountId,
+          accountType: sourceAcc?.type,
+          amount: interestAmount,
+          categoryId: interestCategoryId,
+          date,
+          description: `Juros — ${description || ''}`,
+          createdAt: now,
+        })
+      }
+
+      // Mark installment payable as paid
+      const payables = payableId
+        ? d.payables.map(p => p.id === payableId ? { ...p, status: 'paid', paidAt: now } : p)
+        : d.payables
+
+      return { ...d, accounts, payables, transactions: [...d.transactions, ...newTxs] }
+    })
+  }, [update])
+
   // ── Payables ─────────────────────────────────────────────────────────────────
   const addPayable = useCallback((payable) => {
     const id = 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -972,6 +1049,7 @@ export function AppProvider({ children }) {
       processarLancamentoGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, moveAccount,
+      setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,

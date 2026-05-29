@@ -4,6 +4,8 @@ import { useApp } from '../../context/AppContext'
 import { today, fmt } from '../shared/utils'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
+import DebtPlanModal from './DebtPlanModal'
+import DebtPaymentModal from './DebtPaymentModal'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -31,7 +33,7 @@ function GerencialSelect({ value, onChange, grupos }) {
 
 export default function TransactionForm({ initial, onClose }) {
   const {
-    accounts, categories, costCenters, payees,
+    accounts, accountGroups, categories, costCenters, payees,
     gerencialGroups, processarLancamentoGerencial,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -53,9 +55,10 @@ export default function TransactionForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
   })
 
-  const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match'
+  const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match' | 'debt-plan' | 'debt-payment'
   const [resgateInfo, setResgateInfo] = useState(null)
   const [scheduleMatch, setScheduleMatch] = useState(null) // { schedule, tx }
+  const [debtCtx, setDebtCtx] = useState(null) // { account, group, amount, date, sourceAccountId }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -87,6 +90,27 @@ export default function TransactionForm({ initial, onClose }) {
       updateTransaction(initial.id, txData)
       onClose()
       return
+    }
+
+    // Detect debt/loan account transfer before saving
+    if (form.type === 'transfer' && form.toAccountId && !initial?.id) {
+      const toAcc = accounts.find(a => a.id === form.toAccountId)
+      const toGroup = (accountGroups || []).find(g => g.id === toAcc?.accountGroupId)
+      if (toGroup?.behavior === 'divida' || toGroup?.behavior === 'emprestimo') {
+        const ctx = { account: toAcc, group: toGroup, amount: Number(form.amount), date: form.date, sourceAccountId: form.accountId }
+        if (toAcc.debtPlan) {
+          // Payment flow — intercept, do NOT save as a normal transfer
+          setDebtCtx(ctx)
+          setStep('debt-payment')
+          return
+        } else {
+          // New loan — save transfer normally, then show plan setup
+          addTransaction(txData)
+          setDebtCtx(ctx)
+          setStep('debt-plan')
+          return
+        }
+      }
     }
 
     addTransaction(txData)
@@ -150,6 +174,33 @@ export default function TransactionForm({ initial, onClose }) {
           addRecurringMatchException(scheduleMatch.tx.payee || scheduleMatch.tx.description)
           onClose()
         }}
+      />
+    )
+  }
+
+  // ── Configuração de plano de dívida / empréstimo ────────────────────────────
+  if (step === 'debt-plan' && debtCtx) {
+    return (
+      <DebtPlanModal
+        account={debtCtx.account}
+        group={debtCtx.group}
+        amount={debtCtx.amount}
+        date={debtCtx.date}
+        onClose={onClose}
+      />
+    )
+  }
+
+  // ── Pagamento de parcela de dívida ───────────────────────────────────────────
+  if (step === 'debt-payment' && debtCtx) {
+    return (
+      <DebtPaymentModal
+        account={debtCtx.account}
+        group={debtCtx.group}
+        amount={debtCtx.amount}
+        date={debtCtx.date}
+        sourceAccountId={debtCtx.sourceAccountId}
+        onClose={onClose}
       />
     )
   }
@@ -236,10 +287,28 @@ export default function TransactionForm({ initial, onClose }) {
       </div>
 
       {form.type === 'transfer' && (
-        <div>
-          <label className="label">Valor (R$) *</label>
-          <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
-        </div>
+        <>
+          <div>
+            <label className="label">Valor (R$) *</label>
+            <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
+          </div>
+          {(() => {
+            const toAcc = accounts.find(a => a.id === form.toAccountId)
+            const toGroup = (accountGroups || []).find(g => g.id === toAcc?.accountGroupId)
+            if (!toGroup?.behavior) return null
+            const hasPlan = !!toAcc?.debtPlan
+            const isEmp = toGroup.behavior === 'emprestimo'
+            return (
+              <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${hasPlan ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'}`}>
+                <span className="shrink-0 mt-0.5">{hasPlan ? '✓' : '⚠'}</span>
+                {hasPlan
+                  ? `Pagamento de ${isEmp ? 'empréstimo' : 'dívida'} — plano de ${toAcc.debtPlan.installments} parcelas ativo`
+                  : `Conta de ${isEmp ? 'empréstimo a terceiros' : 'dívida'} — você poderá configurar o plano de parcelas após registrar`
+                }
+              </div>
+            )
+          })()}
+        </>
       )}
 
       <div>

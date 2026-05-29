@@ -17,6 +17,7 @@ export const accountGroupToRow = (g) => ({
   name: g.name,
   type: g.type || 'financeiro',
   order: g.order ?? 0,
+  behavior: g.behavior || null,
 })
 
 export const rowToAccountGroup = (r) => ({
@@ -24,6 +25,7 @@ export const rowToAccountGroup = (r) => ({
   name: r.name,
   type: r.type || 'financeiro',
   order: r.order ?? 0,
+  behavior: r.behavior || null,
 })
 
 export const accountToRow = (a) => ({
@@ -44,6 +46,7 @@ export const accountToRow = (a) => ({
   grupo_gerencial: a.grupoGerencial || null,
   account_group_id: a.accountGroupId || null,
   order: a.order ?? 0,
+  debt_plan: a.debtPlan ? a.debtPlan : null,
 })
 
 export const rowToAccount = (r) => ({
@@ -64,6 +67,7 @@ export const rowToAccount = (r) => ({
   grupoGerencial: r.grupo_gerencial || null,
   accountGroupId: r.account_group_id || null,
   order: r.order ?? 0,
+  debtPlan: r.debt_plan || null,
 })
 
 export const txToRow = (tx) => ({
@@ -229,6 +233,8 @@ export const payableToRow = (p) => ({
   paid_at: p.paidAt || null,
   bill_start: p.billStart || null,
   bill_end: p.billEnd || null,
+  installment_number: p.installmentNumber || null,
+  total_installments: p.totalInstallments || null,
 })
 
 export const rowToPayable = (r) => ({
@@ -244,6 +250,8 @@ export const rowToPayable = (r) => ({
   paidAt: r.paid_at,
   billStart: r.bill_start,
   billEnd: r.bill_end,
+  installmentNumber: r.installment_number || null,
+  totalInstallments: r.total_installments || null,
 })
 
 export const envelopeToRow = (e) => ({

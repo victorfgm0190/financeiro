@@ -231,6 +231,28 @@ CREATE TABLE IF NOT EXISTS reservas (
 );
 ALTER TABLE reservas DISABLE ROW LEVEL SECURITY;
 
+-- Grupos de Contas (agrupadores visuais)
+CREATE TABLE IF NOT EXISTS grupos_conta (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'financeiro',
+  "order" INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE grupos_conta DISABLE ROW LEVEL SECURITY;
+
+-- Colunas de grupo e ordem nas contas (migração)
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS account_group_id TEXT;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS "order" INTEGER DEFAULT 0;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS debt_plan JSONB;
+
+-- Comportamento especial de grupos de contas (dívida / empréstimo)
+ALTER TABLE grupos_conta ADD COLUMN IF NOT EXISTS behavior TEXT;
+
+-- Metadados de parcelas em reservas (migração)
+ALTER TABLE reservas ADD COLUMN IF NOT EXISTS installment_number INTEGER;
+ALTER TABLE reservas ADD COLUMN IF NOT EXISTS total_installments INTEGER;
+
 -- Envelopes de Controle Mensal
 CREATE TABLE IF NOT EXISTS envelopes (
   id TEXT PRIMARY KEY,
