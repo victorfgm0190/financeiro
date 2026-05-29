@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Wifi, WifiOff, AlertTriangle, Loader, Layers,
+  Wallet, Wifi, WifiOff, AlertTriangle, Loader, Layers, Package,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -14,8 +14,9 @@ const NAV = [
   { id: 'schedule', label: 'Agendamentos', icon: Calendar },
   { id: 'import', label: 'Importar Fatura', icon: Upload },
   { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
-  { id: 'reservas', label: 'Reservas', icon: Layers },
-  { id: 'budget', label: 'Orçamento', icon: PieChart },
+  { id: 'reservas',   label: 'Reservas',   icon: Layers  },
+  { id: 'envelopes',  label: 'Envelopes',  icon: Package },
+  { id: 'budget',     label: 'Orçamento',  icon: PieChart },
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },

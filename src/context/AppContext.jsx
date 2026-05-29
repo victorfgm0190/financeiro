@@ -5,7 +5,7 @@ import {
   loadFromSupabase, seedDefaults,
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
-  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow,
+  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow,
 } from '../lib/supabase'
 
 const AppContext = createContext(null)
@@ -124,6 +124,7 @@ const defaultData = {
     { id: 'cat_ore_pis', name: 'PIS / PASEP',        type: 'income',  color: '#6366f1', icon: '📋', group: 'Outras Receitas' },
   ],
   classificationRules: [],
+  envelopes: [],
   costCenters: ['Pessoal', 'Família', 'Trabalho', 'Casa'],
   payees: [],
   gerencialGroups: [
@@ -196,6 +197,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('reservas', prev.payables, data.payables, payableToRow))
       if (prev.payees !== data.payees)
         tasks.push(syncPayees(prev.payees, data.payees))
+      if (prev.envelopes !== data.envelopes)
+        tasks.push(syncSection('envelopes', prev.envelopes, data.envelopes, envelopeToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -597,6 +600,20 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, gerencialGroups: d.gerencialGroups.filter(g => g.id !== id) }))
   }, [update])
 
+  // ── Envelopes ─────────────────────────────────────────────────────────────────
+  const addEnvelope = useCallback((envelope) => {
+    const id = 'env_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    update(d => ({ ...d, envelopes: [...(d.envelopes || []), { ...envelope, id, history: [] }] }))
+  }, [update])
+
+  const updateEnvelope = useCallback((id, changes) => {
+    update(d => ({ ...d, envelopes: (d.envelopes || []).map(e => e.id === id ? { ...e, ...changes } : e) }))
+  }, [update])
+
+  const deleteEnvelope = useCallback((id) => {
+    update(d => ({ ...d, envelopes: (d.envelopes || []).filter(e => e.id !== id) }))
+  }, [update])
+
   // ── Payables ─────────────────────────────────────────────────────────────────
   const addPayable = useCallback((payable) => {
     const id = 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -817,6 +834,7 @@ export function AppProvider({ children }) {
       budgets: data.budgets,
       categories: data.categories,
       classificationRules: data.classificationRules,
+      envelopes: data.envelopes || [],
       costCenters: data.costCenters,
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,
@@ -832,6 +850,7 @@ export function AppProvider({ children }) {
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
+      addEnvelope, updateEnvelope, deleteEnvelope,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,

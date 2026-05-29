@@ -231,6 +231,19 @@ CREATE TABLE IF NOT EXISTS reservas (
 );
 ALTER TABLE reservas DISABLE ROW LEVEL SECURITY;
 
+-- Envelopes de Controle Mensal
+CREATE TABLE IF NOT EXISTS envelopes (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  limit_amount NUMERIC NOT NULL DEFAULT 0,
+  due_day INTEGER NOT NULL DEFAULT 1,
+  category_ids JSONB NOT NULL DEFAULT '[]',
+  account_id TEXT,
+  history JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE envelopes DISABLE ROW LEVEL SECURITY;
+
 -- Movimentos de Reservas (pagamentos/resgates vinculados)
 CREATE TABLE IF NOT EXISTS reservas_movimentos (
   id TEXT PRIMARY KEY,

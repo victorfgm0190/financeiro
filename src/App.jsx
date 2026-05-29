@@ -15,6 +15,7 @@ import SchedulePanel from './components/Schedule/SchedulePanel'
 import ImportPanel from './components/Import/ImportPanel'
 import CashFlowPanel from './components/CashFlow/CashFlowPanel'
 import ReservasPanel from './components/Reservas/ReservasPanel'
+import EnvelopesPanel from './components/Envelopes/EnvelopesPanel'
 import BudgetPanel from './components/Budget/BudgetPanel'
 import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
@@ -59,8 +60,9 @@ function AppContent() {
     schedule: <SchedulePanel />,
     import: <ImportPanel />,
     cashflow: <CashFlowPanel setActivePage={setActivePage} />,
-    reservas: <ReservasPanel />,
-    budget: <BudgetPanel />,
+    reservas:   <ReservasPanel />,
+    envelopes:  <EnvelopesPanel />,
+    budget:     <BudgetPanel />,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel />,
     settings: <SettingsPanel />,

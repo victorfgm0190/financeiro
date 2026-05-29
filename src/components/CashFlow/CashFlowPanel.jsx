@@ -4,6 +4,7 @@ import { addDays, format } from 'date-fns'
 import { ArrowDownCircle, ArrowUpCircle, Wallet, AlertTriangle, Calendar } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -20,7 +21,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function CashFlowPanel({ setActivePage }) {
-  const { accounts, transactions, schedules, getNextOccurrences } = useApp()
+  const { accounts, transactions, schedules, getNextOccurrences, envelopes } = useApp()
   const [filterAccount, setFilterAccount] = useState('fluxo')
   const [horizon, setHorizon] = useState(30)
 
@@ -74,6 +75,19 @@ export default function CashFlowPanel({ setActivePage }) {
       })
     })
 
+    // Envelope projected outflow on due date
+    envelopes.forEach(env => {
+      if (!accountIds.includes(env.accountId)) return
+      const period = getEnvelopePeriod(env.dueDay)
+      if (period.to < todayStr || period.to > endDateStr) return
+      const spent = transactions
+        .filter(tx => tx.type === 'expense' && env.categoryIds.includes(tx.categoryId) && tx.date >= period.from && tx.date <= period.to)
+        .reduce((s, t) => s + t.amount, 0)
+      const remaining = env.limitAmount - spent
+      const outflow = remaining > 0 ? remaining : spent
+      if (outflow > 0) dailyFlow[period.to] = (dailyFlow[period.to] || 0) - outflow
+    })
+
     let balance = currentBalance
     return days.map(date => ({
       label: date.slice(5).split('-').reverse().join('/'),
@@ -122,6 +136,26 @@ export default function CashFlowPanel({ setActivePage }) {
           isTransfer: s.transactionType === 'transfer', fromAccountId: s.accountId, toAccountId: s.toAccountId,
           _key: s.id + '_' + date,
         })
+      })
+    })
+
+    // Envelope projected entries
+    envelopes.forEach(env => {
+      if (!accountIds.includes(env.accountId)) return
+      const period = getEnvelopePeriod(env.dueDay)
+      if (period.to < todayStr || period.to > endDateStr) return
+      const spent = transactions
+        .filter(tx => tx.type === 'expense' && env.categoryIds.includes(tx.categoryId) && tx.date >= period.from && tx.date <= period.to)
+        .reduce((s, t) => s + t.amount, 0)
+      const remaining = env.limitAmount - spent
+      const saida = remaining > 0 ? remaining : spent
+      if (saida <= 0) return
+      const label = remaining > 0
+        ? `Envelope ${env.name} (restante ${fmt(remaining)} de ${fmt(env.limitAmount)})`
+        : `Envelope ${env.name} (excedido — gasto ${fmt(spent)})`
+      events.push({
+        date: period.to, description: label, entrada: 0, saida, scheduled: true,
+        isTransfer: false, isEnvelope: true, _key: 'env_' + env.id,
       })
     })
 
@@ -346,6 +380,9 @@ export default function CashFlowPanel({ setActivePage }) {
                         )}
                         {row.isNetized && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">líquido</span>
+                        )}
+                        {row.isEnvelope && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">envelope</span>
                         )}
                       </div>
                     </td>

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+// envelopeToRow / rowToEnvelope defined below — used by AppContext sync
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -226,6 +227,26 @@ export const rowToPayable = (r) => ({
   billEnd: r.bill_end,
 })
 
+export const envelopeToRow = (e) => ({
+  id: e.id,
+  name: e.name,
+  limit_amount: Number(e.limitAmount) || 0,
+  due_day: Number(e.dueDay) || 1,
+  category_ids: e.categoryIds || [],
+  account_id: e.accountId || null,
+  history: e.history || [],
+})
+
+export const rowToEnvelope = (r) => ({
+  id: r.id,
+  name: r.name,
+  limitAmount: Number(r.limit_amount) || 0,
+  dueDay: Number(r.due_day) || 1,
+  categoryIds: r.category_ids || [],
+  accountId: r.account_id || null,
+  history: r.history || [],
+})
+
 // ─── Status possíveis de conexão ──────────────────────────────────────────────
 // 'connecting'     → verificando
 // 'connected'      → conectado e com dados
@@ -273,6 +294,7 @@ export async function loadFromSupabase(defaultData) {
       { data: pays },
       { data: faves },
       { data: cfg },
+      { data: envs },
     ] = await Promise.all([
       supabase.from('contas').select('*'),
       supabase.from('lancamentos').select('*').order('created_at'),
@@ -284,6 +306,7 @@ export async function loadFromSupabase(defaultData) {
       supabase.from('reservas').select('*'),
       supabase.from('favorecidos').select('name'),
       supabase.from('configuracoes').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('envelopes').select('*'),
     ])
 
     // Banco vazio (primeira execução real)
@@ -311,6 +334,7 @@ export async function loadFromSupabase(defaultData) {
           : defaultData.gerencialGroups,
         payables: (pays || []).map(rowToPayable),
         payees: (faves || []).map(r => r.name),
+        envelopes: (envs || []).map(rowToEnvelope),
       },
     }
   } catch (err) {
