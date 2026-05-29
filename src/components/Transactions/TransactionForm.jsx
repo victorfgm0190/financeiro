@@ -32,6 +32,8 @@ function GerencialSelect({ value, onChange, grupos }) {
   )
 }
 
+const GERENCIAL_CONTA_KEY = 'lastGerencialAccountId'
+
 export default function TransactionForm({ initial, onClose }) {
   const {
     accounts, accountGroups, categories, costCenters, payees,
@@ -41,6 +43,21 @@ export default function TransactionForm({ initial, onClose }) {
   } = useApp()
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+
+  // Contas correntes disponíveis para destino da transferência gerencial
+  const checkingAccounts = useMemo(
+    () => accounts.filter(a => a.type === 'checking' || a.contaCorrentePrincipal),
+    [accounts]
+  )
+
+  // Inicializa com última conta usada (localStorage) ou a conta corrente principal
+  const [gerencialContaId, setGerencialContaId] = useState(() => {
+    const saved = localStorage.getItem(GERENCIAL_CONTA_KEY)
+    if (saved && accounts.some(a => a.id === saved)) return saved
+    return accounts.find(a => a.contaCorrentePrincipal)?.id
+      || accounts.find(a => a.type === 'checking')?.id
+      || ''
+  })
 
   const [form, setForm] = useState({
     type: initial?.type || 'expense',
@@ -117,9 +134,16 @@ export default function TransactionForm({ initial, onClose }) {
     addTransaction(txData)
 
     if (showGerencial && form.grupoGerencial) {
+      const g = gerencialGroups.find(g => g.id === form.grupoGerencial)
+      // Grupo 1 (Gerencial): requer conta destino selecionada
+      const contaId = g?.number === 1 ? gerencialContaId : null
+      if (g?.number === 1 && gerencialContaId) {
+        localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
+      }
       const resultado = processarLancamentoGerencial(
         { accountId: form.accountId, amount: Number(form.amount), date: form.date },
-        form.grupoGerencial
+        form.grupoGerencial,
+        contaId,
       )
       if (resultado.needsResgate && resultado.contaResgate) {
         setResgateInfo({ ...resultado, amount: Number(form.amount), date: form.date })
@@ -362,23 +386,59 @@ export default function TransactionForm({ initial, onClose }) {
       </div>
 
       {showGerencial && (
-        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg space-y-2">
+        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg space-y-3">
           <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
           <GerencialSelect
             value={form.grupoGerencial}
             onChange={v => set('grupoGerencial', v)}
             grupos={gerencialGroups}
           />
+
           {form.grupoGerencial && (() => {
             const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
             if (!g || g.number === 'D') return (
               <p className="text-xs text-gray-500">Lançamento registrado como despesa normal.</p>
             )
-            if (g.number === 1) return (
-              <p className="text-xs text-purple-300">
-                Transferência automática será criada para a subconta "Ger. {selectedAccount?.apelido || selectedAccount?.name || 'CC'}".
-              </p>
-            )
+
+            if (g.number === 1) {
+              const subcontaApelido = selectedAccount?.apelido || selectedAccount?.name?.slice(0, 6) || 'CC'
+              const contaDestino = accounts.find(a => a.id === gerencialContaId)
+              return (
+                <div className="space-y-2">
+                  <div>
+                    <label className="label text-xs uppercase tracking-wide text-purple-400">Conta Destino</label>
+                    <select
+                      className="input"
+                      value={gerencialContaId}
+                      onChange={e => {
+                        setGerencialContaId(e.target.value)
+                        localStorage.setItem(GERENCIAL_CONTA_KEY, e.target.value)
+                      }}
+                      required
+                    >
+                      <option value="">Selecione a conta corrente...</option>
+                      {checkingAccounts.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}{a.contaCorrentePrincipal ? ' ★' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {contaDestino ? (
+                    <p className="text-xs text-purple-300 leading-relaxed">
+                      Transferência automática será criada para a subconta{' '}
+                      <strong className="text-purple-200">"Ger. {subcontaApelido}"</strong>{' '}
+                      a partir de <strong className="text-purple-200">{contaDestino.name}</strong>.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-400">
+                      Selecione a conta corrente de origem da transferência.
+                    </p>
+                  )}
+                </div>
+              )
+            }
+
             const acc = accounts.find(a => a.id === g.defaultAccountId)
             return (
               <p className="text-xs text-blue-300">

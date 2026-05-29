@@ -1024,7 +1024,7 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Gerencial Processing ──────────────────────────────────────────────────────
-  const processarLancamentoGerencial = useCallback((lancamento, grupoId) => {
+  const processarLancamentoGerencial = useCallback((lancamento, grupoId, contaDestinoId = null) => {
     const grupo = data.gerencialGroups?.find(g => g.id === grupoId)
     if (!grupo) return { needsResgate: false }
     if (grupo.number === 'D') return { needsResgate: false }
@@ -1035,10 +1035,12 @@ export function AppProvider({ children }) {
         const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
         const subcontaName = `Ger. ${apelido}`
 
-        const contaPrincipal =
-          d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-          d.accounts.find(a => a.isMain && a.type !== 'credit') ||
-          d.accounts.find(a => a.type === 'checking')
+        // Usa a conta explicitamente selecionada pelo usuário; fallback p/ legado/importação
+        const contaPrincipal = contaDestinoId
+          ? d.accounts.find(a => a.id === contaDestinoId)
+          : d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+            d.accounts.find(a => a.isMain && a.type !== 'credit') ||
+            d.accounts.find(a => a.type === 'checking')
 
         if (!contaPrincipal) return d
 
@@ -1050,7 +1052,7 @@ export function AppProvider({ children }) {
           accounts = [...accounts, {
             id: subcontaId,
             name: subcontaName,
-            type: 'savings',
+            type: 'checking',
             balance: lancamento.amount,
             bank: '',
             apelido: `G${apelido}`.slice(0, 8),
