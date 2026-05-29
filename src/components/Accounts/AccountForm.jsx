@@ -37,7 +37,7 @@ function Toggle({ checked, onChange, label, tooltip }) {
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], addAccount, updateAccount } = useApp()
+  const { accounts, accountGroups = [], profiles = [], addAccount, updateAccount } = useApp()
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -53,6 +53,7 @@ export default function AccountForm({ initial, onClose }) {
     contaAplicacao: initial?.contaAplicacao || false,
     grupoGerencial: initial?.grupoGerencial || null,
     accountGroupId: initial?.accountGroupId || null,
+    profileId: initial?.profileId || null,
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -91,6 +92,7 @@ export default function AccountForm({ initial, onClose }) {
       contaAplicacao: !isCredit && !isPatrimonial ? form.contaAplicacao : false,
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
+      profileId: form.profileId || null,
     }
 
     if (initial) {
@@ -176,6 +178,20 @@ export default function AccountForm({ initial, onClose }) {
           </select>
         </div>
       </div>
+
+      {profiles.length > 0 && (
+        <div>
+          <label className="label">Vínculo (CPF / CNPJ)</label>
+          <select className="input" value={form.profileId || ''} onChange={e => set('profileId', e.target.value || null)}>
+            <option value="">Sem vínculo</option>
+            {profiles.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name} — {p.type === 'pf' ? 'CPF' : 'CNPJ'} {p.document || '—'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {!isCredit && !isPatrimonial && (
         <div>

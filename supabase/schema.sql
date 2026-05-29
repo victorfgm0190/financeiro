@@ -278,3 +278,18 @@ CREATE TABLE IF NOT EXISTS reservas_movimentos (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE reservas_movimentos DISABLE ROW LEVEL SECURITY;
+
+-- Perfis CPF / CNPJ
+CREATE TABLE IF NOT EXISTS perfis (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'pf',
+  document TEXT,
+  color TEXT DEFAULT '#6366f1',
+  is_default BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE perfis DISABLE ROW LEVEL SECURITY;
+
+-- Vínculo de conta com perfil
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS profile_id TEXT;

@@ -350,7 +350,8 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
 // ─── Root panel ─────────────────────────────────────────────────────────────
 
 export default function TransactionsPanel() {
-  const { accounts, accountGroups } = useApp()
+  const { accounts: allAccounts, profileAccounts, accountGroups } = useApp()
+  const accounts = profileAccounts
 
   // view: null | { type: 'account', account } | { type: 'fatura', card, billKey }
   const [view, setView] = useState(null)

@@ -7,7 +7,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
 export default function BudgetPanel() {
-  const { budgets, categories, transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod } = useApp()
+  const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editBudget, setEditBudget] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)

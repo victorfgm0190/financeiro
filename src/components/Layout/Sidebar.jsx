@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, HardDrive,
+  Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -40,7 +40,8 @@ function DbStatusBadge({ status }) {
 }
 
 export default function Sidebar({ active, setActive, alertCount, saldoPrincipal, onShowPosicao }) {
-  const { dbStatus } = useApp()
+  const { dbStatus, profiles, activeProfileId } = useApp()
+  const activeProfile = profiles?.find(p => p.id === activeProfileId) || null
 
   return (
     <aside className="hidden md:flex w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex-col h-screen sticky top-0">
@@ -74,7 +75,14 @@ export default function Sidebar({ active, setActive, alertCount, saldoPrincipal,
           className="w-full text-left group"
           title="Ver posição financeira"
         >
-          <p className="text-xs text-gray-600 uppercase tracking-wide">Saldo Principal</p>
+          {activeProfile ? (
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeProfile.color }} />
+              <p className="text-xs font-medium truncate" style={{ color: activeProfile.color }}>{activeProfile.name}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600 uppercase tracking-wide">Saldo Principal</p>
+          )}
           <p className={`text-base font-bold mt-0.5 group-hover:opacity-80 transition-opacity ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
             {fmt(saldoPrincipal ?? 0)}
           </p>

@@ -21,7 +21,10 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function CashFlowPanel({ setActivePage }) {
-  const { accounts, transactions, schedules, getNextOccurrences, envelopes } = useApp()
+  const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getNextOccurrences, envelopes } = useApp()
+  const accounts = profileAccounts
+  const transactions = profileTransactions
+  const schedules = profileSchedules
   const [filterAccount, setFilterAccount] = useState('fluxo')
   const [horizon, setHorizon] = useState(30)
 

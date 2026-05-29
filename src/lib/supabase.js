@@ -12,6 +12,24 @@ console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
 
 // ─── Transformadores camelCase ↔ snake_case ───────────────────────────────────
 
+export const perfilToRow = (p) => ({
+  id: p.id,
+  name: p.name,
+  type: p.type || 'pf',
+  document: p.document || null,
+  color: p.color || '#6366f1',
+  is_default: !!p.isDefault,
+})
+
+export const rowToPerfil = (r) => ({
+  id: r.id,
+  name: r.name,
+  type: r.type || 'pf',
+  document: r.document || '',
+  color: r.color || '#6366f1',
+  isDefault: !!r.is_default,
+})
+
 export const accountGroupToRow = (g) => ({
   id: g.id,
   name: g.name,
@@ -47,6 +65,7 @@ export const accountToRow = (a) => ({
   account_group_id: a.accountGroupId || null,
   order: a.order ?? 0,
   debt_plan: a.debtPlan ? a.debtPlan : null,
+  profile_id: a.profileId || null,
 })
 
 export const rowToAccount = (r) => ({
@@ -68,6 +87,7 @@ export const rowToAccount = (r) => ({
   accountGroupId: r.account_group_id || null,
   order: r.order ?? 0,
   debtPlan: r.debt_plan || null,
+  profileId: r.profile_id || null,
 })
 
 export const txToRow = (tx) => ({
@@ -323,6 +343,7 @@ export async function loadFromSupabase(defaultData) {
       { data: cfg },
       { data: envs },
       { data: groups },
+      { data: perfis },
     ] = await Promise.all([
       supabase.from('contas').select('*'),
       supabase.from('lancamentos').select('*').order('created_at'),
@@ -336,6 +357,7 @@ export async function loadFromSupabase(defaultData) {
       supabase.from('configuracoes').select('*').eq('id', 1).maybeSingle(),
       supabase.from('envelopes').select('*'),
       supabase.from('grupos_conta').select('*').order('order'),
+      supabase.from('perfis').select('*'),
     ])
 
     // Banco vazio (primeira execução real)
@@ -365,6 +387,7 @@ export async function loadFromSupabase(defaultData) {
         payees: (faves || []).map(r => r.name),
         envelopes: (envs || []).map(rowToEnvelope),
         accountGroups: (groups || []).length > 0 ? groups.map(rowToAccountGroup) : null,
+        profiles: (perfis || []).map(rowToPerfil),
       },
     }
   } catch (err) {

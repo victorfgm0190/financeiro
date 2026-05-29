@@ -1,9 +1,26 @@
 import { useState } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
+
+const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
+
+function maskDoc(raw, type) {
+  const d = raw.replace(/\D/g, '')
+  if (type === 'pf') {
+    return d.slice(0, 11)
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  }
+  return d.slice(0, 14)
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+}
 
 export default function SettingsPanel() {
   const {
@@ -14,6 +31,7 @@ export default function SettingsPanel() {
     gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
     accountGroups, addAccountGroup, updateAccountGroup, deleteAccountGroup,
     moveAccountGroup, reorderAccountGroups,
+    profiles, addProfile, updateProfile, deleteProfile,
     accounts,
     data,
   } = useApp()
@@ -67,6 +85,28 @@ export default function SettingsPanel() {
       return aO - bO
     })
     reorderAccountGroups(sorted.map(g => g.id))
+  }
+
+  // Profile form state
+  const [showProfileForm, setShowProfileForm] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(null)
+  const [profileConfirmDelete, setProfileConfirmDelete] = useState(null)
+  const [profileForm, setProfileForm] = useState({ name: '', type: 'pf', document: '', color: PROFILE_COLORS[0], isDefault: false })
+  const setProfileField = (k, v) => setProfileForm(f => ({ ...f, [k]: v }))
+
+  const openProfileEdit = (p) => {
+    setEditingProfile(p)
+    setProfileForm({ name: p.name, type: p.type, document: p.document || '', color: p.color || PROFILE_COLORS[0], isDefault: !!p.isDefault })
+    setShowProfileForm(true)
+  }
+  const closeProfileForm = () => { setShowProfileForm(false); setEditingProfile(null); setProfileForm({ name: '', type: 'pf', document: '', color: PROFILE_COLORS[0], isDefault: false }) }
+  const handleProfileSubmit = (e) => {
+    e.preventDefault()
+    if (!profileForm.name.trim()) return
+    const payload = { ...profileForm, document: profileForm.document.replace(/\D/g, '') }
+    if (editingProfile) updateProfile(editingProfile.id, payload)
+    else addProfile(payload)
+    closeProfileForm()
   }
 
   // Gerencial group form state
@@ -184,6 +224,115 @@ export default function SettingsPanel() {
             <Save size={14} /> {saved ? 'Salvo!' : 'Salvar'}
           </button>
         </div>
+      </div>
+
+      {/* Perfis CPF / CNPJ */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-300">Perfis CPF / CNPJ</h2>
+          <button className="btn-primary text-xs py-1.5 flex items-center gap-1.5" onClick={() => { setEditingProfile(null); setShowProfileForm(true) }}>
+            <Plus size={12} /> Novo Perfil
+          </button>
+        </div>
+
+        {profiles.length === 0 && !showProfileForm && (
+          <p className="text-xs text-gray-600 italic">Nenhum perfil cadastrado. Adicione um perfil para ativar o filtro na barra superior.</p>
+        )}
+
+        <div className="space-y-2 mb-3">
+          {profiles.map(p => {
+            const Icon = p.type === 'pf' ? User : Building2
+            const rawDoc = p.document || ''
+            const fmtDoc = rawDoc ? maskDoc(rawDoc, p.type) : '—'
+            return (
+              <div key={p.id} className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: p.color }}>
+                  <Icon size={14} className="text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-200 font-medium truncate">{p.name}</span>
+                    {p.isDefault && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0F6E56]/20 text-[#0F6E56] font-medium shrink-0">Principal</span>}
+                  </div>
+                  <p className="text-xs text-gray-500">{p.type === 'pf' ? 'CPF' : 'CNPJ'}: {fmtDoc}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button className="p-1 text-gray-500 hover:text-gray-300 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
+                  <button className="p-1 text-gray-500 hover:text-red-400 transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {showProfileForm && (
+          <form onSubmit={handleProfileSubmit} className="border-t border-gray-700 pt-4 space-y-3">
+            <p className="text-xs font-medium text-gray-400">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Tipo</label>
+                <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                  {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
+                    <button type="button" key={v} onClick={() => setProfileField('type', v)}
+                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileForm.type === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="label">Nome / Razão Social *</label>
+                <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Nome completo..." required />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">{profileForm.type === 'pf' ? 'CPF' : 'CNPJ'}</label>
+              <input
+                className="input"
+                value={maskDoc(profileForm.document, profileForm.type)}
+                onChange={e => setProfileField('document', e.target.value.replace(/\D/g, ''))}
+                placeholder={profileForm.type === 'pf' ? '000.000.000-00' : '00.000.000/0001-00'}
+                maxLength={profileForm.type === 'pf' ? 14 : 18}
+              />
+            </div>
+
+            <div>
+              <label className="label">Cor de identificação</label>
+              <div className="flex gap-2 flex-wrap">
+                {PROFILE_COLORS.map(c => (
+                  <button type="button" key={c} onClick={() => setProfileField('color', c)}
+                    className={`w-7 h-7 rounded-full transition-all ${profileForm.color === c ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white scale-110' : 'hover:scale-105'}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <div className="relative shrink-0">
+                <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+              </div>
+              <span className="text-sm text-gray-300 select-none">Perfil principal</span>
+            </label>
+
+            <div className="flex gap-2 pt-1">
+              <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={closeProfileForm}>Cancelar</button>
+              <button type="submit" className="btn-primary flex-1 text-xs py-1.5">{editingProfile ? 'Salvar' : 'Adicionar'}</button>
+            </div>
+          </form>
+        )}
+
+        {profileConfirmDelete && (
+          <ConfirmDialog
+            message="Excluir este perfil? O vínculo das contas associadas será removido."
+            onConfirm={() => { deleteProfile(profileConfirmDelete); setProfileConfirmDelete(null) }}
+            onCancel={() => setProfileConfirmDelete(null)}
+          />
+        )}
       </div>
 
       {/* Categorias */}

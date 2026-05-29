@@ -1,11 +1,11 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { addMonths, addWeeks, addDays, addYears, format, parseISO } from 'date-fns'
 import {
   supabase,
   loadFromSupabase, seedDefaults, pingSupabase,
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
-  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow,
+  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
 } from '../lib/supabase'
 import { saveLocal, loadLocal } from '../lib/storage'
 
@@ -14,6 +14,7 @@ const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
   budgets: [], classificationRules: [], gerencialGroups: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
+  profiles: [],
   settings: {}, costCenters: [],
 }
 
@@ -154,12 +155,14 @@ const defaultData = {
     { id: 'grp_D', number: 'D', name: 'Despesa', alias: 'D', fixed: true, defaultAccountId: null },
   ],
   payables: [],
+  profiles: [],
 }
 
 export function AppProvider({ children }) {
   const [data, setData] = useState(defaultData)
   const [initialized, setInitialized] = useState(false)
   const [dbStatus, setDbStatus] = useState('connecting')
+  const [activeProfileId, setActiveProfileId] = useState(null) // session-only, not persisted
   const prevDataRef = useRef(null)
   const syncTimerRef = useRef(null)
   const retryTimerRef = useRef(null)
@@ -193,6 +196,7 @@ export function AppProvider({ children }) {
         const merged = {
           ...result.data,
           accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
+          profiles: result.data.profiles ?? [],
         }
         setData(() => {
           prevDataRef.current = merged  // evita sync de volta imediato
@@ -256,6 +260,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('envelopes', prev.envelopes, data.envelopes, envelopeToRow))
       if (prev.accountGroups !== data.accountGroups)
         tasks.push(syncSection('grupos_conta', prev.accountGroups, data.accountGroups, accountGroupToRow))
+      if (prev.profiles !== data.profiles)
+        tasks.push(syncSection('perfis', prev.profiles, data.profiles, perfilToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -287,6 +293,26 @@ export function AppProvider({ children }) {
   const update = useCallback((updater) => {
     setData(prev => typeof updater === 'function' ? updater(prev) : updater)
   }, [])
+
+  // ── Profile-filtered views ────────────────────────────────────────────────────
+  const profileAccounts = useMemo(() => {
+    if (!activeProfileId) return data.accounts
+    return data.accounts.filter(a => a.profileId === activeProfileId)
+  }, [data.accounts, activeProfileId])
+
+  const profileAccountIds = useMemo(() => new Set(profileAccounts.map(a => a.id)), [profileAccounts])
+
+  const profileTransactions = useMemo(() => {
+    if (!activeProfileId) return data.transactions
+    return data.transactions.filter(t =>
+      profileAccountIds.has(t.accountId) || profileAccountIds.has(t.toAccountId)
+    )
+  }, [data.transactions, profileAccountIds, activeProfileId])
+
+  const profileSchedules = useMemo(() => {
+    if (!activeProfileId) return data.schedules
+    return data.schedules.filter(s => !s.accountId || profileAccountIds.has(s.accountId))
+  }, [data.schedules, profileAccountIds, activeProfileId])
 
   // ── Registrar automático na inicialização ───────────────────────────────────
   useEffect(() => {
@@ -577,6 +603,35 @@ export function AppProvider({ children }) {
       if (d.costCenters.includes(name)) return d
       return { ...d, costCenters: [...d.costCenters, name] }
     })
+  }, [update])
+
+  // ── Profiles ─────────────────────────────────────────────────────────────────
+  const addProfile = useCallback((profile) => {
+    const id = 'prf_' + Date.now()
+    update(d => {
+      const profiles = d.profiles || []
+      // If marked default, unmark all others
+      const updated = profile.isDefault
+        ? profiles.map(p => ({ ...p, isDefault: false }))
+        : profiles
+      return { ...d, profiles: [...updated, { ...profile, id }] }
+    })
+  }, [update])
+
+  const updateProfile = useCallback((id, changes) => {
+    update(d => {
+      let profiles = d.profiles || []
+      if (changes.isDefault) profiles = profiles.map(p => ({ ...p, isDefault: false }))
+      return { ...d, profiles: profiles.map(p => p.id === id ? { ...p, ...changes } : p) }
+    })
+  }, [update])
+
+  const deleteProfile = useCallback((id) => {
+    update(d => ({
+      ...d,
+      profiles: (d.profiles || []).filter(p => p.id !== id),
+      accounts: d.accounts.map(a => a.profileId === id ? { ...a, profileId: null } : a),
+    }))
   }, [update])
 
   // ── Financial Month ──────────────────────────────────────────────────────────
@@ -1046,6 +1101,10 @@ export function AppProvider({ children }) {
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,
       payables: data.payables || [],
+      profiles: data.profiles || [],
+      activeProfileId, setActiveProfileId,
+      profileAccounts, profileTransactions, profileSchedules,
+      addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount,
       addTransaction, updateTransaction, deleteTransaction,

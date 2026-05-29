@@ -25,11 +25,11 @@ function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
+  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
 
-  const saldoPrincipal = accounts
-    .filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
-    .reduce((s, a) => s + (a.balance || 0), 0)
+  const saldoPrincipal = activeProfileId
+    ? profileAccounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
+    : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
 
   const alertCount = useMemo(() => {
     const today = new Date()

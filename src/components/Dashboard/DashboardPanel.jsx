@@ -48,7 +48,9 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, onShowPosicao }) {
-  const { accounts, transactions, schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { accounts: allAccounts, transactions: allTransactions, profileAccounts, profileTransactions, schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
+  const accounts = profileAccounts
+  const transactions = profileTransactions
 
   const period = getFinancialPeriod()
   const periodStr = {
