@@ -293,3 +293,8 @@ ALTER TABLE perfis DISABLE ROW LEVEL SECURITY;
 
 -- Vínculo de conta com perfil
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS profile_id TEXT;
+
+-- Campos patrimoniais de contas
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS acquisition_value NUMERIC;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS acquisition_date TEXT;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS value_history JSONB DEFAULT '[]';

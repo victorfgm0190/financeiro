@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2,
+  Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2, Gem,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -17,6 +17,7 @@ const NAV = [
   { id: 'reservas',   label: 'Reservas',   icon: Layers  },
   { id: 'envelopes',  label: 'Envelopes',  icon: Package },
   { id: 'budget',     label: 'Orçamento',  icon: PieChart },
+  { id: 'patrimonio', label: 'Patrimônio', icon: Gem },
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },

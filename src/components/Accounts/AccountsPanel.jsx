@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, FileText, ArrowUp, ArrowDown, Settings, Building2,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, RefreshCw,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -36,6 +36,59 @@ const TYPE_COLORS = {
   cash: 'from-amber-600 to-amber-800',
   asset: 'from-teal-600 to-teal-800',
   liability: 'from-rose-700 to-rose-900',
+}
+
+function UpdateValueModal({ account, onClose }) {
+  const { updateAccountValue } = useApp()
+  const [newValue, setNewValue] = useState(String(account.balance ?? ''))
+  const [note, setNote] = useState('')
+
+  const lastEntry = (account.valueHistory || []).slice(-1)[0]
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (newValue === '') return
+    updateAccountValue(account.id, Number(newValue), note)
+    onClose()
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {lastEntry && (
+        <div className="p-3 bg-gray-800 rounded-lg text-xs text-gray-400">
+          Último valor: <span className="text-gray-200 font-medium">{fmt(lastEntry.value)}</span> em {lastEntry.date}
+          {lastEntry.note && <span className="ml-1 italic">— {lastEntry.note}</span>}
+        </div>
+      )}
+      <div>
+        <label className="label">Novo Valor (R$) *</label>
+        <input
+          className="input"
+          type="number"
+          step="0.01"
+          value={newValue}
+          onChange={e => setNewValue(e.target.value)}
+          placeholder="0,00"
+          autoFocus
+          required
+        />
+      </div>
+      <div>
+        <label className="label">Observação</label>
+        <input
+          className="input"
+          type="text"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          placeholder="Ex: Avaliação de mercado, atualização FIPE..."
+        />
+      </div>
+      <div className="flex gap-3 pt-1">
+        <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+        <button type="submit" className="btn-primary flex-1">Atualizar Valor</button>
+      </div>
+    </form>
+  )
 }
 
 function GroupManager({ groups }) {
@@ -134,11 +187,12 @@ function GroupManager({ groups }) {
   )
 }
 
-function AccountCard({ account, siblings, onEdit, onDelete, onExtrato }) {
+function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
   const { setMainAccount, moveAccount } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
+  const isAsset = account.type === 'asset'
 
   return (
     <div className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg`}>
@@ -206,9 +260,22 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato }) {
         </div>
       ) : (
         <div>
-          <p className="text-xs opacity-70 mb-0.5">Saldo</p>
+          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Valor Atual'}</p>
           <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
-          {account.type !== 'asset' && account.type !== 'liability' && (
+          {account.acquisitionValue != null && (
+            <p className="text-xs opacity-50 mt-0.5">
+              Aquisição: {fmt(account.acquisitionValue)}
+              {account.balance && account.acquisitionValue
+                ? ` (${account.balance >= account.acquisitionValue ? '+' : ''}${fmt(account.balance - account.acquisitionValue)})`
+                : ''}
+            </p>
+          )}
+          {isAsset && (
+            <button onClick={() => onUpdateValue(account)} className="mt-1.5 text-xs flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+              <RefreshCw size={10} /> Atualizar Valor
+            </button>
+          )}
+          {!isAsset && account.type !== 'liability' && (
             <button onClick={() => onExtrato(account)} className="mt-1.5 text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
               <FileText size={10} /> Ver Extrato
             </button>
@@ -227,7 +294,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato }) {
   )
 }
 
-function GroupSection({ group, accounts, onEdit, onDelete, onExtrato }) {
+function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue }) {
   const [collapsed, setCollapsed] = useState(false)
   const typeBadge = group.type === 'financeiro'
     ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
@@ -256,6 +323,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato }) {
               onEdit={onEdit}
               onDelete={onDelete}
               onExtrato={onExtrato}
+              onUpdateValue={onUpdateValue}
             />
           ))}
           {accounts.length === 0 && (
@@ -274,6 +342,7 @@ export default function AccountsPanel() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [extratoAccount, setExtratoAccount] = useState(null)
   const [showGroupManager, setShowGroupManager] = useState(false)
+  const [updateValueAccount, setUpdateValueAccount] = useState(null)
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
@@ -295,6 +364,7 @@ export default function AccountsPanel() {
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
   const handleDelete = (account) => setConfirmDelete(account)
   const handleExtrato = (account) => setExtratoAccount(account)
+  const handleUpdateValue = (account) => setUpdateValueAccount(account)
 
   return (
     <div className="space-y-6">
@@ -347,6 +417,7 @@ export default function AccountsPanel() {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
+                    onUpdateValue={handleUpdateValue}
                   />
                 ))}
               </div>
@@ -365,6 +436,7 @@ export default function AccountsPanel() {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
+                    onUpdateValue={handleUpdateValue}
                   />
                 ))}
               </div>
@@ -383,6 +455,7 @@ export default function AccountsPanel() {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
+                    onUpdateValue={handleUpdateValue}
                   />
                 ))}
               </div>
@@ -434,6 +507,17 @@ export default function AccountsPanel() {
         size="xl"
       >
         {extratoAccount && <ExtratoContaPanel account={extratoAccount} />}
+      </Modal>
+
+      <Modal
+        open={!!updateValueAccount}
+        onClose={() => setUpdateValueAccount(null)}
+        title={`Atualizar Valor — ${updateValueAccount?.name || ''}`}
+        size="sm"
+      >
+        {updateValueAccount && (
+          <UpdateValueModal account={updateValueAccount} onClose={() => setUpdateValueAccount(null)} />
+        )}
       </Modal>
     </div>
   )

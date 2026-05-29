@@ -54,6 +54,8 @@ export default function AccountForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || null,
     accountGroupId: initial?.accountGroupId || null,
     profileId: initial?.profileId || null,
+    acquisitionValue: initial?.acquisitionValue ?? '',
+    acquisitionDate: initial?.acquisitionDate || '',
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -93,6 +95,9 @@ export default function AccountForm({ initial, onClose }) {
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
       profileId: form.profileId || null,
+      acquisitionValue: isPatrimonial && form.acquisitionValue !== '' ? Number(form.acquisitionValue) : null,
+      acquisitionDate: isPatrimonial ? form.acquisitionDate || null : null,
+      valueHistory: initial?.valueHistory || [],
     }
 
     if (initial) {
@@ -208,17 +213,41 @@ export default function AccountForm({ initial, onClose }) {
       )}
 
       {isPatrimonial && (
-        <div>
-          <label className="label">Valor (R$)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
-            value={form.balance}
-            onChange={e => set('balance', e.target.value)}
-            placeholder="0,00"
-          />
-        </div>
+        <>
+          <div>
+            <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : 'Saldo Devedor (R$)'}</label>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              value={form.balance}
+              onChange={e => set('balance', e.target.value)}
+              placeholder="0,00"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Valor de Aquisição (R$)</label>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={form.acquisitionValue}
+                onChange={e => set('acquisitionValue', e.target.value)}
+                placeholder="0,00"
+              />
+            </div>
+            <div>
+              <label className="label">Data de Aquisição</label>
+              <input
+                className="input"
+                type="date"
+                value={form.acquisitionDate}
+                onChange={e => set('acquisitionDate', e.target.value)}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       {isCredit && (

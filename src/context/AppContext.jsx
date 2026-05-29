@@ -806,6 +806,27 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // ── Asset Value History ───────────────────────────────────────────────────────
+  const updateAccountValue = useCallback((accountId, newValue, note) => {
+    update(d => ({
+      ...d,
+      accounts: d.accounts.map(a => {
+        if (a.id !== accountId) return a
+        const entry = {
+          id: 'vh_' + Date.now(),
+          date: format(new Date(), 'yyyy-MM-dd'),
+          value: Number(newValue),
+          note: note || '',
+        }
+        return {
+          ...a,
+          balance: Number(newValue),
+          valueHistory: [...(a.valueHistory || []), entry],
+        }
+      }),
+    }))
+  }, [update])
+
   // ── Debt Plan ─────────────────────────────────────────────────────────────────
   const setDebtPlan = useCallback((accountId, plan) => {
     update(d => ({
@@ -1106,7 +1127,7 @@ export function AppProvider({ children }) {
       profileAccounts, profileTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,
       updateSettings,
-      addAccount, updateAccount, deleteAccount, setMainAccount,
+      addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue,
       addTransaction, updateTransaction, deleteTransaction,
       addCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,

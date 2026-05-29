@@ -20,6 +20,7 @@ import BudgetPanel from './components/Budget/BudgetPanel'
 import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
 import SettingsPanel from './components/Settings/SettingsPanel'
+import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -63,6 +64,7 @@ function AppContent() {
     reservas:   <ReservasPanel />,
     envelopes:  <EnvelopesPanel />,
     budget:     <BudgetPanel />,
+    patrimonio: <PatrimonioPanel />,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel />,
     settings: <SettingsPanel />,

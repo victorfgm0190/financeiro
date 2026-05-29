@@ -66,6 +66,9 @@ export const accountToRow = (a) => ({
   order: a.order ?? 0,
   debt_plan: a.debtPlan ? a.debtPlan : null,
   profile_id: a.profileId || null,
+  acquisition_value: a.acquisitionValue != null ? Number(a.acquisitionValue) : null,
+  acquisition_date: a.acquisitionDate || null,
+  value_history: a.valueHistory || [],
 })
 
 export const rowToAccount = (r) => ({
@@ -88,6 +91,9 @@ export const rowToAccount = (r) => ({
   order: r.order ?? 0,
   debtPlan: r.debt_plan || null,
   profileId: r.profile_id || null,
+  acquisitionValue: r.acquisition_value != null ? Number(r.acquisition_value) : null,
+  acquisitionDate: r.acquisition_date || null,
+  valueHistory: r.value_history || [],
 })
 
 export const txToRow = (tx) => ({
