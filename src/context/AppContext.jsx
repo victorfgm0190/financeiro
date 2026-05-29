@@ -170,9 +170,9 @@ export function AppProvider({ children }) {
   const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
 
-  // ── Inicialização: localStorage imediato + Supabase em background ────────────
+  // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
-    // 1. Carrega localStorage agora — app renderiza sem esperar rede
+    // 1. Carrega cache local para renderização imediata enquanto conecta ao Supabase
     const local = loadLocal()
     if (local) {
       const merged = { ...defaultData, ...local, settings: { ...defaultData.settings, ...(local.settings || {}) } }
@@ -189,10 +189,10 @@ export function AppProvider({ children }) {
     }
     setInitialized(true)
 
-    // 2. Tenta Supabase em background (não bloqueia)
+    // 2. Conecta ao Supabase (storage principal) — substitui cache local quando disponível
     loadFromSupabase(defaultData).then(async (result) => {
       if (result.status === 'connected') {
-        // Supabase tem dados — usa como fonte autoritativa
+        // Supabase tem dados do usuário — é a fonte autoritativa
         setDbStatus('connected')
         const merged = {
           ...result.data,
@@ -205,12 +205,13 @@ export function AppProvider({ children }) {
         })
         saveLocal(merged)
       } else if (result.status === 'empty') {
-        // Schema existe mas vazio — sobe dados locais para o Supabase
+        // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase
         setDbStatus('connected')
         try { await seedDefaults(defaultData) } catch {}
-        fullSyncRef.current = true  // força push completo no próximo sync
+        fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
       } else {
-        // schema-missing ou erro de rede — usa localStorage silenciosamente
+        // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback
+        console.warn('[finup] Fallback para localStorage:', result.status, result.error || '')
         setDbStatus('local')
       }
     })

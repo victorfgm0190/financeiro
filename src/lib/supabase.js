@@ -363,8 +363,9 @@ export async function loadFromSupabase(defaultData) {
       supabase.from('perfis').select('*'),
     ])
 
-    // Banco vazio (primeira execução real)
-    if (!cats || cats.length === 0) {
+    // Banco sem dados de usuário: schema pode existir (categorias do SQL),
+    // mas contas ainda não foram migradas — trata como vazio para migrar local → Supabase.
+    if (!cats || cats.length === 0 || !accs || accs.length === 0) {
       return { status: 'empty', data: null }
     }
 
