@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 // envelopeToRow / rowToEnvelope defined below — used by AppContext sync
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? ''
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
+const SUPABASE_URL = 'https://kwztqlxrxypnkldfxml.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3enRxbHhyeHlwbmtsZGZ4dG1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzNzM4MjAsImV4cCI6MjA2Mzk0OTgyMH0.NSZXiYEdVIljDAzJrz5IoAgAJ1aedcwalF4ENtywy4Q'
 
 console.log('[Supabase] URL:', SUPABASE_URL)
 console.log('[Supabase] KEY:', SUPABASE_KEY ? SUPABASE_KEY.slice(0, 20) + '...' : 'UNDEFINED')
