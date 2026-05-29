@@ -1,12 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { addMonths, addWeeks, addDays, addYears, format, parseISO } from 'date-fns'
 import {
-  supabase,
-  loadFromSupabase, seedDefaults, pingSupabase,
+  loadFromDb, seedDefaults, pingDb,
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
-} from '../lib/supabase'
+} from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey } from '../lib/fatura'
 
@@ -189,8 +188,8 @@ export function AppProvider({ children }) {
     }
     setInitialized(true)
 
-    // 2. Conecta ao Supabase (storage principal) — substitui cache local quando disponível
-    loadFromSupabase(defaultData).then(async (result) => {
+    // 2. Conecta ao Neon via API (storage principal) — substitui cache local quando disponível
+    loadFromDb(defaultData).then(async (result) => {
       if (result.status === 'connected') {
         // Supabase tem dados do usuário — é a fonte autoritativa
         setDbStatus('connected')
@@ -211,7 +210,7 @@ export function AppProvider({ children }) {
         fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
       } else {
         // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback
-        console.warn('[finup] Fallback para localStorage:', result.status, result.error || '')
+        console.warn('[finup] Fallback para localStorage (Neon indisponível):', result.status, result.error || '')
         setDbStatus('local')
       }
     })
@@ -281,7 +280,7 @@ export function AppProvider({ children }) {
       return
     }
     retryTimerRef.current = setInterval(async () => {
-      const ok = await pingSupabase()
+      const ok = await pingDb()
       if (ok) {
         clearInterval(retryTimerRef.current)
         retryTimerRef.current = null
