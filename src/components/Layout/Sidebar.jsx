@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Wifi, WifiOff, AlertTriangle, Loader, Layers, Package,
+  Wallet, Loader, Layers, Package, Cloud, HardDrive,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -23,11 +23,9 @@ const NAV = [
 ]
 
 const STATUS_CONFIG = {
-  connecting:      { icon: Loader,        color: 'text-gray-500',   label: 'Conectando...',      spin: true  },
-  connected:       { icon: Wifi,          color: 'text-emerald-500', label: 'Supabase',           spin: false },
-  seeded:          { icon: Wifi,          color: 'text-emerald-500', label: 'Supabase',           spin: false },
-  'schema-missing':{ icon: AlertTriangle, color: 'text-amber-400',  label: 'Schema não criado',  spin: false },
-  error:           { icon: WifiOff,       color: 'text-red-500',    label: 'Erro de conexão',    spin: false },
+  connecting: { icon: Loader,    color: 'text-gray-500',    label: 'Conectando...',  spin: true  },
+  connected:  { icon: Cloud,     color: 'text-emerald-500', label: 'Nuvem',          spin: false },
+  local:      { icon: HardDrive, color: 'text-blue-400',   label: 'Local',          spin: false },
 }
 
 function DbStatusBadge({ status }) {
@@ -82,13 +80,8 @@ export default function Sidebar({ active, setActive, alertCount, saldoPrincipal,
           </p>
         </button>
 
-        <div className="border-t border-gray-800/60 pt-2 space-y-1">
+        <div className="border-t border-gray-800/60 pt-2">
           <DbStatusBadge status={dbStatus} />
-          {dbStatus === 'schema-missing' && (
-            <p className="text-xs text-amber-500/70 leading-tight">
-              Execute <code className="bg-gray-800 px-1 rounded">supabase/schema.sql</code> no Supabase
-            </p>
-          )}
         </div>
 
         {/* Identidade */}

@@ -2,11 +2,20 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { addMonths, addWeeks, addDays, addYears, format, parseISO } from 'date-fns'
 import {
   supabase,
-  loadFromSupabase, seedDefaults,
+  loadFromSupabase, seedDefaults, pingSupabase,
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow,
 } from '../lib/supabase'
+import { saveLocal, loadLocal } from '../lib/storage'
+
+// Prev vazio para forçar full-sync ao reconectar
+const EMPTY_PREV = {
+  accounts: [], transactions: [], schedules: [], categories: [],
+  budgets: [], classificationRules: [], gerencialGroups: [],
+  payables: [], payees: [], envelopes: [],
+  settings: {}, costCenters: [],
+}
 
 const AppContext = createContext(null)
 
@@ -140,40 +149,63 @@ export function AppProvider({ children }) {
   const [dbStatus, setDbStatus] = useState('connecting')
   const prevDataRef = useRef(null)
   const syncTimerRef = useRef(null)
+  const retryTimerRef = useRef(null)
+  const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
 
-  // ── Inicialização: carrega do Supabase ──────────────────────────────────────
+  // ── Inicialização: localStorage imediato + Supabase em background ────────────
   useEffect(() => {
+    // 1. Carrega localStorage agora — app renderiza sem esperar rede
+    const local = loadLocal()
+    if (local) {
+      const merged = { ...defaultData, ...local, settings: { ...defaultData.settings, ...(local.settings || {}) } }
+      setData(merged)
+      prevDataRef.current = merged
+    } else {
+      prevDataRef.current = defaultData
+    }
+    setInitialized(true)
+
+    // 2. Tenta Supabase em background (não bloqueia)
     loadFromSupabase(defaultData).then(async (result) => {
       if (result.status === 'connected') {
-        setData(result.data)
-        prevDataRef.current = result.data
+        // Supabase tem dados — usa como fonte autoritativa
         setDbStatus('connected')
+        setData(() => {
+          prevDataRef.current = result.data  // evita sync de volta imediato
+          return result.data
+        })
+        saveLocal(result.data)
       } else if (result.status === 'empty') {
-        // Banco existe mas vazio: semeia defaults
-        try {
-          await seedDefaults(defaultData)
-          setDbStatus('seeded')
-        } catch {
-          setDbStatus('error')
-        }
-        prevDataRef.current = defaultData
+        // Schema existe mas vazio — sobe dados locais para o Supabase
+        setDbStatus('connected')
+        try { await seedDefaults(defaultData) } catch {}
+        fullSyncRef.current = true  // força push completo no próximo sync
       } else {
-        // 'schema-missing' ou 'error'
-        console.warn('[Supabase]', result.status, result.error)
-        setDbStatus(result.status)
-        prevDataRef.current = defaultData
+        // schema-missing ou erro de rede — usa localStorage silenciosamente
+        setDbStatus('local')
       }
-      setInitialized(true)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Sync debounced para Supabase ────────────────────────────────────────────
+  // ── Sync: localStorage (sempre) + Supabase (quando conectado) ───────────────
   useEffect(() => {
     if (!initialized) return
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
 
+    // Sempre persiste no localStorage imediatamente
+    saveLocal(data)
+
+    // Sync Supabase apenas quando conectado
+    if (dbStatus !== 'connected') return
+
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
     syncTimerRef.current = setTimeout(async () => {
+      // Se full sync pedido (reconexão ou seed vazio), reseta prev para forçar push total
+      if (fullSyncRef.current) {
+        fullSyncRef.current = false
+        prevDataRef.current = EMPTY_PREV
+      }
+
       const prev = prevDataRef.current
       if (!prev) return
 
@@ -207,7 +239,25 @@ export function AppProvider({ children }) {
     }, 500)
 
     return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }
-  }, [data, initialized])
+  }, [data, initialized, dbStatus])
+
+  // ── Retry automático quando offline — tenta reconectar a cada 30s ────────────
+  useEffect(() => {
+    if (dbStatus !== 'local') {
+      if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
+      return
+    }
+    retryTimerRef.current = setInterval(async () => {
+      const ok = await pingSupabase()
+      if (ok) {
+        clearInterval(retryTimerRef.current)
+        retryTimerRef.current = null
+        fullSyncRef.current = true  // push tudo ao reconectar
+        setDbStatus('connected')
+      }
+    }, 30000)
+    return () => { if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null } }
+  }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback((updater) => {
     setData(prev => typeof updater === 'function' ? updater(prev) : updater)
@@ -809,16 +859,16 @@ export function AppProvider({ children }) {
     return { needsResgate: true, grupo, contaResgate: contaResgate || null }
   }, [data.gerencialGroups, data.accounts, update])
 
-  // ── Loading screen ───────────────────────────────────────────────────────────
+  // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-950">
         <div className="text-center">
           <div
-            className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
+            className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
             style={{ borderColor: '#0F6E56', borderTopColor: 'transparent' }}
           />
-          <p className="text-gray-400 text-sm">Carregando dados...</p>
+          <p className="text-gray-500 text-xs">Iniciando...</p>
         </div>
       </div>
     )

@@ -358,6 +358,16 @@ export async function seedDefaults(defaultData) {
   ])
 }
 
+// ─── Ping (usado para retry de reconexão) ────────────────────────────────────
+export async function pingSupabase() {
+  try {
+    const { error } = await supabase.from('configuracoes').select('id').limit(1)
+    return !error
+  } catch {
+    return false
+  }
+}
+
 // ─── Sync helpers ─────────────────────────────────────────────────────────────
 
 export async function syncSection(table, prevItems, currItems, toRow) {
