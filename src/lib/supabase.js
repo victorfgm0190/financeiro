@@ -8,6 +8,7 @@ console.log('[Supabase] URL:', SUPABASE_URL)
 console.log('[Supabase] KEY:', SUPABASE_KEY ? SUPABASE_KEY.slice(0, 20) + '...' : 'UNDEFINED')
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
 
 // ─── Transformadores camelCase ↔ snake_case ───────────────────────────────────
 
