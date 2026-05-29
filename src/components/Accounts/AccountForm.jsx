@@ -7,6 +7,8 @@ const TYPES = [
   { value: 'savings', label: 'Poupança' },
   { value: 'credit', label: 'Cartão de Crédito' },
   { value: 'cash', label: 'Dinheiro' },
+  { value: 'asset', label: 'Bem / Ativo' },
+  { value: 'liability', label: 'Dívida / Passivo' },
 ]
 
 function Tooltip({ text }) {
@@ -35,7 +37,7 @@ function Toggle({ checked, onChange, label, tooltip }) {
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, addAccount, updateAccount } = useApp()
+  const { accounts, accountGroups = [], addAccount, updateAccount } = useApp()
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -50,12 +52,15 @@ export default function AccountForm({ initial, onClose }) {
     contaCorrentePrincipal: initial?.contaCorrentePrincipal || false,
     contaAplicacao: initial?.contaAplicacao || false,
     grupoGerencial: initial?.grupoGerencial || null,
+    accountGroupId: initial?.accountGroupId || null,
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const isCredit = form.type === 'credit'
   const isChecking = form.type === 'checking'
+  const isPatrimonial = form.type === 'asset' || form.type === 'liability'
+  const sortedGroups = [...accountGroups].sort((a, b) => a.order - b.order)
 
   const conflictAccount = isChecking && form.contaCorrentePrincipal
     ? accounts.find(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal)
@@ -81,10 +86,11 @@ export default function AccountForm({ initial, onClose }) {
       closingDay: Number(form.closingDay),
       dueDay: Number(form.dueDay),
       isMain: form.isMain,
-      fluxoCaixaPrincipal: form.fluxoCaixaPrincipal,
+      fluxoCaixaPrincipal: isPatrimonial ? false : form.fluxoCaixaPrincipal,
       contaCorrentePrincipal: isChecking ? form.contaCorrentePrincipal : false,
-      contaAplicacao: !isCredit ? form.contaAplicacao : false,
+      contaAplicacao: !isCredit && !isPatrimonial ? form.contaAplicacao : false,
       grupoGerencial: form.grupoGerencial,
+      accountGroupId: form.accountGroupId || null,
     }
 
     if (initial) {
@@ -150,19 +156,44 @@ export default function AccountForm({ initial, onClose }) {
         </div>
       </div>
 
-      <div>
-        <label className="label">Banco / Instituição</label>
-        <input
-          className="input"
-          value={form.bank}
-          onChange={e => set('bank', e.target.value)}
-          placeholder="Nome do banco"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Banco / Instituição</label>
+          <input
+            className="input"
+            value={form.bank}
+            onChange={e => set('bank', e.target.value)}
+            placeholder="Nome do banco"
+          />
+        </div>
+        <div>
+          <label className="label">Grupo</label>
+          <select className="input" value={form.accountGroupId || ''} onChange={e => set('accountGroupId', e.target.value || null)}>
+            <option value="">Sem grupo</option>
+            {sortedGroups.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {!isCredit && (
+      {!isCredit && !isPatrimonial && (
         <div>
           <label className="label">Saldo Atual (R$)</label>
+          <input
+            className="input"
+            type="number"
+            step="0.01"
+            value={form.balance}
+            onChange={e => set('balance', e.target.value)}
+            placeholder="0,00"
+          />
+        </div>
+      )}
+
+      {isPatrimonial && (
+        <div>
+          <label className="label">Valor (R$)</label>
           <input
             className="input"
             type="number"
@@ -214,6 +245,7 @@ export default function AccountForm({ initial, onClose }) {
         </>
       )}
 
+      {!isPatrimonial && (
       <div className="space-y-3 pt-1 border-t border-gray-800">
         <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Classificação</p>
 
@@ -259,6 +291,7 @@ export default function AccountForm({ initial, onClose }) {
           </>
         )}
       </div>
+      )}
 
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>

@@ -5,7 +5,7 @@ import {
   loadFromSupabase, seedDefaults, pingSupabase,
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
-  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow,
+  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow,
 } from '../lib/supabase'
 import { saveLocal, loadLocal } from '../lib/storage'
 
@@ -13,9 +13,19 @@ import { saveLocal, loadLocal } from '../lib/storage'
 const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
   budgets: [], classificationRules: [], gerencialGroups: [],
-  payables: [], payees: [], envelopes: [],
+  payables: [], payees: [], envelopes: [], accountGroups: [],
   settings: {}, costCenters: [],
 }
+
+const DEFAULT_ACCOUNT_GROUPS = [
+  { id: 'grp_acc_1', name: 'Conta Corrente',   type: 'financeiro',  order: 0 },
+  { id: 'grp_acc_2', name: 'Poupança',          type: 'financeiro',  order: 1 },
+  { id: 'grp_acc_3', name: 'Investimentos',     type: 'financeiro',  order: 2 },
+  { id: 'grp_acc_4', name: 'Cartão de Crédito', type: 'financeiro',  order: 3 },
+  { id: 'grp_acc_5', name: 'Dinheiro',          type: 'financeiro',  order: 4 },
+  { id: 'grp_acc_6', name: 'Imóveis',           type: 'patrimonial', order: 5 },
+  { id: 'grp_acc_7', name: 'Veículos',          type: 'patrimonial', order: 6 },
+]
 
 const AppContext = createContext(null)
 
@@ -134,6 +144,7 @@ const defaultData = {
   ],
   classificationRules: [],
   envelopes: [],
+  accountGroups: DEFAULT_ACCOUNT_GROUPS,
   costCenters: ['Pessoal', 'Família', 'Trabalho', 'Casa'],
   payees: [],
   gerencialGroups: [
@@ -171,11 +182,15 @@ export function AppProvider({ children }) {
       if (result.status === 'connected') {
         // Supabase tem dados — usa como fonte autoritativa
         setDbStatus('connected')
+        const merged = {
+          ...result.data,
+          accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
+        }
         setData(() => {
-          prevDataRef.current = result.data  // evita sync de volta imediato
-          return result.data
+          prevDataRef.current = merged  // evita sync de volta imediato
+          return merged
         })
-        saveLocal(result.data)
+        saveLocal(merged)
       } else if (result.status === 'empty') {
         // Schema existe mas vazio — sobe dados locais para o Supabase
         setDbStatus('connected')
@@ -231,6 +246,8 @@ export function AppProvider({ children }) {
         tasks.push(syncPayees(prev.payees, data.payees))
       if (prev.envelopes !== data.envelopes)
         tasks.push(syncSection('envelopes', prev.envelopes, data.envelopes, envelopeToRow))
+      if (prev.accountGroups !== data.accountGroups)
+        tasks.push(syncSection('grupos_conta', prev.accountGroups, data.accountGroups, accountGroupToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -664,6 +681,58 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, envelopes: (d.envelopes || []).filter(e => e.id !== id) }))
   }, [update])
 
+  // ── Account Groups ────────────────────────────────────────────────────────────
+  const addAccountGroup = useCallback((group) => {
+    update(d => {
+      const maxOrder = Math.max(-1, ...(d.accountGroups || []).map(g => g.order))
+      const id = 'grp_acc_' + Date.now()
+      return { ...d, accountGroups: [...(d.accountGroups || []), { ...group, id, order: maxOrder + 1 }] }
+    })
+  }, [update])
+
+  const updateAccountGroup = useCallback((id, changes) => {
+    update(d => ({ ...d, accountGroups: (d.accountGroups || []).map(g => g.id === id ? { ...g, ...changes } : g) }))
+  }, [update])
+
+  const deleteAccountGroup = useCallback((id) => {
+    update(d => ({
+      ...d,
+      accountGroups: (d.accountGroups || []).filter(g => g.id !== id),
+      accounts: d.accounts.map(a => a.accountGroupId === id ? { ...a, accountGroupId: null } : a),
+    }))
+  }, [update])
+
+  const moveAccountGroup = useCallback((id, direction) => {
+    update(d => {
+      const sorted = [...(d.accountGroups || [])].sort((a, b) => a.order - b.order)
+      const idx = sorted.findIndex(g => g.id === id)
+      if (idx === -1) return d
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (newIdx < 0 || newIdx >= sorted.length) return d
+      const reordered = [...sorted]
+      const [moved] = reordered.splice(idx, 1)
+      reordered.splice(newIdx, 0, moved)
+      return { ...d, accountGroups: reordered.map((g, i) => ({ ...g, order: i })) }
+    })
+  }, [update])
+
+  const moveAccount = useCallback((id, direction) => {
+    update(d => {
+      const account = d.accounts.find(a => a.id === id)
+      if (!account) return d
+      const peers = [...d.accounts.filter(a => a.accountGroupId === account.accountGroupId)]
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      const idx = peers.findIndex(a => a.id === id)
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (newIdx < 0 || newIdx >= peers.length) return d
+      const reordered = [...peers]
+      const [moved] = reordered.splice(idx, 1)
+      reordered.splice(newIdx, 0, moved)
+      const updMap = new Map(reordered.map((a, i) => [a.id, { ...a, order: i }]))
+      return { ...d, accounts: d.accounts.map(a => updMap.has(a.id) ? updMap.get(a.id) : a) }
+    })
+  }, [update])
+
   // ── Payables ─────────────────────────────────────────────────────────────────
   const addPayable = useCallback((payable) => {
     const id = 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -885,6 +954,7 @@ export function AppProvider({ children }) {
       categories: data.categories,
       classificationRules: data.classificationRules,
       envelopes: data.envelopes || [],
+      accountGroups: data.accountGroups || [],
       costCenters: data.costCenters,
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,
@@ -901,6 +971,7 @@ export function AppProvider({ children }) {
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
+      addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, moveAccount,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,

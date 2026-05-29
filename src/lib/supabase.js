@@ -12,6 +12,20 @@ console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
 
 // ─── Transformadores camelCase ↔ snake_case ───────────────────────────────────
 
+export const accountGroupToRow = (g) => ({
+  id: g.id,
+  name: g.name,
+  type: g.type || 'financeiro',
+  order: g.order ?? 0,
+})
+
+export const rowToAccountGroup = (r) => ({
+  id: r.id,
+  name: r.name,
+  type: r.type || 'financeiro',
+  order: r.order ?? 0,
+})
+
 export const accountToRow = (a) => ({
   id: a.id,
   name: a.name,
@@ -28,6 +42,8 @@ export const accountToRow = (a) => ({
   fluxo_caixa_principal: !!a.fluxoCaixaPrincipal,
   conta_corrente_principal: !!a.contaCorrentePrincipal,
   grupo_gerencial: a.grupoGerencial || null,
+  account_group_id: a.accountGroupId || null,
+  order: a.order ?? 0,
 })
 
 export const rowToAccount = (r) => ({
@@ -46,6 +62,8 @@ export const rowToAccount = (r) => ({
   fluxoCaixaPrincipal: !!r.fluxo_caixa_principal,
   contaCorrentePrincipal: !!r.conta_corrente_principal,
   grupoGerencial: r.grupo_gerencial || null,
+  accountGroupId: r.account_group_id || null,
+  order: r.order ?? 0,
 })
 
 export const txToRow = (tx) => ({
@@ -296,6 +314,7 @@ export async function loadFromSupabase(defaultData) {
       { data: faves },
       { data: cfg },
       { data: envs },
+      { data: groups },
     ] = await Promise.all([
       supabase.from('contas').select('*'),
       supabase.from('lancamentos').select('*').order('created_at'),
@@ -308,6 +327,7 @@ export async function loadFromSupabase(defaultData) {
       supabase.from('favorecidos').select('name'),
       supabase.from('configuracoes').select('*').eq('id', 1).maybeSingle(),
       supabase.from('envelopes').select('*'),
+      supabase.from('grupos_conta').select('*').order('order'),
     ])
 
     // Banco vazio (primeira execução real)
@@ -336,6 +356,7 @@ export async function loadFromSupabase(defaultData) {
         payables: (pays || []).map(rowToPayable),
         payees: (faves || []).map(r => r.name),
         envelopes: (envs || []).map(rowToEnvelope),
+        accountGroups: (groups || []).length > 0 ? groups.map(rowToAccountGroup) : null,
       },
     }
   } catch (err) {
