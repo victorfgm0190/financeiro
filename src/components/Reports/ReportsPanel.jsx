@@ -5,10 +5,11 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
+import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 
 const COLORS = ['#6366f1', '#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#84cc16']
 
@@ -28,6 +29,7 @@ export default function ReportsPanel() {
   const { transactions, categories, accounts } = useApp()
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
+  const [showDemonstrativo, setShowDemonstrativo] = useState(false)
 
   const hasCredit = accounts.some(a => a.type === 'credit')
 
@@ -74,10 +76,7 @@ export default function ReportsPanel() {
   if (showRelatorioFatura) {
     return (
       <div className="space-y-4">
-        <button
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
-          onClick={() => setShowRelatorioFatura(false)}
-        >
+        <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors" onClick={() => setShowRelatorioFatura(false)}>
           <ArrowLeft size={14} /> Voltar aos Relatórios
         </button>
         <RelatorioFatura />
@@ -85,8 +84,33 @@ export default function ReportsPanel() {
     )
   }
 
+  if (showDemonstrativo) {
+    return (
+      <div className="space-y-4">
+        <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors" onClick={() => setShowDemonstrativo(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <DemonstrativoFinanceiro />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
+      <button
+        className="w-full card flex items-center gap-3 text-left hover:bg-gray-800 transition-colors group"
+        onClick={() => setShowDemonstrativo(true)}
+      >
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(99,102,241,0.15)' }}>
+          <FileSpreadsheet size={16} style={{ color: '#818cf8' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">Demonstrativo Financeiro</p>
+          <p className="text-xs text-gray-500 mt-0.5">Relatório hierárquico por categoria com filtros de período e exportação CSV</p>
+        </div>
+        <span className="text-gray-600 group-hover:text-gray-400 transition-colors text-lg">›</span>
+      </button>
+
       {hasCredit && (
         <button
           className="w-full card flex items-center gap-3 text-left hover:bg-gray-800 transition-colors group"
