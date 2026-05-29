@@ -6,6 +6,7 @@ import BottomNav from './components/Layout/BottomNav'
 import Header from './components/Layout/Header'
 import Modal from './components/shared/Modal'
 import TransactionForm from './components/Transactions/TransactionForm'
+import PosicaoFinanceiraModal from './components/Dashboard/PosicaoFinanceiraModal'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
 import AccountsPanel from './components/Accounts/AccountsPanel'
 import TransactionsPanel from './components/Transactions/TransactionsPanel'
@@ -22,7 +23,12 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
   const [showQuickAdd, setShowQuickAdd] = useState(false)
+  const [showPosicao, setShowPosicao] = useState(false)
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
+
+  const saldoPrincipal = accounts
+    .filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
+    .reduce((s, a) => s + (a.balance || 0), 0)
 
   const alertCount = useMemo(() => {
     const today = new Date()
@@ -46,7 +52,7 @@ function AppContent() {
   const financialPeriod = getFinancialPeriod()
 
   const panels = {
-    dashboard: <DashboardPanel setActivePage={setActivePage} />,
+    dashboard: <DashboardPanel setActivePage={setActivePage} onShowPosicao={() => setShowPosicao(true)} />,
     accounts: <AccountsPanel />,
     transactions: <TransactionsPanel />,
     credit: <CreditCardPanel />,
@@ -62,9 +68,9 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-950">
-      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} />
+      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header page={activePage} financialPeriod={financialPeriod} />
+        <Header page={activePage} financialPeriod={financialPeriod} saldoPrincipal={saldoPrincipal} onShowPosicao={() => setShowPosicao(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {panels[activePage] ?? panels.dashboard}
         </main>
@@ -72,6 +78,9 @@ function AppContent() {
       <BottomNav active={activePage} setActive={setActivePage} onFab={() => setShowQuickAdd(true)} />
       <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
         <TransactionForm onClose={() => setShowQuickAdd(false)} />
+      </Modal>
+      <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Posição Financeira" size="lg">
+        <PosicaoFinanceiraModal />
       </Modal>
     </div>
   )

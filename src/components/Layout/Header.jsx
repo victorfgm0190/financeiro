@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { fmt } from '../shared/utils'
 
 const PAGE_TITLES = {
   dashboard: 'Painel Geral',
@@ -16,7 +17,7 @@ const PAGE_TITLES = {
   settings: 'Configurações',
 }
 
-export default function Header({ page, financialPeriod }) {
+export default function Header({ page, financialPeriod, saldoPrincipal, onShowPosicao }) {
   const today = new Date()
   return (
     <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-10">
@@ -28,8 +29,18 @@ export default function Header({ page, financialPeriod }) {
           </p>
         )}
       </div>
-      <div className="text-right hidden md:block">
-        <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+      <div className="flex items-center gap-4">
+        {/* Mobile: saldo principal sempre visível */}
+        <button onClick={onShowPosicao} className="md:hidden text-right">
+          <p className="text-xs text-gray-600 leading-none">Principal</p>
+          <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+            {fmt(saldoPrincipal ?? 0)}
+          </p>
+        </button>
+        {/* Desktop: data */}
+        <div className="text-right hidden md:block">
+          <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+        </div>
       </div>
     </header>
   )

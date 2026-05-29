@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
-  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar,
+  ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
@@ -38,7 +38,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
   )
 }
 
-export default function DashboardPanel({ setActivePage }) {
+export default function DashboardPanel({ setActivePage, onShowPosicao }) {
   const { accounts, transactions, schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
 
   const period = getFinancialPeriod()
@@ -68,6 +68,7 @@ export default function DashboardPanel({ setActivePage }) {
 
   const totalAssets = accounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
   const totalDebt = accounts.filter(a => a.type === 'credit').reduce((s, a) => s + (a.creditDebt || 0), 0)
+  const saldoPrincipal = accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
 
   // Budget progress (expense as % of income)
   const budgetPct = income > 0 ? Math.min((expense / income) * 100, 120) : 0
@@ -145,6 +146,28 @@ export default function DashboardPanel({ setActivePage }) {
         </div>
       )}
 
+      {/* Saldo Principal hero */}
+      <button
+        onClick={onShowPosicao}
+        className="w-full card text-left hover:bg-gray-800/60 transition-colors group border border-transparent hover:border-emerald-900/50"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(15,110,86,0.15)' }}>
+              <Wallet size={14} style={{ color: '#0F6E56' }} />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-gray-400 font-medium">Saldo Principal</p>
+              <p className="text-xs text-gray-600 mt-0.5">Contas de fluxo de caixa · clique para ver posição</p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-gray-600 group-hover:text-emerald-600 transition-colors shrink-0" />
+        </div>
+        <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+          {fmt(saldoPrincipal)}
+        </p>
+      </button>
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
@@ -179,10 +202,10 @@ export default function DashboardPanel({ setActivePage }) {
         />
         <KpiCard
           icon={PiggyBank}
-          iconColor="text-emerald-400"
-          label="Saldo em Contas"
+          iconColor="text-gray-500"
+          label="Saldo Total"
           value={totalAssets}
-          valueColor="text-emerald-400"
+          valueColor="text-gray-300"
         />
       </div>
 

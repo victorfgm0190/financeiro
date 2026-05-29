@@ -386,6 +386,12 @@ export default function SettingsPanel() {
         message={`Excluir o grupo "${confirmDeleteGroup?.name}"?`}
         danger
       />
+
+      {/* Identidade — visível apenas no mobile (sidebar já mostra no desktop) */}
+      <div className="md:hidden border-t border-gray-800 pt-4 text-center space-y-0.5">
+        <p className="text-xs text-gray-600 font-medium">Gislaine &amp; Victor Moreira</p>
+        <p className="text-xs text-gray-700 italic">Transformando conhecimento em resultados.</p>
+      </div>
     </div>
   )
 }

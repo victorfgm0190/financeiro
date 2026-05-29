@@ -4,6 +4,7 @@ import {
   Wallet, Wifi, WifiOff, AlertTriangle, Loader, Layers,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { fmt } from '../shared/utils'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -39,7 +40,7 @@ function DbStatusBadge({ status }) {
   )
 }
 
-export default function Sidebar({ active, setActive, alertCount }) {
+export default function Sidebar({ active, setActive, alertCount, saldoPrincipal, onShowPosicao }) {
   const { dbStatus } = useApp()
 
   return (
@@ -67,14 +68,33 @@ export default function Sidebar({ active, setActive, alertCount }) {
           </button>
         ))}
       </nav>
-      <div className="px-4 py-3 border-t border-gray-800 space-y-1">
-        <DbStatusBadge status={dbStatus} />
-        {dbStatus === 'schema-missing' && (
-          <p className="text-xs text-amber-500/70 leading-tight">
-            Execute <code className="bg-gray-800 px-1 rounded">supabase/schema.sql</code> no Supabase
+      <div className="px-4 pt-3 pb-2 border-t border-gray-800 space-y-2.5">
+        {/* Saldo Principal */}
+        <button
+          onClick={onShowPosicao}
+          className="w-full text-left group"
+          title="Ver posição financeira"
+        >
+          <p className="text-xs text-gray-600 uppercase tracking-wide">Saldo Principal</p>
+          <p className={`text-base font-bold mt-0.5 group-hover:opacity-80 transition-opacity ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+            {fmt(saldoPrincipal ?? 0)}
           </p>
-        )}
-        <p className="text-xs text-gray-700">v1.0</p>
+        </button>
+
+        <div className="border-t border-gray-800/60 pt-2 space-y-1">
+          <DbStatusBadge status={dbStatus} />
+          {dbStatus === 'schema-missing' && (
+            <p className="text-xs text-amber-500/70 leading-tight">
+              Execute <code className="bg-gray-800 px-1 rounded">supabase/schema.sql</code> no Supabase
+            </p>
+          )}
+        </div>
+
+        {/* Identidade */}
+        <div className="border-t border-gray-800/60 pt-2">
+          <p className="text-xs text-gray-600 font-medium leading-tight">Gislaine &amp; Victor Moreira</p>
+          <p className="text-xs text-gray-700 leading-tight mt-0.5 italic">Transformando conhecimento em resultados.</p>
+        </div>
       </div>
     </aside>
   )
