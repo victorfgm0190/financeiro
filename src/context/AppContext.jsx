@@ -8,6 +8,7 @@ import {
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
 } from '../lib/supabase'
 import { saveLocal, loadLocal } from '../lib/storage'
+import { computeFaturaRef, computeScheduleDate, gerencialKey } from '../lib/fatura'
 
 // Prev vazio para forçar full-sync ao reconectar
 const EMPTY_PREV = {
@@ -1030,6 +1031,20 @@ export function AppProvider({ children }) {
     if (grupo.number === 'D') return { needsResgate: false }
 
     if (grupo.number === 1) {
+      // Pre-compute fatura data using current data snapshot (outside update)
+      const cardAccount = data.accounts.find(a => a.id === lancamento.accountId)
+      const closingDay = cardAccount?.closingDay || 14
+      const txDate = new Date(lancamento.date + 'T00:00:00')
+      const faturaRef = computeFaturaRef(txDate, closingDay)
+
+      // ETAPA B: schedule date = card's dueDay in the fatura month
+      const [mm, yyyy] = faturaRef.split('/')
+      const dueDay = String(cardAccount?.dueDay || 10).padStart(2, '0')
+      const scheduleDate = `${yyyy}-${mm}-${dueDay}`
+
+      const gerKey = gerencialKey(lancamento.accountId, faturaRef)
+      const txDescription = lancamento.description || ''
+
       update(d => {
         const cartao = d.accounts.find(a => a.id === lancamento.accountId)
         const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
@@ -1071,22 +1086,48 @@ export function AppProvider({ children }) {
           a.id === contaPrincipal.id ? { ...a, balance: (a.balance || 0) - lancamento.amount } : a
         )
 
-        const txId = 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+        // ETAPA A: transferência imediata Conta Corrente → Ger. subconta
         const newTx = {
-          id: txId,
+          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
           type: 'transfer',
           accountId: contaPrincipal.id,
           toAccountId: subcontaId,
           amount: lancamento.amount,
           date: lancamento.date,
-          description: `Provisão ${subcontaName}`,
+          description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
           grupoGerencial: grupoId,
           createdAt: new Date().toISOString(),
         }
 
-        return { ...d, accounts, transactions: [...d.transactions, newTx] }
+        // ETAPA B: agendamento individual por lançamento (Ger. subconta → Conta Corrente)
+        const newSch = {
+          id: 'sch_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          transactionType: 'transfer',
+          accountId: subcontaId,
+          toAccountId: contaPrincipal.id,
+          frequency: 'once',
+          occurrenceType: 'installment',
+          installments: 1,
+          autoRegister: false,
+          startDate: scheduleDate,
+          amount: lancamento.amount,
+          description: `Pagamento Fatura ${faturaRef}${txDescription ? ` - ${txDescription}` : ''}`,
+          overrides: {
+            _gerencialKey: gerKey,
+            _gerencial: {
+              faturaRef,
+              cardId: lancamento.accountId,
+              checkingAccountId: contaPrincipal.id,
+              gerencialContaId: subcontaId,
+            },
+          },
+          registered: [],
+          skipped: [],
+        }
+
+        return { ...d, accounts, transactions: [...d.transactions, newTx], schedules: [...d.schedules, newSch] }
       })
-      return { needsResgate: false }
+      return { needsResgate: false, faturaRef, scheduleDate }
     }
 
     const contaResgate = data.accounts.find(a => a.id === grupo.defaultAccountId)

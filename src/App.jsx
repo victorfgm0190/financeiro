@@ -29,6 +29,7 @@ function AppContent() {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
+  const [genericToast, setGenericToast] = useState(null)
   const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, data } = useApp()
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
@@ -87,7 +88,7 @@ function AppContent() {
       </div>
       <BottomNav active={activePage} setActive={setActivePage} onFab={() => setShowQuickAdd(true)} />
       <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
-        <TransactionForm onClose={() => setShowQuickAdd(false)} />
+        <TransactionForm onClose={() => setShowQuickAdd(false)} onToast={setGenericToast} />
       </Modal>
       <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Posição Financeira" size="lg">
         <PosicaoFinanceiraModal />
@@ -97,6 +98,9 @@ function AppContent() {
           message="Backup automático salvo na pasta Downloads"
           onClose={() => setBackupToast(false)}
         />
+      )}
+      {genericToast && (
+        <Toast message={genericToast} onClose={() => setGenericToast(null)} />
       )}
     </div>
   )

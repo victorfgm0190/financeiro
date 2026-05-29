@@ -211,7 +211,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account, onClose }) {
-  const { transactions, accounts } = useApp()
+  const { transactions, accounts, schedules } = useApp()
   const now = new Date()
   const [from, setFrom] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -221,6 +221,13 @@ export default function ExtratoContaPanel({ account, onClose }) {
   )
 
   const isAplicacao = !!account.contaAplicacao
+  const isGerencial = !!(account.name?.startsWith('Ger. ') && account.grupoGerencial)
+
+  const gerencialSchedules = useMemo(() =>
+    (schedules || []).filter(s => s.overrides?._gerencial?.gerencialContaId === account.id)
+      .sort((a, b) => (a.overrides._gerencial.faturaRef || '').localeCompare(b.overrides._gerencial.faturaRef || '')),
+    [schedules, account.id]
+  )
 
   const filteredTxs = useMemo(() =>
     transactions.filter(tx => tx.date >= from && tx.date <= to),
@@ -303,6 +310,31 @@ export default function ExtratoContaPanel({ account, onClose }) {
           <p className={`text-lg font-bold ${finalBalance >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(finalBalance)}</p>
         </div>
       </div>
+
+      {/* Faturas Provisionadas — only for Ger. accounts */}
+      {isGerencial && gerencialSchedules.length > 0 && (
+        <div className="card space-y-2">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Faturas Provisionadas</h3>
+          {gerencialSchedules.map(s => {
+            const faturaRef = s.overrides?._gerencial?.faturaRef || '—'
+            const done = (s.registered || []).length > 0
+            return (
+              <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0">
+                <div>
+                  <p className="text-xs text-gray-200 font-medium">Fatura {faturaRef}</p>
+                  <p className="text-xs text-gray-500">Devolução: {fmtDate(s.startDate)}</p>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-xs font-semibold text-purple-300">{fmt(s.amount)}</p>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${done ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                    {done ? 'Executado' : 'Pendente'}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Table */}
       <div className="card p-0 overflow-hidden">

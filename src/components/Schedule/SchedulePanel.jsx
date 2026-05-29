@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
-  Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle,
+  Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -22,6 +22,14 @@ const FREQ_LABELS = {
   semiannual: 'Semestral',
   annual: 'Anual',
 }
+
+const VIEW_FILTERS = [
+  { id: 'future',  label: 'Todos os futuros' },
+  { id: 'next30',  label: 'Próximos 30 dias' },
+  { id: 'month',   label: 'Este mês' },
+  { id: 'all',     label: 'Todos' },
+  { id: 'history', label: 'Histórico' },
+]
 
 function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupoId) {
@@ -101,10 +109,11 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
 
 function SectionHeader({ label, count, variant = 'default' }) {
   const colors = {
-    overdue: 'text-red-400 bg-red-500/10 border-red-500/20',
-    soon: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    month: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    default: 'text-gray-400 bg-gray-800/60 border-gray-700/50',
+    overdue:  'text-red-400 bg-red-500/10 border-red-500/20',
+    soon:     'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    month:    'text-blue-400 bg-blue-500/10 border-blue-500/20',
+    default:  'text-gray-400 bg-gray-800/60 border-gray-700/50',
+    history:  'text-gray-500 bg-gray-800/30 border-gray-700/20',
   }
   return (
     <tr>
@@ -153,8 +162,11 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
     }
   }
 
+  // For completed schedules, show last registered date as reference
+  const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
+
   return (
-    <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''}`}>
+    <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''}`}>
       {/* Próxima Data */}
       <td className="px-3 py-3 whitespace-nowrap">
         {nextDate ? (
@@ -168,7 +180,10 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
             )}
           </div>
         ) : (
-          <span className="text-xs text-gray-600">—</span>
+          <div>
+            <p className="text-xs text-gray-600 font-medium">{displayDate ? fmtDate(displayDate) : '—'}</p>
+            <span className="text-xs text-gray-700">Concluído</span>
+          </div>
         )}
       </td>
 
@@ -193,6 +208,10 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
         {schedule.transactionType === 'income' ? (
           <span className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-600 px-2 py-0.5 rounded font-medium">
             <ArrowDownCircle size={11} /> Receita
+          </span>
+        ) : schedule.transactionType === 'transfer' ? (
+          <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded font-medium">
+            Transferência
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-2 py-0.5 rounded font-medium">
@@ -268,16 +287,17 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     nextDate: getNextOccurrences(s, 1)[0] || null,
   })), [schedules, getNextOccurrences])
 
-  const overdue = rows.filter(r => r.nextDate && r.nextDate < today).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const next7 = rows.filter(r => r.nextDate && r.nextDate >= today && r.nextDate <= in7).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const next30 = rows.filter(r => r.nextDate && r.nextDate > in7 && r.nextDate <= in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const future = rows.filter(r => !r.nextDate || r.nextDate > in30).sort((a, b) => (a.nextDate || '9999').localeCompare(b.nextDate || '9999'))
+  const overdue    = rows.filter(r => r.nextDate && r.nextDate < today).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+  const next7      = rows.filter(r => r.nextDate && r.nextDate >= today && r.nextDate <= in7).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+  const next30     = rows.filter(r => r.nextDate && r.nextDate > in7 && r.nextDate <= in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+  const future     = rows.filter(r => r.nextDate && r.nextDate > in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+  const completed  = rows.filter(r => !r.nextDate).sort((a, b) => (b.schedule.startDate || '').localeCompare(a.schedule.startDate || ''))
 
   if (schedules.length === 0) {
     return (
       <div className="card text-center py-12">
         <Calendar size={32} className="text-gray-700 mx-auto mb-3" />
-        <p className="text-gray-500">Nenhum agendamento cadastrado</p>
+        <p className="text-gray-500">Nenhum agendamento encontrado</p>
         <button className="btn-primary mt-4" onClick={onNewSchedule}>Criar primeiro agendamento</button>
       </div>
     )
@@ -291,7 +311,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-800">
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Próxima Data</th>
+              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
               <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
               <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Movimentação</th>
               <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
@@ -334,6 +354,14 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 ))}
               </>
             )}
+            {completed.length > 0 && (
+              <>
+                <SectionHeader label="Concluídos" count={completed.length} variant="history" />
+                {completed.map(({ schedule, nextDate }) => (
+                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
+                ))}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -350,15 +378,38 @@ export default function SchedulePanel() {
   } = useApp()
 
   const [activeTab, setActiveTab] = useState('conta')
+  const [viewFilter, setViewFilter] = useState('future')
   const [showForm, setShowForm] = useState(false)
   const [editSchedule, setEditSchedule] = useState(null)
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
 
-  const pendingSchedules = schedules.filter(s => getNextOccurrences(s, 1).length > 0)
-  const invoicePayables = (payables || []).filter(p => p.origin === 'invoice')
+  const allPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
+  const invoicePayables  = (payables || []).filter(p => p.origin === 'invoice')
   const gerencialPayables = (payables || []).filter(p => p.origin === 'gerencial')
-  const pendingInvoice = invoicePayables.filter(p => p.status === 'pending').length
+  const pendingInvoice   = invoicePayables.filter(p => p.status === 'pending').length
   const pendingGerencial = gerencialPayables.filter(p => p.status === 'pending').length
+
+  const filteredSchedules = useMemo(() => {
+    const now = new Date()
+    const todayStr  = format(now, 'yyyy-MM-dd')
+    const in30Str   = format(addDays(now, 30), 'yyyy-MM-dd')
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const lastDay    = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    const monthEnd   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+    if (viewFilter === 'all')     return schedules
+    if (viewFilter === 'history') return schedules.filter(s => getNextOccurrences(s, 1).length === 0)
+    if (viewFilter === 'future')  return schedules.filter(s => getNextOccurrences(s, 1).length > 0)
+    if (viewFilter === 'next30')  return schedules.filter(s => {
+      const next = getNextOccurrences(s, 1)[0]
+      return next && next <= in30Str
+    })
+    if (viewFilter === 'month')   return schedules.filter(s => {
+      const next = getNextOccurrences(s, 1)[0]
+      return next && next >= monthStart && next <= monthEnd
+    })
+    return schedules
+  }, [schedules, viewFilter, getNextOccurrences])
 
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
@@ -368,7 +419,7 @@ export default function SchedulePanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-300">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{pendingSchedules.length} agendamentos · {pendingInvoice + pendingGerencial} faturas pendentes</p>
+          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingGerencial} faturas</p>
         </div>
         {activeTab === 'conta' && (
           <button className="btn-primary flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
@@ -378,8 +429,8 @@ export default function SchedulePanel() {
       </div>
 
       <div className="border-b border-gray-800 flex gap-0 overflow-x-auto">
-        <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={pendingSchedules.length}>
-          <Calendar size={14} /> Conta Corrente
+        <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={allPending.length}>
+          <Calendar size={14} /> Agendamentos
         </TabButton>
         <TabButton active={activeTab === 'cartao'} onClick={() => setActiveTab('cartao')} badge={pendingInvoice}>
           <CreditCard size={14} /> Cartão de Crédito
@@ -390,19 +441,40 @@ export default function SchedulePanel() {
       </div>
 
       {activeTab === 'conta' && (
-        <SchedulesTable
-          schedules={schedules}
-          categories={categories}
-          accounts={accounts}
-          gerencialGroups={gerencialGroups}
-          addTransaction={addTransaction}
-          deleteSchedule={deleteSchedule}
-          registerScheduleOccurrence={registerScheduleOccurrence}
-          skipScheduleOccurrence={skipScheduleOccurrence}
-          getNextOccurrences={getNextOccurrences}
-          onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-          onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
-        />
+        <>
+          {/* Filter chips */}
+          <div className="flex flex-wrap gap-2">
+            {VIEW_FILTERS.map(f => (
+              <button
+                key={f.id}
+                onClick={() => setViewFilter(f.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                  viewFilter === f.id
+                    ? 'bg-[#0F6E56] text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                }`}
+              >
+                {f.id === 'history' && <History size={11} />}
+                {f.label}
+                {f.id === 'future' && <span className="text-xs opacity-70">{allPending.length}</span>}
+              </button>
+            ))}
+          </div>
+
+          <SchedulesTable
+            schedules={filteredSchedules}
+            categories={categories}
+            accounts={accounts}
+            gerencialGroups={gerencialGroups}
+            addTransaction={addTransaction}
+            deleteSchedule={deleteSchedule}
+            registerScheduleOccurrence={registerScheduleOccurrence}
+            skipScheduleOccurrence={skipScheduleOccurrence}
+            getNextOccurrences={getNextOccurrences}
+            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
+            onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+          />
+        </>
       )}
 
       {activeTab === 'cartao' && (

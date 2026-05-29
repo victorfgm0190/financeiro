@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt } from '../shared/utils'
+import { today, fmt, fmtDate } from '../shared/utils'
+import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import DebtPlanModal from './DebtPlanModal'
@@ -34,7 +35,7 @@ function GerencialSelect({ value, onChange, grupos }) {
 
 const GERENCIAL_CONTA_KEY = 'lastGerencialAccountId'
 
-export default function TransactionForm({ initial, onClose }) {
+export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees,
     gerencialGroups, processarLancamentoGerencial,
@@ -141,7 +142,7 @@ export default function TransactionForm({ initial, onClose }) {
         localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
       }
       const resultado = processarLancamentoGerencial(
-        { accountId: form.accountId, amount: Number(form.amount), date: form.date },
+        { accountId: form.accountId, amount: Number(form.amount), date: form.date, description: form.description },
         form.grupoGerencial,
         contaId,
       )
@@ -149,6 +150,9 @@ export default function TransactionForm({ initial, onClose }) {
         setResgateInfo({ ...resultado, amount: Number(form.amount), date: form.date })
         setStep('resgate')
         return
+      }
+      if (resultado.scheduleDate) {
+        onToast?.(`Reserva criada + agendamento de devolução em ${fmtDate(resultado.scheduleDate)} criado.`)
       }
     }
 
@@ -403,6 +407,11 @@ export default function TransactionForm({ initial, onClose }) {
             if (g.number === 1) {
               const subcontaApelido = selectedAccount?.apelido || selectedAccount?.name?.slice(0, 6) || 'CC'
               const contaDestino = accounts.find(a => a.id === gerencialContaId)
+              const txDate = form.date ? new Date(form.date + 'T00:00:00') : new Date()
+              const faturaRef = computeFaturaRef(txDate, selectedAccount?.closingDay || 14)
+              const [fmm, fyyyy] = faturaRef.split('/')
+              const dueDay = String(selectedAccount?.dueDay || 10).padStart(2, '0')
+              const scheduleDate = `${fyyyy}-${fmm}-${dueDay}`
               return (
                 <div className="space-y-2">
                   <div>
@@ -425,11 +434,16 @@ export default function TransactionForm({ initial, onClose }) {
                     </select>
                   </div>
                   {contaDestino ? (
-                    <p className="text-xs text-purple-300 leading-relaxed">
-                      Transferência automática será criada para a subconta{' '}
-                      <strong className="text-purple-200">"Ger. {subcontaApelido}"</strong>{' '}
-                      a partir de <strong className="text-purple-200">{contaDestino.name}</strong>.
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-purple-300 leading-relaxed">
+                        Transferência automática será criada para a subconta{' '}
+                        <strong className="text-purple-200">"Ger. {subcontaApelido}"</strong>{' '}
+                        a partir de <strong className="text-purple-200">{contaDestino.name}</strong>.
+                      </p>
+                      <p className="text-xs text-purple-400">
+                        📅 Fatura {faturaRef} · Agendamento de devolução em {fmtDate(scheduleDate)}
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-xs text-amber-400">
                       Selecione a conta corrente de origem da transferência.
