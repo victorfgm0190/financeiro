@@ -83,7 +83,7 @@ export default function TransactionForm({ initial, onClose }) {
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
     }
 
-    if (initial) {
+    if (initial?.id) {
       updateTransaction(initial.id, txData)
       onClose()
       return
