@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, PiggyBank } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate } from '../shared/utils'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -72,6 +72,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     costCenter: initial?.costCenter || '',
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
+    useReserva: false,
+    reservaAccountId: '',
   })
 
   const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match' | 'debt-plan' | 'debt-payment'
@@ -87,6 +89,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
   const relevantCategories = categories.filter(c => c.type === 'both' || c.type === form.type)
 
+  const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
+  const matchingSpecificReserva = useMemo(
+    () => form.type === 'expense' && form.categoryId
+      ? reservaAccounts.find(a => a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId)
+      : null,
+    [form.type, form.categoryId, reservaAccounts]
+  )
+
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
     accounts.find(a => a.isMain && a.type !== 'credit') ||
@@ -98,8 +108,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
+    // eslint-disable-next-line no-unused-vars
+    const { useReserva: _ur, reservaAccountId: _rai, ...formFields } = form
     const txData = {
-      ...form,
+      ...formFields,
       amount: Number(form.amount),
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
@@ -133,6 +145,19 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     }
 
     addTransaction(txData)
+
+    // "Pago com reserva?": cria transferência reserva → conta da despesa
+    if (form.type === 'expense' && form.useReserva && form.reservaAccountId) {
+      const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
+      addTransaction({
+        type: 'transfer',
+        accountId: form.reservaAccountId,
+        toAccountId: form.accountId,
+        amount: Number(form.amount),
+        date: form.date,
+        description: `Resgate ${reservaAcc?.apelido || reservaAcc?.name || 'reserva'}: ${form.description || ''}`.trim().replace(/:$/, ''),
+      })
+    }
 
     if (showGerencial && form.grupoGerencial) {
       const g = gerencialGroups.find(g => g.id === form.grupoGerencial)
@@ -388,6 +413,58 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <label className="label">Observações</label>
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observações adicionais..." />
       </div>
+
+      {form.type === 'expense' && !initial?.id && reservaAccounts.length > 0 && (
+        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg space-y-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <div className="relative shrink-0">
+              <input
+                type="checkbox"
+                checked={form.useReserva}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setForm(f => ({
+                    ...f,
+                    useReserva: checked,
+                    reservaAccountId: checked
+                      ? (matchingSpecificReserva?.id || reservaAccounts[0]?.id || '')
+                      : '',
+                  }))
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-indigo-600 transition-colors" />
+              <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+            </div>
+            <PiggyBank size={14} className="text-indigo-400 shrink-0" />
+            <span className="text-sm text-indigo-300 select-none">Pago com reserva?</span>
+            {matchingSpecificReserva && !form.useReserva && (
+              <span className="text-xs text-indigo-500 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
+            )}
+          </label>
+          {form.useReserva && (
+            <div className="space-y-2">
+              <select
+                className="input"
+                value={form.reservaAccountId}
+                onChange={e => set('reservaAccountId', e.target.value)}
+              >
+                <option value="">Selecione a reserva...</option>
+                {reservaAccounts.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId ? '★ ' : ''}{a.apelido || a.name}
+                  </option>
+                ))}
+              </select>
+              {form.reservaAccountId && (
+                <p className="text-xs text-indigo-400 leading-relaxed">
+                  Será criada uma transferência automática da reserva para a conta da despesa.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {showGerencial && (
         <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg space-y-3">

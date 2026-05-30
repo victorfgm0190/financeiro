@@ -443,7 +443,42 @@ export function AppProvider({ children }) {
           return a
         })
       }
-      return { ...d, accounts, transactions: [...d.transactions, newTx] }
+
+      // Auto expense/income para transferências com contas reserva
+      const extraTxs = []
+      if (tx.type === 'transfer') {
+        const toAcc = d.accounts.find(a => a.id === tx.toAccountId)
+        const fromAcc = d.accounts.find(a => a.id === tx.accountId)
+        const now = new Date().toISOString()
+        if (toAcc?.isReserva) {
+          const catId = toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger'
+          extraTxs.push({
+            id: 'tx_res_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            type: 'expense',
+            accountId: null,
+            amount: Number(tx.amount),
+            categoryId: catId,
+            description: `Reserva: ${toAcc.apelido || toAcc.name}`,
+            date: tx.date,
+            createdAt: now,
+          })
+        }
+        if (fromAcc?.isReserva) {
+          const catId = fromAcc.reservaType === 'especifica' ? (fromAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger'
+          extraTxs.push({
+            id: 'tx_rsg_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            type: 'income',
+            accountId: null,
+            amount: Number(tx.amount),
+            categoryId: catId,
+            description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
+            date: tx.date,
+            createdAt: now,
+          })
+        }
+      }
+
+      return { ...d, accounts, transactions: [...d.transactions, newTx, ...extraTxs] }
     })
     return id
   }, [update])
