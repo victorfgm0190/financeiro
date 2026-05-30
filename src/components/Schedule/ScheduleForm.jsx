@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today } from '../shared/utils'
-import CategorySelect from '../shared/CategorySelect'
-import AccountOptions from '../shared/AccountOptions'
+import { today, groupedAccountOptions } from '../shared/utils'
+import SearchableSelect from '../shared/SearchableSelect'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -164,9 +164,21 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
   )
 }
 
-export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
+function buildCatOpts(categories, type) {
+  return categories
+    .filter(c => !type || c.type === type || c.type === 'both')
+    .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
+}
 
+function buildAccOpts(accounts, accountGroups, excludeId) {
+  const pool = excludeId ? accounts.filter(a => a.id !== excludeId) : accounts
+  return groupedAccountOptions(pool, accountGroups).flatMap(({ group, accounts: accs }) =>
+    accs.map(a => ({ id: a.id, label: a.name, group: group?.name || null }))
+  )
+}
+
+export default function ScheduleForm({ initial, onClose }) {
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -201,7 +213,6 @@ export default function ScheduleForm({ initial, onClose }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
-  const relevantCategories = categories.filter(c => c.type === 'both' || c.type === form.transactionType)
 
   const schToAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
   const schFromAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
@@ -212,6 +223,20 @@ export default function ScheduleForm({ initial, onClose }) {
   const schReservaLinkedCat = schReservaAcc?.reservaType === 'especifica'
     ? categories.find(c => c.id === schReservaAcc.reservaCategoryId)
     : null
+
+  // Options for SearchableSelect fields
+  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups), [accounts, accountGroups])
+  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId), [accounts, accountGroups, form.accountId])
+  const categoryOpts = useMemo(() => buildCatOpts(categories, form.transactionType === 'transfer' ? null : form.transactionType), [categories, form.transactionType])
+  const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
+
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) {
+      if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1
+    }
+    return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
 
   const previewSchedule = {
     ...form,
@@ -296,9 +321,13 @@ export default function ScheduleForm({ initial, onClose }) {
         {/* Conta */}
         <div>
           <LabelTip tip={TIPS.account} required>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
-          <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)} required>
-            <AccountOptions accounts={accounts} accountGroups={accountGroups} />
-          </select>
+          <SearchableSelect
+            options={accountOpts}
+            value={form.accountId}
+            onChange={id => set('accountId', id)}
+            placeholder="Selecione a conta..."
+            required
+          />
         </div>
 
         {/* Valor */}
@@ -320,10 +349,13 @@ export default function ScheduleForm({ initial, onClose }) {
         {form.transactionType === 'transfer' && (
           <div className="col-span-2">
             <LabelTip tip="Conta que receberá a transferência" required>Conta Destino</LabelTip>
-            <select className="input" value={form.toAccountId} onChange={e => setForm(f => ({ ...f, toAccountId: e.target.value, reservaExpenseCategoryId: '' }))} required>
-              <option value="">Selecione a conta destino...</option>
-              <AccountOptions accounts={accounts.filter(a => a.id !== form.accountId)} accountGroups={accountGroups} />
-            </select>
+            <SearchableSelect
+              options={destAccountOpts}
+              value={form.toAccountId}
+              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '' }))}
+              placeholder="Selecione a conta destino..."
+              required
+            />
           </div>
         )}
 
@@ -335,11 +367,11 @@ export default function ScheduleForm({ initial, onClose }) {
             </p>
             {schNeedsReservaCategorySelect ? (
               <>
-                <CategorySelect
-                  categories={categories}
-                  type="expense"
+                <SearchableSelect
+                  options={expenseCatOpts}
                   value={form.reservaExpenseCategoryId}
-                  onChange={e => set('reservaExpenseCategoryId', e.target.value)}
+                  onChange={id => set('reservaExpenseCategoryId', id)}
+                  placeholder="Sem categoria"
                 />
                 {!form.reservaExpenseCategoryId && (
                   <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
@@ -360,11 +392,11 @@ export default function ScheduleForm({ initial, onClose }) {
         {form.transactionType !== 'transfer' && (
           <div>
             <LabelTip tip={TIPS.category}>Categoria</LabelTip>
-            <CategorySelect
-              categories={categories}
-              type={form.transactionType}
+            <SearchableSelect
+              options={categoryOpts}
               value={form.categoryId}
-              onChange={e => set('categoryId', e.target.value)}
+              onChange={id => set('categoryId', id)}
+              placeholder="Sem categoria"
             />
           </div>
         )}
@@ -373,14 +405,11 @@ export default function ScheduleForm({ initial, onClose }) {
         {form.transactionType !== 'transfer' && (
           <div>
             <LabelTip tip={TIPS.payee}>Favorecido</LabelTip>
-            <input
-              className="input"
+            <FavorecidoAutocomplete
               value={form.payee}
-              onChange={e => set('payee', e.target.value)}
-              placeholder="Nome..."
-              list="sch-payees"
+              onChange={v => set('payee', v)}
+              suggestions={sortedPayees}
             />
-            <datalist id="sch-payees">{payees.map(p => <option key={p} value={p} />)}</datalist>
           </div>
         )}
 

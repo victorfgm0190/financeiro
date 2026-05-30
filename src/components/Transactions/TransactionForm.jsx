@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, PiggyBank } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, fmtDate } from '../shared/utils'
+import { today, fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
 import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
-import CategorySelect from '../shared/CategorySelect'
+import SearchableSelect from '../shared/SearchableSelect'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
-import AccountOptions from '../shared/AccountOptions'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -35,9 +35,22 @@ function GerencialSelect({ value, onChange, grupos }) {
 
 const GERENCIAL_CONTA_KEY = 'lastGerencialAccountId'
 
+function buildCatOpts(categories, type) {
+  return categories
+    .filter(c => !type || c.type === type || c.type === 'both')
+    .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
+}
+
+function buildAccOpts(accounts, accountGroups, excludeId) {
+  const pool = excludeId ? accounts.filter(a => a.id !== excludeId) : accounts
+  return groupedAccountOptions(pool, accountGroups).flatMap(({ group, accounts: accs }) =>
+    accs.map(a => ({ id: a.id, label: a.name, group: group?.name || null }))
+  )
+}
+
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
-    accounts, accountGroups, categories, costCenters, payees,
+    accounts, accountGroups, categories, costCenters, payees, transactions,
     gerencialGroups, processarLancamentoGerencial,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -45,13 +58,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
 
-  // Contas correntes disponíveis para destino da transferência gerencial
   const checkingAccounts = useMemo(
     () => accounts.filter(a => a.type === 'checking' || a.contaCorrentePrincipal),
     [accounts]
   )
 
-  // Inicializa com última conta usada (localStorage) ou a conta corrente principal
   const [gerencialContaId, setGerencialContaId] = useState(() => {
     const saved = localStorage.getItem(GERENCIAL_CONTA_KEY)
     if (saved && accounts.some(a => a.id === saved)) return saved
@@ -77,18 +88,16 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     reservaExpenseCategoryId: '',
   })
 
-  const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match' | 'debt-plan' | 'debt-payment'
+  const [step, setStep] = useState('form')
   const [resgateInfo, setResgateInfo] = useState(null)
-  const [scheduleMatch, setScheduleMatch] = useState(null) // { schedule, tx }
-  const [debtCtx, setDebtCtx] = useState(null) // { account, group, amount, date, sourceAccountId }
+  const [scheduleMatch, setScheduleMatch] = useState(null)
+  const [debtCtx, setDebtCtx] = useState(null)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
   const showGerencial = isCredit && form.type === 'expense'
-
-  const relevantCategories = categories.filter(c => c.type === 'both' || c.type === form.type)
 
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
   const matchingSpecificReserva = useMemo(
@@ -98,7 +107,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     [form.type, form.categoryId, reservaAccounts]
   )
 
-  // Reserva transfer context
   const transferToAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
   const transferFromAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
   const isDepositToReserva = !!transferToAcc?.isReserva
@@ -114,13 +122,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     accounts.find(a => a.isMain && a.type !== 'credit') ||
     accounts.find(a => a.type === 'checking')
 
+  // Options for SearchableSelect fields
+  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups), [accounts, accountGroups])
+  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId), [accounts, accountGroups, form.accountId])
+  const categoryOpts = useMemo(() => buildCatOpts(categories, form.type === 'transfer' ? null : form.type), [categories, form.type])
+  const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
+
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) {
+      if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1
+    }
+    return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.amount || !form.accountId) return
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
-    // Geral reserve transfer validation
     if (form.type === 'transfer' && needsReservaCategorySelect && !form.reservaExpenseCategoryId) return
 
     // eslint-disable-next-line no-unused-vars
@@ -139,19 +160,16 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       return
     }
 
-    // Detect debt/loan account transfer before saving
     if (form.type === 'transfer' && form.toAccountId && !initial?.id) {
       const toAcc = accounts.find(a => a.id === form.toAccountId)
       const toGroup = (accountGroups || []).find(g => g.id === toAcc?.accountGroupId)
       if (toGroup?.behavior === 'divida' || toGroup?.behavior === 'emprestimo') {
         const ctx = { account: toAcc, group: toGroup, amount: Number(form.amount), date: form.date, sourceAccountId: form.accountId }
         if (toAcc.debtPlan) {
-          // Payment flow — intercept, do NOT save as a normal transfer
           setDebtCtx(ctx)
           setStep('debt-payment')
           return
         } else {
-          // New loan — save transfer normally, then show plan setup
           addTransaction(txData)
           setDebtCtx(ctx)
           setStep('debt-plan')
@@ -162,7 +180,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
     addTransaction(txData)
 
-    // "Pago com reserva?": cria transferência reserva → conta da despesa
     if (form.type === 'expense' && form.useReserva && form.reservaAccountId) {
       const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
       addTransaction({
@@ -178,7 +195,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
     if (showGerencial && form.grupoGerencial) {
       const g = gerencialGroups.find(g => g.id === form.grupoGerencial)
-      // Grupo 1 (Gerencial): requer conta destino selecionada
       const contaId = g?.number === 1 ? gerencialContaId : null
       if (g?.number === 1 && gerencialContaId) {
         localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
@@ -198,7 +214,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       }
     }
 
-    // Verifica agendamento recorrente para cartão de crédito
     if (isCredit && form.type === 'expense') {
       const match = findMatchingSchedule(txData)
       if (match) {
@@ -226,7 +241,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     onClose()
   }
 
-  // ── Tela de match com agendamento recorrente ─────────────────────────────────
   if (step === 'schedule-match' && scheduleMatch) {
     const handleRegister = () => {
       const nextOccs = getNextOccurrences(scheduleMatch.schedule, 3)
@@ -249,7 +263,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  // ── Configuração de plano de dívida / empréstimo ────────────────────────────
   if (step === 'debt-plan' && debtCtx) {
     return (
       <DebtPlanModal
@@ -262,7 +275,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  // ── Pagamento de parcela de dívida ───────────────────────────────────────────
   if (step === 'debt-payment' && debtCtx) {
     return (
       <DebtPaymentModal
@@ -276,7 +288,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  // ── Tela de confirmação de resgate ──────────────────────────────────────────
   if (step === 'resgate') {
     return (
       <div className="space-y-5 py-2">
@@ -308,7 +319,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  // ── Formulário principal ────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
@@ -336,16 +346,24 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *</label>
-          <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)} required>
-            <AccountOptions accounts={accounts} accountGroups={accountGroups} />
-          </select>
+          <SearchableSelect
+            options={accountOpts}
+            value={form.accountId}
+            onChange={id => set('accountId', id)}
+            placeholder="Selecione a conta..."
+            required
+          />
         </div>
         {form.type === 'transfer' ? (
           <div>
             <label className="label">Conta Destino *</label>
-            <select className="input" value={form.toAccountId} onChange={e => setForm(f => ({ ...f, toAccountId: e.target.value, reservaExpenseCategoryId: '' }))} required>
-              <AccountOptions accounts={accounts} accountGroups={accountGroups} filter={a => a.id !== form.accountId} />
-            </select>
+            <SearchableSelect
+              options={destAccountOpts}
+              value={form.toAccountId}
+              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '' }))}
+              placeholder="Selecione o destino..."
+              required
+            />
           </div>
         ) : (
           <div>
@@ -377,7 +395,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </div>
             )
           })()}
-          {/* Reserva category — shown when transfer involves a reserve account */}
           {(isDepositToReserva || isWithdrawFromReserva) && (
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
               <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
@@ -385,11 +402,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </p>
               {needsReservaCategorySelect ? (
                 <>
-                  <CategorySelect
-                    categories={categories}
-                    type="expense"
+                  <SearchableSelect
+                    options={expenseCatOpts}
                     value={form.reservaExpenseCategoryId}
-                    onChange={e => set('reservaExpenseCategoryId', e.target.value)}
+                    onChange={id => set('reservaExpenseCategoryId', id)}
+                    placeholder="Sem categoria"
                   />
                   {!form.reservaExpenseCategoryId && (
                     <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
@@ -417,26 +434,21 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <>
           <div>
             <label className="label">Categoria</label>
-            <CategorySelect
-              categories={categories}
-              type={form.type}
+            <SearchableSelect
+              options={categoryOpts}
               value={form.categoryId}
-              onChange={e => set('categoryId', e.target.value)}
+              onChange={id => set('categoryId', id)}
+              placeholder="Sem categoria"
             />
           </div>
 
           <div>
             <label className="label">Favorecido</label>
-            <input
-              className="input"
+            <FavorecidoAutocomplete
               value={form.payee}
-              onChange={e => set('payee', e.target.value)}
-              placeholder="Nome do favorecido"
-              list="payees-list"
+              onChange={v => set('payee', v)}
+              suggestions={sortedPayees}
             />
-            <datalist id="payees-list">
-              {payees.map(p => <option key={p} value={p} />)}
-            </datalist>
           </div>
 
           <div>
