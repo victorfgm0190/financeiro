@@ -1395,17 +1395,24 @@ export function AppProvider({ children }) {
             name: subcontaName,
             type: 'checking',
             balance: lancamento.amount,
-            bank: '',
+            bank: contaPrincipal.bank || '',
             apelido: `G${apelido}`.slice(0, 8),
             fluxoCaixaPrincipal: false,
             isMain: false,
             contaCorrentePrincipal: false,
             grupoGerencial: grupoId,
-            accountGroupId: contaPrincipal.accountGroupId || null, // herda grupo da conta destino
+            accountGroupId: contaPrincipal.accountGroupId || null,
           }]
         } else {
           accounts = accounts.map(a =>
-            a.id === subcontaId ? { ...a, balance: (a.balance || 0) + lancamento.amount } : a
+            a.id === subcontaId
+              ? {
+                  ...a,
+                  balance: (a.balance || 0) + lancamento.amount,
+                  accountGroupId: contaPrincipal.accountGroupId || a.accountGroupId || null,
+                  bank: a.bank || contaPrincipal.bank || '',
+                }
+              : a
           )
         }
 
