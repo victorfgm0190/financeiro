@@ -294,8 +294,20 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   )
 }
 
+function calcGroupBalance(accounts) {
+  return accounts.reduce((sum, a) =>
+    a.type === 'credit' ? sum - (a.creditDebt || 0) : sum + (a.balance || 0), 0)
+}
+
+function balColor(amount) {
+  if (amount > 0.005) return 'text-emerald-400'
+  if (amount < -0.005) return 'text-red-400'
+  return 'text-gray-500'
+}
+
 function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue }) {
   const [collapsed, setCollapsed] = useState(false)
+  const total = calcGroupBalance(accounts)
   const typeBadge = group.type === 'financeiro'
     ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
     : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
@@ -311,7 +323,8 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
           : <ChevronDown size={14} className="text-gray-500 shrink-0" />}
         <span className="font-medium text-sm text-gray-200">{group.name}</span>
         {typeBadge}
-        <span className="text-xs text-gray-600 ml-auto">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-gray-500 ml-auto">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
+        <span className={`text-xs font-medium ${balColor(total)}`}>{fmt(total)}</span>
       </button>
       {!collapsed && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pl-2 border-l border-gray-800">
@@ -445,7 +458,11 @@ export default function AccountsPanel() {
 
           {ungrouped.length > 0 && (
             <div className="space-y-3">
-              <p className="text-xs text-gray-600 uppercase tracking-wider border-b border-gray-800 pb-1.5">Sem Grupo</p>
+              <div className="flex items-center gap-3 border-b border-gray-800 pb-1.5">
+                <p className="text-xs text-gray-600 uppercase tracking-wider">Sem Grupo</p>
+                <span className="text-xs text-gray-500 ml-auto">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
+                <span className={`text-xs font-medium ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {ungrouped.map(a => (
                   <AccountCard
