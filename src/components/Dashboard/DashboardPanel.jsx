@@ -135,6 +135,49 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       .slice(0, 5)
   }, [periodTxs, categories])
 
+  // ── Saldo Projetado ──────────────────────────────────────────────────────────
+  const saldoProjetado = useMemo(() => {
+    const principalIds = new Set(
+      accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').map(a => a.id)
+    )
+    if (principalIds.size === 0) return null
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    let pendingIncome = 0
+    let pendingExpense = 0
+    let pendingCount = 0
+
+    for (const schedule of schedules) {
+      const fromPrincipal = principalIds.has(schedule.accountId)
+      const toPrincipal = principalIds.has(schedule.toAccountId)
+      if (!fromPrincipal && !toPrincipal) continue
+
+      const nexts = getNextOccurrences(schedule, 35)
+        .filter(date => date >= todayStr && date <= periodStr.end)
+      if (nexts.length === 0) continue
+
+      for (const _date of nexts) {
+        pendingCount++
+        if (schedule.transactionType === 'income' && fromPrincipal) {
+          pendingIncome += schedule.amount
+        } else if (schedule.transactionType === 'expense' && fromPrincipal) {
+          pendingExpense += schedule.amount
+        } else if (schedule.transactionType === 'transfer') {
+          // transferência entre contas principais cancela — ignora
+          if (fromPrincipal && !toPrincipal) pendingExpense += schedule.amount
+          else if (!fromPrincipal && toPrincipal) pendingIncome += schedule.amount
+        }
+      }
+    }
+
+    return {
+      projetado: saldoPrincipal + pendingIncome - pendingExpense,
+      pendingIncome,
+      pendingExpense,
+      pendingCount,
+    }
+  }, [accounts, schedules, getNextOccurrences, periodStr.end, saldoPrincipal])
+
   const today = new Date().toISOString().split('T')[0]
 
   // ── P17: Pie chart state ─────────────────────────────────────────────────
@@ -249,6 +292,44 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
           value={totalAssets}
           valueColor="text-gray-300"
         />
+
+        {/* Saldo Projetado — largura total, abaixo dos 4 KPI cards */}
+        {saldoProjetado && (
+          <div className="col-span-2 lg:col-span-4 card flex items-center justify-between gap-6">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar size={15} className="text-teal-500 shrink-0" />
+                <span className="text-xs uppercase tracking-wide text-gray-400">
+                  Projetado até {format(parseISO(periodStr.end), 'dd/MM')}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1 leading-relaxed">
+                <span>Atual <span className="text-gray-300 font-medium">{fmt(saldoPrincipal)}</span></span>
+                {saldoProjetado.pendingIncome > 0 && (
+                  <span className="flex items-center gap-1 text-blue-400">
+                    <ArrowDownCircle size={10} className="shrink-0" />
+                    +{fmt(saldoProjetado.pendingIncome)}
+                  </span>
+                )}
+                {saldoProjetado.pendingExpense > 0 && (
+                  <span className="flex items-center gap-1 text-orange-400">
+                    <ArrowUpCircle size={10} className="shrink-0" />
+                    −{fmt(saldoProjetado.pendingExpense)}
+                  </span>
+                )}
+                {saldoProjetado.pendingCount > 0
+                  ? <span className="text-gray-600">· {saldoProjetado.pendingCount} agendamento{saldoProjetado.pendingCount !== 1 ? 's' : ''} pendente{saldoProjetado.pendingCount !== 1 ? 's' : ''}</span>
+                  : <span className="text-gray-600">· nenhum agendamento pendente no período</span>
+                }
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className={`text-2xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmt(saldoProjetado.projetado)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Budget progress bar */}
