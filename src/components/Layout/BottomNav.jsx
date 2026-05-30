@@ -1,11 +1,12 @@
-import { LayoutDashboard, ArrowLeftRight, Calendar, CreditCard, Plus } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, Calendar, CreditCard, Plus, Layers } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { id: 'dashboard', icon: LayoutDashboard, label: 'Painel' },
-  { id: 'transactions', icon: ArrowLeftRight, label: 'Lançamentos' },
-  { id: '__fab__', icon: Plus, label: '' },
-  { id: 'schedule', icon: Calendar, label: 'Agenda' },
-  { id: 'credit', icon: CreditCard, label: 'Cartão' },
+  { id: 'dashboard',    icon: LayoutDashboard, label: 'Painel' },
+  { id: 'transactions', icon: ArrowLeftRight,  label: 'Extratos' },
+  { id: '__fab__',      icon: Plus,            label: '' },
+  { id: 'schedule',     icon: Calendar,        label: 'Agenda' },
+  { id: 'reservas',     icon: Layers,          label: 'Reservas' },
+  { id: 'credit',       icon: CreditCard,      label: 'Cartão' },
 ]
 
 export default function BottomNav({ active, setActive, onFab }) {
@@ -34,8 +35,8 @@ export default function BottomNav({ active, setActive, onFab }) {
               isActive ? 'text-[#0F6E56]' : 'text-gray-500'
             }`}
           >
-            <Icon size={20} />
-            <span className="text-xs leading-none">{item.label}</span>
+            <Icon size={19} />
+            <span className="text-[10px] leading-none">{item.label}</span>
           </button>
         )
       })}
