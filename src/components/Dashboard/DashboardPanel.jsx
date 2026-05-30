@@ -157,15 +157,21 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       if (nexts.length === 0) continue
 
       for (const _date of nexts) {
-        pendingCount++
         if (schedule.transactionType === 'income' && fromPrincipal) {
           pendingIncome += schedule.amount
+          pendingCount++
         } else if (schedule.transactionType === 'expense' && fromPrincipal) {
           pendingExpense += schedule.amount
+          pendingCount++
         } else if (schedule.transactionType === 'transfer') {
-          // transferência entre contas principais cancela — ignora
-          if (fromPrincipal && !toPrincipal) pendingExpense += schedule.amount
-          else if (!fromPrincipal && toPrincipal) pendingIncome += schedule.amount
+          if (fromPrincipal && !toPrincipal) {
+            pendingExpense += schedule.amount
+            pendingCount++
+          } else if (!fromPrincipal && toPrincipal) {
+            pendingIncome += schedule.amount
+            pendingCount++
+          }
+          // principal ↔ principal: cancela, não conta
         }
       }
     }
