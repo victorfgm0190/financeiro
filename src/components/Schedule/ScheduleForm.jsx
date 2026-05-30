@@ -178,6 +178,7 @@ export default function ScheduleForm({ initial, onClose }) {
     description: initial?.description || '',
     transactionType: initial?.transactionType || 'expense',
     accountId: initial?.accountId || accounts[0]?.id || '',
+    toAccountId: initial?.toAccountId || '',
     amount: initial?.amount ?? '',
     categoryId: initial?.categoryId || '',
     payee: initial?.payee || '',
@@ -224,6 +225,7 @@ export default function ScheduleForm({ initial, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.description || !form.amount || !form.accountId) return
+    if (form.transactionType === 'transfer' && !form.toAccountId) return
     const data = {
       ...form,
       amount: Number(form.amount),
@@ -247,18 +249,20 @@ export default function ScheduleForm({ initial, onClose }) {
         <div className="col-span-2">
           <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
           <div className="flex rounded-lg overflow-hidden border border-gray-700">
-            {['expense', 'income'].map(t => (
+            {['expense', 'income', 'transfer'].map(t => (
               <button
                 type="button"
                 key={t}
                 onClick={() => set('transactionType', t)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.transactionType === t
-                    ? t === 'income' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+                    ? t === 'income' ? 'bg-emerald-600 text-white'
+                    : t === 'transfer' ? 'bg-blue-600 text-white'
+                    : 'bg-red-600 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                {t === 'income' ? 'Receita' : 'Despesa'}
+                {t === 'income' ? 'Receita' : t === 'transfer' ? 'Transferência' : 'Despesa'}
               </button>
             ))}
           </div>
@@ -278,7 +282,7 @@ export default function ScheduleForm({ initial, onClose }) {
 
         {/* Conta */}
         <div>
-          <LabelTip tip={TIPS.account} required>Conta</LabelTip>
+          <LabelTip tip={TIPS.account} required>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
           <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)} required>
             <AccountOptions accounts={accounts} accountGroups={accountGroups} />
           </select>
@@ -299,29 +303,44 @@ export default function ScheduleForm({ initial, onClose }) {
           />
         </div>
 
+        {/* Conta Destino (apenas para transferências) */}
+        {form.transactionType === 'transfer' && (
+          <div className="col-span-2">
+            <LabelTip tip="Conta que receberá a transferência" required>Conta Destino</LabelTip>
+            <select className="input" value={form.toAccountId} onChange={e => set('toAccountId', e.target.value)} required>
+              <option value="">Selecione a conta destino...</option>
+              <AccountOptions accounts={accounts.filter(a => a.id !== form.accountId)} accountGroups={accountGroups} />
+            </select>
+          </div>
+        )}
+
         {/* Categoria */}
-        <div>
-          <LabelTip tip={TIPS.category}>Categoria</LabelTip>
-          <CategorySelect
-            categories={categories}
-            type={form.transactionType}
-            value={form.categoryId}
-            onChange={e => set('categoryId', e.target.value)}
-          />
-        </div>
+        {form.transactionType !== 'transfer' && (
+          <div>
+            <LabelTip tip={TIPS.category}>Categoria</LabelTip>
+            <CategorySelect
+              categories={categories}
+              type={form.transactionType}
+              value={form.categoryId}
+              onChange={e => set('categoryId', e.target.value)}
+            />
+          </div>
+        )}
 
         {/* Favorecido */}
-        <div>
-          <LabelTip tip={TIPS.payee}>Favorecido</LabelTip>
-          <input
-            className="input"
-            value={form.payee}
-            onChange={e => set('payee', e.target.value)}
-            placeholder="Nome..."
-            list="sch-payees"
-          />
-          <datalist id="sch-payees">{payees.map(p => <option key={p} value={p} />)}</datalist>
-        </div>
+        {form.transactionType !== 'transfer' && (
+          <div>
+            <LabelTip tip={TIPS.payee}>Favorecido</LabelTip>
+            <input
+              className="input"
+              value={form.payee}
+              onChange={e => set('payee', e.target.value)}
+              placeholder="Nome..."
+              list="sch-payees"
+            />
+            <datalist id="sch-payees">{payees.map(p => <option key={p} value={p} />)}</datalist>
+          </div>
+        )}
 
         {/* Frequência */}
         <div>

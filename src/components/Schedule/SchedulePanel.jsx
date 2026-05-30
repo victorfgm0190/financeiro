@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
-  Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History,
+  Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -129,6 +129,7 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
   const today = format(new Date(), 'yyyy-MM-dd')
   const cat = categories.find(c => c.id === schedule.categoryId)
   const acc = accounts.find(a => a.id === schedule.accountId)
+  const toAcc = accounts.find(a => a.id === schedule.toAccountId)
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
   const totalDone = registered.length + skipped.length
@@ -200,7 +201,14 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
             </span>
           )}
         </div>
-        {acc && <p className="text-xs text-gray-600 mt-0.5 truncate">{acc.apelido || acc.name}</p>}
+        {schedule.transactionType === 'transfer' ? (
+          <p className="text-xs text-gray-600 mt-0.5 truncate">
+            <span className="text-purple-400">↔</span>{' '}
+            {acc?.apelido || acc?.name || '?'} → {toAcc?.apelido || toAcc?.name || '?'}
+          </p>
+        ) : acc ? (
+          <p className="text-xs text-gray-600 mt-0.5 truncate">{acc.apelido || acc.name}</p>
+        ) : null}
       </td>
 
       {/* Movimentação */}
@@ -211,7 +219,7 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
           </span>
         ) : schedule.transactionType === 'transfer' ? (
           <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded font-medium">
-            Transferência
+            <ArrowLeftRight size={11} /> Transferência
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-2 py-0.5 rounded font-medium">
@@ -234,7 +242,7 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
 
       {/* Valor */}
       <td className="px-3 py-3 whitespace-nowrap text-right">
-        <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+        <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-orange-600'}`}>
           {fmt(schedule.amount)}
         </span>
       </td>
