@@ -18,6 +18,8 @@ const FREQUENCIES = [
   { value: 'annual', label: 'Anual' },
 ]
 
+const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
+
 const TIPS = {
   description: 'Nome ou identificação do lançamento recorrente. Ex: Aluguel, Salário, Parcela do carro.',
   transactionType: 'Define se é uma entrada de dinheiro (Receita) ou uma saída (Despesa).',
@@ -416,9 +418,13 @@ export default function ScheduleForm({ initial, onClose }) {
         {/* Frequência */}
         <div>
           <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
-          <select className="input" value={form.frequency} onChange={e => set('frequency', e.target.value)}>
-            {FREQUENCIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
+          <SearchableSelect
+            options={FREQ_OPTIONS}
+            value={form.frequency}
+            onChange={id => set('frequency', id)}
+            placeholder="Selecione a frequência..."
+            required
+          />
         </div>
 
         {/* Data de Início */}
