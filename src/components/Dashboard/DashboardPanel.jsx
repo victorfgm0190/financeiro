@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
+import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 import { fmt, fmtDate } from '../shared/utils'
 import Modal from '../shared/Modal'
 
@@ -48,7 +49,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, onShowPosicao }) {
-  const { accounts: allAccounts, transactions: allTransactions, profileAccounts, profileTransactions, schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { accounts: allAccounts, transactions: allTransactions, profileAccounts, profileTransactions, schedules, categories, envelopes, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
   const transactions = profileTransactions
 
@@ -176,13 +177,25 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       }
     }
 
+    // Envelopes: orçamento restante do período atual entra como despesa prevista
+    let envelopeRestante = 0
+    for (const env of envelopes) {
+      const ep = getEnvelopePeriod(env.dueDay)
+      const spent = transactions
+        .filter(tx => tx.type === 'expense' && env.categoryIds.includes(tx.categoryId) && tx.date >= ep.from && tx.date <= ep.to)
+        .reduce((s, t) => s + t.amount, 0)
+      const remaining = env.limitAmount - spent
+      if (remaining > 0) envelopeRestante += remaining
+    }
+
     return {
-      projetado: saldoPrincipal + pendingIncome - pendingExpense,
+      projetado: saldoPrincipal + pendingIncome - pendingExpense - envelopeRestante,
       pendingIncome,
       pendingExpense,
       pendingCount,
+      envelopeRestante,
     }
-  }, [accounts, schedules, getNextOccurrences, periodStr.end, saldoPrincipal])
+  }, [accounts, schedules, envelopes, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -322,6 +335,9 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
                     <ArrowUpCircle size={10} className="shrink-0" />
                     −{fmt(saldoProjetado.pendingExpense)}
                   </span>
+                )}
+                {saldoProjetado.envelopeRestante > 0 && (
+                  <span className="text-purple-400">⊖ {fmt(saldoProjetado.envelopeRestante)} envelopes previstos</span>
                 )}
                 {saldoProjetado.pendingCount > 0
                   ? <span className="text-gray-600">· {saldoProjetado.pendingCount} agendamento{saldoProjetado.pendingCount !== 1 ? 's' : ''} pendente{saldoProjetado.pendingCount !== 1 ? 's' : ''}</span>
