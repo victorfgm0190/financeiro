@@ -9,6 +9,7 @@ import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 import { fmt, fmtDate } from '../shared/utils'
+import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 
 const PIE_COLORS = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899']
@@ -204,6 +205,44 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
   }, [accounts, schedules, envelopes, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
 
   const today = new Date().toISOString().split('T')[0]
+
+  // Last tx date per fluxo account (single pass, both sides of transfers)
+  const lastTxByFluxoAccount = useMemo(() => {
+    const fluxoIds = new Set(
+      accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').map(a => a.id)
+    )
+    if (fluxoIds.size === 0) return {}
+    const result = {}
+    for (const tx of transactions) {
+      if (tx.reservaAuto) continue
+      if (fluxoIds.has(tx.accountId) && (!result[tx.accountId] || tx.date > result[tx.accountId])) {
+        result[tx.accountId] = tx.date
+      }
+      if (tx.toAccountId && fluxoIds.has(tx.toAccountId) && (!result[tx.toAccountId] || tx.date > result[tx.toAccountId])) {
+        result[tx.toAccountId] = tx.date
+      }
+    }
+    return result
+  }, [accounts, transactions])
+
+  // Last expense date per credit card within current fatura period
+  const lastCreditTxByCard = useMemo(() => {
+    const result = {}
+    const now = new Date()
+    for (const card of accounts.filter(a => a.type === 'credit')) {
+      const closingDay = card.closingDay || 14
+      const currentRef = computeFaturaRef(now, closingDay)
+      let maxDate = null
+      for (const tx of transactions) {
+        if (tx.accountId !== card.id || tx.type !== 'expense' || tx.reservaAuto) continue
+        if (computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay) === currentRef) {
+          if (!maxDate || tx.date > maxDate) maxDate = tx.date
+        }
+      }
+      result[card.id] = maxDate
+    }
+    return result
+  }, [accounts, transactions])
 
   // ── P17: Pie chart state ─────────────────────────────────────────────────
   const [pieFilter, setPieFilter] = useState('current')
@@ -597,18 +636,42 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {accounts.map(a => (
-            <div key={a.id} className="bg-gray-800 rounded-lg p-3">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-400 truncate">{a.apelido || a.name}</p>
-                {a.isMain && <span className="text-yellow-400 text-xs shrink-0 ml-1">★</span>}
+          {accounts.map(a => {
+            // Last activity label for credit cards (current fatura)
+            let lastActivityNode = null
+            if (a.type === 'credit') {
+              const d = lastCreditTxByCard[a.id]
+              lastActivityNode = (
+                <p className="text-xs text-gray-500 mt-1.5 leading-tight">
+                  {d ? `Último lançamento: ${fmtDate(d)}` : 'Sem lançamentos neste mês'}
+                </p>
+              )
+            } else if (a.fluxoCaixaPrincipal) {
+              const d = lastTxByFluxoAccount[a.id]
+              if (!d) {
+                lastActivityNode = <p className="text-xs text-gray-500 mt-1.5 leading-tight">Sem movimentações</p>
+              } else {
+                const diff = differenceInDays(parseISO(today), parseISO(d))
+                const label = diff === 0 ? 'Hoje' : diff === 1 ? 'Ontem' : `Último: ${fmtDate(d)}`
+                const cls = diff > 30 ? 'text-yellow-400' : 'text-gray-500'
+                lastActivityNode = <p className={`text-xs mt-1.5 leading-tight ${cls}`}>{diff > 30 ? 'Há mais de 30 dias' : label}</p>
+              }
+            }
+
+            return (
+              <div key={a.id} className="bg-gray-800 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs text-gray-400 truncate">{a.apelido || a.name}</p>
+                  {a.isMain && <span className="text-yellow-400 text-xs shrink-0 ml-1">★</span>}
+                </div>
+                <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">{a.type === 'credit' ? 'Dívida' : 'Saldo'}</p>
+                {lastActivityNode}
               </div>
-              <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
-              </p>
-              <p className="text-xs text-gray-600 mt-0.5">{a.type === 'credit' ? 'Dívida' : 'Saldo'}</p>
-            </div>
-          ))}
+            )
+          })}
           {accounts.length === 0 && (
             <div className="col-span-4 text-center py-4">
               <p className="text-xs text-gray-500">Nenhuma conta cadastrada</p>
