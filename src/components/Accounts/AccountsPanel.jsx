@@ -313,7 +313,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
     : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <button
         onClick={() => setCollapsed(c => !c)}
         className="flex items-center gap-2 w-full text-left group"
@@ -323,12 +323,11 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
           : <ChevronDown size={14} className="text-gray-500 shrink-0" />}
         <span className="font-medium text-sm text-gray-200">{group.name}</span>
         {typeBadge}
-        <span className="ml-auto flex items-center gap-1.5">
-          <span className="text-xs text-gray-500">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
-          <span className="text-gray-600 text-xs">•</span>
-          <span className={`text-sm font-bold ${balColor(total)}`}>{fmt(total)}</span>
-        </span>
+        <span className="text-xs text-gray-500 ml-auto">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
       </button>
+      {accounts.length > 0 && (
+        <p className={`text-center text-2xl font-bold py-1 ${balColor(total)}`}>{fmt(total)}</p>
+      )}
       {!collapsed && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pl-2 border-l border-gray-800">
           {accounts.map(a => (
@@ -460,15 +459,12 @@ export default function AccountsPanel() {
           )}
 
           {ungrouped.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-1">
               <div className="flex items-center gap-3 border-b border-gray-800 pb-1.5">
                 <p className="text-xs text-gray-600 uppercase tracking-wider">Sem Grupo</p>
-                <span className="ml-auto flex items-center gap-1.5">
-                  <span className="text-xs text-gray-500">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
-                  <span className="text-gray-600 text-xs">•</span>
-                  <span className={`text-sm font-bold ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</span>
-                </span>
+                <span className="text-xs text-gray-500 ml-auto">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
               </div>
+              <p className={`text-center text-2xl font-bold py-1 ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {ungrouped.map(a => (
                   <AccountCard
