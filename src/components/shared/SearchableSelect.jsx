@@ -109,7 +109,7 @@ export default function SearchableSelect({
   useEffect(() => {
     if (!open) return
     const onClick = (e) => { if (!triggerRef.current?.contains(e.target)) closeDropdown() }
-    const onScroll = () => closeDropdown()
+    const onScroll = (e) => { if (listRef.current?.contains(e.target)) return; closeDropdown() }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)
     return () => {
@@ -174,7 +174,7 @@ export default function SearchableSelect({
             </div>
           </div>
 
-          <div ref={listRef} className="overflow-y-auto">
+          <div ref={listRef} className="overflow-y-auto min-h-0">
             {allItems.length === 0 && (
               <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhum resultado</p>
             )}
