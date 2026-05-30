@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
-  ArrowDownCircle, ArrowUpCircle, PiggyBank,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -363,25 +363,26 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
 
   return (
     <div className="space-y-4">
+      {/* KPI + actions */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 uppercase tracking-wide">Total reservado:</span>
           <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(grandTotal)}</span>
         </div>
         {lastPeriod && (
-          <span className="text-xs text-gray-600">Último fechamento: {lastPeriod.closedAt}</span>
+          <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {lastPeriod.closedAt}</span>
         )}
         <div className="flex gap-2 ml-auto flex-wrap">
           {periods.length > 0 && (
             <button onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
-              <RotateCcw size={12} /> Desfazer Virada
+              <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
             </button>
           )}
           <button onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5 bg-emerald-700 hover:bg-emerald-600">
-            <CheckCircle size={12} /> Virar Saldo
+            <CheckCircle size={12} /> <span className="hidden sm:inline">Virar Saldo</span><span className="sm:hidden">Virar</span>
           </button>
           <button onClick={onAdd} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
-            <Plus size={12} /> Nova Função
+            <Plus size={12} /> <span className="hidden sm:inline">Nova Função</span><span className="sm:hidden">Nova</span>
           </button>
         </div>
       </div>
@@ -401,107 +402,182 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
           ? (accountBalances[accountId] !== undefined ? accountBalances[accountId] : (account?.balance || 0))
           : null
         const diff = saldoReal !== null ? Math.round((saldoReal - totalSaldo) * 100) / 100 : null
+        const accLabel = account ? (account.apelido || account.name) : null
 
         return (
-          <div key={accountId || '__none__'} className="card p-0 overflow-hidden">
-            {/* Account header */}
-            <div className="px-4 py-3 border-b border-gray-800 bg-gray-800/30 flex items-center gap-4 flex-wrap">
-              {account ? (
-                <>
-                  <span className="text-sm font-semibold text-gray-200">{account.apelido || account.name}</span>
-                  <span className="text-xs text-gray-600">{fns.length} {fns.length === 1 ? 'função' : 'funções'}</span>
-                  <span className="text-xs text-gray-500">
-                    Σ saldos: <span className="text-gray-300 font-medium">{fmt(totalSaldo)}</span>
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <label className="text-xs text-gray-500 shrink-0">Saldo Real:</label>
-                    <input
-                      className="input w-32 text-xs py-1 text-right"
-                      type="number"
-                      step="0.01"
-                      value={saldoReal ?? ''}
-                      onChange={e => onSetAccountBalance(accountId, e.target.value)}
-                    />
-                    {diff !== null && diff !== 0 && (
-                      <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                        {diff > 0 ? '+' : ''}{fmt(diff)}
-                      </span>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <span className="text-sm font-semibold text-gray-500 italic">Sem conta vinculada</span>
+          <div key={accountId || '__none__'}>
+            {/* ── Mobile card layout (hidden md+) ── */}
+            <div className="md:hidden space-y-2">
+              {/* Group header */}
+              <div className="flex items-center gap-3 px-1">
+                {accLabel
+                  ? <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">{accLabel}</span>
+                  : <span className="text-xs font-semibold text-gray-500 italic uppercase tracking-wide">Sem conta vinculada</span>
+                }
+                <div className="flex-1 h-px bg-gray-800" />
+                <span className={`text-xs font-bold ${totalAtualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                  {fmt(totalAtualizado)}
+                </span>
+              </div>
+
+              {/* Saldo Real input on mobile (for linked accounts) */}
+              {accountId && (
+                <div className="card py-2 px-3 flex items-center gap-2">
+                  <span className="text-xs text-gray-500 shrink-0">Saldo real da conta:</span>
+                  <input
+                    className="input flex-1 text-xs py-1 text-right"
+                    type="number"
+                    step="0.01"
+                    value={saldoReal ?? ''}
+                    onChange={e => onSetAccountBalance(accountId, e.target.value)}
+                  />
+                  {diff !== null && diff !== 0 && (
+                    <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                      {diff > 0 ? '+' : ''}{fmt(diff)}
+                    </span>
+                  )}
+                </div>
               )}
+
+              {fns.map(f => {
+                const saldo = computeSaldo(f)
+                const atualizado = saldosAtualizados[f.id] ?? saldo
+                return (
+                  <div key={f.id} className="card py-3 px-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-200">{f.name}</span>
+                      {accLabel && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
+                      )}
+                    </div>
+                    <div className={`text-lg font-bold ${atualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                      {fmt(atualizado)}
+                    </div>
+                    <div className="h-px bg-gray-800" />
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-gray-500">Entradas:</span>
+                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-gray-500">Saídas:</span>
+                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidas: v })} textClass="text-orange-600" />
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
+                          <Edit2 size={12} />
+                        </button>
+                        <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: 700 }}>
-                <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Despesa Anual</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
-                    <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
-                    <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
-                    <th className="text-right px-4 py-2 text-xs text-emerald-400 font-medium w-32">Saldo Atualizado</th>
-                    <th className="w-14" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {fns.map(f => {
-                    const saldo = computeSaldo(f)
-                    const atualizado = saldosAtualizados[f.id] ?? saldo
-                    return (
-                      <tr key={f.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors">
-                        <td className="px-4 py-2 text-xs text-gray-200">{f.name}</td>
-                        <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
-                        <td className="px-4 py-2 text-right">
-                          <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidas: v })} textClass="text-orange-600" />
-                        </td>
-                        <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
-                          {fmt(saldo)}
-                        </td>
-                        <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
-                          {fmt(atualizado)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center justify-end gap-0.5">
-                            <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
-                              <Edit2 size={11} />
-                            </button>
-                            <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {/* Totals row */}
-                  <tr className="border-t border-gray-700 bg-gray-800/20">
-                    <td className="px-4 py-2 text-xs font-semibold text-gray-500">Total</td>
-                    <td className="px-4 py-2 text-right text-xs font-semibold text-gray-400">
-                      {fmt(fns.reduce((s, f) => s + f.saldoInicial, 0))}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">
-                      {fmt(fns.reduce((s, f) => s + f.entradas, 0))}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">
-                      {fmt(fns.reduce((s, f) => s + f.saidas, 0))}
-                    </td>
-                    <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
-                      {fmt(totalSaldo)}
-                    </td>
-                    <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
-                      {fmt(totalAtualizado)}
-                    </td>
-                    <td />
-                  </tr>
-                </tbody>
-              </table>
+            {/* ── Desktop table layout (hidden below md) ── */}
+            <div className="hidden md:block card p-0 overflow-hidden">
+              {/* Account header */}
+              <div className="px-4 py-3 border-b border-gray-800 bg-gray-800/30 flex items-center gap-4 flex-wrap">
+                {account ? (
+                  <>
+                    <span className="text-sm font-semibold text-gray-200">{account.apelido || account.name}</span>
+                    <span className="text-xs text-gray-600">{fns.length} {fns.length === 1 ? 'função' : 'funções'}</span>
+                    <span className="text-xs text-gray-500">
+                      Σ saldos: <span className="text-gray-300 font-medium">{fmt(totalSaldo)}</span>
+                    </span>
+                    <div className="flex items-center gap-2 ml-auto">
+                      <label className="text-xs text-gray-500 shrink-0">Saldo Real:</label>
+                      <input
+                        className="input w-32 text-xs py-1 text-right"
+                        type="number"
+                        step="0.01"
+                        value={saldoReal ?? ''}
+                        onChange={e => onSetAccountBalance(accountId, e.target.value)}
+                      />
+                      {diff !== null && diff !== 0 && (
+                        <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                          {diff > 0 ? '+' : ''}{fmt(diff)}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold text-gray-500 italic">Sem conta vinculada</span>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" style={{ minWidth: 700 }}>
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Despesa Anual</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
+                      <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
+                      <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
+                      <th className="text-right px-4 py-2 text-xs text-emerald-400 font-medium w-32">Saldo Atualizado</th>
+                      <th className="w-14" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fns.map(f => {
+                      const saldo = computeSaldo(f)
+                      const atualizado = saldosAtualizados[f.id] ?? saldo
+                      return (
+                        <tr key={f.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors">
+                          <td className="px-4 py-2 text-xs text-gray-200">{f.name}</td>
+                          <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
+                          <td className="px-4 py-2 text-right">
+                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidas: v })} textClass="text-orange-600" />
+                          </td>
+                          <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
+                            {fmt(saldo)}
+                          </td>
+                          <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                            {fmt(atualizado)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
+                                <Edit2 size={11} />
+                              </button>
+                              <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {/* Totals row */}
+                    <tr className="border-t border-gray-700 bg-gray-800/20">
+                      <td className="px-4 py-2 text-xs font-semibold text-gray-500">Total</td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-gray-400">
+                        {fmt(fns.reduce((s, f) => s + f.saldoInicial, 0))}
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">
+                        {fmt(fns.reduce((s, f) => s + f.entradas, 0))}
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">
+                        {fmt(fns.reduce((s, f) => s + f.saidas, 0))}
+                      </td>
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
+                        {fmt(totalSaldo)}
+                      </td>
+                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                        {fmt(totalAtualizado)}
+                      </td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )
@@ -563,6 +639,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
   }, [linked, accounts, saldosAtualizados, scheduledByFunction])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
+  const [mobilePage, setMobilePage] = useState(() => Math.min(new Date().getMonth(), 9))
 
   if (linked.length === 0) {
     return (
@@ -575,9 +652,11 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
   }
 
   const alertCount = projections.filter(p => p.hasAlert).length
+  const visibleMonths = [mobilePage, mobilePage + 1, mobilePage + 2]
 
   return (
     <div className="space-y-4">
+      {/* KPI bar */}
       <div className="card py-2.5 px-4 flex items-center gap-4 flex-wrap">
         <Layers size={13} className="text-gray-400" />
         <span className="text-xs text-gray-500">Total investido:</span>
@@ -590,7 +669,72 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
         <span className="text-xs text-gray-600 ml-auto">{currentYear}</span>
       </div>
 
-      <div className="card p-0 overflow-hidden">
+      {/* ── Mobile layout (hidden md+) ── */}
+      <div className="md:hidden space-y-3">
+        {/* Month navigator */}
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => setMobilePage(p => Math.max(0, p - 1))}
+            disabled={mobilePage === 0}
+            className="p-1.5 rounded bg-gray-800 text-gray-400 disabled:opacity-30 hover:bg-gray-700 transition-colors"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-xs text-gray-400 font-medium">
+            {MONTH_LABELS[mobilePage]} · {MONTH_LABELS[mobilePage + 1]} · {MONTH_LABELS[mobilePage + 2]}
+          </span>
+          <button
+            onClick={() => setMobilePage(p => Math.min(9, p + 1))}
+            disabled={mobilePage >= 9}
+            className="p-1.5 rounded bg-gray-800 text-gray-400 disabled:opacity-30 hover:bg-gray-700 transition-colors"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* Cards per function */}
+        {projections.map(({ f, account, monthly, hasAlert }) => (
+          <div key={f.id} className={`card p-0 overflow-hidden ${hasAlert ? 'border border-orange-500/30' : ''}`}>
+            {/* Card header */}
+            <div className="px-3 py-2.5 border-b border-gray-800 flex items-center gap-2">
+              {hasAlert && <AlertTriangle size={11} className="text-orange-600 shrink-0" />}
+              <span className="text-sm font-medium text-gray-200 flex-1 truncate">{f.name}</span>
+              {account && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                  {account.apelido || account.name.slice(0, 8)}
+                </span>
+              )}
+              <span className={`text-xs font-semibold shrink-0 ${(saldosAtualizados[f.id] || 0) < 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                {fmt(saldosAtualizados[f.id] || 0)}
+              </span>
+            </div>
+
+            {/* 3 month columns */}
+            <div className="grid grid-cols-3 divide-x divide-gray-800">
+              {visibleMonths.map(mi => {
+                const d = monthly[mi]
+                return (
+                  <div key={mi} className={`px-2 py-2.5 ${d.neg ? 'bg-orange-500/10' : ''}`}>
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1.5">{MONTH_LABELS[mi]}</p>
+                    <p className={`text-xs ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
+                      ↓ {d.dep > 0 ? fmt(d.dep) : '—'}
+                    </p>
+                    <p className={`text-xs ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
+                      ↑ {d.res > 0 ? fmt(d.res) : '—'}
+                    </p>
+                    <p className={`text-xs font-semibold mt-1 ${d.neg ? 'text-orange-400' : d.saldo === 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+                      {fmt(d.saldo)}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Desktop layout (hidden below md) ── */}
+      <div className="hidden md:block card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
             <thead>
@@ -705,16 +849,16 @@ export default function ReservasPanel() {
   return (
     <div className="space-y-4">
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-800">
+      <div className="flex items-center gap-1 border-b border-gray-800 overflow-x-auto scrollbar-none">
         {[
           { id: 'contas', label: 'Contas Reserva' },
-          { id: 'resumo', label: 'Resumo das Reservas' },
+          { id: 'resumo', label: 'Resumo' },
           { id: 'fluxo', label: 'Fluxo Futuro' },
         ].map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            className={`px-3 sm:px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               tab === t.id
                 ? 'border-[#0F6E56] text-[#0F6E56]'
                 : 'border-transparent text-gray-500 hover:text-gray-300'
