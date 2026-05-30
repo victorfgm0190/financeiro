@@ -511,22 +511,48 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
 }
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, accounts, saldosAtualizados }) {
+function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOccurrences }) {
   const currentYear = new Date().getFullYear()
   const linked = functions.filter(f => f.accountId)
+
+  // Pre-compute scheduled deposits/resgates per function per month (index 0=Jan..11=Dec)
+  const scheduledByFunction = useMemo(() => {
+    const result = {}
+    for (const f of linked) {
+      const deps = new Array(12).fill(0)
+      const ress = new Array(12).fill(0)
+      const activeSchedules = (schedules || []).filter(s =>
+        s.transactionType === 'transfer' &&
+        (s.toAccountId === f.accountId || s.accountId === f.accountId)
+      )
+      for (const s of activeSchedules) {
+        const occurrences = getNextOccurrences(s, 36)
+        for (const dateStr of occurrences) {
+          const d = new Date(dateStr + 'T00:00:00')
+          if (d.getFullYear() !== currentYear) continue
+          const mi = d.getMonth()
+          if (s.toAccountId === f.accountId) deps[mi] = Math.round((deps[mi] + (s.amount || 0)) * 100) / 100
+          else ress[mi] = Math.round((ress[mi] + (s.amount || 0)) * 100) / 100
+        }
+      }
+      result[f.id] = { deps, ress }
+    }
+    return result
+  }, [linked, schedules, getNextOccurrences, currentYear])
 
   const projections = useMemo(() => {
     return linked.map(f => {
       const account = accounts.find(a => a.id === f.accountId)
       let bal = saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100
+      const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0) }
       const monthly = MONTH_LABELS.map((_, mi) => {
         const monthNum = mi + 1
-        const dep = f.depositoMensal || 0
-        let res = 0
+        const dep = Math.round(((f.depositoMensal || 0) + schd.deps[mi]) * 100) / 100
+        let res = schd.ress[mi]
         if (f.mesVencimento == null && f.despesaAnual > 0) {
-          res = Math.round(f.despesaAnual / 12 * 100) / 100
+          res = Math.round((res + f.despesaAnual / 12) * 100) / 100
         } else if (f.mesVencimento === monthNum) {
-          res = f.despesaAnual || 0
+          res = Math.round((res + (f.despesaAnual || 0)) * 100) / 100
         }
         bal = Math.round((bal + dep - res) * 100) / 100
         return { dep, res, saldo: bal, neg: bal < 0 }
@@ -534,7 +560,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados }) {
       const hasAlert = monthly.some(d => d.neg)
       return { f, account, monthly, hasAlert }
     })
-  }, [linked, accounts, saldosAtualizados])
+  }, [linked, accounts, saldosAtualizados, scheduledByFunction])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
 
@@ -630,7 +656,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados }) {
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { accounts, transactions, categories, getFinancialPeriod } = useApp()
+  const { accounts, transactions, categories, schedules, getFinancialPeriod, getNextOccurrences } = useApp()
   const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
   const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)
@@ -728,7 +754,13 @@ export default function ReservasPanel() {
       )}
 
       {tab === 'fluxo' && (
-        <FluxoTab functions={functions} accounts={nonCreditAccounts} saldosAtualizados={saldosAtualizados} />
+        <FluxoTab
+          functions={functions}
+          accounts={nonCreditAccounts}
+          saldosAtualizados={saldosAtualizados}
+          schedules={schedules}
+          getNextOccurrences={getNextOccurrences}
+        />
       )}
 
       <Modal

@@ -136,6 +136,8 @@ function ScheduleRow({
   const cat = categories.find(c => c.id === schedule.categoryId)
   const acc = accounts.find(a => a.id === schedule.accountId)
   const toAcc = accounts.find(a => a.id === schedule.toAccountId)
+  const isDepositoReserva = schedule.transactionType === 'transfer' && !!toAcc?.isReserva
+  const isResgateReserva  = schedule.transactionType === 'transfer' && !!acc?.isReserva && !isDepositoReserva
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
   const totalDone = registered.length + skipped.length
@@ -239,6 +241,14 @@ function ScheduleRow({
           <span className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-600 px-2 py-0.5 rounded font-medium">
             <ArrowDownCircle size={11} /> Receita
           </span>
+        ) : isDepositoReserva ? (
+          <span className="inline-flex items-center gap-1 text-xs bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded font-medium">
+            <ArrowDownCircle size={11} /> Depósito Reserva
+          </span>
+        ) : isResgateReserva ? (
+          <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-2 py-0.5 rounded font-medium">
+            <ArrowUpCircle size={11} /> Resgate Reserva
+          </span>
         ) : schedule.transactionType === 'transfer' ? (
           <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded font-medium">
             <ArrowLeftRight size={11} /> Transferência
@@ -264,7 +274,7 @@ function ScheduleRow({
 
       {/* Valor */}
       <td className="px-3 py-3 whitespace-nowrap text-right">
-        <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-orange-600'}`}>
+        <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : isDepositoReserva ? 'text-emerald-400' : isResgateReserva ? 'text-orange-600' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-orange-600'}`}>
           {fmt(schedule.amount)}
         </span>
       </td>
