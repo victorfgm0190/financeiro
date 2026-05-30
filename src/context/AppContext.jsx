@@ -159,6 +159,50 @@ const defaultData = {
   profiles: [],
 }
 
+// Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
+function buildReservaAutoTxs(tx, accounts) {
+  if (tx.type !== 'transfer') return []
+  const extraTxs = []
+  const toAcc = accounts.find(a => a.id === tx.toAccountId)
+  const fromAcc = accounts.find(a => a.id === tx.accountId)
+  const now = new Date().toISOString()
+  const base = Date.now()
+
+  if (toAcc?.isReserva) {
+    const catId = tx.reservaExpenseCategoryId ||
+      (toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
+    extraTxs.push({
+      id: 'tx_res_' + base + '_' + Math.random().toString(36).slice(2),
+      type: 'expense', accountId: null, amount: Number(tx.amount),
+      categoryId: catId,
+      description: `Reserva: ${toAcc.apelido || toAcc.name}`,
+      date: tx.date, createdAt: now, reservaAuto: true,
+    })
+  }
+
+  if (fromAcc?.isReserva) {
+    const catId = tx.reservaExpenseCategoryId ||
+      (fromAcc.reservaType === 'especifica' ? (fromAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
+    const baseId = 'tx_rsg_' + base + '_' + Math.random().toString(36).slice(2)
+    extraTxs.push({
+      id: baseId + '_r',
+      type: 'income', accountId: null, amount: Number(tx.amount),
+      categoryId: catId,
+      description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
+      date: tx.date, createdAt: now, reservaAuto: true,
+    })
+    extraTxs.push({
+      id: baseId + '_d',
+      type: 'expense', accountId: null, amount: Number(tx.amount),
+      categoryId: catId,
+      description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
+      date: tx.date, createdAt: now, reservaAuto: true,
+    })
+  }
+
+  return extraTxs
+}
+
 export function AppProvider({ children }) {
   const [data, setData] = useState(defaultData)
   const [initialized, setInitialized] = useState(false)
@@ -373,7 +417,11 @@ export function AppProvider({ children }) {
               return a
             })
           }
-          transactions = [...transactions, newTx]
+          const autoTxs = buildReservaAutoTxs(
+            { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: schedule.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
+            accounts
+          )
+          transactions = [...transactions, newTx, ...autoTxs]
           schedules = schedules.map(s => s.id === schedule.id
             ? { ...s, registered: [...(s.registered || []), date] } : s)
         }
@@ -444,40 +492,7 @@ export function AppProvider({ children }) {
         })
       }
 
-      // Auto expense/income para transferências com contas reserva
-      const extraTxs = []
-      if (tx.type === 'transfer') {
-        const toAcc = d.accounts.find(a => a.id === tx.toAccountId)
-        const fromAcc = d.accounts.find(a => a.id === tx.accountId)
-        const now = new Date().toISOString()
-        if (toAcc?.isReserva) {
-          const catId = toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger'
-          extraTxs.push({
-            id: 'tx_res_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            type: 'expense',
-            accountId: null,
-            amount: Number(tx.amount),
-            categoryId: catId,
-            description: `Reserva: ${toAcc.apelido || toAcc.name}`,
-            date: tx.date,
-            createdAt: now,
-          })
-        }
-        if (fromAcc?.isReserva) {
-          const catId = fromAcc.reservaType === 'especifica' ? (fromAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger'
-          extraTxs.push({
-            id: 'tx_rsg_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            type: 'income',
-            accountId: null,
-            amount: Number(tx.amount),
-            categoryId: catId,
-            description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
-            date: tx.date,
-            createdAt: now,
-          })
-        }
-      }
-
+      const extraTxs = buildReservaAutoTxs(tx, d.accounts)
       return { ...d, accounts, transactions: [...d.transactions, newTx, ...extraTxs] }
     })
     return id
@@ -579,9 +594,13 @@ export function AppProvider({ children }) {
           return a
         })
       }
+      const autoTxs = buildReservaAutoTxs(
+        { type: tx.type, accountId: tx.accountId, toAccountId: tx.toAccountId, amount: tx.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
+        accounts
+      )
       return {
         ...d, accounts,
-        transactions: [...d.transactions, newTx],
+        transactions: [...d.transactions, newTx, ...autoTxs],
         schedules: d.schedules.map(s =>
           s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date] } : s
         ),

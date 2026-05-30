@@ -133,6 +133,7 @@ export const txToRow = (tx) => ({
   account_type: tx.accountType || null,
   schedule_id: tx.scheduleId || null,
   reconciled: !!tx.reconciled,
+  reserva_auto: !!tx.reservaAuto,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -153,6 +154,7 @@ export const rowToTx = (r) => ({
   accountType: r.account_type || '',
   scheduleId: r.schedule_id || null,
   reconciled: !!r.reconciled,
+  reservaAuto: !!r.reserva_auto,
   createdAt: r.created_at,
 })
 
@@ -177,6 +179,7 @@ export const scheduleToRow = (s) => ({
   auto_register: s.autoRegister ?? true,
   overrides: s.overrides || {},
   grupo_gerencial: s.grupoGerencial || null,
+  reserva_expense_category_id: s.reservaExpenseCategoryId || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -200,6 +203,7 @@ export const rowToSchedule = (r) => ({
   autoRegister: r.auto_register ?? true,
   overrides: r.overrides || {},
   grupoGerencial: r.grupo_gerencial || null,
+  reservaExpenseCategoryId: r.reserva_expense_category_id || null,
 })
 
 export const categoryToRow = (c) => ({

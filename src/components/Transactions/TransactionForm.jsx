@@ -74,6 +74,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     useReserva: false,
     reservaAccountId: '',
+    reservaExpenseCategoryId: '',
   })
 
   const [step, setStep] = useState('form') // 'form' | 'resgate' | 'schedule-match' | 'debt-plan' | 'debt-payment'
@@ -97,6 +98,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     [form.type, form.categoryId, reservaAccounts]
   )
 
+  // Reserva transfer context
+  const transferToAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
+  const transferFromAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
+  const isDepositToReserva = !!transferToAcc?.isReserva
+  const isWithdrawFromReserva = !!transferFromAcc?.isReserva
+  const reservaTransferAcc = isDepositToReserva ? transferToAcc : isWithdrawFromReserva ? transferFromAcc : null
+  const needsReservaCategorySelect = !!reservaTransferAcc && reservaTransferAcc.reservaType === 'geral'
+  const reservaLinkedCat = reservaTransferAcc?.reservaType === 'especifica'
+    ? categories.find(c => c.id === reservaTransferAcc.reservaCategoryId)
+    : null
+
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
     accounts.find(a => a.isMain && a.type !== 'credit') ||
@@ -108,13 +120,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
+    // Geral reserve transfer validation
+    if (form.type === 'transfer' && needsReservaCategorySelect && !form.reservaExpenseCategoryId) return
+
     // eslint-disable-next-line no-unused-vars
-    const { useReserva: _ur, reservaAccountId: _rai, ...formFields } = form
+    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, ...formFields } = form
     const txData = {
       ...formFields,
       amount: Number(form.amount),
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
+      ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
     if (initial?.id) {
@@ -156,6 +172,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         amount: Number(form.amount),
         date: form.date,
         description: `Resgate ${reservaAcc?.apelido || reservaAcc?.name || 'reserva'}: ${form.description || ''}`.trim().replace(/:$/, ''),
+        reservaExpenseCategoryId: form.categoryId || null,
       })
     }
 
@@ -326,7 +343,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         {form.type === 'transfer' ? (
           <div>
             <label className="label">Conta Destino *</label>
-            <select className="input" value={form.toAccountId} onChange={e => set('toAccountId', e.target.value)} required>
+            <select className="input" value={form.toAccountId} onChange={e => setForm(f => ({ ...f, toAccountId: e.target.value, reservaExpenseCategoryId: '' }))} required>
               <AccountOptions accounts={accounts} accountGroups={accountGroups} filter={a => a.id !== form.accountId} />
             </select>
           </div>
@@ -360,6 +377,34 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </div>
             )
           })()}
+          {/* Reserva category — shown when transfer involves a reserve account */}
+          {(isDepositToReserva || isWithdrawFromReserva) && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+                📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
+              </p>
+              {needsReservaCategorySelect ? (
+                <>
+                  <CategorySelect
+                    categories={categories}
+                    type="expense"
+                    value={form.reservaExpenseCategoryId}
+                    onChange={e => set('reservaExpenseCategoryId', e.target.value)}
+                  />
+                  {!form.reservaExpenseCategoryId && (
+                    <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-amber-300">
+                  {isDepositToReserva ? 'Despesa em:' : 'Categoria:'}{' '}
+                  <span className="font-semibold">
+                    {reservaLinkedCat ? `${reservaLinkedCat.icon} ${reservaLinkedCat.name}` : '🏦 Reservas Gerais'}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
         </>
       )}
 

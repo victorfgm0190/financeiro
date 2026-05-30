@@ -167,6 +167,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
 export default function ScheduleForm({ initial, onClose }) {
   const { accounts, accountGroups, categories, payees, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
 
+
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
     if (b.number === 'D') return -1
@@ -179,6 +180,7 @@ export default function ScheduleForm({ initial, onClose }) {
     transactionType: initial?.transactionType || 'expense',
     accountId: initial?.accountId || accounts[0]?.id || '',
     toAccountId: initial?.toAccountId || '',
+    reservaExpenseCategoryId: initial?.reservaExpenseCategoryId || '',
     amount: initial?.amount ?? '',
     categoryId: initial?.categoryId || '',
     payee: initial?.payee || '',
@@ -200,6 +202,16 @@ export default function ScheduleForm({ initial, onClose }) {
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const relevantCategories = categories.filter(c => c.type === 'both' || c.type === form.transactionType)
+
+  const schToAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
+  const schFromAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
+  const schIsDepositToReserva = !!schToAcc?.isReserva
+  const schIsWithdrawFromReserva = !!schFromAcc?.isReserva
+  const schReservaAcc = schIsDepositToReserva ? schToAcc : schIsWithdrawFromReserva ? schFromAcc : null
+  const schNeedsReservaCategorySelect = !!schReservaAcc && schReservaAcc.reservaType === 'geral'
+  const schReservaLinkedCat = schReservaAcc?.reservaType === 'especifica'
+    ? categories.find(c => c.id === schReservaAcc.reservaCategoryId)
+    : null
 
   const previewSchedule = {
     ...form,
@@ -226,6 +238,7 @@ export default function ScheduleForm({ initial, onClose }) {
     e.preventDefault()
     if (!form.description || !form.amount || !form.accountId) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
+    if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
     const data = {
       ...form,
       amount: Number(form.amount),
@@ -307,10 +320,39 @@ export default function ScheduleForm({ initial, onClose }) {
         {form.transactionType === 'transfer' && (
           <div className="col-span-2">
             <LabelTip tip="Conta que receberá a transferência" required>Conta Destino</LabelTip>
-            <select className="input" value={form.toAccountId} onChange={e => set('toAccountId', e.target.value)} required>
+            <select className="input" value={form.toAccountId} onChange={e => setForm(f => ({ ...f, toAccountId: e.target.value, reservaExpenseCategoryId: '' }))} required>
               <option value="">Selecione a conta destino...</option>
               <AccountOptions accounts={accounts.filter(a => a.id !== form.accountId)} accountGroups={accountGroups} />
             </select>
+          </div>
+        )}
+
+        {/* Reserva category — quando transferência envolve conta reserva */}
+        {form.transactionType === 'transfer' && (schIsDepositToReserva || schIsWithdrawFromReserva) && (
+          <div className="col-span-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-amber-400">
+              📂 {schIsDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
+            </p>
+            {schNeedsReservaCategorySelect ? (
+              <>
+                <CategorySelect
+                  categories={categories}
+                  type="expense"
+                  value={form.reservaExpenseCategoryId}
+                  onChange={e => set('reservaExpenseCategoryId', e.target.value)}
+                />
+                {!form.reservaExpenseCategoryId && (
+                  <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-amber-300">
+                {schIsDepositToReserva ? 'Despesa em:' : 'Categoria:'}{' '}
+                <span className="font-semibold">
+                  {schReservaLinkedCat ? `${schReservaLinkedCat.icon} ${schReservaLinkedCat.name}` : '🏦 Reservas Gerais'}
+                </span>
+              </p>
+            )}
           </div>
         )}
 

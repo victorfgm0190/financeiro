@@ -308,3 +308,9 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_category_id TEXT;
 INSERT INTO categorias (id, name, type, color, icon) VALUES
   ('cat_res_ger', 'Reservas Gerais', 'expense', '#6b7280', '🏦')
 ON CONFLICT (id) DO NOTHING;
+
+-- Flag para lançamentos automáticos de reserva (não exibidos no extrato normal)
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_auto BOOLEAN DEFAULT FALSE;
+
+-- Categoria de despesa para transferências agendadas a reservas (tipo geral)
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_expense_category_id TEXT;
