@@ -2,9 +2,15 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { ChevronDown, Search, X } from 'lucide-react'
 
 const GROUP_ORDER = [
-  'Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Educação',
-  'Lazer', 'Vestuário', 'Impostos', 'Seguros', 'Bancos', 'Outras Despesas',
-  'Remunerações', 'Rendimentos', 'Outras Receitas',
+  // Despesas
+  'Alimentação', 'Bancos', 'Contribuicoes', 'Cuidados Pessoais', 'Doações',
+  'Educação', 'Empresa', 'Escritorio Contabilidade', 'Filhos', 'Finaciamentos',
+  'Fotografia', 'Impostos', 'Lazer', 'Moradia', 'Saúde',
+  'Seguro', 'Seguros', 'Transporte', 'Vestuário', 'Outras Despesas',
+  // Receitas
+  'Remunerações', 'Rendimentos', 'Rendimentos Empresariais', 'Outras Receitas',
+  // Investimentos
+  'Aplicações',
 ]
 
 function sortGroups(groupNames) {
