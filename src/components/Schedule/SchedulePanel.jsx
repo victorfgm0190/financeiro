@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
+  MousePointer2, X,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -107,7 +108,7 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
   )
 }
 
-function SectionHeader({ label, count, variant = 'default' }) {
+function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
   const colors = {
     overdue:  'text-red-400 bg-red-500/10 border-red-500/20',
     soon:     'text-amber-400 bg-amber-500/10 border-amber-500/20',
@@ -117,7 +118,7 @@ function SectionHeader({ label, count, variant = 'default' }) {
   }
   return (
     <tr>
-      <td colSpan={9} className={`px-4 py-2 border-y text-xs font-semibold uppercase tracking-wide ${colors[variant]}`}>
+      <td colSpan={cols} className={`px-4 py-2 border-y text-xs font-semibold uppercase tracking-wide ${colors[variant]}`}>
         {label}
         {count > 0 && <span className="ml-2 font-bold">{count}</span>}
       </td>
@@ -125,7 +126,12 @@ function SectionHeader({ label, count, variant = 'default' }) {
   )
 }
 
-function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups, addTransaction, registerScheduleOccurrence, skipScheduleOccurrence, deleteSchedule, onEditSchedule }) {
+function ScheduleRow({
+  schedule, nextDate, categories, accounts, gerencialGroups,
+  addTransaction, registerScheduleOccurrence, skipScheduleOccurrence,
+  deleteSchedule, onEditSchedule,
+  selectionMode, isSelected, onToggleSelect,
+}) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const cat = categories.find(c => c.id === schedule.categoryId)
   const acc = accounts.find(a => a.id === schedule.accountId)
@@ -163,11 +169,27 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
     }
   }
 
-  // For completed schedules, show last registered date as reference
   const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
 
   return (
-    <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''}`}>
+    <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-indigo-500/5' : ''}`}>
+      {/* Checkbox */}
+      {selectionMode && (
+        <td className="px-3 py-3 w-8">
+          {nextDate ? (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect(schedule.id)}
+              onClick={e => e.stopPropagation()}
+              className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+            />
+          ) : (
+            <div className="w-4 h-4" />
+          )}
+        </td>
+      )}
+
       {/* Próxima Data */}
       <td className="px-3 py-3 whitespace-nowrap">
         {nextDate ? (
@@ -285,10 +307,100 @@ function ScheduleRow({ schedule, nextDate, categories, accounts, gerencialGroups
   )
 }
 
+function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const total = selectedRows.reduce((sum, r) => sum + (r.schedule.amount || 0), 0)
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+          <h3 className="font-semibold text-gray-100">
+            Registrar {selectedRows.length} agendamento{selectedRows.length !== 1 ? 's' : ''}
+          </h3>
+          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Date picker */}
+          <div>
+            <label className="label">Data de registro</label>
+            <input
+              type="date"
+              className="input"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+          </div>
+
+          {/* List of selected items */}
+          <div className="rounded-lg border border-gray-800 overflow-hidden">
+            {selectedRows.map(({ schedule, nextDate }) => {
+              const acc = accounts.find(a => a.id === schedule.accountId)
+              const valueColor = schedule.transactionType === 'income' ? 'text-blue-400'
+                : schedule.transactionType === 'transfer' ? 'text-purple-400'
+                : 'text-orange-500'
+              return (
+                <div key={schedule.id} className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800/80 last:border-0 hover:bg-gray-800/30">
+                  <div className="min-w-0 flex-1 mr-3">
+                    <p className="text-xs font-medium text-gray-200 truncate">{schedule.description}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-bold shrink-0 ${valueColor}`}>{fmt(schedule.amount)}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Total */}
+          <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800/60 rounded-lg">
+            <span className="text-sm text-gray-400 font-medium">Total</span>
+            <span className="text-base font-bold text-gray-100">{fmt(total)}</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
+          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary flex-1 flex items-center justify-center gap-2"
+            onClick={() => onConfirm(date)}
+          >
+            <CheckCircle size={14} /> Confirmar Registro
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Toast({ message }) {
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-gray-900 border border-emerald-500/30 text-gray-100 text-sm px-4 py-3 rounded-xl shadow-2xl pointer-events-none">
+      <CheckCircle size={16} className="text-emerald-400 shrink-0" />
+      {message}
+    </div>
+  )
+}
+
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const in7 = format(addDays(new Date(), 7), 'yyyy-MM-dd')
   const in30 = format(addDays(new Date(), 30), 'yyyy-MM-dd')
+
+  // Selection state
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [showBatchRegister, setShowBatchRegister] = useState(false)
+  const [showBatchSkip, setShowBatchSkip] = useState(false)
+  const [toast, setToast] = useState(null)
 
   const rows = useMemo(() => schedules.map(s => ({
     schedule: s,
@@ -301,6 +413,74 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const future     = rows.filter(r => r.nextDate && r.nextDate > in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
   const completed  = rows.filter(r => !r.nextDate).sort((a, b) => (b.schedule.startDate || '').localeCompare(a.schedule.startDate || ''))
 
+  const selectableRows = rows.filter(r => r.nextDate)
+  const allSelected = selectableRows.length > 0 && selectableRows.every(r => selected.has(r.schedule.id))
+  const selectedRows = rows.filter(r => selected.has(r.schedule.id) && r.nextDate)
+
+  const toggleSelect = (id) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(selectableRows.map(r => r.schedule.id)))
+    }
+  }
+
+  const cancelSelection = () => {
+    setSelectionMode(false)
+    setSelected(new Set())
+  }
+
+  const showToastMsg = (message) => {
+    setToast(message)
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const contaPrincipal =
+    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+    accounts.find(a => a.isMain && a.type !== 'credit') ||
+    accounts.find(a => a.type === 'checking')
+
+  const registerWithGerencial = (schedule, date) => {
+    registerScheduleOccurrence(schedule.id, date)
+    if (!schedule.grupoGerencial) return
+    const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
+    if (!grupo || grupo.number === 'D') return
+    if (grupo.number === 1) {
+      const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
+      if (schedule.accountId && contaReserva) {
+        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id })
+      }
+    } else {
+      const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
+      if (contaResgate && contaPrincipal) {
+        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id })
+      }
+    }
+  }
+
+  const handleBatchRegister = (date) => {
+    const count = selectedRows.length
+    selectedRows.forEach(({ schedule }) => registerWithGerencial(schedule, date))
+    cancelSelection()
+    setShowBatchRegister(false)
+    showToastMsg(`${count} lançamento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''} com sucesso`)
+  }
+
+  const handleBatchSkip = () => {
+    const count = selectedRows.length
+    selectedRows.forEach(({ schedule, nextDate }) => skipScheduleOccurrence(schedule.id, nextDate))
+    cancelSelection()
+    setShowBatchSkip(false)
+    showToastMsg(`${count} agendamento${count !== 1 ? 's' : ''} pulado${count !== 1 ? 's' : ''}`)
+  }
+
   if (schedules.length === 0) {
     return (
       <div className="card text-center py-12">
@@ -311,69 +491,152 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     )
   }
 
-  const rowProps = { categories, accounts, gerencialGroups, addTransaction, registerScheduleOccurrence, skipScheduleOccurrence, deleteSchedule, onEditSchedule }
+  const cols = selectionMode ? 10 : 9
+  const rowProps = {
+    categories, accounts, gerencialGroups, addTransaction,
+    registerScheduleOccurrence, skipScheduleOccurrence,
+    deleteSchedule, onEditSchedule,
+    selectionMode, onToggleSelect: toggleSelect,
+  }
 
   return (
-    <div className="card p-0 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-800">
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Movimentação</th>
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
-              <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-              <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap">Frequência</th>
-              <th className="px-3 py-2.5 text-xs text-gray-400 font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {overdue.length > 0 && (
-              <>
-                <SectionHeader label="Em atraso" count={overdue.length} variant="overdue" />
-                {overdue.map(({ schedule, nextDate }) => (
-                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
-                ))}
-              </>
-            )}
-            {next7.length > 0 && (
-              <>
-                <SectionHeader label="Próximos 7 dias" count={next7.length} variant="soon" />
-                {next7.map(({ schedule, nextDate }) => (
-                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
-                ))}
-              </>
-            )}
-            {next30.length > 0 && (
-              <>
-                <SectionHeader label="Próximos 30 dias" count={next30.length} variant="month" />
-                {next30.map(({ schedule, nextDate }) => (
-                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
-                ))}
-              </>
-            )}
-            {future.length > 0 && (
-              <>
-                <SectionHeader label="Futuros" count={future.length} variant="default" />
-                {future.map(({ schedule, nextDate }) => (
-                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
-                ))}
-              </>
-            )}
-            {completed.length > 0 && (
-              <>
-                <SectionHeader label="Concluídos" count={completed.length} variant="history" />
-                {completed.map(({ schedule, nextDate }) => (
-                  <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} />
-                ))}
-              </>
-            )}
-          </tbody>
-        </table>
+    <>
+      {/* Selection action bar */}
+      {selectionMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+          <span className="text-sm font-medium text-indigo-300">
+            {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowBatchRegister(true)}
+              disabled={selected.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <CheckCircle size={12} /> Registrar selecionados
+            </button>
+            <button
+              onClick={() => setShowBatchSkip(true)}
+              disabled={selected.size === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <SkipForward size={12} /> Pular selecionados
+            </button>
+            <button
+              onClick={cancelSelection}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              <X size={12} /> Cancelar seleção
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table card */}
+      <div className="card p-0 overflow-hidden">
+        {!selectionMode && selectableRows.length > 0 && (
+          <div className="flex justify-end px-3 pt-2.5 pb-0">
+            <button
+              onClick={() => setSelectionMode(true)}
+              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              <MousePointer2 size={11} /> Selecionar
+            </button>
+          </div>
+        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800">
+                {selectionMode && (
+                  <th className="px-3 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+                      title="Selecionar todos"
+                    />
+                  </th>
+                )}
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Movimentação</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
+                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap">Frequência</th>
+                <th className="px-3 py-2.5 text-xs text-gray-400 font-medium">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overdue.length > 0 && (
+                <>
+                  <SectionHeader label="Em atraso" count={overdue.length} variant="overdue" cols={cols} />
+                  {overdue.map(({ schedule, nextDate }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  ))}
+                </>
+              )}
+              {next7.length > 0 && (
+                <>
+                  <SectionHeader label="Próximos 7 dias" count={next7.length} variant="soon" cols={cols} />
+                  {next7.map(({ schedule, nextDate }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  ))}
+                </>
+              )}
+              {next30.length > 0 && (
+                <>
+                  <SectionHeader label="Próximos 30 dias" count={next30.length} variant="month" cols={cols} />
+                  {next30.map(({ schedule, nextDate }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  ))}
+                </>
+              )}
+              {future.length > 0 && (
+                <>
+                  <SectionHeader label="Futuros" count={future.length} variant="default" cols={cols} />
+                  {future.map(({ schedule, nextDate }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  ))}
+                </>
+              )}
+              {completed.length > 0 && (
+                <>
+                  <SectionHeader label="Concluídos" count={completed.length} variant="history" cols={cols} />
+                  {completed.map(({ schedule, nextDate }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  ))}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+
+      {/* Batch register modal */}
+      {showBatchRegister && (
+        <BatchRegisterModal
+          selectedRows={selectedRows}
+          accounts={accounts}
+          onConfirm={handleBatchRegister}
+          onClose={() => setShowBatchRegister(false)}
+        />
+      )}
+
+      {/* Batch skip confirmation */}
+      <ConfirmDialog
+        open={showBatchSkip}
+        onClose={() => setShowBatchSkip(false)}
+        onConfirm={handleBatchSkip}
+        title="Pular selecionados"
+        message={`Pular ${selectedRows.length} agendamento${selectedRows.length !== 1 ? 's' : ''}? Esta ação não pode ser desfeita.`}
+      />
+
+      {/* Toast */}
+      {toast && <Toast message={toast} />}
+    </>
   )
 }
 
