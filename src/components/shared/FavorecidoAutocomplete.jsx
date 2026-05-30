@@ -5,6 +5,7 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
   const [active, setActive] = useState(-1)
   const [rect, setRect] = useState(null)
   const inputRef = useRef(null)
+  const dropdownRef = useRef(null)
 
   const q = value.toLowerCase()
   const filtered = (value
@@ -40,7 +41,7 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
   useEffect(() => {
     if (!open) return
     const onClick = (e) => { if (!inputRef.current?.contains(e.target)) setOpen(false) }
-    const onScroll = () => setOpen(false)
+    const onScroll = (e) => { if (dropdownRef.current?.contains(e.target)) return; setOpen(false) }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)
     return () => {
@@ -63,8 +64,9 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
       />
       {open && filtered.length > 0 && rect && (
         <div
+          ref={dropdownRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden"
+          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-y-auto max-h-48"
         >
           {filtered.map((item, i) => (
             <button
