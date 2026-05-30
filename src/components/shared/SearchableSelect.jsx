@@ -183,7 +183,7 @@ export default function SearchableSelect({
               <button
                 type="button"
                 data-item
-                onClick={() => handleSelect('')}
+                onMouseDown={e => { e.preventDefault(); handleSelect('') }}
                 className={`w-full text-left px-3 py-2 text-sm transition-colors ${itemClass('')}`}
               >
                 {placeholder}
@@ -195,7 +195,7 @@ export default function SearchableSelect({
                 key={opt.id}
                 type="button"
                 data-item
-                onClick={() => handleSelect(opt.id)}
+                onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
                 className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${itemClass(opt.id)}`}
               >
                 {opt.label}
@@ -212,7 +212,7 @@ export default function SearchableSelect({
                     key={opt.id}
                     type="button"
                     data-item
-                    onClick={() => handleSelect(opt.id)}
+                    onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
                     className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
                   >
                     {opt.label}
