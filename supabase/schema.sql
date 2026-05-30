@@ -298,3 +298,13 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS profile_id TEXT;
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS acquisition_value NUMERIC;
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS acquisition_date TEXT;
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS value_history JSONB DEFAULT '[]';
+
+-- Campos de Reserva nas contas
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_reserva BOOLEAN DEFAULT FALSE;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_type TEXT;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_category_id TEXT;
+
+-- Categoria: Reservas Gerais
+INSERT INTO categorias (id, name, type, color, icon) VALUES
+  ('cat_res_ger', 'Reservas Gerais', 'expense', '#6b7280', '🏦')
+ON CONFLICT (id) DO NOTHING;

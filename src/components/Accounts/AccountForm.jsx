@@ -37,7 +37,7 @@ function Toggle({ checked, onChange, label, tooltip }) {
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], profiles = [], addAccount, updateAccount } = useApp()
+  const { accounts, accountGroups = [], profiles = [], categories = [], addAccount, updateAccount } = useApp()
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -56,6 +56,9 @@ export default function AccountForm({ initial, onClose }) {
     profileId: initial?.profileId || null,
     acquisitionValue: initial?.acquisitionValue ?? '',
     acquisitionDate: initial?.acquisitionDate || '',
+    isReserva: initial?.isReserva || false,
+    reservaType: initial?.reservaType || 'geral',
+    reservaCategoryId: initial?.reservaCategoryId || null,
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -98,6 +101,9 @@ export default function AccountForm({ initial, onClose }) {
       acquisitionValue: isPatrimonial && form.acquisitionValue !== '' ? Number(form.acquisitionValue) : null,
       acquisitionDate: isPatrimonial ? form.acquisitionDate || null : null,
       valueHistory: initial?.valueHistory || [],
+      isReserva: !isCredit && !isPatrimonial ? form.isReserva : false,
+      reservaType: form.isReserva && !isCredit && !isPatrimonial ? form.reservaType : null,
+      reservaCategoryId: form.isReserva && form.reservaType === 'especifica' && !isCredit && !isPatrimonial ? form.reservaCategoryId : null,
     }
 
     if (initial) {
@@ -331,6 +337,55 @@ export default function AccountForm({ initial, onClose }) {
                   A conta <strong className="text-amber-200">"{conflictAccount.name}"</strong> já é a Conta Corrente Principal.
                   Ao salvar, ela será substituída por esta conta.
                 </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {!isCredit && (
+          <>
+            <Toggle
+              checked={form.isReserva}
+              onChange={e => {
+                set('isReserva', e.target.checked)
+                if (!e.target.checked) { set('reservaType', 'geral'); set('reservaCategoryId', null) }
+              }}
+              label="É conta de reserva"
+              tooltip="Identifica esta conta como reserva orçamentária para controle de gastos futuros"
+            />
+            {form.isReserva && (
+              <div className="ml-11 space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                <div>
+                  <label className="label">Tipo de reserva</label>
+                  <select
+                    className="input"
+                    value={form.reservaType}
+                    onChange={e => { set('reservaType', e.target.value); if (e.target.value !== 'especifica') set('reservaCategoryId', null) }}
+                  >
+                    <option value="geral">Geral (sem categoria fixa)</option>
+                    <option value="especifica">Específica (vinculada a uma categoria)</option>
+                  </select>
+                </div>
+                {form.reservaType === 'especifica' ? (
+                  <div>
+                    <label className="label">Categoria vinculada</label>
+                    <select
+                      className="input"
+                      value={form.reservaCategoryId || ''}
+                      onChange={e => set('reservaCategoryId', e.target.value || null)}
+                    >
+                      <option value="">Selecione uma categoria...</option>
+                      {categories
+                        .filter(c => c.type === 'expense' || c.type === 'both')
+                        .map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)
+                      }
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Esta conta usará a categoria <span className="text-gray-300 font-medium">🏦 Reservas Gerais</span> automaticamente em lançamentos de reserva.
+                  </p>
+                )}
               </div>
             )}
           </>

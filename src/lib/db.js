@@ -83,6 +83,9 @@ export const accountToRow = (a) => ({
   acquisition_value: a.acquisitionValue != null ? Number(a.acquisitionValue) : null,
   acquisition_date: a.acquisitionDate || null,
   value_history: a.valueHistory || [],
+  is_reserva: !!a.isReserva,
+  reserva_type: a.reservaType || null,
+  reserva_category_id: a.reservaCategoryId || null,
 })
 
 export const rowToAccount = (r) => ({
@@ -108,6 +111,9 @@ export const rowToAccount = (r) => ({
   acquisitionValue: r.acquisition_value != null ? Number(r.acquisition_value) : null,
   acquisitionDate: r.acquisition_date || null,
   valueHistory: r.value_history || [],
+  isReserva: !!r.is_reserva,
+  reservaType: r.reserva_type || null,
+  reservaCategoryId: r.reserva_category_id || null,
 })
 
 export const txToRow = (tx) => ({

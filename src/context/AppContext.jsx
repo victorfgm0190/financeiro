@@ -131,6 +131,7 @@ const defaultData = {
     { id: 'cat_out_pre', name: 'Presentes',          type: 'expense', color: '#78716c', icon: '🎁', group: 'Outras Despesas' },
     { id: 'cat_out_doa', name: 'Doações',            type: 'expense', color: '#78716c', icon: '🤝', group: 'Outras Despesas' },
     { id: 'cat_out_div', name: 'Despesas Diversas',  type: 'expense', color: '#78716c', icon: '📌', group: 'Outras Despesas' },
+    { id: 'cat_res_ger', name: 'Reservas Gerais',    type: 'expense', color: '#6b7280', icon: '🏦' },
     // ── Receitas agrupadas ────────────────────────────────────────────────────
     { id: 'cat_rem_sal', name: 'Salário',            type: 'income',  color: '#22c55e', icon: '💰', group: 'Remunerações' },
     { id: 'cat_rem_fer', name: 'Férias',             type: 'income',  color: '#22c55e', icon: '🌴', group: 'Remunerações' },
