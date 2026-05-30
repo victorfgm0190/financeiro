@@ -585,6 +585,7 @@ export function AppProvider({ children }) {
             costCenter: schedule.costCenter || null,
             date,
             scheduleId: schedule.id,
+            origin: 'agendamento',
             createdAt: new Date().toISOString(),
           }
           if (schedule.transactionType === 'income') {
@@ -721,6 +722,46 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  const reverseTransaction = useCallback((id) => {
+    update(d => {
+      const tx = d.transactions.find(t => t.id === id)
+      if (!tx) return d
+      let accounts = [...d.accounts]
+      if (tx.type === 'income') {
+        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a)
+      } else if (tx.type === 'expense') {
+        if (tx.accountType === 'credit') {
+          accounts = accounts.map(a => a.id === tx.accountId ? {
+            ...a,
+            creditDebt: Math.max(0, (a.creditDebt || 0) - tx.amount),
+            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
+          } : a)
+        } else {
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + tx.amount } : a)
+        }
+      } else if (tx.type === 'transfer') {
+        accounts = accounts.map(a => {
+          if (a.id === tx.accountId) return { ...a, balance: a.balance + tx.amount }
+          if (a.id === tx.toAccountId) return { ...a, balance: a.balance - tx.amount }
+          return a
+        })
+      }
+      let schedules = d.schedules
+      if (tx.scheduleId) {
+        schedules = d.schedules.map(s =>
+          s.id === tx.scheduleId
+            ? { ...s, registered: (s.registered || []).filter(r => r !== tx.date) }
+            : s
+        )
+      }
+      return {
+        ...d, accounts,
+        transactions: d.transactions.filter(t => t.id !== id),
+        schedules,
+      }
+    })
+  }, [update])
+
   // ── Categories ──────────────────────────────────────────────────────────────
   const addCategory = useCallback((category) => {
     const id = 'cat_' + Date.now()
@@ -762,6 +803,7 @@ export function AppProvider({ children }) {
         costCenter: schedule.costCenter,
         date,
         scheduleId,
+        origin: 'agendamento',
       }
       const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
@@ -1417,7 +1459,7 @@ export function AppProvider({ children }) {
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue,
-      addTransaction, updateTransaction, deleteTransaction,
+      addTransaction, updateTransaction, deleteTransaction, reverseTransaction,
       addCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,

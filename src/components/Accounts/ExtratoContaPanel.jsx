@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import ConfirmDialog from '../shared/ConfirmDialog'
+import Toast from '../shared/Toast'
 
 // Computes the account balance just before `fromDate` by reversing
 // all transactions from that date onward.
@@ -92,7 +94,7 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -136,7 +138,17 @@ function SingleRow({ row, accountId, accounts, balance }) {
       <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
         {fmt(balance)}
       </td>
-      <td className="w-6" />
+      <td className="px-1 py-2.5">
+        {onReverse && !tx.reservaAuto && (
+          <button
+            onClick={() => onReverse(tx)}
+            title="Estornar lançamento"
+            className="p-1 text-gray-700 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+          >
+            <Undo2 size={11} />
+          </button>
+        )}
+      </td>
     </tr>
   )
 }
@@ -211,7 +223,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account, onClose }) {
-  const { transactions, accounts, schedules } = useApp()
+  const { transactions, accounts, schedules, reverseTransaction } = useApp()
   const now = new Date()
   const [from, setFrom] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
@@ -219,6 +231,19 @@ export default function ExtratoContaPanel({ account, onClose }) {
   const [to, setTo] = useState(
     new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
   )
+  const [confirmEstorno, setConfirmEstorno] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+
+  const handleReverse = (tx) => {
+    reverseTransaction(tx.id)
+    setConfirmEstorno(null)
+    const msg = tx.scheduleId
+      ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
+      : 'Lançamento estornado.'
+    showToast(msg)
+  }
 
   const isAplicacao = !!account.contaAplicacao
   const isGerencial = !!(account.name?.startsWith('Ger. ') && account.grupoGerencial)
@@ -377,13 +402,28 @@ export default function ExtratoContaPanel({ account, onClose }) {
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (
-                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
+                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} />
                 )
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmEstorno}
+        onClose={() => setConfirmEstorno(null)}
+        onConfirm={() => handleReverse(confirmEstorno)}
+        title="Estornar Lançamento"
+        message={
+          confirmEstorno?.scheduleId
+            ? `Estornar este lançamento? O agendamento voltará para pendente na data ${fmtDate(confirmEstorno?.date)}.`
+            : 'Estornar este lançamento? Esta ação não pode ser desfeita.'
+        }
+        confirmLabel="Confirmar Estorno"
+        danger
+      />
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

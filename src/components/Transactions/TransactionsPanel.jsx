@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, ArrowLeft, CreditCard, Wallet,
-  ChevronRight, Edit2, Trash2, ArrowUpCircle,
+  ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import Toast from '../shared/Toast'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -77,10 +78,23 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { transactions, categories, deleteTransaction } = useApp()
+  const { transactions, categories, deleteTransaction, reverseTransaction } = useApp()
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+
+  const handleReverse = (tx) => {
+    reverseTransaction(tx.id)
+    setConfirmEstorno(null)
+    const msg = tx.scheduleId
+      ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
+      : 'Lançamento estornado.'
+    showToast(msg)
+  }
 
   const label = getBillLabel(billKey)
   const txs = useMemo(() =>
@@ -167,6 +181,13 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                       <td className="px-4 py-3">
                         <div className="flex gap-1 justify-end">
                           <button
+                            onClick={() => setConfirmEstorno(tx)}
+                            title="Estornar lançamento"
+                            className="p-1.5 text-gray-700 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+                          >
+                            <Undo2 size={11} />
+                          </button>
+                          <button
                             onClick={() => { setEditTx(tx); setShowEdit(true) }}
                             className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
                           >
@@ -207,6 +228,20 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         message={`Excluir "${confirmDelete?.description}"?`}
         danger
       />
+      <ConfirmDialog
+        open={!!confirmEstorno}
+        onClose={() => setConfirmEstorno(null)}
+        onConfirm={() => handleReverse(confirmEstorno)}
+        title="Estornar Lançamento"
+        message={
+          confirmEstorno?.scheduleId
+            ? `Estornar este lançamento? O agendamento voltará para pendente na data ${fmtDate(confirmEstorno?.date)}.`
+            : 'Estornar este lançamento? Esta ação não pode ser desfeita.'
+        }
+        confirmLabel="Confirmar Estorno"
+        danger
+      />
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

@@ -311,6 +311,7 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Flag para lançamentos automáticos de reserva (não exibidos no extrato normal)
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_auto BOOLEAN DEFAULT FALSE;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'manual';
 
 -- Categoria de despesa para transferências agendadas a reservas (tipo geral)
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_expense_category_id TEXT;
