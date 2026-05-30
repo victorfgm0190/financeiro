@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -194,6 +195,150 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
         <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>
       </div>
     </form>
+  )
+}
+
+// ── Tab 0: Contas Reserva ───────────────────────────────────────────────────
+function ContasReservaTab({ reservaAccounts, transactions, categories, periodStart, periodEnd }) {
+  const [extratoAcc, setExtratoAcc] = useState(null)
+
+  const reservaData = useMemo(() => {
+    return reservaAccounts.map(acc => {
+      const cat = acc.reservaType === 'especifica'
+        ? categories.find(c => c.id === acc.reservaCategoryId)
+        : null
+      const entradas = transactions
+        .filter(tx => tx.type === 'transfer' && tx.toAccountId === acc.id && tx.date >= periodStart && tx.date <= periodEnd)
+        .reduce((s, t) => s + t.amount, 0)
+      const saidas = transactions
+        .filter(tx => tx.type === 'transfer' && tx.accountId === acc.id && tx.date >= periodStart && tx.date <= periodEnd)
+        .reduce((s, t) => s + t.amount, 0)
+      const txsExtrato = transactions
+        .filter(tx => tx.type === 'transfer' && (tx.accountId === acc.id || tx.toAccountId === acc.id))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 40)
+      return { acc, cat, entradas, saidas, txsExtrato }
+    })
+  }, [reservaAccounts, transactions, categories, periodStart, periodEnd])
+
+  const totalSaldo = reservaAccounts.reduce((s, a) => s + (a.balance || 0), 0)
+  const totalEntradas = reservaData.reduce((s, d) => s + d.entradas, 0)
+  const totalSaidas = reservaData.reduce((s, d) => s + d.saidas, 0)
+  const extratoData = reservaData.find(d => d.acc.id === extratoAcc?.id)
+
+  if (reservaAccounts.length === 0) {
+    return (
+      <div className="card text-center py-12">
+        <PiggyBank size={32} className="text-gray-700 mx-auto mb-3" />
+        <p className="text-gray-500 text-sm">Nenhuma conta marcada como reserva</p>
+        <p className="text-xs text-gray-600 mt-1">Ative "É conta de reserva" no cadastro de uma conta para ela aparecer aqui.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Resumo do topo */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card py-3 text-center">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Reservado</p>
+          <p className={`text-xl font-bold ${totalSaldo >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>{fmt(totalSaldo)}</p>
+        </div>
+        <div className="card py-3 text-center">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Depósitos no Mês</p>
+          <p className="text-xl font-bold text-emerald-400">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
+        </div>
+        <div className="card py-3 text-center">
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resgates no Mês</p>
+          <p className="text-xl font-bold text-orange-400">{totalSaidas > 0 ? fmt(totalSaidas) : <span className="text-gray-700">—</span>}</p>
+        </div>
+      </div>
+
+      {/* Lista de contas reserva */}
+      <div className="space-y-3">
+        {reservaData.map(({ acc, cat, entradas, saidas }) => (
+          <div key={acc.id} className="card">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <span className="text-sm font-semibold text-gray-200">{acc.apelido || acc.name}</span>
+                  {acc.reservaType === 'especifica' ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 shrink-0">
+                      {cat ? `${cat.icon} ${cat.name}` : 'Específica'}
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 shrink-0">
+                      🏦 Geral
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-4 flex-wrap text-xs">
+                  {entradas > 0
+                    ? <span className="flex items-center gap-1 text-emerald-500"><ArrowDownCircle size={11} /> +{fmt(entradas)}</span>
+                    : <span className="text-gray-700">Sem depósitos no mês</span>
+                  }
+                  {saidas > 0 && (
+                    <span className="flex items-center gap-1 text-orange-400"><ArrowUpCircle size={11} /> −{fmt(saidas)}</span>
+                  )}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={`text-xl font-bold ${(acc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
+                  {fmt(acc.balance || 0)}
+                </p>
+                <button
+                  onClick={() => setExtratoAcc(acc)}
+                  className="text-xs text-gray-600 hover:text-indigo-400 transition-colors mt-0.5"
+                >
+                  Ver Extrato →
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modal extrato */}
+      {extratoAcc && extratoData && (
+        <Modal open onClose={() => setExtratoAcc(null)} title={`Extrato — ${extratoAcc.apelido || extratoAcc.name}`} size="md">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-gray-800">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Saldo atual</span>
+              <span className={`text-lg font-bold ${(extratoAcc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
+                {fmt(extratoAcc.balance || 0)}
+              </span>
+            </div>
+            {extratoData.txsExtrato.length === 0 ? (
+              <p className="text-center text-gray-500 text-sm py-6">Nenhuma movimentação registrada</p>
+            ) : (
+              <div className="max-h-80 overflow-y-auto space-y-0">
+                {extratoData.txsExtrato.map(tx => {
+                  const isEntrada = tx.toAccountId === extratoAcc.id
+                  const d = tx.date
+                  return (
+                    <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isEntrada
+                          ? <ArrowDownCircle size={13} className="text-emerald-500 shrink-0" />
+                          : <ArrowUpCircle size={13} className="text-orange-400 shrink-0" />
+                        }
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-200 truncate">{tx.description || (isEntrada ? 'Depósito' : 'Resgate')}</p>
+                          <p className="text-xs text-gray-500">{d.slice(8)}/{d.slice(5,7)}/{d.slice(0,4)}</p>
+                        </div>
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ml-3 ${isEntrada ? 'text-emerald-400' : 'text-orange-400'}`}>
+                        {isEntrada ? '+' : '−'}{fmt(tx.amount)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
   )
 }
 
@@ -485,9 +630,9 @@ function FluxoTab({ functions, accounts, saldosAtualizados }) {
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { accounts } = useApp()
+  const { accounts, transactions, categories, getFinancialPeriod } = useApp()
   const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
-  const [tab, setTab] = useState('resumo')
+  const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)
   const [editFn, setEditFn] = useState(null)
   const [confirmVirar, setConfirmVirar] = useState(false)
@@ -524,13 +669,19 @@ export default function ReservasPanel() {
   }
 
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
+  const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
   const lastPeriod = periods[periods.length - 1]
+
+  const period = getFinancialPeriod()
+  const periodStart = period.start.toISOString().split('T')[0]
+  const periodEnd = period.end.toISOString().split('T')[0]
 
   return (
     <div className="space-y-4">
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-gray-800">
         {[
+          { id: 'contas', label: 'Contas Reserva' },
           { id: 'resumo', label: 'Resumo das Reservas' },
           { id: 'fluxo', label: 'Fluxo Futuro' },
         ].map(t => (
@@ -547,6 +698,16 @@ export default function ReservasPanel() {
           </button>
         ))}
       </div>
+
+      {tab === 'contas' && (
+        <ContasReservaTab
+          reservaAccounts={reservaAccounts}
+          transactions={transactions}
+          categories={categories}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
+        />
+      )}
 
       {tab === 'resumo' && (
         <ResumoTab

@@ -188,12 +188,18 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       if (remaining > 0) envelopeRestante += remaining
     }
 
+    // Reservas específicas: saldo disponível para cobrir despesas da categoria vinculada
+    const saldoReservasEspecificas = accounts
+      .filter(a => a.isReserva && a.reservaType === 'especifica')
+      .reduce((s, a) => s + (a.balance || 0), 0)
+
     return {
-      projetado: saldoPrincipal + pendingIncome - pendingExpense - envelopeRestante,
+      projetado: saldoPrincipal + pendingIncome - pendingExpense - envelopeRestante + saldoReservasEspecificas,
       pendingIncome,
       pendingExpense,
       pendingCount,
       envelopeRestante,
+      saldoReservasEspecificas,
     }
   }, [accounts, schedules, envelopes, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
 
@@ -338,6 +344,9 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
                 )}
                 {saldoProjetado.envelopeRestante > 0 && (
                   <span className="text-purple-400">⊖ {fmt(saldoProjetado.envelopeRestante)} envelopes previstos</span>
+                )}
+                {saldoProjetado.saldoReservasEspecificas > 0 && (
+                  <span className="text-teal-500">⊕ {fmt(saldoProjetado.saldoReservasEspecificas)} reservas específicas</span>
                 )}
                 {saldoProjetado.pendingCount > 0
                   ? <span className="text-gray-600">· {saldoProjetado.pendingCount} agendamento{saldoProjetado.pendingCount !== 1 ? 's' : ''} pendente{saldoProjetado.pendingCount !== 1 ? 's' : ''}</span>
