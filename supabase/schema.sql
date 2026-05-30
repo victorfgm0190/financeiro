@@ -314,3 +314,6 @@ ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_auto BOOLEAN DEFAULT FA
 
 -- Categoria de despesa para transferências agendadas a reservas (tipo geral)
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_expense_category_id TEXT;
+
+-- Campo de ocorrências puladas (adicionado junto com a funcionalidade de Pular)
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS skipped JSONB DEFAULT '[]';
