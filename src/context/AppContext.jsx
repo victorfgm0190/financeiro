@@ -796,6 +796,47 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // Reverte apenas as automações gerenciais (ETAPA A + agendamentos) sem tocar na própria tx
+  const reverseGerencialCascadeOnly = useCallback((tx) => {
+    if (!tx?.grupoGerencial || tx.type !== 'expense' || tx.accountType !== 'credit') return
+    update(d => {
+      const cardAccount = d.accounts.find(a => a.id === tx.accountId)
+      const closingDay = cardAccount?.closingDay || 14
+      const faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
+      const gerKey = gerencialKey(tx.accountId, faturaRef)
+      const resgateKey = `${gerKey}_resgate`
+      const paymentKey = `${gerKey}_payment`
+
+      let accounts = [...d.accounts]
+      let transactions = d.transactions
+
+      const etapaATx = d.transactions.find(t =>
+        t.type === 'transfer' &&
+        t.grupoGerencial === tx.grupoGerencial &&
+        Math.abs(t.amount - tx.amount) < 0.01 &&
+        t.date === tx.date
+      )
+      if (etapaATx) {
+        accounts = accounts.map(a => {
+          if (a.id === etapaATx.accountId) return { ...a, balance: a.balance + etapaATx.amount }
+          if (a.id === etapaATx.toAccountId) return { ...a, balance: a.balance - etapaATx.amount }
+          return a
+        })
+        transactions = transactions.filter(t => t.id !== etapaATx.id)
+      }
+
+      const schedules = d.schedules.map(s => {
+        const sKey = s.overrides?._gerencialKey
+        if (sKey !== resgateKey && sKey !== paymentKey) return s
+        if ((s.registered || []).includes(s.startDate)) return s
+        const newAmount = Math.max(0, Math.round(((s.amount || 0) - tx.amount) * 100) / 100)
+        return { ...s, amount: newAmount }
+      })
+
+      return { ...d, accounts, transactions, schedules }
+    })
+  }, [update])
+
   // ── Categories ──────────────────────────────────────────────────────────────
   const addCategory = useCallback((category) => {
     const id = 'cat_' + Date.now()
@@ -1549,7 +1590,7 @@ export function AppProvider({ children }) {
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue,
-      addTransaction, updateTransaction, deleteTransaction, reverseTransaction,
+      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly,
       addCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,

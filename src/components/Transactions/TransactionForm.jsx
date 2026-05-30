@@ -51,7 +51,7 @@ function buildAccOpts(accounts, accountGroups, excludeId) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions,
-    gerencialGroups, processarLancamentoGerencial,
+    gerencialGroups, processarLancamentoGerencial, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
   } = useApp()
@@ -156,6 +156,38 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
     if (initial?.id) {
       updateTransaction(initial.id, txData)
+
+      // Detecta mudança de classificação gerencial em despesas de cartão
+      const isCardExpense = initial.accountType === 'credit' && initial.type === 'expense'
+      if (isCardExpense) {
+        const prevGrupoId = initial.grupoGerencial || null
+        const newGrupoId = txData.grupoGerencial || null
+        const wasGerencial1 = gerencialGroups.find(g => g.id === prevGrupoId)?.number === 1
+        const isGerencial1 = gerencialGroups.find(g => g.id === newGrupoId)?.number === 1
+
+        if (wasGerencial1 && !isGerencial1) {
+          // Era Gerencial → deixou de ser: reverter transferência e agendamentos
+          reverseGerencialCascadeOnly(initial)
+        } else if (!wasGerencial1 && isGerencial1) {
+          // Não era → agora é Gerencial: criar transferência e agendamentos
+          const contaId = gerencialContaId
+          if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
+          processarLancamentoGerencial(
+            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+            newGrupoId,
+            contaId || null
+          )
+        } else if (wasGerencial1 && isGerencial1 && Math.abs(Number(form.amount) - initial.amount) > 0.005) {
+          // Continua Gerencial mas valor mudou: reverter old e reaplicar new
+          reverseGerencialCascadeOnly(initial)
+          processarLancamentoGerencial(
+            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+            newGrupoId,
+            gerencialContaId || null
+          )
+        }
+      }
+
       onClose()
       return
     }
