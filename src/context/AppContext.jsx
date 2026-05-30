@@ -1325,12 +1325,16 @@ export function AppProvider({ children }) {
       const txDate = new Date(lancamento.date + 'T00:00:00')
       const faturaRef = computeFaturaRef(txDate, closingDay)
 
-      // ETAPA B: schedule date = card's dueDay in the fatura month
       const [mm, yyyy] = faturaRef.split('/')
       const dueDay = String(cardAccount?.dueDay || 10).padStart(2, '0')
-      const scheduleDate = `${yyyy}-${mm}-${dueDay}`
+      const scheduleDate = `${yyyy}-${mm}-${dueDay}` // vencimento: Conta → Cartão
+
+      const financialStartDay = data.settings?.financialMonthStartDay || 1
+      const resgateDate = computeScheduleDate(faturaRef, financialStartDay) // resgate: Ger. → Conta
 
       const gerKey = gerencialKey(lancamento.accountId, faturaRef)
+      const resgateKey = `${gerKey}_resgate`
+      const paymentKey = `${gerKey}_payment`
       const txDescription = lancamento.description || ''
 
       update(d => {
@@ -1363,6 +1367,7 @@ export function AppProvider({ children }) {
             isMain: false,
             contaCorrentePrincipal: false,
             grupoGerencial: grupoId,
+            accountGroupId: contaPrincipal.accountGroupId || null, // herda grupo da conta destino
           }]
         } else {
           accounts = accounts.map(a =>
@@ -1374,7 +1379,7 @@ export function AppProvider({ children }) {
           a.id === contaPrincipal.id ? { ...a, balance: (a.balance || 0) - lancamento.amount } : a
         )
 
-        // ETAPA A: transferência imediata Conta Corrente → Ger. subconta
+        // ETAPA A: transferência imediata Conta Corrente → Ger. subconta (inalterada)
         const newTx = {
           id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
           type: 'transfer',
@@ -1387,33 +1392,77 @@ export function AppProvider({ children }) {
           createdAt: new Date().toISOString(),
         }
 
-        // ETAPA B: agendamento individual por lançamento (Ger. subconta → Conta Corrente)
-        const newSch = {
-          id: 'sch_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          transactionType: 'transfer',
-          accountId: subcontaId,
-          toAccountId: contaPrincipal.id,
-          frequency: 'once',
-          occurrenceType: 'installment',
-          installments: 1,
-          autoRegister: false,
-          startDate: scheduleDate,
-          amount: lancamento.amount,
-          description: `Pagamento Fatura ${faturaRef}${txDescription ? ` - ${txDescription}` : ''}`,
-          overrides: {
-            _gerencialKey: gerKey,
-            _gerencial: {
-              faturaRef,
-              cardId: lancamento.accountId,
-              checkingAccountId: contaPrincipal.id,
-              gerencialContaId: subcontaId,
+        let schedules = [...d.schedules]
+
+        // ETAPA B: Resgate (Ger. → Conta Principal) — único e acumulativo por fatura
+        const resgateIdx = schedules.findIndex(s => s.overrides?._gerencialKey === resgateKey)
+        if (resgateIdx >= 0) {
+          schedules = schedules.map((s, i) => i === resgateIdx
+            ? { ...s, amount: Math.round(((s.amount || 0) + lancamento.amount) * 100) / 100 }
+            : s
+          )
+        } else {
+          schedules = [...schedules, {
+            id: 'sch_ger_r_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            transactionType: 'transfer',
+            accountId: subcontaId,
+            toAccountId: contaPrincipal.id,
+            frequency: 'once',
+            occurrenceType: 'installment',
+            installments: 1,
+            autoRegister: false,
+            startDate: resgateDate,
+            amount: lancamento.amount,
+            description: `Resgate Gerencial - Fatura ${faturaRef}`,
+            overrides: {
+              _gerencialKey: resgateKey,
+              _gerencial: {
+                faturaRef,
+                cardId: lancamento.accountId,
+                checkingAccountId: contaPrincipal.id,
+                gerencialContaId: subcontaId,
+              },
             },
-          },
-          registered: [],
-          skipped: [],
+            registered: [],
+            skipped: [],
+          }]
         }
 
-        return { ...d, accounts, transactions: [...d.transactions, newTx], schedules: [...d.schedules, newSch] }
+        // ETAPA C: Pagamento fatura (Conta Principal → Cartão) — único e acumulativo por fatura
+        const paymentIdx = schedules.findIndex(s => s.overrides?._gerencialKey === paymentKey)
+        if (paymentIdx >= 0) {
+          schedules = schedules.map((s, i) => i === paymentIdx
+            ? { ...s, amount: Math.round(((s.amount || 0) + lancamento.amount) * 100) / 100 }
+            : s
+          )
+        } else {
+          schedules = [...schedules, {
+            id: 'sch_ger_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            transactionType: 'transfer',
+            accountId: contaPrincipal.id,
+            toAccountId: lancamento.accountId,
+            frequency: 'once',
+            occurrenceType: 'installment',
+            installments: 1,
+            autoRegister: false,
+            startDate: scheduleDate,
+            amount: lancamento.amount,
+            description: `Pagamento Fatura ${faturaRef}`,
+            overrides: {
+              _gerencialKey: paymentKey,
+              _gerencial: {
+                faturaRef,
+                cardId: lancamento.accountId,
+                checkingAccountId: contaPrincipal.id,
+                gerencialContaId: subcontaId,
+              },
+            },
+            registered: [],
+            skipped: [],
+          }]
+        }
+
+        return { ...d, accounts, transactions: [...d.transactions, newTx], schedules }
       })
       return { needsResgate: false, faturaRef, scheduleDate }
     }
