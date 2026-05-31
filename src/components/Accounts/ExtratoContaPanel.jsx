@@ -126,6 +126,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           <span className="text-xs text-gray-200 truncate max-w-[160px]">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
         </div>
       </td>
+      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap truncate">{tx.payee || ''}</td>
       <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">
         {deId ? <AccountName id={deId} accounts={accounts} /> : deLabel}
       </td>
@@ -199,6 +200,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
             <span className="text-xs text-indigo-400 ml-1">({txs.length} mov.)</span>
           </div>
         </td>
+        <td />
         <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{isIn ? otherName : thisName}</td>
         <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{isIn ? thisName : otherName}</td>
         <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
@@ -225,6 +227,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
             <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic">
               {tx.description || 'Transferência'}
             </td>
+            <td />
             <td className="px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap">
               {fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'}
             </td>
@@ -329,6 +332,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     <colgroup>
       <col style={{ width: '88px' }} />
       <col />
+      <col style={{ width: '100px' }} />
       <col style={{ width: '108px' }} />
       <col style={{ width: '108px' }} />
       <col style={{ width: '90px' }} />
@@ -404,6 +408,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <tr className="border-b border-gray-800">
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Favorecido</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta De</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta Para</th>
                 <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
@@ -454,7 +459,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               {/* Starting balance row */}
               <tr className="border-b border-gray-800/50 bg-gray-800/20">
                 <td className="px-3 py-2 text-xs text-gray-600">{fmtDate(from)}</td>
-                <td className="px-3 py-2 text-xs text-gray-500 italic" colSpan={5}>Saldo inicial do período</td>
+                <td className="px-3 py-2 text-xs text-gray-500 italic" colSpan={6}>Saldo inicial do período</td>
                 <td className={`px-3 py-2 text-right text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
                   {fmt(startBalance)}
                 </td>
@@ -462,7 +467,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               </tr>
               {rowsWithBalance.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-gray-500 text-xs">
+                  <td colSpan={9} className="text-center py-10 text-gray-500 text-xs">
                     Nenhum lançamento no período
                   </td>
                 </tr>
