@@ -114,23 +114,23 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
       className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group"
       onClick={() => onEdit && onEdit(tx)}
     >
-      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(tx.date)}</td>
-      <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5">
+      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
+      <td className="px-3 py-2.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           {isTransfer
             ? <ArrowLeftRight size={12} className="text-gray-500 shrink-0" />
             : isIn
               ? <ArrowDownCircle size={12} className="text-blue-600 shrink-0" />
               : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
           }
-          <span className="text-xs text-gray-200 truncate max-w-[160px]">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
+          <span className="text-xs text-gray-200 truncate">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
         </div>
       </td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap truncate">{tx.payee || ''}</td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">
+      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
+      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">
         {deId ? <AccountName id={deId} accounts={accounts} /> : deLabel}
       </td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">
+      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">
         {paraId ? <AccountName id={paraId} accounts={accounts} /> : paraLabel}
       </td>
       <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
@@ -192,17 +192,17 @@ function NettedRow({ row, accountId, accounts, balance }) {
         className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5"
         onClick={() => setOpen(v => !v)}
       >
-        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(row.date)}</td>
-        <td className="px-3 py-2.5">
-          <div className="flex items-center gap-1.5">
+        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
+        <td className="px-3 py-2.5 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
             <ArrowLeftRight size={12} className="text-indigo-400 shrink-0" />
-            <span className="text-xs text-gray-200">Transf. líquida</span>
-            <span className="text-xs text-indigo-400 ml-1">({txs.length} mov.)</span>
+            <span className="text-xs text-gray-200 truncate">Transf. líquida</span>
+            <span className="text-xs text-indigo-400 ml-1 shrink-0">({txs.length} mov.)</span>
           </div>
         </td>
         <td />
-        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{isIn ? otherName : thisName}</td>
-        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{isIn ? thisName : otherName}</td>
+        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{isIn ? otherName : thisName}</td>
+        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{isIn ? thisName : otherName}</td>
         <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
           {isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
@@ -223,15 +223,15 @@ function NettedRow({ row, accountId, accounts, balance }) {
         const toAcc = accounts.find(a => a.id === tx.toAccountId)
         return (
           <tr key={tx.id} className="border-b border-gray-800/30 bg-indigo-500/5">
-            <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 whitespace-nowrap">{fmtDate(tx.date)}</td>
-            <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic">
+            <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 truncate">{fmtDate(tx.date)}</td>
+            <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic truncate">
               {tx.description || 'Transferência'}
             </td>
             <td />
-            <td className="px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-xs text-gray-500 truncate">
               {fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'}
             </td>
-            <td className="px-3 py-1.5 text-xs text-gray-500 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-xs text-gray-500 truncate">
               {toAcc ? (toAcc.apelido || toAcc.name) : '—'}
             </td>
             <td className="px-3 py-1.5 text-right text-xs text-blue-600/70 whitespace-nowrap">
@@ -330,15 +330,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Shared column definitions for header and body tables (table-fixed keeps widths in sync)
   const colGroup = (
     <colgroup>
-      <col style={{ width: '88px' }} />
-      <col />
-      <col style={{ width: '72px' }} />
-      <col style={{ width: '108px' }} />
-      <col style={{ width: '108px' }} />
-      <col style={{ width: '90px' }} />
-      <col style={{ width: '90px' }} />
-      <col style={{ width: '90px' }} />
-      <col style={{ width: '32px' }} />
+      <col style={{ width: '84px' }} />   {/* Data */}
+      <col />                              {/* Histórico — ocupa espaço restante */}
+      <col style={{ width: '64px' }} />   {/* Favorecido */}
+      <col style={{ width: '82px' }} />   {/* Conta De */}
+      <col style={{ width: '82px' }} />   {/* Conta Para */}
+      <col style={{ width: '88px' }} />   {/* Entrada */}
+      <col style={{ width: '88px' }} />   {/* Saída */}
+      <col style={{ width: '92px' }} />   {/* Saldo */}
+      <col style={{ width: '100px' }} />  {/* Ações */}
     </colgroup>
   )
 
@@ -409,8 +409,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta De</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta Para</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
                 <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
                 </th>
