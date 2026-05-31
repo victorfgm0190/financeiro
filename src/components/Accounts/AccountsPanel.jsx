@@ -207,26 +207,52 @@ function GroupManager({ groups }) {
 const rb = v => Math.round(v * 100) / 100
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, transactions } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, transactions, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
 
-  const projectedBalance = useMemo(() => {
-    if (['credit', 'asset', 'liability'].includes(account.type)) return null
-    const initBal = rb(account.initialBalance ?? 0)
-    let bal = initBal
-    transactions.forEach(tx => {
-      if (tx.type === 'income' && tx.accountId === account.id) bal = rb(bal + tx.amount)
-      else if (tx.type === 'expense' && tx.accountId === account.id && tx.accountType !== 'credit') bal = rb(bal - tx.amount)
-      else if (tx.type === 'transfer') {
-        if (tx.accountId === account.id) bal = rb(bal - tx.amount)
-        else if (tx.toAccountId === account.id) bal = rb(bal + tx.amount)
-      } else if (tx.type === 'credit_payment' && tx.fromAccountId === account.id) bal = rb(bal - tx.amount)
-    })
-    return bal
-  }, [account.id, account.type, account.initialBalance, transactions])
+  const { projetado, finalBal } = useMemo(() => {
+    if (['credit', 'asset', 'liability'].includes(account.type)) return { projetado: null, finalBal: null }
+    const period = getFinancialPeriod()
+    const endStr = period.end.toISOString().split('T')[0]
+    const todayStr = new Date().toISOString().split('T')[0]
+    const principal = account.balance || 0
+
+    let scheduleDelta = 0
+    for (const s of schedules) {
+      const fromAcc = s.accountId === account.id
+      const toAcc = s.toAccountId === account.id
+      if (!fromAcc && !toAcc) continue
+      const nexts = getNextOccurrences(s, 35).filter(d => d > todayStr && d <= endStr)
+      for (const _d of nexts) {
+        if (s.transactionType === 'income' && fromAcc) scheduleDelta += s.amount
+        else if (s.transactionType === 'expense' && fromAcc) scheduleDelta -= s.amount
+        else if (s.transactionType === 'transfer') {
+          if (fromAcc && !toAcc) scheduleDelta -= s.amount
+          else if (!fromAcc && toAcc) scheduleDelta += s.amount
+        }
+      }
+    }
+
+    let futureDelta = 0
+    for (const tx of transactions) {
+      if (tx.date <= todayStr || tx.date > endStr) continue
+      if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
+      if (tx.type === 'income' && tx.accountId === account.id) futureDelta += tx.amount
+      else if (tx.type === 'expense' && tx.accountId === account.id) futureDelta -= tx.amount
+      else if (tx.type === 'transfer' || tx.type === 'credit_payment') {
+        if (tx.toAccountId === account.id) futureDelta += tx.amount
+        else if (tx.accountId === account.id) futureDelta -= tx.amount
+      }
+    }
+
+    return {
+      projetado: rb(principal + scheduleDelta),
+      finalBal: rb(principal + scheduleDelta + futureDelta),
+    }
+  }, [account.id, account.type, account.balance, schedules, transactions, getNextOccurrences, getFinancialPeriod])
 
   return (
     <div
@@ -301,10 +327,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
       ) : (
         <div>
-          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Atual'}</p>
+          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
           <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
-          {projectedBalance != null && Math.abs(projectedBalance - (account.balance || 0)) >= 0.005 && (
-            <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projectedBalance)}</p>
+          {projetado != null && Math.abs(projetado - (account.balance || 0)) >= 0.005 && (
+            <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projetado)}</p>
+          )}
+          {finalBal != null && Math.abs(finalBal - (projetado ?? (account.balance || 0))) >= 0.005 && (
+            <p className="text-xs text-purple-300/60 mt-0.5">Final: {fmt(finalBal)}</p>
           )}
           {account.acquisitionValue != null && (
             <p className="text-xs opacity-50 mt-0.5">

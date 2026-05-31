@@ -94,7 +94,7 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, todayStr }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -107,6 +107,18 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
     deLabel = tx.payee || 'Receita'; paraId = accountId
   } else {
     deId = accountId; paraLabel = tx.payee || 'Despesa'
+  }
+
+  let badge = null
+  if (todayStr && tx.date > todayStr) {
+    if (tx.scheduleId || tx.origin === 'agendamento')
+      badge = { label: 'Agendamento', cls: 'bg-sky-500/20 text-sky-400' }
+    else if (tx.grupoGerencial)
+      badge = { label: 'Gerencial', cls: 'bg-violet-500/20 text-violet-400' }
+    else if (tx.reservaAuto)
+      badge = { label: 'Reserva', cls: 'bg-teal-500/20 text-teal-400' }
+    else
+      badge = { label: 'Futuro', cls: 'bg-gray-500/20 text-gray-400' }
   }
 
   return (
@@ -124,6 +136,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
           }
           <span className="text-xs text-gray-200 truncate">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
+          {badge && <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
         </div>
       </td>
       <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
@@ -283,6 +296,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     onEdit({ ...rest, date: newDate })
   }
 
+  const todayStr = now.toISOString().split('T')[0]
   const isAplicacao = !!account.contaAplicacao
   const isGerencial = !!(account.name?.startsWith('Ger. ') && account.grupoGerencial)
 
@@ -476,7 +490,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (
-                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} onDuplicate={handleDuplicate} />
+                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} onDuplicate={handleDuplicate} todayStr={todayStr} />
                 )
               )}
             </tbody>

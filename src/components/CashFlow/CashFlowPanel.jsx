@@ -248,7 +248,7 @@ export default function CashFlowPanel({ setActivePage }) {
         <div className="card">
           <div className="flex items-center gap-2 mb-1 text-gray-400">
             <Wallet size={14} />
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Atual</p>
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Principal</p>
           </div>
           <p className={`text-xl font-bold ${currentBalance >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(currentBalance)}</p>
         </div>

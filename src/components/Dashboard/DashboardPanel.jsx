@@ -7,7 +7,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 import { fmt, fmtDate } from '../shared/utils'
 import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
@@ -50,7 +49,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, onShowPosicao }) {
-  const { accounts: allAccounts, transactions: allTransactions, profileAccounts, profileTransactions, schedules, categories, envelopes, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { accounts: allAccounts, transactions: allTransactions, profileAccounts, profileTransactions, schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
   const transactions = profileTransactions
 
@@ -137,7 +136,7 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       .slice(0, 5)
   }, [periodTxs, categories])
 
-  // ── Saldo Projetado ──────────────────────────────────────────────────────────
+  // ── Saldo Projetado + Final ──────────────────────────────────────────────────
   const saldoProjetado = useMemo(() => {
     const principalIds = new Set(
       accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').map(a => a.id)
@@ -155,7 +154,7 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       if (!fromPrincipal && !toPrincipal) continue
 
       const nexts = getNextOccurrences(schedule, 35)
-        .filter(date => date >= todayStr && date <= periodStr.end)
+        .filter(date => date > todayStr && date <= periodStr.end)
       if (nexts.length === 0) continue
 
       for (const _date of nexts) {
@@ -173,36 +172,35 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
             pendingIncome += schedule.amount
             pendingCount++
           }
-          // principal ↔ principal: cancela, não conta
         }
       }
     }
 
-    // Envelopes: orçamento restante do período atual entra como despesa prevista
-    let envelopeRestante = 0
-    for (const env of envelopes) {
-      const ep = getEnvelopePeriod(env.dueDay)
-      const spent = transactions
-        .filter(tx => tx.type === 'expense' && env.categoryIds.includes(tx.categoryId) && tx.date >= ep.from && tx.date <= ep.to)
-        .reduce((s, t) => s + t.amount, 0)
-      const remaining = env.limitAmount - spent
-      if (remaining > 0) envelopeRestante += remaining
+    // Future registered transactions (date > today, ≤ end of period) — used for saldoFinal
+    let futureDelta = 0
+    for (const tx of transactions) {
+      if (tx.date <= todayStr || tx.date > periodStr.end) continue
+      const fromPrincipal = principalIds.has(tx.accountId)
+      const toPrincipal = principalIds.has(tx.toAccountId)
+      if (!fromPrincipal && !toPrincipal) continue
+      if (tx.type === 'income' && fromPrincipal) futureDelta += tx.amount
+      else if (tx.type === 'expense' && fromPrincipal) futureDelta -= tx.amount
+      else if (tx.type === 'transfer') {
+        if (fromPrincipal && !toPrincipal) futureDelta -= tx.amount
+        else if (!fromPrincipal && toPrincipal) futureDelta += tx.amount
+      }
     }
 
-    // Reservas específicas: saldo disponível para cobrir despesas da categoria vinculada
-    const saldoReservasEspecificas = accounts
-      .filter(a => a.isReserva && a.reservaType === 'especifica')
-      .reduce((s, a) => s + (a.balance || 0), 0)
-
+    const projetado = saldoPrincipal + pendingIncome - pendingExpense
     return {
-      projetado: saldoPrincipal + pendingIncome - pendingExpense - envelopeRestante + saldoReservasEspecificas,
+      projetado,
+      final: projetado + futureDelta,
       pendingIncome,
       pendingExpense,
       pendingCount,
-      envelopeRestante,
-      saldoReservasEspecificas,
+      futureDelta,
     }
-  }, [accounts, schedules, envelopes, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
+  }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -315,6 +313,13 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
         <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
           {fmt(saldoPrincipal)}
         </p>
+        {saldoProjetado && (
+          <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-2.5 flex-wrap">
+            <span>Projetado <span className={`font-semibold ${saldoProjetado.projetado >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(saldoProjetado.projetado)}</span></span>
+            <span className="text-gray-700">·</span>
+            <span>Final <span className={`font-semibold ${saldoProjetado.final >= 0 ? 'text-purple-400' : 'text-red-400'}`}>{fmt(saldoProjetado.final)}</span></span>
+          </p>
+        )}
       </button>
 
       {/* KPI cards */}
@@ -357,18 +362,18 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
           valueColor="text-gray-300"
         />
 
-        {/* Saldo Projetado — largura total, abaixo dos 4 KPI cards */}
+        {/* Projetado + Final — largura total, abaixo dos 4 KPI cards */}
         {saldoProjetado && (
           <div className="col-span-2 lg:col-span-4 card flex items-center justify-between gap-6">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-2">
                 <Calendar size={15} className="text-teal-500 shrink-0" />
                 <span className="text-xs uppercase tracking-wide text-gray-400">
-                  Projetado até {format(parseISO(periodStr.end), 'dd/MM')}
+                  Projeção até {format(parseISO(periodStr.end), 'dd/MM')}
                 </span>
               </div>
               <p className="text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1 leading-relaxed">
-                <span>Atual <span className="text-gray-300 font-medium">{fmt(saldoPrincipal)}</span></span>
+                <span>Principal <span className="text-gray-300 font-medium">{fmt(saldoPrincipal)}</span></span>
                 {saldoProjetado.pendingIncome > 0 && (
                   <span className="flex items-center gap-1 text-blue-400">
                     <ArrowDownCircle size={10} className="shrink-0" />
@@ -381,11 +386,10 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
                     −{fmt(saldoProjetado.pendingExpense)}
                   </span>
                 )}
-                {saldoProjetado.envelopeRestante > 0 && (
-                  <span className="text-purple-400">⊖ {fmt(saldoProjetado.envelopeRestante)} envelopes previstos</span>
-                )}
-                {saldoProjetado.saldoReservasEspecificas > 0 && (
-                  <span className="text-teal-500">⊕ {fmt(saldoProjetado.saldoReservasEspecificas)} reservas específicas</span>
+                {saldoProjetado.futureDelta !== 0 && (
+                  <span className={`flex items-center gap-1 ${saldoProjetado.futureDelta > 0 ? 'text-indigo-400' : 'text-amber-400'}`}>
+                    {saldoProjetado.futureDelta > 0 ? '+' : ''}{fmt(saldoProjetado.futureDelta)} lançamentos futuros
+                  </span>
                 )}
                 {saldoProjetado.pendingCount > 0
                   ? <span className="text-gray-600">· {saldoProjetado.pendingCount} agendamento{saldoProjetado.pendingCount !== 1 ? 's' : ''} pendente{saldoProjetado.pendingCount !== 1 ? 's' : ''}</span>
@@ -393,10 +397,21 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
                 }
               </p>
             </div>
-            <div className="shrink-0 text-right">
-              <p className={`text-2xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {fmt(saldoProjetado.projetado)}
-              </p>
+            <div className="shrink-0 text-right space-y-1.5">
+              <div>
+                <p className="text-xs text-gray-500 mb-0.5">Projetado</p>
+                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-teal-400' : 'text-red-400'}`}>
+                  {fmt(saldoProjetado.projetado)}
+                </p>
+              </div>
+              {Math.abs(saldoProjetado.final - saldoProjetado.projetado) >= 0.005 && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Final</p>
+                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
+                    {fmt(saldoProjetado.final)}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
