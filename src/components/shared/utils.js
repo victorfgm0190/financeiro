@@ -16,6 +16,13 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
+// 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest
+export function accountPriority(a) {
+  if (a.isMain || a.type === 'credit') return 0
+  if (a.appPriority) return 1
+  return 2
+}
+
 // Returns accounts grouped and sorted by accountGroup.order, then account.order
 // Shape: [{ group: groupObj|null, accounts: [...] }, ...]
 export function groupedAccountOptions(accounts, accountGroups) {

@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS contas (
   is_main BOOLEAN DEFAULT FALSE,
   fluxo_caixa_principal BOOLEAN DEFAULT FALSE,
   conta_corrente_principal BOOLEAN DEFAULT FALSE,
+  app_priority BOOLEAN DEFAULT FALSE,
   grupo_gerencial TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

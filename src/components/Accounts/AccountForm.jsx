@@ -53,6 +53,7 @@ export default function AccountForm({ initial, onClose }) {
     contaAplicacao: initial?.contaAplicacao || false,
     grupoGerencial: initial?.grupoGerencial || null,
     accountGroupId: initial?.accountGroupId || null,
+    appPriority: initial?.appPriority || false,
     profileId: initial?.profileId || null,
     acquisitionValue: initial?.acquisitionValue ?? '',
     acquisitionDate: initial?.acquisitionDate || '',
@@ -97,6 +98,7 @@ export default function AccountForm({ initial, onClose }) {
       contaAplicacao: !isCredit && !isPatrimonial ? form.contaAplicacao : false,
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
+      appPriority: form.appPriority,
       profileId: form.profileId || null,
       acquisitionValue: isPatrimonial && form.acquisitionValue !== '' ? Number(form.acquisitionValue) : null,
       acquisitionDate: isPatrimonial ? form.acquisitionDate || null : null,
@@ -304,6 +306,13 @@ export default function AccountForm({ initial, onClose }) {
           checked={form.isMain}
           onChange={e => set('isMain', e.target.checked)}
           label="Conta principal"
+        />
+
+        <Toggle
+          checked={form.appPriority}
+          onChange={e => set('appPriority', e.target.checked)}
+          label="Prioridade no app"
+          tooltip="Exibe esta conta com prioridade nos selects de lançamento, antes das demais"
         />
 
         <Toggle

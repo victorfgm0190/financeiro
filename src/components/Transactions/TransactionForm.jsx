@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, PiggyBank } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
+import { today, fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
 import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
@@ -41,11 +41,11 @@ function buildCatOpts(categories, type) {
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
 }
 
-function buildAccOpts(accounts, accountGroups, excludeId) {
+function buildAccOpts(accounts, _accountGroups, excludeId) {
   const pool = excludeId ? accounts.filter(a => a.id !== excludeId) : accounts
-  return groupedAccountOptions(pool, accountGroups).flatMap(({ group, accounts: accs }) =>
-    accs.map(a => ({ id: a.id, label: a.name, group: group?.name || null }))
-  )
+  return [...pool]
+    .sort((a, b) => accountPriority(a) - accountPriority(b))
+    .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null }))
 }
 
 export default function TransactionForm({ initial, onClose, onToast }) {

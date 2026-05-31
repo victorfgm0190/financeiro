@@ -1,29 +1,35 @@
-import { groupedAccountOptions } from './utils'
+import { accountPriority } from './utils'
 
-// Renders <optgroup>/<option> elements inside a <select>, sorted by group order.
-// Usage: <select ...><AccountOptions accounts={accounts} accountGroups={accountGroups} /></select>
+// Renders <optgroup>/<option> elements inside a <select>, sorted by priority.
+// Tier 0 (isMain / credit) and Tier 1 (appPriority) appear ungrouped at top.
+// Tier 2 (rest) appears inside an <optgroup label="Outras contas">.
+// Usage: <select ...><AccountOptions accounts={accounts} /></select>
 export default function AccountOptions({
   accounts,
-  accountGroups,
+  accountGroups, // kept for interface compatibility, unused
   placeholder = 'Selecione...',
-  filter,          // optional (a) => bool to pre-filter accounts
-  labelFn,         // optional (a) => string for option label, defaults to a.name
+  filter,
+  labelFn,
 }) {
   const pool = filter ? accounts.filter(filter) : accounts
   const label = labelFn || (a => a.name)
-  const groups = groupedAccountOptions(pool, accountGroups)
+
+  const top = pool.filter(a => accountPriority(a) === 0)
+  const mid = pool.filter(a => accountPriority(a) === 1)
+  const rest = pool.filter(a => accountPriority(a) === 2)
+  const hasGroups = top.length + mid.length > 0 && rest.length > 0
 
   return (
     <>
       {placeholder !== null && <option value="">{placeholder}</option>}
-      {groups.map(({ group, accounts: accs }) =>
-        group ? (
-          <optgroup key={group.id} label={group.name}>
-            {accs.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)}
-          </optgroup>
-        ) : (
-          accs.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)
-        )
+      {top.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)}
+      {mid.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)}
+      {hasGroups ? (
+        <optgroup label="Outras contas">
+          {rest.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)}
+        </optgroup>
+      ) : (
+        rest.map(a => <option key={a.id} value={a.id}>{label(a)}</option>)
       )}
     </>
   )

@@ -4,7 +4,7 @@ import {
   ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
+import { fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -37,40 +37,49 @@ function getBillLabel(key) {
 
 // ─── Account picker (step 1 of new-tx modal) ───────────────────────────────
 
+function AccountPickerButton({ a, onSelect }) {
+  return (
+    <button
+      onClick={() => onSelect(a)}
+      className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left group mb-1"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors shrink-0">
+          {a.type === 'credit'
+            ? <CreditCard size={14} className="text-purple-400" />
+            : <Wallet size={14} className="text-emerald-400" />}
+        </div>
+        <div>
+          <p className="text-sm text-gray-200 font-medium">{a.apelido || a.name}</p>
+          <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
+        </div>
+      </div>
+      <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+        {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
+      </span>
+    </button>
+  )
+}
+
 function AccountPicker({ accounts, accountGroups, onSelect }) {
-  const groups = groupedAccountOptions(accounts, accountGroups)
+  const [showAll, setShowAll] = useState(false)
+  const top = accounts.filter(a => accountPriority(a) === 0)
+  const mid = accounts.filter(a => accountPriority(a) === 1)
+  const rest = accounts.filter(a => accountPriority(a) === 2)
+  const visible = showAll ? [...top, ...mid, ...rest] : [...top, ...mid]
+
   return (
     <div className="space-y-1">
       <p className="text-sm text-gray-400 mb-3">Selecione a conta para o lançamento:</p>
-      {groups.map(({ group, accounts: accs }) => (
-        <div key={group?.id || 'ungrouped'}>
-          {group && (
-            <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-1 pt-2 pb-1">{group.name}</p>
-          )}
-          {accs.map(a => (
-            <button
-              key={a.id}
-              onClick={() => onSelect(a)}
-              className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left group mb-1"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors shrink-0">
-                  {a.type === 'credit'
-                    ? <CreditCard size={14} className="text-purple-400" />
-                    : <Wallet size={14} className="text-emerald-400" />}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-200 font-medium">{a.apelido || a.name}</p>
-                  <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
-                </div>
-              </div>
-              <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
-                {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
-              </span>
-            </button>
-          ))}
-        </div>
-      ))}
+      {visible.map(a => <AccountPickerButton key={a.id} a={a} onSelect={onSelect} />)}
+      {!showAll && rest.length > 0 && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full text-xs text-gray-500 hover:text-gray-300 py-2 border border-dashed border-gray-700 hover:border-gray-600 rounded-xl transition-colors"
+        >
+          Ver todas — {rest.length} conta{rest.length !== 1 ? 's' : ''} oculta{rest.length !== 1 ? 's' : ''}
+        </button>
+      )}
     </div>
   )
 }
@@ -397,8 +406,14 @@ export default function TransactionsPanel() {
   const [modalAccount, setModalAccount] = useState(null)
   const [editTx, setEditTx] = useState(null)
 
-  const bankAccounts = accounts.filter(a => a.type !== 'credit')
-  const creditCards = accounts.filter(a => a.type === 'credit')
+  const bankAccounts = useMemo(
+    () => accounts.filter(a => a.type !== 'credit').sort((a, b) => accountPriority(a) - accountPriority(b)),
+    [accounts]
+  )
+  const creditCards = useMemo(
+    () => accounts.filter(a => a.type === 'credit').sort((a, b) => (a.appPriority ? 0 : 1) - (b.appPriority ? 0 : 1)),
+    [accounts]
+  )
 
   const { transactions } = useApp()
 
