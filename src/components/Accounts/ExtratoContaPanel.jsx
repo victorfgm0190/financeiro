@@ -324,56 +324,98 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const finalBalance = rowsWithBalance[rowsWithBalance.length - 1]?.runningBalance ?? startBalance
 
+  // Shared column definitions for header and body tables (table-fixed keeps widths in sync)
+  const colGroup = (
+    <colgroup>
+      <col style={{ width: '88px' }} />
+      <col />
+      <col style={{ width: '108px' }} />
+      <col style={{ width: '108px' }} />
+      <col style={{ width: '90px' }} />
+      <col style={{ width: '90px' }} />
+      <col style={{ width: '90px' }} />
+      <col style={{ width: '32px' }} />
+    </colgroup>
+  )
+
+  const hasFaturas = isGerencial && gerencialSchedules.length > 0
+
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">
-            Extrato — {account.apelido || account.name}
-            {isAplicacao && (
-              <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
+    <div>
+      {/* ── Sticky block: title · filters · KPIs · table header ── */}
+      <div className="sticky top-0 z-10 bg-gray-950">
+        <div className="space-y-3 pb-3">
+          {/* Title */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-200">
+              Extrato — {account.apelido || account.name}
+              {isAplicacao && (
+                <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
+              )}
+            </h2>
+            {onClose && (
+              <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
+                <X size={14} />
+              </button>
             )}
-          </h2>
+          </div>
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="label">De</label>
+              <input className="input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Até</label>
+              <input className="input" type="date" value={to} onChange={e => setTo(e.target.value)} />
+            </div>
+          </div>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="card">
+              <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={13} /><p className="text-xs text-gray-400 uppercase">Entradas</p></div>
+              <p className="text-lg font-bold text-blue-600">{fmt(totals.entrada)}</p>
+            </div>
+            <div className="card">
+              <div className="flex items-center gap-2 mb-1 text-orange-600"><ArrowUpCircle size={13} /><p className="text-xs text-gray-400 uppercase">Saídas</p></div>
+              <p className="text-lg font-bold text-orange-600">{fmt(totals.saida)}</p>
+            </div>
+            <div className="card">
+              <p className="text-xs text-gray-400 uppercase mb-1">Saldo Final</p>
+              <p className={`text-lg font-bold ${finalBalance >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(finalBalance)}</p>
+            </div>
+          </div>
         </div>
-        {onClose && (
-          <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
-            <X size={14} />
-          </button>
-        )}
+
+        {/* Table column header — seamlessly connects to body table below */}
+        <div className="bg-gray-900 border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
+          <table className="w-full text-sm table-fixed">
+            {colGroup}
+            <thead>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta De</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta Para</th>
+                <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
+                  <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
+                </th>
+                <th className="text-right px-3 py-2.5 text-xs text-orange-600 font-medium whitespace-nowrap">
+                  <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={10} /> Saída</span>
+                </th>
+                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+          </table>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="label">De</label>
-          <input className="input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Até</label>
-          <input className="input" type="date" value={to} onChange={e => setTo(e.target.value)} />
-        </div>
-      </div>
-
-      {/* KPI summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="card">
-          <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={13} /><p className="text-xs text-gray-400 uppercase">Entradas</p></div>
-          <p className="text-lg font-bold text-blue-600">{fmt(totals.entrada)}</p>
-        </div>
-        <div className="card">
-          <div className="flex items-center gap-2 mb-1 text-orange-600"><ArrowUpCircle size={13} /><p className="text-xs text-gray-400 uppercase">Saídas</p></div>
-          <p className="text-lg font-bold text-orange-600">{fmt(totals.saida)}</p>
-        </div>
-        <div className="card">
-          <p className="text-xs text-gray-400 uppercase mb-1">Saldo Final</p>
-          <p className={`text-lg font-bold ${finalBalance >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(finalBalance)}</p>
-        </div>
-      </div>
-
-      {/* Faturas Provisionadas — only for Ger. accounts */}
-      {isGerencial && gerencialSchedules.length > 0 && (
-        <div className="card space-y-2">
+      {/* ── Faturas Provisionadas (Ger. accounts only) ── */}
+      {hasFaturas && (
+        <div className="bg-gray-900 border-x border-gray-800 p-4 space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Faturas Provisionadas</h3>
           {gerencialSchedules.map(s => {
             const faturaRef = s.overrides?._gerencial?.faturaRef || '—'
@@ -396,26 +438,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
       )}
 
-      {/* Table */}
-      <div className="card p-0 overflow-hidden">
+      {/* ── Table body ── */}
+      <div className={`bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden ${hasFaturas ? 'border-t' : ''}`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta De</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta Para</th>
-                <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
-                  <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
-                </th>
-                <th className="text-right px-3 py-2.5 text-xs text-orange-600 font-medium whitespace-nowrap">
-                  <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={10} /> Saída</span>
-                </th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
-                <th className="w-6" />
-              </tr>
-            </thead>
+          <table className="w-full text-sm table-fixed">
+            {colGroup}
             <tbody>
               {/* Starting balance row */}
               <tr className="border-b border-gray-800/50 bg-gray-800/20">
