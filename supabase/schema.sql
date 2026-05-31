@@ -252,6 +252,18 @@ ALTER TABLE grupos_conta ADD COLUMN IF NOT EXISTS behavior TEXT;
 -- Grupos inibidos ficam ocultos na tela de Contas e selects
 ALTER TABLE grupos_conta ADD COLUMN IF NOT EXISTS inibido BOOLEAN DEFAULT false;
 
+-- Histórico de importações de fatura de cartão
+CREATE TABLE IF NOT EXISTS card_imports (
+  id          TEXT PRIMARY KEY,
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  count       INTEGER NOT NULL DEFAULT 0,
+  mes_ano     TEXT NOT NULL DEFAULT '',
+  filename    TEXT NOT NULL DEFAULT '',
+  account_id  TEXT NOT NULL DEFAULT '',
+  tx_ids      JSONB NOT NULL DEFAULT '[]'
+);
+ALTER TABLE card_imports DISABLE ROW LEVEL SECURITY;
+
 -- Metadados de parcelas em reservas (migração)
 ALTER TABLE reservas ADD COLUMN IF NOT EXISTS installment_number INTEGER;
 ALTER TABLE reservas ADD COLUMN IF NOT EXISTS total_installments INTEGER;

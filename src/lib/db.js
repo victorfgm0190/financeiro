@@ -363,6 +363,7 @@ export async function loadFromDb(defaultData) {
         envelopes: d.envs.map(rowToEnvelope),
         accountGroups: d.groups.length > 0 ? d.groups.map(rowToAccountGroup) : null,
         profiles: d.perfis.map(rowToPerfil),
+        cardImports: d.imports?.map(rowToImport) || [],
       },
     }
   } catch (err) {
@@ -380,6 +381,28 @@ export async function seedDefaults(defaultData) {
     syncSettings(defaultData.settings, defaultData.costCenters),
   ])
 }
+
+// ─── Card Imports (histórico de importações) ─────────────────────────────────
+
+export const importToRow = (i) => ({
+  id: i.id,
+  imported_at: i.importedAt,
+  count: i.count,
+  mes_ano: i.mesAno || '',
+  filename: i.filename || '',
+  account_id: i.accountId || '',
+  tx_ids: i.txIds || [],
+})
+
+export const rowToImport = (r) => ({
+  id: r.id,
+  importedAt: r.imported_at,
+  count: r.count,
+  mesAno: r.mes_ano || '',
+  filename: r.filename || '',
+  accountId: r.account_id || '',
+  txIds: r.tx_ids || [],
+})
 
 // ─── Account Mapping (De-Para Dindin → Finup) ────────────────────────────────
 

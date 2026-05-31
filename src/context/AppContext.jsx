@@ -5,6 +5,7 @@ import {
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
+  importToRow,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey } from '../lib/fatura'
@@ -14,7 +15,7 @@ const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
   budgets: [], classificationRules: [], gerencialGroups: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
-  profiles: [],
+  profiles: [], cardImports: [],
   settings: {}, costCenters: [],
 }
 
@@ -348,6 +349,7 @@ const defaultData = {
   ],
   payables: [],
   profiles: [],
+  cardImports: [],
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
@@ -433,6 +435,7 @@ export function AppProvider({ children }) {
           ...result.data,
           accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
           profiles: result.data.profiles ?? [],
+          cardImports: result.data.cardImports ?? [],
         }
         setData(() => {
           prevDataRef.current = merged  // evita sync de volta imediato
@@ -499,6 +502,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('grupos_conta', prev.accountGroups, data.accountGroups, accountGroupToRow))
       if (prev.profiles !== data.profiles)
         tasks.push(syncSection('perfis', prev.profiles, data.profiles, perfilToRow))
+      if (prev.cardImports !== data.cardImports)
+        tasks.push(syncSection('card_imports', prev.cardImports || [], data.cardImports || [], importToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -688,6 +693,39 @@ export function AppProvider({ children }) {
       return { ...d, accounts, transactions: [...d.transactions, newTx, ...extraTxs] }
     })
     return id
+  }, [update])
+
+  const addCardImport = useCallback((imp) => {
+    update(d => ({ ...d, cardImports: [imp, ...(d.cardImports || [])] }))
+  }, [update])
+
+  const revertCardImport = useCallback((importId) => {
+    update(d => {
+      const imp = (d.cardImports || []).find(i => i.id === importId)
+      if (!imp) return d
+      const txIds = new Set(imp.txIds || [])
+      const txs = d.transactions.filter(t => txIds.has(t.id))
+      let accounts = [...d.accounts]
+      for (const tx of txs) {
+        if (tx.type === 'expense' && tx.accountType === 'credit') {
+          accounts = accounts.map(a => a.id === tx.accountId ? {
+            ...a,
+            creditDebt: Math.max(0, (a.creditDebt || 0) - tx.amount),
+            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
+          } : a)
+        } else if (tx.type === 'income') {
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a)
+        } else if (tx.type === 'expense') {
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + tx.amount } : a)
+        }
+      }
+      return {
+        ...d,
+        accounts,
+        transactions: d.transactions.filter(t => !txIds.has(t.id)),
+        cardImports: (d.cardImports || []).filter(i => i.id !== importId),
+      }
+    })
   }, [update])
 
   const updateTransaction = useCallback((id, changes) => {
@@ -1586,6 +1624,8 @@ export function AppProvider({ children }) {
       gerencialGroups: data.gerencialGroups,
       payables: data.payables || [],
       profiles: data.profiles || [],
+      cardImports: data.cardImports || [],
+      addCardImport, revertCardImport,
       activeProfileId, setActiveProfileId,
       profileAccounts, profileTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,

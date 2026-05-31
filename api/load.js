@@ -2,7 +2,7 @@ import { query } from './_db.js'
 
 export default async function handler(req, res) {
   try {
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis] =
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -17,12 +17,13 @@ export default async function handler(req, res) {
         query('SELECT * FROM envelopes'),
         query('SELECT * FROM grupos_conta ORDER BY "order"'),
         query('SELECT * FROM perfis'),
+        query('SELECT * FROM card_imports ORDER BY imported_at DESC'),
       ])
 
     res.json({
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis,
+      envs, groups, perfis, imports,
     })
   } catch (err) {
     const isTableMissing =

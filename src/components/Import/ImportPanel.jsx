@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, FileText, Check, AlertCircle, Wand2, Save,
-  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight,
+  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
@@ -10,6 +10,7 @@ import { loadAccountMappings } from '../../lib/db'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import AccountOptions from '../shared/AccountOptions'
+import ConfirmDialog from '../shared/ConfirmDialog'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -582,12 +583,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
     addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
+    cardImports, addCardImport, revertCardImport,
   } = useApp()
 
   const today = new Date()
   const currentMonthDefault = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
 
   const [faturaMonthYear, setFaturaMonthYear] = useState(currentMonthDefault)
+  const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
   const [selectedAccount, setSelectedAccount] = useState('')
@@ -595,6 +598,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [result, setResult] = useState(null)
   const [matchQueue, setMatchQueue] = useState([])
   const [scheduleMatchQueue, setScheduleMatchQueue] = useState([])
+  const [confirmRevertId, setConfirmRevertId] = useState(null)
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
@@ -610,6 +614,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setError('')
     setResult(null)
     setMatchQueue([])
+    setFilename(file.name)
     try {
       const isCsv = /\.csv$/i.test(file.name)
       let cardName = '', faturaStr = '', parsed = []
@@ -701,13 +706,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const handleImport = () => {
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)
+    const txIds = []
     toImport.forEach(row => {
-      addTransaction({
+      const txId = addTransaction({
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: row.amount, date: row.date, description: row.description,
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: row.grupoGerencial || defaultGrupoD,
       })
+      txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee)
       if (row.grupoGerencial) processarLancamentoGerencial({ accountId: selectedAccount, amount: row.amount, date: row.date }, row.grupoGerencial)
     })
@@ -716,6 +723,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const dates = toImport.map(r => r.date).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
       if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno)
+      addCardImport({
+        id: 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        importedAt: new Date().toISOString(),
+        count: toImport.length,
+        mesAno: mesAno || '',
+        filename,
+        accountId: selectedAccount,
+        txIds,
+      })
     }
 
     const pending = []
@@ -946,6 +962,53 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           )}
         </>
       )}
+
+      {/* Histórico de importações */}
+      {cardImports.length > 0 && (
+        <div className="card">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Histórico de Importações
+          </h3>
+          <div className="space-y-1.5">
+            {cardImports.slice(0, 20).map(imp => {
+              const acc = accounts.find(a => a.id === imp.accountId)
+              const dateStr = imp.importedAt
+                ? new Date(imp.importedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : '—'
+              const mesAnoFmt = imp.mesAno ? imp.mesAno.split('-').reverse().join('/') : '—'
+              return (
+                <div key={imp.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-gray-800/50 last:border-0">
+                  <span className="text-gray-500 shrink-0 w-32">{dateStr}</span>
+                  <span className="text-gray-300 truncate flex-1 min-w-0" title={imp.filename}>{imp.filename || '—'}</span>
+                  <span className="text-gray-400 shrink-0">{imp.count} lançamento{imp.count !== 1 ? 's' : ''}</span>
+                  <span className="text-gray-500 shrink-0">{mesAnoFmt}</span>
+                  <span className="text-gray-500 shrink-0 hidden sm:inline">{acc?.apelido || acc?.name || '—'}</span>
+                  <button
+                    className="shrink-0 flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400 border border-orange-500/30 hover:border-orange-400/50 rounded px-2 py-0.5 transition-colors"
+                    onClick={() => setConfirmRevertId(imp.id)}
+                  >
+                    <RotateCcw size={11} /> Estornar
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!confirmRevertId}
+        onClose={() => setConfirmRevertId(null)}
+        onConfirm={() => { revertCardImport(confirmRevertId); setConfirmRevertId(null) }}
+        title="Estornar importação"
+        message={(() => {
+          const imp = cardImports.find(i => i.id === confirmRevertId)
+          if (!imp) return ''
+          return `Excluir ${imp.count} lançamento${imp.count !== 1 ? 's' : ''} da importação de ${imp.mesAno ? imp.mesAno.split('-').reverse().join('/') : 'data desconhecida'} (${imp.filename || 'arquivo desconhecido'})?`
+        })()}
+        danger
+        confirmLabel="Estornar"
+      />
     </div>
   )
 }
