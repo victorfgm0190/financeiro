@@ -1270,20 +1270,32 @@ export function AppProvider({ children }) {
       if (!account) return d
       const today = format(new Date(), 'yyyy-MM-dd')
       const initBal = overrideInitialBalance != null ? rb(overrideInitialBalance) : rb(account.initialBalance ?? 0)
-      let balance = initBal
+      let balance = initBal    // lançamentos ≤ hoje
+      let projected = initBal  // todos os lançamentos
       d.transactions.forEach(tx => {
-        if (tx.date > today) return
-        if (tx.type === 'income' && tx.accountId === accountId) balance = rb(balance + tx.amount)
-        else if (tx.type === 'expense' && tx.accountId === accountId && tx.accountType !== 'credit') balance = rb(balance - tx.amount)
-        else if (tx.type === 'transfer') {
-          if (tx.accountId === accountId) balance = rb(balance - tx.amount)
-          else if (tx.toAccountId === accountId) balance = rb(balance + tx.amount)
-        } else if (tx.type === 'credit_payment' && tx.fromAccountId === accountId) balance = rb(balance - tx.amount)
+        if (tx.type === 'income' && tx.accountId === accountId) {
+          projected = rb(projected + tx.amount)
+          if (tx.date <= today) balance = rb(balance + tx.amount)
+        } else if (tx.type === 'expense' && tx.accountId === accountId && tx.accountType !== 'credit') {
+          projected = rb(projected - tx.amount)
+          if (tx.date <= today) balance = rb(balance - tx.amount)
+        } else if (tx.type === 'transfer') {
+          if (tx.accountId === accountId) {
+            projected = rb(projected - tx.amount)
+            if (tx.date <= today) balance = rb(balance - tx.amount)
+          } else if (tx.toAccountId === accountId) {
+            projected = rb(projected + tx.amount)
+            if (tx.date <= today) balance = rb(balance + tx.amount)
+          }
+        } else if (tx.type === 'credit_payment' && tx.fromAccountId === accountId) {
+          projected = rb(projected - tx.amount)
+          if (tx.date <= today) balance = rb(balance - tx.amount)
+        }
       })
       return {
         ...d,
         accounts: d.accounts.map(a => a.id === accountId
-          ? { ...a, balance: rb(balance), initialBalance: initBal }
+          ? { ...a, balance: rb(balance), projectedBalance: rb(projected), initialBalance: initBal }
           : a
         ),
       }

@@ -3,6 +3,7 @@ import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, L
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
+import { fmt } from '../shared/utils'
 import { triggerBackupDownload, getLastBackupTs } from '../../hooks/useAutoBackup'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
@@ -35,6 +36,7 @@ export default function SettingsPanel() {
     moveAccountGroup, reorderAccountGroups,
     profiles, addProfile, updateProfile, deleteProfile,
     accounts,
+    transactions,
     recalcularSaldo,
     data,
   } = useApp()
@@ -45,18 +47,48 @@ export default function SettingsPanel() {
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
-  const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0 })
+  const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0, totalBalance: 0, totalProjected: 0 })
 
   const handleRecalcAll = async () => {
     const eligible = accounts.filter(a =>
       a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability'
     )
     if (eligible.length === 0) return
-    setRecalcStatus({ running: true, total: eligible.length, done: 0 })
+    const today = new Date().toISOString().slice(0, 10)
+    const rb = v => Math.round(v * 100) / 100
+    let totalBalance = 0
+    let totalProjected = 0
+    setRecalcStatus({ running: true, total: eligible.length, done: 0, totalBalance: 0, totalProjected: 0 })
     for (let i = 0; i < eligible.length; i++) {
+      const acc = eligible[i]
       await new Promise(r => setTimeout(r, 40))
-      recalcularSaldo(eligible[i].id)
-      setRecalcStatus({ running: i < eligible.length - 1, total: eligible.length, done: i + 1 })
+      recalcularSaldo(acc.id)
+      const initBal = rb(acc.initialBalance ?? 0)
+      let bal = initBal
+      let proj = initBal
+      transactions.forEach(tx => {
+        if (tx.type === 'income' && tx.accountId === acc.id) {
+          proj = rb(proj + tx.amount)
+          if (tx.date <= today) bal = rb(bal + tx.amount)
+        } else if (tx.type === 'expense' && tx.accountId === acc.id && tx.accountType !== 'credit') {
+          proj = rb(proj - tx.amount)
+          if (tx.date <= today) bal = rb(bal - tx.amount)
+        } else if (tx.type === 'transfer') {
+          if (tx.accountId === acc.id) {
+            proj = rb(proj - tx.amount)
+            if (tx.date <= today) bal = rb(bal - tx.amount)
+          } else if (tx.toAccountId === acc.id) {
+            proj = rb(proj + tx.amount)
+            if (tx.date <= today) bal = rb(bal + tx.amount)
+          }
+        } else if (tx.type === 'credit_payment' && tx.fromAccountId === acc.id) {
+          proj = rb(proj - tx.amount)
+          if (tx.date <= today) bal = rb(bal - tx.amount)
+        }
+      })
+      totalBalance = rb(totalBalance + bal)
+      totalProjected = rb(totalProjected + proj)
+      setRecalcStatus({ running: i < eligible.length - 1, total: eligible.length, done: i + 1, totalBalance, totalProjected })
     }
   }
 
@@ -838,11 +870,15 @@ export default function SettingsPanel() {
           )}
 
           {recalcStatus.done > 0 && !recalcStatus.running && (
-            <div className="flex items-center gap-2 text-xs text-emerald-400">
-              <Check size={13} />
-              <span>
-                {recalcStatus.done} conta{recalcStatus.done !== 1 ? 's' : ''} recalculada{recalcStatus.done !== 1 ? 's' : ''} com sucesso.
-              </span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-xs text-emerald-400">
+                <Check size={13} />
+                <span>{recalcStatus.done} conta{recalcStatus.done !== 1 ? 's' : ''} recalculada{recalcStatus.done !== 1 ? 's' : ''} com sucesso.</span>
+              </div>
+              <div className="text-xs text-gray-400 pl-5 space-y-0.5">
+                <p>Saldo atual total: <span className="text-white/80 font-medium">{fmt(recalcStatus.totalBalance)}</span></p>
+                <p>Saldo projetado total: <span className="text-sky-300 font-medium">{fmt(recalcStatus.totalProjected)}</span></p>
+              </div>
             </div>
           )}
 
