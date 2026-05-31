@@ -201,20 +201,39 @@ function parseDindinCC(allRows) {
   return { rows: parsed, accountNames: [...accountNamesSet] }
 }
 
-function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls' }) {
+function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false }) {
   const ref = useRef()
   return (
     <div
-      className="border-2 border-dashed border-gray-700 rounded-xl p-8 text-center cursor-pointer hover:border-[#0F6E56] transition-colors"
-      onClick={() => ref.current?.click()}
+      className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+        disabled
+          ? 'border-gray-800 opacity-40 cursor-not-allowed select-none'
+          : 'border-gray-700 cursor-pointer hover:border-[#0F6E56]'
+      }`}
+      onClick={() => !disabled && ref.current?.click()}
     >
       <Upload size={28} className="text-gray-600 mx-auto mb-2" />
       <p className="text-sm text-gray-400">{label || 'Clique para selecionar arquivo XLS/XLSX'}</p>
       <p className="text-xs text-gray-600 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
-      <input ref={ref} type="file" accept={accept} className="hidden" onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
+      <input ref={ref} type="file" accept={accept} disabled={disabled} className="hidden"
+        onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
     </div>
   )
 }
+
+function generateMonthOptions() {
+  const opts = []
+  const now = new Date()
+  for (let i = 24; i >= -3; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    opts.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) })
+  }
+  return opts
+}
+
+const MONTH_OPTIONS = generateMonthOptions()
 
 function SummaryBar({ found, toImport, duplicates, ignored = 0 }) {
   return (
@@ -586,10 +605,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     cardImports, addCardImport, revertCardImport,
   } = useApp()
 
-  const today = new Date()
-  const currentMonthDefault = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-
-  const [faturaMonthYear, setFaturaMonthYear] = useState(currentMonthDefault)
+  const [faturaMonthYear, setFaturaMonthYear] = useState('')
   const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
@@ -611,6 +627,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }), [gerencialGroups])
 
   const handleFile = async (file) => {
+    if (!faturaMonthYear) { setError('Selecione o mês de referência da fatura antes de importar.'); return }
     setError('')
     setResult(null)
     setMatchQueue([])
@@ -805,23 +822,38 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {rows.length === 0 && result === null && (
         <div className="space-y-4">
           <div className="card">
-            <label className="label mb-1.5 block">Mês/Ano da Fatura</label>
-            <input
-              type="month"
-              className="input w-44"
+            <label className="label mb-1.5 block">
+              Mês de referência da fatura <span className="text-orange-500">*</span>
+            </label>
+            <select
+              className="input w-64"
               value={faturaMonthYear}
-              onChange={e => setFaturaMonthYear(e.target.value)}
-            />
-            <p className="text-xs text-gray-500 mt-1.5">
-              Lançamentos com data fora deste mês terão o mês/ano ajustado, mantendo o dia.
-            </p>
+              onChange={e => { setFaturaMonthYear(e.target.value); setError('') }}
+              required
+            >
+              <option value="">Selecione o mês da fatura...</option>
+              {MONTH_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            {faturaMonthYear && (
+              <p className="text-xs text-gray-500 mt-1.5">
+                Datas fora de {faturaMonthYear.split('-').reverse().join('/')} terão mês/ano ajustado, mantendo o dia.
+              </p>
+            )}
           </div>
           <DropZone
             onFile={handleFile}
             label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
             subtitle="Formato Dindin (XLS) ou Itaú (CSV)"
             accept=".xlsx,.xls,.csv"
+            disabled={!faturaMonthYear}
           />
+          {!faturaMonthYear && !error && (
+            <p className="text-xs text-gray-500 text-center -mt-2">
+              Selecione o mês de referência para habilitar o upload.
+            </p>
+          )}
           {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
         </div>
       )}
