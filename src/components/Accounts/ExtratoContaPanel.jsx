@@ -236,8 +236,10 @@ function NettedRow({ row, accountId, accounts, balance }) {
   )
 }
 
-export default function ExtratoContaPanel({ account, onClose, onEdit }) {
+export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit }) {
   const { transactions, accounts, schedules, reverseTransaction } = useApp()
+  // Always derive account from live context so balance stays current after new transactions
+  const account = accounts.find(a => a.id === accountProp.id) || accountProp
   const now = new Date()
   const [from, setFrom] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
