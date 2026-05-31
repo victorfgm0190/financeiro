@@ -586,15 +586,36 @@ function addMonthSafe(dateStr, n) {
   return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(td).padStart(2, '0')}`
 }
 
-// Ajusta data para o mês/ano da fatura, mantendo o dia original.
-// Datas que já estão no mês informado são preservadas.
-function applyFaturaDate(dateStr, faturaYYYYMM) {
-  if (!faturaYYYYMM || !dateStr) return dateStr
-  if (dateStr.startsWith(faturaYYYYMM)) return dateStr
-  const day = parseInt(dateStr.slice(8, 10), 10)
-  const [fy, fm] = faturaYYYYMM.split('-').map(Number)
-  const maxDay = new Date(fy, fm, 0).getDate()
-  return `${faturaYYYYMM}-${String(Math.min(day, maxDay)).padStart(2, '0')}`
+// Calcula o mês da fatura (YYYY-MM) de um lançamento dado o dia de fechamento do cartão.
+// dia < closingDay → fatura do mês corrente; dia >= closingDay → fatura do mês seguinte.
+function calcFatura(dateStr, closingDay = 14) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr + 'T00:00:00')
+  const day = d.getDate()
+  let m, y
+  if (day < closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
+  else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); m = n.getMonth() + 1; y = n.getFullYear() }
+  return `${y}-${String(m).padStart(2, '0')}`
+}
+
+// Avança n meses em um string YYYY-MM.
+function addMonthToFatura(yyyymm, n) {
+  if (!yyyymm) return ''
+  const [y, m] = yyyymm.split('-').map(Number)
+  const raw = m - 1 + n
+  const ty = y + Math.floor(raw / 12), tm = raw % 12
+  return `${ty}-${String(tm + 1).padStart(2, '0')}`
+}
+
+// Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
+function detectMainFatura(rows) {
+  const counts = {}
+  rows.forEach(r => {
+    if (r.faturaMonthYear && !r._generated)
+      counts[r.faturaMonthYear] = (counts[r.faturaMonthYear] || 0) + 1
+  })
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0] || ''
 }
 
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
@@ -627,7 +648,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }), [gerencialGroups])
 
   const handleFile = async (file) => {
-    if (!faturaMonthYear) { setError('Selecione o mês de referência da fatura antes de importar.'); return }
     setError('')
     setResult(null)
     setMatchQueue([])
@@ -647,18 +667,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }
 
-      // Ajustar datas para o mês/ano da fatura (exceto as que já estão no mês)
-      if (faturaMonthYear) {
-        parsed = parsed.map(row => ({ ...row, date: applyFaturaDate(row.date, faturaMonthYear) }))
-      }
-
-      // Auto-match card
+      // Auto-match card (before fatura computation so we get the right closingDay)
+      let resolvedClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
       if (cardName) {
         const match = fuzzyMatchAccount(cardName, creditAccounts)
-        if (match) setSelectedAccount(match.id)
+        if (match) {
+          setSelectedAccount(match.id)
+          resolvedClosingDay = match.closingDay || 14
+        }
       }
 
-      // Auto-classify from rules + Movimentação → category
+      // Auto-classify from rules + Movimentação → category; compute per-row fatura
       const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
       const processed = []
       const pendingMatches = []
@@ -670,16 +689,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const categoryId = classified?.categoryId || movCat?.id || ''
         const payee = classified?.payee || ''
         const installInfo = detectInstallment(row.description)
+        const baseFatura = calcFatura(row.date, resolvedClosingDay)
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoD, _installment: installInfo, _generated: false,
+          faturaMonthYear: baseFatura,
         }
         processed.push(baseRow)
         if (installInfo?.num === 1 && installInfo.total > 1) {
+          // Parcelas 2..N: data original, fatura avança 1 mês por parcela
           for (let i = 2; i <= installInfo.total; i++) {
             processed.push({
               ...baseRow, _id: idCtr++ * 100 + i,
-              date: addMonthSafe(baseRow.date, i - 1),
+              date: baseRow.date,
+              faturaMonthYear: addMonthToFatura(baseFatura, i - 1),
               description: baseRow.description.replace(installInfo.matchStr, `${i}/${installInfo.total}`),
               _generated: true, _seriesId: baseRow._id, _installmentNum: i,
             })
@@ -694,12 +717,39 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
       })
 
-      setRows(processed.sort((a, b) => a.date.localeCompare(b.date)))
+      const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
+      setRows(sortedRows)
       setCardInfo({ cardName, faturaStr })
       setMatchQueue(pendingMatches)
+
+      // Auto-detectar mês de referência pelo mês de fatura mais frequente
+      const detected = detectMainFatura(sortedRows)
+      if (detected) setFaturaMonthYear(detected)
     } catch (err) {
       setError('Erro ao ler arquivo: ' + err.message)
     }
+  }
+
+  // Recomputa faturas de todas as linhas quando o cartão muda
+  const handleAccountChange = (accountId) => {
+    setSelectedAccount(accountId)
+    if (rows.length === 0) return
+    const cl = accounts.find(a => a.id === accountId)?.closingDay || 14
+    setRows(prev => {
+      const step1 = prev.map(row =>
+        row._generated ? row : { ...row, faturaMonthYear: calcFatura(row.date, cl) }
+      )
+      const step2 = step1.map(row => {
+        if (!row._generated) return row
+        const parent = step1.find(r => r._id === row._seriesId)
+        return parent
+          ? { ...row, faturaMonthYear: addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1) }
+          : row
+      })
+      const detected = detectMainFatura(step2)
+      if (detected) setFaturaMonthYear(detected)
+      return step2
+    })
   }
 
   const resolvedRows = useMemo(() => {
@@ -821,39 +871,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {rows.length === 0 && result === null && (
         <div className="space-y-4">
-          <div className="card">
-            <label className="label mb-1.5 block">
-              Mês de referência da fatura <span className="text-orange-500">*</span>
-            </label>
-            <select
-              className="input w-64"
-              value={faturaMonthYear}
-              onChange={e => { setFaturaMonthYear(e.target.value); setError('') }}
-              required
-            >
-              <option value="">Selecione o mês da fatura...</option>
-              {MONTH_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            {faturaMonthYear && (
-              <p className="text-xs text-gray-500 mt-1.5">
-                Datas fora de {faturaMonthYear.split('-').reverse().join('/')} terão mês/ano ajustado, mantendo o dia.
-              </p>
-            )}
-          </div>
           <DropZone
             onFile={handleFile}
             label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
-            subtitle="Formato Dindin (XLS) ou Itaú (CSV)"
+            subtitle="Formato Dindin (XLS) ou Itaú (CSV) — fatura detectada automaticamente"
             accept=".xlsx,.xls,.csv"
-            disabled={!faturaMonthYear}
           />
-          {!faturaMonthYear && !error && (
-            <p className="text-xs text-gray-500 text-center -mt-2">
-              Selecione o mês de referência para habilitar o upload.
-            </p>
-          )}
           {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
         </div>
       )}
@@ -861,22 +884,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {rows.length > 0 && (
         <>
           <div className="card">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="label">Cartão de Destino</label>
-                <select className="input" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
+                <select className="input" value={selectedAccount} onChange={e => handleAccountChange(e.target.value)}>
                   <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
+                </select>
+              </div>
+              <div>
+                <label className="label">Mês de Referência</label>
+                <select className="input" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div className="flex items-end gap-4 pb-1">
                 {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-gray-200">{cardInfo.cardName}</p></div>}
-                {cardInfo.faturaStr && <div><p className="label">Fatura</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
-                {faturaMonthYear && (
-                  <div>
-                    <p className="label">Mês da Fatura</p>
-                    <p className="text-sm text-gray-200">{faturaMonthYear.split('-').reverse().join('/')}</p>
-                  </div>
-                )}
+                {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
               </div>
             </div>
           </div>
@@ -911,6 +935,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         onChange={e => toggleAll(e.target.checked)} />
                     </th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Ger.</th>
@@ -927,6 +952,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           onChange={() => toggleRow(row._id)} />
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{row.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2">
+                        <select
+                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                          value={row.faturaMonthYear || ''}
+                          onChange={e => updateRow(row._id, { faturaMonthYear: e.target.value })}
+                        >
+                          <option value="">—</option>
+                          {MONTH_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.value.split('-').reverse().join('/')}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-3 py-2 text-gray-200 max-w-xs">
                         <div className="flex items-center gap-1.5">
                           <input className="bg-transparent text-xs focus:outline-none focus:bg-gray-800 rounded px-1 min-w-0 flex-1"
