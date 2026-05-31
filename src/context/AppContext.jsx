@@ -356,7 +356,7 @@ const defaultData = {
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
-function buildReservaAutoTxs(tx, accounts) {
+function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
   if (tx.type !== 'transfer') return []
   const extraTxs = []
   const toAcc = accounts.find(a => a.id === tx.toAccountId)
@@ -373,6 +373,7 @@ function buildReservaAutoTxs(tx, accounts) {
       categoryId: catId,
       description: `Reserva: ${toAcc.apelido || toAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
+      ...(parentTxId ? { parentTxId } : {}),
     })
   }
 
@@ -386,6 +387,7 @@ function buildReservaAutoTxs(tx, accounts) {
       categoryId: catId,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
+      ...(parentTxId ? { parentTxId } : {}),
     })
     extraTxs.push({
       id: baseId + '_d',
@@ -393,6 +395,7 @@ function buildReservaAutoTxs(tx, accounts) {
       categoryId: catId,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
+      ...(parentTxId ? { parentTxId } : {}),
     })
   }
 
@@ -619,7 +622,8 @@ export function AppProvider({ children }) {
           }
           const autoTxs = buildReservaAutoTxs(
             { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: schedule.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
-            accounts
+            accounts,
+            txId
           )
           transactions = [...transactions, newTx, ...autoTxs]
           schedules = schedules.map(s => s.id === schedule.id
@@ -693,7 +697,7 @@ export function AppProvider({ children }) {
         })
       }
 
-      const extraTxs = buildReservaAutoTxs(tx, d.accounts)
+      const extraTxs = buildReservaAutoTxs(tx, d.accounts, id)
       return { ...d, accounts, transactions: [...d.transactions, newTx, ...extraTxs] }
     })
     return id
@@ -710,7 +714,11 @@ export function AppProvider({ children }) {
       const txIds = new Set(imp.txIds || [])
       const txs = d.transactions.filter(t => txIds.has(t.id))
       let accounts = [...d.accounts]
+      let schedules = d.schedules
+      let transactions = d.transactions
+
       for (const tx of txs) {
+        // Revert balance impact
         if (tx.type === 'expense' && tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
             ...a,
@@ -722,11 +730,69 @@ export function AppProvider({ children }) {
         } else if (tx.type === 'expense') {
           accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
         }
+
+        // Grupo G cascade
+        if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
+          const cardAccount = d.accounts.find(a => a.id === tx.accountId)
+          const closingDay = cardAccount?.closingDay || 14
+          let faturaRef
+          if (tx.faturaMonthYear) {
+            const [y, m] = tx.faturaMonthYear.split('-')
+            faturaRef = `${m}/${y}`
+          } else {
+            faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
+          }
+          const gerKey = gerencialKey(tx.accountId, faturaRef)
+          const paymentKey = `${gerKey}_payment`
+          const isParcelado = INSTALL_RE.test(tx.description || '')
+
+          if (isParcelado) {
+            const provisionKey = `${gerKey}_provision`
+            const resgateParceladoKey = `${gerKey}_resgate_parc`
+            schedules = schedules.map(s => {
+              const sKey = s.overrides?._gerencialKey
+              if (sKey !== provisionKey && sKey !== resgateParceladoKey && sKey !== paymentKey) return s
+              if ((s.registered || []).includes(s.startDate)) return s
+              return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+            })
+          } else {
+            const resgateKey = `${gerKey}_resgate`
+            const etapaATx = d.transactions.find(t =>
+              !txIds.has(t.id) &&
+              t.type === 'transfer' &&
+              t.grupoGerencial === tx.grupoGerencial &&
+              Math.abs(t.amount - tx.amount) < 0.01 &&
+              t.date === tx.date
+            )
+            if (etapaATx) {
+              accounts = accounts.map(a => {
+                if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+                if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+                return a
+              })
+              transactions = transactions.filter(t => t.id !== etapaATx.id)
+            }
+            schedules = schedules.map(s => {
+              const sKey = s.overrides?._gerencialKey
+              if (sKey !== resgateKey && sKey !== paymentKey) return s
+              if ((s.registered || []).includes(s.startDate)) return s
+              return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+            })
+          }
+        }
       }
+
+      // Remove imported txs + reservaAuto linked to them
+      transactions = transactions.filter(t =>
+        !txIds.has(t.id) &&
+        !(t.reservaAuto && txIds.has(t.parentTxId))
+      )
+
       return {
         ...d,
         accounts,
-        transactions: d.transactions.filter(t => !txIds.has(t.id)),
+        schedules,
+        transactions,
         cardImports: (d.cardImports || []).filter(i => i.id !== importId),
       }
     })
@@ -760,8 +826,61 @@ export function AppProvider({ children }) {
           return a
         })
       }
-      // Estorno em cadeia: agendamento numérico gerencial
+
       let schedules = d.schedules
+      let transactions = d.transactions.filter(t => t.id !== id)
+
+      // Grupo G cascade (à vista: remove etapaA; parcelado: ajusta agendamentos)
+      if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
+        const cardAccount = d.accounts.find(a => a.id === tx.accountId)
+        const closingDay = cardAccount?.closingDay || 14
+        let faturaRef
+        if (tx.faturaMonthYear) {
+          const [y, m] = tx.faturaMonthYear.split('-')
+          faturaRef = `${m}/${y}`
+        } else {
+          faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
+        }
+        const gerKey = gerencialKey(tx.accountId, faturaRef)
+        const paymentKey = `${gerKey}_payment`
+        const isParcelado = INSTALL_RE.test(tx.description || '')
+
+        if (isParcelado) {
+          const provisionKey = `${gerKey}_provision`
+          const resgateParceladoKey = `${gerKey}_resgate_parc`
+          schedules = schedules.map(s => {
+            const sKey = s.overrides?._gerencialKey
+            if (sKey !== provisionKey && sKey !== resgateParceladoKey && sKey !== paymentKey) return s
+            if ((s.registered || []).includes(s.startDate)) return s
+            return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+          })
+        } else {
+          const resgateKey = `${gerKey}_resgate`
+          const etapaATx = d.transactions.find(t =>
+            t.id !== id &&
+            t.type === 'transfer' &&
+            t.grupoGerencial === tx.grupoGerencial &&
+            Math.abs(t.amount - tx.amount) < 0.01 &&
+            t.date === tx.date
+          )
+          if (etapaATx) {
+            accounts = accounts.map(a => {
+              if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+              if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+              return a
+            })
+            transactions = transactions.filter(t => t.id !== etapaATx.id)
+          }
+          schedules = schedules.map(s => {
+            const sKey = s.overrides?._gerencialKey
+            if (sKey !== resgateKey && sKey !== paymentKey) return s
+            if ((s.registered || []).includes(s.startDate)) return s
+            return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+          })
+        }
+      }
+
+      // Agendamento numérico gerencial
       if (tx.gerencialScheduleId) {
         const sch = schedules.find(s => s.id === tx.gerencialScheduleId)
         if (sch) {
@@ -786,7 +905,11 @@ export function AppProvider({ children }) {
         }
         return acc
       }, [])
-      return { ...d, accounts, schedules, transactions: d.transactions.filter(t => t.id !== id) }
+
+      // Remove reservaAuto txs linked to this transaction
+      transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
+
+      return { ...d, accounts, schedules, transactions }
     })
   }, [update])
 
@@ -902,6 +1025,9 @@ export function AppProvider({ children }) {
         return acc
       }, [])
 
+      // Remove reservaAuto txs linked to this transaction
+      transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
+
       return { ...d, accounts, transactions, schedules }
     })
   }, [update])
@@ -961,6 +1087,13 @@ export function AppProvider({ children }) {
           return { ...s, amount: newAmount }
         })
       }
+
+      // Limpa placeholders de parcelas 2..N (G1 — sem _gerencialKey) não registrados
+      schedules = schedules.filter(s => {
+        if (s.overrides?._originTxId !== tx.id) return true
+        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
+        return done
+      })
 
       return { ...d, accounts, transactions, schedules }
     })
@@ -1033,7 +1166,8 @@ export function AppProvider({ children }) {
       }
       const autoTxs = buildReservaAutoTxs(
         { type: tx.type, accountId: tx.accountId, toAccountId: tx.toAccountId, amount: tx.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
-        accounts
+        accounts,
+        newTxId
       )
       return {
         ...d, accounts,
@@ -1334,6 +1468,64 @@ export function AppProvider({ children }) {
           ? { ...a, balance: rb(balance), projectedBalance: rb(projected), initialBalance: initBal }
           : a
         ),
+      }
+    })
+  }, [update])
+
+  // ── Balance Snapshots (para desfazer ajustes) ────────────────────────────────
+  const saveBalanceSnapshot = useCallback((accountIds, reason) => {
+    update(d => {
+      const affected = accountIds
+        ? d.accounts.filter(a => accountIds.includes(a.id))
+        : d.accounts
+      const snapshot = {
+        date: format(new Date(), 'yyyy-MM-dd'),
+        reason: reason || '',
+        accounts: affected.map(a => ({ id: a.id, initialBalance: a.initialBalance ?? 0 })),
+      }
+      return { ...d, settings: { ...d.settings, lastBalanceSnapshot: snapshot } }
+    })
+  }, [update])
+
+  const restoreBalanceSnapshot = useCallback(() => {
+    update(d => {
+      const snapshot = d.settings?.lastBalanceSnapshot
+      if (!snapshot?.accounts?.length) return d
+      const today = format(new Date(), 'yyyy-MM-dd')
+      let accounts = d.accounts
+      for (const { id, initialBalance } of snapshot.accounts) {
+        const initBal = rb(initialBalance)
+        let balance = initBal
+        let projected = initBal
+        d.transactions.forEach(tx => {
+          if (tx.type === 'income' && tx.accountId === id) {
+            projected = rb(projected + tx.amount)
+            if (tx.date <= today) balance = rb(balance + tx.amount)
+          } else if (tx.type === 'expense' && tx.accountId === id && tx.accountType !== 'credit') {
+            projected = rb(projected - tx.amount)
+            if (tx.date <= today) balance = rb(balance - tx.amount)
+          } else if (tx.type === 'transfer') {
+            if (tx.accountId === id) {
+              projected = rb(projected - tx.amount)
+              if (tx.date <= today) balance = rb(balance - tx.amount)
+            } else if (tx.toAccountId === id) {
+              projected = rb(projected + tx.amount)
+              if (tx.date <= today) balance = rb(balance + tx.amount)
+            }
+          } else if (tx.type === 'credit_payment' && tx.fromAccountId === id) {
+            projected = rb(projected - tx.amount)
+            if (tx.date <= today) balance = rb(balance - tx.amount)
+          }
+        })
+        accounts = accounts.map(a => a.id === id
+          ? { ...a, initialBalance: initBal, balance: rb(balance), projectedBalance: rb(projected) }
+          : a
+        )
+      }
+      return {
+        ...d,
+        accounts,
+        settings: { ...d.settings, lastBalanceSnapshot: null },
       }
     })
   }, [update])
@@ -2278,7 +2470,7 @@ export function AppProvider({ children }) {
       profileAccounts, profileTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,
       updateSettings,
-      addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo,
+      addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly,
       addCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,

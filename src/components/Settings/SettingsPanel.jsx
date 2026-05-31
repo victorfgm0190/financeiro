@@ -38,6 +38,8 @@ export default function SettingsPanel() {
     accounts,
     transactions,
     recalcularSaldo,
+    saveBalanceSnapshot,
+    restoreBalanceSnapshot,
     corrigirDadosGerencial,
     data,
   } = useApp()
@@ -56,6 +58,7 @@ export default function SettingsPanel() {
       a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability'
     )
     if (eligible.length === 0) return
+    saveBalanceSnapshot(eligible.map(a => a.id), 'Recalcular todos os saldos')
     const today = new Date().toISOString().slice(0, 10)
     const rb = v => Math.round(v * 100) / 100
     let totalBalance = 0
@@ -143,6 +146,7 @@ export default function SettingsPanel() {
 
   const handleAjusteConfirm = async () => {
     if (!ajusteResult?.anchorAccount) return
+    saveBalanceSnapshot([ajusteResult.anchorAccount.id], 'Ajuste de saldo por grupo')
     recalcularSaldo(ajusteResult.anchorAccount.id, ajusteResult.newInitialBalance)
     for (const acc of ajusteResult.groupAccounts) {
       if (acc.id !== ajusteResult.anchorAccount.id) {
@@ -1089,6 +1093,26 @@ export default function SettingsPanel() {
               </p>
             )}
           </div>
+
+          {data.settings?.lastBalanceSnapshot && (
+            <div className="border-t border-gray-700 pt-4 space-y-2">
+              <div>
+                <p className="text-sm text-gray-200 font-medium flex items-center gap-1.5">
+                  <RotateCcw size={13} className="text-amber-400" /> Desfazer último ajuste de saldo
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {data.settings.lastBalanceSnapshot.reason} · {data.settings.lastBalanceSnapshot.date}
+                  {' · '}{data.settings.lastBalanceSnapshot.accounts?.length} conta{data.settings.lastBalanceSnapshot.accounts?.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                className="btn-secondary flex items-center gap-2 text-amber-400 border-amber-900/40 hover:bg-amber-900/20"
+                onClick={restoreBalanceSnapshot}
+              >
+                <RotateCcw size={13} /> Restaurar saldo anterior
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

@@ -147,6 +147,7 @@ export const txToRow = (tx) => ({
   origin: tx.origin || 'manual',
   gerencial_schedule_id: tx.gerencialScheduleId || null,
   fatura_month_year: tx.faturaMonthYear || null,
+  parent_tx_id: tx.parentTxId || null,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -171,6 +172,7 @@ export const rowToTx = (r) => ({
   origin: r.origin || 'manual',
   gerencialScheduleId: r.gerencial_schedule_id || null,
   faturaMonthYear: r.fatura_month_year || null,
+  parentTxId: r.parent_tx_id || null,
   createdAt: r.created_at,
 })
 
@@ -359,6 +361,7 @@ export async function loadFromDb(defaultData) {
               financialMonthStartDay: d.cfg.financial_month_start_day ?? 1,
               currency: d.cfg.currency ?? 'BRL',
               recurringMatchExceptions: d.cfg.recurring_match_exceptions ?? [],
+              lastBalanceSnapshot: d.cfg.balance_snapshot || null,
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,
@@ -509,6 +512,7 @@ export async function syncSettings(settings, costCenters) {
         currency: settings.currency ?? 'BRL',
         cost_centers: costCenters ?? [],
         recurring_match_exceptions: settings.recurringMatchExceptions ?? [],
+        balance_snapshot: settings.lastBalanceSnapshot || null,
       },
     })
   } catch (err) {
