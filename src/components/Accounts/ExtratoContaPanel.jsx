@@ -246,7 +246,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit }) {
-  const { transactions, accounts, schedules, reverseTransaction, addTransaction } = useApp()
+  const { transactions, accounts, schedules, reverseTransaction } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
   const now = new Date()
@@ -271,13 +271,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   }
 
   const handleDuplicate = (tx) => {
+    if (!onEdit) return
     const d = new Date(tx.date + 'T00:00:00')
     d.setDate(d.getDate() + 30)
     const newDate = d.toISOString().split('T')[0]
     // eslint-disable-next-line no-unused-vars
     const { id, createdAt, scheduleId, origin, grupoGerencial, gerencialScheduleId, reservaAuto, ...rest } = tx
-    addTransaction({ ...rest, date: newDate })
-    showToast(`Lançamento duplicado para ${fmtDate(newDate)}`)
+    onEdit({ ...rest, date: newDate })
   }
 
   const isAplicacao = !!account.contaAplicacao
