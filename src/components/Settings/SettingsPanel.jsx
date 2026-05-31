@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
@@ -35,6 +35,7 @@ export default function SettingsPanel() {
     moveAccountGroup, reorderAccountGroups,
     profiles, addProfile, updateProfile, deleteProfile,
     accounts,
+    recalcularSaldo,
     data,
   } = useApp()
 
@@ -44,6 +45,20 @@ export default function SettingsPanel() {
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+  const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0 })
+
+  const handleRecalcAll = async () => {
+    const eligible = accounts.filter(a =>
+      a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability'
+    )
+    if (eligible.length === 0) return
+    setRecalcStatus({ running: true, total: eligible.length, done: 0 })
+    for (let i = 0; i < eligible.length; i++) {
+      await new Promise(r => setTimeout(r, 40))
+      recalcularSaldo(eligible[i].id)
+      setRecalcStatus({ running: i < eligible.length - 1, total: eligible.length, done: i + 1 })
+    }
+  }
 
   // Account groups (conta) management state
   const [agDragId, setAgDragId] = useState(null)
@@ -792,6 +807,54 @@ export default function SettingsPanel() {
           O backup periódico (a cada 24h com o app aberto) é baixado automaticamente para a pasta Downloads.
           Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
         </p>
+      </div>
+
+      {/* Manutenção */}
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+          <RefreshCw size={14} className="text-gray-500" /> Manutenção
+        </h2>
+        <p className="text-xs text-gray-500 mb-4">Ferramentas para corrigir inconsistências nos dados.</p>
+
+        <div className="bg-gray-800 rounded-xl p-4 space-y-3">
+          <div>
+            <p className="text-sm text-gray-200 font-medium">Recalcular todos os saldos</p>
+            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+              Recalcula o saldo atual de cada conta a partir do saldo inicial e de todos os lançamentos vinculados.
+              Útil para corrigir inconsistências causadas por importações ou edições manuais.
+            </p>
+          </div>
+
+          {recalcStatus.running && (
+            <div className="space-y-1.5">
+              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${recalcStatus.total > 0 ? Math.round((recalcStatus.done / recalcStatus.total) * 100) : 0}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-400">Recalculando... {recalcStatus.done} / {recalcStatus.total} contas</p>
+            </div>
+          )}
+
+          {recalcStatus.done > 0 && !recalcStatus.running && (
+            <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <Check size={13} />
+              <span>
+                {recalcStatus.done} conta{recalcStatus.done !== 1 ? 's' : ''} recalculada{recalcStatus.done !== 1 ? 's' : ''} com sucesso.
+              </span>
+            </div>
+          )}
+
+          <button
+            className="btn-secondary flex items-center gap-2"
+            onClick={handleRecalcAll}
+            disabled={recalcStatus.running}
+          >
+            <RefreshCw size={13} className={recalcStatus.running ? 'animate-spin' : ''} />
+            {recalcStatus.running ? 'Recalculando...' : 'Recalcular todos os saldos'}
+          </button>
+        </div>
       </div>
 
       {/* Zona de Perigo */}
