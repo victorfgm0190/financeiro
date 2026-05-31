@@ -566,6 +566,17 @@ function addMonthSafe(dateStr, n) {
   return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(td).padStart(2, '0')}`
 }
 
+// Ajusta data para o mês/ano da fatura, mantendo o dia original.
+// Datas que já estão no mês informado são preservadas.
+function applyFaturaDate(dateStr, faturaYYYYMM) {
+  if (!faturaYYYYMM || !dateStr) return dateStr
+  if (dateStr.startsWith(faturaYYYYMM)) return dateStr
+  const day = parseInt(dateStr.slice(8, 10), 10)
+  const [fy, fm] = faturaYYYYMM.split('-').map(Number)
+  const maxDay = new Date(fy, fm, 0).getDate()
+  return `${faturaYYYYMM}-${String(Math.min(day, maxDay)).padStart(2, '0')}`
+}
+
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
@@ -573,6 +584,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
   } = useApp()
 
+  const today = new Date()
+  const currentMonthDefault = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+
+  const [faturaMonthYear, setFaturaMonthYear] = useState(currentMonthDefault)
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
   const [selectedAccount, setSelectedAccount] = useState('')
@@ -609,6 +624,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
 
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }
+
+      // Ajustar datas para o mês/ano da fatura (exceto as que já estão no mês)
+      if (faturaMonthYear) {
+        parsed = parsed.map(row => ({ ...row, date: applyFaturaDate(row.date, faturaMonthYear) }))
+      }
 
       // Auto-match card
       if (cardName) {
@@ -694,7 +714,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     if (toImport.length > 0) {
       const dates = toImport.map(r => r.date).sort()
-      const mesAno = dates[0]?.slice(0, 7)
+      const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
       if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno)
     }
 
@@ -768,6 +788,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {rows.length === 0 && result === null && (
         <div className="space-y-4">
+          <div className="card">
+            <label className="label mb-1.5 block">Mês/Ano da Fatura</label>
+            <input
+              type="month"
+              className="input w-44"
+              value={faturaMonthYear}
+              onChange={e => setFaturaMonthYear(e.target.value)}
+            />
+            <p className="text-xs text-gray-500 mt-1.5">
+              Lançamentos com data fora deste mês terão o mês/ano ajustado, mantendo o dia.
+            </p>
+          </div>
           <DropZone
             onFile={handleFile}
             label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
@@ -788,12 +820,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
                 </select>
               </div>
-              {(cardInfo.cardName || cardInfo.faturaStr) && (
-                <div className="flex items-end gap-4 pb-1">
-                  {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-gray-200">{cardInfo.cardName}</p></div>}
-                  {cardInfo.faturaStr && <div><p className="label">Fatura</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
-                </div>
-              )}
+              <div className="flex items-end gap-4 pb-1">
+                {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-gray-200">{cardInfo.cardName}</p></div>}
+                {cardInfo.faturaStr && <div><p className="label">Fatura</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
+                {faturaMonthYear && (
+                  <div>
+                    <p className="label">Mês da Fatura</p>
+                    <p className="text-sm text-gray-200">{faturaMonthYear.split('-').reverse().join('/')}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
