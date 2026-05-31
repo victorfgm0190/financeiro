@@ -248,7 +248,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 
 // ─── Account extrato view ───────────────────────────────────────────────────
 
-function AccountView({ account, onBack, onNewTx }) {
+function AccountView({ account, onBack, onNewTx, onEditTx }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
@@ -267,7 +267,7 @@ function AccountView({ account, onBack, onNewTx }) {
           <Plus size={12} /> Novo lançamento
         </button>
       </div>
-      <ExtratoContaPanel account={account} />
+      <ExtratoContaPanel account={account} onEdit={onEditTx} />
     </div>
   )
 }
@@ -431,6 +431,13 @@ export default function TransactionsPanel() {
     setShowModal(true)
   }
 
+  const openEditTx = (tx) => {
+    setEditTx(tx)
+    setModalAccount(null)
+    setModalStep('form')
+    setShowModal(true)
+  }
+
   const closeModal = () => {
     setShowModal(false)
     setEditTx(null)
@@ -446,8 +453,9 @@ export default function TransactionsPanel() {
           account={view.account}
           onBack={() => setView(null)}
           onNewTx={() => openNewTx(view.account)}
+          onEditTx={openEditTx}
         />
-        <Modal open={showModal} onClose={closeModal} title="Novo Lançamento">
+        <Modal open={showModal} onClose={closeModal} title={editTx?.id ? 'Editar Lançamento' : 'Novo Lançamento'}>
           <TransactionForm
             initial={editTx || { accountId: modalAccount?.id }}
             onClose={closeModal}

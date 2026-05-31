@@ -94,7 +94,7 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -110,7 +110,10 @@ function SingleRow({ row, accountId, accounts, balance, onReverse }) {
   }
 
   return (
-    <tr className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors">
+    <tr
+      className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer"
+      onClick={() => onEdit && onEdit(tx)}
+    >
       <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(tx.date)}</td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-1.5">
@@ -141,7 +144,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse }) {
       <td className="px-1 py-2.5">
         {onReverse && !tx.reservaAuto && (
           <button
-            onClick={() => onReverse(tx)}
+            onClick={(e) => { e.stopPropagation(); onReverse(tx) }}
             title="Estornar lançamento"
             className="p-1 text-gray-700 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
           >
@@ -222,7 +225,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
   )
 }
 
-export default function ExtratoContaPanel({ account, onClose }) {
+export default function ExtratoContaPanel({ account, onClose, onEdit }) {
   const { transactions, accounts, schedules, reverseTransaction } = useApp()
   const now = new Date()
   const [from, setFrom] = useState(
@@ -402,7 +405,7 @@ export default function ExtratoContaPanel({ account, onClose }) {
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (
-                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} />
+                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} />
                 )
               )}
             </tbody>
