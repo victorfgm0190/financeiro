@@ -269,14 +269,8 @@ function AccountView({ account, onBack, onNewTx, onEditTx }) {
         </button>
         <ChevronRight size={12} className="text-gray-600" />
         <span className="text-sm text-gray-200">{account.apelido || account.name}</span>
-        <button
-          onClick={onNewTx}
-          className="ml-auto btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5"
-        >
-          <Plus size={12} /> Novo lançamento
-        </button>
       </div>
-      <ExtratoContaPanel account={account} onEdit={onEditTx} />
+      <ExtratoContaPanel account={account} onEdit={onEditTx} onNewTx={onNewTx} />
     </div>
   )
 }

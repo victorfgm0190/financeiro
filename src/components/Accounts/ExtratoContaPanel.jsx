@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2, Copy } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2, Copy, Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -245,7 +245,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
   )
 }
 
-export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit }) {
+export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx }) {
   const { transactions, accounts, schedules, reverseTransaction } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
@@ -346,18 +346,25 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       <div className="sticky top-0 z-10 bg-gray-950">
         <div className="space-y-3 pb-3">
           {/* Title */}
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-200">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-200 truncate">
               Extrato — {account.apelido || account.name}
               {isAplicacao && (
                 <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
               )}
             </h2>
-            {onClose && (
-              <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
-                <X size={14} />
-              </button>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {onNewTx && (
+                <button onClick={onNewTx} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
+                  <Plus size={12} /> Novo lançamento
+                </button>
+              )}
+              {onClose && (
+                <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filters */}
