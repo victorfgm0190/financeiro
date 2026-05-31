@@ -332,7 +332,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     <colgroup>
       <col style={{ width: '88px' }} />
       <col />
-      <col style={{ width: '100px' }} />
+      <col style={{ width: '72px' }} />
       <col style={{ width: '108px' }} />
       <col style={{ width: '108px' }} />
       <col style={{ width: '90px' }} />
@@ -408,7 +408,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <tr className="border-b border-gray-800">
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Favorecido</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta De</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Conta Para</th>
                 <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
