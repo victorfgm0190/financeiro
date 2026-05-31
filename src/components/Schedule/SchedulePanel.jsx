@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X,
+  MousePointer2, X, Eye,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -663,12 +663,17 @@ export default function SchedulePanel() {
   const [showForm, setShowForm] = useState(false)
   const [editSchedule, setEditSchedule] = useState(null)
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
+  const [showZeroed, setShowZeroed] = useState(false)
 
-  const allPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
-  const invoicePayables  = (payables || []).filter(p => p.origin === 'invoice')
+  const rawPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
+  const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => Number(s.amount) !== 0), [rawPending, showZeroed])
+
+  const invoicePayables   = (payables || []).filter(p => p.origin === 'invoice')
   const gerencialPayables = (payables || []).filter(p => p.origin === 'gerencial')
-  const pendingInvoice   = invoicePayables.filter(p => p.status === 'pending').length
-  const pendingGerencial = gerencialPayables.filter(p => p.status === 'pending').length
+  const displayInvoice    = showZeroed ? invoicePayables : invoicePayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
+  const displayGerencial  = showZeroed ? gerencialPayables : gerencialPayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
+  const pendingInvoice    = displayInvoice.filter(p => p.status === 'pending').length
+  const pendingGerencial  = displayGerencial.filter(p => p.status === 'pending').length
 
   const filteredSchedules = useMemo(() => {
     const now = new Date()
@@ -692,6 +697,11 @@ export default function SchedulePanel() {
     return schedules
   }, [schedules, viewFilter, getNextOccurrences])
 
+  const displaySchedules = useMemo(
+    () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => Number(s.amount) !== 0),
+    [filteredSchedules, showZeroed]
+  )
+
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
 
@@ -709,7 +719,7 @@ export default function SchedulePanel() {
         )}
       </div>
 
-      <div className="border-b border-gray-800 flex gap-0 overflow-x-auto">
+      <div className="border-b border-gray-800 flex items-center gap-0 overflow-x-auto">
         <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={allPending.length}>
           <Calendar size={14} /> Agendamentos
         </TabButton>
@@ -719,6 +729,14 @@ export default function SchedulePanel() {
         <TabButton active={activeTab === 'gerencial'} onClick={() => setActiveTab('gerencial')} badge={pendingGerencial}>
           <BarChart3 size={14} /> Gerencial
         </TabButton>
+        <button
+          onClick={() => setShowZeroed(v => !v)}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-2.5 text-xs whitespace-nowrap transition-colors shrink-0 ${
+            showZeroed ? 'text-[#0F6E56]' : 'text-gray-600 hover:text-gray-400'
+          }`}
+        >
+          <Eye size={11} /> {showZeroed ? 'Ocultar zerados' : 'Mostrar zerados'}
+        </button>
       </div>
 
       {activeTab === 'conta' && (
@@ -743,7 +761,7 @@ export default function SchedulePanel() {
           </div>
 
           <SchedulesTable
-            schedules={filteredSchedules}
+            schedules={displaySchedules}
             categories={categories}
             accounts={accounts}
             gerencialGroups={gerencialGroups}
@@ -760,14 +778,14 @@ export default function SchedulePanel() {
 
       {activeTab === 'cartao' && (
         <div className="space-y-3">
-          {invoicePayables.length === 0 ? (
+          {displayInvoice.length === 0 ? (
             <div className="card text-center py-12">
               <CreditCard size={32} className="text-gray-700 mx-auto mb-3" />
               <p className="text-gray-500 text-sm">Nenhuma fatura gerada</p>
               <p className="text-gray-600 text-xs mt-1">As faturas são geradas automaticamente ao importar lançamentos de cartão</p>
             </div>
           ) : (
-            invoicePayables.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
+            displayInvoice.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
               <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={accounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
             ))
           )}
@@ -776,14 +794,14 @@ export default function SchedulePanel() {
 
       {activeTab === 'gerencial' && (
         <div className="space-y-3">
-          {gerencialPayables.length === 0 ? (
+          {displayGerencial.length === 0 ? (
             <div className="card text-center py-12">
               <BarChart3 size={32} className="text-gray-700 mx-auto mb-3" />
               <p className="text-gray-500 text-sm">Nenhuma conta gerencial gerada</p>
               <p className="text-gray-600 text-xs mt-1">Lançamentos no Grupo Gerencial (G) geram contas a pagar aqui</p>
             </div>
           ) : (
-            gerencialPayables.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
+            displayGerencial.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
               <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={accounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
             ))
           )}
