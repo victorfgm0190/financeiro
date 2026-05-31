@@ -51,6 +51,7 @@ export const accountGroupToRow = (g) => ({
   order: g.order ?? 0,
   behavior: g.behavior || null,
   inibido: !!g.inibido,
+  anchor_account_id: g.anchorAccountId || null,
 })
 
 export const rowToAccountGroup = (r) => ({
@@ -60,6 +61,7 @@ export const rowToAccountGroup = (r) => ({
   order: r.order ?? 0,
   behavior: r.behavior || null,
   inibido: !!r.inibido,
+  anchorAccountId: r.anchor_account_id || null,
 })
 
 export const accountToRow = (a) => ({

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
@@ -99,9 +99,60 @@ export default function SettingsPanel() {
   const [agDragOverId, setAgDragOverId] = useState(null)
   const [agEditId, setAgEditId] = useState(null)
   const [agEditName, setAgEditName] = useState('')
+  const [agEditAnchorId, setAgEditAnchorId] = useState('')
   const [agConfirmDeleteId, setAgConfirmDeleteId] = useState(null)
   const [agNewName, setAgNewName] = useState('')
   const [agNewType, setAgNewType] = useState('financeiro')
+
+  // Balance adjustment by group state
+  const today = new Date().toISOString().slice(0, 10)
+  const rbLocal = v => Math.round(v * 100) / 100
+  const [ajusteGrupoId, setAjusteGrupoId] = useState('')
+  const [ajusteData, setAjusteData] = useState(today)
+  const [ajusteExpected, setAjusteExpected] = useState('')
+  const [ajusteResult, setAjusteResult] = useState(null)
+  const [ajusteDone, setAjusteDone] = useState(false)
+
+  const calcAjusteGrupo = () => {
+    setAjusteResult(null)
+    setAjusteDone(false)
+    const group = (accountGroups || []).find(g => g.id === ajusteGrupoId)
+    if (!group) return
+    const groupAccounts = accounts.filter(a => a.accountGroupId === ajusteGrupoId && a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability')
+    let calculatedBalance = 0
+    groupAccounts.forEach(acc => {
+      let bal = rbLocal(acc.initialBalance ?? 0)
+      transactions.forEach(tx => {
+        if (tx.date > ajusteData) return
+        if (tx.type === 'income' && tx.accountId === acc.id) bal = rbLocal(bal + tx.amount)
+        else if (tx.type === 'expense' && tx.accountId === acc.id && tx.accountType !== 'credit') bal = rbLocal(bal - tx.amount)
+        else if (tx.type === 'transfer') {
+          if (tx.accountId === acc.id) bal = rbLocal(bal - tx.amount)
+          else if (tx.toAccountId === acc.id) bal = rbLocal(bal + tx.amount)
+        } else if (tx.type === 'credit_payment' && tx.fromAccountId === acc.id) bal = rbLocal(bal - tx.amount)
+      })
+      calculatedBalance = rbLocal(calculatedBalance + bal)
+    })
+    const expected = parseFloat(String(ajusteExpected).replace(',', '.'))
+    if (isNaN(expected)) return
+    const difference = rbLocal(expected - calculatedBalance)
+    const anchorAccount = group.anchorAccountId ? accounts.find(a => a.id === group.anchorAccountId) : null
+    const newInitialBalance = anchorAccount != null ? rbLocal((anchorAccount.initialBalance ?? 0) + difference) : null
+    setAjusteResult({ calculatedBalance, expected, difference, anchorAccount, newInitialBalance, groupAccounts, group })
+  }
+
+  const handleAjusteConfirm = async () => {
+    if (!ajusteResult?.anchorAccount) return
+    recalcularSaldo(ajusteResult.anchorAccount.id, ajusteResult.newInitialBalance)
+    for (const acc of ajusteResult.groupAccounts) {
+      if (acc.id !== ajusteResult.anchorAccount.id) {
+        await new Promise(r => setTimeout(r, 30))
+        recalcularSaldo(acc.id)
+      }
+    }
+    setAjusteDone(true)
+    setAjusteResult(null)
+  }
 
   const sortedAccountGroups = [...(accountGroups || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
@@ -524,29 +575,44 @@ export default function SettingsPanel() {
                 {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
               </span>
 
-              {/* Name (inline edit) */}
+              {/* Name + anchor (inline edit) */}
               {agEditId === g.id ? (
                 <>
                   <input
-                    className="input flex-1 py-1 text-sm"
+                    className="input flex-1 py-1 text-sm min-w-0"
                     value={agEditName}
                     onChange={e => setAgEditName(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') { updateAccountGroup(g.id, { name: agEditName }); setAgEditId(null) }
                       if (e.key === 'Escape') setAgEditId(null)
                     }}
                     autoFocus
                   />
-                  <button className="btn-primary text-xs py-1 px-2" onClick={() => { updateAccountGroup(g.id, { name: agEditName }); setAgEditId(null) }}>
+                  <select
+                    className="input py-1 text-xs w-36 shrink-0"
+                    value={agEditAnchorId}
+                    onChange={e => setAgEditAnchorId(e.target.value)}
+                    title="Conta âncora para ajuste de saldo"
+                  >
+                    <option value="">— Âncora —</option>
+                    {accounts.filter(a => a.accountGroupId === g.id && a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability').map(a => (
+                      <option key={a.id} value={a.id}>{a.apelido || a.name}</option>
+                    ))}
+                  </select>
+                  <button className="btn-primary text-xs py-1 px-2 shrink-0" onClick={() => { updateAccountGroup(g.id, { name: agEditName, anchorAccountId: agEditAnchorId || null }); setAgEditId(null) }}>
                     <Check size={11} />
                   </button>
-                  <button className="btn-secondary text-xs py-1 px-2" onClick={() => setAgEditId(null)}>
+                  <button className="btn-secondary text-xs py-1 px-2 shrink-0" onClick={() => setAgEditId(null)}>
                     <X size={11} />
                   </button>
                 </>
               ) : (
                 <>
                   <span className={`flex-1 text-sm min-w-0 truncate ${g.inibido ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{g.name}</span>
+                  {g.anchorAccountId && !g.inibido && (
+                    <span className="flex items-center gap-0.5 text-xs text-gray-500 shrink-0" title={`Âncora: ${accounts.find(a => a.id === g.anchorAccountId)?.apelido || accounts.find(a => a.id === g.anchorAccountId)?.name || '?'}`}>
+                      <Anchor size={10} />
+                    </span>
+                  )}
                   {g.behavior && !g.inibido && (
                     <span className="text-xs text-gray-600 shrink-0 italic">
                       {g.behavior === 'divida' ? 'dívidas' : 'empréstimos'}
@@ -597,7 +663,7 @@ export default function SettingsPanel() {
                     <>
                       {/* Edit */}
                       <button
-                        onClick={() => { setAgEditId(g.id); setAgEditName(g.name) }}
+                        onClick={() => { setAgEditId(g.id); setAgEditName(g.name); setAgEditAnchorId(g.anchorAccountId || '') }}
                         className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
                       >
                         <Edit2 size={11} />
@@ -909,6 +975,119 @@ export default function SettingsPanel() {
               <RefreshCw size={13} />
               Corrigir Dados Gerenciais
             </button>
+          </div>
+
+          <div className="border-t border-gray-800 pt-4 space-y-3">
+            <div>
+              <p className="text-sm text-gray-200 font-medium flex items-center gap-1.5">
+                <Calculator size={13} className="text-gray-500" /> Ajuste de Saldo por Grupo
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                Corrige o saldo inicial da conta âncora do grupo para que o saldo calculado bata com o saldo real informado.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              <div>
+                <label className="label">Grupo de contas</label>
+                <select
+                  className="input text-sm"
+                  value={ajusteGrupoId}
+                  onChange={e => { setAjusteGrupoId(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
+                >
+                  <option value="">Selecione um grupo...</option>
+                  {(accountGroups || []).filter(g => !g.inibido).map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {ajusteGrupoId && !(accountGroups || []).find(g => g.id === ajusteGrupoId)?.anchorAccountId && (
+                <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                  <AlertTriangle size={12} />
+                  Este grupo não tem conta âncora definida. Configure em Configurações → Grupos de Contas antes de prosseguir.
+                </p>
+              )}
+
+              {ajusteGrupoId && (accountGroups || []).find(g => g.id === ajusteGrupoId)?.anchorAccountId && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="label">Data de referência</label>
+                      <input
+                        type="date"
+                        className="input text-sm"
+                        value={ajusteData}
+                        onChange={e => { setAjusteData(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Saldo esperado (R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="input text-sm"
+                        value={ajusteExpected}
+                        onChange={e => { setAjusteExpected(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
+                        placeholder="Ex: -1234,56"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    className="btn-secondary flex items-center gap-2 self-start"
+                    onClick={calcAjusteGrupo}
+                    disabled={!ajusteExpected}
+                  >
+                    <Calculator size={13} /> Calcular diferença
+                  </button>
+                </>
+              )}
+            </div>
+
+            {ajusteResult && (
+              <div className="bg-gray-900 rounded-lg p-3 space-y-1.5 text-xs">
+                <p className="font-medium text-gray-300 mb-2">Resumo do ajuste</p>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Saldo calculado pelo sistema</span>
+                  <span className="text-gray-200">{fmt(ajusteResult.calculatedBalance)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Saldo informado</span>
+                  <span className="text-gray-200">{fmt(ajusteResult.expected)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
+                  <span className="text-gray-500">Diferença</span>
+                  <span className={ajusteResult.difference === 0 ? 'text-gray-400' : ajusteResult.difference > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                    {ajusteResult.difference > 0 ? '+' : ''}{fmt(ajusteResult.difference)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Conta âncora</span>
+                  <span className="text-gray-200">{ajusteResult.anchorAccount?.apelido || ajusteResult.anchorAccount?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Novo saldo inicial da âncora</span>
+                  <span className={ajusteResult.newInitialBalance < 0 ? 'text-red-300' : 'text-sky-300'}>{fmt(ajusteResult.newInitialBalance)}</span>
+                </div>
+                {ajusteResult.difference === 0 ? (
+                  <p className="text-gray-500 italic text-xs pt-1">Nenhum ajuste necessário — saldos já coincidem.</p>
+                ) : (
+                  <button
+                    className="btn-primary flex items-center gap-2 mt-2 w-full justify-center"
+                    onClick={handleAjusteConfirm}
+                  >
+                    <Check size={13} /> Confirmar ajuste
+                  </button>
+                )}
+              </div>
+            )}
+
+            {ajusteDone && (
+              <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                <Check size={12} /> Saldo inicial ajustado e contas recalculadas com sucesso.
+              </p>
+            )}
           </div>
         </div>
       </div>
