@@ -205,7 +205,7 @@ function GroupManager({ groups }) {
 }
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
-  const { setMainAccount, moveAccount } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
@@ -300,9 +300,14 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             </button>
           )}
           {!isAsset && account.type !== 'liability' && (
-            <button onClick={() => onExtrato(account)} className="mt-1.5 text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
-              <FileText size={10} /> Ver Extrato
-            </button>
+            <div className="flex items-center gap-3 mt-1.5">
+              <button onClick={() => onExtrato(account)} className="text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                <FileText size={10} /> Ver Extrato
+              </button>
+              <button onClick={() => recalcularSaldo(account.id)} className="text-xs flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                <RefreshCw size={10} /> Recalcular
+              </button>
+            </div>
           )}
         </div>
       )}

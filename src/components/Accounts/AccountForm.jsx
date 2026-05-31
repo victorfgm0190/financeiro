@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Info, AlertTriangle } from 'lucide-react'
+import { Info, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { fmt } from '../shared/utils'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -37,7 +38,7 @@ function Toggle({ checked, onChange, label, tooltip }) {
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo } = useApp()
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -55,6 +56,9 @@ export default function AccountForm({ initial, onClose }) {
     accountGroupId: initial?.accountGroupId || null,
     appPriority: initial?.appPriority || false,
     profileId: initial?.profileId || null,
+    initialBalance: (!initial || (initial.type !== 'credit' && initial.type !== 'asset' && initial.type !== 'liability'))
+      ? Math.round(((initial?.initialBalance ?? initial?.balance) ?? 0) * 100) / 100
+      : '',
     acquisitionValue: initial?.acquisitionValue ?? '',
     acquisitionDate: initial?.acquisitionDate || '',
     isReserva: initial?.isReserva || false,
@@ -83,12 +87,20 @@ export default function AccountForm({ initial, onClose }) {
         .forEach(a => updateAccount(a.id, { contaCorrentePrincipal: false }))
     }
 
+    const rb = v => Math.round(v * 100) / 100
     const payload = {
       name: form.name,
       apelido: form.apelido.slice(0, 8),
       type: form.type,
       bank: form.bank,
-      balance: isCredit ? (initial?.balance || 0) : Number(form.balance),
+      balance: isCredit
+        ? (initial?.balance || 0)
+        : (initial && !isPatrimonial)
+          ? (initial.balance ?? 0)
+          : Number(form.balance),
+      initialBalance: (!isCredit && !isPatrimonial)
+        ? rb(Number(initial ? form.initialBalance : form.balance) || 0)
+        : null,
       creditLimit: Number(form.creditLimit),
       closingDay: Number(form.closingDay),
       dueDay: Number(form.dueDay),
@@ -206,9 +218,9 @@ export default function AccountForm({ initial, onClose }) {
         </div>
       )}
 
-      {!isCredit && !isPatrimonial && (
+      {!isCredit && !isPatrimonial && !initial && (
         <div>
-          <label className="label">Saldo Atual (R$)</label>
+          <label className="label">Saldo Inicial (R$)</label>
           <input
             className="input"
             type="number"
@@ -217,6 +229,40 @@ export default function AccountForm({ initial, onClose }) {
             onChange={e => set('balance', e.target.value)}
             placeholder="0,00"
           />
+        </div>
+      )}
+
+      {!isCredit && !isPatrimonial && initial && (
+        <div className="space-y-2">
+          <div>
+            <label className="label">Saldo Inicial (R$)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              value={form.initialBalance}
+              onChange={e => set('initialBalance', e.target.value)}
+              placeholder="0,00"
+            />
+          </div>
+          <div>
+            <label className="label flex items-center justify-between">
+              <span>Saldo Atual</span>
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-[#0F6E56] hover:text-emerald-400 transition-colors"
+                onClick={() => {
+                  recalcularSaldo(initial.id, Math.round(Number(form.initialBalance) * 100) / 100)
+                  onClose()
+                }}
+              >
+                <RefreshCw size={11} /> Recalcular
+              </button>
+            </label>
+            <div className="input bg-gray-700/50 text-gray-400 cursor-not-allowed select-none">
+              {fmt(initial.balance ?? 0)}
+            </div>
+          </div>
         </div>
       )}
 

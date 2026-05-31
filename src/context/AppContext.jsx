@@ -10,6 +10,8 @@ import {
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey } from '../lib/fatura'
 
+const rb = v => Math.round(v * 100) / 100
+
 // Prev vazio para forçar full-sync ao reconectar
 const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
@@ -595,7 +597,7 @@ export function AppProvider({ children }) {
           }
           if (schedule.transactionType === 'income') {
             accounts = accounts.map(a => a.id === schedule.accountId
-              ? { ...a, balance: a.balance + Number(schedule.amount) } : a)
+              ? { ...a, balance: rb(a.balance + Number(schedule.amount)) } : a)
           } else if (schedule.transactionType === 'expense') {
             if (schedule.accountType === 'credit') {
               accounts = accounts.map(a => a.id === schedule.accountId ? {
@@ -605,12 +607,12 @@ export function AppProvider({ children }) {
               } : a)
             } else {
               accounts = accounts.map(a => a.id === schedule.accountId
-                ? { ...a, balance: a.balance - Number(schedule.amount) } : a)
+                ? { ...a, balance: rb(a.balance - Number(schedule.amount)) } : a)
             }
           } else if (schedule.transactionType === 'transfer') {
             accounts = accounts.map(a => {
-              if (a.id === schedule.accountId) return { ...a, balance: a.balance - Number(schedule.amount) }
-              if (a.id === schedule.toAccountId) return { ...a, balance: a.balance + Number(schedule.amount) }
+              if (a.id === schedule.accountId) return { ...a, balance: rb(a.balance - Number(schedule.amount)) }
+              if (a.id === schedule.toAccountId) return { ...a, balance: rb(a.balance + Number(schedule.amount)) }
               return a
             })
           }
@@ -637,7 +639,8 @@ export function AppProvider({ children }) {
   // ── Accounts ────────────────────────────────────────────────────────────────
   const addAccount = useCallback((account) => {
     const id = 'acc_' + Date.now()
-    update(d => ({ ...d, accounts: [...d.accounts, { ...account, id, balance: Number(account.balance) || 0 }] }))
+    const initBal = rb(Number(account.balance) || 0)
+    update(d => ({ ...d, accounts: [...d.accounts, { ...account, id, balance: initBal, initialBalance: initBal }] }))
     return id
   }, [update])
 
@@ -660,7 +663,7 @@ export function AppProvider({ children }) {
     update(d => {
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + Number(tx.amount) } : a)
+        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
@@ -669,17 +672,17 @@ export function AppProvider({ children }) {
             creditMonthBill: (a.creditMonthBill || 0) + Number(tx.amount),
           } : a)
         } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - Number(tx.amount) } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - Number(tx.amount)) } : a)
         }
       } else if (tx.type === 'transfer') {
         accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: a.balance - Number(tx.amount) }
-          if (a.id === tx.toAccountId) return { ...a, balance: a.balance + Number(tx.amount) }
+          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
+          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance + Number(tx.amount)) }
           return a
         })
       } else if (tx.type === 'credit_payment') {
         accounts = accounts.map(a => {
-          if (a.id === tx.fromAccountId) return { ...a, balance: a.balance - Number(tx.amount) }
+          if (a.id === tx.fromAccountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
           if (a.id === tx.accountId) return {
             ...a,
             creditDebt: Math.max(0, (a.creditDebt || 0) - Number(tx.amount)),
@@ -714,9 +717,9 @@ export function AppProvider({ children }) {
             creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
           } : a)
         } else if (tx.type === 'income') {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
         } else if (tx.type === 'expense') {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + tx.amount } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
         }
       }
       return {
@@ -738,7 +741,7 @@ export function AppProvider({ children }) {
       if (!tx) return d
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a)
+        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
@@ -747,12 +750,12 @@ export function AppProvider({ children }) {
             creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
           } : a)
         } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + tx.amount } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
         }
       } else if (tx.type === 'transfer') {
         accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: a.balance + tx.amount }
-          if (a.id === tx.toAccountId) return { ...a, balance: a.balance - tx.amount }
+          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance + tx.amount) }
+          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance - tx.amount) }
           return a
         })
       }
@@ -792,7 +795,7 @@ export function AppProvider({ children }) {
       if (!tx) return d
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - tx.amount } : a)
+        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
@@ -801,12 +804,12 @@ export function AppProvider({ children }) {
             creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
           } : a)
         } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + tx.amount } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
         }
       } else if (tx.type === 'transfer') {
         accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: a.balance + tx.amount }
-          if (a.id === tx.toAccountId) return { ...a, balance: a.balance - tx.amount }
+          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance + tx.amount) }
+          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance - tx.amount) }
           return a
         })
       }
@@ -839,8 +842,8 @@ export function AppProvider({ children }) {
         )
         if (etapaATx) {
           accounts = accounts.map(a => {
-            if (a.id === etapaATx.accountId) return { ...a, balance: a.balance + etapaATx.amount }
-            if (a.id === etapaATx.toAccountId) return { ...a, balance: a.balance - etapaATx.amount }
+            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
             return a
           })
           transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -908,8 +911,8 @@ export function AppProvider({ children }) {
       )
       if (etapaATx) {
         accounts = accounts.map(a => {
-          if (a.id === etapaATx.accountId) return { ...a, balance: a.balance + etapaATx.amount }
-          if (a.id === etapaATx.toAccountId) return { ...a, balance: a.balance - etapaATx.amount }
+          if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+          if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
           return a
         })
         transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -974,7 +977,7 @@ export function AppProvider({ children }) {
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance + Number(tx.amount) } : a)
+        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
@@ -983,12 +986,12 @@ export function AppProvider({ children }) {
             creditMonthBill: (a.creditMonthBill || 0) + Number(tx.amount),
           } : a)
         } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: a.balance - Number(tx.amount) } : a)
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - Number(tx.amount)) } : a)
         }
       } else if (tx.type === 'transfer') {
         accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: a.balance - Number(tx.amount) }
-          if (a.id === tx.toAccountId) return { ...a, balance: a.balance + Number(tx.amount) }
+          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
+          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance + Number(tx.amount)) }
           return a
         })
       }
@@ -1260,6 +1263,31 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // ── Recalcular Saldo ──────────────────────────────────────────────────────────
+  const recalcularSaldo = useCallback((accountId, overrideInitialBalance) => {
+    update(d => {
+      const account = d.accounts.find(a => a.id === accountId)
+      if (!account) return d
+      const initBal = overrideInitialBalance != null ? rb(overrideInitialBalance) : rb(account.initialBalance ?? 0)
+      let balance = initBal
+      d.transactions.forEach(tx => {
+        if (tx.type === 'income' && tx.accountId === accountId) balance = rb(balance + tx.amount)
+        else if (tx.type === 'expense' && tx.accountId === accountId && tx.accountType !== 'credit') balance = rb(balance - tx.amount)
+        else if (tx.type === 'transfer') {
+          if (tx.accountId === accountId) balance = rb(balance - tx.amount)
+          else if (tx.toAccountId === accountId) balance = rb(balance + tx.amount)
+        } else if (tx.type === 'credit_payment' && tx.fromAccountId === accountId) balance = rb(balance - tx.amount)
+      })
+      return {
+        ...d,
+        accounts: d.accounts.map(a => a.id === accountId
+          ? { ...a, balance: rb(balance), initialBalance: initBal }
+          : a
+        ),
+      }
+    })
+  }, [update])
+
   // ── Asset Value History ───────────────────────────────────────────────────────
   const updateAccountValue = useCallback((accountId, newValue, note) => {
     update(d => ({
@@ -1302,7 +1330,7 @@ export function AppProvider({ children }) {
       // Update account balances
       const accounts = d.accounts.map(a => {
         if (a.id === sourceAccountId) {
-          return { ...a, balance: (a.balance || 0) - paidAmount }
+          return { ...a, balance: rb((a.balance || 0) - paidAmount) }
         }
         if (a.id === debtAccountId) {
           const newPlan = a.debtPlan ? {
@@ -1539,7 +1567,7 @@ export function AppProvider({ children }) {
             a.id === subcontaId
               ? {
                   ...a,
-                  balance: (a.balance || 0) + lancamento.amount,
+                  balance: rb((a.balance || 0) + lancamento.amount),
                   accountGroupId: contaPrincipal.accountGroupId || a.accountGroupId || null,
                   bank: a.bank || contaPrincipal.bank || '',
                 }
@@ -1548,7 +1576,7 @@ export function AppProvider({ children }) {
         }
 
         accounts = accounts.map(a =>
-          a.id === contaPrincipal.id ? { ...a, balance: (a.balance || 0) - lancamento.amount } : a
+          a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
         )
 
         // ETAPA A: transferência imediata Conta Corrente → Ger. subconta (inalterada)
@@ -1938,7 +1966,7 @@ export function AppProvider({ children }) {
       profileAccounts, profileTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,
       updateSettings,
-      addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue,
+      addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly,
       addCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
