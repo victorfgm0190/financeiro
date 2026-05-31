@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, FileText, ArrowUp, ArrowDown, Settings, Building2,
@@ -212,7 +212,14 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const isAsset = account.type === 'asset'
 
   return (
-    <div className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg`}>
+    <div
+      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-grab active:cursor-grabbing`}
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', account.id)
+      }}
+    >
       {account.isMain && (
         <span className="absolute top-3 right-10 text-yellow-300"><Star size={13} fill="currentColor" /></span>
       )}
@@ -322,7 +329,7 @@ function balColor(amount) {
   return 'text-gray-300'
 }
 
-function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue }) {
+function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup }) {
   const [collapsed, setCollapsed] = useState(false)
   const total = calcGroupBalance(accounts)
   const typeBadge = group.type === 'financeiro'
@@ -330,7 +337,12 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
     : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
 
   return (
-    <div className="space-y-3">
+    <div
+      className={`space-y-3 rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-emerald-500/50 bg-emerald-500/5' : ''}`}
+      onDragOver={e => { e.preventDefault(); onDragOverGroup?.() }}
+      onDragLeave={e => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) onDragLeaveGroup?.() }}
+      onDrop={e => { e.preventDefault(); onDropAccount?.(e.dataTransfer.getData('text/plain')) }}
+    >
       <button
         onClick={() => setCollapsed(c => !c)}
         className="flex items-center gap-2.5 w-full text-left rounded-xl bg-white/5 border border-white/10 py-3 px-4 hover:bg-white/8 transition-colors"
@@ -366,7 +378,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
 }
 
 export default function AccountsPanel() {
-  const { accounts, accountGroups = [], activeAccountGroups = [], deleteAccount } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -395,6 +407,18 @@ export default function AccountsPanel() {
   const handleDelete = (account) => setConfirmDelete(account)
   const handleExtrato = (account) => setExtratoAccount(account)
   const handleUpdateValue = (account) => setUpdateValueAccount(account)
+
+  const [dragOverGroup, setDragOverGroup] = useState(null)
+  const handleDropAccount = (targetGroupId, accountId) => {
+    if (!accountId) return
+    updateAccount(accountId, { accountGroupId: targetGroupId || null })
+    setDragOverGroup(null)
+  }
+  useEffect(() => {
+    const reset = () => setDragOverGroup(null)
+    document.addEventListener('dragend', reset)
+    return () => document.removeEventListener('dragend', reset)
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -448,6 +472,10 @@ export default function AccountsPanel() {
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
                     onUpdateValue={handleUpdateValue}
+                    onDropAccount={id => handleDropAccount(g.id, id)}
+                    isDragOver={dragOverGroup === g.id}
+                    onDragOverGroup={() => setDragOverGroup(g.id)}
+                    onDragLeaveGroup={() => setDragOverGroup(null)}
                   />
                 ))}
               </div>
@@ -467,32 +495,47 @@ export default function AccountsPanel() {
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
                     onUpdateValue={handleUpdateValue}
+                    onDropAccount={id => handleDropAccount(g.id, id)}
+                    isDragOver={dragOverGroup === g.id}
+                    onDragOverGroup={() => setDragOverGroup(g.id)}
+                    onDragLeaveGroup={() => setDragOverGroup(null)}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {ungrouped.length > 0 && (
-            <div className="space-y-3">
+          {(ungrouped.length > 0 || sortedGroups.length > 0) && (
+            <div
+              className={`space-y-3 rounded-xl transition-colors ${dragOverGroup === 'ungrouped' ? 'ring-2 ring-gray-500/50 bg-gray-500/5' : ''}`}
+              onDragOver={e => { e.preventDefault(); setDragOverGroup('ungrouped') }}
+              onDragLeave={e => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) setDragOverGroup(null) }}
+              onDrop={e => { e.preventDefault(); handleDropAccount(null, e.dataTransfer.getData('text/plain')) }}
+            >
               <div className="flex items-center gap-2.5 rounded-xl bg-white/5 border border-white/10 py-3 px-4">
                 <span className="font-semibold text-sm text-gray-100">Sem Grupo</span>
                 <span className="text-xs text-gray-600 ml-2">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
-                <span className={`font-bold text-base ml-auto ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</span>
+                {ungrouped.length > 0 && <span className={`font-bold text-base ml-auto ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</span>}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {ungrouped.map(a => (
-                  <AccountCard
-                    key={a.id}
-                    account={a}
-                    siblings={ungrouped}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onExtrato={handleExtrato}
-                    onUpdateValue={handleUpdateValue}
-                  />
-                ))}
-              </div>
+              {ungrouped.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {ungrouped.map(a => (
+                    <AccountCard
+                      key={a.id}
+                      account={a}
+                      siblings={ungrouped}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onExtrato={handleExtrato}
+                      onUpdateValue={handleUpdateValue}
+                    />
+                  ))}
+                </div>
+              ) : dragOverGroup === 'ungrouped' ? (
+                <div className="h-16 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center">
+                  <p className="text-xs text-gray-500">Soltar aqui para remover do grupo</p>
+                </div>
+              ) : null}
             </div>
           )}
 
