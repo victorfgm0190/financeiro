@@ -137,6 +137,7 @@ export const txToRow = (tx) => ({
   reconciled: !!tx.reconciled,
   reserva_auto: !!tx.reservaAuto,
   origin: tx.origin || 'manual',
+  gerencial_schedule_id: tx.gerencialScheduleId || null,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -159,6 +160,7 @@ export const rowToTx = (r) => ({
   reconciled: !!r.reconciled,
   reservaAuto: !!r.reserva_auto,
   origin: r.origin || 'manual',
+  gerencialScheduleId: r.gerencial_schedule_id || null,
   createdAt: r.created_at,
 })
 

@@ -50,9 +50,10 @@ function buildAccOpts(accounts, accountGroups, excludeId) {
 
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
-    accounts, accountGroups, categories, costCenters, payees, transactions,
+    accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, processarLancamentoGerencial, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
+    updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
   } = useApp()
 
@@ -162,29 +163,59 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       if (isCardExpense) {
         const prevGrupoId = initial.grupoGerencial || null
         const newGrupoId = txData.grupoGerencial || null
-        const wasGerencial1 = gerencialGroups.find(g => g.id === prevGrupoId)?.number === 1
-        const isGerencial1 = gerencialGroups.find(g => g.id === newGrupoId)?.number === 1
+        const prevGrupo = gerencialGroups.find(g => g.id === prevGrupoId)
+        const newGrupo  = gerencialGroups.find(g => g.id === newGrupoId)
+        const wasGerencial1 = prevGrupo?.number === 1
+        const isGerencial1  = newGrupo?.number === 1
+        const wasNumbered = typeof prevGrupo?.number === 'number' && prevGrupo.number !== 1
+        const isNumbered  = typeof newGrupo?.number === 'number' && newGrupo.number !== 1
 
         if (wasGerencial1 && !isGerencial1) {
-          // Era Gerencial → deixou de ser: reverter transferência e agendamentos
           reverseGerencialCascadeOnly(initial)
         } else if (!wasGerencial1 && isGerencial1) {
-          // Não era → agora é Gerencial: criar transferência e agendamentos
           const contaId = gerencialContaId
           if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
           processarLancamentoGerencial(
             { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
-            newGrupoId,
-            contaId || null
+            newGrupoId, contaId || null
           )
         } else if (wasGerencial1 && isGerencial1 && Math.abs(Number(form.amount) - initial.amount) > 0.005) {
-          // Continua Gerencial mas valor mudou: reverter old e reaplicar new
           reverseGerencialCascadeOnly(initial)
           processarLancamentoGerencial(
             { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
-            newGrupoId,
-            gerencialContaId || null
+            newGrupoId, gerencialContaId || null
           )
+        } else if (wasNumbered && !isNumbered && initial.gerencialScheduleId) {
+          // Deixou de ser grupo numerado: subtrair do agendamento vinculado
+          const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
+          if (oldSch) {
+            const done = (oldSch.registered || []).includes(oldSch.startDate)
+            if (!done) {
+              const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - initial.amount) * 100) / 100)
+              if (newAmt <= 0) deleteSchedule(oldSch.id)
+              else updateSchedule(oldSch.id, { amount: newAmt })
+            }
+          }
+          updateTransaction(initial.id, { gerencialScheduleId: null })
+        } else if (!wasNumbered && isNumbered) {
+          // Passou a ser grupo numerado: criar agendamento
+          const res = processarLancamentoGerencial(
+            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+            newGrupoId, null
+          )
+          if (res.gerencialScheduleId) updateTransaction(initial.id, { gerencialScheduleId: res.gerencialScheduleId })
+        } else if (wasNumbered && isNumbered && Math.abs(Number(form.amount) - initial.amount) > 0.005 && initial.gerencialScheduleId) {
+          // Mesmo grupo numerado mas valor mudou: ajustar delta no agendamento
+          const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
+          if (oldSch) {
+            const done = (oldSch.registered || []).includes(oldSch.startDate)
+            if (!done) {
+              const delta = Number(form.amount) - initial.amount
+              const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) + delta) * 100) / 100)
+              if (newAmt <= 0) { deleteSchedule(oldSch.id); updateTransaction(initial.id, { gerencialScheduleId: null }) }
+              else updateSchedule(oldSch.id, { amount: newAmt })
+            }
+          }
         }
       }
 
@@ -210,7 +241,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       }
     }
 
-    addTransaction(txData)
+    const txId = addTransaction(txData)
 
     if (form.type === 'expense' && form.useReserva && form.reservaAccountId) {
       const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
@@ -236,13 +267,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         form.grupoGerencial,
         contaId,
       )
-      if (resultado.needsResgate && resultado.contaResgate) {
-        setResgateInfo({ ...resultado, amount: Number(form.amount), date: form.date })
-        setStep('resgate')
-        return
+      if (resultado.gerencialScheduleId) {
+        updateTransaction(txId, { gerencialScheduleId: resultado.gerencialScheduleId })
       }
       if (resultado.scheduleDate) {
-        onToast?.(`Reserva criada + agendamento de devolução em ${fmtDate(resultado.scheduleDate)} criado.`)
+        onToast?.(`Agendamento de resgate criado para ${fmtDate(resultado.scheduleDate)}.`)
       }
     }
 
@@ -620,9 +649,23 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             }
 
             const acc = accounts.find(a => a.id === g.defaultAccountId)
-            return (
-              <p className="text-xs text-blue-300">
-                Após registrar, você poderá resgatar da conta{acc ? ` "${acc.name}"` : ' padrão do grupo'}.
+            const txDate3 = form.date ? new Date(form.date + 'T00:00:00') : new Date()
+            const faturaRef3 = computeFaturaRef(txDate3, selectedAccount?.closingDay || 14)
+            const [fmm3, fyyyy3] = faturaRef3.split('/')
+            const dueDate3 = `${fyyyy3}-${fmm3}-${String(selectedAccount?.dueDay || 10).padStart(2, '0')}`
+            return acc ? (
+              <div className="space-y-1">
+                <p className="text-xs text-blue-300 leading-relaxed">
+                  Agendamento de resgate automático:{' '}
+                  <strong className="text-blue-200">{acc.apelido || acc.name}</strong> → conta corrente principal.
+                </p>
+                <p className="text-xs text-blue-400">
+                  📅 Fatura {faturaRef3} · Resgate em {fmtDate(dueDate3)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-400">
+                Configure uma conta padrão neste grupo para ativar o resgate automático.
               </p>
             )
           })()}

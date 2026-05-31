@@ -756,7 +756,21 @@ export function AppProvider({ children }) {
           return a
         })
       }
-      return { ...d, accounts, transactions: d.transactions.filter(t => t.id !== id) }
+      // Estorno em cadeia: agendamento numérico gerencial
+      let schedules = d.schedules
+      if (tx.gerencialScheduleId) {
+        const sch = schedules.find(s => s.id === tx.gerencialScheduleId)
+        if (sch) {
+          const done = (sch.registered || []).includes(sch.startDate) || (sch.skipped || []).includes(sch.startDate)
+          if (!done) {
+            const newAmt = Math.max(0, Math.round(((sch.amount || 0) - tx.amount) * 100) / 100)
+            schedules = newAmt <= 0
+              ? schedules.filter(s => s.id !== tx.gerencialScheduleId)
+              : schedules.map(s => s.id === tx.gerencialScheduleId ? { ...s, amount: newAmt } : s)
+          }
+        }
+      }
+      return { ...d, accounts, schedules, transactions: d.transactions.filter(t => t.id !== id) }
     })
   }, [update])
 
@@ -828,6 +842,20 @@ export function AppProvider({ children }) {
           const newAmount = Math.max(0, Math.round(((s.amount || 0) - tx.amount) * 100) / 100)
           return { ...s, amount: newAmount }
         })
+      }
+
+      // Estorno em cadeia: agendamento numérico gerencial
+      if (tx.gerencialScheduleId) {
+        const sch = schedules.find(s => s.id === tx.gerencialScheduleId)
+        if (sch) {
+          const done = (sch.registered || []).includes(sch.startDate) || (sch.skipped || []).includes(sch.startDate)
+          if (!done) {
+            const newAmt = Math.max(0, Math.round(((sch.amount || 0) - tx.amount) * 100) / 100)
+            schedules = newAmt <= 0
+              ? schedules.filter(s => s.id !== tx.gerencialScheduleId)
+              : schedules.map(s => s.id === tx.gerencialScheduleId ? { ...s, amount: newAmt } : s)
+          }
+        }
       }
 
       return { ...d, accounts, transactions, schedules }
@@ -1587,9 +1615,60 @@ export function AppProvider({ children }) {
       return { needsResgate: false, faturaRef, scheduleDate }
     }
 
-    const contaResgate = data.accounts.find(a => a.id === grupo.defaultAccountId)
-    return { needsResgate: true, grupo, contaResgate: contaResgate || null }
-  }, [data.gerencialGroups, data.accounts, update])
+    // Grupos numerados (2, 3, 4…): cria agendamento único de transferência no vencimento do cartão
+    if (!grupo.defaultAccountId) return { needsResgate: false }
+
+    const cardAccount = data.accounts.find(a => a.id === lancamento.accountId)
+    const closingDay = cardAccount?.closingDay || 14
+    const dueDay = cardAccount?.dueDay || 10
+    const txDate = new Date(lancamento.date + 'T00:00:00')
+    const faturaRef = computeFaturaRef(txDate, closingDay)
+    const [fmm, fyyyy] = faturaRef.split('/')
+    const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}`
+    const gerKey = `ger_num_${grupoId}_${lancamento.accountId}_${dueDate}`
+
+    // Resolve schedule ID before update() — check current snapshot
+    const existingSch = data.schedules.find(s => s.overrides?._gerencialKey === gerKey)
+    const scheduleId = existingSch
+      ? existingSch.id
+      : 'sch_ger_num_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+
+    update(d => {
+      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+        || d.accounts.find(a => a.isMain && a.type !== 'credit')
+        || d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+
+      const idx = d.schedules.findIndex(s => s.overrides?._gerencialKey === gerKey)
+      let schedules
+      if (idx >= 0) {
+        schedules = d.schedules.map((s, i) => i === idx
+          ? { ...s, amount: Math.round(((s.amount || 0) + lancamento.amount) * 100) / 100 }
+          : s
+        )
+      } else {
+        schedules = [...d.schedules, {
+          id: scheduleId,
+          transactionType: 'transfer',
+          accountId: grupo.defaultAccountId,
+          toAccountId: contaPrincipal.id,
+          frequency: 'once',
+          occurrenceType: 'installment',
+          installments: 1,
+          autoRegister: false,
+          startDate: dueDate,
+          amount: lancamento.amount,
+          description: `Resgate ${grupo.name} - Fatura ${faturaRef}`,
+          overrides: { _gerencialKey: gerKey },
+          registered: [],
+          skipped: [],
+        }]
+      }
+      return { ...d, schedules }
+    })
+
+    return { needsResgate: false, gerencialScheduleId: scheduleId, scheduleDate: dueDate }
+  }, [data.gerencialGroups, data.accounts, data.schedules, update])
 
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {

@@ -105,9 +105,13 @@ CREATE TABLE IF NOT EXISTS lancamentos (
   account_type TEXT,
   schedule_id TEXT,
   reconciled BOOLEAN DEFAULT FALSE,
+  gerencial_schedule_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE lancamentos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS gerencial_schedule_id TEXT;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_auto BOOLEAN DEFAULT FALSE;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'manual';
 
 -- Agendamentos / Recorrências
 CREATE TABLE IF NOT EXISTS agendamentos (

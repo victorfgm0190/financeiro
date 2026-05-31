@@ -2,6 +2,7 @@ import { query } from './_db.js'
 
 export default async function handler(req, res) {
   try {
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS gerencial_schedule_id TEXT`)
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports] =
       await Promise.all([
         query('SELECT * FROM contas'),
