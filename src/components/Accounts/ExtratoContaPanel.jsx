@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2 } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -111,7 +111,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit }) {
 
   return (
     <tr
-      className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer"
+      className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group"
       onClick={() => onEdit && onEdit(tx)}
     >
       <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(tx.date)}</td>
@@ -141,16 +141,27 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit }) {
       <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
         {fmt(balance)}
       </td>
-      <td className="px-1 py-2.5">
-        {onReverse && !tx.reservaAuto && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onReverse(tx) }}
-            title="Estornar lançamento"
-            className="p-1 text-gray-700 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
-          >
-            <Undo2 size={11} />
-          </button>
-        )}
+      <td className="px-2 py-2.5">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(tx) }}
+              title="Editar lançamento"
+              className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+            >
+              <Edit2 size={14} />
+            </button>
+          )}
+          {onReverse && !tx.reservaAuto && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onReverse(tx) }}
+              title="Estornar lançamento"
+              className="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+            >
+              <Undo2 size={14} />
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   )
