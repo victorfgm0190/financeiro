@@ -51,7 +51,7 @@ function buildAccOpts(accounts, accountGroups, excludeId) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, reverseGerencialCascadeOnly,
+    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -87,6 +87,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     useReserva: false,
     reservaAccountId: '',
     reservaExpenseCategoryId: '',
+    installments: 1,
   })
 
   const [step, setStep] = useState('form')
@@ -145,11 +146,16 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
     if (form.type === 'transfer' && needsReservaCategorySelect && !form.reservaExpenseCategoryId) return
 
+    const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1
+    const installmentAmount = isParcelado
+      ? Math.round(Number(form.amount) / form.installments * 100) / 100
+      : Number(form.amount)
+
     // eslint-disable-next-line no-unused-vars
-    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, ...formFields } = form
+    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, ...formFields } = form
     const txData = {
       ...formFields,
-      amount: Number(form.amount),
+      amount: installmentAmount,
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
@@ -263,7 +269,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
       }
       const resultado = processarLancamentoGerencial(
-        { accountId: form.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+        { accountId: form.accountId, amount: installmentAmount, date: form.date, description: form.description },
         form.grupoGerencial,
         contaId,
       )
@@ -272,6 +278,15 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       }
       if (resultado.scheduleDate) {
         onToast?.(`Agendamento de resgate criado para ${fmtDate(resultado.scheduleDate)}.`)
+      }
+      if (isParcelado) {
+        criarParcelasGerencial(txId, {
+          accountId: form.accountId,
+          amount: installmentAmount,
+          date: form.date,
+          grupoGerencialId: form.grupoGerencial,
+          installments: form.installments,
+        })
       }
     }
 
@@ -428,7 +443,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           </div>
         ) : (
           <div>
-            <label className="label">Valor (R$) *</label>
+            <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}</label>
             <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
           </div>
         )}
@@ -578,6 +593,42 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <p className="text-xs text-indigo-400 leading-relaxed">
                   Será criada uma transferência automática da reserva para a conta da despesa.
                 </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isCredit && form.type === 'expense' && !initial?.id && (
+        <div className="p-3 bg-gray-800/60 border border-gray-700 rounded-lg space-y-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <div className="relative shrink-0">
+              <input
+                type="checkbox"
+                checked={form.installments > 1}
+                onChange={e => set('installments', e.target.checked ? 2 : 1)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-gray-600 transition-colors" />
+              <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+            </div>
+            <span className="text-sm text-gray-300 select-none">Parcelado</span>
+          </label>
+          {form.installments > 1 && (
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-gray-400 shrink-0">Parcelas:</label>
+              <input
+                className="input w-20 text-center"
+                type="number"
+                min="2"
+                max="48"
+                value={form.installments}
+                onChange={e => set('installments', Math.max(2, Math.min(48, Number(e.target.value) || 2)))}
+              />
+              {form.amount && (
+                <span className="text-xs text-gray-500">
+                  {fmt(Math.round(Number(form.amount) / form.installments * 100) / 100)} por parcela
+                </span>
               )}
             </div>
           )}

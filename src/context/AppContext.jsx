@@ -770,6 +770,18 @@ export function AppProvider({ children }) {
           }
         }
       }
+      // Cascade: parcelas 2..N criadas por criarParcelasGerencial
+      schedules = schedules.reduce((acc, s) => {
+        if (s.overrides?._originTxId !== id) { acc.push(s); return acc }
+        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
+        if (done) { acc.push(s); return acc }
+        if (s.overrides?._gerencialKey) {
+          const originAmt = s.overrides._originAmount || s.amount
+          const newAmt = Math.max(0, Math.round(((s.amount || 0) - originAmt) * 100) / 100)
+          if (newAmt > 0) acc.push({ ...s, amount: newAmt })
+        }
+        return acc
+      }, [])
       return { ...d, accounts, schedules, transactions: d.transactions.filter(t => t.id !== id) }
     })
   }, [update])
@@ -857,6 +869,18 @@ export function AppProvider({ children }) {
           }
         }
       }
+      // Cascade: parcelas 2..N criadas por criarParcelasGerencial
+      schedules = schedules.reduce((acc, s) => {
+        if (s.overrides?._originTxId !== id) { acc.push(s); return acc }
+        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
+        if (done) { acc.push(s); return acc }
+        if (s.overrides?._gerencialKey) {
+          const originAmt = s.overrides._originAmount || s.amount
+          const newAmt = Math.max(0, Math.round(((s.amount || 0) - originAmt) * 100) / 100)
+          if (newAmt > 0) acc.push({ ...s, amount: newAmt })
+        }
+        return acc
+      }, [])
 
       return { ...d, accounts, transactions, schedules }
     })
@@ -1670,6 +1694,103 @@ export function AppProvider({ children }) {
     return { needsResgate: false, gerencialScheduleId: scheduleId, scheduleDate: dueDate }
   }, [data.gerencialGroups, data.accounts, data.schedules, update])
 
+  // ── Parcelado gerencial: cria agendamentos futuros para parcelas 2..N ─────────
+  const criarParcelasGerencial = useCallback((rootTxId, { accountId, amount, date, grupoGerencialId, installments }) => {
+    if (!installments || installments <= 1) return
+    const grupo = data.gerencialGroups?.find(g => g.id === grupoGerencialId)
+    if (!grupo || grupo.number === 'D') return
+
+    const cardAccount = data.accounts.find(a => a.id === accountId)
+    const closingDay = cardAccount?.closingDay || 14
+    const dueDay = cardAccount?.dueDay || 10
+    const txDate = new Date(date + 'T00:00:00')
+    const faturaRef1 = computeFaturaRef(txDate, closingDay)
+    const [fmm1, fyyyy1] = faturaRef1.split('/')
+    const baseYear = Number(fyyyy1)
+    const baseMonth0 = Number(fmm1) - 1
+
+    if (typeof grupo.number === 'number' && grupo.number !== 1) {
+      if (!grupo.defaultAccountId) return
+      update(d => {
+        const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+          || d.accounts.find(a => a.isMain && a.type !== 'credit')
+          || d.accounts.find(a => a.type === 'checking')
+        if (!contaPrincipal) return d
+        let schedules = [...d.schedules]
+        for (let i = 2; i <= installments; i++) {
+          const dI = new Date(baseYear, baseMonth0 + (i - 1), dueDay)
+          const fmI = String(dI.getMonth() + 1).padStart(2, '0')
+          const fyI = dI.getFullYear()
+          const faturaRefI = `${fmI}/${fyI}`
+          const dueDateStr = `${fyI}-${fmI}-${String(dueDay).padStart(2, '0')}`
+          const gerKeyI = `ger_num_${grupoGerencialId}_${accountId}_${dueDateStr}`
+          const existingIdx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKeyI)
+          if (existingIdx >= 0) {
+            schedules = schedules.map((s, idx) => idx === existingIdx
+              ? { ...s, amount: Math.round(((s.amount || 0) + amount) * 100) / 100 }
+              : s
+            )
+          } else {
+            schedules = [...schedules, {
+              id: 'sch_ger_num_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
+              transactionType: 'transfer',
+              accountId: grupo.defaultAccountId,
+              toAccountId: contaPrincipal.id,
+              frequency: 'once',
+              occurrenceType: 'installment',
+              installments: 1,
+              autoRegister: false,
+              startDate: dueDateStr,
+              amount,
+              description: `Resgate ${grupo.name} - Fatura ${faturaRefI} (${i}/${installments}x)`,
+              overrides: { _gerencialKey: gerKeyI, _originTxId: rootTxId, _originAmount: amount },
+              registered: [],
+              skipped: [],
+            }]
+          }
+        }
+        return { ...d, schedules }
+      })
+    } else if (grupo.number === 1) {
+      const financialStartDay = data.settings?.financialMonthStartDay || 1
+      update(d => {
+        const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+          || d.accounts.find(a => a.isMain && a.type !== 'credit')
+          || d.accounts.find(a => a.type === 'checking')
+        if (!contaPrincipal) return d
+        const cartao = d.accounts.find(a => a.id === accountId)
+        const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
+        const subconta = d.accounts.find(a => a.name === `Ger. ${apelido}`)
+        if (!subconta) return d
+        let schedules = [...d.schedules]
+        for (let i = 2; i <= installments; i++) {
+          const futureDate = new Date(baseYear, baseMonth0 + (i - 1), 1)
+          const fmI = String(futureDate.getMonth() + 1).padStart(2, '0')
+          const fyI = futureDate.getFullYear()
+          const faturaRefI = `${fmI}/${fyI}`
+          const startDateStr = computeScheduleDate(faturaRefI, financialStartDay)
+          schedules = [...schedules, {
+            id: 'sch_ger_p_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
+            transactionType: 'transfer',
+            accountId: contaPrincipal.id,
+            toAccountId: subconta.id,
+            frequency: 'once',
+            occurrenceType: 'installment',
+            installments: 1,
+            autoRegister: false,
+            startDate: startDateStr,
+            amount,
+            description: `Provisão ${subconta.name} - Fatura ${faturaRefI} (${i}/${installments}x)`,
+            overrides: { _originTxId: rootTxId },
+            registered: [],
+            skipped: [],
+          }]
+        }
+        return { ...d, schedules }
+      })
+    }
+  }, [data.gerencialGroups, data.accounts, data.settings, update])
+
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
     return (
@@ -1719,6 +1840,7 @@ export function AppProvider({ children }) {
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
+      criarParcelasGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
