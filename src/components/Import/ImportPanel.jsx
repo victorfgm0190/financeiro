@@ -861,6 +861,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                           value={row.categoryId}
                           onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee) }}
+                          searchable
                         />
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
