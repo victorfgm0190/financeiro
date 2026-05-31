@@ -1791,6 +1791,114 @@ export function AppProvider({ children }) {
     }
   }, [data.gerencialGroups, data.accounts, data.settings, update])
 
+  // ── Ajusta parcelas 2..N quando o grupo gerencial muda em uma edição ──────────
+  const ajustarParcelasGrupoGerencial = useCallback((txId, { prevGrupoId, newGrupoId, amount, accountId }) => {
+    const prevGrupo = data.gerencialGroups?.find(g => g.id === prevGrupoId)
+    const newGrupo  = newGrupoId ? data.gerencialGroups?.find(g => g.id === newGrupoId) : null
+
+    const prevIsNumbered = typeof prevGrupo?.number === 'number' && prevGrupo.number !== 1
+    const prevIsG1       = prevGrupo?.number === 1
+    const newIsNumbered  = typeof newGrupo?.number === 'number' && newGrupo.number !== 1
+    const newIsG1        = newGrupo?.number === 1
+
+    if (!prevIsNumbered && !prevIsG1) return
+
+    const cardAccount      = data.accounts.find(a => a.id === accountId)
+    const dueDay           = cardAccount?.dueDay || 10
+    const financialStartDay = data.settings?.financialMonthStartDay || 1
+
+    update(d => {
+      const parcelaSchedules = d.schedules.filter(s =>
+        s.overrides?._originTxId === txId &&
+        !(s.registered || []).includes(s.startDate) &&
+        !(s.skipped || []).includes(s.startDate)
+      )
+      if (parcelaSchedules.length === 0) return d
+
+      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+        || d.accounts.find(a => a.isMain && a.type !== 'credit')
+        || d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+
+      let schedules = [...d.schedules]
+
+      for (const oldSch of parcelaSchedules) {
+        const originAmt = oldSch.overrides?._originAmount || oldSch.amount
+
+        // 1. Remove contribution from old schedule
+        if (prevIsNumbered && oldSch.overrides?._gerencialKey) {
+          const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - originAmt) * 100) / 100)
+          schedules = newAmt <= 0
+            ? schedules.filter(s => s.id !== oldSch.id)
+            : schedules.map(s => s.id === oldSch.id ? { ...s, amount: newAmt } : s)
+        } else if (prevIsG1 && !oldSch.overrides?._gerencialKey) {
+          schedules = schedules.filter(s => s.id !== oldSch.id)
+        }
+
+        if (!newIsNumbered && !newIsG1) continue
+
+        // Derive fatura ref from old schedule's month (both numbered and G1 dates live in fatura month)
+        const [yyyy, mm] = oldSch.startDate.split('-')
+        const faturaRefI = `${mm}/${yyyy}`
+
+        // 2. Create new schedule for new group
+        if (newIsNumbered) {
+          if (!newGrupo?.defaultAccountId) continue
+          const dueDateStr = `${yyyy}-${mm}-${String(dueDay).padStart(2, '0')}`
+          const gerKeyI = `ger_num_${newGrupoId}_${accountId}_${dueDateStr}`
+          const existingIdx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKeyI)
+          if (existingIdx >= 0) {
+            schedules = schedules.map((s, idx) => idx === existingIdx
+              ? { ...s, amount: Math.round(((s.amount || 0) + amount) * 100) / 100 }
+              : s
+            )
+          } else {
+            schedules = [...schedules, {
+              id: 'sch_ger_num_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+              transactionType: 'transfer',
+              accountId: newGrupo.defaultAccountId,
+              toAccountId: contaPrincipal.id,
+              frequency: 'once',
+              occurrenceType: 'installment',
+              installments: 1,
+              autoRegister: false,
+              startDate: dueDateStr,
+              amount,
+              description: `Resgate ${newGrupo.name} - Fatura ${faturaRefI}`,
+              overrides: { _gerencialKey: gerKeyI, _originTxId: txId, _originAmount: amount },
+              registered: [],
+              skipped: [],
+            }]
+          }
+        } else if (newIsG1) {
+          const cartao = d.accounts.find(a => a.id === accountId)
+          const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
+          const subconta = d.accounts.find(a => a.name === `Ger. ${apelido}`)
+          if (!subconta) continue
+          const startDateStr = computeScheduleDate(faturaRefI, financialStartDay)
+          schedules = [...schedules, {
+            id: 'sch_ger_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            transactionType: 'transfer',
+            accountId: contaPrincipal.id,
+            toAccountId: subconta.id,
+            frequency: 'once',
+            occurrenceType: 'installment',
+            installments: 1,
+            autoRegister: false,
+            startDate: startDateStr,
+            amount,
+            description: `Provisão ${subconta.name} - Fatura ${faturaRefI}`,
+            overrides: { _originTxId: txId },
+            registered: [],
+            skipped: [],
+          }]
+        }
+      }
+
+      return { ...d, schedules }
+    })
+  }, [data.gerencialGroups, data.accounts, data.settings, update])
+
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
     return (
@@ -1841,6 +1949,7 @@ export function AppProvider({ children }) {
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
       criarParcelasGerencial,
+      ajustarParcelasGrupoGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,

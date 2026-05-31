@@ -51,7 +51,7 @@ function buildAccOpts(accounts, accountGroups, excludeId) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, reverseGerencialCascadeOnly,
+    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -164,62 +164,86 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (initial?.id) {
       updateTransaction(initial.id, txData)
 
-      // Detecta mudança de classificação gerencial em despesas de cartão
+      // Ajuste de automações gerenciais em edição de despesa de cartão
       const isCardExpense = initial.accountType === 'credit' && initial.type === 'expense'
       if (isCardExpense) {
-        const prevGrupoId = initial.grupoGerencial || null
-        const newGrupoId = txData.grupoGerencial || null
-        const prevGrupo = gerencialGroups.find(g => g.id === prevGrupoId)
-        const newGrupo  = gerencialGroups.find(g => g.id === newGrupoId)
+        const prevGrupoId   = initial.grupoGerencial || null
+        const newGrupoId    = txData.grupoGerencial  || null
+        const prevGrupo     = gerencialGroups.find(g => g.id === prevGrupoId)
+        const newGrupo      = gerencialGroups.find(g => g.id === newGrupoId)
         const wasGerencial1 = prevGrupo?.number === 1
         const isGerencial1  = newGrupo?.number === 1
-        const wasNumbered = typeof prevGrupo?.number === 'number' && prevGrupo.number !== 1
-        const isNumbered  = typeof newGrupo?.number === 'number' && newGrupo.number !== 1
+        const wasNumbered   = typeof prevGrupo?.number === 'number' && prevGrupo.number !== 1
+        const isNumbered    = typeof newGrupo?.number === 'number' && newGrupo.number !== 1
+        const groupChanged  = prevGrupoId !== newGrupoId
+        const amountChanged = Math.abs(Number(form.amount) - initial.amount) > 0.005
 
-        if (wasGerencial1 && !isGerencial1) {
-          reverseGerencialCascadeOnly(initial)
-        } else if (!wasGerencial1 && isGerencial1) {
-          const contaId = gerencialContaId
-          if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
-          processarLancamentoGerencial(
-            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
-            newGrupoId, contaId || null
-          )
-        } else if (wasGerencial1 && isGerencial1 && Math.abs(Number(form.amount) - initial.amount) > 0.005) {
-          reverseGerencialCascadeOnly(initial)
-          processarLancamentoGerencial(
-            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
-            newGrupoId, gerencialContaId || null
-          )
-        } else if (wasNumbered && !isNumbered && initial.gerencialScheduleId) {
-          // Deixou de ser grupo numerado: subtrair do agendamento vinculado
-          const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
-          if (oldSch) {
-            const done = (oldSch.registered || []).includes(oldSch.startDate)
-            if (!done) {
-              const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - initial.amount) * 100) / 100)
-              if (newAmt <= 0) deleteSchedule(oldSch.id)
-              else updateSchedule(oldSch.id, { amount: newAmt })
-            }
+        if (groupChanged) {
+          // — Desfaz automação do grupo anterior —
+          if (wasGerencial1) {
+            reverseGerencialCascadeOnly(initial)
           }
-          updateTransaction(initial.id, { gerencialScheduleId: null })
-        } else if (!wasNumbered && isNumbered) {
-          // Passou a ser grupo numerado: criar agendamento
-          const res = processarLancamentoGerencial(
-            { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
-            newGrupoId, null
-          )
-          if (res.gerencialScheduleId) updateTransaction(initial.id, { gerencialScheduleId: res.gerencialScheduleId })
-        } else if (wasNumbered && isNumbered && Math.abs(Number(form.amount) - initial.amount) > 0.005 && initial.gerencialScheduleId) {
-          // Mesmo grupo numerado mas valor mudou: ajustar delta no agendamento
-          const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
-          if (oldSch) {
-            const done = (oldSch.registered || []).includes(oldSch.startDate)
-            if (!done) {
-              const delta = Number(form.amount) - initial.amount
-              const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) + delta) * 100) / 100)
-              if (newAmt <= 0) { deleteSchedule(oldSch.id); updateTransaction(initial.id, { gerencialScheduleId: null }) }
-              else updateSchedule(oldSch.id, { amount: newAmt })
+          if (wasNumbered && initial.gerencialScheduleId) {
+            const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
+            if (oldSch) {
+              const done = (oldSch.registered || []).includes(oldSch.startDate)
+                        || (oldSch.skipped   || []).includes(oldSch.startDate)
+              if (!done) {
+                const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - initial.amount) * 100) / 100)
+                if (newAmt <= 0) deleteSchedule(oldSch.id)
+                else updateSchedule(oldSch.id, { amount: newAmt })
+              }
+            }
+            updateTransaction(initial.id, { gerencialScheduleId: null })
+          }
+
+          // — Aplica automação do novo grupo —
+          if (isGerencial1) {
+            const contaId = gerencialContaId
+            if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
+            processarLancamentoGerencial(
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              newGrupoId, contaId || null
+            )
+          }
+          if (isNumbered) {
+            const res = processarLancamentoGerencial(
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              newGrupoId, null
+            )
+            if (res.gerencialScheduleId) updateTransaction(initial.id, { gerencialScheduleId: res.gerencialScheduleId })
+            if (res.scheduleDate) onToast?.(`Agendamento de resgate criado para ${fmtDate(res.scheduleDate)}.`)
+          }
+
+          // — Cascata parcelas 2..N —
+          if (wasGerencial1 || wasNumbered || isGerencial1 || isNumbered) {
+            ajustarParcelasGrupoGerencial(initial.id, {
+              prevGrupoId,
+              newGrupoId: (isGerencial1 || isNumbered) ? newGrupoId : null,
+              amount: Number(form.amount),
+              accountId: initial.accountId,
+            })
+          }
+        } else if (amountChanged) {
+          // — Mesmo grupo, valor alterado —
+          if (wasGerencial1) {
+            reverseGerencialCascadeOnly(initial)
+            processarLancamentoGerencial(
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              newGrupoId, gerencialContaId || null
+            )
+          }
+          if (wasNumbered && initial.gerencialScheduleId) {
+            const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
+            if (oldSch) {
+              const done = (oldSch.registered || []).includes(oldSch.startDate)
+                        || (oldSch.skipped   || []).includes(oldSch.startDate)
+              if (!done) {
+                const delta  = Number(form.amount) - initial.amount
+                const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) + delta) * 100) / 100)
+                if (newAmt <= 0) { deleteSchedule(oldSch.id); updateTransaction(initial.id, { gerencialScheduleId: null }) }
+                else updateSchedule(oldSch.id, { amount: newAmt })
+              }
             }
           }
         }
