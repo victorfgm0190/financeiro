@@ -877,7 +877,9 @@ export default function SettingsPanel() {
               </div>
               <div className="text-xs text-gray-400 pl-5 space-y-0.5">
                 <p>Saldo atual total: <span className="text-white/80 font-medium">{fmt(recalcStatus.totalBalance)}</span></p>
-                <p>Saldo projetado total: <span className="text-sky-300 font-medium">{fmt(recalcStatus.totalProjected)}</span></p>
+                {Math.abs(recalcStatus.totalProjected - recalcStatus.totalBalance) >= 0.005 && (
+                  <p>Saldo projetado total: <span className="text-sky-300 font-medium">{fmt(recalcStatus.totalProjected)}</span></p>
+                )}
               </div>
             </div>
           )}
