@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, FileText, Check, AlertCircle, Wand2, Save,
   Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight,
@@ -6,6 +6,7 @@ import {
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import { loadAccountMappings } from '../../lib/db'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import AccountOptions from '../shared/AccountOptions'
@@ -160,7 +161,7 @@ function DropZone({ onFile, label }) {
   )
 }
 
-function SummaryBar({ found, toImport, duplicates }) {
+function SummaryBar({ found, toImport, duplicates, ignored = 0 }) {
   return (
     <div className="flex items-center gap-4 flex-wrap text-xs">
       <span className="text-gray-400">{found} encontrado{found !== 1 ? 's' : ''}</span>
@@ -168,6 +169,7 @@ function SummaryBar({ found, toImport, duplicates }) {
       <span className="text-blue-600 font-medium">{toImport} serão importados</span>
       <span className="text-gray-600">·</span>
       <span className="text-orange-600">{duplicates} já existem</span>
+      {ignored > 0 && <><span className="text-gray-600">·</span><span className="text-gray-500">{ignored} ignorados</span></>}
     </div>
   )
 }
@@ -186,15 +188,40 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   const [accountMapping, setAccountMapping] = useState({})
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+  const [dbMappings, setDbMappings] = useState([])
   const { addTransaction, gerencialGroups } = useApp()
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
 
+  useEffect(() => {
+    loadAccountMappings().then(maps => setDbMappings(maps))
+  }, [])
+
+  // Índice nome_dindin (lower) → mapping para lookup O(1)
+  const dbMapIndex = useMemo(() => {
+    const idx = {}
+    for (const m of dbMappings) {
+      if (m.nome_dindin) idx[m.nome_dindin.toLowerCase().trim()] = m
+    }
+    return idx
+  }, [dbMappings])
+
   const resolvedRows = useMemo(() => {
     return parsedRows.map(row => {
-      const accountId =
-        accountMapping[row.fromAccount] || accountMapping[row.toAccount] ||
-        (row.type === 'income' ? accountMapping[row.toAccount] : accountMapping[row.fromAccount]) || null
+      const fromMap = row.fromAccount ? dbMapIndex[row.fromAccount.toLowerCase().trim()] : null
+      const toMap   = row.toAccount   ? dbMapIndex[row.toAccount.toLowerCase().trim()]   : null
+
+      // nao_criar: conta principal marcada para ignorar
+      const primaryMap = row.type === 'income' ? toMap : fromMap
+      if (primaryMap?.nao_criar) {
+        return { ...row, accountId: null, toAccountId: null, _isIgnored: true, _ignoreReason: 'mapeamento', selected: false }
+      }
+
+      // ignorar_transferencias: pular transferências envolvendo esta conta
+      if (row.type === 'transfer' && (fromMap?.ignorar_transferencias || toMap?.ignorar_transferencias)) {
+        return { ...row, accountId: null, toAccountId: null, _isIgnored: true, _ignoreReason: 'transferencia', selected: false }
+      }
+
       const toAccountId = row.type === 'transfer' ? (accountMapping[row.toAccount] || null) : null
       const fromAccountId = row.type === 'transfer' ? (accountMapping[row.fromAccount] || null) : null
       const resolvedAccountId = row.type === 'income' ? (accountMapping[row.toAccount] || null)
@@ -203,9 +230,9 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
 
       const rowWithAccount = { ...row, accountId: resolvedAccountId, toAccountId }
       const dup = resolvedAccountId ? isDuplicate(rowWithAccount, transactions) : false
-      return { ...rowWithAccount, _isDuplicate: dup, selected: row.selected && !dup }
+      return { ...rowWithAccount, _isDuplicate: dup, _isIgnored: false, selected: row.selected && !dup }
     })
-  }, [parsedRows, accountMapping, transactions])
+  }, [parsedRows, accountMapping, transactions, dbMapIndex])
 
   const handleFile = async (file) => {
     setError('')
@@ -215,11 +242,19 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
       const { rows: parsed, accountNames: names } = parseDindinCC(rows)
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado no arquivo.'); return }
 
-      // Auto-map accounts
+      // Auto-map: DB mapping tem prioridade, depois fuzzy match
       const autoMap = {}
       names.forEach(name => {
-        const match = fuzzyMatchAccount(name, accounts)
-        if (match) autoMap[name] = match.id
+        const dbMap = dbMapIndex[name.toLowerCase().trim()]
+        if (dbMap && dbMap.nome_finup && !dbMap.nao_criar) {
+          const finupAcc =
+            accounts.find(a => a.name.toLowerCase().trim() === dbMap.nome_finup.toLowerCase().trim()) ||
+            fuzzyMatchAccount(dbMap.nome_finup, accounts)
+          if (finupAcc) autoMap[name] = finupAcc.id
+        } else if (!dbMap?.nao_criar) {
+          const match = fuzzyMatchAccount(name, accounts)
+          if (match) autoMap[name] = match.id
+        }
       })
 
       setParsedRows(parsed)
@@ -235,11 +270,11 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   }
 
   const toggleAll = (checked) => {
-    setParsedRows(r => r.map(row => ({ ...row, selected: row._isDuplicate ? false : checked })))
+    setParsedRows(r => r.map(row => ({ ...row, selected: (row._isDuplicate || row._isIgnored) ? false : checked })))
   }
 
   const handleImport = () => {
-    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)
+    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._isIgnored)
     toImport.forEach(row => {
       const acc = accounts.find(a => a.id === row.accountId)
       addTransaction({
@@ -261,7 +296,8 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
 
   const found = resolvedRows.length
   const dups = resolvedRows.filter(r => r._isDuplicate).length
-  const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate).length
+  const ignored = resolvedRows.filter(r => r._isIgnored).length
+  const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._isIgnored).length
 
   if (result !== null) {
     return (
@@ -308,7 +344,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
 
       {/* Summary + action */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
+        <SummaryBar found={found} toImport={toImportCount} duplicates={dups} ignored={ignored} />
         <div className="flex gap-2">
           <button className="btn-secondary text-xs py-1.5" onClick={() => { setParsedRows([]); setAccountNames([]) }}>
             <X size={12} className="mr-1 inline" /> Cancelar
@@ -377,7 +413,9 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                     <td className="px-3 py-2">
                       {row._isDuplicate
                         ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500">Duplicado</span>
-                        : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                        : row._isIgnored
+                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500">Ignorado</span>
+                          : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
                       }
                     </td>
                   </tr>

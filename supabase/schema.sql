@@ -480,3 +480,126 @@ INSERT INTO categorias (id, name, type, color, icon, category_group) VALUES
   ('cat_apl_ppv','Previdência Privada','expense','#22c55e','🛡️','Aplicações'),
   ('cat_apl_ted','Tesouro Direto','expense','#22c55e','🏛️','Aplicações')
 ON CONFLICT (id) DO NOTHING;
+
+-- ─── Mapeamento De-Para: Dindin → Finup ──────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS account_mapping (
+  id                    SERIAL PRIMARY KEY,
+  user_id               TEXT,
+  grupo                 TEXT,
+  nome_finup            TEXT,
+  nome_dindin           TEXT,
+  nao_criar             BOOLEAN DEFAULT false,
+  ignorar_transferencias BOOLEAN DEFAULT false,
+  vincular_cnpj         BOOLEAN DEFAULT false,
+  rendimento_permitido  BOOLEAN DEFAULT false,
+  created_at            TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE account_mapping DISABLE ROW LEVEL SECURITY;
+
+INSERT INTO account_mapping
+  (grupo, nome_finup, nome_dindin, nao_criar, ignorar_transferencias, vincular_cnpj, rendimento_permitido)
+VALUES
+  -- CARTÕES DE CRÉDITO
+  ('CARTÕES DE CRÉDITO','BANCO DO BRASIL','1. CARTAO DE CREDITO BANCO DO BRASIL',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','ITAU AZUL','2. ITAU - AZUL',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','Cartao Itau Personalite','3. ITAU PERSON',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','Midway Riachuelo','4. MIDWAY - RIACHUELO',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','Nubank','5. NUBANK',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','NUBANK GI','6. NUBANK - GI',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','SWILE VR GI','7. SWILE - VALE REFEICAO GI',false,false,false,false),
+  ('CARTÕES DE CRÉDITO','Caju - VR GI','9. V -CAJU - VALE ALIMENTACAO',false,false,false,false),
+  -- ITAU
+  ('Itau','Itau principal','2. 01 - Banco Itau - Principal',false,false,false,false),
+  ('Itau','Ger. Itaupers','10. 01 - Banco Itau - ITAU PER',false,true,false,false),
+  (NULL,NULL,'6. 01 - Banco Itau - ABB',true,true,false,false),
+  (NULL,NULL,'7. 01 - Banco Itau - ANU GI',true,true,false,false),
+  (NULL,NULL,'8. 01 - Banco Itau - ANU VI',true,true,false,false),
+  (NULL,NULL,'9. 01 - Banco Itau - ITAU AZ',true,true,false,false),
+  -- ITAU COFRINHOS
+  ('Itau Cofrinhos','Contas anuais','3. 03 CONTAS ANUAIS',false,false,false,false),
+  ('Itau Cofrinhos','Pharma','5. 05 PHARMA LOG',false,false,false,false),
+  ('Itau Cofrinhos','Imperium','4. 04 IMPERIUM',false,false,false,false),
+  ('Itau Cofrinhos','Reserva c6 inter','1. 01 RESERVA C6 E INTER',false,false,false,false),
+  ('Itau Cofrinhos','Conta auxiliar','2. 02 Conta corrente auxiliar',false,false,false,false),
+  ('Itau Cofrinhos','Itau cofrinho res','6. Banco Itaú - Cofrinhos(reserva)',false,false,false,false),
+  -- BANCO DO BRASIL
+  ('Banco do Brasil','Banco do Brasil Principal','1. 01 - Banco do Brasil Conta Corrente Principal',false,false,false,false),
+  (NULL,NULL,'1. 01 - Banco do Brasil Conta Corrente - DENUBAK GI',true,true,false,false),
+  (NULL,NULL,'2. 01 - Banco do Brasil Conta Corrente - DENUBAK V',true,true,false,false),
+  (NULL,NULL,'3. 01 - Banco do Brasil Conta Corrente - DESAZUL ITAU',true,true,false,false),
+  (NULL,NULL,'4. 01 - Banco do Brasil Conta Corrente - ITAU',true,true,false,false),
+  (NULL,NULL,'5. 01 - Banco do Brasil Conta Corrente - despesas',true,true,false,false),
+  -- NUBANK
+  ('Nubank','Nubank Victor','3. NUCONTA',false,false,false,false),
+  ('Nubank GI','Nubank GI','4. NUBANK GI',false,false,false,false),
+  ('Nubank GI','Omnia','5. NUBANK - GI OMNIA',false,false,false,false),
+  -- LUMEN - CORA (CNPJ)
+  ('Lumen - Cora','Cora','9. BANCO CORA',false,false,true,false),
+  -- BANCO AUXILIARES
+  ('Banco auxiliares','Banco Inter','6. BANCO INTER',false,false,false,false),
+  ('Banco auxiliares','Banco C6','8. BANCO C6 - PEDAGIO',false,false,false,false),
+  ('Banco auxiliares','BTG','7. BANCO BTG',false,false,false,false),
+  ('Banco auxiliares','Banco inter poupanca','1. BANCO INTER - POUPANCA',false,false,false,false),
+  ('Banco auxiliares','banco inter renda fixa','2. BANCO INTER - RENDA FIXA',false,false,false,false),
+  ('Banco auxiliares','Banco c6 Investimentos','3. BANCO C6 - PEDAGIO - INVESTIMENTOS',false,false,false,false),
+  ('Banco auxiliares','Nu conta Fixas','4. NUCONTA - CONTAS FIXAS',false,true,false,false),
+  ('Banco auxiliares','Nu conta Investimentos','5. NUCONTA - INVESTIMENTOS',false,false,false,false),
+  -- RICO
+  ('Rico conta corrente','Rico','15. 1 - Rico conta corrente',false,false,false,false),
+  ('Rico cdb','Indusval','12. RENDA FIXA - CDB - BANCO INDUSVAL',false,false,false,false),
+  ('Rico cdb','Fibra','13. RENDA FIXA - CDB BANCO FIBRA SA',false,false,false,false),
+  ('Rico cdb','portocred','14. RENDA FIXA - LC - PORTOCRED S.A. CFI',false,false,false,false),
+  -- FUNDO / IPO
+  ('Fundo Arcah','arcah','1. ARCAH FIC FIM',false,false,false,false),
+  ('Nu IPO','Nu IPO Victor','6. NUCONTA - IPO',false,false,false,false),
+  ('Nu IPO','Nu IPO GI','7. NUBANK GI - IPO',false,false,false,false),
+  -- BB POUPANÇA
+  ('BB Poupanca','BB Poup var 01','5. POUPANCA 01 - BANCO DO BRASIL',false,false,false,false),
+  ('BB Poupanca','BB Poup var 51','6. POUPANCA 51 - BANCO DO BRASIL',false,false,false,false),
+  ('BB Poupanca','BB Poup var 96','8. POUPANCA 96 - BANCO DO BRASIL',false,false,false,false),
+  ('BB Poupanca','BB Poup var 96','9. POUPANCA 96 - BANCO DO BRASIL - SALARIO',false,true,false,true),
+  ('BB Poupanca','BB Poup var 96','10. POUPANCA 96 - BANCO DO BRASIL - RESERVAS PARA PAGTO FIXO',false,true,false,true),
+  -- BB LCI
+  ('BB LCI','BB LCI','2. LCI BANCO DO BRASIL - 202007030000942 - 500,00',false,false,false,false),
+  ('BB LCI','BB LCI','3. LCI BANCO DO BRASIL - 20200806002507 500,00',false,false,false,false),
+  ('BB LCI','BB LCI','4. LCI BANCO DO BRASIL - 3000,00',false,false,false,false),
+  -- BANCO INTER RENDA FIXA
+  ('Banco Inter Renda Fixa','BB Poup var 01','7. BANCO INTER - FUNDOS - RESERVAS',false,false,false,false),
+  ('Banco Inter Renda Fixa','BB Poup var 51','8. BANCO INTER - RENDA FIXA - RESERVAS',false,true,false,true),
+  ('Banco Inter Renda Fixa','BB Poup var 96','9. BANCO INTER - RENDA FIXA - RESERVAS LCI PORCO',false,true,false,true),
+  -- BRASILCAP
+  ('Brasilcap','Brasilcap','33. BRASIL CAP',false,false,false,false),
+  -- TESOURO IPCA RICO
+  ('Tesouro IPCA Rico','IPCASELIC','23. TESOURO IPCA - SELIC - 320,55',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2035','24. TESOURO IPCA + 2035 - 4,6% - 6183,28',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2035','25. TESOURO IPCA + 2035(2) - 4,3% - 1003,21',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2035','26. TESOURO IPCA + 2035(3) - 4,46% - 51,59',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2045','27. TESOURO IPCA + 2045 - 4,53% - 4092,68',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2045','28. TESOURO IPCA + 2045(2) - 4,3% - 3007,16',false,false,false,false),
+  ('Tesouro IPCA Rico','IPCA 2045','29. TESOURO IPCA + 2045(3) - 4,46% - 33,38',false,false,false,false),
+  ('Tesouro IPCA Rico','PREF JUROS 2031','30. TESOURO PREF. JUROS SEM. 2031 - 503,69',false,false,false,false),
+  ('Tesouro IPCA Rico','PREF JUROS 2030','31. TESOURO IPCA + JUROS SEM. 2030 - 571,20',false,false,false,false),
+  ('Tesouro IPCA Rico','PREF JUROS 2040','32. TESOURO IPCA + JUROS SEM. 2040 - 551,73',false,false,false,false),
+  -- AÇÕES
+  ('Acoes empresas','Acao arezzo','16. AREZZO - ARZZ3F - 45,38/51,2',false,false,false,false),
+  ('Acoes empresas','Acao BB','17. BANCO BB - BBAS3F - 30,63/39,67',false,false,false,false),
+  ('Acoes empresas','Acao Banco inter','18. BANCO INTER - BIDI11F 29,63/33,43',false,false,false,false),
+  ('Acoes empresas','Acao BB seguros','19. BANCO SEGURIDADE - BBSE3F - 25,62/33,18',false,false,false,false),
+  ('Acoes empresas','Acao Magalu','20. Magazine Luiza - MGLU3F 52,15/60,45',false,false,false,false),
+  ('Acoes empresas','Acao Totvs','21. TOTVS - TOTS3F 119,01/134,28',false,false,false,false),
+  ('Acoes empresas','Acao Weg','22. WEG - WEGE3 75,30/83,6',false,false,false,false),
+  -- PRINCIPAIS BENS
+  ('Principais Bens','Gabriel Tanios Iasbik 191','8. Gabriel Tanios Iasbik 191',false,false,false,false),
+  ('Principais Bens','HB20S','2. HB20 PLUS 2022',false,false,false,false),
+  ('Principais Bens','PRISMA 2015','3. PRISMA 2015',false,false,false,false),
+  ('Principais Bens','CONSORCIO HS','1. CONSORCIO HS',false,false,false,false),
+  ('Principais Bens','Morro dos Anjos','10. MORRO DOS ANJOS BANDEIRANTES',false,false,false,false),
+  -- DÍVIDAS/EMPRÉSTIMOS
+  ('Dividas/emprestimos','Café do Bras','12. EMPRESIMO SUELI BRAS',false,false,false,false),
+  ('Dividas/emprestimos','Café do Bras','11. Cafe do Bras',false,false,false,false),
+  ('Dividas/emprestimos','Emerson Pires Agra','2. EMERSON PARCERIA',false,false,false,false),
+  ('Dividas/emprestimos','Papai Condominio','9. PAPAI CONDOMINIO',false,false,false,false),
+  ('Dividas/emprestimos','Morro dos Anjos Papai','8. MORRO DOS ANJOS - PARTE PAPAI',false,false,false,false),
+  ('Dividas/emprestimos','Morro dos anjos','7. MORRO DOS ANJOS',false,false,false,false)
+ON CONFLICT DO NOTHING;

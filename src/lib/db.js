@@ -379,6 +379,17 @@ export async function seedDefaults(defaultData) {
   ])
 }
 
+// ─── Account Mapping (De-Para Dindin → Finup) ────────────────────────────────
+
+export async function loadAccountMappings() {
+  try {
+    const data = await apiGet('/api/account-mapping')
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
 // ─── Ping ─────────────────────────────────────────────────────────────────────
 
 export async function pingDb() {
