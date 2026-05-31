@@ -817,7 +817,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee)
-      if (row.grupoGerencial) processarLancamentoGerencial({ accountId: selectedAccount, amount: row.amount, date: row.date }, row.grupoGerencial)
+      if (row.grupoGerencial) processarLancamentoGerencial(
+        { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
+        row.grupoGerencial
+      )
     })
 
     if (toImport.length > 0) {

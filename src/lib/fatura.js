@@ -30,6 +30,18 @@ export function computeScheduleDate(faturaRef, financialStartDay) {
 }
 
 /**
+ * Retorna a data (YYYY-MM-DD) do agendamento de resgate parcelado:
+ * dia `financialStartDay` do mês SEGUINTE ao mês de vencimento da fatura.
+ */
+export function nextMonthScheduleDate(faturaRef, financialStartDay) {
+  const [mm, yyyy] = faturaRef.split('/')
+  const next = new Date(Number(yyyy), Number(mm), 1)
+  const nM = String(next.getMonth() + 1).padStart(2, '0')
+  const nY = next.getFullYear()
+  return `${nY}-${nM}-${String(financialStartDay).padStart(2, '0')}`
+}
+
+/**
  * Chave única de um agendamento gerencial: identifica fatura + cartão.
  */
 export function gerencialKey(cardId, faturaRef) {

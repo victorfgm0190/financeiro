@@ -38,6 +38,7 @@ export default function SettingsPanel() {
     accounts,
     transactions,
     recalcularSaldo,
+    corrigirDadosGerencial,
     data,
   } = useApp()
 
@@ -48,6 +49,7 @@ export default function SettingsPanel() {
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0, totalBalance: 0, totalProjected: 0 })
+  const [corrigirStatus, setCorrigirStatus] = useState(null)
 
   const handleRecalcAll = async () => {
     const eligible = accounts.filter(a =>
@@ -892,6 +894,22 @@ export default function SettingsPanel() {
             <RefreshCw size={13} className={recalcStatus.running ? 'animate-spin' : ''} />
             {recalcStatus.running ? 'Recalculando...' : 'Recalcular todos os saldos'}
           </button>
+
+          <div className="border-t border-gray-800 pt-4">
+            <p className="text-xs text-gray-500 mb-2">
+              Corrige transferências e agendamentos gerenciais do Grupo G: elimina provisões imediatas erradas de parcelados e reconstrói agendamentos com datas corretas.
+            </p>
+            {corrigirStatus === 'done' && (
+              <p className="text-xs text-green-400 mb-2">Dados gerenciais corrigidos com sucesso.</p>
+            )}
+            <button
+              className="btn-secondary flex items-center gap-2"
+              onClick={() => { corrigirDadosGerencial(); setCorrigirStatus('done') }}
+            >
+              <RefreshCw size={13} />
+              Corrigir Dados Gerenciais
+            </button>
+          </div>
         </div>
       </div>
 

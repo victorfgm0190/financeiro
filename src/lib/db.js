@@ -144,6 +144,7 @@ export const txToRow = (tx) => ({
   reserva_auto: !!tx.reservaAuto,
   origin: tx.origin || 'manual',
   gerencial_schedule_id: tx.gerencialScheduleId || null,
+  fatura_month_year: tx.faturaMonthYear || null,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -167,6 +168,7 @@ export const rowToTx = (r) => ({
   reservaAuto: !!r.reserva_auto,
   origin: r.origin || 'manual',
   gerencialScheduleId: r.gerencial_schedule_id || null,
+  faturaMonthYear: r.fatura_month_year || null,
   createdAt: r.created_at,
 })
 
