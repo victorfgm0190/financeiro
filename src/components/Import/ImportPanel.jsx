@@ -27,6 +27,60 @@ function parseFile(file) {
   })
 }
 
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target.result)
+    reader.onerror = reject
+    reader.readAsText(file, 'UTF-8')
+  })
+}
+
+// Detecta se o texto é CSV do Itaú (linha de cabeçalho "data,lançamento,valor")
+function isItauCSV(text) {
+  const clean = text.replace(/^﻿/, '')
+  return /^data[,;]lan[çc]amento[,;]valor/im.test(clean)
+}
+
+function parseItauCSV(text) {
+  const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
+
+  // Localizar linha de cabeçalho
+  const headerIdx = lines.findIndex(l => /^data[,;]lan[çc]amento[,;]valor/i.test(l))
+  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '' }
+
+  const sep = lines[headerIdx].includes(';') ? ';' : ','
+  const parsed = []
+  let idCtr = 0
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g, ''))
+    if (cols.length < 3) continue
+
+    const date = normalizeDate(cols[0])
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+
+    const desc = cols[1] || ''
+    if (!desc) continue
+
+    const rawVal = parseFloat(cols[2].replace(',', '.'))
+    if (isNaN(rawVal)) continue
+
+    // Valor negativo = pagamento/estorno → ignorar
+    if (rawVal <= 0) continue
+
+    parsed.push({
+      _id: idCtr++,
+      date, description: desc, movimentacao: '', amount: rawVal,
+      isDeposit: false, type: 'expense', selected: true, _isDuplicate: false,
+      categoryId: '', payee: '', grupoGerencial: '',
+    })
+  }
+
+  return { rows: parsed, cardName: '', faturaStr: '' }
+}
+
 function normalizeDate(val) {
   if (!val) return ''
   if (val instanceof Date) return val.toISOString().split('T')[0]
@@ -146,7 +200,7 @@ function parseDindinCC(allRows) {
   return { rows: parsed, accountNames: [...accountNamesSet] }
 }
 
-function DropZone({ onFile, label }) {
+function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls' }) {
   const ref = useRef()
   return (
     <div
@@ -155,8 +209,8 @@ function DropZone({ onFile, label }) {
     >
       <Upload size={28} className="text-gray-600 mx-auto mb-2" />
       <p className="text-sm text-gray-400">{label || 'Clique para selecionar arquivo XLS/XLSX'}</p>
-      <p className="text-xs text-gray-600 mt-1">Formato Dindin exportação</p>
-      <input ref={ref} type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
+      <p className="text-xs text-gray-600 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
+      <input ref={ref} type="file" accept={accept} className="hidden" onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
     </div>
   )
 }
@@ -542,8 +596,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setResult(null)
     setMatchQueue([])
     try {
-      const rawRows = await parseFile(file)
-      const { cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows)
+      const isCsv = /\.csv$/i.test(file.name)
+      let cardName = '', faturaStr = '', parsed = []
+
+      if (isCsv) {
+        const text = await readFileAsText(file)
+        if (!isItauCSV(text)) { setError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).'); return }
+        ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text))
+      } else {
+        const rawRows = await parseFile(file)
+        ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
+      }
+
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }
 
       // Auto-match card
@@ -704,7 +768,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {rows.length === 0 && result === null && (
         <div className="space-y-4">
-          <DropZone onFile={handleFile} label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX)" />
+          <DropZone
+            onFile={handleFile}
+            label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
+            subtitle="Formato Dindin (XLS) ou Itaú (CSV)"
+            accept=".xlsx,.xls,.csv"
+          />
           {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
         </div>
       )}
