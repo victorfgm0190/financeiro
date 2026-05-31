@@ -1268,9 +1268,11 @@ export function AppProvider({ children }) {
     update(d => {
       const account = d.accounts.find(a => a.id === accountId)
       if (!account) return d
+      const today = format(new Date(), 'yyyy-MM-dd')
       const initBal = overrideInitialBalance != null ? rb(overrideInitialBalance) : rb(account.initialBalance ?? 0)
       let balance = initBal
       d.transactions.forEach(tx => {
+        if (tx.date > today) return
         if (tx.type === 'income' && tx.accountId === accountId) balance = rb(balance + tx.amount)
         else if (tx.type === 'expense' && tx.accountId === accountId && tx.accountType !== 'credit') balance = rb(balance - tx.amount)
         else if (tx.type === 'transfer') {

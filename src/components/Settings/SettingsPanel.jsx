@@ -820,7 +820,7 @@ export default function SettingsPanel() {
           <div>
             <p className="text-sm text-gray-200 font-medium">Recalcular todos os saldos</p>
             <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-              Recalcula o saldo atual de cada conta a partir do saldo inicial e de todos os lançamentos vinculados.
+              Recalcula o saldo atual de cada conta a partir do saldo inicial e dos lançamentos até hoje.
               Útil para corrigir inconsistências causadas por importações ou edições manuais.
             </p>
           </div>

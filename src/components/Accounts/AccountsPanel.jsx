@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, FileText, ArrowUp, ArrowDown, Settings, Building2,
@@ -204,12 +204,29 @@ function GroupManager({ groups }) {
   )
 }
 
+const rb = v => Math.round(v * 100) / 100
+
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
-  const { setMainAccount, moveAccount, recalcularSaldo } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, transactions } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
+
+  const projectedBalance = useMemo(() => {
+    if (['credit', 'asset', 'liability'].includes(account.type)) return null
+    const initBal = rb(account.initialBalance ?? 0)
+    let bal = initBal
+    transactions.forEach(tx => {
+      if (tx.type === 'income' && tx.accountId === account.id) bal = rb(bal + tx.amount)
+      else if (tx.type === 'expense' && tx.accountId === account.id && tx.accountType !== 'credit') bal = rb(bal - tx.amount)
+      else if (tx.type === 'transfer') {
+        if (tx.accountId === account.id) bal = rb(bal - tx.amount)
+        else if (tx.toAccountId === account.id) bal = rb(bal + tx.amount)
+      } else if (tx.type === 'credit_payment' && tx.fromAccountId === account.id) bal = rb(bal - tx.amount)
+    })
+    return bal
+  }, [account.id, account.type, account.initialBalance, transactions])
 
   return (
     <div
@@ -284,8 +301,11 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
       ) : (
         <div>
-          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Valor Atual'}</p>
+          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Atual'}</p>
           <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
+          {projectedBalance != null && Math.abs(projectedBalance - (account.balance || 0)) >= 0.005 && (
+            <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projectedBalance)}</p>
+          )}
           {account.acquisitionValue != null && (
             <p className="text-xs opacity-50 mt-0.5">
               Aquisição: {fmt(account.acquisitionValue)}
