@@ -30,6 +30,7 @@ const VIEW_FILTERS = [
   { id: 'month',   label: 'Este mês' },
   { id: 'all',     label: 'Todos' },
   { id: 'history', label: 'Histórico' },
+  { id: 'ra',      label: 'Resgates Anuais' },
 ]
 
 function GerBadge({ grupoId, gerencialGroups }) {
@@ -665,6 +666,14 @@ export default function SchedulePanel() {
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
   const [showZeroed, setShowZeroed] = useState(false)
 
+  const raAccountIds = useMemo(() => {
+    const ids = new Set()
+    gerencialGroups.forEach(g => {
+      if (typeof g.number === 'number' && g.number !== 1 && g.defaultAccountId) ids.add(g.defaultAccountId)
+    })
+    return ids
+  }, [gerencialGroups])
+
   const rawPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
   const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => Number(s.amount) !== 0), [rawPending, showZeroed])
 
@@ -694,8 +703,12 @@ export default function SchedulePanel() {
       const next = getNextOccurrences(s, 1)[0]
       return next && next >= monthStart && next <= monthEnd
     })
+    if (viewFilter === 'ra') return schedules.filter(s =>
+      s.transactionType === 'transfer' &&
+      (raAccountIds.has(s.accountId) || raAccountIds.has(s.toAccountId))
+    )
     return schedules
-  }, [schedules, viewFilter, getNextOccurrences])
+  }, [schedules, viewFilter, getNextOccurrences, raAccountIds])
 
   const displaySchedules = useMemo(
     () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => Number(s.amount) !== 0),
@@ -754,6 +767,7 @@ export default function SchedulePanel() {
                 }`}
               >
                 {f.id === 'history' && <History size={11} />}
+                {f.id === 'ra' && <ArrowLeftRight size={11} />}
                 {f.label}
                 {f.id === 'future' && <span className="text-xs opacity-70">{allPending.length}</span>}
               </button>

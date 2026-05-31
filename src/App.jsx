@@ -23,6 +23,7 @@ import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
+import MonthStartModal from './components/shared/MonthStartModal'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -102,6 +103,7 @@ function AppContent() {
       {genericToast && (
         <Toast message={genericToast} onClose={() => setGenericToast(null)} />
       )}
+      <MonthStartModal />
     </div>
   )
 }
