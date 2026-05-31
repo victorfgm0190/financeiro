@@ -607,6 +607,34 @@ function addMonthToFatura(yyyymm, n) {
   return `${ty}-${String(tm + 1).padStart(2, '0')}`
 }
 
+// Retorna a data de vencimento (YYYY-MM-DD) do cartão no mês da fatura.
+function faturaToDate(faturaYYYYMM, dueDay) {
+  if (!faturaYYYYMM || !dueDay) return null
+  const [y, m] = faturaYYYYMM.split('-').map(Number)
+  const lastDay = new Date(y, m, 0).getDate()
+  return `${faturaYYYYMM}-${String(Math.min(dueDay, lastDay)).padStart(2, '0')}`
+}
+
+// Detecta duplicata de parcelado: base desc + num parcela + fatura + valor dentro de R$ 0,50.
+function isDuplicateInstallment(row, existing, accountId, closingDay) {
+  const rowInst = detectInstallment(row.description)
+  if (!rowInst) return false
+  const rowBase = rowInst.base.toLowerCase().trim()
+  const rowFatura = row.faturaMonthYear || ''
+  return existing.some(t => {
+    if (t.accountId !== accountId) return false
+    if (Math.abs(t.amount - row.amount) > 0.50) return false
+    const tInst = detectInstallment(t.description || '')
+    if (!tInst || tInst.num !== rowInst.num) return false
+    if (tInst.base.toLowerCase().trim() !== rowBase) return false
+    if (!rowFatura) return true
+    // Fatura do lançamento existente: tenta calcFatura pela data original OU mês bruto da data
+    const tFaturaCalc = calcFatura(t.date, closingDay)
+    const tFaturaRaw = t.date.slice(0, 7)
+    return tFaturaCalc === rowFatura || tFaturaRaw === rowFatura
+  })
+}
+
 // Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
 function detectMainFatura(rows) {
   const counts = {}
@@ -667,13 +695,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }
 
-      // Auto-match card (before fatura computation so we get the right closingDay)
+      // Auto-match card (before fatura computation so we get the right closingDay/dueDay)
       let resolvedClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
+      let resolvedDueDay = accounts.find(a => a.id === selectedAccount)?.dueDay || null
       if (cardName) {
         const match = fuzzyMatchAccount(cardName, creditAccounts)
         if (match) {
           setSelectedAccount(match.id)
           resolvedClosingDay = match.closingDay || 14
+          resolvedDueDay = match.dueDay || null
         }
       }
 
@@ -697,12 +727,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
         processed.push(baseRow)
         if (installInfo?.num === 1 && installInfo.total > 1) {
-          // Parcelas 2..N: data original, fatura avança 1 mês por parcela
+          // Parcelas 2..N: fatura avança 1 mês, data = dia de vencimento do cartão naquele mês
           for (let i = 2; i <= installInfo.total; i++) {
+            const faturaI = addMonthToFatura(baseFatura, i - 1)
             processed.push({
               ...baseRow, _id: idCtr++ * 100 + i,
-              date: baseRow.date,
-              faturaMonthYear: addMonthToFatura(baseFatura, i - 1),
+              date: faturaToDate(faturaI, resolvedDueDay) || baseRow.date,
+              faturaMonthYear: faturaI,
               description: baseRow.description.replace(installInfo.matchStr, `${i}/${installInfo.total}`),
               _generated: true, _seriesId: baseRow._id, _installmentNum: i,
             })
@@ -730,11 +761,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
   }
 
-  // Recomputa faturas de todas as linhas quando o cartão muda
+  // Recomputa faturas e datas de todas as linhas quando o cartão muda
   const handleAccountChange = (accountId) => {
     setSelectedAccount(accountId)
     if (rows.length === 0) return
-    const cl = accounts.find(a => a.id === accountId)?.closingDay || 14
+    const acc = accounts.find(a => a.id === accountId)
+    const cl = acc?.closingDay || 14
+    const dd = acc?.dueDay || null
     setRows(prev => {
       const step1 = prev.map(row =>
         row._generated ? row : { ...row, faturaMonthYear: calcFatura(row.date, cl) }
@@ -742,9 +775,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const step2 = step1.map(row => {
         if (!row._generated) return row
         const parent = step1.find(r => r._id === row._seriesId)
-        return parent
-          ? { ...row, faturaMonthYear: addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1) }
-          : row
+        if (!parent) return row
+        const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
+        return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dd) || row.date }
       })
       const detected = detectMainFatura(step2)
       if (detected) setFaturaMonthYear(detected)
@@ -754,12 +787,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const resolvedRows = useMemo(() => {
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false }))
+    const closingDay = selectedAcc?.closingDay || 14
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
-      const dup = isDuplicate(r, transactions)
+      const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount, closingDay)
       return { ...r, _isDuplicate: dup, selected: row.selected && !dup }
     })
-  }, [rows, selectedAccount, transactions])
+  }, [rows, selectedAccount, transactions, selectedAcc])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
