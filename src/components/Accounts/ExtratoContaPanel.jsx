@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2 } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2, Copy } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -94,7 +94,7 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -150,6 +150,15 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit }) {
               className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
             >
               <Edit2 size={14} />
+            </button>
+          )}
+          {onDuplicate && !tx.reservaAuto && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDuplicate(tx) }}
+              title="Duplicar lançamento (+30 dias)"
+              className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+            >
+              <Copy size={14} />
             </button>
           )}
           {onReverse && !tx.reservaAuto && (
@@ -237,7 +246,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit }) {
-  const { transactions, accounts, schedules, reverseTransaction } = useApp()
+  const { transactions, accounts, schedules, reverseTransaction, addTransaction } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
   const now = new Date()
@@ -259,6 +268,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
       : 'Lançamento estornado.'
     showToast(msg)
+  }
+
+  const handleDuplicate = (tx) => {
+    const d = new Date(tx.date + 'T00:00:00')
+    d.setDate(d.getDate() + 30)
+    const newDate = d.toISOString().split('T')[0]
+    // eslint-disable-next-line no-unused-vars
+    const { id, createdAt, scheduleId, origin, grupoGerencial, gerencialScheduleId, reservaAuto, ...rest } = tx
+    addTransaction({ ...rest, date: newDate })
+    showToast(`Lançamento duplicado para ${fmtDate(newDate)}`)
   }
 
   const isAplicacao = !!account.contaAplicacao
@@ -418,7 +437,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (
-                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} />
+                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} onDuplicate={handleDuplicate} />
                 )
               )}
             </tbody>
