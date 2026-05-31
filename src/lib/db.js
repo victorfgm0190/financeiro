@@ -258,7 +258,7 @@ export const rowToRule = (r) => ({
 
 export const gerencialGroupToRow = (g) => ({
   id: g.id,
-  number: g.number,
+  number: JSON.stringify(g.number), // JSONB exige JSON válido: 'D' → '"D"', 1 → '1'
   name: g.name,
   alias: g.alias || null,
   fixed: !!g.fixed,
