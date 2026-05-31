@@ -50,6 +50,7 @@ export const accountGroupToRow = (g) => ({
   type: g.type || 'financeiro',
   order: g.order ?? 0,
   behavior: g.behavior || null,
+  inibido: !!g.inibido,
 })
 
 export const rowToAccountGroup = (r) => ({
@@ -58,6 +59,7 @@ export const rowToAccountGroup = (r) => ({
   type: r.type || 'financeiro',
   order: r.order ?? 0,
   behavior: r.behavior || null,
+  inibido: !!r.inibido,
 })
 
 export const accountToRow = (a) => ({

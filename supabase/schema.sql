@@ -249,6 +249,9 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS debt_plan JSONB;
 -- Comportamento especial de grupos de contas (dívida / empréstimo)
 ALTER TABLE grupos_conta ADD COLUMN IF NOT EXISTS behavior TEXT;
 
+-- Grupos inibidos ficam ocultos na tela de Contas e selects
+ALTER TABLE grupos_conta ADD COLUMN IF NOT EXISTS inibido BOOLEAN DEFAULT false;
+
 -- Metadados de parcelas em reservas (migração)
 ALTER TABLE reservas ADD COLUMN IF NOT EXISTS installment_number INTEGER;
 ALTER TABLE reservas ADD COLUMN IF NOT EXISTS total_installments INTEGER;

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
@@ -497,43 +497,71 @@ export default function SettingsPanel() {
                 </>
               ) : (
                 <>
-                  <span className="flex-1 text-sm text-gray-200 min-w-0 truncate">{g.name}</span>
-                  {g.behavior && (
+                  <span className={`flex-1 text-sm min-w-0 truncate ${g.inibido ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{g.name}</span>
+                  {g.behavior && !g.inibido && (
                     <span className="text-xs text-gray-600 shrink-0 italic">
                       {g.behavior === 'divida' ? 'dívidas' : 'empréstimos'}
                     </span>
                   )}
-                  {/* ↑↓ reorder */}
-                  <div className="flex gap-0.5 shrink-0">
+                  {g.inibido && (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-500 shrink-0 font-medium">
+                      Inibido
+                    </span>
+                  )}
+                  {!g.inibido && (
+                    <div className="flex gap-0.5 shrink-0">
+                      <button
+                        onClick={() => moveAccountGroup(g.id, 'up')}
+                        disabled={i === 0}
+                        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                      >
+                        <ArrowUp size={11} />
+                      </button>
+                      <button
+                        onClick={() => moveAccountGroup(g.id, 'down')}
+                        disabled={i === sortedAccountGroups.length - 1}
+                        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                      >
+                        <ArrowDown size={11} />
+                      </button>
+                    </div>
+                  )}
+                  {/* Inibir / Reativar */}
+                  {g.inibido ? (
                     <button
-                      onClick={() => moveAccountGroup(g.id, 'up')}
-                      disabled={i === 0}
-                      className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                      onClick={() => updateAccountGroup(g.id, { inibido: false })}
+                      title="Reativar grupo"
+                      className="p-1 rounded hover:bg-gray-700 text-emerald-600 hover:text-emerald-400 transition-colors shrink-0"
                     >
-                      <ArrowUp size={11} />
+                      <Eye size={11} />
                     </button>
+                  ) : (
                     <button
-                      onClick={() => moveAccountGroup(g.id, 'down')}
-                      disabled={i === sortedAccountGroups.length - 1}
-                      className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                      onClick={() => updateAccountGroup(g.id, { inibido: true })}
+                      title="Inibir grupo (ocultar do app)"
+                      className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-amber-400 transition-colors shrink-0"
                     >
-                      <ArrowDown size={11} />
+                      <EyeOff size={11} />
                     </button>
-                  </div>
-                  {/* Edit */}
-                  <button
-                    onClick={() => { setAgEditId(g.id); setAgEditName(g.name) }}
-                    className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
-                  >
-                    <Edit2 size={11} />
-                  </button>
-                  {/* Delete */}
-                  <button
-                    onClick={() => setAgConfirmDeleteId(g.id)}
-                    className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-red-400 transition-colors shrink-0"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+                  )}
+                  {!g.inibido && (
+                    <>
+                      {/* Edit */}
+                      <button
+                        onClick={() => { setAgEditId(g.id); setAgEditName(g.name) }}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+                      {/* Delete */}
+                      <button
+                        onClick={() => setAgConfirmDeleteId(g.id)}
+                        className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>

@@ -1580,6 +1580,7 @@ export function AppProvider({ children }) {
       classificationRules: data.classificationRules,
       envelopes: data.envelopes || [],
       accountGroups: data.accountGroups || [],
+      activeAccountGroups: (data.accountGroups || []).filter(g => !g.inibido),
       costCenters: data.costCenters,
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,

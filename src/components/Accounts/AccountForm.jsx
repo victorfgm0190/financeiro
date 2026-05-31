@@ -37,7 +37,7 @@ function Toggle({ checked, onChange, label, tooltip }) {
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], profiles = [], categories = [], addAccount, updateAccount } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount } = useApp()
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -66,7 +66,7 @@ export default function AccountForm({ initial, onClose }) {
   const isCredit = form.type === 'credit'
   const isChecking = form.type === 'checking'
   const isPatrimonial = form.type === 'asset' || form.type === 'liability'
-  const sortedGroups = [...accountGroups].sort((a, b) => a.order - b.order)
+  const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
 
   const conflictAccount = isChecking && form.contaCorrentePrincipal
     ? accounts.find(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal)

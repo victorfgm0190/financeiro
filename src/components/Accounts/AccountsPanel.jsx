@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, FileText, ArrowUp, ArrowDown, Settings, Building2,
-  ChevronDown, ChevronRight, RefreshCw,
+  ChevronDown, ChevronRight, RefreshCw, EyeOff,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -100,6 +100,8 @@ function GroupManager({ groups }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
 
   const sorted = [...groups].sort((a, b) => a.order - b.order)
+  const active = sorted.filter(g => !g.inibido)
+  const inibidos = sorted.filter(g => g.inibido)
 
   const handleAdd = () => {
     if (!newName.trim()) return
@@ -110,7 +112,7 @@ function GroupManager({ groups }) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        {sorted.map((g, i) => (
+        {active.map((g, i) => (
           <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800">
             {editId === g.id ? (
               <>
@@ -137,7 +139,7 @@ function GroupManager({ groups }) {
                   <button onClick={() => moveAccountGroup(g.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-400 transition-colors">
                     <ArrowUp size={12} />
                   </button>
-                  <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === sorted.length - 1} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-400 transition-colors">
+                  <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === active.length - 1} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-400 transition-colors">
                     <ArrowDown size={12} />
                   </button>
                   <button onClick={() => { setEditId(g.id); setEditName(g.name) }} className="p-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">
@@ -151,6 +153,21 @@ function GroupManager({ groups }) {
             )}
           </div>
         ))}
+        {inibidos.length > 0 && (
+          <div className="pt-2 space-y-1">
+            <p className="text-xs text-gray-600 px-1">Grupos inibidos ({inibidos.length})</p>
+            {inibidos.map(g => (
+              <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800/50 opacity-50">
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${g.type === 'financeiro' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                  {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
+                </span>
+                <span className="flex-1 text-sm text-gray-400 line-through">{g.name}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-500 shrink-0">Inibido</span>
+                <EyeOff size={11} className="text-gray-600 shrink-0" />
+              </div>
+            ))}
+          </div>
+        )}
         {sorted.length === 0 && (
           <p className="text-sm text-gray-500 text-center py-4">Nenhum grupo cadastrado</p>
         )}
@@ -349,7 +366,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
 }
 
 export default function AccountsPanel() {
-  const { accounts, accountGroups = [], deleteAccount } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], deleteAccount } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -364,7 +381,7 @@ export default function AccountsPanel() {
     .filter(a => a.type === 'credit')
     .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
 
-  const sortedGroups = [...accountGroups].sort((a, b) => a.order - b.order)
+  const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')
   const patrimonialGroups = sortedGroups.filter(g => g.type === 'patrimonial')
 
