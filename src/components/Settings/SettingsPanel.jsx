@@ -30,6 +30,7 @@ export default function SettingsPanel() {
     settings, updateSettings,
     categories, addCategory, deleteCategory,
     classificationRules, addRule, deleteRule,
+    gerencialRules, addGerencialRule, deleteGerencialRule, moveGerencialRule,
     costCenters, addCostCenter,
     gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
     accountGroups, addAccountGroup, updateAccountGroup, deleteAccountGroup,
@@ -48,6 +49,7 @@ export default function SettingsPanel() {
   const [saved, setSaved] = useState(false)
   const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌' })
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
+  const [newGRule, setNewGRule] = useState({ contains: '', isParcelado: 'any', minAmount: '', maxAmount: '', grupoGerencialId: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
   const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0, totalBalance: 0, totalProjected: 0 })
@@ -513,6 +515,123 @@ export default function SettingsPanel() {
             placeholder="Categoria..."
           />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
+        </form>
+      </div>
+
+      {/* Regras de Grupo Gerencial */}
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-300 mb-1">Regras de Grupo Gerencial ({gerencialRules.length})</h2>
+        <p className="text-xs text-gray-500 mb-4">Testadas em ordem — a primeira que bater é aplicada na importação de fatura.</p>
+        <div className="space-y-2 mb-4">
+          {gerencialRules.length === 0 && (
+            <p className="text-xs text-gray-500">Nenhuma regra cadastrada.</p>
+          )}
+          {[...gerencialRules].sort((a, b) => a.order - b.order).map((rule, idx, arr) => {
+            const grupo = gerencialGroups.find(g => g.id === rule.grupoGerencialId)
+            const labelParc = rule.isParcelado === 'yes' ? 'parcelado' : rule.isParcelado === 'no' ? 'à vista' : null
+            const labelVal = (rule.minAmount != null || rule.maxAmount != null)
+              ? [rule.minAmount != null ? `min R$${rule.minAmount}` : null, rule.maxAmount != null ? `max R$${rule.maxAmount}` : null].filter(Boolean).join(', ')
+              : null
+            return (
+              <div key={rule.id} className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                <span className="text-xs text-gray-500 w-5 text-center shrink-0">{idx + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-gray-300">
+                    Contém <span className="text-[#0F6E56] font-medium">"{rule.contains}"</span>
+                    {labelParc && <span className="text-gray-500 ml-1">· {labelParc}</span>}
+                    {labelVal && <span className="text-gray-500 ml-1">· {labelVal}</span>}
+                    {' → '}
+                    <span className="text-gray-200">{grupo ? `${grupo.number} · ${grupo.name}` : rule.grupoGerencialId}</span>
+                  </span>
+                </div>
+                <div className="flex gap-0.5 shrink-0">
+                  <button onClick={() => moveGerencialRule(rule.id, 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-500 transition-colors">
+                    <ArrowUp size={12} />
+                  </button>
+                  <button onClick={() => moveGerencialRule(rule.id, 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-500 transition-colors">
+                    <ArrowDown size={12} />
+                  </button>
+                  <button onClick={() => deleteGerencialRule(rule.id)} className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-red-400 transition-colors">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Form — nova regra */}
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            if (!newGRule.contains.trim() || !newGRule.grupoGerencialId) return
+            addGerencialRule({
+              contains: newGRule.contains.trim(),
+              isParcelado: newGRule.isParcelado,
+              minAmount: newGRule.minAmount !== '' ? Number(newGRule.minAmount) : null,
+              maxAmount: newGRule.maxAmount !== '' ? Number(newGRule.maxAmount) : null,
+              grupoGerencialId: newGRule.grupoGerencialId,
+            })
+            setNewGRule({ contains: '', isParcelado: 'any', minAmount: '', maxAmount: '', grupoGerencialId: '' })
+          }}
+          className="space-y-2"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input
+              className="input text-sm"
+              placeholder="Palavra-chave *"
+              value={newGRule.contains}
+              onChange={e => setNewGRule(f => ({ ...f, contains: e.target.value }))}
+              required
+            />
+            <select
+              className="input text-sm"
+              value={newGRule.isParcelado}
+              onChange={e => setNewGRule(f => ({ ...f, isParcelado: e.target.value }))}
+            >
+              <option value="any">Qualquer</option>
+              <option value="yes">Parcelado</option>
+              <option value="no">À Vista</option>
+            </select>
+            <input
+              className="input text-sm"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Valor mín (R$)"
+              value={newGRule.minAmount}
+              onChange={e => setNewGRule(f => ({ ...f, minAmount: e.target.value }))}
+            />
+            <input
+              className="input text-sm"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Valor máx (R$)"
+              value={newGRule.maxAmount}
+              onChange={e => setNewGRule(f => ({ ...f, maxAmount: e.target.value }))}
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              className="input text-sm flex-1"
+              value={newGRule.grupoGerencialId}
+              onChange={e => setNewGRule(f => ({ ...f, grupoGerencialId: e.target.value }))}
+              required
+            >
+              <option value="">Grupo Gerencial *</option>
+              {[...gerencialGroups].sort((a, b) => {
+                if (a.number === 'D') return 1
+                if (b.number === 'D') return -1
+                return typeof a.number === 'number' && typeof b.number === 'number' ? a.number - b.number : 0
+              }).map(g => (
+                <option key={g.id} value={g.id}>{g.number} · {g.name}</option>
+              ))}
+            </select>
+            <button type="submit" className="btn-secondary flex items-center gap-1 shrink-0">
+              <Plus size={13} /> Adicionar
+            </button>
+          </div>
         </form>
       </div>
 

@@ -13,7 +13,16 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS day_of_month INTEGER`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS amount_approx NUMERIC`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS grupo_gerencial TEXT`)
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports] =
+    await query(`CREATE TABLE IF NOT EXISTS gerencial_rules (
+      id TEXT PRIMARY KEY,
+      contains TEXT NOT NULL,
+      is_parcelado TEXT DEFAULT 'any',
+      min_amount NUMERIC,
+      max_amount NUMERIC,
+      grupo_gerencial_id TEXT NOT NULL,
+      "order" INTEGER DEFAULT 0
+    )`)
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -29,12 +38,13 @@ export default async function handler(req, res) {
         query('SELECT * FROM grupos_conta ORDER BY "order"'),
         query('SELECT * FROM perfis'),
         query('SELECT * FROM card_imports ORDER BY imported_at DESC'),
+        query('SELECT * FROM gerencial_rules ORDER BY "order"'),
       ])
 
     res.json({
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis, imports,
+      envs, groups, perfis, imports, grules,
     })
   } catch (err) {
     const isTableMissing =

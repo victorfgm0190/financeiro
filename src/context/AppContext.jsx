@@ -5,7 +5,7 @@ import {
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
-  importToRow,
+  importToRow, gerencialRuleToRow,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate } from '../lib/fatura'
@@ -16,7 +16,7 @@ const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
 // Prev vazio para forçar full-sync ao reconectar
 const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
-  budgets: [], classificationRules: [], gerencialGroups: [],
+  budgets: [], classificationRules: [], gerencialGroups: [], gerencialRules: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
   profiles: [], cardImports: [],
   settings: {}, costCenters: [],
@@ -342,6 +342,7 @@ const defaultData = {
     { id: 'cat_apl_ted', name: 'Tesouro Direto',         type: 'expense', color: '#22c55e', icon: '🏛️', group: 'Aplicações' },
   ],
   classificationRules: [],
+  gerencialRules: [],
   envelopes: [],
   accountGroups: DEFAULT_ACCOUNT_GROUPS,
   costCenters: ['Pessoal', 'Família', 'Trabalho', 'Casa'],
@@ -496,6 +497,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('orcamento', prev.budgets, data.budgets, budgetToRow))
       if (prev.classificationRules !== data.classificationRules)
         tasks.push(syncSection('regras_classificacao', prev.classificationRules, data.classificationRules, ruleToRow))
+      if (prev.gerencialRules !== data.gerencialRules)
+        tasks.push(syncSection('gerencial_rules', prev.gerencialRules, data.gerencialRules, gerencialRuleToRow))
       if (prev.gerencialGroups !== data.gerencialGroups)
         tasks.push(syncSection('reservas_funcoes', prev.gerencialGroups, data.gerencialGroups, gerencialGroupToRow))
       if (prev.payables !== data.payables)
@@ -1222,6 +1225,53 @@ export function AppProvider({ children }) {
   const deleteRule = useCallback((id) => {
     update(d => ({ ...d, classificationRules: d.classificationRules.filter(r => r.id !== id) }))
   }, [update])
+
+  // ── Gerencial Rules (Regras de Grupo Gerencial) ────────────────────────────
+  const addGerencialRule = useCallback((rule) => {
+    const id = 'grule_' + Date.now()
+    update(d => {
+      const order = (d.gerencialRules || []).length
+      return { ...d, gerencialRules: [...(d.gerencialRules || []), { ...rule, id, order }] }
+    })
+  }, [update])
+
+  const updateGerencialRule = useCallback((id, changes) => {
+    update(d => ({ ...d, gerencialRules: (d.gerencialRules || []).map(r => r.id === id ? { ...r, ...changes } : r) }))
+  }, [update])
+
+  const deleteGerencialRule = useCallback((id) => {
+    update(d => ({
+      ...d,
+      gerencialRules: (d.gerencialRules || []).filter(r => r.id !== id).map((r, i) => ({ ...r, order: i })),
+    }))
+  }, [update])
+
+  const moveGerencialRule = useCallback((id, dir) => {
+    update(d => {
+      const rules = [...(d.gerencialRules || [])].sort((a, b) => a.order - b.order)
+      const idx = rules.findIndex(r => r.id === id)
+      if (idx < 0) return d
+      const newIdx = dir === 'up' ? idx - 1 : idx + 1
+      if (newIdx < 0 || newIdx >= rules.length) return d
+      const [rule] = rules.splice(idx, 1)
+      rules.splice(newIdx, 0, rule)
+      return { ...d, gerencialRules: rules.map((r, i) => ({ ...r, order: i })) }
+    })
+  }, [update])
+
+  const classifyGerencialByRules = useCallback((description, amount, isParcelado) => {
+    const lower = description.toLowerCase()
+    const sorted = [...(data.gerencialRules || [])].sort((a, b) => a.order - b.order)
+    for (const rule of sorted) {
+      if (!lower.includes(rule.contains.toLowerCase())) continue
+      if (rule.isParcelado === 'yes' && !isParcelado) continue
+      if (rule.isParcelado === 'no' && isParcelado) continue
+      if (rule.minAmount != null && amount < rule.minAmount) continue
+      if (rule.maxAmount != null && amount > rule.maxAmount) continue
+      return rule.grupoGerencialId
+    }
+    return null
+  }, [data.gerencialRules])
 
   // ── Payees ──────────────────────────────────────────────────────────────────
   const addPayee = useCallback((name) => {
@@ -2543,6 +2593,7 @@ export function AppProvider({ children }) {
       budgets: data.budgets,
       categories: data.categories,
       classificationRules: data.classificationRules,
+      gerencialRules: data.gerencialRules || [],
       envelopes: data.envelopes || [],
       accountGroups: data.accountGroups || [],
       activeAccountGroups: (data.accountGroups || []).filter(g => !g.inibido),
@@ -2564,6 +2615,7 @@ export function AppProvider({ children }) {
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,
+      addGerencialRule, updateGerencialRule, deleteGerencialRule, moveGerencialRule, classifyGerencialByRules,
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,

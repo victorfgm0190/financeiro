@@ -650,7 +650,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
     criarParcelasGerencial,
-    addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura,
+    addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, revertCardImport,
   } = useApp()
@@ -721,6 +721,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const categoryId = classified?.categoryId || movCat?.id || ''
         const payee = classified?.payee || ''
         const installInfo = detectInstallment(row.description)
+        const isParcelado = !!installInfo
+        const grupoFromRules = classified?.grupoGerencial
+          || classifyGerencialByRules(row.description, row.amount, isParcelado)
         const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
         // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses
         const baseFatura = (installInfo && installInfo.num > 1)
@@ -728,7 +731,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : faturaParc1
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
-          grupoGerencial: classified?.grupoGerencial || grupoD, _installment: installInfo, _generated: false,
+          grupoGerencial: grupoFromRules || grupoD, _installment: installInfo, _generated: false,
           faturaMonthYear: baseFatura,
         }
         processed.push(baseRow)
@@ -809,13 +812,31 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
   const toggleAll = (v) => setRows(prev => prev.map(r => ({ ...r, selected: r._isDuplicate ? false : v })))
 
-  const autoClassify = () => setRows(prev => prev.map(row => {
-    if (row.categoryId) return row
-    const rowDay = new Date(row.date + 'T00:00:00').getDate()
-    const c = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
-    if (!c) return row
-    return { ...row, categoryId: c.categoryId, payee: c.payee || row.payee, ...(c.grupoGerencial ? { grupoGerencial: c.grupoGerencial } : {}) }
-  }))
+  const autoClassify = () => {
+    const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+    setRows(prev => prev.map(row => {
+      const rowDay = new Date(row.date + 'T00:00:00').getDate()
+      const c = row.categoryId ? null : classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
+      const isParcelado = !!row._installment
+      const gerencialId = classifyGerencialByRules(row.description, row.amount, isParcelado)
+
+      const updates = {}
+      if (c) {
+        updates.categoryId = c.categoryId
+        updates.payee = c.payee || row.payee
+        if (c.grupoGerencial) updates.grupoGerencial = c.grupoGerencial
+      }
+      // Apply gerencial rule if found and category rule didn't set a grupo
+      if (gerencialId && !updates.grupoGerencial) updates.grupoGerencial = gerencialId
+
+      // Reset to grupoD when no rule applies and still on default
+      if (!updates.grupoGerencial && row.grupoGerencial === grupoD) {
+        // keep default
+      }
+
+      return Object.keys(updates).length ? { ...row, ...updates } : row
+    }))
+  }
 
   const handleImport = () => {
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)

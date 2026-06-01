@@ -294,6 +294,26 @@ export const rowToGerencialGroup = (r) => ({
   defaultAccountId: r.default_account_id || null,
 })
 
+export const gerencialRuleToRow = (r) => ({
+  id: r.id,
+  contains: r.contains,
+  is_parcelado: r.isParcelado || 'any',
+  min_amount: r.minAmount ?? null,
+  max_amount: r.maxAmount ?? null,
+  grupo_gerencial_id: r.grupoGerencialId,
+  order: r.order ?? 0,
+})
+
+export const rowToGerencialRule = (r) => ({
+  id: r.id,
+  contains: r.contains,
+  isParcelado: r.is_parcelado || 'any',
+  minAmount: r.min_amount != null ? Number(r.min_amount) : null,
+  maxAmount: r.max_amount != null ? Number(r.max_amount) : null,
+  grupoGerencialId: r.grupo_gerencial_id,
+  order: r.order ?? 0,
+})
+
 export const payableToRow = (p) => ({
   id: p.id,
   cartao_id: p.cartaoId || null,
@@ -379,6 +399,7 @@ export async function loadFromDb(defaultData) {
         classificationRules: d.rules.map(rowToRule),
         gerencialGroups:
           d.gers.length > 0 ? d.gers.map(rowToGerencialGroup) : defaultData.gerencialGroups,
+        gerencialRules: d.grules?.map(rowToGerencialRule) || [],
         payables: d.pays.map(rowToPayable),
         payees: d.faves.map((r) => r.name),
         envelopes: d.envs.map(rowToEnvelope),
