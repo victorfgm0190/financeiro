@@ -826,6 +826,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         amount: row.amount, date: row.date, description: row.description,
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: row.grupoGerencial || defaultGrupoD,
+        faturaMonthYear: row.faturaMonthYear || null,
       })
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
