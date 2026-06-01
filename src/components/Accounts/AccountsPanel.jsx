@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
-  DollarSign, FileText, ArrowUp, ArrowDown, Settings, Building2,
+  DollarSign, ArrowUp, ArrowDown, Settings, Building2,
   ChevronDown, ChevronRight, RefreshCw, EyeOff,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -10,6 +10,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
 import ExtratoContaPanel from './ExtratoContaPanel'
+import TransactionForm from '../Transactions/TransactionForm'
 
 const ACCOUNT_ICONS = {
   checking: Landmark,
@@ -256,12 +257,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
 
   return (
     <div
-      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-grab active:cursor-grabbing`}
+      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer`}
       draggable
       onDragStart={e => {
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData('text/plain', account.id)
       }}
+      onClick={() => onExtrato(account)}
     >
       {account.isMain && (
         <span className="absolute top-3 right-10 text-yellow-300"><Star size={13} fill="currentColor" /></span>
@@ -287,18 +289,18 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
         <div className="flex flex-col gap-1 shrink-0 ml-2">
           <div className="flex gap-1">
-            <button onClick={() => onEdit(account)} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
               <Edit2 size={11} />
             </button>
-            <button onClick={() => onDelete(account)} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
               <Trash2 size={11} />
             </button>
           </div>
           <div className="flex gap-1">
-            <button onClick={() => moveAccount(account.id, 'up')} disabled={idx === 0} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 'up') }} disabled={idx === 0} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
               <ArrowUp size={10} />
             </button>
-            <button onClick={() => moveAccount(account.id, 'down')} disabled={idx === siblings.length - 1} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 'down') }} disabled={idx === siblings.length - 1} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
               <ArrowDown size={10} />
             </button>
           </div>
@@ -344,25 +346,26 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             </p>
           )}
           {isAsset && (
-            <button onClick={() => onUpdateValue(account)} className="mt-1.5 text-xs flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => { e.stopPropagation(); onUpdateValue(account) }}
+              className="mt-1.5 text-xs flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
+            >
               <RefreshCw size={10} /> Atualizar Valor
             </button>
           )}
           {!isAsset && account.type !== 'liability' && (
-            <div className="flex items-center gap-3 mt-1.5">
-              <button onClick={() => onExtrato(account)} className="text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
-                <FileText size={10} /> Ver Extrato
-              </button>
-              <button onClick={() => recalcularSaldo(account.id)} className="text-xs flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
-                <RefreshCw size={10} /> Recalcular
-              </button>
-            </div>
+            <button
+              onClick={(e) => { e.stopPropagation(); recalcularSaldo(account.id) }}
+              className="mt-1.5 text-xs flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
+            >
+              <RefreshCw size={10} /> Recalcular
+            </button>
           )}
         </div>
       )}
 
       <button
-        onClick={() => setMainAccount(account.id)}
+        onClick={(e) => { e.stopPropagation(); setMainAccount(account.id) }}
         className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
       >
         <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
@@ -432,13 +435,15 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
 }
 
 export default function AccountsPanel() {
-  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [extratoAccount, setExtratoAccount] = useState(null)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
+  const [showTxForm, setShowTxForm] = useState(false)
+  const [editTxInitial, setEditTxInitial] = useState(null)
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
@@ -462,6 +467,8 @@ export default function AccountsPanel() {
   const handleExtrato = (account) => setExtratoAccount(account)
   const handleUpdateValue = (account) => setUpdateValueAccount(account)
 
+  const closeTxForm = () => { setShowTxForm(false); setEditTxInitial(null) }
+
   const [dragOverGroup, setDragOverGroup] = useState(null)
   const handleDropAccount = (targetGroupId, accountId) => {
     if (!accountId) return
@@ -473,6 +480,33 @@ export default function AccountsPanel() {
     document.addEventListener('dragend', reset)
     return () => document.removeEventListener('dragend', reset)
   }, [])
+
+  // Inline extrato mode — replace the whole panel
+  if (extratoAccount) {
+    const liveAccount = accounts.find(a => a.id === extratoAccount.id) || extratoAccount
+    return (
+      <>
+        <ExtratoContaPanel
+          account={liveAccount}
+          onClose={() => setExtratoAccount(null)}
+          backButton
+          onEdit={(tx) => { setEditTxInitial(tx); setShowTxForm(true) }}
+          onNewTx={() => { setEditTxInitial(null); setShowTxForm(true) }}
+          onDelete={deleteTransaction}
+        />
+        <Modal
+          open={showTxForm}
+          onClose={closeTxForm}
+          title={editTxInitial?.id ? 'Editar Lançamento' : 'Novo Lançamento'}
+        >
+          <TransactionForm
+            initial={editTxInitial || { type: 'expense', accountId: liveAccount.id }}
+            onClose={closeTxForm}
+          />
+        </Modal>
+      </>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -630,15 +664,6 @@ export default function AccountsPanel() {
         message={`Tem certeza que deseja excluir a conta "${confirmDelete?.name}"? Esta ação não pode ser desfeita.`}
         danger
       />
-
-      <Modal
-        open={!!extratoAccount}
-        onClose={() => setExtratoAccount(null)}
-        title={`Extrato — ${extratoAccount?.name || ''}`}
-        size="xl"
-      >
-        {extratoAccount && <ExtratoContaPanel account={extratoAccount} />}
-      </Modal>
 
       <Modal
         open={!!updateValueAccount}

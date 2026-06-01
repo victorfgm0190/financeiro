@@ -1,12 +1,12 @@
-import { LayoutDashboard, ArrowLeftRight, Calendar, CreditCard, Plus, Layers } from 'lucide-react'
+import { LayoutDashboard, Wallet, Calendar, CreditCard, Plus, Layers } from 'lucide-react'
 
 const NAV_ITEMS = [
-  { id: 'dashboard',    icon: LayoutDashboard, label: 'Painel' },
-  { id: 'transactions', icon: ArrowLeftRight,  label: 'Extratos' },
-  { id: '__fab__',      icon: Plus,            label: '' },
-  { id: 'schedule',     icon: Calendar,        label: 'Agenda' },
-  { id: 'reservas',     icon: Layers,          label: 'Reservas' },
-  { id: 'credit',       icon: CreditCard,      label: 'Cartão' },
+  { id: 'dashboard', icon: LayoutDashboard, label: 'Painel' },
+  { id: 'accounts',  icon: Wallet,          label: 'Contas' },
+  { id: '__fab__',   icon: Plus,            label: '' },
+  { id: 'schedule',  icon: Calendar,        label: 'Agenda' },
+  { id: 'reservas',  icon: Layers,          label: 'Reservas' },
+  { id: 'credit',    icon: CreditCard,      label: 'Cartão' },
 ]
 
 export default function BottomNav({ active, setActive, onFab }) {

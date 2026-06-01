@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, CreditCard, ArrowLeftRight, Calendar,
+  LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
   Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2, Gem,
 } from 'lucide-react'
@@ -9,7 +9,6 @@ import { fmt } from '../shared/utils'
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
   { id: 'accounts', label: 'Contas', icon: Wallet },
-  { id: 'transactions', label: 'Lançamentos', icon: ArrowLeftRight },
   { id: 'credit', label: 'Cartão de Crédito', icon: CreditCard },
   { id: 'schedule', label: 'Agendamentos', icon: Calendar },
   { id: 'import', label: 'Importar Fatura', icon: Upload },

@@ -1,9 +1,14 @@
 import { useState, useMemo } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp, X, Undo2, Edit2, Copy, Plus } from 'lucide-react'
+import {
+  ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2,
+} from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+
+const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
 // Computes the account balance just before `fromDate` by reversing
 // all transactions from that date onward.
@@ -94,7 +99,7 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, todayStr }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, todayStr }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -184,6 +189,15 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               <Undo2 size={14} />
             </button>
           )}
+          {onDelete && !tx.reservaAuto && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(tx) }}
+              title="Excluir lançamento"
+              className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -261,18 +275,39 @@ function NettedRow({ row, accountId, accounts, balance }) {
   )
 }
 
-export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx }) {
-  const { transactions, accounts, schedules, reverseTransaction } = useApp()
+export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
+  const { transactions, accounts, schedules, reverseTransaction, deleteTransaction, getFinancialPeriod } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
+
   const now = new Date()
-  const [from, setFrom] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  )
-  const [to, setTo] = useState(
-    new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-  )
+  const defaultMonth = (() => {
+    try {
+      const fp = getFinancialPeriod()
+      return fp.start.toISOString().slice(0, 7)
+    } catch {
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    }
+  })()
+
+  const [selectedMonth, setSelectedMonth] = useState(defaultMonth)
+
+  const [year, month] = selectedMonth.split('-').map(Number)
+  const from = `${selectedMonth}-01`
+  const to = new Date(year, month, 0).toISOString().split('T')[0]
+  const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`
+
+  const prevMonth = () => {
+    const d = new Date(year, month - 2, 1)
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const nextMonth = () => {
+    const d = new Date(year, month, 1)
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
   const [confirmEstorno, setConfirmEstorno] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [toast, setToast] = useState(null)
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
@@ -284,6 +319,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
       : 'Lançamento estornado.'
     showToast(msg)
+  }
+
+  const handleDelete = (tx) => {
+    if (onDelete) onDelete(tx.id)
+    else deleteTransaction(tx.id)
+    setConfirmDelete(null)
   }
 
   const handleDuplicate = (tx) => {
@@ -341,18 +382,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const finalBalance = rowsWithBalance[rowsWithBalance.length - 1]?.runningBalance ?? startBalance
 
-  // Shared column definitions for header and body tables (table-fixed keeps widths in sync)
   const colGroup = (
     <colgroup>
-      <col style={{ width: '84px' }} />   {/* Data */}
-      <col />                              {/* Histórico — ocupa espaço restante */}
-      <col style={{ width: '64px' }} />   {/* Favorecido */}
-      <col style={{ width: '82px' }} />   {/* Conta De */}
-      <col style={{ width: '82px' }} />   {/* Conta Para */}
-      <col style={{ width: '88px' }} />   {/* Entrada */}
-      <col style={{ width: '88px' }} />   {/* Saída */}
-      <col style={{ width: '92px' }} />   {/* Saldo */}
-      <col style={{ width: '100px' }} />  {/* Ações */}
+      <col style={{ width: '84px' }} />
+      <col />
+      <col style={{ width: '64px' }} />
+      <col style={{ width: '82px' }} />
+      <col style={{ width: '82px' }} />
+      <col style={{ width: '88px' }} />
+      <col style={{ width: '88px' }} />
+      <col style={{ width: '92px' }} />
+      <col style={{ width: '100px' }} />
     </colgroup>
   )
 
@@ -363,10 +403,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       {/* ── Sticky block: title · filters · KPIs · table header ── */}
       <div className="sticky top-0 z-10 bg-gray-950">
         <div className="space-y-3 pb-3">
-          {/* Title */}
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-gray-200 truncate">
-              Extrato — {account.apelido || account.name}
+          {/* Title row */}
+          <div className="flex items-center gap-3">
+            {backButton && onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors shrink-0"
+              >
+                <ChevronLeft size={16} /> Voltar
+              </button>
+            )}
+            <h2 className="text-sm font-semibold text-gray-200 truncate flex-1">
+              {account.apelido || account.name}
               {isAplicacao && (
                 <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
               )}
@@ -374,10 +422,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             <div className="flex items-center gap-2 shrink-0">
               {onNewTx && (
                 <button onClick={onNewTx} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
-                  <Plus size={12} /> Novo lançamento
+                  <Plus size={12} /> Novo Lançamento
                 </button>
               )}
-              {onClose && (
+              {!backButton && onClose && (
                 <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
                   <X size={14} />
                 </button>
@@ -385,20 +433,29 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="label">De</label>
-              <input className="input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Até</label>
-              <input className="input" type="date" value={to} onChange={e => setTo(e.target.value)} />
-            </div>
+          {/* Month navigator */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={prevMonth}
+              className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="text-sm font-medium text-gray-200 min-w-[90px] text-center">{monthLabel}</span>
+            <button
+              onClick={nextMonth}
+              className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              <ChevronRight size={15} />
+            </button>
           </div>
 
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="card">
+              <p className="text-xs text-gray-400 uppercase mb-1">Saldo Atual</p>
+              <p className={`text-lg font-bold ${(account.balance || 0) >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(account.balance || 0)}</p>
+            </div>
             <div className="card">
               <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={13} /><p className="text-xs text-gray-400 uppercase">Entradas</p></div>
               <p className="text-lg font-bold text-blue-600">{fmt(totals.entrada)}</p>
@@ -407,14 +464,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <div className="flex items-center gap-2 mb-1 text-orange-600"><ArrowUpCircle size={13} /><p className="text-xs text-gray-400 uppercase">Saídas</p></div>
               <p className="text-lg font-bold text-orange-600">{fmt(totals.saida)}</p>
             </div>
-            <div className="card">
-              <p className="text-xs text-gray-400 uppercase mb-1">Saldo Final</p>
-              <p className={`text-lg font-bold ${finalBalance >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(finalBalance)}</p>
-            </div>
           </div>
         </div>
 
-        {/* Table column header — seamlessly connects to body table below */}
+        {/* Table column header */}
         <div className="bg-gray-900 border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             {colGroup}
@@ -490,7 +543,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (
-                  <SingleRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onReverse={setConfirmEstorno} onEdit={onEdit} onDuplicate={handleDuplicate} todayStr={todayStr} />
+                  <SingleRow
+                    key={i}
+                    row={row}
+                    accountId={account.id}
+                    accounts={accounts}
+                    balance={row.runningBalance}
+                    onReverse={setConfirmEstorno}
+                    onEdit={onEdit}
+                    onDuplicate={onEdit ? handleDuplicate : null}
+                    onDelete={setConfirmDelete}
+                    todayStr={todayStr}
+                  />
                 )
               )}
             </tbody>
@@ -511,6 +575,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         confirmLabel="Confirmar Estorno"
         danger
       />
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => handleDelete(confirmDelete)}
+        title="Excluir Lançamento"
+        message="Excluir este lançamento permanentemente? Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        danger
+      />
+
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
