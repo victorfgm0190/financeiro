@@ -649,6 +649,7 @@ function detectMainFatura(rows) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
+    criarParcelasGerencial,
     addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, revertCardImport,
@@ -817,10 +818,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee)
-      if (row.grupoGerencial) processarLancamentoGerencial(
-        { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
-        row.grupoGerencial
-      )
+      if (row.grupoGerencial) {
+        processarLancamentoGerencial(
+          { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
+          row.grupoGerencial
+        )
+        // Parcela intermediária (ex: "02/05") importada sem as irmãs: cria agendamentos das faturas restantes
+        const inst = row._installment
+        if (inst && inst.num > 1 && inst.total > inst.num && !row._generated) {
+          criarParcelasGerencial(txId, {
+            accountId: selectedAccount,
+            amount: row.amount,
+            date: row.date,
+            grupoGerencialId: row.grupoGerencial,
+            installments: inst.total,
+            startFromInstallment: inst.num + 1,
+            baseFaturaMonthYear: row.faturaMonthYear,
+            baseInstallmentNum: inst.num,
+          })
+        }
+      }
     })
 
     if (toImport.length > 0) {
