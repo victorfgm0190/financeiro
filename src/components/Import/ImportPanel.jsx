@@ -831,10 +831,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
       if (row.grupoGerencial) {
-        processarLancamentoGerencial(
+        const gerResult = processarLancamentoGerencial(
           { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
           row.grupoGerencial
         )
+        if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
         // Parcela intermediária (ex: "02/05") importada sem as irmãs: cria agendamentos das faturas restantes
         const inst = row._installment
         if (inst && inst.num > 1 && inst.total > inst.num && !row._generated) {
