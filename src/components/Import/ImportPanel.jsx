@@ -721,7 +721,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const categoryId = classified?.categoryId || movCat?.id || ''
         const payee = classified?.payee || ''
         const installInfo = detectInstallment(row.description)
-        const baseFatura = calcFatura(row.date, resolvedClosingDay)
+        const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
+        // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses
+        const baseFatura = (installInfo && installInfo.num > 1)
+          ? addMonthToFatura(faturaParc1, installInfo.num - 1)
+          : faturaParc1
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: classified?.grupoGerencial || grupoD, _installment: installInfo, _generated: false,
@@ -771,9 +775,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const cl = acc?.closingDay || 14
     const dd = acc?.dueDay || null
     setRows(prev => {
-      const step1 = prev.map(row =>
-        row._generated ? row : { ...row, faturaMonthYear: calcFatura(row.date, cl) }
-      )
+      const step1 = prev.map(row => {
+        if (row._generated) return row
+        const inst = detectInstallment(row.description)
+        const faturaParc1 = calcFatura(row.date, cl)
+        const fatura = (inst && inst.num > 1) ? addMonthToFatura(faturaParc1, inst.num - 1) : faturaParc1
+        return { ...row, faturaMonthYear: fatura }
+      })
       const step2 = step1.map(row => {
         if (!row._generated) return row
         const parent = step1.find(r => r._id === row._seriesId)
