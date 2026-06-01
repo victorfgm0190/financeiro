@@ -1310,32 +1310,35 @@ export function AppProvider({ children }) {
   }, [])
 
   // ── Classification ───────────────────────────────────────────────────────────
-  const classifyByRules = useCallback((description) => {
+  const classifyByRules = useCallback((description, { dayOfMonth = null, amountApprox = null } = {}) => {
     const lower = description.toLowerCase()
+    let best = null, bestScore = -1
     for (const rule of data.classificationRules) {
-      if (lower.includes(rule.contains.toLowerCase())) {
-        return { categoryId: rule.categoryId, payee: rule.payee || '' }
-      }
+      if (!lower.includes(rule.contains.toLowerCase())) continue
+      if (rule.dayOfMonth != null && (dayOfMonth == null || rule.dayOfMonth !== dayOfMonth)) continue
+      if (rule.amountApprox != null && (amountApprox == null || Math.abs(rule.amountApprox - amountApprox) > 0.50)) continue
+      const score = 1 + (rule.dayOfMonth != null ? 1 : 0) + (rule.amountApprox != null ? 1 : 0)
+      if (score > bestScore) { bestScore = score; best = rule }
     }
-    return null
+    return best ? { categoryId: best.categoryId, payee: best.payee || '', grupoGerencial: best.grupoGerencial || null } : null
   }, [data.classificationRules])
 
-  const learnClassification = useCallback((description, categoryId, payee) => {
+  const learnClassification = useCallback((description, categoryId, payee, { dayOfMonth = null, amountApprox = null, grupoGerencial = null } = {}) => {
     const words = description.toLowerCase().split(/\s+/).filter(w => w.length > 3)
     if (words.length === 0) return
     const keyword = words[0]
     update(d => {
-      const exists = d.classificationRules.some(r => r.contains.toLowerCase() === keyword)
-      if (exists) return d
-      return {
-        ...d,
-        classificationRules: [...d.classificationRules, {
-          id: 'rule_' + Date.now(),
-          contains: keyword,
-          categoryId,
-          payee: payee || '',
-        }],
+      const exact = d.classificationRules.find(r => {
+        if (r.contains.toLowerCase() !== keyword) return false
+        if ((r.dayOfMonth ?? null) !== dayOfMonth) return false
+        const bothNull = r.amountApprox == null && amountApprox == null
+        const bothClose = r.amountApprox != null && amountApprox != null && Math.abs(r.amountApprox - amountApprox) <= 0.50
+        return bothNull || bothClose
+      })
+      if (exact) {
+        return { ...d, classificationRules: d.classificationRules.map(r => r.id === exact.id ? { ...r, categoryId, payee: payee || r.payee, grupoGerencial: grupoGerencial || r.grupoGerencial } : r) }
       }
+      return { ...d, classificationRules: [...d.classificationRules, { id: 'rule_' + Date.now(), contains: keyword, categoryId, payee: payee || '', dayOfMonth, amountApprox, grupoGerencial }] }
     })
   }, [update])
 

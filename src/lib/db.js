@@ -261,6 +261,9 @@ export const ruleToRow = (r) => ({
   contains: r.contains,
   category_id: r.categoryId || null,
   payee: r.payee || null,
+  day_of_month: r.dayOfMonth ?? null,
+  amount_approx: r.amountApprox ?? null,
+  grupo_gerencial: r.grupoGerencial || null,
 })
 
 export const rowToRule = (r) => ({
@@ -268,6 +271,9 @@ export const rowToRule = (r) => ({
   contains: r.contains,
   categoryId: r.category_id || '',
   payee: r.payee || '',
+  dayOfMonth: r.day_of_month ?? null,
+  amountApprox: r.amount_approx != null ? Number(r.amount_approx) : null,
+  grupoGerencial: r.grupo_gerencial || null,
 })
 
 export const gerencialGroupToRow = (g) => ({

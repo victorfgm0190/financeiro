@@ -715,7 +715,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       let idCtr = 0
 
       parsed.forEach(row => {
-        const classified = classifyByRules(row.description)
+        const rowDay = new Date(row.date + 'T00:00:00').getDate()
+        const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const movCat = categories.find(c => c.name.toLowerCase() === row.movimentacao.toLowerCase())
         const categoryId = classified?.categoryId || movCat?.id || ''
         const payee = classified?.payee || ''
@@ -723,7 +724,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const baseFatura = calcFatura(row.date, resolvedClosingDay)
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
-          grupoGerencial: grupoD, _installment: installInfo, _generated: false,
+          grupoGerencial: classified?.grupoGerencial || grupoD, _installment: installInfo, _generated: false,
           faturaMonthYear: baseFatura,
         }
         processed.push(baseRow)
@@ -802,8 +803,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const autoClassify = () => setRows(prev => prev.map(row => {
     if (row.categoryId) return row
-    const c = classifyByRules(row.description)
-    return c ? { ...row, ...c } : row
+    const rowDay = new Date(row.date + 'T00:00:00').getDate()
+    const c = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
+    if (!c) return row
+    return { ...row, categoryId: c.categoryId, payee: c.payee || row.payee, ...(c.grupoGerencial ? { grupoGerencial: c.grupoGerencial } : {}) }
   }))
 
   const handleImport = () => {
@@ -817,7 +820,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         grupoGerencial: row.grupoGerencial || defaultGrupoD,
       })
       txIds.push(txId)
-      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee)
+      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
       if (row.grupoGerencial) {
         processarLancamentoGerencial(
           { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
@@ -1035,7 +1038,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           categories={categories}
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                           value={row.categoryId}
-                          onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee) }}
+                          onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial }) }}
                           searchable
                         />
                       </td>
