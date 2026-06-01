@@ -710,6 +710,10 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, cardImports: [imp, ...(d.cardImports || [])] }))
   }, [update])
 
+  const updateCardImport = useCallback((id, changes) => {
+    update(d => ({ ...d, cardImports: (d.cardImports || []).map(i => i.id === id ? { ...i, ...changes } : i) }))
+  }, [update])
+
   const revertCardImport = useCallback((importId) => {
     update(d => {
       const imp = (d.cardImports || []).find(i => i.id === importId)
@@ -2603,7 +2607,7 @@ export function AppProvider({ children }) {
       payables: data.payables || [],
       profiles: data.profiles || [],
       cardImports: data.cardImports || [],
-      addCardImport, revertCardImport,
+      addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId,
       profileAccounts, profileTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,

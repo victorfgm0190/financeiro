@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, FileText, Check, AlertCircle, Wand2, Save,
-  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw,
+  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
@@ -650,9 +650,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
     criarParcelasGerencial,
-    addTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
+    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
-    cardImports, addCardImport, revertCardImport,
+    cardImports, addCardImport, updateCardImport, revertCardImport,
   } = useApp()
 
   const [faturaMonthYear, setFaturaMonthYear] = useState('')
@@ -665,6 +665,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [matchQueue, setMatchQueue] = useState([])
   const [scheduleMatchQueue, setScheduleMatchQueue] = useState([])
   const [confirmRevertId, setConfirmRevertId] = useState(null)
+  const [editingImport, setEditingImport] = useState(null)
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
@@ -680,6 +681,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setError('')
     setResult(null)
     setMatchQueue([])
+    setEditingImport(null)
     setFilename(file.name)
     try {
       const isCsv = /\.csv$/i.test(file.name)
@@ -798,7 +800,72 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     })
   }
 
+  // Propaga o Mês de Referência global para todas as linhas
+  const handleFaturaMonthYearChange = (newFatura) => {
+    setFaturaMonthYear(newFatura)
+    if (!newFatura || rows.length === 0) return
+    const acc = accounts.find(a => a.id === selectedAccount)
+    const dd = acc?.dueDay || null
+    setRows(prev => {
+      const step1 = prev.map(row => {
+        if (row._generated) return row
+        const inst = row._installment
+        const fatura = (inst && inst.num > 1)
+          ? addMonthToFatura(newFatura, inst.num - 1)
+          : newFatura
+        return { ...row, faturaMonthYear: fatura }
+      })
+      const step2 = step1.map(row => {
+        if (!row._generated) return row
+        const parent = step1.find(r => r._id === row._seriesId)
+        if (!parent) return row
+        const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
+        return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dd) || row.date }
+      })
+      return step2
+    })
+  }
+
+  // Carrega uma importação do histórico para reedição
+  const loadImportForEdit = (imp) => {
+    const txSet = new Set(imp.txIds || [])
+    const impTxs = transactions.filter(t => txSet.has(t.id) && t.type !== 'transfer')
+    if (impTxs.length === 0) return
+    const reconstructed = impTxs.map(t => {
+      const inst = detectInstallment(t.description || '')
+      return {
+        _id: t.id,
+        date: t.date,
+        description: t.description || '',
+        amount: t.amount,
+        faturaMonthYear: t.faturaMonthYear || '',
+        categoryId: t.categoryId || '',
+        payee: t.payee || '',
+        grupoGerencial: t.grupoGerencial || defaultGrupoD,
+        type: t.type,
+        isDeposit: false,
+        selected: true,
+        _isDuplicate: false,
+        _installment: inst,
+        _generated: false,
+        movimentacao: '',
+      }
+    })
+    reconstructed.sort((a, b) =>
+      (a.faturaMonthYear || '').localeCompare(b.faturaMonthYear || '') || a.date.localeCompare(b.date)
+    )
+    setRows(reconstructed)
+    setSelectedAccount(imp.accountId)
+    setFaturaMonthYear(imp.mesAno || '')
+    setEditingImport(imp)
+    setResult(null)
+    setFilename(imp.filename || '')
+    setError('')
+    setCardInfo({ cardName: '', faturaStr: '' })
+  }
+
   const resolvedRows = useMemo(() => {
+    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false }))
     const closingDay = selectedAcc?.closingDay || 14
     return rows.map(row => {
@@ -806,7 +873,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount, closingDay)
       return { ...r, _isDuplicate: dup, selected: row.selected && !dup }
     })
-  }, [rows, selectedAccount, transactions, selectedAcc])
+  }, [rows, selectedAccount, transactions, selectedAcc, editingImport])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
@@ -840,6 +907,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const handleImport = () => {
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)
+
+    // Modo reedição: apenas atualiza campos editáveis das transações existentes
+    if (editingImport) {
+      toImport.forEach(row => {
+        updateTransaction(row._id, {
+          faturaMonthYear: row.faturaMonthYear || null,
+          categoryId: row.categoryId || null,
+          grupoGerencial: row.grupoGerencial || null,
+        })
+      })
+      if (faturaMonthYear && faturaMonthYear !== editingImport.mesAno) {
+        updateCardImport(editingImport.id, { mesAno: faturaMonthYear })
+      }
+      setEditingImport(null)
+      setResult(toImport.length)
+      setRows([])
+      return
+    }
+
     const txIds = []
     toImport.forEach(row => {
       const txId = addTransaction({
@@ -972,16 +1058,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {rows.length > 0 && (
         <>
           <div className="card">
+            {editingImport && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs">
+                <Pencil size={12} />
+                <span>Modo de reedição — {editingImport.filename || 'importação anterior'} · {editingImport.count} lançamento{editingImport.count !== 1 ? 's' : ''}</span>
+                <button className="ml-auto text-blue-500 hover:text-blue-300" onClick={() => { setEditingImport(null); setRows([]) }}>Cancelar</button>
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="label">Cartão de Destino</label>
-                <select className="input" value={selectedAccount} onChange={e => handleAccountChange(e.target.value)}>
+                <select className="input" value={selectedAccount} disabled={!!editingImport} onChange={e => handleAccountChange(e.target.value)}>
                   <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
                 </select>
               </div>
               <div>
                 <label className="label">Mês de Referência</label>
-                <select className="input" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
+                <select className="input" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
                   <option value="">Selecione...</option>
                   {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -996,10 +1089,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
             <div className="flex gap-2">
-              <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
-                <Wand2 size={12} /> Classificar Auto
-              </button>
-              <button className="btn-secondary text-xs py-1.5" onClick={() => setRows([])}>
+              {!editingImport && (
+                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
+                  <Wand2 size={12} /> Classificar Auto
+                </button>
+              )}
+              <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }}>
                 <X size={12} className="mr-1 inline" /> Cancelar
               </button>
               <button
@@ -1007,7 +1102,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 disabled={toImportCount === 0 || !selectedAccount}
                 onClick={handleImport}
               >
-                <Save size={12} /> Confirmar ({toImportCount})
+                <Save size={12} /> {editingImport ? `Salvar (${toImportCount})` : `Confirmar (${toImportCount})`}
               </button>
             </div>
           </div>
@@ -1134,15 +1229,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 : '—'
               const mesAnoFmt = imp.mesAno ? imp.mesAno.split('-').reverse().join('/') : '—'
               return (
-                <div key={imp.id} className="flex items-center gap-3 text-xs py-1.5 border-b border-gray-800/50 last:border-0">
+                <div
+                  key={imp.id}
+                  className="flex items-center gap-3 text-xs py-1.5 border-b border-gray-800/50 last:border-0 cursor-pointer hover:bg-gray-800/30 rounded px-1 -mx-1 transition-colors"
+                  onClick={() => loadImportForEdit(imp)}
+                >
                   <span className="text-gray-500 shrink-0 w-32">{dateStr}</span>
                   <span className="text-gray-300 truncate flex-1 min-w-0" title={imp.filename}>{imp.filename || '—'}</span>
                   <span className="text-gray-400 shrink-0">{imp.count} lançamento{imp.count !== 1 ? 's' : ''}</span>
                   <span className="text-gray-500 shrink-0">{mesAnoFmt}</span>
                   <span className="text-gray-500 shrink-0 hidden sm:inline">{acc?.apelido || acc?.name || '—'}</span>
                   <button
+                    className="shrink-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 border border-blue-500/30 hover:border-blue-400/50 rounded px-2 py-0.5 transition-colors"
+                    onClick={e => { e.stopPropagation(); loadImportForEdit(imp) }}
+                  >
+                    <Pencil size={11} /> Editar
+                  </button>
+                  <button
                     className="shrink-0 flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400 border border-orange-500/30 hover:border-orange-400/50 rounded px-2 py-0.5 transition-colors"
-                    onClick={() => setConfirmRevertId(imp.id)}
+                    onClick={e => { e.stopPropagation(); setConfirmRevertId(imp.id) }}
                   >
                     <RotateCcw size={11} /> Estornar
                   </button>
