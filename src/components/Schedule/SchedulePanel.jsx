@@ -653,7 +653,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
 
 export default function SchedulePanel() {
   const {
-    schedules, categories, accounts,
+    profileSchedules: schedules, categories, profileAccounts: accounts,
     payables, updatePayable, deletePayable,
     gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences,

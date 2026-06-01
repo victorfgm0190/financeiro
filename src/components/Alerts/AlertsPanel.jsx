@@ -54,7 +54,7 @@ function getScheduleAlerts(schedules, getNextOccurrences) {
 }
 
 export default function AlertsPanel() {
-  const { accounts, schedules, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileSchedules: schedules, getNextOccurrences } = useApp()
   const [notificationsEnabled, setNotificationsEnabled] = useState(Notification?.permission === 'granted')
   const [dismissed, setDismissed] = useState([])
 

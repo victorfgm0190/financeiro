@@ -800,7 +800,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { accounts, transactions, categories, schedules, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, getFinancialPeriod, getNextOccurrences } = useApp()
   const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
   const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)

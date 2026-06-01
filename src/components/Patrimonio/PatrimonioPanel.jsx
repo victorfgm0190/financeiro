@@ -88,7 +88,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function PatrimonioPanel() {
-  const { accounts, accountGroups } = useApp()
+  const { profileAccounts: accounts, accountGroups } = useApp()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [expandedHistory, setExpandedHistory] = useState(null)
 

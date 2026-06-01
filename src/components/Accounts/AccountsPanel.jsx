@@ -432,7 +432,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
 }
 
 export default function AccountsPanel() {
-  const { accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)

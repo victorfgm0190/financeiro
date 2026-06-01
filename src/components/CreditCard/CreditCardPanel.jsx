@@ -23,7 +23,7 @@ function GerBadge({ grupoId, gerencialGroups }) {
 }
 
 export default function CreditCardPanel() {
-  const { accounts, transactions, categories, gerencialGroups, addTransaction } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, categories, gerencialGroups, addTransaction } = useApp()
   const [payModal, setPayModal] = useState(null)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState(today())

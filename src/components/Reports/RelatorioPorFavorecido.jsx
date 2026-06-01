@@ -102,7 +102,7 @@ function doExport(filtered, totals, accounts, categories, applied, analytic) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function RelatorioPorFavorecido() {
-  const { transactions, categories, accounts, settings } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
 
   const [months, setMonths] = useState(1)

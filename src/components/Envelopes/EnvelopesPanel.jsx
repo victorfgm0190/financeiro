@@ -255,7 +255,7 @@ function DetailModal({ data, categories, accounts, onClose }) {
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, transactions, categories, accounts, accountGroups } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups } = useApp()
   const [showForm,  setShowForm]  = useState(false)
   const [editEnv,   setEditEnv]   = useState(null)
   const [detailId,  setDetailId]  = useState(null)

@@ -1142,7 +1142,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 // ─── Painel principal ─────────────────────────────────────────────────────────
 
 export default function ImportPanel() {
-  const { accounts, accountGroups, transactions } = useApp()
+  const { profileAccounts: accounts, accountGroups, profileTransactions: transactions } = useApp()
   const [tab, setTab] = useState('corrente')
 
   return (

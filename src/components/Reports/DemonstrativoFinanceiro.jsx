@@ -206,7 +206,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { transactions, categories, accounts, settings } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
 
   // ── Filter draft state ────────────────────────────────────────────────────
