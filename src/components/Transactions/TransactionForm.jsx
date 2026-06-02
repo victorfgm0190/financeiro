@@ -51,7 +51,7 @@ function buildAccOpts(accounts, _accountGroups, excludeId) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, reverseGerencialCascadeOnly,
+    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, propagarValorParcelas, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -137,6 +137,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     }
     return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
   }, [transactions, payees])
+
+  // Parcelas seguintes (X+1..N) da mesma cadeia X/N, no mesmo cartão — para propagação de valor
+  const subsequentParcelas = useMemo(() => {
+    if (!initial?.id || initial.accountType !== 'credit' || initial.type !== 'expense') return []
+    const parse = (desc) => {
+      const m = (desc || '').match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/)
+      if (!m) return null
+      const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
+      if (num < 1 || total < 2 || num > total) return null
+      return { num, total, base: desc.replace(m[0], '').trim().replace(/\s+/g, ' ').toLowerCase() }
+    }
+    const baseInst = parse(initial.description)
+    if (!baseInst) return []
+    return transactions.filter(t => {
+      if (t.id === initial.id) return false
+      if (t.accountId !== initial.accountId || t.type !== 'expense' || t.accountType !== 'credit') return false
+      const pi = parse(t.description)
+      return pi && pi.total === baseInst.total && pi.num > baseInst.num && pi.base === baseInst.base
+    })
+  }, [initial, transactions])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -247,6 +267,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             }
           }
         }
+      }
+
+      // Parcelado: oferecer propagação do novo valor para as parcelas seguintes da cadeia
+      const amountChangedNow = Math.abs(Number(form.amount) - initial.amount) > 0.005
+      if (amountChangedNow && subsequentParcelas.length > 0) {
+        setStep('propagate-parcelas')
+        return
       }
 
       onClose()
@@ -385,6 +412,37 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         sourceAccountId={debtCtx.sourceAccountId}
         onClose={onClose}
       />
+    )
+  }
+
+  if (step === 'propagate-parcelas') {
+    const novoValor = Number(form.amount)
+    const n = subsequentParcelas.length
+    return (
+      <div className="space-y-5 py-2">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-purple-500/15 flex items-center justify-center mx-auto">
+            <ArrowLeftRight size={22} className="text-purple-400" />
+          </div>
+          <h3 className="font-semibold text-gray-100">Aplicar às demais parcelas?</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Aplicar este valor (<span className="text-white font-semibold">{fmt(novoValor)}</span>) a todas as{' '}
+            <span className="text-white font-semibold">{n}</span> parcela{n !== 1 ? 's' : ''} seguinte{n !== 1 ? 's' : ''} desta cadeia?
+          </p>
+          <p className="text-xs text-gray-600">
+            Os reflexos gerenciais (provisões, resgates e pagamentos) serão ajustados automaticamente.
+          </p>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button className="btn-secondary flex-1" onClick={onClose}>Não, só esta</button>
+          <button
+            className="btn-primary flex-1"
+            onClick={() => { propagarValorParcelas(initial.id, novoValor); onClose() }}
+          >
+            Sim, aplicar a todas
+          </button>
+        </div>
+      </div>
     )
   }
 

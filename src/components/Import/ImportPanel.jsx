@@ -631,14 +631,40 @@ function isDuplicateInstallment(row, existing, accountId) {
 }
 
 // Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
+// À-vista calculam a fatura de forma confiável (calcFatura da data do gasto); parcelados X/N
+// usam um offset (num-1) que pode driftar no fechamento — por isso preferimos as à-vista.
 function detectMainFatura(rows) {
-  const counts = {}
-  rows.forEach(r => {
-    if (r.faturaMonthYear && !r._generated)
-      counts[r.faturaMonthYear] = (counts[r.faturaMonthYear] || 0) + 1
+  const tally = (pred) => {
+    const counts = {}
+    rows.forEach(r => {
+      if (r.faturaMonthYear && !r._generated && pred(r))
+        counts[r.faturaMonthYear] = (counts[r.faturaMonthYear] || 0) + 1
+    })
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0] || ''
+  }
+  return tally(r => !r._installment) || tally(() => true)
+}
+
+// Um arquivo de cartão é o extrato de UMA fatura: toda parcela X/N nele pertence a esse mês.
+// Ancora a parcela base ao mês de referência (sem o offset que pode driftar) e recomputa
+// as parcelas geradas (siblings) a partir dela. À-vista não são tocadas.
+function alignInstallmentsToFatura(rows, fatura, dueDay) {
+  if (!fatura) return rows
+  const [fy, fm] = fatura.split('-').map(Number)
+  const maxDay = new Date(fy, fm, 0).getDate()
+  const step1 = rows.map(row => {
+    if (row._generated || !row._installment || row.faturaMonthYear === fatura) return row
+    const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
+    return { ...row, faturaMonthYear: fatura, date: `${fatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}` }
   })
-  return Object.entries(counts)
-    .sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0] || ''
+  return step1.map(row => {
+    if (!row._generated) return row
+    const parent = step1.find(r => r._id === row._seriesId)
+    if (!parent) return row
+    const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
+    return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dueDay) || row.date }
+  })
 }
 
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
@@ -755,12 +781,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
 
       const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
-      setRows(sortedRows)
+
+      // Auto-detectar mês de referência pelo mês de fatura mais frequente e ancorar as parcelas a ele
+      const detected = detectMainFatura(sortedRows)
+      const alignedRows = detected ? alignInstallmentsToFatura(sortedRows, detected, resolvedDueDay) : sortedRows
+      setRows(alignedRows)
       setCardInfo({ cardName, faturaStr })
       setMatchQueue(pendingMatches)
-
-      // Auto-detectar mês de referência pelo mês de fatura mais frequente
-      const detected = detectMainFatura(sortedRows)
       if (detected) setFaturaMonthYear(detected)
     } catch (err) {
       setError('Erro ao ler arquivo: ' + err.message)
@@ -791,7 +818,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
       const detected = detectMainFatura(step2)
       if (detected) setFaturaMonthYear(detected)
-      return step2
+      return detected ? alignInstallmentsToFatura(step2, detected, dd) : step2
     })
   }
 

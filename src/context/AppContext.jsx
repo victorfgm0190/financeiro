@@ -2386,6 +2386,109 @@ export function AppProvider({ children }) {
     })
   }, [data.gerencialGroups, data.accounts, data.settings, update])
 
+  // ── Propaga um novo valor para as parcelas seguintes (X+1..N) de uma cadeia X/N ──
+  // Atualiza cada lançamento da cadeia e ajusta os reflexos gerenciais:
+  //   • Grupo G (1): parcelas futuras → ajusta os agendamentos (provisão/resgate/pagamento);
+  //                  parcelas já pagas → ajusta o lançamento vinculado + saldos das contas.
+  //   • Grupos numerados (2,3..): ajusta o agendamento de resgate; se já liquidado, ajusta o
+  //                  lançamento de transferência vinculado + saldo da conta de resgate.
+  const propagarValorParcelas = useCallback((txId, novoValor) => {
+    const valor = Number(novoValor)
+    if (isNaN(valor)) return
+    update(d => {
+      const parseInst = (desc) => {
+        const m = (desc || '').match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/)
+        if (!m) return null
+        const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
+        if (num < 1 || total < 2 || num > total) return null
+        return { num, total, base: desc.replace(m[0], '').trim().replace(/\s+/g, ' ').toLowerCase() }
+      }
+
+      const baseTx = d.transactions.find(t => t.id === txId)
+      if (!baseTx) return d
+      const baseInst = parseInst(baseTx.description)
+      if (!baseInst) return d
+
+      const chain = d.transactions.filter(t => {
+        if (t.id === txId) return false
+        if (t.accountId !== baseTx.accountId || t.type !== 'expense' || t.accountType !== 'credit') return false
+        const pi = parseInst(t.description)
+        return pi && pi.total === baseInst.total && pi.num > baseInst.num && pi.base === baseInst.base
+      })
+      if (chain.length === 0) return d
+
+      const card = d.accounts.find(a => a.id === baseTx.accountId)
+      const closingDay = card?.closingDay || 14
+      const dueDay = card?.dueDay || 10
+
+      let accounts = [...d.accounts]
+      let transactions = [...d.transactions]
+      let schedules = [...d.schedules]
+
+      const adjustTransfer = (accId, toAccId, delta) => {
+        accounts = accounts.map(a => {
+          if (a.id === accId) return { ...a, balance: rb((a.balance || 0) - delta) }
+          if (a.id === toAccId) return { ...a, balance: rb((a.balance || 0) + delta) }
+          return a
+        })
+      }
+
+      for (const parcela of chain) {
+        const delta = rb(valor - parcela.amount)
+        if (Math.abs(delta) < 0.005) continue
+
+        // Lançamento da parcela (despesa de cartão): novo valor + ajuste da dívida do cartão
+        accounts = accounts.map(a => a.id === parcela.accountId ? {
+          ...a,
+          creditDebt: Math.max(0, rb((a.creditDebt || 0) + delta)),
+          creditMonthBill: Math.max(0, rb((a.creditMonthBill || 0) + delta)),
+        } : a)
+        transactions = transactions.map(t => t.id === parcela.id ? { ...t, amount: valor } : t)
+
+        const grupo = d.gerencialGroups?.find(g => g.id === parcela.grupoGerencial)
+        if (!grupo || grupo.number === 'D') continue
+
+        let faturaRef
+        if (parcela.faturaMonthYear) {
+          const [y, m] = parcela.faturaMonthYear.split('-')
+          faturaRef = `${m}/${y}`
+        } else {
+          faturaRef = computeFaturaRef(new Date(parcela.date + 'T00:00:00'), closingDay)
+        }
+
+        // Já registrado (pago/liquidado): congela o agendamento e ajusta o lançamento + saldos.
+        // Futuro: ajusta apenas o valor agendado.
+        const applyToSchedule = (sch) => {
+          if (!sch) return
+          if ((sch.registered || []).includes(sch.startDate)) {
+            const linked = transactions.find(t => t.scheduleId === sch.id && t.date === sch.startDate)
+            if (linked) {
+              transactions = transactions.map(t => t.id === linked.id ? { ...t, amount: rb(t.amount + delta) } : t)
+              if (linked.type === 'transfer') adjustTransfer(linked.accountId, linked.toAccountId, delta)
+            }
+          } else {
+            schedules = schedules.map(s => s.id === sch.id
+              ? { ...s, amount: Math.max(0, rb((s.amount || 0) + delta)) } : s)
+          }
+        }
+
+        if (grupo.number === 1) {
+          const gerKey = gerencialKey(parcela.accountId, faturaRef)
+          for (const key of [`${gerKey}_provision`, `${gerKey}_resgate_parc`, `${gerKey}_payment`]) {
+            applyToSchedule(schedules.find(s => s.overrides?._gerencialKey === key))
+          }
+        } else if (typeof grupo.number === 'number') {
+          const [fmm, fyyyy] = faturaRef.split('/')
+          const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}`
+          const gerKey = `ger_num_${parcela.grupoGerencial}_${parcela.accountId}_${dueDate}`
+          applyToSchedule(schedules.find(s => s.overrides?._gerencialKey === gerKey))
+        }
+      }
+
+      return { ...d, accounts, transactions, schedules }
+    })
+  }, [update])
+
   // ── Corrigir dados gerenciais: elimina provisões erradas de parcelados e reconstrói agendamentos ──
   const corrigirDadosGerencial = useCallback(() => {
     update(d => {
@@ -2636,6 +2739,7 @@ export function AppProvider({ children }) {
       processarLancamentoGerencial,
       criarParcelasGerencial,
       ajustarParcelasGrupoGerencial,
+      propagarValorParcelas,
       corrigirDadosGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
