@@ -413,7 +413,6 @@ export function AppProvider({ children }) {
   const retryTimerRef = useRef(null)
   const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
-  const autoProvisaoDoneRef = useRef(false)
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
@@ -637,78 +636,6 @@ export function AppProvider({ children }) {
 
       if (!changed) return prev
       return { ...prev, schedules, accounts, transactions }
-    })
-  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-provisão de parcelas futuras do Grupo G na virada do mês financeiro ──
-  // Parcelas geradas na importação (09/12, 10/12…) não têm a transferência imediata
-  // Conta → Ger. Quando o dia financeiro do mês da fatura chega, criamos a provisão.
-  useEffect(() => {
-    if (!initialized || autoProvisaoDoneRef.current) return
-    autoProvisaoDoneRef.current = true
-    const todayStr = format(new Date(), 'yyyy-MM-dd')
-
-    setData(prev => {
-      const g1 = prev.gerencialGroups?.find(g => g.number === 1)
-      if (!g1) return prev
-      const financialStartDay = prev.settings?.financialMonthStartDay || 1
-
-      const resolveContaPrincipal = () =>
-        prev.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-        prev.accounts.find(a => a.isMain && a.type !== 'credit') ||
-        prev.accounts.find(a => a.type === 'checking')
-
-      // Parcelas do Grupo G cuja provisão já venceu (dia financeiro do mês da fatura) e que
-      // ainda não tiveram a transferência imediata nem a auto-provisão criadas.
-      const due = prev.transactions.filter(tx => {
-        if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
-        if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
-        if (!INSTALL_RE.test(tx.description || '')) return false
-        const [y, m] = tx.faturaMonthYear.split('-')
-        const provDate = `${y}-${m}-${String(financialStartDay).padStart(2, '0')}`
-        if (provDate > todayStr) return false
-        const jaProvisionada = prev.transactions.some(t =>
-          t.type === 'transfer' && t.grupoGerencial === g1.id &&
-          (t.parentTxId === tx.id || t.description === `Reserva Gerencial - ${tx.description}`)
-        )
-        return !jaProvisionada
-      })
-      if (due.length === 0) return prev
-
-      const contaPrincipal = resolveContaPrincipal()
-      if (!contaPrincipal) return prev
-
-      let accounts = [...prev.accounts]
-      const newTxs = []
-      for (const tx of due) {
-        const card = prev.accounts.find(a => a.id === tx.accountId)
-        const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
-        const subconta = accounts.find(a => a.name === `Ger. ${apelido}`)
-        if (!subconta) continue
-        const [y, m] = tx.faturaMonthYear.split('-')
-        const provDate = `${y}-${m}-${String(financialStartDay).padStart(2, '0')}`
-        const faturaRef = `${m}/${y}`
-        accounts = accounts.map(a => {
-          if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - tx.amount) }
-          if (a.id === subconta.id) return { ...a, balance: rb((a.balance || 0) + tx.amount) }
-          return a
-        })
-        newTxs.push({
-          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          type: 'transfer',
-          accountId: contaPrincipal.id,
-          toAccountId: subconta.id,
-          amount: tx.amount,
-          date: provDate,
-          description: `Provisão Ger. ${apelido} - Fatura ${faturaRef}`,
-          grupoGerencial: g1.id,
-          origin: 'auto-provisao',
-          parentTxId: tx.id,
-          createdAt: new Date().toISOString(),
-        })
-      }
-      if (newTxs.length === 0) return prev
-      return { ...prev, accounts, transactions: [...prev.transactions, ...newTxs] }
     })
   }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2576,6 +2503,107 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // ── Provisões gerenciais pendentes (parcelas futuras do Grupo G ainda não provisionadas) ──
+  // Parcela elegível: despesa de cartão no Grupo G, com padrão X/N, faturaMonthYear <= mês atual,
+  // e sem a transferência imediata correspondente (Conta → Ger.) já registrada.
+  const getProvisoesPendentes = useCallback(() => {
+    const g1 = data.gerencialGroups?.find(g => g.number === 1)
+    if (!g1) return []
+    const now = new Date()
+    const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const contaPrincipal =
+      data.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+      data.accounts.find(a => a.isMain && a.type !== 'credit') ||
+      data.accounts.find(a => a.type === 'checking')
+    return data.transactions
+      .filter(tx => {
+        if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
+        if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
+        if (!INSTALL_RE.test(tx.description || '')) return false
+        if (tx.faturaMonthYear > mesAtual) return false
+        const jaProvisionada = data.transactions.some(t =>
+          t.type === 'transfer' && t.grupoGerencial === g1.id &&
+          (t.parentTxId === tx.id || t.description === `Reserva Gerencial - ${tx.description}`)
+        )
+        return !jaProvisionada
+      })
+      .map(tx => {
+        const card = data.accounts.find(a => a.id === tx.accountId)
+        const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
+        const subconta = data.accounts.find(a => a.name === `Ger. ${apelido}`)
+        return {
+          id: tx.id,
+          description: tx.description,
+          faturaMonthYear: tx.faturaMonthYear,
+          amount: tx.amount,
+          date: tx.date,
+          contaOrigemId: contaPrincipal?.id || null,
+          contaDestinoId: subconta?.id || null,
+        }
+      })
+  }, [data.gerencialGroups, data.accounts, data.transactions])
+
+  // Executa as provisões selecionadas: transferência imediata Conta Principal → Ger. (igual ao
+  // fluxo à vista) na data calculada de cada parcela.
+  const executarProvisoesGerenciais = useCallback((parcelaIds) => {
+    const ids = new Set(parcelaIds)
+    if (ids.size === 0) return
+    update(d => {
+      const g1 = d.gerencialGroups?.find(g => g.number === 1)
+      if (!g1) return d
+      const contaPrincipal =
+        d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+        d.accounts.find(a => a.isMain && a.type !== 'credit') ||
+        d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+
+      let accounts = [...d.accounts]
+      const newTxs = []
+      for (const parcela of d.transactions) {
+        if (!ids.has(parcela.id) || parcela.grupoGerencial !== g1.id) continue
+        const jaProvisionada = d.transactions.some(t =>
+          t.type === 'transfer' && t.grupoGerencial === g1.id &&
+          (t.parentTxId === parcela.id || t.description === `Reserva Gerencial - ${parcela.description}`)
+        )
+        if (jaProvisionada) continue
+
+        const card = d.accounts.find(a => a.id === parcela.accountId)
+        const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
+        let subconta = accounts.find(a => a.name === `Ger. ${apelido}`)
+        if (!subconta) {
+          subconta = {
+            id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            name: `Ger. ${apelido}`, type: 'checking', balance: 0,
+            bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
+            fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+            grupoGerencial: g1.id, accountGroupId: contaPrincipal.accountGroupId || null,
+          }
+          accounts = [...accounts, subconta]
+        }
+        accounts = accounts.map(a => {
+          if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - parcela.amount) }
+          if (a.id === subconta.id) return { ...a, balance: rb((a.balance || 0) + parcela.amount) }
+          return a
+        })
+        newTxs.push({
+          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          type: 'transfer',
+          accountId: contaPrincipal.id,
+          toAccountId: subconta.id,
+          amount: parcela.amount,
+          date: parcela.date,
+          description: `Reserva Gerencial - ${parcela.description}`,
+          grupoGerencial: g1.id,
+          origin: 'auto-provisao',
+          parentTxId: parcela.id,
+          createdAt: new Date().toISOString(),
+        })
+      }
+      if (newTxs.length === 0) return d
+      return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
+    })
+  }, [update])
+
   // ── Corrigir dados gerenciais: elimina provisões erradas de parcelados e reconstrói agendamentos ──
   const corrigirDadosGerencial = useCallback(() => {
     update(d => {
@@ -2827,6 +2855,8 @@ export function AppProvider({ children }) {
       criarParcelasGerencial,
       ajustarParcelasGrupoGerencial,
       propagarValorParcelas,
+      getProvisoesPendentes,
+      executarProvisoesGerenciais,
       corrigirDadosGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,

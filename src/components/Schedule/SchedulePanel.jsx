@@ -982,6 +982,75 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   )
 }
 
+const MONTHS_PT_FULL = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+function faturaLabel(ym) {
+  if (!ym) return '—'
+  const [y, m] = ym.split('-').map(Number)
+  return `${MONTHS_PT_FULL[m - 1]}/${y}`
+}
+
+function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
+  const [selected, setSelected] = useState(() => new Set(provisoes.map(p => p.id)))
+  const toggle = (id) => setSelected(prev => {
+    const n = new Set(prev)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
+  const total = provisoes.filter(p => selected.has(p.id)).reduce((s, p) => s + p.amount, 0)
+  const accName = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+          <div>
+            <h3 className="font-semibold text-gray-100">Executar Provisões Gerenciais</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Transferência imediata Conta Principal → Ger. para cada parcela marcada</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"><X size={16} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+          {provisoes.map(p => (
+            <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800/30 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={() => toggle(p.id)}
+                className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-gray-200 truncate">{p.description}</p>
+                <p className="text-xs text-gray-600 mt-0.5 truncate">
+                  Fatura {faturaLabel(p.faturaMonthYear)} · {accName(p.contaOrigemId)} → {accName(p.contaDestinoId)}
+                </p>
+              </div>
+              <span className="text-xs font-bold text-orange-600 shrink-0">{fmt(p.amount)}</span>
+            </label>
+          ))}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
+          <span className="text-sm text-gray-400">{selected.size} selecionada{selected.size !== 1 ? 's' : ''}</span>
+          <span className="text-base font-bold text-gray-100">{fmt(total)}</span>
+        </div>
+
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
+          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={selected.size === 0}
+            onClick={() => onConfirm([...selected])}
+          >
+            <CheckCircle size={14} /> Confirmar ({selected.size})
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SchedulePanel() {
   const {
     profileSchedules: schedules, categories, profileAccounts: accounts,
@@ -989,7 +1058,11 @@ export default function SchedulePanel() {
     gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
+    getProvisoesPendentes, executarProvisoesGerenciais,
   } = useApp()
+
+  const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
+  const [showExecutarGer, setShowExecutarGer] = useState(false)
 
   const [activeTab, setActiveTab] = useState('conta')
   const [viewFilter, setViewFilter] = useState('future')
@@ -1088,11 +1161,18 @@ export default function SchedulePanel() {
           <h2 className="text-sm font-semibold text-gray-300">Agendamentos & Contas a Pagar</h2>
           <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingGerencial} faturas</p>
         </div>
-        {activeTab === 'conta' && (
-          <button className="btn-primary flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
-            <Plus size={14} /> Novo Agendamento
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {provisoesPendentes.length > 0 && (
+            <button className="btn-secondary flex items-center gap-2" onClick={() => setShowExecutarGer(true)}>
+              <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
+            </button>
+          )}
+          {activeTab === 'conta' && (
+            <button className="btn-primary flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
+              <Plus size={14} /> Novo Agendamento
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="border-b border-gray-800 flex items-center gap-0 overflow-x-auto">
@@ -1233,6 +1313,15 @@ export default function SchedulePanel() {
         message={`Excluir "${confirmDeletePayable?.description}"?`}
         danger
       />
+
+      {showExecutarGer && (
+        <ExecutarGerenciaisModal
+          provisoes={provisoesPendentes}
+          accounts={accounts}
+          onClose={() => setShowExecutarGer(false)}
+          onConfirm={(ids) => { executarProvisoesGerenciais(ids); setShowExecutarGer(false) }}
+        />
+      )}
     </div>
   )
 }
