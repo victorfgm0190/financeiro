@@ -964,6 +964,31 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           })
         }
       }
+
+      // Gera lançamentos das parcelas futuras (X+1 … N) para parcelados intermediários X/N com X > 1
+      const instRow = row._installment
+      if (!row._generated && instRow && instRow.num > 1 && instRow.num < instRow.total && row.faturaMonthYear) {
+        const numWidth = instRow.matchStr.split('/')[0].length
+        const origDay = parseInt(saveDate.split('-')[2] || '1', 10)
+        for (let i = instRow.num + 1; i <= instRow.total; i++) {
+          const futureFatura = addMonthToFatura(row.faturaMonthYear, i - instRow.num)
+          const [fy, fm] = futureFatura.split('-').map(Number)
+          const maxDay = new Date(fy, fm, 0).getDate()
+          const futureDate = `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
+          const futureNumStr = String(i).padStart(numWidth, '0')
+          const futureDesc = row.description.replace(instRow.matchStr, `${futureNumStr}/${instRow.total}`)
+          if (!isDuplicateInstallment({ description: futureDesc, amount: row.amount }, transactions, selectedAccount)) {
+            const fId = addTransaction({
+              type: 'expense', accountId: selectedAccount, accountType: 'credit',
+              amount: row.amount, date: futureDate, description: futureDesc,
+              categoryId: row.categoryId, payee: row.payee,
+              grupoGerencial: row.grupoGerencial || defaultGrupoD,
+              faturaMonthYear: futureFatura,
+            })
+            if (fId) txIds.push(fId)
+          }
+        }
+      }
     })
 
     if (toImport.length > 0) {
