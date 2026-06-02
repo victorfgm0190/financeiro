@@ -2509,8 +2509,6 @@ export function AppProvider({ children }) {
   const getProvisoesPendentes = useCallback(() => {
     const g1 = data.gerencialGroups?.find(g => g.number === 1)
     if (!g1) return []
-    const now = new Date()
-    const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const contaPrincipal =
       data.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
       data.accounts.find(a => a.isMain && a.type !== 'credit') ||
@@ -2520,13 +2518,13 @@ export function AppProvider({ children }) {
         if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
         if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
         if (!INSTALL_RE.test(tx.description || '')) return false
-        if (tx.faturaMonthYear > mesAtual) return false
         const jaProvisionada = data.transactions.some(t =>
           t.type === 'transfer' && t.grupoGerencial === g1.id &&
           (t.parentTxId === tx.id || t.description === `Reserva Gerencial - ${tx.description}`)
         )
         return !jaProvisionada
       })
+      .sort((a, b) => (a.faturaMonthYear || '').localeCompare(b.faturaMonthYear || '') || (a.date || '').localeCompare(b.date || ''))
       .map(tx => {
         const card = data.accounts.find(a => a.id === tx.accountId)
         const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
