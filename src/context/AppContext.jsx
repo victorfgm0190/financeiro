@@ -413,6 +413,7 @@ export function AppProvider({ children }) {
   const retryTimerRef = useRef(null)
   const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
+  const autoProvisaoDoneRef = useRef(false)
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
@@ -639,6 +640,78 @@ export function AppProvider({ children }) {
     })
   }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Auto-provisão de parcelas futuras do Grupo G na virada do mês financeiro ──
+  // Parcelas geradas na importação (09/12, 10/12…) não têm a transferência imediata
+  // Conta → Ger. Quando o dia financeiro do mês da fatura chega, criamos a provisão.
+  useEffect(() => {
+    if (!initialized || autoProvisaoDoneRef.current) return
+    autoProvisaoDoneRef.current = true
+    const todayStr = format(new Date(), 'yyyy-MM-dd')
+
+    setData(prev => {
+      const g1 = prev.gerencialGroups?.find(g => g.number === 1)
+      if (!g1) return prev
+      const financialStartDay = prev.settings?.financialMonthStartDay || 1
+
+      const resolveContaPrincipal = () =>
+        prev.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+        prev.accounts.find(a => a.isMain && a.type !== 'credit') ||
+        prev.accounts.find(a => a.type === 'checking')
+
+      // Parcelas do Grupo G cuja provisão já venceu (dia financeiro do mês da fatura) e que
+      // ainda não tiveram a transferência imediata nem a auto-provisão criadas.
+      const due = prev.transactions.filter(tx => {
+        if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
+        if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
+        if (!INSTALL_RE.test(tx.description || '')) return false
+        const [y, m] = tx.faturaMonthYear.split('-')
+        const provDate = `${y}-${m}-${String(financialStartDay).padStart(2, '0')}`
+        if (provDate > todayStr) return false
+        const jaProvisionada = prev.transactions.some(t =>
+          t.type === 'transfer' && t.grupoGerencial === g1.id &&
+          (t.parentTxId === tx.id || t.description === `Reserva Gerencial - ${tx.description}`)
+        )
+        return !jaProvisionada
+      })
+      if (due.length === 0) return prev
+
+      const contaPrincipal = resolveContaPrincipal()
+      if (!contaPrincipal) return prev
+
+      let accounts = [...prev.accounts]
+      const newTxs = []
+      for (const tx of due) {
+        const card = prev.accounts.find(a => a.id === tx.accountId)
+        const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
+        const subconta = accounts.find(a => a.name === `Ger. ${apelido}`)
+        if (!subconta) continue
+        const [y, m] = tx.faturaMonthYear.split('-')
+        const provDate = `${y}-${m}-${String(financialStartDay).padStart(2, '0')}`
+        const faturaRef = `${m}/${y}`
+        accounts = accounts.map(a => {
+          if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - tx.amount) }
+          if (a.id === subconta.id) return { ...a, balance: rb((a.balance || 0) + tx.amount) }
+          return a
+        })
+        newTxs.push({
+          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          type: 'transfer',
+          accountId: contaPrincipal.id,
+          toAccountId: subconta.id,
+          amount: tx.amount,
+          date: provDate,
+          description: `Provisão Ger. ${apelido} - Fatura ${faturaRef}`,
+          grupoGerencial: g1.id,
+          origin: 'auto-provisao',
+          parentTxId: tx.id,
+          createdAt: new Date().toISOString(),
+        })
+      }
+      if (newTxs.length === 0) return prev
+      return { ...prev, accounts, transactions: [...prev.transactions, ...newTxs] }
+    })
+  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Settings ────────────────────────────────────────────────────────────────
   const updateSettings = useCallback((settings) => {
     update(d => ({ ...d, settings: { ...d.settings, ...settings } }))
@@ -792,10 +865,20 @@ export function AppProvider({ children }) {
       // Delete schedules created by criarParcelasGerencial (linked via _originTxId to any main tx)
       schedules = schedules.filter(s => !txIds.has(s.overrides?._originTxId))
 
-      // Remove imported txs + reservaAuto linked to them
+      // Reverte saldos das auto-provisões geradas para as parcelas importadas
+      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && txIds.has(t.parentTxId))) {
+        accounts = accounts.map(a => {
+          if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
+          if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
+          return a
+        })
+      }
+
+      // Remove imported txs + reservaAuto + auto-provisões vinculadas a elas
       transactions = transactions.filter(t =>
         !txIds.has(t.id) &&
-        !(t.reservaAuto && txIds.has(t.parentTxId))
+        !(t.reservaAuto && txIds.has(t.parentTxId)) &&
+        !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId))
       )
 
       // Delete pending payables generated for this import.
@@ -924,6 +1007,16 @@ export function AppProvider({ children }) {
         return acc
       }, [])
 
+      // Reverte e remove auto-provisões gerenciais vinculadas a esta parcela
+      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && t.parentTxId === id)) {
+        accounts = accounts.map(a => {
+          if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
+          if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
+          return a
+        })
+      }
+      transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
+
       // Remove reservaAuto txs linked to this transaction
       transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
 
@@ -1030,6 +1123,16 @@ export function AppProvider({ children }) {
         }
         return acc
       }, [])
+
+      // Reverte e remove auto-provisões gerenciais vinculadas a esta parcela
+      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && t.parentTxId === id)) {
+        accounts = accounts.map(a => {
+          if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
+          if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
+          return a
+        })
+      }
+      transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
 
       // Remove reservaAuto txs linked to this transaction
       transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))

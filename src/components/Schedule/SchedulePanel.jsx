@@ -998,6 +998,16 @@ export default function SchedulePanel() {
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
   const [showZeroed, setShowZeroed] = useState(false)
 
+  // Filtros em tempo real (aba Agendamentos)
+  const [fltFrom, setFltFrom] = useState('')
+  const [fltTo, setFltTo] = useState('')
+  const [fltDesc, setFltDesc] = useState('')
+  const [fltCat, setFltCat] = useState('')
+  const [fltMin, setFltMin] = useState('')
+  const [fltMax, setFltMax] = useState('')
+  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltCat || fltMin !== '' || fltMax !== ''
+  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltCat(''); setFltMin(''); setFltMax('') }
+
   const raAccountIds = useMemo(() => {
     const ids = new Set()
     gerencialGroups.forEach(g => {
@@ -1046,6 +1056,27 @@ export default function SchedulePanel() {
     () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => Number(s.amount) !== 0),
     [filteredSchedules, showZeroed]
   )
+
+  // Filtros em tempo real (data / descrição / categoria / valor) sobre a lista já filtrada por período
+  const searchedSchedules = useMemo(() => {
+    const desc = fltDesc.trim().toLowerCase()
+    const min = fltMin !== '' ? parseFloat(fltMin) : null
+    const max = fltMax !== '' ? parseFloat(fltMax) : null
+    if (!desc && !fltCat && !fltFrom && !fltTo && min === null && max === null) return displaySchedules
+    return displaySchedules.filter(s => {
+      if (desc && !(s.description || '').toLowerCase().includes(desc)) return false
+      if (fltCat && s.categoryId !== fltCat) return false
+      const amt = Number(s.amount) || 0
+      if (min !== null && amt < min) return false
+      if (max !== null && amt > max) return false
+      if (fltFrom || fltTo) {
+        const d = getNextOccurrences(s, 1)[0] || s.startDate || ''
+        if (fltFrom && d < fltFrom) return false
+        if (fltTo && d > fltTo) return false
+      }
+      return true
+    })
+  }, [displaySchedules, fltDesc, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
 
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
@@ -1106,8 +1137,43 @@ export default function SchedulePanel() {
             ))}
           </div>
 
+          {/* Barra de filtros (tempo real) */}
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+            <div>
+              <label className="label text-xs">Data de</label>
+              <input type="date" className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
+            </div>
+            <div>
+              <label className="label text-xs">Data até</label>
+              <input type="date" className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <label className="label text-xs">Descrição</label>
+              <input type="text" className="input py-1.5 text-xs" value={fltDesc} onChange={e => setFltDesc(e.target.value)} placeholder="Buscar..." />
+            </div>
+            <div>
+              <label className="label text-xs">Categoria</label>
+              <CategorySelect categories={categories} value={fltCat} onChange={e => setFltCat(e.target.value)} className="input py-1.5 text-xs" />
+            </div>
+            <div>
+              <label className="label text-xs">Valor de</label>
+              <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="0,00" />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="label text-xs">Valor até</label>
+                <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="0,00" />
+              </div>
+              {hasActiveFilter && (
+                <button onClick={clearFilters} title="Limpar filtros" className="p-1.5 mb-0.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors shrink-0">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
           <SchedulesTable
-            schedules={displaySchedules}
+            schedules={searchedSchedules}
             categories={categories}
             accounts={accounts}
             gerencialGroups={gerencialGroups}
