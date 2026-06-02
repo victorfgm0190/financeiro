@@ -670,7 +670,6 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    criarParcelasGerencial,
     addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
@@ -977,20 +976,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           row.grupoGerencial
         )
         if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
-        // Parcela intermediária (ex: "02/05") importada sem as irmãs: cria agendamentos das faturas restantes
-        const inst = row._installment
-        if (inst && inst.num > 1 && inst.total > inst.num && !row._generated) {
-          criarParcelasGerencial(txId, {
-            accountId: selectedAccount,
-            amount: row.amount,
-            date: saveDate,
-            grupoGerencialId: row.grupoGerencial,
-            installments: inst.total,
-            startFromInstallment: inst.num + 1,
-            baseFaturaMonthYear: row.faturaMonthYear,
-            baseInstallmentNum: inst.num,
-          })
-        }
       }
 
       // Gera lançamentos das parcelas futuras (X+1 … N) para parcelados intermediários X/N com X > 1
@@ -1015,6 +1000,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               faturaMonthYear: futureFatura,
             })
             if (fId) txIds.push(fId)
+            // Cada parcela futura segue o mesmo fluxo gerencial da sua própria fatura
+            if (row.grupoGerencial) {
+              const futRes = processarLancamentoGerencial(
+                { accountId: selectedAccount, amount: row.amount, date: futureDate, description: futureDesc, faturaMonthYear: futureFatura },
+                row.grupoGerencial
+              )
+              if (futRes?.etapaATxId) txIds.push(futRes.etapaATxId)
+            }
           }
         }
       }

@@ -759,12 +759,12 @@ export function AppProvider({ children }) {
             }
 
             if (grupo.number === 1) {
+              // A transferência etapaA é removida via txIds; aqui só decrementa os agendamentos
+              // (resgate + pagamento; provision/resgate_parc legadas mantidas por segurança).
               const gerKey = gerencialKey(tx.accountId, faturaRef)
-              const paymentKey = `${gerKey}_payment`
-              const isParcelado = INSTALL_RE.test(tx.description || '')
-              const keysToDecrement = isParcelado
-                ? new Set([`${gerKey}_provision`, `${gerKey}_resgate_parc`, paymentKey])
-                : new Set([`${gerKey}_resgate`, paymentKey])
+              const keysToDecrement = new Set([
+                `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
+              ])
               schedules = schedules.map(s => {
                 const sKey = s.overrides?._gerencialKey
                 if (!keysToDecrement.has(sKey)) return s
@@ -868,43 +868,34 @@ export function AppProvider({ children }) {
         } else {
           faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
         }
+        // Grupo G e parcelado seguem o mesmo fluxo (provisão imediata): remove a transferência
+        // etapaA e decrementa resgate + pagamento da fatura. (provision/resgate_parc são chaves
+        // legadas — mantidas no conjunto por segurança.)
         const gerKey = gerencialKey(tx.accountId, faturaRef)
-        const paymentKey = `${gerKey}_payment`
-        const isParcelado = INSTALL_RE.test(tx.description || '')
-
-        if (isParcelado) {
-          const provisionKey = `${gerKey}_provision`
-          const resgateParceladoKey = `${gerKey}_resgate_parc`
-          schedules = schedules.map(s => {
-            const sKey = s.overrides?._gerencialKey
-            if (sKey !== provisionKey && sKey !== resgateParceladoKey && sKey !== paymentKey) return s
-            if ((s.registered || []).includes(s.startDate)) return s
-            return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+        const keysToDecrement = new Set([
+          `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
+        ])
+        const etapaATx = d.transactions.find(t =>
+          t.id !== id &&
+          t.type === 'transfer' &&
+          t.grupoGerencial === tx.grupoGerencial &&
+          Math.abs(t.amount - tx.amount) < 0.01 &&
+          t.date === tx.date
+        )
+        if (etapaATx) {
+          accounts = accounts.map(a => {
+            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+            return a
           })
-        } else {
-          const resgateKey = `${gerKey}_resgate`
-          const etapaATx = d.transactions.find(t =>
-            t.id !== id &&
-            t.type === 'transfer' &&
-            t.grupoGerencial === tx.grupoGerencial &&
-            Math.abs(t.amount - tx.amount) < 0.01 &&
-            t.date === tx.date
-          )
-          if (etapaATx) {
-            accounts = accounts.map(a => {
-              if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-              if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-              return a
-            })
-            transactions = transactions.filter(t => t.id !== etapaATx.id)
-          }
-          schedules = schedules.map(s => {
-            const sKey = s.overrides?._gerencialKey
-            if (sKey !== resgateKey && sKey !== paymentKey) return s
-            if ((s.registered || []).includes(s.startDate)) return s
-            return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
-          })
+          transactions = transactions.filter(t => t.id !== etapaATx.id)
         }
+        schedules = schedules.map(s => {
+          const sKey = s.overrides?._gerencialKey
+          if (!keysToDecrement.has(sKey)) return s
+          if ((s.registered || []).includes(s.startDate)) return s
+          return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+        })
       }
 
       // Agendamento numérico gerencial
@@ -985,45 +976,33 @@ export function AppProvider({ children }) {
         } else {
           faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
         }
+        // Grupo G e parcelado seguem o mesmo fluxo: remove a transferência etapaA e decrementa
+        // resgate + pagamento da fatura (provision/resgate_parc legadas mantidas por segurança).
         const gerKey = gerencialKey(tx.accountId, faturaRef)
-        const paymentKey = `${gerKey}_payment`
-        const isParcelado = INSTALL_RE.test(tx.description || '')
-
-        if (isParcelado) {
-          const provisionKey = `${gerKey}_provision`
-          const resgateParceladoKey = `${gerKey}_resgate_parc`
-          schedules = schedules.map(s => {
-            const sKey = s.overrides?._gerencialKey
-            if (sKey !== provisionKey && sKey !== resgateParceladoKey && sKey !== paymentKey) return s
-            if ((s.registered || []).includes(s.startDate)) return s
-            const newAmount = Math.max(0, rb((s.amount || 0) - tx.amount))
-            return { ...s, amount: newAmount }
+        const keysToDecrement = new Set([
+          `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
+        ])
+        const etapaATx = d.transactions.find(t =>
+          t.id !== id &&
+          t.type === 'transfer' &&
+          t.grupoGerencial === tx.grupoGerencial &&
+          Math.abs(t.amount - tx.amount) < 0.01 &&
+          t.date === tx.date
+        )
+        if (etapaATx) {
+          accounts = accounts.map(a => {
+            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+            return a
           })
-        } else {
-          const resgateKey = `${gerKey}_resgate`
-          const etapaATx = d.transactions.find(t =>
-            t.id !== id &&
-            t.type === 'transfer' &&
-            t.grupoGerencial === tx.grupoGerencial &&
-            Math.abs(t.amount - tx.amount) < 0.01 &&
-            t.date === tx.date
-          )
-          if (etapaATx) {
-            accounts = accounts.map(a => {
-              if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-              if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-              return a
-            })
-            transactions = transactions.filter(t => t.id !== etapaATx.id)
-          }
-          schedules = schedules.map(s => {
-            const sKey = s.overrides?._gerencialKey
-            if (sKey !== resgateKey && sKey !== paymentKey) return s
-            if ((s.registered || []).includes(s.startDate)) return s
-            const newAmount = Math.max(0, rb((s.amount || 0) - tx.amount))
-            return { ...s, amount: newAmount }
-          })
+          transactions = transactions.filter(t => t.id !== etapaATx.id)
         }
+        schedules = schedules.map(s => {
+          const sKey = s.overrides?._gerencialKey
+          if (!keysToDecrement.has(sKey)) return s
+          if ((s.registered || []).includes(s.startDate)) return s
+          return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+        })
       }
 
       // Estorno em cadeia: agendamento numérico gerencial
@@ -1073,47 +1052,34 @@ export function AppProvider({ children }) {
         faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
       }
       const gerKey = gerencialKey(tx.accountId, faturaRef)
-      const paymentKey = `${gerKey}_payment`
-      const isParcelado = INSTALL_RE.test(tx.description || '')
+      const keysToDecrement = new Set([
+        `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
+      ])
 
       let accounts = [...d.accounts]
       let transactions = d.transactions
-      let schedules
 
-      if (isParcelado) {
-        const provisionKey = `${gerKey}_provision`
-        const resgateParceladoKey = `${gerKey}_resgate_parc`
-        schedules = d.schedules.map(s => {
-          const sKey = s.overrides?._gerencialKey
-          if (sKey !== provisionKey && sKey !== resgateParceladoKey && sKey !== paymentKey) return s
-          if ((s.registered || []).includes(s.startDate)) return s
-          const newAmount = Math.max(0, rb((s.amount || 0) - tx.amount))
-          return { ...s, amount: newAmount }
+      // Grupo G (provisão imediata): remove a transferência etapaA e decrementa resgate + pagamento
+      const etapaATx = d.transactions.find(t =>
+        t.type === 'transfer' &&
+        t.grupoGerencial === tx.grupoGerencial &&
+        Math.abs(t.amount - tx.amount) < 0.01 &&
+        t.date === tx.date
+      )
+      if (etapaATx) {
+        accounts = accounts.map(a => {
+          if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+          if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+          return a
         })
-      } else {
-        const resgateKey = `${gerKey}_resgate`
-        const etapaATx = d.transactions.find(t =>
-          t.type === 'transfer' &&
-          t.grupoGerencial === tx.grupoGerencial &&
-          Math.abs(t.amount - tx.amount) < 0.01 &&
-          t.date === tx.date
-        )
-        if (etapaATx) {
-          accounts = accounts.map(a => {
-            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-            return a
-          })
-          transactions = transactions.filter(t => t.id !== etapaATx.id)
-        }
-        schedules = d.schedules.map(s => {
-          const sKey = s.overrides?._gerencialKey
-          if (sKey !== resgateKey && sKey !== paymentKey) return s
-          if ((s.registered || []).includes(s.startDate)) return s
-          const newAmount = Math.max(0, rb((s.amount || 0) - tx.amount))
-          return { ...s, amount: newAmount }
-        })
+        transactions = transactions.filter(t => t.id !== etapaATx.id)
       }
+      let schedules = d.schedules.map(s => {
+        const sKey = s.overrides?._gerencialKey
+        if (!keysToDecrement.has(sKey)) return s
+        if ((s.registered || []).includes(s.startDate)) return s
+        return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+      })
 
       // Limpa placeholders de parcelas 2..N (G1 — sem _gerencialKey) não registrados
       schedules = schedules.filter(s => {
@@ -1850,17 +1816,15 @@ export function AppProvider({ children }) {
       const scheduleDate = `${yyyy}-${mm}-${dueDay}` // vencimento: Conta → Cartão
 
       const financialStartDay = data.settings?.financialMonthStartDay || 1
-      const resgateDate = computeScheduleDate(faturaRef, financialStartDay) // resgate à vista: Ger. → Conta
-      const resgateParceladoDate = nextMonthScheduleDate(faturaRef, financialStartDay) // resgate parc.: mês seguinte
+      const resgateDate = computeScheduleDate(faturaRef, financialStartDay) // resgate: Ger. → Conta no dia financeiro
 
       const gerKey = gerencialKey(lancamento.accountId, faturaRef)
       const resgateKey = `${gerKey}_resgate`
-      const provisionKey = `${gerKey}_provision`
-      const resgateParceladoKey = `${gerKey}_resgate_parc`
       const paymentKey = `${gerKey}_payment`
       const txDescription = lancamento.description || ''
-      const isParcelado = INSTALL_RE.test(txDescription)
-      const etapaATxId = isParcelado ? null : ('tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2))
+      // Parcelado e à vista seguem o MESMO fluxo (cada parcela é um lançamento próprio):
+      // provisão imediata Conta → Ger. + resgate no dia financeiro da fatura + pagamento no vencimento.
+      const etapaATxId = 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
 
       update(d => {
         const cartao = d.accounts.find(a => a.id === lancamento.accountId)
@@ -1885,7 +1849,7 @@ export function AppProvider({ children }) {
             id: subcontaId,
             name: subcontaName,
             type: 'checking',
-            balance: isParcelado ? 0 : lancamento.amount,
+            balance: lancamento.amount,
             bank: contaPrincipal.bank || '',
             apelido: `G${apelido}`.slice(0, 8),
             fluxoCaixaPrincipal: false,
@@ -1894,7 +1858,7 @@ export function AppProvider({ children }) {
             grupoGerencial: grupoId,
             accountGroupId: contaPrincipal.accountGroupId || null,
           }]
-        } else if (!isParcelado) {
+        } else {
           accounts = accounts.map(a =>
             a.id === subcontaId
               ? {
@@ -1907,114 +1871,51 @@ export function AppProvider({ children }) {
           )
         }
 
-        // ETAPA A: apenas para gastos à vista — transferência imediata Conta → Ger. subconta
-        let newTxs = []
-        if (!isParcelado) {
-          accounts = accounts.map(a =>
-            a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
-          )
-          newTxs = [{
-            id: etapaATxId,
-            type: 'transfer',
-            accountId: contaPrincipal.id,
-            toAccountId: subcontaId,
-            amount: lancamento.amount,
-            date: lancamento.date,
-            description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
-            grupoGerencial: grupoId,
-            createdAt: new Date().toISOString(),
-          }]
-        }
+        // ETAPA A: transferência imediata Conta Principal → Ger. subconta, na data da parcela
+        accounts = accounts.map(a =>
+          a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
+        )
+        const newTxs = [{
+          id: etapaATxId,
+          type: 'transfer',
+          accountId: contaPrincipal.id,
+          toAccountId: subcontaId,
+          amount: lancamento.amount,
+          date: lancamento.date,
+          description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
+          grupoGerencial: grupoId,
+          createdAt: new Date().toISOString(),
+        }]
 
         let schedules = [...d.schedules]
 
-        if (isParcelado) {
-          // ETAPA A (agendada): Provisão CC → Ger. no dia do vencimento da fatura
-          const provIdx = schedules.findIndex(s => s.overrides?._gerencialKey === provisionKey)
-          if (provIdx >= 0) {
-            schedules = schedules.map((s, i) => i === provIdx
-              ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-              : s
-            )
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_prov_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: contaPrincipal.id,
-              toAccountId: subcontaId,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: scheduleDate,
-              amount: lancamento.amount,
-              description: `Provisão Ger. ${apelido} - Fatura ${faturaRef}`,
-              overrides: {
-                _gerencialKey: provisionKey,
-                _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
-              },
-              registered: [],
-              skipped: [],
-            }]
-          }
-
-          // ETAPA B (parcelado): Resgate Ger. → CC no início do mês financeiro SEGUINTE
-          const rpIdx = schedules.findIndex(s => s.overrides?._gerencialKey === resgateParceladoKey)
-          if (rpIdx >= 0) {
-            schedules = schedules.map((s, i) => i === rpIdx
-              ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-              : s
-            )
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_rp_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: subcontaId,
-              toAccountId: contaPrincipal.id,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: resgateParceladoDate,
-              amount: lancamento.amount,
-              description: `Resgate Ger. ${apelido} - Fatura ${faturaRef}`,
-              overrides: {
-                _gerencialKey: resgateParceladoKey,
-                _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
-              },
-              registered: [],
-              skipped: [],
-            }]
-          }
+        // ETAPA B: Resgate Ger. → Conta Principal no dia financeiro do mês da fatura (acumulativo)
+        const resgateIdx = schedules.findIndex(s => s.overrides?._gerencialKey === resgateKey)
+        if (resgateIdx >= 0) {
+          schedules = schedules.map((s, i) => i === resgateIdx
+            ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
+            : s
+          )
         } else {
-          // ETAPA B (à vista): Resgate Ger. → CC no início do mês financeiro da fatura
-          const resgateIdx = schedules.findIndex(s => s.overrides?._gerencialKey === resgateKey)
-          if (resgateIdx >= 0) {
-            schedules = schedules.map((s, i) => i === resgateIdx
-              ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-              : s
-            )
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_r_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: subcontaId,
-              toAccountId: contaPrincipal.id,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: resgateDate,
-              amount: lancamento.amount,
-              description: `Resgate Ger. ${apelido} - Fatura ${faturaRef}`,
-              overrides: {
-                _gerencialKey: resgateKey,
-                _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
-              },
-              registered: [],
-              skipped: [],
-            }]
-          }
+          schedules = [...schedules, {
+            id: 'sch_ger_r_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            transactionType: 'transfer',
+            accountId: subcontaId,
+            toAccountId: contaPrincipal.id,
+            frequency: 'once',
+            occurrenceType: 'installment',
+            installments: 1,
+            autoRegister: false,
+            startDate: resgateDate,
+            amount: lancamento.amount,
+            description: `Resgate Ger. ${apelido} - Fatura ${faturaRef}`,
+            overrides: {
+              _gerencialKey: resgateKey,
+              _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
+            },
+            registered: [],
+            skipped: [],
+          }]
         }
 
         // ETAPA C: Pagamento fatura (Conta Principal → Cartão) — acumulativo para à vista e parcelados
@@ -2070,9 +1971,7 @@ export function AppProvider({ children }) {
       faturaRef = computeFaturaRef(new Date(lancamento.date + 'T00:00:00'), closingDay)
     }
     const [fmm, fyyyy] = faturaRef.split('/')
-    const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}`
-    const financialStartDay = data.settings?.financialMonthStartDay || 1
-    const resgateDate = computeScheduleDate(faturaRef, financialStartDay) // resgate no dia financeiro
+    const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}` // resgate e pagamento no vencimento
     const gerKey = `ger_num_${grupoId}_${lancamento.accountId}_${dueDate}`
     const paymentKey = `${gerencialKey(lancamento.accountId, faturaRef)}_payment`
 
@@ -2090,7 +1989,7 @@ export function AppProvider({ children }) {
 
       let schedules = [...d.schedules]
 
-      // Resgate: conta do grupo → Conta Principal, no dia financeiro da fatura (acumulativo)
+      // Resgate: conta do grupo → Conta Principal, no vencimento da fatura (acumulativo)
       const idx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKey)
       if (idx >= 0) {
         schedules = schedules.map((s, i) => i === idx
@@ -2107,7 +2006,7 @@ export function AppProvider({ children }) {
           occurrenceType: 'installment',
           installments: 1,
           autoRegister: false,
-          startDate: resgateDate,
+          startDate: dueDate,
           amount: lancamento.amount,
           description: `Resgate ${grupo.name} - ${apelido} - Fatura ${faturaRef}`,
           overrides: { _gerencialKey: gerKey },
@@ -2148,7 +2047,7 @@ export function AppProvider({ children }) {
       return { ...d, schedules }
     })
 
-    return { needsResgate: false, gerencialScheduleId: scheduleId, scheduleDate: resgateDate }
+    return { needsResgate: false, gerencialScheduleId: scheduleId, scheduleDate: dueDate }
   }, [data.gerencialGroups, data.accounts, data.schedules, data.settings, update])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
@@ -2186,7 +2085,6 @@ export function AppProvider({ children }) {
 
     if (typeof grupo.number === 'number' && grupo.number !== 1) {
       if (!grupo.defaultAccountId) return
-      const financialStartDay = data.settings?.financialMonthStartDay || 1
       update(d => {
         const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
           || d.accounts.find(a => a.isMain && a.type !== 'credit')
@@ -2199,11 +2097,10 @@ export function AppProvider({ children }) {
           const fyI = dI.getFullYear()
           const faturaRefI = `${fmI}/${fyI}`
           const dueDateStr = `${fyI}-${fmI}-${String(dueDay).padStart(2, '0')}`
-          const resgateDateI = computeScheduleDate(faturaRefI, financialStartDay)
           const gerKeyI = `ger_num_${grupoGerencialId}_${accountId}_${dueDateStr}`
           const payKeyI = `${gerencialKey(accountId, faturaRefI)}_payment`
 
-          // Resgate: conta do grupo → Conta Principal, no dia financeiro da fatura
+          // Resgate: conta do grupo → Conta Principal, no vencimento da fatura
           const existingIdx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKeyI)
           if (existingIdx >= 0) {
             schedules = schedules.map((s, idx) => idx === existingIdx
@@ -2220,7 +2117,7 @@ export function AppProvider({ children }) {
               occurrenceType: 'installment',
               installments: 1,
               autoRegister: false,
-              startDate: resgateDateI,
+              startDate: dueDateStr,
               amount,
               description: `Resgate ${grupo.name} - ${apelido} - Fatura ${faturaRefI} (${i}/${installments}x)`,
               overrides: { _gerencialKey: gerKeyI, _originTxId: rootTxId, _originAmount: amount },
