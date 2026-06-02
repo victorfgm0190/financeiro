@@ -1791,7 +1791,11 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Gerencial Processing ──────────────────────────────────────────────────────
-  const processarLancamentoGerencial = useCallback((lancamento, grupoId, contaDestinoId = null) => {
+  const processarLancamentoGerencial = useCallback((lancamento, grupoId, contaDestinoId = null, options = {}) => {
+    // immediate=false: parcela futura (gerada na importação) — cria apenas os agendamentos
+    // (resgate + pagamento); a transferência imediata Conta → Ger. só ocorre na parcela da
+    // fatura corrente (quando ela for de fato importada/lançada no mês dela).
+    const { immediate = true } = options
     const grupo = data.gerencialGroups?.find(g => g.id === grupoId)
     if (!grupo) return { needsResgate: false }
     if (grupo.number === 'D') return { needsResgate: false }
@@ -1822,9 +1826,9 @@ export function AppProvider({ children }) {
       const resgateKey = `${gerKey}_resgate`
       const paymentKey = `${gerKey}_payment`
       const txDescription = lancamento.description || ''
-      // Parcelado e à vista seguem o MESMO fluxo (cada parcela é um lançamento próprio):
-      // provisão imediata Conta → Ger. + resgate no dia financeiro da fatura + pagamento no vencimento.
-      const etapaATxId = 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+      // Parcela da fatura corrente: provisão imediata Conta → Ger. + resgate no dia financeiro
+      // + pagamento no vencimento. Parcela futura (immediate=false): só os agendamentos.
+      const etapaATxId = immediate ? ('tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)) : null
 
       update(d => {
         const cartao = d.accounts.find(a => a.id === lancamento.accountId)
@@ -1849,7 +1853,7 @@ export function AppProvider({ children }) {
             id: subcontaId,
             name: subcontaName,
             type: 'checking',
-            balance: lancamento.amount,
+            balance: immediate ? lancamento.amount : 0,
             bank: contaPrincipal.bank || '',
             apelido: `G${apelido}`.slice(0, 8),
             fluxoCaixaPrincipal: false,
@@ -1858,7 +1862,7 @@ export function AppProvider({ children }) {
             grupoGerencial: grupoId,
             accountGroupId: contaPrincipal.accountGroupId || null,
           }]
-        } else {
+        } else if (immediate) {
           accounts = accounts.map(a =>
             a.id === subcontaId
               ? {
@@ -1871,21 +1875,24 @@ export function AppProvider({ children }) {
           )
         }
 
-        // ETAPA A: transferência imediata Conta Principal → Ger. subconta, na data da parcela
-        accounts = accounts.map(a =>
-          a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
-        )
-        const newTxs = [{
-          id: etapaATxId,
-          type: 'transfer',
-          accountId: contaPrincipal.id,
-          toAccountId: subcontaId,
-          amount: lancamento.amount,
-          date: lancamento.date,
-          description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
-          grupoGerencial: grupoId,
-          createdAt: new Date().toISOString(),
-        }]
+        // ETAPA A: transferência imediata Conta Principal → Ger. subconta (só na parcela corrente)
+        let newTxs = []
+        if (immediate) {
+          accounts = accounts.map(a =>
+            a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
+          )
+          newTxs = [{
+            id: etapaATxId,
+            type: 'transfer',
+            accountId: contaPrincipal.id,
+            toAccountId: subcontaId,
+            amount: lancamento.amount,
+            date: lancamento.date,
+            description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
+            grupoGerencial: grupoId,
+            createdAt: new Date().toISOString(),
+          }]
+        }
 
         let schedules = [...d.schedules]
 

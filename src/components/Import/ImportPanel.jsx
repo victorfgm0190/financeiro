@@ -971,9 +971,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(saveDate + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
       if (row.grupoGerencial) {
+        // Parcela gerada (siblings 2..N de um parcelado 1/N) é futura → não cria transferência imediata
         const gerResult = processarLancamentoGerencial(
           { accountId: selectedAccount, amount: row.amount, date: saveDate, description: row.description, faturaMonthYear: row.faturaMonthYear },
-          row.grupoGerencial
+          row.grupoGerencial, null, { immediate: !row._generated }
         )
         if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
       }
@@ -1000,13 +1001,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               faturaMonthYear: futureFatura,
             })
             if (fId) txIds.push(fId)
-            // Cada parcela futura segue o mesmo fluxo gerencial da sua própria fatura
+            // Parcela futura: cria apenas os agendamentos (resgate + pagamento) da própria fatura,
+            // sem transferência imediata — esta só ocorre quando a parcela for lançada no mês dela.
             if (row.grupoGerencial) {
-              const futRes = processarLancamentoGerencial(
+              processarLancamentoGerencial(
                 { accountId: selectedAccount, amount: row.amount, date: futureDate, description: futureDesc, faturaMonthYear: futureFatura },
-                row.grupoGerencial
+                row.grupoGerencial, null, { immediate: false }
               )
-              if (futRes?.etapaATxId) txIds.push(futRes.etapaATxId)
             }
           }
         }

@@ -276,7 +276,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, schedules, reverseTransaction, deleteTransaction, getFinancialPeriod } = useApp()
+  const { transactions, accounts, reverseTransaction, deleteTransaction, getFinancialPeriod } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -339,13 +339,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const todayStr = now.toISOString().split('T')[0]
   const isAplicacao = !!account.contaAplicacao
-  const isGerencial = !!(account.name?.startsWith('Ger. ') && account.grupoGerencial)
-
-  const gerencialSchedules = useMemo(() =>
-    (schedules || []).filter(s => s.overrides?._gerencial?.gerencialContaId === account.id)
-      .sort((a, b) => (a.overrides._gerencial.faturaRef || '').localeCompare(b.overrides._gerencial.faturaRef || '')),
-    [schedules, account.id]
-  )
 
   const filteredTxs = useMemo(() =>
     transactions.filter(tx => tx.date >= from && tx.date <= to),
@@ -395,8 +388,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       <col style={{ width: '100px' }} />
     </colgroup>
   )
-
-  const hasFaturas = isGerencial && gerencialSchedules.length > 0
 
   return (
     <div>
@@ -492,33 +483,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
       </div>
 
-      {/* ── Faturas Provisionadas (Ger. accounts only) ── */}
-      {hasFaturas && (
-        <div className="bg-gray-900 border-x border-gray-800 p-4 space-y-2">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Faturas Provisionadas</h3>
-          {gerencialSchedules.map(s => {
-            const faturaRef = s.overrides?._gerencial?.faturaRef || '—'
-            const done = (s.registered || []).length > 0
-            return (
-              <div key={s.id} className="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0">
-                <div>
-                  <p className="text-xs text-gray-200 font-medium">Fatura {faturaRef}</p>
-                  <p className="text-xs text-gray-500">Devolução: {fmtDate(s.startDate)}</p>
-                </div>
-                <div className="text-right space-y-1">
-                  <p className="text-xs font-semibold text-purple-300">{fmt(s.amount)}</p>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${done ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
-                    {done ? 'Executado' : 'Pendente'}
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
       {/* ── Table body ── */}
-      <div className={`bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden ${hasFaturas ? 'border-t' : ''}`}>
+      <div className="bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             {colGroup}
