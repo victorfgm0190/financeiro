@@ -806,14 +806,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     if (!newFatura || rows.length === 0) return
     const acc = accounts.find(a => a.id === selectedAccount)
     const dd = acc?.dueDay || null
+    const [fatYear, fatMonth] = newFatura.split('-').map(Number)
+    const daysInMonth = new Date(fatYear, fatMonth, 0).getDate()
     setRows(prev => {
+      // Todas as linhas base recebem exatamente o mês de referência selecionado.
+      // A data é reescrita substituindo mês/ano pelo mês de referência, mantendo o dia original.
       const step1 = prev.map(row => {
         if (row._generated) return row
-        const inst = row._installment
-        const fatura = (inst && inst.num > 1)
-          ? addMonthToFatura(newFatura, inst.num - 1)
-          : newFatura
-        return { ...row, faturaMonthYear: fatura }
+        const origDay = parseInt((row.date || '').split('-')[2] || '1', 10)
+        const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
+        return { ...row, faturaMonthYear: newFatura, date: `${newFatura}-${clampedDay}` }
       })
       const step2 = step1.map(row => {
         if (!row._generated) return row
