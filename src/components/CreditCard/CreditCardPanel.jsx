@@ -13,20 +13,29 @@ import RelatorioFatura from './RelatorioFatura'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
+// Mesma convenção de computeFaturaRef: dia < closingDay → fatura do mês corrente;
+// dia >= closingDay → fatura do mês seguinte.
 function getBillKey(date, card) {
   if (!date || !card) return ''
   const closingDay = card.closingDay || 1
   const d = new Date(date + 'T00:00:00')
   const day = d.getDate()
-  let month, year
+  let month0, year
   if (day < closingDay) {
-    month = d.getMonth() === 0 ? 12 : d.getMonth()
-    year = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear()
-  } else {
-    month = d.getMonth() + 1
+    month0 = d.getMonth()
     year = d.getFullYear()
+  } else {
+    const n = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+    month0 = n.getMonth()
+    year = n.getFullYear()
   }
-  return `${year}-${String(month).padStart(2, '0')}`
+  return `${year}-${String(month0 + 1).padStart(2, '0')}`
+}
+
+// Fatura de um lançamento: usa o faturaMonthYear explícito (importação/gerencial)
+// quando presente; senão deriva da data pelo dia de fechamento.
+function txBillKey(tx, card) {
+  return tx.faturaMonthYear || getBillKey(tx.date, card)
 }
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -106,7 +115,7 @@ export default function CreditCardPanel() {
       .filter(tx =>
         tx.accountId === selectedCard.id &&
         tx.type === 'expense' &&
-        getBillKey(tx.date, selectedCard) === billKey
+        txBillKey(tx, selectedCard) === billKey
       )
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [transactions, selectedCard, billKey])

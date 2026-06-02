@@ -13,20 +13,28 @@ import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
 // ─── Credit fatura helpers ──────────────────────────────────────────────────
 
+// Mesma convenção de computeFaturaRef: dia < closingDay → fatura do mês corrente;
+// dia >= closingDay → fatura do mês seguinte.
 function getBillKey(date, card) {
   if (!date || !card) return ''
   const closingDay = card.closingDay || 1
   const d = new Date(date + 'T00:00:00')
   const day = d.getDate()
-  let month, year
+  let month0, year
   if (day < closingDay) {
-    month = d.getMonth() === 0 ? 12 : d.getMonth()
-    year = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear()
-  } else {
-    month = d.getMonth() + 1
+    month0 = d.getMonth()
     year = d.getFullYear()
+  } else {
+    const n = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+    month0 = n.getMonth()
+    year = n.getFullYear()
   }
-  return `${year}-${String(month).padStart(2, '0')}`
+  return `${year}-${String(month0 + 1).padStart(2, '0')}`
+}
+
+// Usa o faturaMonthYear explícito (importação/gerencial) quando presente.
+function txBillKey(tx, card) {
+  return tx.faturaMonthYear || getBillKey(tx.date, card)
 }
 
 function getBillLabel(key) {
@@ -108,7 +116,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   const label = getBillLabel(billKey)
   const txs = useMemo(() =>
     transactions
-      .filter(tx => tx.accountId === card.id && tx.type === 'expense' && getBillKey(tx.date, card) === billKey)
+      .filter(tx => tx.accountId === card.id && tx.type === 'expense' && txBillKey(tx, card) === billKey)
       .sort((a, b) => b.date.localeCompare(a.date)),
     [transactions, card, billKey]
   )
@@ -418,7 +426,7 @@ export default function TransactionsPanel() {
       transactions
         .filter(tx => tx.accountId === card.id && tx.type === 'expense')
         .forEach(tx => {
-          const key = getBillKey(tx.date, card)
+          const key = txBillKey(tx, card)
           if (!groups[key]) groups[key] = { key, label: getBillLabel(key), count: 0, total: 0 }
           groups[key].count++
           groups[key].total += tx.amount
