@@ -615,23 +615,18 @@ function faturaToDate(faturaYYYYMM, dueDay) {
   return `${faturaYYYYMM}-${String(Math.min(dueDay, lastDay)).padStart(2, '0')}`
 }
 
-// Detecta duplicata de parcelado: base desc + num parcela + fatura + valor dentro de R$ 0,50.
-function isDuplicateInstallment(row, existing, accountId, closingDay) {
+// Detecta duplicata de parcelado: mesma base de descrição + mesmo número de parcela + valor dentro de R$ 0,50.
+// Não compara fatura — se a parcela já existe no cartão, é duplicata independente do mês.
+function isDuplicateInstallment(row, existing, accountId) {
   const rowInst = detectInstallment(row.description)
   if (!rowInst) return false
   const rowBase = rowInst.base.toLowerCase().trim()
-  const rowFatura = row.faturaMonthYear || ''
   return existing.some(t => {
     if (t.accountId !== accountId) return false
     if (Math.abs(t.amount - row.amount) > 0.50) return false
     const tInst = detectInstallment(t.description || '')
     if (!tInst || tInst.num !== rowInst.num) return false
-    if (tInst.base.toLowerCase().trim() !== rowBase) return false
-    if (!rowFatura) return true
-    // Fatura do lançamento existente: tenta calcFatura pela data original OU mês bruto da data
-    const tFaturaCalc = calcFatura(t.date, closingDay)
-    const tFaturaRaw = t.date.slice(0, 7)
-    return tFaturaCalc === rowFatura || tFaturaRaw === rowFatura
+    return tInst.base.toLowerCase().trim() === rowBase
   })
 }
 
@@ -869,13 +864,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false }))
-    const closingDay = selectedAcc?.closingDay || 14
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
-      const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount, closingDay)
+      const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount)
       return { ...r, _isDuplicate: dup, selected: row.selected && !dup }
     })
-  }, [rows, selectedAccount, transactions, selectedAcc, editingImport])
+  }, [rows, selectedAccount, transactions, editingImport])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
@@ -928,20 +922,30 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
 
+    // Deriva a data final de cada linha: mês/ano do campo Fatura da linha + dia original do CSV.
+    const computeSaveDate = (row) => {
+      const origDay = parseInt((row.date || '').split('-')[2] || '1', 10)
+      if (!row.faturaMonthYear) return row.date
+      const [fy, fm] = row.faturaMonthYear.split('-').map(Number)
+      const maxDay = new Date(fy, fm, 0).getDate()
+      return `${row.faturaMonthYear}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
+    }
+
     const txIds = []
     toImport.forEach(row => {
+      const saveDate = computeSaveDate(row)
       const txId = addTransaction({
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
-        amount: row.amount, date: row.date, description: row.description,
+        amount: row.amount, date: saveDate, description: row.description,
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: row.grupoGerencial || defaultGrupoD,
         faturaMonthYear: row.faturaMonthYear || null,
       })
       txIds.push(txId)
-      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
+      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(saveDate + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
       if (row.grupoGerencial) {
         const gerResult = processarLancamentoGerencial(
-          { accountId: selectedAccount, amount: row.amount, date: row.date, description: row.description, faturaMonthYear: row.faturaMonthYear },
+          { accountId: selectedAccount, amount: row.amount, date: saveDate, description: row.description, faturaMonthYear: row.faturaMonthYear },
           row.grupoGerencial
         )
         if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
@@ -951,7 +955,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           criarParcelasGerencial(txId, {
             accountId: selectedAccount,
             amount: row.amount,
-            date: row.date,
+            date: saveDate,
             grupoGerencialId: row.grupoGerencial,
             installments: inst.total,
             startFromInstallment: inst.num + 1,
@@ -963,7 +967,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     })
 
     if (toImport.length > 0) {
-      const dates = toImport.map(r => r.date).sort()
+      const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
       if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno)
       addCardImport({
@@ -979,8 +983,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     const pending = []
     toImport.forEach(row => {
-      const s = findMatchingSchedule({ type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: row.date })
-      if (s) pending.push({ schedule: s, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: row.date } })
+      const saveDate = computeSaveDate(row)
+      const s = findMatchingSchedule({ type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate })
+      if (s) pending.push({ schedule: s, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate } })
     })
 
     if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(toImport.length); setRows([]); return }
