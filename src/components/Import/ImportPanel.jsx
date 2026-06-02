@@ -729,7 +729,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoFromRules || grupoD, _installment: installInfo, _generated: false,
-          faturaMonthYear: baseFatura,
+          faturaMonthYear: baseFatura, _origDay: rowDay,
         }
         processed.push(baseRow)
         if (installInfo?.num === 1 && installInfo.total > 1) {
@@ -808,7 +808,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // A data é reescrita substituindo mês/ano pelo mês de referência, mantendo o dia original.
       const step1 = prev.map(row => {
         if (row._generated) return row
-        const origDay = parseInt((row.date || '').split('-')[2] || '1', 10)
+        const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
         const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
         return { ...row, faturaMonthYear: newFatura, date: `${newFatura}-${clampedDay}` }
       })
@@ -846,6 +846,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _installment: inst,
         _generated: false,
         movimentacao: '',
+        _origDay: t.date ? new Date(t.date + 'T00:00:00').getDate() : null,
       }
     })
     reconstructed.sort((a, b) =>
@@ -924,7 +925,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     // Deriva a data final de cada linha: mês/ano do campo Fatura da linha + dia original do CSV.
     const computeSaveDate = (row) => {
-      const origDay = parseInt((row.date || '').split('-')[2] || '1', 10)
+      const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
       if (!row.faturaMonthYear) return row.date
       const [fy, fm] = row.faturaMonthYear.split('-').map(Number)
       const maxDay = new Date(fy, fm, 0).getDate()
@@ -969,12 +970,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const instRow = row._installment
       if (!row._generated && instRow && instRow.num > 1 && instRow.num < instRow.total && row.faturaMonthYear) {
         const numWidth = instRow.matchStr.split('/')[0].length
-        const origDay = parseInt(saveDate.split('-')[2] || '1', 10)
+        const dia = row._origDay ?? parseInt(saveDate.split('-')[2] || '1', 10)
+        const [baseFY, baseFM] = row.faturaMonthYear.split('-').map(Number)
         for (let i = instRow.num + 1; i <= instRow.total; i++) {
-          const futureFatura = addMonthToFatura(row.faturaMonthYear, i - instRow.num)
-          const [fy, fm] = futureFatura.split('-').map(Number)
-          const maxDay = new Date(fy, fm, 0).getDate()
-          const futureDate = `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
+          const offset = i - instRow.num
+          const futureD = new Date(baseFY, baseFM - 1 + offset, dia)
+          const futureFatura = `${futureD.getFullYear()}-${String(futureD.getMonth() + 1).padStart(2, '0')}`
+          const futureDate = `${futureFatura}-${String(futureD.getDate()).padStart(2, '0')}`
           const futureNumStr = String(i).padStart(numWidth, '0')
           const futureDesc = row.description.replace(instRow.matchStr, `${futureNumStr}/${instRow.total}`)
           if (!isDuplicateInstallment({ description: futureDesc, amount: row.amount }, transactions, selectedAccount)) {
