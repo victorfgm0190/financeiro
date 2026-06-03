@@ -119,6 +119,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     ? categories.find(c => c.id === reservaTransferAcc.reservaCategoryId)
     : null
 
+  // Transferência cujo DESTINO é conta de aplicação financeira (e não é reserva):
+  // habilita um campo OPCIONAL de categoria para classificar o aporte nos relatórios.
+  const isTransferToAplicacao = !!transferToAcc?.contaAplicacao && !isDepositToReserva && !isWithdrawFromReserva
+
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
     accounts.find(a => a.isMain && a.type !== 'credit') ||
@@ -179,6 +183,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
+    }
+
+    // Categoria só é mantida em transferências quando o destino é conta de aplicação
+    // financeira (aporte categorizado). Transferências comuns nunca carregam categoria.
+    if (form.type === 'transfer' && !isTransferToAplicacao) {
+      txData.categoryId = null
     }
 
     if (initial?.id) {
@@ -518,7 +528,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
-              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '' }))}
+              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '' }))}
               placeholder="Selecione o destino..."
               required
             />
@@ -578,6 +588,22 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   </span>
                 </p>
               )}
+            </div>
+          )}
+          {isTransferToAplicacao && (
+            <div>
+              <label className="label">Categoria</label>
+              <SearchableSelect
+                options={expenseCatOpts}
+                value={form.categoryId}
+                onChange={id => set('categoryId', id)}
+                placeholder="Sem categoria"
+              />
+              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                Opcional — preencha apenas se quiser classificar o aporte. Com categoria, o
+                lançamento aparece nos relatórios como saída; em branco, é uma transferência
+                comum (invisível nos relatórios).
+              </p>
             </div>
           )}
         </>

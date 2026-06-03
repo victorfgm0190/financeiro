@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense } from '../shared/utils'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -29,11 +29,11 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
-    (tx.type === 'expense' || tx.type === 'income') &&
+    (countsAsReportExpense(tx, aplicSet) || tx.type === 'income') &&
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId))
@@ -67,7 +67,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
       }))
   }
 
-  const expenseTxs = inRange.filter(t => t.type === 'expense')
+  const expenseTxs = inRange.filter(t => countsAsReportExpense(t, aplicSet))
   const incomeTxs = inRange.filter(t => t.type === 'income')
   return {
     expenses: buildSection(expenseTxs),
@@ -208,6 +208,7 @@ function TxRow({ tx, indent }) {
 export default function DemonstrativoFinanceiro() {
   const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
+  const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(1)
@@ -241,7 +242,7 @@ export default function DemonstrativoFinanceiro() {
     // Default categories: those with transactions in range on default accounts
     const activeCats = [...new Set(
       transactions
-        .filter(tx => (tx.type === 'expense' || tx.type === 'income') && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
+        .filter(tx => (countsAsReportExpense(tx, aplicSet) || tx.type === 'income') && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
         .map(tx => tx.categoryId)
     )]
     const catsToUse = activeCats.length > 0 ? activeCats : categories.map(c => c.id)
@@ -270,8 +271,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats)
-  }, [applied, transactions, categories])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet)
+  }, [applied, transactions, categories, aplicSet])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 

@@ -16,6 +16,23 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
 
+// Conjunto de ids de contas marcadas como "Aplicação Financeira".
+export function aplicacaoAccountIds(accounts) {
+  return new Set((accounts || []).filter(a => a.contaAplicacao).map(a => a.id))
+}
+
+// Aporte = transferência para conta de aplicação financeira COM categoria preenchida.
+// Estas devem aparecer nos relatórios tratadas como despesa/saída.
+// Transferências para aplicação SEM categoria continuam invisíveis nos relatórios.
+export function isAplicacaoAporte(tx, aplicSet) {
+  return tx.type === 'transfer' && !!tx.categoryId && aplicSet.has(tx.toAccountId)
+}
+
+// Conta como despesa nos relatórios: despesas normais + aportes categorizados.
+export function countsAsReportExpense(tx, aplicSet) {
+  return tx.type === 'expense' || isAplicacaoAporte(tx, aplicSet)
+}
+
 // 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest
 export function accountPriority(a) {
   if (a.isMain || a.type === 'credit') return 0

@@ -325,6 +325,9 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_reserva BOOLEAN DEFAULT FALSE;
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_type TEXT;
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_category_id TEXT;
 
+-- Conta de Aplicação Financeira (netização de transferências + aportes categorizados em relatórios)
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE;
+
 -- Categoria: Reservas Gerais
 INSERT INTO categorias (id, name, type, color, icon) VALUES
   ('cat_res_ger', 'Reservas Gerais', 'expense', '#6b7280', '🏦')

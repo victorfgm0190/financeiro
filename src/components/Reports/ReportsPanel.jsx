@@ -7,7 +7,7 @@ import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, aplicacaoAccountIds, countsAsReportExpense } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
@@ -28,6 +28,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function ReportsPanel() {
   const { profileTransactions: transactions, categories, profileAccounts: accounts } = useApp()
+  const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
@@ -46,12 +47,12 @@ export default function ReportsPanel() {
         .filter(tx => tx.type === 'income' && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       const expense = transactions
-        .filter(tx => tx.type === 'expense' && tx.date >= start && tx.date <= end)
+        .filter(tx => countsAsReportExpense(tx, aplicSet) && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       months.push({ label, start, end, income, expense, balance: income - expense })
     }
     return months
-  }, [transactions])
+  }, [transactions, aplicSet])
 
   const currentMonthData = last6Months[5 - selectedMonth] || last6Months[last6Months.length - 1]
 
@@ -59,7 +60,7 @@ export default function ReportsPanel() {
     if (!currentMonthData) return []
     const totals = {}
     transactions
-      .filter(tx => tx.type === 'expense' && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
+      .filter(tx => countsAsReportExpense(tx, aplicSet) && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
       })
@@ -70,7 +71,7 @@ export default function ReportsPanel() {
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [transactions, categories, currentMonthData])
+  }, [transactions, categories, currentMonthData, aplicSet])
 
   const totalIncome = last6Months.reduce((s, m) => s + m.income, 0) / 6
   const totalExpense = last6Months.reduce((s, m) => s + m.expense, 0) / 6
