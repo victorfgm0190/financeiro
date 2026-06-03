@@ -120,7 +120,14 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSubmit({ ...form, accountId: form.accountId || null, mesVencimento: form.mesVencimento !== '' ? Number(form.mesVencimento) : null }) }} className="space-y-4">
+    <form onSubmit={e => { e.preventDefault(); onSubmit({
+      ...form,
+      accountId: form.accountId || null,
+      saldoInicial: Number(form.saldoInicial) || 0,
+      despesaAnual: Number(form.despesaAnual) || 0,
+      depositoMensal: Number(form.depositoMensal) || 0,
+      mesVencimento: form.mesVencimento !== '' ? Number(form.mesVencimento) : null,
+    }) }} className="space-y-4">
       <div>
         <label className="label">Nome da Função *</label>
         <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Ex: IPVA, Seguro Residencial..." />
@@ -134,16 +141,16 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
       </div>
       <div>
         <label className="label">Saldo Inicial (R$)</label>
-        <input className="input" type="number" step="0.01" value={form.saldoInicial} onChange={e => set('saldoInicial', Number(e.target.value))} />
+        <input className="input" type="number" step="0.01" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Despesa Anual (R$)</label>
-          <input className="input" type="number" step="0.01" value={form.despesaAnual} onChange={e => set('despesaAnual', Number(e.target.value))} placeholder="0,00" />
+          <input className="input" type="number" step="0.01" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
         </div>
         <div>
           <label className="label">Depósito Mensal (R$)</label>
-          <input className="input" type="number" step="0.01" value={form.depositoMensal} onChange={e => set('depositoMensal', Number(e.target.value))} placeholder="0,00" />
+          <input className="input" type="number" step="0.01" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
         </div>
       </div>
       <div>
@@ -556,26 +563,18 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
   const linked = functions.filter(f => f.accountId)
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
-  // Vínculo por reservaFuncaoId quando presente; senão, fallback por conta (comportamento atual).
+  // Apenas agendamentos com reservaFuncaoId entram — sem vínculo de função, ficam fora do fluxo.
   const scheduledByFunction = useMemo(() => {
     const accById = new Map(accounts.map(a => [a.id, a]))
-    const transfers = (schedules || []).filter(s => s.transactionType === 'transfer')
+    const transfers = (schedules || []).filter(s => s.transactionType === 'transfer' && s.reservaFuncaoId)
     const result = {}
     for (const f of linked) {
       const deps = new Array(12).fill(0)
       const ress = new Array(12).fill(0)
       for (const s of transfers) {
-        let isDep = false, isRes = false
-        if (s.reservaFuncaoId) {
-          // Agendamento vinculado a uma função específica → conta só para ela
-          if (s.reservaFuncaoId !== f.id) continue
-          if (accById.get(s.toAccountId)?.isReserva) isDep = true
-          else if (accById.get(s.accountId)?.isReserva) isRes = true
-        } else {
-          // Fallback: vínculo por conta da função
-          if (s.toAccountId === f.accountId) isDep = true
-          else if (s.accountId === f.accountId) isRes = true
-        }
+        if (s.reservaFuncaoId !== f.id) continue
+        const isDep = !!accById.get(s.toAccountId)?.isReserva
+        const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
         if (!isDep && !isRes) continue
         for (const dateStr of getNextOccurrences(s, 36)) {
           const d = new Date(dateStr + 'T00:00:00')
