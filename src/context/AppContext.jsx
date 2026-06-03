@@ -404,11 +404,11 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
   return extraTxs
 }
 
-// Gera a receita/aporte automático numa conta de investimento quando uma despesa de
-// cartão de crédito tem categoria vinculada a uma conta de investimento (categoria com
-// investmentAccountId). Retorna o lançamento de entrada (origin: 'investAuto') ou null.
+// Gera a receita/aporte automático numa conta de investimento quando uma despesa
+// (de qualquer tipo de conta) tem categoria vinculada a uma conta de investimento
+// (categoria com investmentAccountId). Retorna o lançamento de entrada (origin: 'investAuto') ou null.
 function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
-  if (tx.type !== 'expense' || tx.accountType !== 'credit') return null
+  if (tx.type !== 'expense') return null
   const cat = (categories || []).find(c => c.id === tx.categoryId)
   if (!cat?.investmentAccountId) return null
   const invAcc = (accounts || []).find(a => a.id === cat.investmentAccountId)

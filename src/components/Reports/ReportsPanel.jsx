@@ -7,7 +7,7 @@ import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, aplicacaoAccountIds, countsAsReportExpense } from '../shared/utils'
+import { fmt, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
@@ -44,7 +44,7 @@ export default function ReportsPanel() {
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, 'MMM/yy', { locale: ptBR })
       const income = transactions
-        .filter(tx => tx.type === 'income' && tx.date >= start && tx.date <= end)
+        .filter(tx => countsAsReportIncome(tx) && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       const expense = transactions
         .filter(tx => countsAsReportExpense(tx, aplicSet) && tx.date >= start && tx.date <= end)

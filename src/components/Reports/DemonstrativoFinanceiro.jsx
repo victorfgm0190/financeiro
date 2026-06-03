@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
-    (countsAsReportExpense(tx, aplicSet) || tx.type === 'income') &&
+    (countsAsReportExpense(tx, aplicSet) || countsAsReportIncome(tx)) &&
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId))
@@ -242,7 +242,7 @@ export default function DemonstrativoFinanceiro() {
     // Default categories: those with transactions in range on default accounts
     const activeCats = [...new Set(
       transactions
-        .filter(tx => (countsAsReportExpense(tx, aplicSet) || tx.type === 'income') && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
+        .filter(tx => (countsAsReportExpense(tx, aplicSet) || countsAsReportIncome(tx)) && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
         .map(tx => tx.categoryId)
     )]
     const catsToUse = activeCats.length > 0 ? activeCats : categories.map(c => c.id)

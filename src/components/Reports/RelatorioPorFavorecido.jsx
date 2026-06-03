@@ -146,6 +146,7 @@ export default function RelatorioPorFavorecido() {
     if (!applied) return []
     const inRange = transactions.filter(tx =>
       (tx.type === 'expense' || tx.type === 'income') &&
+      tx.origin !== 'investAuto' &&
       tx.date >= applied.from && tx.date <= applied.to &&
       (applied.accs.length === 0 || applied.accs.includes(tx.accountId))
     )

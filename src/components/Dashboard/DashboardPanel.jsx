@@ -59,8 +59,8 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
     end: period.end.toISOString().split('T')[0],
   }
 
-  // Current period
-  const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end)
+  // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
+  const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && tx.origin !== 'investAuto')
   const income = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
@@ -68,7 +68,7 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
   // Previous period (same duration, shifted back)
   const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
   const prevEnd = subMonths(period.end, 1).toISOString().split('T')[0]
-  const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd)
+  const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && tx.origin !== 'investAuto')
   const prevIncome = prevTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const prevExpense = prevTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const prevBalance = prevIncome - prevExpense
@@ -94,7 +94,7 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
       const start = startOfMonth(d).toISOString().split('T')[0]
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, "MMM'/'yy", { locale: ptBR })
-      const inc = transactions.filter(tx => tx.type === 'income' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
+      const inc = transactions.filter(tx => tx.type === 'income' && tx.origin !== 'investAuto' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       const exp = transactions.filter(tx => tx.type === 'expense' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       return { label, income: inc, expense: exp }
     })

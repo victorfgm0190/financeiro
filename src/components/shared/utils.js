@@ -21,6 +21,18 @@ export function aplicacaoAccountIds(accounts) {
   return new Set((accounts || []).filter(a => a.contaAplicacao).map(a => a.id))
 }
 
+// Lançamentos automáticos que nunca entram nos cálculos de relatório financeiro.
+// O aporte investAuto (Receita na conta de investimento) movimenta o saldo da conta,
+// mas é invisível em Demonstrativo, pizza, ranking e totais de receita/despesa.
+export function isReportExcluded(tx) {
+  return tx.origin === 'investAuto'
+}
+
+// Conta como receita nos relatórios (exclui lançamentos automáticos ocultos).
+export function countsAsReportIncome(tx) {
+  return tx.type === 'income' && !isReportExcluded(tx)
+}
+
 // Aporte = transferência para conta de aplicação financeira COM categoria preenchida.
 // Estas devem aparecer nos relatórios tratadas como despesa/saída.
 // Transferências para aplicação SEM categoria continuam invisíveis nos relatórios.
@@ -30,6 +42,7 @@ export function isAplicacaoAporte(tx, aplicSet) {
 
 // Conta como despesa nos relatórios: despesas normais + aportes categorizados.
 export function countsAsReportExpense(tx, aplicSet) {
+  if (isReportExcluded(tx)) return false
   return tx.type === 'expense' || isAplicacaoAporte(tx, aplicSet)
 }
 
