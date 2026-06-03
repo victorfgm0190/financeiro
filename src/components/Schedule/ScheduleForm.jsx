@@ -181,7 +181,7 @@ function buildAccOpts(accounts, _accountGroups, excludeId) {
 }
 
 export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, addPayee, getNextOccurrences } = useApp()
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -276,6 +276,7 @@ export default function ScheduleForm({ initial, onClose }) {
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
     if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
+    if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     const data = {
       ...form,
       amount: Number(form.amount),
