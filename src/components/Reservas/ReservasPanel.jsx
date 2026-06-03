@@ -1,14 +1,28 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
-  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical,
 } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+// Salva uma matriz (array de arrays) como .xlsx
+function exportSheet(rows, filename) {
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Reservas')
+  XLSX.writeFile(wb, filename)
+}
+
+function mmYYYY() {
+  const d = new Date()
+  return `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`
+}
 
 // Funções de reserva vivem no estado global (Neon). accountBalances e periods seguem
 // locais (overrides de saldo real e histórico de viradas — específicos do dispositivo).
@@ -314,7 +328,8 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo }) {
+function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
+  const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
   const groups = useMemo(() => {
     const byAccount = {}
     functions.forEach(f => {
@@ -323,14 +338,42 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
     })
     const result = []
     accounts.forEach(acc => {
-      if (byAccount[acc.id]) result.push({ accountId: acc.id, account: acc, fns: [...byAccount[acc.id]].sort((a, b) => a.name.localeCompare(b.name)) })
+      if (byAccount[acc.id]) result.push({ accountId: acc.id, account: acc, fns: [...byAccount[acc.id]].sort(byOrdem) })
     })
-    if (byAccount['__none__']) result.push({ accountId: null, account: null, fns: [...byAccount['__none__']].sort((a, b) => a.name.localeCompare(b.name)) })
+    if (byAccount['__none__']) result.push({ accountId: null, account: null, fns: [...byAccount['__none__']].sort(byOrdem) })
     return result
   }, [functions, accounts])
 
   const grandTotal = Object.values(saldosAtualizados).reduce((s, v) => s + v, 0)
   const lastPeriod = periods[periods.length - 1]
+
+  const [dragId, setDragId] = useState(null)
+  const handleDropOn = (targetFn) => {
+    const dragged = functions.find(f => f.id === dragId)
+    setDragId(null)
+    if (!dragged || dragged.id === targetFn.id) return
+    if ((dragged.accountId || null) !== (targetFn.accountId || null)) return // reordena dentro do mesmo grupo
+    const allFns = groups.flatMap(g => g.fns)
+    const arr = [...allFns]
+    const from = arr.findIndex(f => f.id === dragged.id)
+    const to = arr.findIndex(f => f.id === targetFn.id)
+    if (from === -1 || to === -1) return
+    const [m] = arr.splice(from, 1)
+    arr.splice(to, 0, m)
+    onReorder(arr.map(f => f.id))
+  }
+
+  const handleExport = () => {
+    const rows = [['Função', 'Conta', 'Saldo Inicial', 'Entradas', 'Saídas', 'Saldo', 'Saldo Atualizado']]
+    groups.forEach(g => g.fns.forEach(f => {
+      rows.push([
+        f.name,
+        g.account ? (g.account.apelido || g.account.name) : 'Sem conta',
+        f.saldoInicial, f.entradas, f.saidas, computeSaldo(f), saldosAtualizados[f.id] ?? computeSaldo(f),
+      ])
+    }))
+    exportSheet(rows, `reservas-resumo-${mmYYYY()}.xlsx`)
+  }
 
   return (
     <div className="space-y-4">
@@ -344,6 +387,11 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
           <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {lastPeriod.closedAt}</span>
         )}
         <div className="flex gap-2 ml-auto flex-wrap">
+          {functions.length > 0 && (
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+              <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
+            </button>
+          )}
           {periods.length > 0 && (
             <button onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
@@ -414,9 +462,19 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                 const saldo = computeSaldo(f)
                 const atualizado = saldosAtualizados[f.id] ?? saldo
                 return (
-                  <div key={f.id} className="card py-3 px-3 space-y-2">
+                  <div
+                    key={f.id}
+                    draggable
+                    onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragId(f.id) }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); handleDropOn(f) }}
+                    className={`card py-3 px-3 space-y-2 ${dragId === f.id ? 'opacity-40' : ''}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-200">{f.name}</span>
+                      <span className="text-sm font-medium text-gray-200 inline-flex items-center gap-1.5">
+                        <GripVertical size={12} className="text-gray-700 cursor-grab shrink-0" />
+                        {f.name}
+                      </span>
                       {accLabel && (
                         <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
                       )}
@@ -498,8 +556,20 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                       const saldo = computeSaldo(f)
                       const atualizado = saldosAtualizados[f.id] ?? saldo
                       return (
-                        <tr key={f.id} className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors">
-                          <td className="px-4 py-2 text-xs text-gray-200">{f.name}</td>
+                        <tr
+                          key={f.id}
+                          draggable
+                          onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragId(f.id) }}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={e => { e.preventDefault(); handleDropOn(f) }}
+                          className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors ${dragId === f.id ? 'opacity-40' : ''}`}
+                        >
+                          <td className="px-4 py-2 text-xs text-gray-200">
+                            <span className="inline-flex items-center gap-1.5">
+                              <GripVertical size={11} className="text-gray-700 cursor-grab shrink-0" />
+                              {f.name}
+                            </span>
+                          </td>
                           <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
                           <td className="px-4 py-2 text-right">
                             <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
@@ -559,8 +629,27 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
 function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOccurrences }) {
-  const currentYear = new Date().getFullYear()
   const linked = functions.filter(f => f.accountId)
+  const round2 = (n) => Math.round(n * 100) / 100
+
+  // Janela deslizante de 12 meses a partir do mês ANTERIOR ao atual.
+  const windowMonths = useMemo(() => {
+    const now = new Date()
+    const base = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
+      return { year: d.getFullYear(), month0: d.getMonth(), label: MONTH_LABELS[d.getMonth()], isYearStart: d.getMonth() === 0 && i > 0 }
+    })
+  }, [])
+
+  const winStart = `${windowMonths[0].year}-${String(windowMonths[0].month0 + 1).padStart(2, '0')}-01`
+  const lastWm = windowMonths[11]
+  const winEndDate = new Date(lastWm.year, lastWm.month0 + 1, 0)
+  const winEnd = `${winEndDate.getFullYear()}-${String(winEndDate.getMonth() + 1).padStart(2, '0')}-${String(winEndDate.getDate()).padStart(2, '0')}`
+  const winIndexOf = (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00')
+    return (d.getFullYear() - windowMonths[0].year) * 12 + (d.getMonth() - windowMonths[0].month0)
+  }
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
   // Apenas agendamentos com reservaFuncaoId entram — sem vínculo de função, ficam fora do fluxo.
@@ -576,37 +665,57 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
         const isDep = !!accById.get(s.toAccountId)?.isReserva
         const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
         if (!isDep && !isRes) continue
-        for (const dateStr of getNextOccurrences(s, 36)) {
-          const d = new Date(dateStr + 'T00:00:00')
-          if (d.getFullYear() !== currentYear) continue
-          const mi = d.getMonth()
-          if (isDep) deps[mi] = Math.round((deps[mi] + (s.amount || 0)) * 100) / 100
-          else ress[mi] = Math.round((ress[mi] + (s.amount || 0)) * 100) / 100
+        for (const dateStr of getNextOccurrences(s, 140)) {
+          if (dateStr < winStart || dateStr > winEnd) continue
+          const idx = winIndexOf(dateStr)
+          if (idx < 0 || idx > 11) continue
+          if (isDep) deps[idx] = round2(deps[idx] + (s.amount || 0))
+          else ress[idx] = round2(ress[idx] + (s.amount || 0))
         }
       }
       result[f.id] = { deps, ress }
     }
     return result
-  }, [linked, accounts, schedules, getNextOccurrences, currentYear])
+  }, [linked, accounts, schedules, getNextOccurrences, winStart, winEnd]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const projections = useMemo(() => {
     return linked.map(f => {
       const account = accounts.find(a => a.id === f.accountId)
-      let bal = saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100
+      const start = saldosAtualizados[f.id] ?? round2(f.saldoInicial + f.entradas - f.saidas)
       const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0) }
-      const monthly = MONTH_LABELS.map((_, mi) => {
-        const dep = schd.deps[mi]
-        const res = schd.ress[mi]
-        bal = Math.round((bal + dep - res) * 100) / 100
-        return { dep, res, saldo: bal, neg: bal < 0 }
+      let bal = start
+      const monthly = windowMonths.map((wm, i) => {
+        const dep = schd.deps[i]
+        const res = schd.ress[i]
+        // mês anterior (i=0) é a referência do saldo atual; projeção começa no mês corrente
+        if (i > 0) bal = round2(bal + dep - res)
+        return { dep, res, saldo: bal, neg: bal < 0, ...wm }
       })
       const hasAlert = monthly.some(d => d.neg)
       return { f, account, monthly, hasAlert }
     })
-  }, [linked, accounts, saldosAtualizados, scheduledByFunction])
+  }, [linked, accounts, saldosAtualizados, scheduledByFunction, windowMonths])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
-  const [mobilePage, setMobilePage] = useState(() => Math.min(new Date().getMonth(), 9))
+  const [mobilePage, setMobilePage] = useState(0)
+
+  const yy = (y) => String(y).slice(2)
+  const rangeLabel = `${windowMonths[0].label}/${yy(windowMonths[0].year)} – ${lastWm.label}/${yy(lastWm.year)}`
+
+  const handleExport = () => {
+    const header = ['Função', 'Conta', 'Total Investido']
+    windowMonths.forEach(wm => {
+      const lbl = `${wm.label}/${yy(wm.year)}`
+      header.push(`${lbl} Dep`, `${lbl} Res`, `${lbl} Saldo`)
+    })
+    const rows = [header]
+    projections.forEach(({ f, account, monthly }) => {
+      const row = [f.name, account ? (account.apelido || account.name) : '', saldosAtualizados[f.id] || 0]
+      monthly.forEach(d => row.push(d.dep, d.res, d.saldo))
+      rows.push(row)
+    })
+    exportSheet(rows, `reservas-fluxo-${mmYYYY()}.xlsx`)
+  }
 
   if (linked.length === 0) {
     return (
@@ -633,7 +742,12 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
             <AlertTriangle size={12} /> {alertCount} {alertCount === 1 ? 'função ficará negativa' : 'funções ficarão negativas'}
           </span>
         )}
-        <span className="text-xs text-gray-600 ml-auto">{currentYear}</span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-xs text-gray-600">{rangeLabel}</span>
+          <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
+            <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Mobile layout (hidden md+) ── */}
@@ -648,7 +762,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
             <ChevronLeft size={16} />
           </button>
           <span className="text-xs text-gray-400 font-medium">
-            {MONTH_LABELS[mobilePage]} · {MONTH_LABELS[mobilePage + 1]} · {MONTH_LABELS[mobilePage + 2]}
+            {visibleMonths.map(mi => `${windowMonths[mi].label}/${yy(windowMonths[mi].year)}`).join(' · ')}
           </span>
           <button
             onClick={() => setMobilePage(p => Math.min(9, p + 1))}
@@ -681,8 +795,10 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
               {visibleMonths.map(mi => {
                 const d = monthly[mi]
                 return (
-                  <div key={mi} className={`px-2 py-2.5 ${d.neg ? 'bg-orange-500/10' : ''}`}>
-                    <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1.5">{MONTH_LABELS[mi]}</p>
+                  <div key={mi} className={`px-2 py-2.5 ${d.neg ? 'bg-orange-500/10' : ''} ${d.isYearStart ? 'border-l-2 border-l-emerald-700' : ''}`}>
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1.5">
+                      {d.label}{d.isYearStart || mi === 0 ? ` ${yy(d.year)}` : ''}
+                    </p>
                     <p className={`text-xs ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
                       ↓ {d.dep > 0 ? fmt(d.dep) : '—'}
                     </p>
@@ -706,20 +822,25 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
           <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
             <thead>
               <tr className="border-b border-gray-800 bg-gray-900">
-                <th className="text-left px-3 py-2.5 text-gray-400 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Despesa Anual</th>
+                <th className="text-left px-3 py-2.5 text-gray-400 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
                 <th className="text-left px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 80 }}>Conta</th>
                 <th className="text-right px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 100 }}>Total Investido</th>
-                {MONTH_LABELS.map(m => (
-                  <th key={m} colSpan={3} className="text-center px-1 py-2 text-gray-400 font-medium border-l border-gray-800 whitespace-nowrap" style={{ minWidth: 190 }}>
-                    {m}
+                {windowMonths.map((wm, i) => (
+                  <th
+                    key={i}
+                    colSpan={3}
+                    className={`text-center px-1 py-2 font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-emerald-700 text-emerald-300' : 'border-l border-gray-800 text-gray-400'}`}
+                    style={{ minWidth: 190 }}
+                  >
+                    {wm.label}{wm.isYearStart || i === 0 ? ` ${wm.year}` : ''}
                   </th>
                 ))}
               </tr>
               <tr className="border-b border-gray-700 bg-gray-900/80">
                 <th /><th /><th />
-                {MONTH_LABELS.map(m => (
-                  <Fragment key={m}>
-                    <th className="text-right px-2 py-1.5 text-blue-600/70 font-medium border-l border-gray-800 whitespace-nowrap" style={{ minWidth: 62 }}>Dep</th>
+                {windowMonths.map((wm, i) => (
+                  <Fragment key={i}>
+                    <th className={`text-right px-2 py-1.5 text-blue-600/70 font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-emerald-700' : 'border-l border-gray-800'}`} style={{ minWidth: 62 }}>Dep</th>
                     <th className="text-right px-2 py-1.5 text-orange-600/70 font-medium whitespace-nowrap" style={{ minWidth: 62 }}>Res</th>
                     <th className="text-right px-2 py-1.5 text-gray-500 font-medium whitespace-nowrap" style={{ minWidth: 66 }}>Saldo</th>
                   </Fragment>
@@ -744,7 +865,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
                   </td>
                   {monthly.map((d, mi) => (
                     <Fragment key={mi}>
-                      <td className={`px-2 py-2 text-right border-l border-gray-800 ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
+                      <td className={`px-2 py-2 text-right ${d.isYearStart ? 'border-l-2 border-l-emerald-700' : 'border-l border-gray-800'} ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
                         {d.dep > 0 ? fmt(d.dep) : '—'}
                       </td>
                       <td className={`px-2 py-2 text-right ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
@@ -767,7 +888,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions } = useApp()
   const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
   const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)
@@ -861,6 +982,7 @@ export default function ReservasPanel() {
           onSetAccountBalance={setAccountBalance}
           onVirar={() => setConfirmVirar(true)}
           onUndo={() => setConfirmUndo(true)}
+          onReorder={reorderReserveFunctions}
         />
       )}
 

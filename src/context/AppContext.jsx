@@ -1465,6 +1465,16 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, reserveFunctions: (d.reserveFunctions || []).filter(f => f.id !== id) }))
   }, [update])
 
+  const reorderReserveFunctions = useCallback((orderedIds) => {
+    update(d => ({
+      ...d,
+      reserveFunctions: (d.reserveFunctions || []).map(f => {
+        const idx = orderedIds.indexOf(f.id)
+        return idx !== -1 ? { ...f, ordem: idx } : f
+      }),
+    }))
+  }, [update])
+
   // ── Gerencial Groups ─────────────────────────────────────────────────────────
   const addGerencialGroup = useCallback((group) => {
     update(d => {
@@ -2888,7 +2898,7 @@ export function AppProvider({ children }) {
       profiles: data.profiles || [],
       cardImports: data.cardImports || [],
       reserveFunctions: data.reserveFunctions || [],
-      addReserveFunction, updateReserveFunction, deleteReserveFunction,
+      addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId,
       profileAccounts, profileTransactions, profileSchedules,
