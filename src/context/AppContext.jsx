@@ -404,6 +404,30 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
   return extraTxs
 }
 
+// Gera a receita/aporte automático numa conta de investimento quando uma despesa de
+// cartão de crédito tem categoria vinculada a uma conta de investimento (categoria com
+// investmentAccountId). Retorna o lançamento de entrada (origin: 'investAuto') ou null.
+function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
+  if (tx.type !== 'expense' || tx.accountType !== 'credit') return null
+  const cat = (categories || []).find(c => c.id === tx.categoryId)
+  if (!cat?.investmentAccountId) return null
+  const invAcc = (accounts || []).find(a => a.id === cat.investmentAccountId)
+  if (!invAcc) return null
+  return {
+    id: 'tx_invauto_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+    type: 'income',
+    accountId: cat.investmentAccountId,
+    accountType: invAcc.type || null,
+    amount: Number(tx.amount),
+    categoryId: null,
+    date: tx.date,
+    description: `${tx.description || ''} [aporte auto]`.trim(),
+    origin: 'investAuto',
+    parentTxId,
+    createdAt: new Date().toISOString(),
+  }
+}
+
 export function AppProvider({ children }) {
   const [data, setData] = useState(defaultData)
   const [initialized, setInitialized] = useState(false)
@@ -656,7 +680,11 @@ export function AppProvider({ children }) {
             accounts,
             txId
           )
-          transactions = [...transactions, newTx, ...autoTxs]
+          const investIncome = buildInvestAutoIncomeTx(newTx, prev.categories, accounts, txId)
+          if (investIncome) {
+            accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
+          }
+          transactions = [...transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])]
           schedules = schedules.map(s => s.id === schedule.id
             ? { ...s, registered: [...(s.registered || []), date] } : s)
         }
@@ -729,7 +757,19 @@ export function AppProvider({ children }) {
       }
 
       const extraTxs = buildReservaAutoTxs(tx, d.accounts, id)
-      return { ...d, accounts, transactions: [...d.transactions, newTx, ...extraTxs] }
+
+      // Aporte automático: despesa de cartão com categoria vinculada a conta de investimento
+      // gera uma receita (crédito) na conta de investimento.
+      const investIncome = buildInvestAutoIncomeTx({ ...tx, amount: Number(tx.amount) }, d.categories, d.accounts, id)
+      if (investIncome) {
+        accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
+      }
+
+      return {
+        ...d,
+        accounts,
+        transactions: [...d.transactions, newTx, ...extraTxs, ...(investIncome ? [investIncome] : [])],
+      }
     })
     return id
   }, [update])
@@ -829,11 +869,17 @@ export function AppProvider({ children }) {
         })
       }
 
-      // Remove imported txs + reservaAuto + auto-provisões vinculadas a elas
+      // Reverte saldos das receitas investAuto (aportes) geradas para despesas importadas
+      for (const p of transactions.filter(t => t.origin === 'investAuto' && txIds.has(t.parentTxId))) {
+        accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
+      }
+
+      // Remove imported txs + reservaAuto + auto-provisões + investAuto vinculadas a elas
       transactions = transactions.filter(t =>
         !txIds.has(t.id) &&
         !(t.reservaAuto && txIds.has(t.parentTxId)) &&
-        !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId))
+        !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId)) &&
+        !(t.origin === 'investAuto' && txIds.has(t.parentTxId))
       )
 
       // Delete pending payables generated for this import.
@@ -972,6 +1018,12 @@ export function AppProvider({ children }) {
       }
       transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
 
+      // Reverte e remove receitas investAuto (aportes) vinculadas a esta despesa
+      for (const p of transactions.filter(t => t.origin === 'investAuto' && t.parentTxId === id)) {
+        accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
+      }
+      transactions = transactions.filter(t => !(t.origin === 'investAuto' && t.parentTxId === id))
+
       // Remove reservaAuto txs linked to this transaction
       transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
 
@@ -1089,6 +1141,12 @@ export function AppProvider({ children }) {
       }
       transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
 
+      // Reverte e remove receitas investAuto (aportes) vinculadas a esta despesa
+      for (const p of transactions.filter(t => t.origin === 'investAuto' && t.parentTxId === id)) {
+        accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
+      }
+      transactions = transactions.filter(t => !(t.origin === 'investAuto' && t.parentTxId === id))
+
       // Remove reservaAuto txs linked to this transaction
       transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
 
@@ -1156,6 +1214,10 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, categories: [...d.categories, { ...category, id }] }))
   }, [update])
 
+  const updateCategory = useCallback((id, changes) => {
+    update(d => ({ ...d, categories: d.categories.map(c => c.id === id ? { ...c, ...changes } : c) }))
+  }, [update])
+
   const deleteCategory = useCallback((id) => {
     update(d => ({ ...d, categories: d.categories.filter(c => c.id !== id) }))
   }, [update])
@@ -1221,9 +1283,13 @@ export function AppProvider({ children }) {
         accounts,
         newTxId
       )
+      const investIncome = buildInvestAutoIncomeTx(newTx, d.categories, accounts, newTxId)
+      if (investIncome) {
+        accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
+      }
       return {
         ...d, accounts,
-        transactions: [...d.transactions, newTx, ...autoTxs],
+        transactions: [...d.transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])],
         schedules: d.schedules.map(s =>
           s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date] } : s
         ),
@@ -2906,7 +2972,7 @@ export function AppProvider({ children }) {
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly,
-      addCategory, deleteCategory,
+      addCategory, updateCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,

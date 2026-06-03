@@ -328,6 +328,11 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_category_id TEXT;
 -- Conta de Aplicação Financeira (netização de transferências + aportes categorizados em relatórios)
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE;
 
+-- Categoria vinculada a conta de investimento: despesas (de cartão) com essa categoria
+-- geram automaticamente uma receita/aporte na conta de investimento apontada.
+-- (id de contas é TEXT neste schema — não INTEGER.)
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT;
+
 -- Categoria: Reservas Gerais
 INSERT INTO categorias (id, name, type, color, icon) VALUES
   ('cat_res_ger', 'Reservas Gerais', 'expense', '#6b7280', '🏦')

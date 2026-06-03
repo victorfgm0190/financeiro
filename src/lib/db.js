@@ -265,6 +265,7 @@ export const categoryToRow = (c) => ({
   color: c.color || null,
   icon: c.icon || null,
   category_group: c.group || null,
+  investment_account_id: c.investmentAccountId || null,
 })
 
 export const rowToCategory = (r) => ({
@@ -274,6 +275,7 @@ export const rowToCategory = (r) => ({
   color: r.color || '',
   icon: r.icon || '',
   group: r.category_group || null,
+  investmentAccountId: r.investment_account_id || null,
 })
 
 export const budgetToRow = (b) => ({

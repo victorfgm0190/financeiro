@@ -28,7 +28,7 @@ function maskDoc(raw, type) {
 export default function SettingsPanel() {
   const {
     settings, updateSettings,
-    categories, addCategory, deleteCategory,
+    categories, addCategory, updateCategory, deleteCategory,
     classificationRules, addRule, deleteRule,
     gerencialRules, addGerencialRule, deleteGerencialRule, moveGerencialRule,
     costCenters, addCostCenter,
@@ -45,6 +45,7 @@ export default function SettingsPanel() {
     data,
   } = useApp()
 
+  const aplicAccounts = accounts.filter(a => a.contaAplicacao)
   const [startDay, setStartDay] = useState(settings.financialMonthStartDay || 1)
   const [saved, setSaved] = useState(false)
   const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌' })
@@ -456,17 +457,32 @@ export default function SettingsPanel() {
         <h2 className="text-sm font-semibold text-gray-300 mb-4">Categorias ({categories.length})</h2>
         <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
           {categories.map(cat => (
-            <div key={cat.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full" style={{ background: cat.color }} />
-                <span className="text-sm text-gray-200">{cat.icon} {cat.name}</span>
-                <span className="badge bg-gray-700 text-gray-400 text-xs">
+            <div key={cat.id} className="flex items-center justify-between gap-2 bg-gray-800 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
+                <span className="text-sm text-gray-200 truncate">{cat.icon} {cat.name}</span>
+                <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0">
                   {cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}
                 </span>
               </div>
-              <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
-                <Trash2 size={12} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {aplicAccounts.length > 0 && cat.type !== 'income' && (
+                  <select
+                    className="input w-auto text-xs py-1 max-w-[150px]"
+                    title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
+                    value={cat.investmentAccountId || ''}
+                    onChange={e => updateCategory(cat.id, { investmentAccountId: e.target.value || null })}
+                  >
+                    <option value="">Sem investimento</option>
+                    {aplicAccounts.map(a => (
+                      <option key={a.id} value={a.id}>🐷 {a.apelido || a.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
+                  <Trash2 size={12} />
+                </button>
+              </div>
             </div>
           ))}
         </div>

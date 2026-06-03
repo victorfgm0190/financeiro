@@ -25,7 +25,19 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS initial_balance NUMERIC DEFAULT NULL`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS projected_balance NUMERIC DEFAULT NULL`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE`)
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
+
+    // Seed idempotente: categoria "Capitalização" vinculada à conta de investimento Brasilcap.
+    // Só insere se houver uma conta cujo nome casa com "brasil...cap" e a categoria ainda não existir.
+    await query(`
+      INSERT INTO categorias (id, name, type, color, icon, category_group, investment_account_id)
+      SELECT 'cat_capitalizacao', 'Capitalização', 'expense', '#22c55e', '🐷', 'Aplicações', c.id
+      FROM contas c
+      WHERE c.name ILIKE '%brasil%cap%'
+        AND NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_capitalizacao' OR name = 'Capitalização')
+      LIMIT 1
+    `)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS day_of_month INTEGER`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS amount_approx NUMERIC`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS grupo_gerencial TEXT`)
