@@ -673,6 +673,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
+    payees, addPayee,
   } = useApp()
 
   const [faturaMonthYear, setFaturaMonthYear] = useState('')
@@ -961,6 +962,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const txIds = []
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
+      if (row.payee && !payees.includes(row.payee)) addPayee(row.payee)
       const txId = addTransaction({
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: row.amount, date: saveDate, description: row.description,

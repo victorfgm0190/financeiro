@@ -12,6 +12,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
 import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -130,6 +131,12 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
+  const { payees, transactions, addPayee } = useApp()
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) { if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1 }
+    return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
   const today = format(new Date(), 'yyyy-MM-dd')
   const initialTab = schedule.transactionType === 'income' ? 'recebimento'
     : schedule.transactionType === 'transfer' ? 'transferencia'
@@ -167,6 +174,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
     const regDate = nextDate || today
     if (tab === 'pagamento') {
       const amount = parseFloat(payAmount) || 0
+      if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
       addTransaction({
         type: 'expense', accountId: payAccountId, payee: payPayee,
         amount, date: payDate, categoryId: payCategoryId,
@@ -191,6 +199,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         }
       }
     } else if (tab === 'recebimento') {
+      if (recPayee && !payees.includes(recPayee)) addPayee(recPayee)
       addTransaction({
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount: parseFloat(recAmount) || 0, date: recDate,
@@ -247,7 +256,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Favorecido</label>
-                <input className="input" value={payPayee} onChange={e => setPayPayee(e.target.value)} placeholder="Favorecido" />
+                <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Favorecido" />
               </div>
               <div>
                 <label className="label">Valor</label>
@@ -285,7 +294,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Pagador</label>
-                <input className="input" value={recPayee} onChange={e => setRecPayee(e.target.value)} placeholder="Pagador" />
+                <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Pagador" />
               </div>
               <div>
                 <label className="label">Valor</label>

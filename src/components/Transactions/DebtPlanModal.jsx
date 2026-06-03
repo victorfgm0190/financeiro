@@ -4,6 +4,7 @@ import { DollarSign, Calendar, User, CreditCard, Tag } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import AccountOptions from '../shared/AccountOptions'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -19,7 +20,13 @@ function firstDueAfterToday(dueDay) {
 }
 
 export default function DebtPlanModal({ account, group, amount, date, onClose }) {
-  const { accounts, accountGroups, categories, addPayable, setDebtPlan } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, addPayee, addPayable, setDebtPlan } = useApp()
+
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) { if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1 }
+    return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
 
   const isEmprestimo = group?.behavior === 'emprestimo'
 
@@ -73,6 +80,7 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
 
   const handleConfirm = () => {
     if (!form.debitAccountId || form.installments < 1) return
+    if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
 
     const plan = {
       totalAmount: form.totalAmount,
@@ -134,10 +142,10 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         </div>
         <div>
           <label className="label flex items-center gap-1"><User size={11} /> Favorecido</label>
-          <input
-            className="input"
+          <FavorecidoAutocomplete
             value={form.payee}
-            onChange={e => set('payee', e.target.value)}
+            onChange={v => set('payee', v)}
+            suggestions={sortedPayees}
             placeholder={isEmprestimo ? 'Quem você emprestou...' : 'Nome do credor...'}
           />
         </div>
