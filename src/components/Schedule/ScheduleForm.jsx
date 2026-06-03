@@ -181,7 +181,7 @@ function buildAccOpts(accounts, _accountGroups, excludeId) {
 }
 
 export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, addSchedule, updateSchedule, getNextOccurrences } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences } = useApp()
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -196,6 +196,7 @@ export default function ScheduleForm({ initial, onClose }) {
     accountId: initial?.accountId || accounts[0]?.id || '',
     toAccountId: initial?.toAccountId || '',
     reservaExpenseCategoryId: initial?.reservaExpenseCategoryId || '',
+    reservaFuncaoId: initial?.reservaFuncaoId || '',
     amount: initial?.amount ?? '',
     categoryId: initial?.categoryId || '',
     payee: initial?.payee || '',
@@ -226,6 +227,13 @@ export default function ScheduleForm({ initial, onClose }) {
   const schReservaLinkedCat = schReservaAcc?.reservaType === 'especifica'
     ? categories.find(c => c.id === schReservaAcc.reservaCategoryId)
     : null
+  // Funções de reserva da conta envolvida (depósito/resgate reserva)
+  const reservaFuncoesDaConta = useMemo(
+    () => schReservaAcc
+      ? (reserveFunctions || []).filter(f => f.accountId === schReservaAcc.id).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name))
+      : [],
+    [reserveFunctions, schReservaAcc]
+  )
 
   // Options for SearchableSelect fields
   const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups), [accounts, accountGroups])
@@ -388,6 +396,24 @@ export default function ScheduleForm({ initial, onClose }) {
                 </span>
               </p>
             )}
+
+            {/* Função de reserva (vincula o agendamento à função específica) */}
+            <div>
+              <label className="label text-amber-400">Função de Reserva</label>
+              <select
+                className="input"
+                value={form.reservaFuncaoId}
+                onChange={e => set('reservaFuncaoId', e.target.value)}
+              >
+                <option value="">— Nenhuma —</option>
+                {reservaFuncoesDaConta.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              {reservaFuncoesDaConta.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">Nenhuma função vinculada a esta conta de reserva.</p>
+              )}
+            </div>
           </div>
         )}
 

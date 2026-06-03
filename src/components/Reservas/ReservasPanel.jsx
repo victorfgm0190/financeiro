@@ -10,38 +10,11 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-const INITIAL_NAMES = [
-  'IPVA', 'Seguro Residencial', 'IPTU', 'CRC', 'Help', 'Aluguel Papai',
-  'Reserva do Mês', 'Seguro Carro', '13 Salário GI', 'Licenciamento',
-  'Pneus', 'Óleo', 'Férias GI', 'Outras Rec GI', 'Outras Rec Victor',
-  'Academia', 'Brasil Sem Medo', 'Norton', 'Fralda Bebê', 'Microsoft',
-  'Seguro de Vida', 'Brasil Paralelo', 'Bolsa GI', 'Safra Financi',
-  'Gás', 'Stela Maris', 'Presentes', 'PIS GI', 'Rico e BB', 'Salão GI',
-  'Cadeira BB', 'Help Itália', 'Help Lava', 'Help Not', 'Help ___',
-  'Aniversário GI e Victor', 'Consórcio', 'Expo Londrina',
-]
-
-function makeInitialFunctions() {
-  return INITIAL_NAMES.map((name, i) => ({
-    id: `res_init_${i}`,
-    name,
-    accountId: null,
-    saldoInicial: 0,
-    entradas: 0,
-    saidas: 0,
-    despesaAnual: 0,
-    depositoMensal: 0,
-    mesVencimento: null,
-  }))
-}
-
+// Funções de reserva vivem no estado global (Neon). accountBalances e periods seguem
+// locais (overrides de saldo real e histórico de viradas — específicos do dispositivo).
 function useReservas() {
-  const [functions, setFunctions] = useState(() => {
-    try {
-      const s = localStorage.getItem('finup_reserve_funcs')
-      return s ? JSON.parse(s) : makeInitialFunctions()
-    } catch { return makeInitialFunctions() }
-  })
+  const { reserveFunctions: functions, addReserveFunction, updateReserveFunction, deleteReserveFunction } = useApp()
+
   const [accountBalances, setAccountBalancesState] = useState(() => {
     try {
       const s = localStorage.getItem('finup_reserve_balances')
@@ -55,18 +28,12 @@ function useReservas() {
     } catch { return [] }
   })
 
-  useEffect(() => { localStorage.setItem('finup_reserve_funcs', JSON.stringify(functions)) }, [functions])
   useEffect(() => { localStorage.setItem('finup_reserve_balances', JSON.stringify(accountBalances)) }, [accountBalances])
   useEffect(() => { localStorage.setItem('finup_reserve_periods', JSON.stringify(periods)) }, [periods])
 
-  const addFunction = (fn) => {
-    const id = 'res_' + Date.now()
-    setFunctions(fs => [...fs, { ...fn, id, entradas: 0, saidas: 0 }])
-  }
-  const updateFunction = (id, changes) => {
-    setFunctions(fs => fs.map(f => f.id === id ? { ...f, ...changes } : f))
-  }
-  const deleteFunction = (id) => setFunctions(fs => fs.filter(f => f.id !== id))
+  const addFunction = (fn) => addReserveFunction(fn)
+  const updateFunction = (id, changes) => updateReserveFunction(id, changes)
+  const deleteFunction = (id) => deleteReserveFunction(id)
 
   const setAccountBalance = (accountId, value) => {
     setAccountBalancesState(b => ({ ...b, [accountId]: Number(value) }))
@@ -81,22 +48,19 @@ function useReservas() {
       saldoAtualizado: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
     }))
     setPeriods(ps => [...ps, { closedAt: new Date().toISOString().split('T')[0], snapshot }])
-    setFunctions(fs => fs.map(f => ({
-      ...f,
+    functions.forEach(f => updateReserveFunction(f.id, {
       saldoInicial: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
       entradas: 0,
       saidas: 0,
-    })))
+    }))
   }
 
   const undoVirarSaldo = () => {
     if (periods.length === 0) return
     const last = periods[periods.length - 1]
-    setFunctions(fs => fs.map(f => {
-      const snap = last.snapshot.find(s => s.id === f.id)
-      if (!snap) return f
-      return { ...f, saldoInicial: snap.prevSaldoInicial, entradas: snap.prevEntradas, saidas: snap.prevSaidas }
-    }))
+    last.snapshot.forEach(snap =>
+      updateReserveFunction(snap.id, { saldoInicial: snap.prevSaldoInicial, entradas: snap.prevEntradas, saidas: snap.prevSaidas })
+    )
     setPeriods(ps => ps.slice(0, -1))
   }
 

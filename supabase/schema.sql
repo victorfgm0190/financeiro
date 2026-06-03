@@ -624,3 +624,20 @@ VALUES
   ('Dividas/emprestimos','Morro dos Anjos Papai','8. MORRO DOS ANJOS - PARTE PAPAI',false,false,false,false),
   ('Dividas/emprestimos','Morro dos anjos','7. MORRO DOS ANJOS',false,false,false,false)
 ON CONFLICT DO NOTHING;
+
+-- ─── Funções de reserva (Academia, Salão GI, ...) — migradas do localStorage ───
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT;
+CREATE TABLE IF NOT EXISTS reserve_functions (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  account_id TEXT,
+  saldo_inicial NUMERIC DEFAULT 0,
+  entradas NUMERIC DEFAULT 0,
+  saidas NUMERIC DEFAULT 0,
+  despesa_anual NUMERIC DEFAULT 0,
+  deposito_mensal NUMERIC DEFAULT 0,
+  mes_vencimento TEXT,
+  ordem INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);

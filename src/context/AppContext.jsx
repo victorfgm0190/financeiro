@@ -5,7 +5,7 @@ import {
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
-  importToRow, gerencialRuleToRow,
+  importToRow, gerencialRuleToRow, reserveFunctionToRow,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate } from '../lib/fatura'
@@ -18,7 +18,7 @@ const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
   budgets: [], classificationRules: [], gerencialGroups: [], gerencialRules: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
-  profiles: [], cardImports: [],
+  profiles: [], cardImports: [], reserveFunctions: [],
   settings: {}, costCenters: [],
 }
 
@@ -354,6 +354,7 @@ const defaultData = {
   payables: [],
   profiles: [],
   cardImports: [],
+  reserveFunctions: [],
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
@@ -443,9 +444,33 @@ export function AppProvider({ children }) {
           accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
           profiles: result.data.profiles ?? [],
           cardImports: result.data.cardImports ?? [],
+          reserveFunctions: result.data.reserveFunctions ?? [],
         }
+
+        // Migração: funções de reserva do localStorage → Neon.
+        // O localStorage só é limpo quando o banco já tem as funções (evita perda em reload
+        // antes do sync concluir).
+        let legado = []
+        try { legado = JSON.parse(localStorage.getItem('finup_reserve_funcs') || '[]') } catch { legado = [] }
+        if (merged.reserveFunctions.length === 0 && Array.isArray(legado) && legado.length > 0) {
+          merged.reserveFunctions = legado.map((f, i) => ({
+            id: f.id || ('res_' + Date.now() + '_' + i),
+            name: f.name || 'Função',
+            accountId: f.accountId || null,
+            saldoInicial: Number(f.saldoInicial) || 0,
+            entradas: Number(f.entradas) || 0,
+            saidas: Number(f.saidas) || 0,
+            despesaAnual: Number(f.despesaAnual) || 0,
+            depositoMensal: Number(f.depositoMensal) || 0,
+            mesVencimento: f.mesVencimento ?? null,
+            ordem: i,
+          }))
+        } else if (merged.reserveFunctions.length > 0) {
+          localStorage.removeItem('finup_reserve_funcs') // banco é autoritativo — limpa legado
+        }
+
         setData(() => {
-          prevDataRef.current = merged  // evita sync de volta imediato
+          prevDataRef.current = { ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }
           return merged
         })
         saveLocal(merged)
@@ -513,6 +538,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('perfis', prev.profiles, data.profiles, perfilToRow))
       if (prev.cardImports !== data.cardImports)
         tasks.push(syncSection('card_imports', prev.cardImports || [], data.cardImports || [], importToRow))
+      if (prev.reserveFunctions !== data.reserveFunctions)
+        tasks.push(syncSection('reserve_functions', prev.reserveFunctions || [], data.reserveFunctions || [], reserveFunctionToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -599,6 +626,7 @@ export function AppProvider({ children }) {
             costCenter: schedule.costCenter || null,
             date,
             scheduleId: schedule.id,
+            reservaFuncaoId: schedule.reservaFuncaoId || null,
             origin: 'agendamento',
             createdAt: new Date().toISOString(),
           }
@@ -1163,6 +1191,7 @@ export function AppProvider({ children }) {
         costCenter: schedule.costCenter,
         date,
         scheduleId,
+        reservaFuncaoId: schedule.reservaFuncaoId || null,
         origin: 'agendamento',
       }
       const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -1410,6 +1439,30 @@ export function AppProvider({ children }) {
       }
       return { ...d, classificationRules: [...d.classificationRules, { id: 'rule_' + Date.now(), contains: keyword, categoryId, payee: payee || '', dayOfMonth, amountApprox, grupoGerencial }] }
     })
+  }, [update])
+
+  // ── Funções de Reserva ───────────────────────────────────────────────────────
+  const addReserveFunction = useCallback((fn) => {
+    const id = 'res_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+    update(d => {
+      const maxOrdem = (d.reserveFunctions || []).reduce((m, f) => Math.max(m, f.ordem ?? 0), -1)
+      const novo = {
+        id, name: fn.name || '', accountId: fn.accountId || null,
+        saldoInicial: Number(fn.saldoInicial) || 0, entradas: 0, saidas: 0,
+        despesaAnual: Number(fn.despesaAnual) || 0, depositoMensal: Number(fn.depositoMensal) || 0,
+        mesVencimento: fn.mesVencimento ?? null, ordem: maxOrdem + 1,
+      }
+      return { ...d, reserveFunctions: [...(d.reserveFunctions || []), novo] }
+    })
+    return id
+  }, [update])
+
+  const updateReserveFunction = useCallback((id, changes) => {
+    update(d => ({ ...d, reserveFunctions: (d.reserveFunctions || []).map(f => f.id === id ? { ...f, ...changes } : f) }))
+  }, [update])
+
+  const deleteReserveFunction = useCallback((id) => {
+    update(d => ({ ...d, reserveFunctions: (d.reserveFunctions || []).filter(f => f.id !== id) }))
   }, [update])
 
   // ── Gerencial Groups ─────────────────────────────────────────────────────────
@@ -2834,6 +2887,8 @@ export function AppProvider({ children }) {
       payables: data.payables || [],
       profiles: data.profiles || [],
       cardImports: data.cardImports || [],
+      reserveFunctions: data.reserveFunctions || [],
+      addReserveFunction, updateReserveFunction, deleteReserveFunction,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId,
       profileAccounts, profileTransactions, profileSchedules,

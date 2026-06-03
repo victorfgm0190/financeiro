@@ -148,6 +148,7 @@ export const txToRow = (tx) => ({
   gerencial_schedule_id: tx.gerencialScheduleId || null,
   fatura_month_year: tx.faturaMonthYear || null,
   parent_tx_id: tx.parentTxId || null,
+  reserva_funcao_id: tx.reservaFuncaoId || null,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -173,6 +174,7 @@ export const rowToTx = (r) => ({
   gerencialScheduleId: r.gerencial_schedule_id || null,
   faturaMonthYear: r.fatura_month_year || null,
   parentTxId: r.parent_tx_id || null,
+  reservaFuncaoId: r.reserva_funcao_id || null,
   createdAt: r.created_at,
 })
 
@@ -198,6 +200,7 @@ export const scheduleToRow = (s) => ({
   overrides: s.overrides || {},
   grupo_gerencial: s.grupoGerencial || null,
   reserva_expense_category_id: s.reservaExpenseCategoryId || null,
+  reserva_funcao_id: s.reservaFuncaoId || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -222,6 +225,35 @@ export const rowToSchedule = (r) => ({
   overrides: r.overrides || {},
   grupoGerencial: r.grupo_gerencial || null,
   reservaExpenseCategoryId: r.reserva_expense_category_id || null,
+  reservaFuncaoId: r.reserva_funcao_id || null,
+})
+
+// ─── Funções de reserva ───────────────────────────────────────────────────────
+
+export const reserveFunctionToRow = (f) => ({
+  id: f.id,
+  name: f.name,
+  account_id: f.accountId || null,
+  saldo_inicial: Number(f.saldoInicial) || 0,
+  entradas: Number(f.entradas) || 0,
+  saidas: Number(f.saidas) || 0,
+  despesa_anual: Number(f.despesaAnual) || 0,
+  deposito_mensal: Number(f.depositoMensal) || 0,
+  mes_vencimento: f.mesVencimento != null && f.mesVencimento !== '' ? String(f.mesVencimento) : null,
+  ordem: Number.isFinite(f.ordem) ? f.ordem : 0,
+})
+
+export const rowToReserveFunction = (r) => ({
+  id: r.id,
+  name: r.name,
+  accountId: r.account_id || null,
+  saldoInicial: Number(r.saldo_inicial) || 0,
+  entradas: Number(r.entradas) || 0,
+  saidas: Number(r.saidas) || 0,
+  despesaAnual: Number(r.despesa_anual) || 0,
+  depositoMensal: Number(r.deposito_mensal) || 0,
+  mesVencimento: r.mes_vencimento != null && r.mes_vencimento !== '' ? Number(r.mes_vencimento) : null,
+  ordem: r.ordem ?? 0,
 })
 
 export const categoryToRow = (c) => ({
@@ -406,6 +438,7 @@ export async function loadFromDb(defaultData) {
         accountGroups: d.groups.length > 0 ? d.groups.map(rowToAccountGroup) : null,
         profiles: d.perfis.map(rowToPerfil),
         cardImports: d.imports?.map(rowToImport) || [],
+        reserveFunctions: d.rfns?.map(rowToReserveFunction) || [],
       },
     }
   } catch (err) {
