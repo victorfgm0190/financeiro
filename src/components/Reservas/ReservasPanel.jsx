@@ -555,30 +555,40 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
   const currentYear = new Date().getFullYear()
   const linked = functions.filter(f => f.accountId)
 
-  // Pre-compute scheduled deposits/resgates per function per month (index 0=Jan..11=Dec)
+  // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
+  // Vínculo por reservaFuncaoId quando presente; senão, fallback por conta (comportamento atual).
   const scheduledByFunction = useMemo(() => {
+    const accById = new Map(accounts.map(a => [a.id, a]))
+    const transfers = (schedules || []).filter(s => s.transactionType === 'transfer')
     const result = {}
     for (const f of linked) {
       const deps = new Array(12).fill(0)
       const ress = new Array(12).fill(0)
-      const activeSchedules = (schedules || []).filter(s =>
-        s.transactionType === 'transfer' &&
-        (s.toAccountId === f.accountId || s.accountId === f.accountId)
-      )
-      for (const s of activeSchedules) {
-        const occurrences = getNextOccurrences(s, 36)
-        for (const dateStr of occurrences) {
+      for (const s of transfers) {
+        let isDep = false, isRes = false
+        if (s.reservaFuncaoId) {
+          // Agendamento vinculado a uma função específica → conta só para ela
+          if (s.reservaFuncaoId !== f.id) continue
+          if (accById.get(s.toAccountId)?.isReserva) isDep = true
+          else if (accById.get(s.accountId)?.isReserva) isRes = true
+        } else {
+          // Fallback: vínculo por conta da função
+          if (s.toAccountId === f.accountId) isDep = true
+          else if (s.accountId === f.accountId) isRes = true
+        }
+        if (!isDep && !isRes) continue
+        for (const dateStr of getNextOccurrences(s, 36)) {
           const d = new Date(dateStr + 'T00:00:00')
           if (d.getFullYear() !== currentYear) continue
           const mi = d.getMonth()
-          if (s.toAccountId === f.accountId) deps[mi] = Math.round((deps[mi] + (s.amount || 0)) * 100) / 100
+          if (isDep) deps[mi] = Math.round((deps[mi] + (s.amount || 0)) * 100) / 100
           else ress[mi] = Math.round((ress[mi] + (s.amount || 0)) * 100) / 100
         }
       }
       result[f.id] = { deps, ress }
     }
     return result
-  }, [linked, schedules, getNextOccurrences, currentYear])
+  }, [linked, accounts, schedules, getNextOccurrences, currentYear])
 
   const projections = useMemo(() => {
     return linked.map(f => {
@@ -586,14 +596,8 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
       let bal = saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100
       const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0) }
       const monthly = MONTH_LABELS.map((_, mi) => {
-        const monthNum = mi + 1
-        const dep = Math.round(((f.depositoMensal || 0) + schd.deps[mi]) * 100) / 100
-        let res = schd.ress[mi]
-        if (f.mesVencimento == null && f.despesaAnual > 0) {
-          res = Math.round((res + f.despesaAnual / 12) * 100) / 100
-        } else if (f.mesVencimento === monthNum) {
-          res = Math.round((res + (f.despesaAnual || 0)) * 100) / 100
-        }
+        const dep = schd.deps[mi]
+        const res = schd.ress[mi]
         bal = Math.round((bal + dep - res) * 100) / 100
         return { dep, res, saldo: bal, neg: bal < 0 }
       })
