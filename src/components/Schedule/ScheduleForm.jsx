@@ -201,10 +201,10 @@ export default function ScheduleForm({ initial, onClose }) {
     categoryId: initial?.categoryId || '',
     payee: initial?.payee || '',
     costCenter: initial?.costCenter || '',
-    frequency: initial?.frequency || 'monthly',
+    frequency: initial?.frequency || '',
     startDate: initial?.startDate || today(),
     occurrenceType: initial?.occurrenceType || 'continuous',
-    installments: initial?.installments ?? 12,
+    installments: initial?.installments ?? 0,
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
     autoRegister: initial?.autoRegister ?? true,
     grupoGerencial: initial?.grupoGerencial || null,
@@ -272,7 +272,8 @@ export default function ScheduleForm({ initial, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!form.description || !form.amount || !form.accountId) return
+    if (!form.description || !form.amount || !form.accountId || !form.frequency) return
+    if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
     if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
     const data = {
@@ -448,7 +449,7 @@ export default function ScheduleForm({ initial, onClose }) {
           <SearchableSelect
             options={FREQ_OPTIONS}
             value={form.frequency}
-            onChange={id => set('frequency', id)}
+            onChange={id => setForm(f => ({ ...f, frequency: id, ...(id === 'once' || !id ? { occurrenceType: 'continuous' } : {}) }))}
             placeholder="Selecione a frequência..."
             required
           />
@@ -466,26 +467,32 @@ export default function ScheduleForm({ initial, onClose }) {
           />
         </div>
 
-        {/* Ocorrência */}
-        <div className={form.occurrenceType === 'installment' ? '' : 'col-span-2'}>
-          <LabelTip tip={TIPS.occurrence}>Ocorrência</LabelTip>
-          <div className="flex rounded-lg overflow-hidden border border-gray-700">
-            {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
-              <button
-                type="button"
-                key={v}
-                onClick={() => set('occurrenceType', v)}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                  form.occurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Ocorrência — habilitada só com frequência recorrente escolhida */}
+        {form.frequency !== 'once' && (() => {
+          const occDisabled = !form.frequency
+          return (
+            <div className={form.occurrenceType === 'installment' && !occDisabled ? '' : 'col-span-2'}>
+              <LabelTip tip={TIPS.occurrence}>Ocorrência</LabelTip>
+              <div className={`flex rounded-lg overflow-hidden border border-gray-700 ${occDisabled ? 'opacity-40' : ''}`}>
+                {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
+                  <button
+                    type="button"
+                    key={v}
+                    disabled={occDisabled}
+                    onClick={() => set('occurrenceType', v)}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${occDisabled ? 'cursor-not-allowed' : ''} ${
+                      form.occurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
-        {form.occurrenceType === 'installment' && (
+        {form.frequency && form.frequency !== 'once' && form.occurrenceType === 'installment' && (
           <div>
             <LabelTip tip={TIPS.installments}>Nº de Parcelas</LabelTip>
             <input
