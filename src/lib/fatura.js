@@ -1,14 +1,14 @@
 /**
- * Determina a faturaRef (MM/YYYY do vencimento) de um gasto no cartão.
+ * Determina a faturaRef (MM/YYYY do mês de fechamento) de um gasto no cartão.
  *
- * Regra:
- *   dia < closingDay  → fatura do mês corrente
- *   dia >= closingDay → fatura do mês seguinte
+ * Regra (a fatura do mês M fecha no dia `closingDay` de M e vai do dia F+1 de M-1 ao dia F de M):
+ *   dia <= closingDay → fatura do mês corrente
+ *   dia >  closingDay → fatura do mês seguinte
  */
 export function computeFaturaRef(txDate, closingDay) {
   const day = txDate.getDate()
   let m, y
-  if (day < closingDay) {
+  if (day <= closingDay) {
     m = txDate.getMonth()       // 0-indexed
     y = txDate.getFullYear()
   } else {

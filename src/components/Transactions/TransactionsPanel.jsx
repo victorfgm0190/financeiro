@@ -13,15 +13,15 @@ import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
 // ─── Credit fatura helpers ──────────────────────────────────────────────────
 
-// Mesma convenção de computeFaturaRef: dia < closingDay → fatura do mês corrente;
-// dia >= closingDay → fatura do mês seguinte.
+// Mesma convenção de computeFaturaRef: dia <= closingDay → fatura do mês corrente;
+// dia > closingDay → fatura do mês seguinte (a fatura do mês M fecha no dia F de M).
 function getBillKey(date, card) {
   if (!date || !card) return ''
   const closingDay = card.closingDay || 1
   const d = new Date(date + 'T00:00:00')
   const day = d.getDate()
   let month0, year
-  if (day < closingDay) {
+  if (day <= closingDay) {
     month0 = d.getMonth()
     year = d.getFullYear()
   } else {

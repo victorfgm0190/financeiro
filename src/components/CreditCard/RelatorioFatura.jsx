@@ -3,26 +3,24 @@ import { Download, FileBarChart } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 
+// Fatura do mês M: fecha no dia F de M e vai do dia F+1 de M-1 ao dia F de M.
+// dia <= F → mês corrente; dia > F → mês seguinte (label = mês de fechamento).
 function getBillPeriod(dateStr, closingDay) {
   const d = new Date(dateStr + 'T00:00:00')
   const day = d.getDate()
-  let startMonth, startYear
-  if (day >= closingDay) {
-    startYear = d.getFullYear()
-    startMonth = d.getMonth()
-  } else {
-    const prev = new Date(d.getFullYear(), d.getMonth() - 1, 1)
-    startYear = prev.getFullYear()
-    startMonth = prev.getMonth()
-  }
-  const start = new Date(startYear, startMonth, closingDay)
-  const end = new Date(startYear, startMonth + 1, closingDay - 1)
+  const fm0 = day <= closingDay ? d.getMonth() : d.getMonth() + 1
+  const fatura = new Date(d.getFullYear(), fm0, 1)
+  const fy = fatura.getFullYear()
+  const fmonth = fatura.getMonth()
+  const start = new Date(fy, fmonth - 1, closingDay + 1)
+  const end = new Date(fy, fmonth, closingDay)
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+  const f = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
   return {
-    key: start.toISOString().split('T')[0],
-    label: `${months[startMonth]}/${startYear}`,
-    start: start.toISOString().split('T')[0],
-    end: end.toISOString().split('T')[0],
+    key: `${fy}-${String(fmonth + 1).padStart(2, '0')}`,
+    label: `${months[fmonth]}/${fy}`,
+    start: f(start),
+    end: f(end),
   }
 }
 

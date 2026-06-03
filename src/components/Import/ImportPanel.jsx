@@ -587,13 +587,13 @@ function addMonthSafe(dateStr, n) {
 }
 
 // Calcula o mês da fatura (YYYY-MM) de um lançamento dado o dia de fechamento do cartão.
-// dia < closingDay → fatura do mês corrente; dia >= closingDay → fatura do mês seguinte.
+// dia <= closingDay → fatura do mês corrente; dia > closingDay → fatura do mês seguinte.
 function calcFatura(dateStr, closingDay = 14) {
   if (!dateStr) return ''
   const d = new Date(dateStr + 'T00:00:00')
   const day = d.getDate()
   let m, y
-  if (day < closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
+  if (day <= closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
   else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); m = n.getMonth() + 1; y = n.getFullYear() }
   return `${y}-${String(m).padStart(2, '0')}`
 }

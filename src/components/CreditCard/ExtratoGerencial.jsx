@@ -13,20 +13,16 @@ function GerBadge({ grupoId, gerencialGroups }) {
   return <span className={cls}>{grupo.alias}</span>
 }
 
+// dia <= closingDay → fatura do mês corrente; dia > closingDay → mês seguinte.
 function getBillLabel(date, card) {
   if (!date || !card) return ''
   const closingDay = card.closingDay || 1
   const d = new Date(date + 'T00:00:00')
   const day = d.getDate()
-  let month, year
-  if (day < closingDay) {
-    month = d.getMonth() === 0 ? 12 : d.getMonth()
-    year = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear()
-  } else {
-    month = d.getMonth() + 1
-    year = d.getFullYear()
-  }
-  return `${String(month).padStart(2, '0')}/${year}`
+  const ref = day <= closingDay
+    ? new Date(d.getFullYear(), d.getMonth(), 1)
+    : new Date(d.getFullYear(), d.getMonth() + 1, 1)
+  return `${String(ref.getMonth() + 1).padStart(2, '0')}/${ref.getFullYear()}`
 }
 
 export default function ExtratoGerencial({ initialCardId }) {
