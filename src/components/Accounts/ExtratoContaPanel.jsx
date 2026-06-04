@@ -29,58 +29,104 @@ function balanceAt(account, allTransactions, fromDate) {
   return Math.round(b * 100) / 100
 }
 
-// Builds display rows for the extract, netting opposing same-date transfers
-// when contaAplicacao=true.
-function buildRows(transactions, accountId, netize) {
+// Netiza múltiplas transferências RECEBIDAS de uma mesma conta de aplicação
+// (contaAplicacao=true) no mesmo dia — agrupando-as numa única linha líquida no
+// extrato da conta que RECEBE. Aditivo: só agrupa linhas 'single' de transferência
+// entrante cuja origem é conta de aplicação; preserva a ordem cronológica colocando
+// a linha netizada na posição da primeira ocorrência do grupo.
+function netCAIncoming(rows, accountId, aplicacaoIds) {
+  if (!aplicacaoIds || aplicacaoIds.size === 0) return rows
+
+  const groups = {}
+  rows.forEach((row, idx) => {
+    if (row.kind !== 'single') return
+    const tx = row.tx
+    if (tx.type === 'transfer' && tx.toAccountId === accountId && aplicacaoIds.has(tx.accountId)) {
+      const key = `${tx.date}|${tx.accountId}`
+      ;(groups[key] = groups[key] || []).push({ idx, tx })
+    }
+  })
+
+  const toNet = Object.values(groups).filter(g => g.length >= 2)
+  if (toNet.length === 0) return rows
+
+  const insertAt = {}
+  const drop = new Set()
+  toNet.forEach(g => {
+    const txs = g.map(x => x.tx)
+    const netFlow = Math.round(txs.reduce((s, t) => s + t.amount, 0) * 100) / 100
+    insertAt[g[0].idx] = {
+      kind: 'netted', txs, date: txs[0].date, netFlow,
+      otherAccountId: txs[0].accountId, caIncoming: true,
+    }
+    g.forEach((x, i) => { if (i > 0) drop.add(x.idx) })
+  })
+
+  const result = []
+  rows.forEach((row, idx) => {
+    if (insertAt[idx]) result.push(insertAt[idx])
+    else if (!drop.has(idx)) result.push(row)
+  })
+  return result
+}
+
+// Builds display rows for the extract. Netiza transferências opostas (round-trip)
+// do mesmo dia quando contaAplicacao=true (conta de aplicação), e — via netCAIncoming
+// — também netiza múltiplas transferências recebidas de uma mesma conta de aplicação
+// no extrato da conta destino.
+function buildRows(transactions, accountId, netize, aplicacaoIds) {
   const relevant = transactions
     .filter(tx => tx.accountId === accountId || tx.toAccountId === accountId)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''))
 
-  if (!netize) return relevant.map(tx => ({ kind: 'single', tx }))
-
-  const byDate = {}
-  relevant.forEach(tx => {
-    ;(byDate[tx.date] = byDate[tx.date] || []).push(tx)
-  })
-
-  const rows = []
-  Object.keys(byDate).sort().forEach(date => {
-    const dayTxs = byDate[date]
-    const processed = new Set()
-
-    dayTxs.forEach(tx => {
-      if (processed.has(tx.id)) return
-      if (tx.type !== 'transfer') {
-        rows.push({ kind: 'single', tx })
-        processed.add(tx.id)
-        return
-      }
-
-      const opposing = dayTxs.find(t =>
-        !processed.has(t.id) &&
-        t.id !== tx.id &&
-        t.type === 'transfer' &&
-        t.accountId === tx.toAccountId &&
-        t.toAccountId === tx.accountId
-      )
-
-      if (!opposing) {
-        rows.push({ kind: 'single', tx })
-        processed.add(tx.id)
-        return
-      }
-
-      const flow = (t) => (t.toAccountId === accountId ? t.amount : -t.amount)
-      const netFlow = Math.round((flow(tx) + flow(opposing)) * 100) / 100
-      const otherAccountId = tx.accountId === accountId ? tx.toAccountId : tx.accountId
-
-      rows.push({ kind: 'netted', txs: [tx, opposing], date, netFlow, otherAccountId })
-      processed.add(tx.id)
-      processed.add(opposing.id)
+  let rows
+  if (!netize) {
+    rows = relevant.map(tx => ({ kind: 'single', tx }))
+  } else {
+    const byDate = {}
+    relevant.forEach(tx => {
+      ;(byDate[tx.date] = byDate[tx.date] || []).push(tx)
     })
-  })
 
-  return rows
+    rows = []
+    Object.keys(byDate).sort().forEach(date => {
+      const dayTxs = byDate[date]
+      const processed = new Set()
+
+      dayTxs.forEach(tx => {
+        if (processed.has(tx.id)) return
+        if (tx.type !== 'transfer') {
+          rows.push({ kind: 'single', tx })
+          processed.add(tx.id)
+          return
+        }
+
+        const opposing = dayTxs.find(t =>
+          !processed.has(t.id) &&
+          t.id !== tx.id &&
+          t.type === 'transfer' &&
+          t.accountId === tx.toAccountId &&
+          t.toAccountId === tx.accountId
+        )
+
+        if (!opposing) {
+          rows.push({ kind: 'single', tx })
+          processed.add(tx.id)
+          return
+        }
+
+        const flow = (t) => (t.toAccountId === accountId ? t.amount : -t.amount)
+        const netFlow = Math.round((flow(tx) + flow(opposing)) * 100) / 100
+        const otherAccountId = tx.accountId === accountId ? tx.toAccountId : tx.accountId
+
+        rows.push({ kind: 'netted', txs: [tx, opposing], date, netFlow, otherAccountId })
+        processed.add(tx.id)
+        processed.add(opposing.id)
+      })
+    })
+  }
+
+  return netCAIncoming(rows, accountId, aplicacaoIds)
 }
 
 // Computes the entry/exit delta for a single transaction relative to accountId.
@@ -225,6 +271,11 @@ function NettedRow({ row, accountId, accounts, balance }) {
             <ArrowLeftRight size={12} className="text-indigo-400 shrink-0" />
             <span className="text-xs text-gray-200 truncate">Transf. líquida</span>
             <span className="text-xs text-indigo-400 ml-1 shrink-0">({txs.length} mov.)</span>
+            {row.caIncoming && (
+              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
+                {otherName} · netizado
+              </span>
+            )}
           </div>
         </td>
         <td />
@@ -345,7 +396,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     [transactions, from, to]
   )
 
-  const rows = useMemo(() => buildRows(filteredTxs, account.id, isAplicacao), [filteredTxs, account.id, isAplicacao])
+  const aplicacaoIds = useMemo(
+    () => new Set(accounts.filter(a => a.contaAplicacao).map(a => a.id)),
+    [accounts]
+  )
+
+  const rows = useMemo(
+    () => buildRows(filteredTxs, account.id, isAplicacao, aplicacaoIds),
+    [filteredTxs, account.id, isAplicacao, aplicacaoIds]
+  )
 
   const startBalance = useMemo(() => balanceAt(account, transactions, from), [account, transactions, from])
 
