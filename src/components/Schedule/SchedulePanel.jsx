@@ -1120,6 +1120,35 @@ export default function SchedulePanel() {
   const displayInvoice    = showZeroed ? invoicePayables : invoicePayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
   const pendingInvoice    = displayInvoice.filter(p => p.status === 'pending').length
 
+  // Agendamentos "Pagamento Fatura X" (transfer Conta Principal → Cartão, _gerencialKey
+  // terminando em _payment). São gerados pela automação gerencial tanto na importação
+  // quanto no lançamento MANUAL — mas o lançamento manual não gera contas_a_pagar, então
+  // o cartão (ex.: BBCCRED) ficava invisível na aba. Mostramos aqui os que ainda NÃO têm
+  // um contas_a_pagar (invoice) correspondente, para não duplicar quem veio da importação.
+  const invoiceFaturaKeys = useMemo(
+    () => new Set(invoicePayables.map(p => `${p.cartaoId}|${p.mesAno}`)),
+    [invoicePayables]
+  )
+  const faturaPaymentSchedules = useMemo(
+    () => allSchedules.filter(s => {
+      const key = s.overrides?._gerencialKey
+      if (!key || !key.endsWith('_payment') || s.transactionType !== 'transfer') return false
+      const g = s.overrides?._gerencial || {}
+      const cardId = g.cardId || s.toAccountId
+      if (!accountInProfile(cardId)) return false
+      // dedupe: se já existe contas_a_pagar para o mesmo cartão+fatura, não repete
+      if (g.faturaRef && g.faturaRef.includes('/')) {
+        const [mm, yyyy] = g.faturaRef.split('/')
+        if (invoiceFaturaKeys.has(`${cardId}|${yyyy}-${mm}`)) return false
+      }
+      return true
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allSchedules, invoiceFaturaKeys, activeProfileId, allAccounts]
+  )
+  const displayFaturaPayments = showZeroed ? faturaPaymentSchedules : faturaPaymentSchedules.filter(s => Number(s.amount) !== 0)
+  const pendingFaturaPayments = displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0).length
+
   // CORREÇÃO 3: contas de origem "gerenciais" = subcontas "Ger. ..." (têm grupoGerencial
   // no próprio account) + contas de resgate dos grupos numerados (raAccountIds).
   const gerencialOrigemIds = useMemo(() => {
@@ -1206,7 +1235,7 @@ export default function SchedulePanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-300">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice} faturas · {pendingGerencial} resgates</p>
+          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
         </div>
         <div className="flex items-center gap-2">
           {provisoesPendentes.length > 0 && (
@@ -1226,7 +1255,7 @@ export default function SchedulePanel() {
         <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={allPending.length}>
           <Calendar size={14} /> Agendamentos
         </TabButton>
-        <TabButton active={activeTab === 'cartao'} onClick={() => setActiveTab('cartao')} badge={pendingInvoice}>
+        <TabButton active={activeTab === 'cartao'} onClick={() => setActiveTab('cartao')} badge={pendingInvoice + pendingFaturaPayments}>
           <CreditCard size={14} /> Cartão de Crédito
         </TabButton>
         <TabButton active={activeTab === 'gerencial'} onClick={() => setActiveTab('gerencial')} badge={pendingGerencial}>
@@ -1322,16 +1351,34 @@ export default function SchedulePanel() {
 
       {activeTab === 'cartao' && (
         <div className="space-y-3">
-          {displayInvoice.length === 0 ? (
+          {displayInvoice.length === 0 && displayFaturaPayments.length === 0 ? (
             <div className="card text-center py-12">
               <CreditCard size={32} className="text-gray-700 mx-auto mb-3" />
               <p className="text-gray-500 text-sm">Nenhuma fatura gerada</p>
-              <p className="text-gray-600 text-xs mt-1">As faturas são geradas automaticamente ao importar lançamentos de cartão</p>
+              <p className="text-gray-600 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
             </div>
           ) : (
-            displayInvoice.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
-              <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
-            ))
+            <>
+              {displayInvoice.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
+                <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
+              ))}
+              {displayFaturaPayments.length > 0 && (
+                <SchedulesTable
+                  schedules={displayFaturaPayments}
+                  categories={categories}
+                  accounts={allAccounts}
+                  gerencialGroups={gerencialGroups}
+                  addTransaction={addTransaction}
+                  markScheduleRegistered={markScheduleRegistered}
+                  deleteSchedule={deleteSchedule}
+                  registerScheduleOccurrence={registerScheduleOccurrence}
+                  skipScheduleOccurrence={skipScheduleOccurrence}
+                  getNextOccurrences={getNextOccurrences}
+                  onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
+                  onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+                />
+              )}
+            </>
           )}
         </div>
       )}
