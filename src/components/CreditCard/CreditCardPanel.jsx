@@ -377,7 +377,7 @@ export default function CreditCardPanel() {
 
       <Modal open={showNewTx} onClose={() => setShowNewTx(false)} title="Novo Lançamento" size="lg">
         <TransactionForm
-          initial={{ type: 'expense', accountId: selectedCard?.id, date: today() }}
+          initial={{ type: 'expense', accountId: selectedCard?.id, date: today(), faturaMonthYear: billKey }}
           onClose={() => setShowNewTx(false)}
         />
       </Modal>
