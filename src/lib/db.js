@@ -365,6 +365,7 @@ export const payableToRow = (p) => ({
   bill_end: p.billEnd || null,
   installment_number: p.installmentNumber || null,
   total_installments: p.totalInstallments || null,
+  import_id: p.importId || null,
 })
 
 export const rowToPayable = (r) => ({
@@ -382,6 +383,7 @@ export const rowToPayable = (r) => ({
   billEnd: r.bill_end,
   installmentNumber: r.installment_number || null,
   totalInstallments: r.total_installments || null,
+  importId: r.import_id || null,
 })
 
 export const envelopeToRow = (e) => ({

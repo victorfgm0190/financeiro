@@ -1019,9 +1019,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     if (toImport.length > 0) {
       const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
-      if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno)
+      const importId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+      if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno, importId)
       addCardImport({
-        id: 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        id: importId,
         importedAt: new Date().toISOString(),
         count: toImport.length,
         mesAno: mesAno || '',

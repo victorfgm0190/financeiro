@@ -882,19 +882,21 @@ export function AppProvider({ children }) {
         !(t.origin === 'investAuto' && txIds.has(t.parentTxId))
       )
 
-      // Delete pending payables generated for this import.
-      // Match by mesAno (primary) or by bill date range overlapping with imported tx dates (fallback,
-      // handles cases where imp.mesAno diverged from the payable's mesAno in older imports).
+      // Remove os contas-a-pagar (payables) gerados por ESTE lote. Operação SOMENTE de
+      // exclusão: o estorno nunca recria/atualiza um payable (não chama gerarContasPagarFatura).
+      // Prioridade: vínculo direto por importId (lotes novos). Para lotes antigos sem importId,
+      // mantém a heurística por cartão + mesAno / janela de datas como fallback.
       const impExpenseDates = txs
         .filter(t => t.type === 'expense' && t.date)
         .map(t => t.date)
       const payables = (d.payables || []).filter(p => {
-        if (p.cartaoId !== imp.accountId) return true   // different card — keep
-        if (p.status === 'paid') return true             // already paid — keep
-        if (imp.mesAno && p.mesAno === imp.mesAno) return false  // mesAno match — remove
-        // Fallback: any imported expense date falls within this payable's bill window
+        if (p.status === 'paid') return true                 // já paga — nunca remove
+        if (p.importId) return p.importId !== importId       // vínculo direto: remove só os do lote
+        // — Legado (sem importId): heurística por cartão + mesAno / janela de datas —
+        if (p.cartaoId !== imp.accountId) return true        // outro cartão — mantém
+        if (imp.mesAno && p.mesAno === imp.mesAno) return false              // mesAno casa — remove
         if (p.billStart && p.billEnd && impExpenseDates.some(dt => dt >= p.billStart && dt <= p.billEnd))
-          return false
+          return false                                       // data importada cai na janela — remove
         return true
       })
 
@@ -1836,7 +1838,7 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, payables: (d.payables || []).filter(p => p.id !== id) }))
   }, [update])
 
-  const gerarContasPagarFatura = useCallback((cartaoId, billStart, billEnd, mesAno) => {
+  const gerarContasPagarFatura = useCallback((cartaoId, billStart, billEnd, mesAno, importId = null) => {
     update(d => {
       const card = d.accounts.find(a => a.id === cartaoId)
       if (!card) return d
@@ -1887,6 +1889,7 @@ export function AppProvider({ children }) {
           paidAt: null,
           billStart,
           billEnd,
+          importId,   // vínculo direto com o lote de importação (estorno apaga por aqui)
         })
       }
 
