@@ -11,7 +11,8 @@ export default function AccountOptions({
   filter,
   labelFn,
 }) {
-  const pool = filter ? accounts.filter(filter) : accounts
+  // Contas inativas (active === false) nunca aparecem nos selects de formulário.
+  const pool = (filter ? accounts.filter(filter) : accounts).filter(a => a.active !== false)
   const label = labelFn || (a => a.name)
 
   const top = pool.filter(a => accountPriority(a) === 0)

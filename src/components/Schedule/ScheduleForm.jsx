@@ -173,7 +173,8 @@ function buildCatOpts(categories, type) {
 }
 
 function buildAccOpts(accounts, _accountGroups, excludeId) {
-  const pool = excludeId ? accounts.filter(a => a.id !== excludeId) : accounts
+  // Contas inativas não aparecem nos selects de formulário.
+  const pool = accounts.filter(a => a.active !== false && (!excludeId || a.id !== excludeId))
   return [...pool]
     .sort((a, b) => accountPriority(a) - accountPriority(b))
     .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null })

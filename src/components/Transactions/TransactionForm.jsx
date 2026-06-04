@@ -70,7 +70,8 @@ function buildCatOpts(categories, type) {
 }
 
 function buildAccOpts(accounts, _accountGroups, excludeId) {
-  const pool = excludeId ? accounts.filter(a => a.id !== excludeId) : accounts
+  // Contas inativas não aparecem nos selects de formulário.
+  const pool = accounts.filter(a => a.active !== false && (!excludeId || a.id !== excludeId))
   return [...pool]
     .sort((a, b) => accountPriority(a) - accountPriority(b))
     .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null }))
@@ -88,7 +89,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
 
   const checkingAccounts = useMemo(
-    () => accounts.filter(a => a.type === 'checking' || a.contaCorrentePrincipal),
+    () => accounts.filter(a => (a.type === 'checking' || a.contaCorrentePrincipal) && a.active !== false),
     [accounts]
   )
 
@@ -135,7 +136,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const isCredit = selectedAccount?.type === 'credit'
   const showGerencial = isCredit && form.type === 'expense'
 
-  const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
+  const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva && a.active !== false), [accounts])
   const matchingSpecificReserva = useMemo(
     () => form.type === 'expense' && form.categoryId
       ? reservaAccounts.find(a => a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId)

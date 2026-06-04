@@ -150,7 +150,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
         <label className="label">Conta Vinculada</label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+          {accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
       <div>

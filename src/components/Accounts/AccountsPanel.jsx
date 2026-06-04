@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, ArrowUp, ArrowDown, Settings, Building2,
-  ChevronDown, ChevronRight, RefreshCw, EyeOff,
+  ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -208,11 +208,13 @@ function GroupManager({ groups }) {
 const rb = v => Math.round(v * 100) / 100
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, transactions, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
+  const isInactive = account.active === false
+  const [confirmInactivate, setConfirmInactivate] = useState(false)
 
   const { projetado, finalBal } = useMemo(() => {
     if (['credit', 'asset', 'liability'].includes(account.type)) return { projetado: null, finalBal: null }
@@ -256,8 +258,9 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   }, [account.id, account.type, account.balance, schedules, transactions, getNextOccurrences, getFinancialPeriod])
 
   return (
+    <>
     <div
-      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer`}
+      className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
       draggable
       onDragStart={e => {
         e.dataTransfer.effectAllowed = 'move'
@@ -285,14 +288,28 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             {account.contaCorrentePrincipal && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-emerald-200">CC</span>
             )}
+            {isInactive && (
+              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-gray-500/40 text-gray-200">Inativa</span>
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-1 shrink-0 ml-2">
           <div className="flex gap-1">
-            <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar conta">
               <Edit2 size={11} />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isInactive) updateAccount(account.id, { active: true })
+                else setConfirmInactivate(true)
+              }}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+              title={isInactive ? 'Reativar conta' : 'Inativar conta'}
+            >
+              {isInactive ? <EyeOff size={11} /> : <Eye size={11} />}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Excluir conta">
               <Trash2 size={11} />
             </button>
           </div>
@@ -372,6 +389,16 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         {account.isMain ? 'Conta principal' : 'Definir como principal'}
       </button>
     </div>
+
+    <ConfirmDialog
+      open={confirmInactivate}
+      onClose={() => setConfirmInactivate(false)}
+      onConfirm={() => { updateAccount(account.id, { active: false }); setConfirmInactivate(false) }}
+      title="Inativar Conta"
+      message="Deseja inativar esta conta? Ela não aparecerá nos formulários de lançamento."
+      confirmLabel="Inativar"
+    />
+    </>
   )
 }
 

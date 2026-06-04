@@ -117,7 +117,7 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
   // Credit card alerts
   const creditAlerts = useMemo(() => {
     const today = new Date()
-    return accounts.filter(a => a.type === 'credit').filter(a => {
+    return accounts.filter(a => a.type === 'credit' && a.active !== false).filter(a => {
       let due = new Date(today.getFullYear(), today.getMonth(), a.dueDay || 10)
       if (due < today) due = new Date(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
       return differenceInDays(due, today) <= 5

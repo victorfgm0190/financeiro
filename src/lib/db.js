@@ -94,6 +94,7 @@ export const accountToRow = (a) => ({
   reserva_category_id: a.reservaCategoryId || null,
   conta_aplicacao: !!a.contaAplicacao,
   projected_balance: a.projectedBalance != null ? Math.round(Number(a.projectedBalance) * 100) / 100 : null,
+  active: a.active !== false,
 })
 
 export const rowToAccount = (r) => ({
@@ -126,6 +127,7 @@ export const rowToAccount = (r) => ({
   reservaCategoryId: r.reserva_category_id || null,
   contaAplicacao: !!r.conta_aplicacao,
   projectedBalance: r.projected_balance != null ? Math.round(Number(r.projected_balance) * 100) / 100 : null,
+  active: r.active !== false,
 })
 
 export const txToRow = (tx) => ({

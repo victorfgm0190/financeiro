@@ -77,7 +77,7 @@ export default function CreditCardPanel() {
     addTransaction, deleteTransaction, setReconciled,
   } = useApp()
 
-  const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit'), [accounts])
+  const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
   const bankAccounts = useMemo(() => accounts.filter(a => a.type !== 'credit'), [accounts])
 
   // ── State ────────────────────────────────────────────────────────────────

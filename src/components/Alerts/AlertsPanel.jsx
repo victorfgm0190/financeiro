@@ -8,7 +8,7 @@ function getDueAlerts(accounts) {
   const today = new Date()
   const alerts = []
   accounts
-    .filter(a => a.type === 'credit')
+    .filter(a => a.type === 'credit' && a.active !== false)
     .forEach(account => {
       const dueDay = account.dueDay || 10
       let dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay)
@@ -189,7 +189,7 @@ export default function AlertsPanel() {
       <div className="card">
         <h3 className="text-sm font-semibold text-gray-300 mb-3">Calendário de Vencimentos — Cartões</h3>
         <div className="space-y-2">
-          {accounts.filter(a => a.type === 'credit').map(acc => {
+          {accounts.filter(a => a.type === 'credit' && a.active !== false).map(acc => {
             const today = new Date()
             let dueDate = new Date(today.getFullYear(), today.getMonth(), acc.dueDay || 10)
             if (dueDate < today) dueDate = new Date(today.getFullYear(), today.getMonth() + 1, acc.dueDay || 10)
@@ -210,7 +210,7 @@ export default function AlertsPanel() {
               </div>
             )
           })}
-          {accounts.filter(a => a.type === 'credit').length === 0 && (
+          {accounts.filter(a => a.type === 'credit' && a.active !== false).length === 0 && (
             <p className="text-xs text-gray-500 text-center py-4">Nenhum cartão de crédito cadastrado</p>
           )}
         </div>
