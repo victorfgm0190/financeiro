@@ -35,6 +35,20 @@ function GerencialSelect({ value, onChange, grupos }) {
 
 const GERENCIAL_CONTA_KEY = 'lastGerencialAccountId'
 
+// Opções do select "Fatura de referência": mês anterior, mês atual e próximos 3
+// meses (5 no total), no formato MM/AAAA. Valor armazenado em 'YYYY-MM'.
+function buildFaturaRefOptions() {
+  const now = new Date()
+  const opts = []
+  for (let off = -1; off <= 3; off++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + off, 1)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    opts.push({ value: `${yyyy}-${mm}`, label: `${mm}/${yyyy}` })
+  }
+  return opts
+}
+
 function buildCatOpts(categories, type) {
   return categories
     .filter(c => !type || c.type === type || c.type === 'both')
@@ -84,6 +98,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     costCenter: initial?.costCenter || '',
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
+    faturaMonthYear: initial?.faturaMonthYear || '',
     useReserva: false,
     reservaAccountId: '',
     reservaExpenseCategoryId: '',
@@ -134,6 +149,18 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const categoryOpts = useMemo(() => buildCatOpts(categories, form.type === 'transfer' ? null : form.type), [categories, form.type])
   const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
 
+  // Fatura de referência: 5 meses padrão + o valor atual (ex.: fatura antiga em edição)
+  // caso não esteja no intervalo, para não perdê-lo no select.
+  const faturaRefOptions = useMemo(() => {
+    const opts = buildFaturaRefOptions()
+    const cur = form.faturaMonthYear
+    if (cur && !opts.some(o => o.value === cur)) {
+      const [y, m] = cur.split('-')
+      opts.unshift({ value: cur, label: `${m}/${y}` })
+    }
+    return opts
+  }, [form.faturaMonthYear])
+
   const sortedPayees = useMemo(() => {
     const counts = {}
     for (const tx of transactions) {
@@ -182,6 +209,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       amount: installmentAmount,
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
+      faturaMonthYear: (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear : null,
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
@@ -740,6 +768,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {isCredit && form.type === 'expense' && (
+        <div>
+          <label className="label">Fatura de referência</label>
+          <select
+            className="input"
+            value={form.faturaMonthYear}
+            onChange={e => set('faturaMonthYear', e.target.value)}
+          >
+            <option value="">(automático)</option>
+            {faturaRefOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+            Opcional — em branco, a fatura é calculada automaticamente pelo dia de
+            fechamento do cartão.
+          </p>
         </div>
       )}
 
