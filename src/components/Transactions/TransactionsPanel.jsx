@@ -97,7 +97,7 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { transactions, categories, accounts, deleteTransaction, reverseTransaction, setReconciled } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, reverseTransaction, setReconciled } = useApp()
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [editTx, setEditTx] = useState(null)
@@ -450,7 +450,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
 // ─── Root panel ─────────────────────────────────────────────────────────────
 
 export default function TransactionsPanel() {
-  const { accounts: allAccounts, profileAccounts, accountGroups } = useApp()
+  const { profileAccounts, accountGroups } = useApp()
   const accounts = profileAccounts
 
   // view: null | { type: 'account', account } | { type: 'fatura', card, billKey }
@@ -471,7 +471,7 @@ export default function TransactionsPanel() {
     [accounts]
   )
 
-  const { transactions } = useApp()
+  const { profileTransactions: transactions } = useApp()
 
   const cardFaturas = useMemo(() => {
     const result = {}

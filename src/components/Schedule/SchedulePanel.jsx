@@ -1068,6 +1068,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, executarProvisoesGerenciais,
+    activeProfileId,
   } = useApp()
 
   const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
@@ -1101,8 +1102,11 @@ export default function SchedulePanel() {
   const rawPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
   const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => Number(s.amount) !== 0), [rawPending, showZeroed])
 
-  const invoicePayables   = (payables || []).filter(p => p.origin === 'invoice')
-  const gerencialPayables = (payables || []).filter(p => p.origin === 'gerencial')
+  // Com perfil ativo, contas a pagar só dos cartões do perfil (accounts já filtrado).
+  // Em "Tudo" (activeProfileId nulo) não filtra, preservando o comportamento atual.
+  const inProfile = (p) => !activeProfileId || accounts.some(a => a.id === p.cartaoId)
+  const invoicePayables   = (payables || []).filter(p => p.origin === 'invoice' && inProfile(p))
+  const gerencialPayables = (payables || []).filter(p => p.origin === 'gerencial' && inProfile(p))
   const displayInvoice    = showZeroed ? invoicePayables : invoicePayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
   const displayGerencial  = showZeroed ? gerencialPayables : gerencialPayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
   const pendingInvoice    = displayInvoice.filter(p => p.status === 'pending').length
