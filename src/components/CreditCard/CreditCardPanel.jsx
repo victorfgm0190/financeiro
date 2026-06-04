@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
-  ChevronLeft, ChevronRight, Plus, Edit2, Trash2,
+  ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
+import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
@@ -73,7 +74,7 @@ export default function CreditCardPanel() {
     profileAccounts: accounts,
     profileTransactions: transactions,
     categories, gerencialGroups,
-    addTransaction, deleteTransaction,
+    addTransaction, deleteTransaction, setReconciled,
   } = useApp()
 
   const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit'), [accounts])
@@ -130,6 +131,13 @@ export default function CreditCardPanel() {
   const displayBillTxs = useMemo(
     () => hasLancFiltros(filtros) ? billTxs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : billTxs,
     [billTxs, filtros, accounts]
+  )
+
+  // Reconciliação — lançamentos NÃO reconciliados da fatura em exibição.
+  const [showReconciliar, setShowReconciliar] = useState(false)
+  const billPending = useMemo(
+    () => billTxs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
+    [billTxs]
   )
 
   // ── Pay invoice ──────────────────────────────────────────────────────────
@@ -290,15 +298,26 @@ export default function CreditCardPanel() {
 
       {/* ── Tabela de lançamentos da fatura ── */}
       <div className="card p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-300">{getBillLabel(billKey)}</h3>
-          {hasGer && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold">G</span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-xs font-bold">2+</span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {hasGer && (
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold">G</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-xs font-bold">2+</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span>
+              </div>
+            )}
+            {billTxs.length > 0 && (
+              <button
+                onClick={() => setShowReconciliar(true)}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
+                title="Reconciliar transações da fatura"
+              >
+                <CheckSquare size={12} /> Reconciliar
+              </button>
+            )}
+          </div>
         </div>
 
         {billTxs.length > 0 && (
@@ -325,12 +344,13 @@ export default function CreditCardPanel() {
                     {hasGer && <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Ger.</th>}
                     <th className="text-right px-4 py-3 text-xs text-gray-400 font-medium">Valor</th>
                     <th className="px-4 py-3 w-16" />
+                    <th className="px-2 py-3 text-center text-xs text-gray-400 font-medium w-10" title="Reconciliado">R</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayBillTxs.length === 0 && (
                     <tr>
-                      <td colSpan={hasGer ? 6 : 5} className="text-center py-8 text-gray-500 text-xs">
+                      <td colSpan={hasGer ? 7 : 6} className="text-center py-8 text-gray-500 text-xs">
                         Nenhum lançamento corresponde aos filtros
                       </td>
                     </tr>
@@ -338,7 +358,7 @@ export default function CreditCardPanel() {
                   {displayBillTxs.map(tx => {
                     const cat = categories.find(c => c.id === tx.categoryId)
                     return (
-                      <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                      <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-70' : ''}`}>
                         <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                         <td className="px-4 py-3">
                           <p className="text-gray-200 text-sm">{tx.description}</p>
@@ -379,6 +399,18 @@ export default function CreditCardPanel() {
                             </button>
                           </div>
                         </td>
+                        <td className="px-2 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setReconciled([tx.id], !tx.reconciled)}
+                            title={tx.reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
+                            className="p-1 rounded hover:bg-gray-700/50 transition-colors"
+                          >
+                            {tx.reconciled
+                              ? <CheckCircle2 size={15} className="text-emerald-500" />
+                              : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -394,6 +426,14 @@ export default function CreditCardPanel() {
       </div>
 
       {/* ── Modais ── */}
+
+      {showReconciliar && (
+        <ReconciliarModal
+          items={billPending}
+          onApply={setReconciled}
+          onClose={() => setShowReconciliar(false)}
+        />
+      )}
 
       <Modal open={showNewTx} onClose={() => setShowNewTx(false)} title="Novo Lançamento" size="lg">
         <TransactionForm

@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2,
+  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, CheckCircle2, Circle, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
+import ReconciliarModal from '../shared/ReconciliarModal'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -146,7 +147,23 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, todayStr }) {
+// Ícone clicável de reconciliação para a coluna "R".
+function ReconcileBtn({ reconciled, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
+      className="p-1 rounded hover:bg-gray-700/50 transition-colors"
+    >
+      {reconciled
+        ? <CheckCircle2 size={15} className="text-emerald-500" />
+        : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
+    </button>
+  )
+}
+
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -175,7 +192,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
 
   return (
     <tr
-      className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group"
+      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? 'opacity-70' : ''}`}
       onClick={() => onEdit && onEdit(tx)}
     >
       <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
@@ -247,11 +264,17 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           )}
         </div>
       </td>
+      <td className="px-1 py-2.5 text-center">
+        <ReconcileBtn
+          reconciled={!!tx.reconciled}
+          onClick={(e) => { e.stopPropagation(); onToggleReconcile([tx.id], !tx.reconciled) }}
+        />
+      </td>
     </tr>
   )
 }
 
-function NettedRow({ row, accountId, accounts, balance }) {
+function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
   const [open, setOpen] = useState(false)
   const { netFlow, otherAccountId, txs } = row
   const isIn = netFlow > 0
@@ -259,11 +282,12 @@ function NettedRow({ row, accountId, accounts, balance }) {
   const otherName = otherAcc ? (otherAcc.apelido || otherAcc.name) : '?'
   const thisAcc = accounts.find(a => a.id === accountId)
   const thisName = thisAcc ? (thisAcc.apelido || thisAcc.name) : '?'
+  const allReconciled = txs.every(t => t.reconciled)
 
   return (
     <>
       <tr
-        className="border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5"
+        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? 'opacity-70' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
         <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
@@ -294,6 +318,12 @@ function NettedRow({ row, accountId, accounts, balance }) {
         <td className="px-3 py-2.5 text-center">
           {open ? <ChevronUp size={12} className="text-indigo-400" /> : <ChevronDown size={12} className="text-indigo-400" />}
         </td>
+        <td className="px-1 py-2.5 text-center">
+          <ReconcileBtn
+            reconciled={allReconciled}
+            onClick={(e) => { e.stopPropagation(); onToggleReconcile(txs.map(t => t.id), !allReconciled) }}
+          />
+        </td>
       </tr>
       {open && txs.map(tx => {
         const delta = txDelta(tx, accountId)
@@ -319,7 +349,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
             <td className="px-3 py-1.5 text-right text-xs text-orange-600/70 whitespace-nowrap">
               {!isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
-            <td colSpan={2} />
+            <td colSpan={3} />
           </tr>
         )
       })}
@@ -328,7 +358,7 @@ function NettedRow({ row, accountId, accounts, balance }) {
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, reverseTransaction, deleteTransaction, getFinancialPeriod } = useApp()
+  const { transactions, accounts, reverseTransaction, deleteTransaction, getFinancialPeriod, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -421,6 +451,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     })
   }, [rows, startBalance, account.id])
 
+  // Reconciliação — lançamentos NÃO reconciliados do período (mês) em exibição.
+  const [showReconciliar, setShowReconciliar] = useState(false)
+  const periodPending = useMemo(
+    () => filteredTxs
+      .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id) && !tx.reconciled)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [filteredTxs, account.id]
+  )
+
   // Filtros em tempo real — afetam apenas as linhas exibidas; os totais do header
   // continuam calculados sobre o período completo (rowsWithBalance).
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
@@ -458,6 +497,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       <col style={{ width: '88px' }} />
       <col style={{ width: '92px' }} />
       <col style={{ width: '100px' }} />
+      <col style={{ width: '40px' }} />
     </colgroup>
   )
 
@@ -483,6 +523,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
             </h2>
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowReconciliar(true)}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                title="Reconciliar transações do período"
+              >
+                <CheckSquare size={12} /> Reconciliar
+              </button>
               {onNewTx && (
                 <button onClick={onNewTx} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
@@ -549,6 +596,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </th>
                 <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
                 <th className="w-8" />
+                <th className="text-center px-1 py-2.5 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
               </tr>
             </thead>
           </table>
@@ -573,18 +621,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 <td className={`px-3 py-2 text-right text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
                   {fmt(startBalance)}
                 </td>
-                <td />
+                <td colSpan={2} />
               </tr>
               {displayRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center py-10 text-gray-500 text-xs">
+                  <td colSpan={10} className="text-center py-10 text-gray-500 text-xs">
                     {hasLancFiltros(filtros) ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
                   </td>
                 </tr>
               )}
               {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
-                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
+                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} />
                 ) : (
                   <SingleRow
                     key={i}
@@ -596,6 +644,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     onEdit={onEdit}
                     onDuplicate={onEdit ? handleDuplicate : null}
                     onDelete={setConfirmDelete}
+                    onToggleReconcile={setReconciled}
                     todayStr={todayStr}
                   />
                 )
@@ -630,6 +679,14 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       />
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {showReconciliar && (
+        <ReconciliarModal
+          items={periodPending}
+          onApply={setReconciled}
+          onClose={() => setShowReconciliar(false)}
+        />
+      )}
     </div>
   )
 }

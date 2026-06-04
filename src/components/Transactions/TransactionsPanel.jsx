@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, ArrowLeft, CreditCard, Wallet,
-  ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2,
+  ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2, CheckCircle2, Circle, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
@@ -9,6 +9,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
+import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -96,8 +97,9 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { transactions, categories, accounts, deleteTransaction, reverseTransaction } = useApp()
+  const { transactions, categories, accounts, deleteTransaction, reverseTransaction, setReconciled } = useApp()
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
+  const [showReconciliar, setShowReconciliar] = useState(false)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmEstorno, setConfirmEstorno] = useState(null)
@@ -129,6 +131,10 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
     () => hasLancFiltros(filtros) ? txs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : txs,
     [txs, filtros, accounts]
   )
+  const billPending = useMemo(
+    () => txs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
+    [txs]
+  )
 
   return (
     <div className="space-y-4">
@@ -146,6 +152,15 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         <span className="text-sm text-gray-200">Fatura {label}</span>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-base font-bold text-orange-600">{fmt(total)}</span>
+          {txs.length > 0 && (
+            <button
+              onClick={() => setShowReconciliar(true)}
+              className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+              title="Reconciliar transações da fatura"
+            >
+              <CheckSquare size={12} /> Reconciliar
+            </button>
+          )}
           <button
             onClick={onNewTx}
             className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5"
@@ -188,12 +203,13 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                   <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                   <th className="text-right px-4 py-3 text-xs text-gray-400 font-medium">Valor</th>
                   <th className="px-4 py-3 w-16"></th>
+                  <th className="px-2 py-3 text-center text-xs text-gray-400 font-medium w-10" title="Reconciliado">R</th>
                 </tr>
               </thead>
               <tbody>
                 {displayTxs.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-500 text-xs">
+                    <td colSpan={6} className="text-center py-8 text-gray-500 text-xs">
                       Nenhum lançamento corresponde aos filtros
                     </td>
                   </tr>
@@ -201,7 +217,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 {displayTxs.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId)
                   return (
-                    <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                    <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-70' : ''}`}>
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
                         <p className="text-gray-200 text-sm">{tx.description}</p>
@@ -236,6 +252,18 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                           </button>
                         </div>
                       </td>
+                      <td className="px-2 py-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setReconciled([tx.id], !tx.reconciled)}
+                          title={tx.reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
+                          className="p-1 rounded hover:bg-gray-700/50 transition-colors"
+                        >
+                          {tx.reconciled
+                            ? <CheckCircle2 size={15} className="text-emerald-500" />
+                            : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -244,13 +272,21 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 <tr className="border-t-2 border-gray-700 bg-gray-900/30">
                   <td colSpan={3} className="px-4 py-3 text-sm font-bold text-gray-300">Total da Fatura</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-orange-600">{fmt(total)}</td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
       </div>
+
+      {showReconciliar && (
+        <ReconciliarModal
+          items={billPending}
+          onApply={setReconciled}
+          onClose={() => setShowReconciliar(false)}
+        />
+      )}
 
       <Modal open={showEdit} onClose={() => { setShowEdit(false); setEditTx(null) }} title="Editar Lançamento">
         <TransactionForm initial={editTx} onClose={() => { setShowEdit(false); setEditTx(null) }} />

@@ -915,6 +915,12 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, transactions: d.transactions.map(t => t.id === id ? { ...t, ...changes } : t) }))
   }, [update])
 
+  // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
+  const setReconciled = useCallback((ids, value) => {
+    const idSet = new Set(Array.isArray(ids) ? ids : [ids])
+    update(d => ({ ...d, transactions: d.transactions.map(t => idSet.has(t.id) ? { ...t, reconciled: !!value } : t) }))
+  }, [update])
+
   const deleteTransaction = useCallback((id) => {
     update(d => {
       const tx = d.transactions.find(t => t.id === id)
@@ -2974,7 +2980,7 @@ export function AppProvider({ children }) {
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
-      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly,
+      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled,
       addCategory, updateCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,
