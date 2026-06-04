@@ -12,6 +12,41 @@ export function today() {
   return new Date().toISOString().split('T')[0]
 }
 
+// ─── Filtros de lançamentos (barra de filtros em tempo real) ────────────────
+export const EMPTY_LANC_FILTROS = { data: '', historico: '', favorecido: '', de: '', para: '' }
+
+export function hasLancFiltros(f) {
+  return !!(f && (f.data || f.historico || f.favorecido || f.de || f.para))
+}
+
+// Nomes "Conta De" / "Conta Para" de um lançamento (absoluto, não relativo à
+// conta visualizada) — mesma convenção do extrato: transferência usa origem→destino;
+// receita usa favorecido→conta; despesa usa conta→favorecido.
+export function txDeParaNames(tx, accounts) {
+  const name = id => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '' }
+  const isTransfer = tx.type === 'transfer' || tx.type === 'credit_payment'
+  if (isTransfer) return { de: name(tx.accountId), para: name(tx.toAccountId) }
+  if (tx.type === 'income') return { de: tx.payee || '', para: name(tx.accountId) }
+  return { de: name(tx.accountId), para: tx.payee || '' } // expense
+}
+
+// True se o lançamento satisfaz TODOS os filtros preenchidos (AND). Campo vazio
+// não filtra. Data casa parcialmente contra DD/MM/AAAA; demais são substring
+// case-insensitive.
+export function matchLancFiltros(tx, f, accounts) {
+  if (!hasLancFiltros(f)) return true
+  const norm = s => (s ?? '').toString().toLowerCase()
+  if (f.data && !fmtDate(tx.date).includes(f.data.trim())) return false
+  if (f.historico && !norm(tx.description).includes(norm(f.historico))) return false
+  if (f.favorecido && !norm(tx.payee).includes(norm(f.favorecido))) return false
+  if (f.de || f.para) {
+    const { de, para } = txDeParaNames(tx, accounts)
+    if (f.de && !norm(de).includes(norm(f.de))) return false
+    if (f.para && !norm(para).includes(norm(f.para))) return false
+  }
+  return true
+}
+
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }

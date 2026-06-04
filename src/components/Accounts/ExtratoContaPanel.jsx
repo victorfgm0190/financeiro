@@ -4,9 +4,10 @@ import {
   ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import LancamentoFiltros from '../shared/LancamentoFiltros'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -420,6 +421,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     })
   }, [rows, startBalance, account.id])
 
+  // Filtros em tempo real — afetam apenas as linhas exibidas; os totais do header
+  // continuam calculados sobre o período completo (rowsWithBalance).
+  const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
+  const displayRows = useMemo(() => {
+    if (!hasLancFiltros(filtros)) return rowsWithBalance
+    return rowsWithBalance.filter(row =>
+      row.kind === 'netted'
+        ? row.txs.some(tx => matchLancFiltros(tx, filtros, accounts))
+        : matchLancFiltros(row.tx, filtros, accounts)
+    )
+  }, [rowsWithBalance, filtros, accounts])
+
   const totals = useMemo(() => {
     let entrada = 0, saida = 0
     rowsWithBalance.forEach(row => {
@@ -540,6 +553,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </thead>
           </table>
         </div>
+
+        {/* Filtros em tempo real (abaixo do header da tabela) */}
+        <div className="border-x border-gray-800 bg-gray-900">
+          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+        </div>
       </div>
 
       {/* ── Table body ── */}
@@ -557,14 +575,14 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </td>
                 <td />
               </tr>
-              {rowsWithBalance.length === 0 && (
+              {displayRows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="text-center py-10 text-gray-500 text-xs">
-                    Nenhum lançamento no período
+                    {hasLancFiltros(filtros) ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
                   </td>
                 </tr>
               )}
-              {rowsWithBalance.map((row, i) =>
+              {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
                   <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} />
                 ) : (

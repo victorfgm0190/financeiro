@@ -4,9 +4,10 @@ import {
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, today } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import LancamentoFiltros from '../shared/LancamentoFiltros'
 import TransactionForm from '../Transactions/TransactionForm'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
@@ -122,6 +123,14 @@ export default function CreditCardPanel() {
 
   const billTotal = billTxs.reduce((s, t) => s + t.amount, 0)
   const hasGer = billTxs.some(tx => tx.grupoGerencial)
+
+  // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
+  // calculado sobre a fatura completa (billTotal).
+  const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
+  const displayBillTxs = useMemo(
+    () => hasLancFiltros(filtros) ? billTxs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : billTxs,
+    [billTxs, filtros, accounts]
+  )
 
   // ── Pay invoice ──────────────────────────────────────────────────────────
   const handlePay = () => {
@@ -292,6 +301,10 @@ export default function CreditCardPanel() {
           )}
         </div>
 
+        {billTxs.length > 0 && (
+          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+        )}
+
         {billTxs.length === 0 ? (
           <div className="text-center py-12">
             <Calendar size={28} className="text-gray-700 mx-auto mb-2" />
@@ -315,7 +328,14 @@ export default function CreditCardPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {billTxs.map(tx => {
+                  {displayBillTxs.length === 0 && (
+                    <tr>
+                      <td colSpan={hasGer ? 6 : 5} className="text-center py-8 text-gray-500 text-xs">
+                        Nenhum lançamento corresponde aos filtros
+                      </td>
+                    </tr>
+                  )}
+                  {displayBillTxs.map(tx => {
                     const cat = categories.find(c => c.id === tx.categoryId)
                     return (
                       <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">

@@ -4,10 +4,11 @@ import {
   ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import LancamentoFiltros from '../shared/LancamentoFiltros'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -95,7 +96,8 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { transactions, categories, deleteTransaction, reverseTransaction } = useApp()
+  const { transactions, categories, accounts, deleteTransaction, reverseTransaction } = useApp()
+  const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmEstorno, setConfirmEstorno] = useState(null)
@@ -121,6 +123,12 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
     [transactions, card, billKey]
   )
   const total = txs.reduce((s, t) => s + t.amount, 0)
+
+  // Filtros em tempo real — afetam só a exibição; o total da fatura segue completo.
+  const displayTxs = useMemo(
+    () => hasLancFiltros(filtros) ? txs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : txs,
+    [txs, filtros, accounts]
+  )
 
   return (
     <div className="space-y-4">
@@ -161,6 +169,9 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 
       {/* Table */}
       <div className="card p-0 overflow-hidden">
+        {txs.length > 0 && (
+          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+        )}
         {txs.length === 0 ? (
           <div className="text-center py-10">
             <ArrowUpCircle size={28} className="text-gray-700 mx-auto mb-2" />
@@ -180,7 +191,14 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 </tr>
               </thead>
               <tbody>
-                {txs.map(tx => {
+                {displayTxs.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500 text-xs">
+                      Nenhum lançamento corresponde aos filtros
+                    </td>
+                  </tr>
+                )}
+                {displayTxs.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId)
                   return (
                     <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
