@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
-  ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare,
+  ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import Toast from '../shared/Toast'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from '../Transactions/TransactionForm'
@@ -74,8 +75,9 @@ export default function CreditCardPanel() {
     profileAccounts: accounts,
     profileTransactions: transactions,
     categories, gerencialGroups,
-    addTransaction, deleteTransaction, setReconciled,
+    addTransaction, deleteTransaction, setReconciled, recalcContasPagarFatura,
   } = useApp()
+  const [toast, setToast] = useState(null)
 
   const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
   const bankAccounts = useMemo(() => accounts.filter(a => a.type !== 'credit'), [accounts])
@@ -293,6 +295,17 @@ export default function CreditCardPanel() {
           >
             <DollarSign size={14} /> Pagar Fatura
           </button>
+          <button
+            className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
+            onClick={() => {
+              if (!selectedCard || !billKey) return
+              recalcContasPagarFatura(selectedCard.id, billKey)
+              setToast(`Fatura atualizada: ${fmt(billTotal)}`)
+            }}
+            title="Recalcula o total da fatura e atualiza a conta a pagar"
+          >
+            <RotateCcw size={14} /> Atualizar
+          </button>
         </div>
       </div>
 
@@ -489,6 +502,8 @@ export default function CreditCardPanel() {
           </div>
         </div>
       </Modal>
+
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

@@ -428,6 +428,16 @@ function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
   }
 }
 
+// Fatura (YYYY-MM) de uma despesa de cartão: usa faturaMonthYear (override) quando
+// presente; senão calcula pelo dia de fechamento do cartão.
+function faturaMesAnoOf(card, date, faturaMonthYear) {
+  if (faturaMonthYear) return faturaMonthYear
+  if (!date) return null
+  const ref = computeFaturaRef(new Date(date + 'T00:00:00'), card?.closingDay || 14) // MM/YYYY
+  const [mm, yyyy] = ref.split('/')
+  return `${yyyy}-${mm}`
+}
+
 export function AppProvider({ children }) {
   const [data, setData] = useState(defaultData)
   const [initialized, setInitialized] = useState(false)
@@ -438,6 +448,10 @@ export function AppProvider({ children }) {
   const retryTimerRef = useRef(null)
   const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
+  // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
+  // (definido mais abaixo); usamos ref p/ contornar a ordem de declaração.
+  const recalcFaturaRef = useRef(null)
+  const dataRef = useRef(data)
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
@@ -722,8 +736,11 @@ export function AppProvider({ children }) {
 
   // ── Transactions ────────────────────────────────────────────────────────────
   const addTransaction = useCallback((tx) => {
+    // _fromImport: a importação gera as contas a pagar uma vez no fim (com importId);
+    // não disparar o recálculo por lançamento aqui para não quebrar esse vínculo.
+    const { _fromImport, ...txClean } = tx
     const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
-    const newTx = { ...tx, id, amount: Number(tx.amount), createdAt: new Date().toISOString() }
+    const newTx = { ...txClean, id, amount: Number(txClean.amount), createdAt: new Date().toISOString() }
     update(d => {
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
@@ -771,6 +788,11 @@ export function AppProvider({ children }) {
         transactions: [...d.transactions, newTx, ...extraTxs, ...(investIncome ? [investIncome] : [])],
       }
     })
+    // TAREFA 1: despesa de cartão (não vinda de importação) gera/atualiza a conta a
+    // pagar da fatura — mesmo comportamento da importação (por grupo gerencial).
+    if (!_fromImport && newTx.type === 'expense' && newTx.accountType === 'credit') {
+      recalcFaturaRef.current?.(newTx.accountId, newTx.date, newTx.faturaMonthYear)
+    }
     return id
   }, [update])
 
@@ -912,7 +934,27 @@ export function AppProvider({ children }) {
   }, [update])
 
   const updateTransaction = useCallback((id, changes) => {
+    // TAREFA 2: se uma despesa de cartão muda de valor ou de fatura, recalcula a(s)
+    // conta(s) a pagar afetada(s). Lê o tx antigo do dataRef (síncrono) antes do update.
+    const old = dataRef.current.transactions.find(t => t.id === id)
+    let recalcArgs = null
+    if (old && old.type === 'expense' && old.accountType === 'credit') {
+      const updated = { ...old, ...changes }
+      const amountChanged = 'amount' in changes && Number(changes.amount) !== old.amount
+      const faturaChanged =
+        ('faturaMonthYear' in changes && (changes.faturaMonthYear || null) !== (old.faturaMonthYear || null)) ||
+        ('date' in changes && changes.date !== old.date)
+      if (amountChanged || faturaChanged) {
+        recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
+      }
+    }
     update(d => ({ ...d, transactions: d.transactions.map(t => t.id === id ? { ...t, ...changes } : t) }))
+    if (recalcArgs) {
+      recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
+      if (recalcArgs.faturaChanged) {
+        recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.old.date, recalcArgs.old.faturaMonthYear)
+      }
+    }
   }, [update])
 
   // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
@@ -1850,8 +1892,8 @@ export function AppProvider({ children }) {
       if (!card) return d
 
       const grpDId = d.gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
-      const existingKeys = new Set(
-        (d.payables || []).map(p => `${p.cartaoId}|${p.mesAno}|${p.grupoGerencialId}`)
+      const existingByKey = new Map(
+        (d.payables || []).map(p => [`${p.cartaoId}|${p.mesAno}|${p.grupoGerencialId}`, p])
       )
 
       const gerencialTxs = d.transactions.filter(tx =>
@@ -1875,34 +1917,73 @@ export function AppProvider({ children }) {
         groups[tx.grupoGerencial] = (groups[tx.grupoGerencial] || 0) + tx.amount
       }
 
+      // UPSERT: cria as faltantes e ATUALIZA o valor das pendentes existentes (recálculo).
+      // Pagas ficam intactas. Mantém/define importId p/ preservar o vínculo de estorno.
+      const updatesById = new Map()
       const newPayables = []
-      for (const [grupoId, amount] of Object.entries(groups)) {
+      for (const [grupoId, amountRaw] of Object.entries(groups)) {
+        const amount = Math.round(amountRaw * 100) / 100
         const key = `${cartaoId}|${mesAno}|${grupoId}`
-        if (existingKeys.has(key)) continue
-        const grupo = d.gerencialGroups.find(g => g.id === grupoId)
-        const cardName = card.apelido || card.name
-        const grupoAlias = grupo?.alias || grupoId
-        newPayables.push({
-          id: 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          cartaoId,
-          mesAno,
-          grupoGerencialId: grupoId,
-          origin: grupo?.number === 1 ? 'gerencial' : 'invoice',
-          description: `Fatura ${cardName} ${grupoAlias} · ${mesAno}`,
-          amount,
-          dueDate: dueDateStr,
-          status: 'pending',
-          paidAt: null,
-          billStart,
-          billEnd,
-          importId,   // vínculo direto com o lote de importação (estorno apaga por aqui)
-        })
+        const existing = existingByKey.get(key)
+        if (existing) {
+          if (existing.status !== 'paid') {
+            updatesById.set(existing.id, { amount, importId: importId || existing.importId })
+          }
+        } else {
+          const grupo = d.gerencialGroups.find(g => g.id === grupoId)
+          const cardName = card.apelido || card.name
+          const grupoAlias = grupo?.alias || grupoId
+          newPayables.push({
+            id: 'pay_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            cartaoId,
+            mesAno,
+            grupoGerencialId: grupoId,
+            origin: grupo?.number === 1 ? 'gerencial' : 'invoice',
+            description: `Fatura ${cardName} ${grupoAlias} · ${mesAno}`,
+            amount,
+            dueDate: dueDateStr,
+            status: 'pending',
+            paidAt: null,
+            billStart,
+            billEnd,
+            importId,   // vínculo direto com o lote de importação (estorno apaga por aqui)
+          })
+        }
       }
 
-      if (newPayables.length === 0) return d
-      return { ...d, payables: [...(d.payables || []), ...newPayables] }
+      if (updatesById.size === 0 && newPayables.length === 0) return d
+      let payables = (d.payables || []).map(p => updatesById.has(p.id) ? { ...p, ...updatesById.get(p.id) } : p)
+      if (newPayables.length) payables = [...payables, ...newPayables]
+      return { ...d, payables }
     })
   }, [update])
+
+  // Recalcula as contas a pagar de uma fatura (cartão + mês YYYY-MM): deriva a janela
+  // de datas pelo dia de fechamento e delega para gerarContasPagarFatura (upsert).
+  const recalcContasPagarFatura = useCallback((cartaoId, mesAno) => {
+    const card = dataRef.current.accounts.find(a => a.id === cartaoId)
+    if (!card || !mesAno) return
+    const F = card.closingDay || 14
+    const [y, m] = mesAno.split('-').map(Number)
+    const prev = new Date(y, m - 2, 1) // mês anterior (M-1)
+    // billStart = F+1 do mês anterior (comparação string tolera overflow de dia);
+    // billEnd = F do mês corrente, mas limitado ao último dia válido (ex.: fechamento
+    // 31 em fevereiro) pois gerarContasPagarFatura faz new Date(billEnd).
+    const lastDay = new Date(y, m, 0).getDate()
+    const billStart = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(F + 1).padStart(2, '0')}`
+    const billEnd = `${mesAno}-${String(Math.min(F, lastDay)).padStart(2, '0')}`
+    gerarContasPagarFatura(cartaoId, billStart, billEnd, mesAno)
+  }, [gerarContasPagarFatura])
+
+  // Mantém dataRef e o recalc-por-tx atualizados (lidos por addTransaction/
+  // updateTransaction em event handlers, após o commit).
+  useEffect(() => {
+    dataRef.current = data
+    recalcFaturaRef.current = (cartaoId, date, faturaMonthYear) => {
+      const card = dataRef.current.accounts.find(a => a.id === cartaoId)
+      recalcContasPagarFatura(cartaoId, faturaMesAnoOf(card, date, faturaMonthYear))
+    }
+  })
 
   // ── Recurring Schedule Match ──────────────────────────────────────────────────
 
@@ -2999,7 +3080,7 @@ export function AppProvider({ children }) {
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
-      addPayable, updatePayable, deletePayable, gerarContasPagarFatura,
+      addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,
       getFinancialPeriod,

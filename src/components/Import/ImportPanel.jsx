@@ -969,6 +969,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: row.grupoGerencial || defaultGrupoD,
         faturaMonthYear: row.faturaMonthYear || null,
+        _fromImport: true,
       })
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(saveDate + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
@@ -1001,6 +1002,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               categoryId: row.categoryId, payee: row.payee,
               grupoGerencial: row.grupoGerencial || defaultGrupoD,
               faturaMonthYear: futureFatura,
+              _fromImport: true,
             })
             if (fId) txIds.push(fId)
             // Parcela futura: cria apenas os agendamentos (resgate + pagamento) da própria fatura,
