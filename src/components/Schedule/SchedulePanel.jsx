@@ -348,7 +348,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={handleConfirm}>
-            <CheckCircle size={14} /> Confirmar
+            <CheckCircle size={14} /> Confirmar {TAB_LABELS[tab]}
           </button>
         </div>
       </div>
@@ -388,16 +388,16 @@ function EstornarModal({ schedule, nextDate, accounts, onClose, onConfirm }) {
             </div>
           </div>
           <p className="text-xs text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2">
-            Os dados não podem ser alterados. Confirme apenas se deseja estornar esta ocorrência.
+            Esta ação não pode ser desfeita. Deseja confirmar?
           </p>
         </div>
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
-          <button className="btn-secondary flex-1" onClick={onClose}>Não</button>
+          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg transition-colors"
             onClick={onConfirm}
           >
-            <RotateCcw size={14} /> Sim, estornar
+            <RotateCcw size={14} /> Confirmar
           </button>
         </div>
       </div>
@@ -436,16 +436,16 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
             </div>
           </div>
           <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">
-            Os dados não podem ser alterados. Confirme apenas se deseja excluir este agendamento.
+            Esta ação não pode ser desfeita. Deseja confirmar?
           </p>
         </div>
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
-          <button className="btn-secondary flex-1" onClick={onClose}>Não</button>
+          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
             onClick={onConfirm}
           >
-            <Trash2 size={14} /> Sim, excluir
+            <Trash2 size={14} /> Confirmar
           </button>
         </div>
       </div>
