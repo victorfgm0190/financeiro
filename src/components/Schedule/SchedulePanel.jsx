@@ -1062,7 +1062,8 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
 
 export default function SchedulePanel() {
   const {
-    profileSchedules: schedules, categories, profileAccounts: accounts,
+    profileSchedules: schedules, schedules: allSchedules,
+    categories, profileAccounts: accounts, accounts: allAccounts,
     payables, updatePayable, deletePayable,
     gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
@@ -1085,11 +1086,12 @@ export default function SchedulePanel() {
   const [fltFrom, setFltFrom] = useState('')
   const [fltTo, setFltTo] = useState('')
   const [fltDesc, setFltDesc] = useState('')
+  const [fltPayee, setFltPayee] = useState('')
   const [fltCat, setFltCat] = useState('')
   const [fltMin, setFltMin] = useState('')
   const [fltMax, setFltMax] = useState('')
-  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltCat || fltMin !== '' || fltMax !== ''
-  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltCat(''); setFltMin(''); setFltMax('') }
+  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== ''
+  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax('') }
 
   const raAccountIds = useMemo(() => {
     const ids = new Set()
@@ -1102,15 +1104,45 @@ export default function SchedulePanel() {
   const rawPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
   const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => Number(s.amount) !== 0), [rawPending, showZeroed])
 
-  // Com perfil ativo, contas a pagar só dos cartões do perfil (accounts já filtrado).
-  // Em "Tudo" (activeProfileId nulo) não filtra, preservando o comportamento atual.
-  const inProfile = (p) => !activeProfileId || accounts.some(a => a.id === p.cartaoId)
-  const invoicePayables   = (payables || []).filter(p => p.origin === 'invoice' && inProfile(p))
-  const gerencialPayables = (payables || []).filter(p => p.origin === 'gerencial' && inProfile(p))
+  // Pertence ao perfil ativo? Em "Tudo" (activeProfileId nulo) sempre true.
+  // Caso contrário, mostra se a conta pertence ao perfil OU não está vinculada a
+  // perfil nenhum (untagged) — só esconde o que é explicitamente de OUTRO perfil.
+  // Usa allAccounts (não o filtrado) para não excluir cartões indevidamente.
+  const accountInProfile = (accId) => {
+    if (!activeProfileId) return true
+    const acc = allAccounts.find(a => a.id === accId)
+    return !acc || !acc.profileId || acc.profileId === activeProfileId
+  }
+
+  // CORREÇÃO 1: faturas de TODOS os cartões (não só do primeiro). O filtro de
+  // perfil agora compara o profileId real do cartão, sem depender de profileAccounts.
+  const invoicePayables   = (payables || []).filter(p => p.origin === 'invoice' && accountInProfile(p.cartaoId))
   const displayInvoice    = showZeroed ? invoicePayables : invoicePayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
-  const displayGerencial  = showZeroed ? gerencialPayables : gerencialPayables.filter(p => Number(p.amount) !== 0 && p.status !== 'paid')
   const pendingInvoice    = displayInvoice.filter(p => p.status === 'pending').length
-  const pendingGerencial  = displayGerencial.filter(p => p.status === 'pending').length
+
+  // CORREÇÃO 3: contas de origem "gerenciais" = subcontas "Ger. ..." (têm grupoGerencial
+  // no próprio account) + contas de resgate dos grupos numerados (raAccountIds).
+  const gerencialOrigemIds = useMemo(() => {
+    const ids = new Set(raAccountIds)
+    allAccounts.forEach(a => { if (a.grupoGerencial) ids.add(a.id) })
+    return ids
+  }, [allAccounts, raAccountIds])
+
+  // Agendamentos de devolução/resgate: transfer de conta gerencial → conta principal.
+  // Usa allSchedules porque as subcontas "Ger." não carregam profileId; o perfil é
+  // respeitado filtrando pela conta de destino (principal).
+  const gerencialResgates = useMemo(
+    () => allSchedules.filter(s =>
+      s.transactionType === 'transfer' &&
+      gerencialOrigemIds.has(s.accountId) &&
+      !gerencialOrigemIds.has(s.toAccountId) &&
+      accountInProfile(s.toAccountId)
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allSchedules, gerencialOrigemIds, activeProfileId, allAccounts]
+  )
+  const displayGerencial = showZeroed ? gerencialResgates : gerencialResgates.filter(s => Number(s.amount) !== 0)
+  const pendingGerencial = displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   const filteredSchedules = useMemo(() => {
     const now = new Date()
@@ -1146,11 +1178,13 @@ export default function SchedulePanel() {
   // Filtros em tempo real (data / descrição / categoria / valor) sobre a lista já filtrada por período
   const searchedSchedules = useMemo(() => {
     const desc = fltDesc.trim().toLowerCase()
+    const payee = fltPayee.trim().toLowerCase()
     const min = fltMin !== '' ? parseFloat(fltMin) : null
     const max = fltMax !== '' ? parseFloat(fltMax) : null
-    if (!desc && !fltCat && !fltFrom && !fltTo && min === null && max === null) return displaySchedules
+    if (!desc && !payee && !fltCat && !fltFrom && !fltTo && min === null && max === null) return displaySchedules
     return displaySchedules.filter(s => {
       if (desc && !(s.description || '').toLowerCase().includes(desc)) return false
+      if (payee && !(s.payee || '').toLowerCase().includes(payee)) return false
       if (fltCat && s.categoryId !== fltCat) return false
       const amt = Number(s.amount) || 0
       if (min !== null && amt < min) return false
@@ -1162,7 +1196,7 @@ export default function SchedulePanel() {
       }
       return true
     })
-  }, [displaySchedules, fltDesc, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
+  }, [displaySchedules, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
 
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
@@ -1172,7 +1206,7 @@ export default function SchedulePanel() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold text-gray-300">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingGerencial} faturas</p>
+          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice} faturas · {pendingGerencial} resgates</p>
         </div>
         <div className="flex items-center gap-2">
           {provisoesPendentes.length > 0 && (
@@ -1231,7 +1265,7 @@ export default function SchedulePanel() {
           </div>
 
           {/* Barra de filtros (tempo real) */}
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
             <div>
               <label className="label text-xs">Data de</label>
               <input type="date" className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
@@ -1243,6 +1277,10 @@ export default function SchedulePanel() {
             <div className="col-span-2 sm:col-span-1">
               <label className="label text-xs">Descrição</label>
               <input type="text" className="input py-1.5 text-xs" value={fltDesc} onChange={e => setFltDesc(e.target.value)} placeholder="Buscar..." />
+            </div>
+            <div>
+              <label className="label text-xs">Favorecido</label>
+              <input type="text" className="input py-1.5 text-xs" value={fltPayee} onChange={e => setFltPayee(e.target.value)} placeholder="Buscar..." />
             </div>
             <div>
               <label className="label text-xs">Categoria</label>
@@ -1292,26 +1330,35 @@ export default function SchedulePanel() {
             </div>
           ) : (
             displayInvoice.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
-              <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={accounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
+              <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
             ))
           )}
         </div>
       )}
 
       {activeTab === 'gerencial' && (
-        <div className="space-y-3">
-          {displayGerencial.length === 0 ? (
-            <div className="card text-center py-12">
-              <BarChart3 size={32} className="text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Nenhuma conta gerencial gerada</p>
-              <p className="text-gray-600 text-xs mt-1">Lançamentos no Grupo Gerencial (G) geram contas a pagar aqui</p>
-            </div>
-          ) : (
-            displayGerencial.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
-              <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={accounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
-            ))
-          )}
-        </div>
+        displayGerencial.length === 0 ? (
+          <div className="card text-center py-12">
+            <BarChart3 size={32} className="text-gray-700 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Nenhum resgate gerencial agendado</p>
+            <p className="text-gray-600 text-xs mt-1">Lançamentos no Grupo Gerencial (1) geram agendamentos de devolução das subcontas "Ger." para a conta principal</p>
+          </div>
+        ) : (
+          <SchedulesTable
+            schedules={displayGerencial}
+            categories={categories}
+            accounts={allAccounts}
+            gerencialGroups={gerencialGroups}
+            addTransaction={addTransaction}
+            markScheduleRegistered={markScheduleRegistered}
+            deleteSchedule={deleteSchedule}
+            registerScheduleOccurrence={registerScheduleOccurrence}
+            skipScheduleOccurrence={skipScheduleOccurrence}
+            getNextOccurrences={getNextOccurrences}
+            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
+            onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+          />
+        )
       )}
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditSchedule(null) }} title={editSchedule ? 'Editar Agendamento' : 'Novo Agendamento'} size="lg">
