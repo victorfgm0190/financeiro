@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowLeftRight, PiggyBank } from 'lucide-react'
+import { ArrowLeftRight, PiggyBank, Repeat } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -13,6 +13,20 @@ const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
   { value: 'expense', label: 'Despesa' },
   { value: 'transfer', label: 'Transferência' },
+]
+
+// As 10 frequências do sistema (mesmos values do ScheduleForm/agendamentos).
+const REPEAT_FREQUENCIES = [
+  { value: 'once', label: 'Uma vez' },
+  { value: 'daily', label: 'Diária' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'biweekly', label: 'Quinzenal' },
+  { value: 'monthly', label: 'Mensal' },
+  { value: 'bimonthly', label: 'Bimestral' },
+  { value: 'quarterly', label: 'Trimestral' },
+  { value: 'quadrimestral', label: 'Quadrimestral' },
+  { value: 'semiannual', label: 'Semestral' },
+  { value: 'annual', label: 'Anual' },
 ]
 
 function GerencialSelect({ value, onChange, grupos }) {
@@ -67,7 +81,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, propagarValorParcelas, reverseGerencialCascadeOnly,
     addTransaction, updateTransaction, addPayee, addCostCenter,
-    updateSchedule, deleteSchedule,
+    addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
   } = useApp()
 
@@ -99,6 +113,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     faturaMonthYear: initial?.faturaMonthYear || '',
+    repeat: false,
+    repeatFrequency: 'monthly',
+    repeatOccurrenceType: 'continuous',
+    repeatInstallments: 2,
+    repeatRemindDaysBefore: 0,
     useReserva: false,
     reservaAccountId: '',
     reservaExpenseCategoryId: '',
@@ -203,7 +222,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       : Number(form.amount)
 
     // eslint-disable-next-line no-unused-vars
-    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, ...formFields } = form
+    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
     const txData = {
       ...formFields,
       amount: installmentAmount,
@@ -337,6 +356,34 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     }
 
     const txId = addTransaction(txData)
+
+    // Painel "Repetir este lançamento" (somente em NOVO): cria um agendamento com os
+    // mesmos dados, usando a data do lançamento como início. A ocorrência da data de
+    // início é marcada como já registrada (corresponde a este próprio lançamento), e
+    // autoRegister fica desligado para não re-registrar datas passadas no próximo load.
+    if (form.repeat) {
+      const schId = addSchedule({
+        description: form.description || form.payee || 'Lançamento recorrente',
+        transactionType: form.type,
+        accountId: form.accountId,
+        toAccountId: form.type === 'transfer' ? form.toAccountId : '',
+        amount: installmentAmount,
+        accountType: selectedAccount?.type,
+        categoryId: form.type === 'transfer' ? (txData.categoryId || '') : (form.categoryId || ''),
+        payee: form.payee || '',
+        costCenter: form.costCenter || '',
+        frequency: form.repeatFrequency,
+        startDate: form.date,
+        occurrenceType: form.repeatFrequency === 'once' ? 'continuous' : form.repeatOccurrenceType,
+        installments: form.repeatOccurrenceType === 'installment' ? Number(form.repeatInstallments) : 0,
+        remindDaysBefore: Number(form.repeatRemindDaysBefore) || 0,
+        autoRegister: false,
+        grupoGerencial: showGerencial ? form.grupoGerencial : null,
+        skipped: [],
+        overrides: {},
+      })
+      markScheduleRegistered(schId, form.date)
+    }
 
     if (form.type === 'expense' && form.useReserva && form.reservaAccountId) {
       const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
@@ -876,6 +923,112 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </p>
             )
           })()}
+        </div>
+      )}
+
+      {/* Repetir este lançamento — só no formulário de NOVO lançamento */}
+      {!initial?.id && (
+        <div className="p-3 bg-gray-800/60 border border-gray-700 rounded-lg space-y-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <div className="relative shrink-0">
+              <input
+                type="checkbox"
+                checked={form.repeat}
+                onChange={e => set('repeat', e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+              <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+            </div>
+            <Repeat size={14} className="text-gray-300 shrink-0" />
+            <span className="text-sm text-gray-300 select-none">Repetir este lançamento</span>
+          </label>
+
+          {form.repeat && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="label">Frequência</label>
+                <select
+                  className="input"
+                  value={form.repeatFrequency}
+                  onChange={e => setForm(f => ({
+                    ...f,
+                    repeatFrequency: e.target.value,
+                    ...(e.target.value === 'once' ? { repeatOccurrenceType: 'continuous' } : {}),
+                  }))}
+                >
+                  {REPEAT_FREQUENCIES.map(fr => (
+                    <option key={fr.value} value={fr.value}>{fr.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {form.repeatFrequency !== 'once' && (
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <label className="label">Tipo</label>
+                    <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                      {[['continuous', 'Contínuo'], ['installment', 'Por parcelas']].map(([v, l]) => (
+                        <button
+                          type="button"
+                          key={v}
+                          onClick={() => set('repeatOccurrenceType', v)}
+                          className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                            form.repeatOccurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {form.repeatOccurrenceType === 'installment' && (
+                    <div className="w-24">
+                      <label className="label">Parcelas</label>
+                      <input
+                        className="input text-center"
+                        type="number"
+                        min="1"
+                        max="360"
+                        value={form.repeatInstallments}
+                        onChange={e => set('repeatInstallments', Math.max(1, Number(e.target.value) || 1))}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-gray-300">Lembrete</span>
+                <div className="flex items-center gap-2">
+                  {form.repeatRemindDaysBefore > 0 && (
+                    <>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={form.repeatRemindDaysBefore}
+                        onChange={e => set('repeatRemindDaysBefore', Math.max(1, Number(e.target.value) || 1))}
+                        className="w-14 input text-center text-xs py-1"
+                      />
+                      <span className="text-xs text-gray-500 whitespace-nowrap">dias antes</span>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => set('repeatRemindDaysBefore', form.repeatRemindDaysBefore > 0 ? 0 : 3)}
+                    className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${form.repeatRemindDaysBefore > 0 ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.repeatRemindDaysBefore > 0 ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Um agendamento será criado em "Agendamentos" com estes dados, começando em {fmtDate(form.date)}.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
