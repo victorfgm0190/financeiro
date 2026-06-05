@@ -2194,6 +2194,7 @@ export function AppProvider({ children }) {
             startDate: scheduleDate,
             amount: lancamento.amount,
             description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+            faturaRef,
             overrides: {
               _gerencialKey: paymentKey,
               _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
@@ -2291,6 +2292,7 @@ export function AppProvider({ children }) {
           startDate: dueDate,
           amount: lancamento.amount,
           description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+          faturaRef,
           overrides: {
             _gerencialKey: paymentKey,
             _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id },
@@ -2402,6 +2404,7 @@ export function AppProvider({ children }) {
               startDate: dueDateStr,
               amount,
               description: `Pagamento Fatura ${apelido} ${faturaRefI}`,
+              faturaRef: faturaRefI,
               overrides: {
                 _gerencialKey: payKeyI, _originTxId: rootTxId, _originAmount: amount,
                 _gerencial: { faturaRef: faturaRefI, cardId: accountId, checkingAccountId: contaPrincipal.id },
@@ -2500,6 +2503,7 @@ export function AppProvider({ children }) {
               startDate: startDateStr,
               amount,
               description: `Pagamento Fatura ${apelido} ${faturaRefI}`,
+              faturaRef: faturaRefI,
               overrides: { _gerencialKey: payKeyI, _originTxId: rootTxId, _gerencial: gerencialMeta },
               registered: [],
               skipped: [],
@@ -3008,6 +3012,7 @@ export function AppProvider({ children }) {
           startDate: scheduleDate,
           amount: totalPayment,
           description: `Pagamento Fatura ${faturaRef}`,
+          faturaRef,
           overrides: { _gerencialKey: paymentKey, _gerencial: { faturaRef, cardId, checkingAccountId: contaPrincipal.id, gerencialContaId: subconta.id } },
           registered: [],
           skipped: [],

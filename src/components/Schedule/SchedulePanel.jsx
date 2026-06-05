@@ -227,6 +227,9 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
           <div>
             <h3 className="font-semibold text-gray-100">Registrar Agendamento</h3>
             <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]">{schedule.description}</p>
+            {(schedule.faturaRef || schedule.overrides?._gerencial?.faturaRef) && (
+              <p className="text-xs text-indigo-400 mt-0.5">Fatura: {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}</p>
+            )}
           </div>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
             <X size={16} />
@@ -526,6 +529,11 @@ function ScheduleRow({
             <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
             {schedule.transactionType === 'expense' && (
               <GerBadge grupoId={schedule.grupoGerencial} gerencialGroups={gerencialGroups} />
+            )}
+            {(schedule.faturaRef || schedule.overrides?._gerencial?.faturaRef) && (
+              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title="Fatura de referência">
+                {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}
+              </span>
             )}
             {isInstallment && (
               <span className="text-xs bg-gray-700/60 text-gray-400 px-1 py-0.5 rounded whitespace-nowrap">
