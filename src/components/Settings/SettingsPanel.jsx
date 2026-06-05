@@ -47,6 +47,7 @@ export default function SettingsPanel() {
 
   const aplicAccounts = accounts.filter(a => a.contaAplicacao)
   const [startDay, setStartDay] = useState(settings.financialMonthStartDay || 1)
+  const [monthMode, setMonthMode] = useState(settings.financialMonthMode || 'custom')
   const [saved, setSaved] = useState(false)
   const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌' })
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
@@ -225,7 +226,7 @@ export default function SettingsPanel() {
   const [groupForm, setGroupForm] = useState({ name: '', alias: '', defaultAccountId: '' })
 
   const handleSaveSettings = () => {
-    updateSettings({ financialMonthStartDay: Number(startDay) })
+    updateSettings({ financialMonthStartDay: Number(startDay), financialMonthMode: monthMode })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -319,22 +320,56 @@ export default function SettingsPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Mês Financeiro */}
+      {/* Período Financeiro */}
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Mês Financeiro</h2>
+        <h2 className="text-sm font-semibold text-gray-300 mb-1">Período Financeiro</h2>
+        <p className="text-xs text-gray-500 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
+
+        <div className="space-y-2.5 mb-4">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="radio"
+              name="finMode"
+              className="mt-0.5 accent-[#0F6E56] cursor-pointer shrink-0"
+              checked={monthMode === 'calendar'}
+              onChange={() => setMonthMode('calendar')}
+            />
+            <span className="text-sm text-gray-200">
+              Mês corrido
+              <span className="block text-xs text-gray-500">Período sempre do dia 01 ao último dia do mês calendário (ignora o dia de início).</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="radio"
+              name="finMode"
+              className="mt-0.5 accent-[#0F6E56] cursor-pointer shrink-0"
+              checked={monthMode === 'custom'}
+              onChange={() => setMonthMode('custom')}
+            />
+            <span className="text-sm text-gray-200">
+              Mês personalizado
+              <span className="block text-xs text-gray-500">Período começa no dia de início abaixo (ex.: dia 15 → 15/05 a 14/06 = “Maio”).</span>
+            </span>
+          </label>
+        </div>
+
         <div className="flex items-end gap-4">
           <div className="flex-1">
             <label className="label">Dia de Início do Mês Financeiro</label>
             <input
-              className="input"
+              className={`input ${monthMode === 'calendar' ? 'opacity-50 cursor-not-allowed' : ''}`}
               type="number"
               min="1"
               max="28"
               value={startDay}
               onChange={e => setStartDay(e.target.value)}
+              disabled={monthMode === 'calendar'}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Ex: dia 5 = período vai do dia 5 ao dia 4 do mês seguinte
+              {monthMode === 'calendar'
+                ? 'Sem efeito no modo “Mês corrido”.'
+                : 'Ex: dia 5 = período vai do dia 5 ao dia 4 do mês seguinte'}
             </p>
           </div>
           <button className="btn-primary flex items-center gap-2" onClick={handleSaveSettings}>

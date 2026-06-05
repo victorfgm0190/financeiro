@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
+    await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)
 
     // Seed idempotente: categoria "Capitalização" vinculada à conta de investimento Brasilcap.
     // Só insere se houver uma conta cujo nome casa com "brasil...cap" e a categoria ainda não existir.

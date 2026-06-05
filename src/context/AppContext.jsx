@@ -68,6 +68,7 @@ function computePendingUpTo(schedule, upToDateStr) {
 const defaultData = {
   settings: {
     financialMonthStartDay: 1,
+    financialMonthMode: 'custom', // 'calendar' = 01..fim do mês | 'custom' = a partir do dia de início
     currency: 'BRL',
     recurringMatchExceptions: [],
   },
@@ -1478,8 +1479,15 @@ export function AppProvider({ children }) {
 
   // ── Financial Month ──────────────────────────────────────────────────────────
   const getFinancialPeriod = useCallback((referenceDate = new Date()) => {
-    const startDay = data.settings.financialMonthStartDay || 1
     const ref = new Date(referenceDate)
+    // Modo "calendar": período sempre do dia 1 ao último dia do mês calendário,
+    // ignorando o dia de início. "custom" (padrão): janela a partir do dia de início.
+    if ((data.settings.financialMonthMode || 'custom') === 'calendar') {
+      const start = new Date(ref.getFullYear(), ref.getMonth(), 1)
+      const end = new Date(ref.getFullYear(), ref.getMonth() + 1, 0) // último dia do mês
+      return { start, end }
+    }
+    const startDay = data.settings.financialMonthStartDay || 1
     const day = ref.getDate()
     let start, end
     if (day >= startDay) {
@@ -1490,7 +1498,7 @@ export function AppProvider({ children }) {
       end = new Date(ref.getFullYear(), ref.getMonth(), startDay - 1)
     }
     return { start, end }
-  }, [data.settings.financialMonthStartDay])
+  }, [data.settings.financialMonthStartDay, data.settings.financialMonthMode])
 
   // ── Schedule Occurrences ─────────────────────────────────────────────────────
   const getNextOccurrences = useCallback((schedule, count = 12) => {
