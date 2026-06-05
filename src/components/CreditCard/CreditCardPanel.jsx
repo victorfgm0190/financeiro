@@ -75,7 +75,7 @@ export default function CreditCardPanel() {
     profileAccounts: accounts,
     profileTransactions: transactions,
     categories, gerencialGroups,
-    addTransaction, deleteTransaction, setReconciled, recalcContasPagarFatura,
+    addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
   } = useApp()
   const [toast, setToast] = useState(null)
 
@@ -299,7 +299,8 @@ export default function CreditCardPanel() {
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
             onClick={() => {
               if (!selectedCard || !billKey) return
-              recalcContasPagarFatura(selectedCard.id, billKey)
+              const [by, bm] = billKey.split('-')
+              recalcularAgendamentosFatura(selectedCard.id, by, bm)
               setToast(`Fatura atualizada: ${fmt(billTotal)}`)
             }}
             title="Recalcula o total da fatura e atualiza a conta a pagar"

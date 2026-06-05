@@ -2037,7 +2037,18 @@ export function AppProvider({ children }) {
         schedules.push({ ...baseSch, ...rest })
       }
 
-      return { ...d, accounts, schedules }
+      // 5. Limpeza dos contas_a_pagar (payables) LEGADOS de fatura deste cartão/mês — gerados
+      //    pelo modelo antigo (origin 'invoice'/'gerencial') e agora substituídos pelos
+      //    agendamentos tipo='pagamento_fatura'. Remove apenas os pendentes; preserva os já
+      //    pagos (histórico) e quaisquer outros (ex.: dívidas 'debt_installment').
+      const payables = (d.payables || []).filter(p => {
+        const isFaturaLegacy = (p.origin === 'invoice' || p.origin === 'gerencial')
+          && p.cartaoId === cardId && p.mesAno === faturaMesAno
+        if (!isFaturaLegacy) return true
+        return p.status === 'paid'
+      })
+
+      return { ...d, accounts, schedules, payables }
     })
   }, [update])
 
@@ -2049,7 +2060,8 @@ export function AppProvider({ children }) {
     recalcFaturaRef.current = (cartaoId, date, faturaMonthYear) => {
       const card = dataRef.current.accounts.find(a => a.id === cartaoId)
       const mesAno = faturaMesAnoOf(card, date, faturaMonthYear)
-      recalcContasPagarFatura(cartaoId, mesAno)
+      // O modelo de fatura agora é totalmente baseado em agendamentos (tipo='pagamento_fatura');
+      // não geramos mais contas_a_pagar legadas (gerarContasPagarFatura/recalcContasPagarFatura).
       if (mesAno) {
         const [y, m] = mesAno.split('-')
         recalcularAgendamentosFatura(cartaoId, y, m)

@@ -671,7 +671,7 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, recalcularAgendamentosFatura, classifyGerencialByRules,
+    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
@@ -1034,7 +1034,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
       const importId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
-      if (mesAno) gerarContasPagarFatura(selectedAccount, dates[0], dates[dates.length - 1], mesAno, importId)
+      // Não geramos mais contas_a_pagar legadas de fatura; os agendamentos acumulativos
+      // (tipo='pagamento_fatura') são reconstruídos no loop de recalcularAgendamentosFatura abaixo.
       addCardImport({
         id: importId,
         importedAt: new Date().toISOString(),
