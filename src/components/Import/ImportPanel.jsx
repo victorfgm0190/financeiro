@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings } from '../../lib/db'
+import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import AccountOptions from '../shared/AccountOptions'
@@ -670,7 +671,7 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, classifyGerencialByRules,
+    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, gerarContasPagarFatura, recalcularAgendamentosFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
@@ -960,8 +961,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
 
     const txIds = []
+    // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
+    const importClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
+    const faturasAfetadas = new Set()
+    const addFaturaAfetada = (faturaMY, dataStr) => {
+      if (faturaMY) { faturasAfetadas.add(faturaMY); return }
+      const ref = computeFaturaRef(new Date(dataStr + 'T00:00:00'), importClosingDay) // MM/YYYY
+      const [m, y] = ref.split('/')
+      faturasAfetadas.add(`${y}-${m}`)
+    }
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
+      addFaturaAfetada(row.faturaMonthYear, saveDate)
       if (row.payee && !payees.includes(row.payee)) addPayee(row.payee)
       const txId = addTransaction({
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
@@ -995,6 +1006,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           const futureDate = `${futureFatura}-${String(futureD.getDate()).padStart(2, '0')}`
           const futureNumStr = String(i).padStart(numWidth, '0')
           const futureDesc = row.description.replace(instRow.matchStr, `${futureNumStr}/${instRow.total}`)
+          addFaturaAfetada(futureFatura, futureDate)
           if (!isDuplicateInstallment({ description: futureDesc, amount: row.amount }, transactions, selectedAccount)) {
             const fId = addTransaction({
               type: 'expense', accountId: selectedAccount, accountType: 'credit',
@@ -1032,6 +1044,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         accountId: selectedAccount,
         txIds,
       })
+
+      // Gatilho: importação de fatura em lote → recálculo acumulativo dos agendamentos
+      // (devolução gerencial / resgate reserva / pagamento) de cada fatura tocada.
+      for (const fmy of faturasAfetadas) {
+        const [y, m] = fmy.split('-')
+        recalcularAgendamentosFatura(selectedAccount, y, m)
+      }
     }
 
     const pending = []

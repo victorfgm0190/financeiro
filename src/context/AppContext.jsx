@@ -452,6 +452,9 @@ export function AppProvider({ children }) {
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
   // (definido mais abaixo); usamos ref p/ contornar a ordem de declaração.
   const recalcFaturaRef = useRef(null)
+  // Recálculo dos agendamentos acumulativos de fatura (definido mais abaixo); ref p/ contornar
+  // a ordem de declaração — chamado por deleteTransaction/reverseTransaction/revertCardImport.
+  const recalcAgendamentosRef = useRef(null)
   const dataRef = useRef(data)
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
@@ -806,17 +809,33 @@ export function AppProvider({ children }) {
   }, [update])
 
   const revertCardImport = useCallback((importId) => {
+    // Faturas afetadas pelo lote (cartão + mês de cada despesa), capturadas antes do update.
+    const before = dataRef.current
+    const impBefore = (before.cardImports || []).find(i => i.id === importId)
+    const faturasParaRecalcular = []
+    if (impBefore) {
+      const ids = new Set(impBefore.txIds || [])
+      for (const t of before.transactions) {
+        if (!ids.has(t.id)) continue
+        if (t.type === 'expense' && t.accountType === 'credit') {
+          const card = before.accounts.find(a => a.id === t.accountId)
+          const mesAno = faturaMesAnoOf(card, t.date, t.faturaMonthYear)
+          if (mesAno) faturasParaRecalcular.push([t.accountId, mesAno])
+        }
+      }
+    }
+
     update(d => {
       const imp = (d.cardImports || []).find(i => i.id === importId)
       if (!imp) return d
       const txIds = new Set(imp.txIds || [])
       const txs = d.transactions.filter(t => txIds.has(t.id))
       let accounts = [...d.accounts]
-      let schedules = d.schedules
       let transactions = d.transactions
 
       for (const tx of txs) {
-        // Revert balance impact
+        // Reverte o impacto no(s) saldo(s). Os agendamentos da fatura são reconstruídos no fim
+        // por recalcularAgendamentosFatura (não há mais decremento incremental aqui).
         if (tx.type === 'expense' && tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
             ...a,
@@ -834,54 +853,7 @@ export function AppProvider({ children }) {
             return a
           })
         }
-
-        // Grupo G cascade: decrement/delete schedules created by processarLancamentoGerencial
-        if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
-          const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
-          if (grupo && grupo.number !== 'D') {
-            const cardAccount = d.accounts.find(a => a.id === tx.accountId)
-            const closingDay = cardAccount?.closingDay || 14
-            let faturaRef
-            if (tx.faturaMonthYear) {
-              const [y, m] = tx.faturaMonthYear.split('-')
-              faturaRef = `${m}/${y}`
-            } else {
-              faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
-            }
-
-            if (grupo.number === 1) {
-              // A transferência etapaA é removida via txIds; aqui só decrementa os agendamentos
-              // (resgate + pagamento; provision/resgate_parc legadas mantidas por segurança).
-              const gerKey = gerencialKey(tx.accountId, faturaRef)
-              const keysToDecrement = new Set([
-                `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
-              ])
-              schedules = schedules.map(s => {
-                const sKey = s.overrides?._gerencialKey
-                if (!keysToDecrement.has(sKey)) return s
-                if ((s.registered || []).includes(s.startDate)) return s
-                return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
-              })
-            } else {
-              // Numbered group (2, 3, 4…): resgate + contribuição no pagamento da fatura
-              const dueDay = cardAccount?.dueDay || 10
-              const [fmm, fyyyy] = faturaRef.split('/')
-              const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}`
-              const gerKey = `ger_num_${tx.grupoGerencial}_${tx.accountId}_${dueDate}`
-              const paymentKey = `${gerencialKey(tx.accountId, faturaRef)}_payment`
-              schedules = schedules.map(s => {
-                const sKey = s.overrides?._gerencialKey
-                if (sKey !== gerKey && sKey !== paymentKey) return s
-                if ((s.registered || []).includes(s.startDate)) return s
-                return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
-              })
-            }
-          }
-        }
       }
-
-      // Delete schedules created by criarParcelasGerencial (linked via _originTxId to any main tx)
-      schedules = schedules.filter(s => !txIds.has(s.overrides?._originTxId))
 
       // Reverte saldos das auto-provisões geradas para as parcelas importadas
       for (const p of transactions.filter(t => t.origin === 'auto-provisao' && txIds.has(t.parentTxId))) {
@@ -926,12 +898,22 @@ export function AppProvider({ children }) {
       return {
         ...d,
         accounts,
-        schedules,
         transactions,
         payables,
         cardImports: (d.cardImports || []).filter(i => i.id !== importId),
       }
     })
+
+    // Gatilho: estorno de importação → recalcula os agendamentos de cada fatura afetada
+    // (após a remoção dos lançamentos do lote).
+    const seen = new Set()
+    for (const [cardId, mesAno] of faturasParaRecalcular) {
+      const key = `${cardId}|${mesAno}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const [y, m] = mesAno.split('-')
+      recalcAgendamentosRef.current?.(cardId, y, m)
+    }
   }, [update])
 
   const updateTransaction = useCallback((id, changes) => {
@@ -945,7 +927,10 @@ export function AppProvider({ children }) {
       const faturaChanged =
         ('faturaMonthYear' in changes && (changes.faturaMonthYear || null) !== (old.faturaMonthYear || null)) ||
         ('date' in changes && changes.date !== old.date)
-      if (amountChanged || faturaChanged) {
+      // Mudança de grupo gerencial reclassifica o gasto (G ↔ numerado ↔ D) → recalcula a fatura.
+      const grupoChanged =
+        'grupoGerencial' in changes && (changes.grupoGerencial || null) !== (old.grupoGerencial || null)
+      if (amountChanged || faturaChanged || grupoChanged) {
         recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
       }
     }
@@ -965,147 +950,137 @@ export function AppProvider({ children }) {
   }, [update])
 
   const deleteTransaction = useCallback((id) => {
+    // Captura as faturas afetadas (gasto + parcelas-filhas) antes do update p/ recalcular depois.
+    const before = dataRef.current
+    const txBefore = before.transactions.find(t => t.id === id)
+    const faturasParaRecalcular = []
+    const addFatura = (t) => {
+      if (t && t.type === 'expense' && t.accountType === 'credit') {
+        const card = before.accounts.find(a => a.id === t.accountId)
+        const mesAno = faturaMesAnoOf(card, t.date, t.faturaMonthYear)
+        if (mesAno) faturasParaRecalcular.push([t.accountId, mesAno])
+      }
+    }
+    if (txBefore) {
+      addFatura(txBefore)
+      before.transactions.filter(t => t.parentTxId === id && t.origin === 'parcela').forEach(addFatura)
+    }
+
     update(d => {
       const tx = d.transactions.find(t => t.id === id)
       if (!tx) return d
       let accounts = [...d.accounts]
-      if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
-      } else if (tx.type === 'expense') {
-        if (tx.accountType === 'credit') {
-          accounts = accounts.map(a => a.id === tx.accountId ? {
-            ...a,
-            creditDebt: Math.max(0, (a.creditDebt || 0) - tx.amount),
-            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
-          } : a)
-        } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
-        }
-      } else if (tx.type === 'transfer') {
-        accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance + tx.amount) }
-          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance - tx.amount) }
-          return a
-        })
-      }
-
-      let schedules = d.schedules
-      let transactions = d.transactions.filter(t => t.id !== id)
-
-      // Grupo G cascade (à vista: remove etapaA; parcelado: ajusta agendamentos)
-      if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
-        const cardAccount = d.accounts.find(a => a.id === tx.accountId)
-        const closingDay = cardAccount?.closingDay || 14
-        let faturaRef
-        if (tx.faturaMonthYear) {
-          const [y, m] = tx.faturaMonthYear.split('-')
-          faturaRef = `${m}/${y}`
-        } else {
-          faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
-        }
-        // Grupo G e parcelado seguem o mesmo fluxo (provisão imediata): remove a transferência
-        // etapaA e decrementa resgate + pagamento da fatura. (provision/resgate_parc são chaves
-        // legadas — mantidas no conjunto por segurança.)
-        const gerKey = gerencialKey(tx.accountId, faturaRef)
-        const keysToDecrement = new Set([
-          `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
-        ])
-        const etapaATx = d.transactions.find(t =>
-          t.id !== id &&
-          t.type === 'transfer' &&
-          t.grupoGerencial === tx.grupoGerencial &&
-          Math.abs(t.amount - tx.amount) < 0.01 &&
-          t.date === tx.date
-        )
-        if (etapaATx) {
+      // Desfaz o impacto de um lançamento no(s) saldo(s) ao removê-lo.
+      const reverseBalance = (t) => {
+        if (t.type === 'income') {
+          accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+        } else if (t.type === 'expense') {
+          if (t.accountType === 'credit') {
+            accounts = accounts.map(a => a.id === t.accountId ? {
+              ...a,
+              creditDebt: Math.max(0, (a.creditDebt || 0) - t.amount),
+              creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - t.amount),
+            } : a)
+          } else {
+            accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance + t.amount) } : a)
+          }
+        } else if (t.type === 'transfer') {
           accounts = accounts.map(a => {
-            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+            if (a.id === t.accountId) return { ...a, balance: rb(a.balance + t.amount) }
+            if (a.id === t.toAccountId) return { ...a, balance: rb(a.balance - t.amount) }
             return a
           })
-          transactions = transactions.filter(t => t.id !== etapaATx.id)
         }
-        schedules = schedules.map(s => {
-          const sKey = s.overrides?._gerencialKey
-          if (!keysToDecrement.has(sKey)) return s
-          if ((s.registered || []).includes(s.startDate)) return s
-          return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
-        })
       }
 
-      // Agendamento numérico gerencial
-      if (tx.gerencialScheduleId) {
-        const sch = schedules.find(s => s.id === tx.gerencialScheduleId)
-        if (sch) {
-          const done = (sch.registered || []).includes(sch.startDate) || (sch.skipped || []).includes(sch.startDate)
-          if (!done) {
-            const newAmt = Math.max(0, Math.round(((sch.amount || 0) - tx.amount) * 100) / 100)
-            schedules = newAmt <= 0
-              ? schedules.filter(s => s.id !== tx.gerencialScheduleId)
-              : schedules.map(s => s.id === tx.gerencialScheduleId ? { ...s, amount: newAmt } : s)
+      reverseBalance(tx)
+      let transactions = d.transactions.filter(t => t.id !== id)
+
+      // Grupo G: remove a transferência imediata (etapa A) vinculada a este gasto.
+      if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
+        const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
+        if (grupo?.number === 1) {
+          const etapaATx = d.transactions.find(t =>
+            t.id !== id && t.type === 'transfer' &&
+            t.grupoGerencial === tx.grupoGerencial &&
+            Math.abs(t.amount - tx.amount) < 0.01 && t.date === tx.date
+          )
+          if (etapaATx) {
+            reverseBalance(etapaATx)
+            transactions = transactions.filter(t => t.id !== etapaATx.id)
           }
         }
       }
-      // Cascade: parcelas 2..N criadas por criarParcelasGerencial
-      schedules = schedules.reduce((acc, s) => {
-        if (s.overrides?._originTxId !== id) { acc.push(s); return acc }
-        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
-        if (done) { acc.push(s); return acc }
-        if (s.overrides?._gerencialKey) {
-          const originAmt = s.overrides._originAmount || s.amount
-          const newAmt = Math.max(0, Math.round(((s.amount || 0) - originAmt) * 100) / 100)
-          if (newAmt > 0) acc.push({ ...s, amount: newAmt })
-        }
-        return acc
-      }, [])
 
-      // Reverte e remove auto-provisões gerenciais vinculadas a esta parcela
-      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && t.parentTxId === id)) {
-        accounts = accounts.map(a => {
-          if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
-          if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
-          return a
-        })
-      }
-      transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
+      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, auto-provisão, investAuto)
+      const children = transactions.filter(t =>
+        t.parentTxId === id &&
+        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.reservaAuto)
+      )
+      for (const c of children) reverseBalance(c)
+      const childIds = new Set(children.map(c => c.id))
+      transactions = transactions.filter(t => !childIds.has(t.id))
 
-      // Reverte e remove receitas investAuto (aportes) vinculadas a esta despesa
-      for (const p of transactions.filter(t => t.origin === 'investAuto' && t.parentTxId === id)) {
-        accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
-      }
-      transactions = transactions.filter(t => !(t.origin === 'investAuto' && t.parentTxId === id))
-
-      // Remove reservaAuto txs linked to this transaction
-      transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
-
-      return { ...d, accounts, schedules, transactions }
+      return { ...d, accounts, transactions }
     })
+
+    // Recalcula os agendamentos das faturas afetadas (gatilho: deleção de gasto de cartão).
+    const seen = new Set()
+    for (const [cardId, mesAno] of faturasParaRecalcular) {
+      const key = `${cardId}|${mesAno}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const [y, m] = mesAno.split('-')
+      recalcAgendamentosRef.current?.(cardId, y, m)
+    }
   }, [update])
 
   const reverseTransaction = useCallback((id) => {
+    // Faturas afetadas (gasto + parcelas-filhas), capturadas antes do update.
+    const before = dataRef.current
+    const txBefore = before.transactions.find(t => t.id === id)
+    const faturasParaRecalcular = []
+    const addFatura = (t) => {
+      if (t && t.type === 'expense' && t.accountType === 'credit') {
+        const card = before.accounts.find(a => a.id === t.accountId)
+        const mesAno = faturaMesAnoOf(card, t.date, t.faturaMonthYear)
+        if (mesAno) faturasParaRecalcular.push([t.accountId, mesAno])
+      }
+    }
+    if (txBefore) {
+      addFatura(txBefore)
+      before.transactions.filter(t => t.parentTxId === id && t.origin === 'parcela').forEach(addFatura)
+    }
+
     update(d => {
       const tx = d.transactions.find(t => t.id === id)
       if (!tx) return d
       let accounts = [...d.accounts]
-      if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
-      } else if (tx.type === 'expense') {
-        if (tx.accountType === 'credit') {
-          accounts = accounts.map(a => a.id === tx.accountId ? {
-            ...a,
-            creditDebt: Math.max(0, (a.creditDebt || 0) - tx.amount),
-            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
-          } : a)
-        } else {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
+      const reverseBalance = (t) => {
+        if (t.type === 'income') {
+          accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+        } else if (t.type === 'expense') {
+          if (t.accountType === 'credit') {
+            accounts = accounts.map(a => a.id === t.accountId ? {
+              ...a,
+              creditDebt: Math.max(0, (a.creditDebt || 0) - t.amount),
+              creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - t.amount),
+            } : a)
+          } else {
+            accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance + t.amount) } : a)
+          }
+        } else if (t.type === 'transfer') {
+          accounts = accounts.map(a => {
+            if (a.id === t.accountId) return { ...a, balance: rb(a.balance + t.amount) }
+            if (a.id === t.toAccountId) return { ...a, balance: rb(a.balance - t.amount) }
+            return a
+          })
         }
-      } else if (tx.type === 'transfer') {
-        accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance + tx.amount) }
-          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance - tx.amount) }
-          return a
-        })
       }
+
+      reverseBalance(tx)
+
+      // Desfaz o registro da ocorrência no agendamento vinculado (estorno reabre a ocorrência).
       let schedules = d.schedules
       if (tx.scheduleId) {
         schedules = d.schedules.map(s =>
@@ -1116,146 +1091,64 @@ export function AppProvider({ children }) {
       }
       let transactions = d.transactions.filter(t => t.id !== id)
 
-      // Cascata para lançamentos gerenciais (grupo 1 — cartão de crédito)
+      // Grupo G: remove a transferência imediata (etapa A) vinculada a este gasto.
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
-        const cardAccount = d.accounts.find(a => a.id === tx.accountId)
-        const closingDay = cardAccount?.closingDay || 14
-        let faturaRef
-        if (tx.faturaMonthYear) {
-          const [y, m] = tx.faturaMonthYear.split('-')
-          faturaRef = `${m}/${y}`
-        } else {
-          faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
-        }
-        // Grupo G e parcelado seguem o mesmo fluxo: remove a transferência etapaA e decrementa
-        // resgate + pagamento da fatura (provision/resgate_parc legadas mantidas por segurança).
-        const gerKey = gerencialKey(tx.accountId, faturaRef)
-        const keysToDecrement = new Set([
-          `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
-        ])
-        const etapaATx = d.transactions.find(t =>
-          t.id !== id &&
-          t.type === 'transfer' &&
-          t.grupoGerencial === tx.grupoGerencial &&
-          Math.abs(t.amount - tx.amount) < 0.01 &&
-          t.date === tx.date
-        )
-        if (etapaATx) {
-          accounts = accounts.map(a => {
-            if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-            if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-            return a
-          })
-          transactions = transactions.filter(t => t.id !== etapaATx.id)
-        }
-        schedules = schedules.map(s => {
-          const sKey = s.overrides?._gerencialKey
-          if (!keysToDecrement.has(sKey)) return s
-          if ((s.registered || []).includes(s.startDate)) return s
-          return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
-        })
-      }
-
-      // Estorno em cadeia: agendamento numérico gerencial
-      if (tx.gerencialScheduleId) {
-        const sch = schedules.find(s => s.id === tx.gerencialScheduleId)
-        if (sch) {
-          const done = (sch.registered || []).includes(sch.startDate) || (sch.skipped || []).includes(sch.startDate)
-          if (!done) {
-            const newAmt = Math.max(0, Math.round(((sch.amount || 0) - tx.amount) * 100) / 100)
-            schedules = newAmt <= 0
-              ? schedules.filter(s => s.id !== tx.gerencialScheduleId)
-              : schedules.map(s => s.id === tx.gerencialScheduleId ? { ...s, amount: newAmt } : s)
+        const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
+        if (grupo?.number === 1) {
+          const etapaATx = d.transactions.find(t =>
+            t.id !== id && t.type === 'transfer' &&
+            t.grupoGerencial === tx.grupoGerencial &&
+            Math.abs(t.amount - tx.amount) < 0.01 && t.date === tx.date
+          )
+          if (etapaATx) {
+            reverseBalance(etapaATx)
+            transactions = transactions.filter(t => t.id !== etapaATx.id)
           }
         }
       }
-      // Cascade: parcelas 2..N criadas por criarParcelasGerencial
-      schedules = schedules.reduce((acc, s) => {
-        if (s.overrides?._originTxId !== id) { acc.push(s); return acc }
-        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
-        if (done) { acc.push(s); return acc }
-        if (s.overrides?._gerencialKey) {
-          const originAmt = s.overrides._originAmount || s.amount
-          const newAmt = Math.max(0, Math.round(((s.amount || 0) - originAmt) * 100) / 100)
-          if (newAmt > 0) acc.push({ ...s, amount: newAmt })
-        }
-        return acc
-      }, [])
 
-      // Reverte e remove auto-provisões gerenciais vinculadas a esta parcela
-      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && t.parentTxId === id)) {
-        accounts = accounts.map(a => {
-          if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
-          if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
-          return a
-        })
-      }
-      transactions = transactions.filter(t => !(t.origin === 'auto-provisao' && t.parentTxId === id))
-
-      // Reverte e remove receitas investAuto (aportes) vinculadas a esta despesa
-      for (const p of transactions.filter(t => t.origin === 'investAuto' && t.parentTxId === id)) {
-        accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
-      }
-      transactions = transactions.filter(t => !(t.origin === 'investAuto' && t.parentTxId === id))
-
-      // Remove reservaAuto txs linked to this transaction
-      transactions = transactions.filter(t => !(t.reservaAuto && t.parentTxId === id))
+      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, auto-provisão, investAuto)
+      const children = transactions.filter(t =>
+        t.parentTxId === id &&
+        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.reservaAuto)
+      )
+      for (const c of children) reverseBalance(c)
+      const childIds = new Set(children.map(c => c.id))
+      transactions = transactions.filter(t => !childIds.has(t.id))
 
       return { ...d, accounts, transactions, schedules }
     })
+
+    const seen = new Set()
+    for (const [cardId, mesAno] of faturasParaRecalcular) {
+      const key = `${cardId}|${mesAno}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const [y, m] = mesAno.split('-')
+      recalcAgendamentosRef.current?.(cardId, y, m)
+    }
   }, [update])
 
-  // Reverte apenas as automações gerenciais (ETAPA A + agendamentos) sem tocar na própria tx
+  // Reverte apenas a transferência imediata do Grupo G (ETAPA A) sem tocar na própria tx.
+  // Os agendamentos da fatura são reconstruídos por recalcularAgendamentosFatura após a edição.
   const reverseGerencialCascadeOnly = useCallback((tx) => {
     if (!tx?.grupoGerencial || tx.type !== 'expense' || tx.accountType !== 'credit') return
     update(d => {
-      const cardAccount = d.accounts.find(a => a.id === tx.accountId)
-      const closingDay = cardAccount?.closingDay || 14
-      let faturaRef
-      if (tx.faturaMonthYear) {
-        const [y, m] = tx.faturaMonthYear.split('-')
-        faturaRef = `${m}/${y}`
-      } else {
-        faturaRef = computeFaturaRef(new Date(tx.date + 'T00:00:00'), closingDay)
-      }
-      const gerKey = gerencialKey(tx.accountId, faturaRef)
-      const keysToDecrement = new Set([
-        `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
-      ])
-
-      let accounts = [...d.accounts]
-      let transactions = d.transactions
-
-      // Grupo G (provisão imediata): remove a transferência etapaA e decrementa resgate + pagamento
+      const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
+      if (grupo?.number !== 1) return d // só o Grupo G tem transferência imediata
       const etapaATx = d.transactions.find(t =>
         t.type === 'transfer' &&
         t.grupoGerencial === tx.grupoGerencial &&
         Math.abs(t.amount - tx.amount) < 0.01 &&
         t.date === tx.date
       )
-      if (etapaATx) {
-        accounts = accounts.map(a => {
-          if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
-          if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-          return a
-        })
-        transactions = transactions.filter(t => t.id !== etapaATx.id)
-      }
-      let schedules = d.schedules.map(s => {
-        const sKey = s.overrides?._gerencialKey
-        if (!keysToDecrement.has(sKey)) return s
-        if ((s.registered || []).includes(s.startDate)) return s
-        return { ...s, amount: Math.max(0, rb((s.amount || 0) - tx.amount)) }
+      if (!etapaATx) return d
+      const accounts = d.accounts.map(a => {
+        if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
+        if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+        return a
       })
-
-      // Limpa placeholders de parcelas 2..N (G1 — sem _gerencialKey) não registrados
-      schedules = schedules.filter(s => {
-        if (s.overrides?._originTxId !== tx.id) return true
-        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
-        return done
-      })
-
-      return { ...d, accounts, transactions, schedules }
+      return { ...d, accounts, transactions: d.transactions.filter(t => t.id !== etapaATx.id) }
     })
   }, [update])
 
@@ -1983,13 +1876,182 @@ export function AppProvider({ children }) {
     gerarContasPagarFatura(cartaoId, billStart, billEnd, mesAno)
   }, [gerarContasPagarFatura])
 
+  // ── Recálculo acumulativo dos agendamentos de uma fatura de cartão ───────────
+  // Fonte ÚNICA dos agendamentos gerados por gastos de cartão. Idempotente:
+  // recalcula do zero a partir das transações da fatura (cardId, faturaAno-faturaMs).
+  // Mantém UP TO 3 tipos por (card_id, fatura_mes_ano):
+  //   'gerencial_devolucao' : soma do Grupo G (number===1) → Ger.{cartão} → Principal, no dia
+  //                           de início do mês financeiro do mês da fatura.
+  //   'resgate_reserva'     : soma dos grupos numerados (2,3,…), UM por conta-origem
+  //                           (grupo.defaultAccountId) → conta-origem → Principal, no vencimento.
+  //   'pagamento_fatura'    : soma TOTAL da fatura (G + numerados + D/comuns)
+  //                           → Principal → Cartão, no vencimento.
+  // INSERT se valor>0 e não existe; UPDATE se já existe; DELETE se valor zerou.
+  // Nunca altera/remove um agendamento já registrado (executado) ou pulado.
+  const recalcularAgendamentosFatura = useCallback((cardId, faturaAno, faturaMs) => {
+    update(d => {
+      const card = d.accounts.find(a => a.id === cardId)
+      if (!card) return d
+
+      const mm = String(faturaMs).padStart(2, '0')
+      const yyyy = String(faturaAno)
+      const faturaMesAno = `${yyyy}-${mm}` // YYYY-MM (igual a lancamentos.faturaMonthYear)
+      const faturaRef = `${mm}/${yyyy}`    // MM/YYYY (helpers de fatura.js)
+
+      const financialStartDay = d.settings?.financialMonthStartDay || 1
+      const dueDay = String(card.dueDay || 10).padStart(2, '0')
+      const devolDate = computeScheduleDate(faturaRef, financialStartDay) // dia financeiro do mês da fatura
+      const dueDate = `${yyyy}-${mm}-${dueDay}`                            // vencimento do cartão no mês da fatura
+
+      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+        || d.accounts.find(a => a.isMain && a.type !== 'credit')
+        || d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+
+      const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
+      const subcontaName = `Ger. ${apelido}`
+
+      // 1. Gastos reais desta fatura (ignora automações: reservaAuto / auto-provisao / investAuto)
+      const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto'
+      const belongs = (tx) =>
+        tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === cardId &&
+        !isAutomacao(tx) &&
+        faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno
+      const expenses = d.transactions.filter(belongs)
+
+      // 2. Totais por classe de grupo
+      let totalG = 0
+      let totalGeral = 0
+      const numberedByAccount = new Map() // contaOrigemId → soma dos grupos numerados
+      for (const tx of expenses) {
+        const amt = Number(tx.amount) || 0
+        totalGeral = rb(totalGeral + amt)
+        const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
+        if (grupo && grupo.number === 1) {
+          totalG = rb(totalG + amt)
+        } else if (grupo && typeof grupo.number === 'number' && grupo.number !== 1 && grupo.defaultAccountId) {
+          const origem = grupo.defaultAccountId
+          numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
+        }
+        // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
+      }
+
+      // Garante a subconta gerencial quando há devolução a agendar (origem da transferência)
+      let accounts = d.accounts
+      let subcontaId = d.accounts.find(a => a.name === subcontaName)?.id
+      if (!subcontaId && totalG > 0) {
+        subcontaId = 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+        accounts = [...accounts, {
+          id: subcontaId, name: subcontaName, type: 'checking', balance: 0,
+          bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
+          fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+          accountGroupId: contaPrincipal.accountGroupId || null,
+        }]
+      }
+
+      // 3. Conjunto desejado de agendamentos (slot = tipo + conta-origem para resgate)
+      const meta = { faturaRef, cardId, checkingAccountId: contaPrincipal.id }
+      const baseSch = {
+        frequency: 'once', occurrenceType: 'installment', installments: 1,
+        autoRegister: false, registered: [], skipped: [],
+        cardId, faturaMesAno, faturaRef,
+      }
+      const desired = []
+      if (totalG > 0 && subcontaId) {
+        desired.push({
+          slot: 'gerencial_devolucao',
+          id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
+          tipo: 'gerencial_devolucao',
+          transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
+          startDate: devolDate, amount: totalG,
+          description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
+          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId } },
+        })
+      }
+      for (const [origem, soma] of numberedByAccount) {
+        if (soma <= 0) continue
+        desired.push({
+          slot: `resgate_reserva_${origem}`,
+          id: `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`,
+          tipo: 'resgate_reserva',
+          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+          startDate: dueDate, amount: soma,
+          description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+          overrides: { _gerencial: meta },
+        })
+      }
+      if (totalGeral > 0) {
+        desired.push({
+          slot: 'pagamento_fatura',
+          id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
+          tipo: 'pagamento_fatura',
+          transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
+          startDate: dueDate, amount: totalGeral,
+          description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta },
+        })
+      }
+
+      // 4. Reconciliação. Identifica os agendamentos desta fatura (novos + legados),
+      //    preserva os já registrados/pulados e descarta os pendentes (serão recriados).
+      const gerKey = gerencialKey(cardId, faturaRef)
+      const legacyKeys = new Set([
+        `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
+      ])
+      const isManaged = (s) => {
+        if (s.tipo && s.cardId === cardId && s.faturaMesAno === faturaMesAno) return true
+        const k = s.overrides?._gerencialKey
+        if (!k) return false
+        if (legacyKeys.has(k)) return true
+        // legado de grupo numerado: ger_num_{grupoId}_{cardId}_{dueDate}
+        if (k.startsWith('ger_num_') && k.includes(`_${cardId}_`) && s.startDate === dueDate) return true
+        return false
+      }
+      const slotOf = (s) => {
+        if (s.tipo === 'resgate_reserva') return `resgate_reserva_${s.accountId}`
+        if (s.tipo) return s.tipo
+        const k = s.overrides?._gerencialKey || ''
+        if (k === `${gerKey}_payment`) return 'pagamento_fatura'
+        if (k === `${gerKey}_resgate` || k === `${gerKey}_provision` || k === `${gerKey}_resgate_parc`) return 'gerencial_devolucao'
+        if (k.startsWith('ger_num_')) return `resgate_reserva_${s.accountId}`
+        return null
+      }
+
+      const registeredSlots = new Set()
+      const schedules = []
+      for (const s of d.schedules) {
+        if (!isManaged(s)) { schedules.push(s); continue }
+        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
+        if (done) {
+          schedules.push(s)
+          const sl = slotOf(s)
+          if (sl) registeredSlots.add(sl)
+        }
+        // pendente → descartado; será recriado a partir de `desired`
+      }
+      for (const dsh of desired) {
+        if (registeredSlots.has(dsh.slot)) continue // já há um executado nesse slot
+        const { slot, ...rest } = dsh
+        schedules.push({ ...baseSch, ...rest })
+      }
+
+      return { ...d, accounts, schedules }
+    })
+  }, [update])
+
   // Mantém dataRef e o recalc-por-tx atualizados (lidos por addTransaction/
   // updateTransaction em event handlers, após o commit).
   useEffect(() => {
     dataRef.current = data
+    recalcAgendamentosRef.current = recalcularAgendamentosFatura
     recalcFaturaRef.current = (cartaoId, date, faturaMonthYear) => {
       const card = dataRef.current.accounts.find(a => a.id === cartaoId)
-      recalcContasPagarFatura(cartaoId, faturaMesAnoOf(card, date, faturaMonthYear))
+      const mesAno = faturaMesAnoOf(card, date, faturaMonthYear)
+      recalcContasPagarFatura(cartaoId, mesAno)
+      if (mesAno) {
+        const [y, m] = mesAno.split('-')
+        recalcularAgendamentosFatura(cartaoId, y, m)
+      }
     }
   })
 
@@ -2072,19 +2134,11 @@ export function AppProvider({ children }) {
         faturaRef = computeFaturaRef(txDate, closingDay)
       }
 
-      const [mm, yyyy] = faturaRef.split('/')
-      const dueDay = String(cardAccount?.dueDay || 10).padStart(2, '0')
-      const scheduleDate = `${yyyy}-${mm}-${dueDay}` // vencimento: Conta → Cartão
-
-      const financialStartDay = data.settings?.financialMonthStartDay || 1
-      const resgateDate = computeScheduleDate(faturaRef, financialStartDay) // resgate: Ger. → Conta no dia financeiro
-
-      const gerKey = gerencialKey(lancamento.accountId, faturaRef)
-      const resgateKey = `${gerKey}_resgate`
-      const paymentKey = `${gerKey}_payment`
       const txDescription = lancamento.description || ''
-      // Parcela da fatura corrente: provisão imediata Conta → Ger. + resgate no dia financeiro
-      // + pagamento no vencimento. Parcela futura (immediate=false): só os agendamentos.
+      // Grupo G: única automação imediata é a transferência Conta Principal → Ger. subconta.
+      // Os agendamentos da fatura (devolução/pagamento) são gerados por recalcularAgendamentosFatura.
+      // Parcela futura (immediate=false): nenhuma transferência imediata (a subconta só é
+      // alimentada quando a parcela for de fato lançada no mês dela).
       const etapaATxId = immediate ? ('tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)) : null
 
       update(d => {
@@ -2151,187 +2205,32 @@ export function AppProvider({ children }) {
           }]
         }
 
-        let schedules = [...d.schedules]
-
-        // ETAPA B: Resgate Ger. → Conta Principal no dia financeiro do mês da fatura (acumulativo)
-        const resgateIdx = schedules.findIndex(s => s.overrides?._gerencialKey === resgateKey)
-        if (resgateIdx >= 0) {
-          schedules = schedules.map((s, i) => i === resgateIdx
-            ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-            : s
-          )
-        } else {
-          schedules = [...schedules, {
-            id: 'sch_ger_r_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            transactionType: 'transfer',
-            accountId: subcontaId,
-            toAccountId: contaPrincipal.id,
-            frequency: 'once',
-            occurrenceType: 'installment',
-            installments: 1,
-            autoRegister: false,
-            startDate: resgateDate,
-            amount: lancamento.amount,
-            description: `Resgate Ger. ${apelido} - Fatura ${faturaRef}`,
-            overrides: {
-              _gerencialKey: resgateKey,
-              _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
-            },
-            registered: [],
-            skipped: [],
-          }]
-        }
-
-        // ETAPA C: Pagamento fatura (Conta Principal → Cartão) — acumulativo para à vista e parcelados
-        const paymentIdx = schedules.findIndex(s => s.overrides?._gerencialKey === paymentKey)
-        if (paymentIdx >= 0) {
-          schedules = schedules.map((s, i) => i === paymentIdx
-            ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-            : s
-          )
-        } else {
-          schedules = [...schedules, {
-            id: 'sch_ger_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            transactionType: 'transfer',
-            accountId: contaPrincipal.id,
-            toAccountId: lancamento.accountId,
-            frequency: 'once',
-            occurrenceType: 'installment',
-            installments: 1,
-            autoRegister: false,
-            startDate: scheduleDate,
-            amount: lancamento.amount,
-            description: `Pagamento Fatura ${apelido} ${faturaRef}`,
-            faturaRef,
-            overrides: {
-              _gerencialKey: paymentKey,
-              _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subcontaId },
-            },
-            registered: [],
-            skipped: [],
-          }]
-        }
-
-        return { ...d, accounts, transactions: [...d.transactions, ...newTxs], schedules }
+        return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
       })
-      return { needsResgate: false, faturaRef, scheduleDate, etapaATxId }
+      return { needsResgate: false, faturaRef, etapaATxId }
     }
 
-    // Grupos numerados (2, 3, 4…): resgate (conta do grupo → Conta Principal) no início do mês
-    // financeiro + contribuição no pagamento da fatura (Conta Principal → Cartão no vencimento),
-    // compartilhado com o Grupo G para fechar o total real da fatura.
-    if (!grupo.defaultAccountId) return { needsResgate: false }
-
-    const cardAccount = data.accounts.find(a => a.id === lancamento.accountId)
-    const closingDay = cardAccount?.closingDay || 14
-    const dueDay = cardAccount?.dueDay || 10
-    const apelido = cardAccount?.apelido || cardAccount?.name?.slice(0, 6) || 'CC'
-
-    // Usa faturaMonthYear quando disponível (mesma convenção do Grupo G e dos estornos)
-    let faturaRef
-    if (lancamento.faturaMonthYear) {
-      const [y, m] = lancamento.faturaMonthYear.split('-')
-      faturaRef = `${m}/${y}`
-    } else {
-      faturaRef = computeFaturaRef(new Date(lancamento.date + 'T00:00:00'), closingDay)
-    }
-    const [fmm, fyyyy] = faturaRef.split('/')
-    const dueDate = `${fyyyy}-${fmm}-${String(dueDay).padStart(2, '0')}` // resgate e pagamento no vencimento
-    const gerKey = `ger_num_${grupoId}_${lancamento.accountId}_${dueDate}`
-    const paymentKey = `${gerencialKey(lancamento.accountId, faturaRef)}_payment`
-
-    // Resolve schedule ID before update() — check current snapshot
-    const existingSch = data.schedules.find(s => s.overrides?._gerencialKey === gerKey)
-    const scheduleId = existingSch
-      ? existingSch.id
-      : 'sch_ger_num_' + Date.now() + '_' + Math.random().toString(36).slice(2)
-
-    update(d => {
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
-      if (!contaPrincipal) return d
-
-      let schedules = [...d.schedules]
-
-      // Resgate: conta do grupo → Conta Principal, no vencimento da fatura (acumulativo)
-      const idx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKey)
-      if (idx >= 0) {
-        schedules = schedules.map((s, i) => i === idx
-          ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-          : s
-        )
-      } else {
-        schedules = [...schedules, {
-          id: scheduleId,
-          transactionType: 'transfer',
-          accountId: grupo.defaultAccountId,
-          toAccountId: contaPrincipal.id,
-          frequency: 'once',
-          occurrenceType: 'installment',
-          installments: 1,
-          autoRegister: false,
-          startDate: dueDate,
-          amount: lancamento.amount,
-          description: `Resgate ${grupo.name} - ${apelido} - Fatura ${faturaRef}`,
-          overrides: { _gerencialKey: gerKey },
-          registered: [],
-          skipped: [],
-        }]
-      }
-
-      // Pagamento da fatura: Conta Principal → Cartão no vencimento (compartilhado com o Grupo G)
-      const payIdx = schedules.findIndex(s => s.overrides?._gerencialKey === paymentKey)
-      if (payIdx >= 0) {
-        schedules = schedules.map((s, i) => i === payIdx
-          ? { ...s, amount: rb((s.amount || 0) + lancamento.amount) }
-          : s
-        )
-      } else {
-        schedules = [...schedules, {
-          id: 'sch_ger_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          transactionType: 'transfer',
-          accountId: contaPrincipal.id,
-          toAccountId: lancamento.accountId,
-          frequency: 'once',
-          occurrenceType: 'installment',
-          installments: 1,
-          autoRegister: false,
-          startDate: dueDate,
-          amount: lancamento.amount,
-          description: `Pagamento Fatura ${apelido} ${faturaRef}`,
-          faturaRef,
-          overrides: {
-            _gerencialKey: paymentKey,
-            _gerencial: { faturaRef, cardId: lancamento.accountId, checkingAccountId: contaPrincipal.id },
-          },
-          registered: [],
-          skipped: [],
-        }]
-      }
-
-      return { ...d, schedules }
-    })
-
-    return { needsResgate: false, gerencialScheduleId: scheduleId, scheduleDate: dueDate }
-  }, [data.gerencialGroups, data.accounts, data.schedules, data.settings, update])
+    // Grupos numerados (2,3,…) e Grupo D: sem transferência imediata. Os agendamentos
+    // (resgate de reserva e pagamento da fatura) são gerados por recalcularAgendamentosFatura.
+    return { needsResgate: false }
+  }, [data.gerencialGroups, data.accounts, update])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
+  // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na
+  // sua fatura, e recalcula os agendamentos de cada fatura afetada. Cada parcela vira um gasto
+  // normal da fatura em que cai (recalcularAgendamentosFatura faz o resto). Sem provisões/resgates
+  // parcelados separados — o modelo mantém UP TO 3 agendamentos por fatura.
   const criarParcelasGerencial = useCallback((rootTxId, {
-    accountId, amount, date, grupoGerencialId, installments,
+    accountId, amount, date, grupoGerencialId, installments, description = '',
     startFromInstallment = 2,   // default 2 (TransactionForm); import X>1 passa X+1
     baseFaturaMonthYear = null, // fatura da parcela importada (formato "YYYY-MM")
     baseInstallmentNum = 1,     // número da parcela importada (1 = normal)
   }) => {
     if (!installments || installments <= 1) return
     if (startFromInstallment > installments) return
-    const grupo = data.gerencialGroups?.find(g => g.id === grupoGerencialId)
-    if (!grupo || grupo.number === 'D') return
-
-    const cardAccount = data.accounts.find(a => a.id === accountId)
-    const closingDay = cardAccount?.closingDay || 14
-    const dueDay = cardAccount?.dueDay || 10
-    const apelido = cardAccount?.apelido || cardAccount?.name?.slice(0, 6) || 'CC'
+    const cardAccount = dataRef.current.accounts.find(a => a.id === accountId)
+    if (!cardAccount) return
+    const closingDay = cardAccount.closingDay || 14
 
     // Determina baseYear/baseMonth0 = mês da fatura da parcela 1
     let baseYear, baseMonth0
@@ -2342,186 +2241,36 @@ export function AppProvider({ children }) {
       baseYear = d1.getFullYear()
       baseMonth0 = d1.getMonth()
     } else {
-      const txDate = new Date(date + 'T00:00:00')
-      const faturaRef1 = computeFaturaRef(txDate, closingDay)
+      const faturaRef1 = computeFaturaRef(new Date(date + 'T00:00:00'), closingDay)
       const [fmm1, fyyyy1] = faturaRef1.split('/')
       baseYear = Number(fyyyy1)
       baseMonth0 = Number(fmm1) - 1
     }
 
-    if (typeof grupo.number === 'number' && grupo.number !== 1) {
-      if (!grupo.defaultAccountId) return
-      update(d => {
-        const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-          || d.accounts.find(a => a.isMain && a.type !== 'credit')
-          || d.accounts.find(a => a.type === 'checking')
-        if (!contaPrincipal) return d
-        let schedules = [...d.schedules]
-        for (let i = startFromInstallment; i <= installments; i++) {
-          const dI = new Date(baseYear, baseMonth0 + (i - 1), dueDay)
-          const fmI = String(dI.getMonth() + 1).padStart(2, '0')
-          const fyI = dI.getFullYear()
-          const faturaRefI = `${fmI}/${fyI}`
-          const dueDateStr = `${fyI}-${fmI}-${String(dueDay).padStart(2, '0')}`
-          const gerKeyI = `ger_num_${grupoGerencialId}_${accountId}_${dueDateStr}`
-          const payKeyI = `${gerencialKey(accountId, faturaRefI)}_payment`
-
-          // Resgate: conta do grupo → Conta Principal, no vencimento da fatura
-          const existingIdx = schedules.findIndex(s => s.overrides?._gerencialKey === gerKeyI)
-          if (existingIdx >= 0) {
-            schedules = schedules.map((s, idx) => idx === existingIdx
-              ? { ...s, amount: rb((s.amount || 0) + amount) }
-              : s
-            )
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_num_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: grupo.defaultAccountId,
-              toAccountId: contaPrincipal.id,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: dueDateStr,
-              amount,
-              description: `Resgate ${grupo.name} - ${apelido} - Fatura ${faturaRefI} (${i}/${installments}x)`,
-              overrides: { _gerencialKey: gerKeyI, _originTxId: rootTxId, _originAmount: amount },
-              registered: [],
-              skipped: [],
-            }]
-          }
-
-          // Pagamento da fatura: Conta Principal → Cartão no vencimento (compartilhado)
-          const payIdx = schedules.findIndex(s => s.overrides?._gerencialKey === payKeyI)
-          if (payIdx >= 0) {
-            schedules = schedules.map((s, idx) => idx === payIdx
-              ? { ...s, amount: rb((s.amount || 0) + amount) }
-              : s
-            )
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_pay_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: contaPrincipal.id,
-              toAccountId: accountId,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: dueDateStr,
-              amount,
-              description: `Pagamento Fatura ${apelido} ${faturaRefI}`,
-              faturaRef: faturaRefI,
-              overrides: {
-                _gerencialKey: payKeyI, _originTxId: rootTxId, _originAmount: amount,
-                _gerencial: { faturaRef: faturaRefI, cardId: accountId, checkingAccountId: contaPrincipal.id },
-              },
-              registered: [],
-              skipped: [],
-            }]
-          }
-        }
-        return { ...d, schedules }
+    const origDay = parseInt((date || '').split('-')[2] || '1', 10)
+    const baseDesc = (description || '').replace(/\s*\(?\d+\s*\/\s*\d+\)?\s*$/, '').trim()
+    const faturasAfetadas = new Set()
+    for (let i = startFromInstallment; i <= installments; i++) {
+      const fd = new Date(baseYear, baseMonth0 + (i - 1), 1)
+      const fy = fd.getFullYear()
+      const fm0 = fd.getMonth()
+      const futureFatura = `${fy}-${String(fm0 + 1).padStart(2, '0')}`
+      const maxDay = new Date(fy, fm0 + 1, 0).getDate()
+      const futureDate = `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
+      addTransaction({
+        type: 'expense', accountId, accountType: 'credit', amount, date: futureDate,
+        description: `${baseDesc} (${i}/${installments})`.trim(),
+        grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
+        origin: 'parcela', parentTxId: rootTxId,
+        _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
-    } else if (grupo.number === 1) {
-      const financialStartDay = data.settings?.financialMonthStartDay || 1
-      update(d => {
-        const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-          || d.accounts.find(a => a.isMain && a.type !== 'credit')
-          || d.accounts.find(a => a.type === 'checking')
-        if (!contaPrincipal) return d
-        const subconta = d.accounts.find(a => a.name === `Ger. ${apelido}`)
-        if (!subconta) return d
-        let schedules = [...d.schedules]
-        for (let i = startFromInstallment; i <= installments; i++) {
-          const futureDate = new Date(baseYear, baseMonth0 + (i - 1), 1)
-          const fmI = String(futureDate.getMonth() + 1).padStart(2, '0')
-          const fyI = futureDate.getFullYear()
-          const faturaRefI = `${fmI}/${fyI}`
-          const dueDayStr = String(dueDay).padStart(2, '0')
-          const startDateStr = `${fyI}-${fmI}-${dueDayStr}`
-          const resgateParceladoDateI = nextMonthScheduleDate(faturaRefI, financialStartDay)
-          const gerKeyBase = gerencialKey(accountId, faturaRefI)
-          const provKeyI = `${gerKeyBase}_provision`
-          const rpKeyI = `${gerKeyBase}_resgate_parc`
-          const payKeyI = `${gerKeyBase}_payment`
-          const gerencialMeta = { faturaRef: faturaRefI, cardId: accountId, checkingAccountId: contaPrincipal.id, gerencialContaId: subconta.id }
-
-          // _provision: Principal → Ger. no vencimento (acumulativo)
-          const provIdx = schedules.findIndex(s => s.overrides?._gerencialKey === provKeyI)
-          if (provIdx >= 0) {
-            schedules = schedules.map((s, idx) => idx === provIdx ? { ...s, amount: rb((s.amount || 0) + amount) } : s)
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_prov_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: contaPrincipal.id,
-              toAccountId: subconta.id,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: startDateStr,
-              amount,
-              description: `Provisão Ger. ${apelido} - Fatura ${faturaRefI} (${i}/${installments}x)`,
-              overrides: { _gerencialKey: provKeyI, _originTxId: rootTxId, _gerencial: gerencialMeta },
-              registered: [],
-              skipped: [],
-            }]
-          }
-
-          // _resgate_parc: Ger. → Principal no início do mês seguinte (acumulativo)
-          const rpIdx = schedules.findIndex(s => s.overrides?._gerencialKey === rpKeyI)
-          if (rpIdx >= 0) {
-            schedules = schedules.map((s, idx) => idx === rpIdx ? { ...s, amount: rb((s.amount || 0) + amount) } : s)
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_rp_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: subconta.id,
-              toAccountId: contaPrincipal.id,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: resgateParceladoDateI,
-              amount,
-              description: `Resgate Ger. ${apelido} - Fatura ${faturaRefI} (${i}/${installments}x)`,
-              overrides: { _gerencialKey: rpKeyI, _originTxId: rootTxId, _gerencial: gerencialMeta },
-              registered: [],
-              skipped: [],
-            }]
-          }
-
-          // _payment: Principal → Cartão no vencimento (acumulativo)
-          const payIdx = schedules.findIndex(s => s.overrides?._gerencialKey === payKeyI)
-          if (payIdx >= 0) {
-            schedules = schedules.map((s, idx) => idx === payIdx ? { ...s, amount: rb((s.amount || 0) + amount) } : s)
-          } else {
-            schedules = [...schedules, {
-              id: 'sch_ger_pay_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2),
-              transactionType: 'transfer',
-              accountId: contaPrincipal.id,
-              toAccountId: accountId,
-              frequency: 'once',
-              occurrenceType: 'installment',
-              installments: 1,
-              autoRegister: false,
-              startDate: startDateStr,
-              amount,
-              description: `Pagamento Fatura ${apelido} ${faturaRefI}`,
-              faturaRef: faturaRefI,
-              overrides: { _gerencialKey: payKeyI, _originTxId: rootTxId, _gerencial: gerencialMeta },
-              registered: [],
-              skipped: [],
-            }]
-          }
-        }
-        return { ...d, schedules }
-      })
+      faturasAfetadas.add(futureFatura)
     }
-  }, [data.gerencialGroups, data.accounts, data.settings, update])
+    for (const f of faturasAfetadas) {
+      const [y, m] = f.split('-')
+      recalcularAgendamentosFatura(accountId, y, m)
+    }
+  }, [addTransaction, recalcularAgendamentosFatura])
 
   // ── Ajusta parcelas 2..N quando o grupo gerencial muda em uma edição ──────────
   const ajustarParcelasGrupoGerencial = useCallback((txId, { prevGrupoId, newGrupoId, amount, accountId }) => {
@@ -3085,6 +2834,7 @@ export function AppProvider({ children }) {
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       processarLancamentoGerencial,
       criarParcelasGerencial,
+      recalcularAgendamentosFatura,
       ajustarParcelasGrupoGerencial,
       propagarValorParcelas,
       getProvisoesPendentes,

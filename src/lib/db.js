@@ -206,6 +206,9 @@ export const scheduleToRow = (s) => ({
   reserva_expense_category_id: s.reservaExpenseCategoryId || null,
   reserva_funcao_id: s.reservaFuncaoId || null,
   fatura_ref: s.faturaRef || null,
+  card_id: s.cardId || null,
+  fatura_mes_ano: s.faturaMesAno || null,
+  tipo: s.tipo || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -232,6 +235,9 @@ export const rowToSchedule = (r) => ({
   reservaExpenseCategoryId: r.reserva_expense_category_id || null,
   reservaFuncaoId: r.reserva_funcao_id || null,
   faturaRef: r.fatura_ref || null,
+  cardId: r.card_id || null,
+  faturaMesAno: r.fatura_mes_ano || null,
+  tipo: r.tipo || null,
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

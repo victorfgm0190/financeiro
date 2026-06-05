@@ -348,6 +348,16 @@ ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_expense_category_id TE
 -- Campo de ocorrências puladas (adicionado junto com a funcionalidade de Pular)
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS skipped JSONB DEFAULT '[]';
 
+-- Agendamentos acumulativos por fatura de cartão (recalcularAgendamentosFatura).
+-- Identificam de forma canônica os 3 tipos de agendamento mantidos por (card_id, fatura_mes_ano):
+--   'gerencial_devolucao' | 'resgate_reserva' | 'pagamento_fatura'
+-- fatura_mes_ano usa o formato 'YYYY-MM' (mesmo de lancamentos.fatura_month_year).
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref TEXT;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_mes_ano TEXT;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo TEXT;
+CREATE INDEX IF NOT EXISTS idx_agendamentos_fatura ON agendamentos (card_id, fatura_mes_ano, tipo);
+
 -- Plano de contas completo v2 (novas categorias — ON CONFLICT DO NOTHING preserva existentes)
 INSERT INTO categorias (id, name, type, color, icon, category_group) VALUES
   -- Alimentação

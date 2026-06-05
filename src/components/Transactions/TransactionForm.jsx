@@ -423,6 +423,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           date: form.date,
           grupoGerencialId: form.grupoGerencial,
           installments: form.installments,
+          description: form.description,
         })
       }
     }
