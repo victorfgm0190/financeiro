@@ -1101,6 +1101,9 @@ export default function SchedulePanel() {
   const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== ''
   const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax('') }
 
+  // Filtro por cartão na aba "Cartão de Crédito" ('' = todos os cartões)
+  const [cartaoFiltroId, setCartaoFiltroId] = useState('')
+
   const raAccountIds = useMemo(() => {
     const ids = new Set()
     gerencialGroups.forEach(g => {
@@ -1156,6 +1159,20 @@ export default function SchedulePanel() {
   )
   const displayFaturaPayments = showZeroed ? faturaPaymentSchedules : faturaPaymentSchedules.filter(s => Number(s.amount) !== 0)
   const pendingFaturaPayments = displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0).length
+
+  // Cartões de crédito ativos (do perfil) para o seletor da aba Cartão.
+  const cartoesDisponiveis = useMemo(
+    () => allAccounts
+      .filter(a => a.type === 'credit' && a.active !== false &&
+        (!activeProfileId || !a.profileId || a.profileId === activeProfileId))
+      .sort((a, b) => (a.apelido || a.name).localeCompare(b.apelido || b.name)),
+    [allAccounts, activeProfileId]
+  )
+  // Cartão de um agendamento de pagamento de fatura.
+  const faturaPaymentCardId = (s) => s.overrides?._gerencial?.cardId || s.toAccountId
+  // Listas exibidas na aba Cartão, aplicando o filtro por cartão selecionado.
+  const viewInvoice = cartaoFiltroId ? displayInvoice.filter(p => p.cartaoId === cartaoFiltroId) : displayInvoice
+  const viewFaturaPayments = cartaoFiltroId ? displayFaturaPayments.filter(s => faturaPaymentCardId(s) === cartaoFiltroId) : displayFaturaPayments
 
   // CORREÇÃO 3: contas de origem "gerenciais" = subcontas "Ger. ..." (têm grupoGerencial
   // no próprio account) + contas de resgate dos grupos numerados (raAccountIds).
@@ -1359,20 +1376,42 @@ export default function SchedulePanel() {
 
       {activeTab === 'cartao' && (
         <div className="space-y-3">
-          {displayInvoice.length === 0 && displayFaturaPayments.length === 0 ? (
+          {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) && cartoesDisponiveis.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 shrink-0">Cartão:</label>
+              <select
+                className="input py-1.5 text-xs max-w-xs"
+                value={cartaoFiltroId}
+                onChange={e => setCartaoFiltroId(e.target.value)}
+              >
+                <option value="">Todos os cartões</option>
+                {cartoesDisponiveis.map(c => (
+                  <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {viewInvoice.length === 0 && viewFaturaPayments.length === 0 ? (
             <div className="card text-center py-12">
               <CreditCard size={32} className="text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Nenhuma fatura gerada</p>
-              <p className="text-gray-600 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
+              {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) ? (
+                <p className="text-gray-500 text-sm">Nenhuma fatura para o cartão selecionado</p>
+              ) : (
+                <>
+                  <p className="text-gray-500 text-sm">Nenhuma fatura gerada</p>
+                  <p className="text-gray-600 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
+                </>
+              )}
             </div>
           ) : (
             <>
-              {displayInvoice.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
+              {[...viewInvoice].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
                 <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
               ))}
-              {displayFaturaPayments.length > 0 && (
+              {viewFaturaPayments.length > 0 && (
                 <SchedulesTable
-                  schedules={displayFaturaPayments}
+                  schedules={viewFaturaPayments}
                   categories={categories}
                   accounts={allAccounts}
                   gerencialGroups={gerencialGroups}
