@@ -1941,10 +1941,12 @@ export function AppProvider({ children }) {
       let subcontaId = d.accounts.find(a => a.name === subcontaName)?.id
       if (!subcontaId && totalG > 0) {
         subcontaId = 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+        const grupoGId = d.gerencialGroups?.find(g => g.number === 1)?.id || null
         accounts = [...accounts, {
           id: subcontaId, name: subcontaName, type: 'checking', balance: 0,
           bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
           fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+          grupoGerencial: grupoGId,
           accountGroupId: contaPrincipal.accountGroupId || null,
         }]
       }

@@ -1142,14 +1142,21 @@ export default function SchedulePanel() {
   )
   const faturaPaymentSchedules = useMemo(
     () => allSchedules.filter(s => {
+      // Reconhece AMBOS: novo (tipo='pagamento_fatura') e legado (_gerencialKey terminando _payment).
       const key = s.overrides?._gerencialKey
-      if (!key || !key.endsWith('_payment') || s.transactionType !== 'transfer') return false
+      const isNew = s.tipo === 'pagamento_fatura'
+      const isLegacyPayment = !!key && key.endsWith('_payment')
+      if (!isNew && !isLegacyPayment) return false
+      if (s.transactionType !== 'transfer') return false
       const g = s.overrides?._gerencial || {}
-      const cardId = g.cardId || s.toAccountId
+      const cardId = s.cardId || g.cardId || s.toAccountId
       if (!accountInProfile(cardId)) return false
-      // dedupe: se já existe contas_a_pagar para o mesmo cartão+fatura, não repete
-      if (g.faturaRef && g.faturaRef.includes('/')) {
-        const [mm, yyyy] = g.faturaRef.split('/')
+      // Os novos (tipo) são a fonte de verdade e sempre aparecem. O dedupe contra
+      // contas_a_pagar legadas aplica-se apenas aos agendamentos LEGADOS (_payment).
+      if (isNew) return true
+      const faturaRef = g.faturaRef || s.faturaRef
+      if (faturaRef && faturaRef.includes('/')) {
+        const [mm, yyyy] = faturaRef.split('/')
         if (invoiceFaturaKeys.has(`${cardId}|${yyyy}-${mm}`)) return false
       }
       return true
@@ -1169,7 +1176,7 @@ export default function SchedulePanel() {
     [allAccounts, activeProfileId]
   )
   // Cartão de um agendamento de pagamento de fatura.
-  const faturaPaymentCardId = (s) => s.overrides?._gerencial?.cardId || s.toAccountId
+  const faturaPaymentCardId = (s) => s.cardId || s.overrides?._gerencial?.cardId || s.toAccountId
   // Listas exibidas na aba Cartão, aplicando o filtro por cartão selecionado.
   const viewInvoice = cartaoFiltroId ? displayInvoice.filter(p => p.cartaoId === cartaoFiltroId) : displayInvoice
   const viewFaturaPayments = cartaoFiltroId ? displayFaturaPayments.filter(s => faturaPaymentCardId(s) === cartaoFiltroId) : displayFaturaPayments
@@ -1182,16 +1189,29 @@ export default function SchedulePanel() {
     return ids
   }, [allAccounts, raAccountIds])
 
-  // Agendamentos de devolução/resgate: transfer de conta gerencial → conta principal.
-  // Usa allSchedules porque as subcontas "Ger." não carregam profileId; o perfil é
-  // respeitado filtrando pela conta de destino (principal).
+  // Agendamentos LEGADOS obsoletos (provisão / resgate / resgate parcelado / resgate numerado)
+  // foram substituídos pelos tipos 'gerencial_devolucao' e 'resgate_reserva'. Escondemos os que
+  // ainda não têm 'tipo' (dados antigos cujo recálculo ainda não rodou); os novos carregam tipo.
+  const isObsoleteLegacy = (s) => {
+    if (s.tipo) return false
+    const k = s.overrides?._gerencialKey || ''
+    return k.endsWith('_provision') || k.endsWith('_resgate') || k.endsWith('_resgate_parc') || k.startsWith('ger_num_')
+  }
+
+  // Agendamentos de devolução/resgate: novos (tipo gerencial_devolucao/resgate_reserva) ou, por
+  // compatibilidade, transfers de conta gerencial → conta principal. Usa allSchedules porque as
+  // subcontas "Ger." não carregam profileId; o perfil é respeitado pela conta de destino (principal).
   const gerencialResgates = useMemo(
-    () => allSchedules.filter(s =>
-      s.transactionType === 'transfer' &&
-      gerencialOrigemIds.has(s.accountId) &&
-      !gerencialOrigemIds.has(s.toAccountId) &&
-      accountInProfile(s.toAccountId)
-    ),
+    () => allSchedules.filter(s => {
+      if (isObsoleteLegacy(s)) return false
+      const isNewGer = s.tipo === 'gerencial_devolucao' || s.tipo === 'resgate_reserva'
+      const structural =
+        s.transactionType === 'transfer' &&
+        gerencialOrigemIds.has(s.accountId) &&
+        !gerencialOrigemIds.has(s.toAccountId)
+      if (!isNewGer && !structural) return false
+      return accountInProfile(s.toAccountId)
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allSchedules, gerencialOrigemIds, activeProfileId, allAccounts]
   )
