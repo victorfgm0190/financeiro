@@ -42,6 +42,7 @@ export default function SettingsPanel() {
     saveBalanceSnapshot,
     restoreBalanceSnapshot,
     corrigirDadosGerencial,
+    recalcularAgendamentosFatura,
     data,
   } = useApp()
 
@@ -56,6 +57,36 @@ export default function SettingsPanel() {
   const [confirmReset, setConfirmReset] = useState(false)
   const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0, totalBalance: 0, totalProjected: 0 })
   const [corrigirStatus, setCorrigirStatus] = useState(null)
+  const [faturaStatus, setFaturaStatus] = useState({ running: false, total: 0, done: 0, finished: false })
+
+  // Recalcula os agendamentos acumulativos (devolução / resgate / pagamento) de cada cartão
+  // de crédito, para os últimos 12 e próximos 12 meses. Útil para limpar agendamentos legados
+  // após a migração do modelo de fatura.
+  const handleRecalcFaturas = async () => {
+    const cards = accounts.filter(a => a.type === 'credit')
+    const now = new Date()
+    const meses = []
+    for (let offset = -12; offset <= 12; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+      meses.push([d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0')])
+    }
+    const total = cards.length * meses.length
+    setFaturaStatus({ running: true, total, done: 0, finished: false })
+
+    let done = 0
+    for (const card of cards) {
+      for (const [ano, mes] of meses) {
+        recalcularAgendamentosFatura(card.id, ano, mes)
+        done++
+        // Cede o event loop periodicamente para a UI atualizar a barra de progresso.
+        if (done % 6 === 0) {
+          setFaturaStatus({ running: true, total, done, finished: false })
+          await new Promise(r => setTimeout(r, 0))
+        }
+      }
+    }
+    setFaturaStatus({ running: false, total, done: total, finished: true })
+  }
 
   const handleRecalcAll = async () => {
     const eligible = accounts.filter(a =>
@@ -1148,6 +1179,45 @@ export default function SettingsPanel() {
             >
               <RefreshCw size={13} />
               Corrigir Dados Gerenciais
+            </button>
+          </div>
+
+          <div className="border-t border-gray-800 pt-4 space-y-3">
+            <div>
+              <p className="text-sm text-gray-200 font-medium">Recalcular Agendamentos de Faturas</p>
+              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                Reconstrói os agendamentos acumulativos (devolução gerencial, resgate de reserva e
+                pagamento da fatura) de cada cartão de crédito, dos últimos 12 aos próximos 12 meses.
+                Remove agendamentos legados que foram substituídos pelo novo modelo.
+              </p>
+            </div>
+
+            {faturaStatus.running && (
+              <div className="space-y-1.5">
+                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${faturaStatus.total > 0 ? Math.round((faturaStatus.done / faturaStatus.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Recalculando faturas... {faturaStatus.done} / {faturaStatus.total}</p>
+              </div>
+            )}
+
+            {faturaStatus.finished && !faturaStatus.running && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400">
+                <Check size={13} />
+                <span>Agendamentos de faturas recalculados com sucesso ({faturaStatus.total} faturas).</span>
+              </div>
+            )}
+
+            <button
+              className="btn-secondary flex items-center gap-2"
+              onClick={handleRecalcFaturas}
+              disabled={faturaStatus.running}
+            >
+              <RefreshCw size={13} className={faturaStatus.running ? 'animate-spin' : ''} />
+              {faturaStatus.running ? 'Recalculando...' : 'Recalcular Agendamentos de Faturas'}
             </button>
           </div>
 
