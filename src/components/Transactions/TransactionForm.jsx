@@ -114,6 +114,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     faturaMonthYear: initial?.faturaMonthYear || '',
+    categoriaCnpjId: initial?.categoriaCnpjId || '',
+    categoriaCpfId: initial?.categoriaCpfId || '',
     repeat: false,
     repeatFrequency: 'monthly',
     repeatOccurrenceType: 'continuous',
@@ -157,6 +159,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // Transferência cujo DESTINO é conta de aplicação financeira (e não é reserva):
   // habilita um campo OPCIONAL de categoria para classificar o aporte nos relatórios.
   const isTransferToAplicacao = !!transferToAcc?.contaAplicacao && !isDepositToReserva && !isWithdrawFromReserva
+
+  // Transferência entre perfis diferentes (CPF↔CNPJ): habilita categorias por visão (PARTE 1).
+  const fromProfileId = transferFromAcc?.profileId || null
+  const toProfileId = transferToAcc?.profileId || null
+  const isInterProfileTransfer = form.type === 'transfer' && !!fromProfileId && !!toProfileId && fromProfileId !== toProfileId
 
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
@@ -238,6 +245,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (form.type === 'transfer' && !isTransferToAplicacao) {
       txData.categoryId = null
     }
+
+    // Categorias de transferência entre perfis (visão CNPJ/CPF) — só em transferências cross-profile.
+    txData.categoriaCnpjId = isInterProfileTransfer ? (form.categoriaCnpjId || null) : null
+    txData.categoriaCpfId = isInterProfileTransfer ? (form.categoriaCpfId || null) : null
 
     if (initial?.id) {
       updateTransaction(initial.id, txData)
@@ -680,6 +691,37 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 Opcional — preencha apenas se quiser classificar o aporte. Com categoria, o
                 lançamento aparece nos relatórios como saída; em branco, é uma transferência
                 comum (invisível nos relatórios).
+              </p>
+            </div>
+          )}
+          {isInterProfileTransfer && (
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
+              <p className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
+                🔁 Transferência entre perfis — categorize a movimentação em cada visão (opcional)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Categoria no CNPJ</label>
+                  <SearchableSelect
+                    options={categoryOpts}
+                    value={form.categoriaCnpjId}
+                    onChange={id => set('categoriaCnpjId', id)}
+                    placeholder="Sem categoria"
+                  />
+                </div>
+                <div>
+                  <label className="label">Categoria no CPF</label>
+                  <SearchableSelect
+                    options={categoryOpts}
+                    value={form.categoriaCpfId}
+                    onChange={id => set('categoriaCpfId', id)}
+                    placeholder="Sem categoria"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Opcional — usado em Relatórios e KPIs quando um perfil está selecionado: a saída
+                do perfil entra como despesa e a entrada como receita, na categoria da respectiva visão.
               </p>
             </div>
           )}

@@ -27,7 +27,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts } = useApp()
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)

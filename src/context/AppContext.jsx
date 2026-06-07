@@ -634,6 +634,35 @@ export function AppProvider({ children }) {
     return data.schedules.filter(s => !s.accountId || profileAccountIds.has(s.accountId))
   }, [data.schedules, profileAccountIds, activeProfileId])
 
+  const activeProfile = useMemo(
+    () => activeProfileId ? (data.profiles || []).find(p => p.id === activeProfileId) || null : null,
+    [data.profiles, activeProfileId],
+  )
+
+  // Transações normalizadas para relatórios/KPIs do perfil ativo: uma transferência
+  // ENTRE PERFIS (contas com perfis diferentes, e o perfil ativo é dono de exatamente um
+  // lado) vira receita/despesa sintética, na categoria da visão do perfil ativo:
+  //   • saída do perfil ativo → despesa | entrada no perfil ativo → receita
+  //   • categoria = categoria_cnpj_id (perfil PJ) ou categoria_cpf_id (perfil PF)
+  // Transferências do MESMO perfil (ou sem perfil dos dois lados) permanecem inalteradas.
+  const profileReportTransactions = useMemo(() => {
+    if (!activeProfile) return profileTransactions
+    const accById = new Map(data.accounts.map(a => [a.id, a]))
+    return profileTransactions.map(tx => {
+      if (tx.type !== 'transfer') return tx
+      const fromP = accById.get(tx.accountId)?.profileId || null
+      const toP = accById.get(tx.toAccountId)?.profileId || null
+      if (!fromP || !toP || fromP === toP) return tx
+      const fromIsActive = fromP === activeProfile.id
+      const toIsActive = toP === activeProfile.id
+      if (fromIsActive === toIsActive) return tx // perfil ativo é dono de ambos ou de nenhum
+      const categoryId = (activeProfile.type === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || ''
+      return fromIsActive
+        ? { ...tx, type: 'expense', categoryId } // accountId já é o do perfil ativo (origem)
+        : { ...tx, type: 'income', categoryId, accountId: tx.toAccountId } // entra na conta destino (perfil ativo)
+    })
+  }, [profileTransactions, activeProfile, data.accounts])
+
   // ── Registrar automático na inicialização ───────────────────────────────────
   useEffect(() => {
     if (!initialized || autoRegisterDoneRef.current) return
@@ -2832,8 +2861,8 @@ export function AppProvider({ children }) {
       reserveFunctions: data.reserveFunctions || [],
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       addCardImport, updateCardImport, revertCardImport,
-      activeProfileId, setActiveProfileId,
-      profileAccounts, profileTransactions, profileSchedules,
+      activeProfileId, setActiveProfileId, activeProfile,
+      profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,

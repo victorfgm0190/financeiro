@@ -49,9 +49,10 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, onShowPosicao }) {
-  const { profileAccounts, profileTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
-  const transactions = profileTransactions
+  // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
+  const transactions = profileReportTransactions
 
   const period = getFinancialPeriod()
   const periodStr = {

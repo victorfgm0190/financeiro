@@ -153,6 +153,8 @@ export const txToRow = (tx) => ({
   fatura_month_year: tx.faturaMonthYear || null,
   parent_tx_id: tx.parentTxId || null,
   reserva_funcao_id: tx.reservaFuncaoId || null,
+  categoria_cnpj_id: tx.categoriaCnpjId || null,
+  categoria_cpf_id: tx.categoriaCpfId || null,
   created_at: tx.createdAt || new Date().toISOString(),
 })
 
@@ -179,6 +181,8 @@ export const rowToTx = (r) => ({
   faturaMonthYear: r.fatura_month_year || null,
   parentTxId: r.parent_tx_id || null,
   reservaFuncaoId: r.reserva_funcao_id || null,
+  categoriaCnpjId: r.categoria_cnpj_id || null,
+  categoriaCpfId: r.categoria_cpf_id || null,
   createdAt: r.created_at,
 })
 

@@ -206,7 +206,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
 
