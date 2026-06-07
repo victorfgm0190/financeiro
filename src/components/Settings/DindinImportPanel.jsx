@@ -24,7 +24,7 @@ function makeId(parts) {
 }
 
 export default function DindinImportPanel() {
-  const { accounts, categories } = useApp()
+  const { accounts, categories, classificationRules } = useApp()
   const [tab, setTab] = useState('cc') // 'cc' | 'cartao'
   const [pendentes, setPendentes] = useState([])
   const [dbMappings, setDbMappings] = useState([])
@@ -71,20 +71,27 @@ export default function DindinImportPanel() {
     return () => { active = false }
   }, [buildDefaultSelection])
 
-  // Resolve um nome Dindin → id de conta Finup (mapeamento DB tem prioridade, depois fuzzy).
-  // Retorna { id, nao_criar }. id null quando não resolvido (item ambíguo).
+  // Resolve um nome Dindin → conta Finup (mapeamento DB tem prioridade, depois fuzzy).
+  // Retorna { id, m } onde m é o registro de account_mapping (ou null) para aplicar flags.
   const resolveFinup = useCallback((name) => {
-    if (!name) return { id: null, naoCriar: false }
-    const m = dbMapIndex[name.toLowerCase().trim()]
-    if (m?.nao_criar) return { id: null, naoCriar: true }
+    if (!name) return { id: null, m: null }
+    const m = dbMapIndex[name.toLowerCase().trim()] || null
+    if (m?.nao_criar) return { id: null, m }
     if (m?.nome_finup) {
       const acc = accounts.find(a => a.name.toLowerCase().trim() === m.nome_finup.toLowerCase().trim())
         || fuzzyMatchAccount(m.nome_finup, accounts)
-      if (acc) return { id: acc.id, naoCriar: false }
+      if (acc) return { id: acc.id, m }
     }
     const fuzzy = fuzzyMatchAccount(name, accounts)
-    return { id: fuzzy?.id || null, naoCriar: false }
+    return { id: fuzzy?.id || null, m }
   }, [dbMapIndex, accounts])
+
+  // Sugere categoria por regra de classificação (descrição contém o gatilho).
+  const suggestCategory = useCallback((desc) => {
+    const d = (desc || '').toLowerCase()
+    const rule = (classificationRules || []).find(r => r.contains && d.includes(r.contains.toLowerCase()))
+    return rule?.categoryId || ''
+  }, [classificationRules])
 
   async function handleUpload(file, fonte) {
     setError(''); setInfo(''); setBusy('upload')
@@ -92,6 +99,7 @@ export default function DindinImportPanel() {
       const raw = await parseFile(file)
       const counter = new Map()
       const rows = []
+      const skip = { mapeamento: 0, transferencia: 0, fatura: 0 }
 
       if (fonte === 'cc') {
         const { rows: parsed } = parseDindinCC(raw)
@@ -99,28 +107,51 @@ export default function DindinImportPanel() {
           const tipo = TIPO_FROM_CC[r.type] || 'despesa'
           const origem = resolveFinup(r.fromAccount)
           const destino = resolveFinup(r.toAccount)
+          const origAcc = origem.id ? accById.get(origem.id) : null
+          const destAcc = destino.id ? accById.get(destino.id) : null
+
+          // Regra: conta marcada como nao_criar no mapeamento → não importa.
+          const primaryMap = tipo === 'receita' ? destino.m : origem.m
+          if (primaryMap?.nao_criar) { skip.mapeamento++; continue }
+          // Regra: transferências marcadas como ignorar_transferencias (mantém só o lado PARA).
+          if (tipo === 'transferencia' && (origem.m?.ignorar_transferencias || destino.m?.ignorar_transferencias)) {
+            skip.transferencia++; continue
+          }
+          // Regra: pagamento de fatura — no lado Conta Corrente o destino/origem é um cartão
+          // de crédito; ignora aqui (as despesas já entram pelo lado Cartões).
+          if ((tipo === 'transferencia' && destAcc?.type === 'credit') || (tipo === 'despesa' && origAcc?.type === 'credit')) {
+            skip.fatura++; continue
+          }
+
           rows.push(buildRow({
             fonte, data: r.date, descricao: r.description, valor: r.amount, tipo,
             contaOrigemDindin: r.fromAccount || '', contaDestinoDindin: r.toAccount || '',
-            contaOrigemFinup: origem.id, contaDestinoFinup: destino.id, categoriaId: '',
+            contaOrigemFinup: origem.id, contaDestinoFinup: destino.id,
+            categoriaId: suggestCategory(r.description),
           }, counter))
         }
       } else {
+        // Cartões: toda despesa entra como expense, sem grupo gerencial (regra Dindin).
         const { rows: parsed, cardName } = parseDindinCartao(raw)
         const cartao = resolveFinup(cardName)
         for (const r of parsed) {
           rows.push(buildRow({
             fonte, data: r.date, descricao: r.description, valor: r.amount, tipo: 'despesa',
             contaOrigemDindin: cardName || '', contaDestinoDindin: '',
-            contaOrigemFinup: cartao.id, contaDestinoFinup: null, categoriaId: '',
+            contaOrigemFinup: cartao.id, contaDestinoFinup: null,
+            categoriaId: suggestCategory(r.description),
           }, counter))
         }
       }
 
-      if (rows.length === 0) { setError('Nenhum lançamento encontrado no arquivo.'); setBusy(''); return }
+      const puladas = skip.mapeamento + skip.transferencia + skip.fatura
+      if (rows.length === 0) {
+        setError(`Nenhum lançamento importável${puladas ? ` (${puladas} puladas por regras de mapeamento)` : ''}.`)
+        setBusy(''); return
+      }
       await insertImportPendentes(rows)
       await reload()
-      setInfo(`${rows.length} linha(s) carregada(s) para revisão.`)
+      setInfo(`${rows.length} linha(s) para revisão${puladas ? ` · ${puladas} puladas (mapeamento ${skip.mapeamento}, transferência ${skip.transferencia}, fatura ${skip.fatura})` : ''}.`)
     } catch (err) {
       setError('Erro ao processar o arquivo: ' + (err?.message || err))
     } finally {
@@ -354,9 +385,12 @@ export default function DindinImportPanel() {
       )}
 
       <p className="text-xs text-gray-600 leading-relaxed">
-        Linhas sem conta mapeada ficam destacadas em amarelo — revise o De-Para de contas
-        (account_mapping) e recarregue. "Confirmar" grava os lançamentos com origem DINDIN;
-        "Ignorar" descarta sem gravar. Os lançamentos aparecem no app após recarregar.
+        Mapeamento automático via De-Para de contas (account_mapping): linhas sem conta ficam
+        em amarelo para revisão. Regras aplicadas no upload — contas <i>não criar</i> e
+        transferências <i>ignoradas</i> são puladas; pagamento de fatura é ignorado no lado
+        Conta Corrente (as despesas entram pelo lado Cartões). "Confirmar" grava em lançamentos
+        com origem DINDIN (sem disparar automações de reserva); "Ignorar" descarta. Os
+        lançamentos aparecem no app após recarregar.
       </p>
 
       <ConfirmDialog
