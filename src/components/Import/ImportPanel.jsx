@@ -934,6 +934,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const dups = resolvedRows.filter(r => r._isDuplicate).length
   const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate).length
 
+  // Totalizador da fatura (atualiza em tempo real conforme os checkboxes):
+  //   importar  = itens "Novo" selecionados | jaExistem = itens "Duplicado" (já no banco)
+  const totais = useMemo(() => {
+    let importar = 0, jaExistem = 0
+    for (const r of resolvedRows) {
+      if (r._isDuplicate) jaExistem += r.amount
+      else if (r.selected) importar += r.amount
+    }
+    return { importar, jaExistem, total: importar + jaExistem }
+  }, [resolvedRows])
+
   return (
     <div className="space-y-4">
       {matchQueue.length > 0 && (
@@ -1012,6 +1023,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-gray-200">{cardInfo.cardName}</p></div>}
                 {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
               </div>
+            </div>
+          </div>
+
+          {/* Totalizador da fatura */}
+          <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-gray-500">Total a ser importado:</span>
+              <span className="text-sm font-semibold text-emerald-400">{fmt(totais.importar)}</span>
+            </div>
+            <span className="text-gray-600 font-medium">+</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs text-gray-500">Já existem:</span>
+              <span className="text-sm font-semibold text-orange-500">{fmt(totais.jaExistem)}</span>
+            </div>
+            <span className="text-gray-600 font-medium">=</span>
+            <div className="flex items-baseline gap-2 sm:ml-auto">
+              <span className="text-xs text-gray-400">Total da fatura:</span>
+              <span className="text-lg font-bold text-gray-100">{fmt(totais.total)}</span>
             </div>
           </div>
 
