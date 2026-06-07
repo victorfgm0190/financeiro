@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
-import { format, differenceInDays, parseISO } from 'date-fns'
-import { Package, Plus, Edit2, Trash2 } from 'lucide-react'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import { Package, Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
@@ -23,6 +24,24 @@ export function getEnvelopePeriod(dueDay) {
     from: format(from, 'yyyy-MM-dd'),
     to:   format(to,   'yyyy-MM-dd'),
   }
+}
+
+// ── Competência (mês financeiro) ────────────────────────────────────────────
+// Chave comparável (ano*12 + mês0) da competência de uma data, aplicando o dia de
+// início do mês financeiro: date.day >= startDay → mês da data; senão → mês anterior.
+function competenciaKeyOf(dateStr, startDay) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  let year = y, month0 = m - 1
+  if (d < startDay) { const p = new Date(y, m - 2, 1); year = p.getFullYear(); month0 = p.getMonth() }
+  return year * 12 + month0
+}
+
+// Competência atual: hoje.day >= startDay → mês atual; senão mês anterior.
+function currentCompetencia(startDay) {
+  const t = new Date()
+  if (t.getDate() >= startDay) return { year: t.getFullYear(), month0: t.getMonth() }
+  const p = new Date(t.getFullYear(), t.getMonth() - 1, 1)
+  return { year: p.getFullYear(), month0: p.getMonth() }
 }
 
 // ── EnvelopeForm ──────────────────────────────────────────────────────────────
@@ -123,24 +142,19 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 }
 
 // ── EnvelopeCard ──────────────────────────────────────────────────────────────
-function EnvelopeCard({ envelope, spent, daysUntilDue, onClick }) {
+function EnvelopeCard({ envelope, spent, onClick }) {
   const pct      = envelope.limitAmount > 0 ? (spent / envelope.limitAmount) * 100 : 0
   const remaining = envelope.limitAmount - spent
   const barWidth = Math.min(pct, 100)
   const barColor = pct <= 80 ? 'bg-blue-500' : pct <= 100 ? 'bg-orange-500' : 'bg-red-500'
-
-  let dueLabel, dueColor
-  if (daysUntilDue < 0)      { dueLabel = 'Em atraso';       dueColor = 'text-red-400' }
-  else if (daysUntilDue === 0){ dueLabel = 'Vence hoje';      dueColor = 'text-orange-400' }
-  else if (daysUntilDue === 1){ dueLabel = 'Vence amanhã';    dueColor = 'text-orange-400' }
-  else                        { dueLabel = `Vence em ${daysUntilDue} dia${daysUntilDue !== 1 ? 's' : ''}`; dueColor = 'text-gray-400' }
+  const nCats = envelope.categoryIds?.length || 0
 
   return (
     <button className="card text-left w-full hover:bg-gray-800/80 transition-colors group" onClick={onClick}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-12">
           <p className="text-sm font-semibold text-gray-200 truncate">{envelope.name}</p>
-          <p className={`text-xs mt-0.5 ${dueColor}`}>{dueLabel}</p>
+          <p className="text-xs mt-0.5 text-gray-500">{nCats} categoria{nCats !== 1 ? 's' : ''}</p>
         </div>
         <div className="text-right shrink-0">
           <p className="text-xs text-gray-500">Limite</p>
@@ -154,10 +168,12 @@ function EnvelopeCard({ envelope, spent, daysUntilDue, onClick }) {
         </div>
         <div className="flex justify-between text-xs">
           <span className="text-gray-400">Gasto: <span className="text-gray-200 font-medium">{fmt(spent)}</span></span>
-          {remaining >= 0
-            ? <span className="text-gray-400">Restante: <span className="text-blue-400 font-medium">{fmt(remaining)}</span></span>
-            : <span className="text-red-400 font-medium">Excedido: {fmt(-remaining)}</span>
-          }
+          <span className="text-gray-400">
+            Saldo:{' '}
+            <span className={`font-medium ${remaining >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {remaining >= 0 ? fmt(remaining) : `−${fmt(-remaining)}`}
+            </span>
+          </span>
         </div>
       </div>
 
@@ -170,8 +186,8 @@ function EnvelopeCard({ envelope, spent, daysUntilDue, onClick }) {
 }
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
-function DetailModal({ data, categories, accounts, onClose }) {
-  const { env, period, txs, spent } = data
+function DetailModal({ data, compLabel, categories, accounts }) {
+  const { env, txs, spent } = data
   const remaining = env.limitAmount - spent
   const account   = accounts.find(a => a.id === env.accountId)
 
@@ -199,7 +215,7 @@ function DetailModal({ data, categories, accounts, onClose }) {
 
       {/* Meta */}
       <div className="text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
-        <span>Período: {period.from.slice(8).split('-').reverse().join('/')} / {period.from.slice(0,7).split('-').reverse().join('/')} → {period.to.slice(8).split('-').reverse().join('/')} / {period.to.slice(0,7).split('-').reverse().join('/')}</span>
+        <span>Competência: <span className="text-gray-300">{compLabel}</span></span>
         {account && <span>Conta: {account.apelido || account.name}</span>}
       </div>
 
@@ -255,25 +271,39 @@ function DetailModal({ data, categories, accounts, onClose }) {
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings } = useApp()
   const [showForm,  setShowForm]  = useState(false)
   const [editEnv,   setEditEnv]   = useState(null)
   const [detailId,  setDetailId]  = useState(null)
 
+  const startDay = settings.financialMonthStartDay || 1
+  // Offset (em meses) a partir da competência atual — assim o padrão acompanha o
+  // financialMonthStartDay mesmo que as configurações carreguem após o 1º render.
+  const [monthOffset, setMonthOffset] = useState(0)
+  const comp = useMemo(() => {
+    const base = currentCompetencia(startDay)
+    const d = new Date(base.year, base.month0 + monthOffset, 1)
+    return { year: d.getFullYear(), month0: d.getMonth() }
+  }, [startDay, monthOffset])
+  const compKey = comp.year * 12 + comp.month0
+  const compLabel = useMemo(() => {
+    const s = format(new Date(comp.year, comp.month0, 1), "MMMM 'de' yyyy", { locale: ptBR })
+    return s.charAt(0).toUpperCase() + s.slice(1)
+  }, [comp])
+  const shiftComp = (delta) => setMonthOffset(o => o + delta)
+
   const envelopeData = useMemo(() => {
     return envelopes.map(env => {
-      const period = getEnvelopePeriod(env.dueDay)
-      const txs    = transactions.filter(tx =>
+      const txs = transactions.filter(tx =>
         tx.type === 'expense' &&
+        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'investAuto' &&
         env.categoryIds.includes(tx.categoryId) &&
-        tx.date >= period.from &&
-        tx.date <= period.to
+        competenciaKeyOf(tx.date, startDay) === compKey
       )
-      const spent       = txs.reduce((s, t) => s + t.amount, 0)
-      const daysUntilDue = differenceInDays(parseISO(period.to), new Date())
-      return { env, period, txs, spent, daysUntilDue }
+      const spent = txs.reduce((s, t) => s + t.amount, 0)
+      return { env, txs, spent }
     })
-  }, [envelopes, transactions])
+  }, [envelopes, transactions, compKey, startDay])
 
   function handleSave(data) {
     if (editEnv) updateEnvelope(editEnv.id, data)
@@ -312,6 +342,22 @@ export default function EnvelopesPanel() {
         </button>
       </div>
 
+      {/* Competência selector */}
+      {envelopes.length > 0 && (
+        <div className="card flex items-center justify-between py-2.5">
+          <button onClick={() => shiftComp(-1)} className="p-1.5 rounded-md hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors" title="Competência anterior">
+            <ChevronLeft size={18} />
+          </button>
+          <div className="text-center">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Competência</p>
+            <p className="text-sm font-semibold text-gray-200">{compLabel}</p>
+          </div>
+          <button onClick={() => shiftComp(1)} className="p-1.5 rounded-md hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors" title="Próxima competência">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Summary KPIs (only when there are envelopes) */}
       {envelopes.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
@@ -324,9 +370,9 @@ export default function EnvelopesPanel() {
             <p className="text-xl font-bold text-orange-400 mt-1">{fmt(totalSpent)}</p>
           </div>
           <div className="card">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Total Restante</p>
-            <p className={`text-xl font-bold mt-1 ${totalRemain >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
-              {fmt(Math.abs(totalRemain))}
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Total Saldo</p>
+            <p className={`text-xl font-bold mt-1 ${totalRemain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {totalRemain >= 0 ? fmt(totalRemain) : `−${fmt(-totalRemain)}`}
             </p>
           </div>
         </div>
@@ -347,12 +393,11 @@ export default function EnvelopesPanel() {
       {/* Cards grid */}
       {envelopes.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {envelopeData.map(({ env, period, txs, spent, daysUntilDue }) => (
+          {envelopeData.map(({ env, spent }) => (
             <div key={env.id} className="relative">
               <EnvelopeCard
                 envelope={env}
                 spent={spent}
-                daysUntilDue={daysUntilDue}
                 onClick={() => setDetailId(env.id)}
               />
               {/* action buttons */}
@@ -404,14 +449,14 @@ export default function EnvelopesPanel() {
         <Modal
           open={!!detailId}
           onClose={() => setDetailId(null)}
-          title={`${detail.env.name} — Período atual`}
+          title={`${detail.env.name} — ${compLabel}`}
           size="lg"
         >
           <DetailModal
             data={detail}
+            compLabel={compLabel}
             categories={categories}
             accounts={accounts}
-            onClose={() => setDetailId(null)}
           />
         </Modal>
       )}
