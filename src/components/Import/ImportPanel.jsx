@@ -441,6 +441,19 @@ function isDuplicateInstallment(row, existing, accountId) {
   })
 }
 
+// Encontra no banco a transação de uma parcela específica (mesma base + número + conta,
+// valor dentro de R$ 0,50). Usado para saber se uma parcela futura já existe.
+function findExistingParcela(inst, num, amount, accountId, existing) {
+  const base = inst.base.toLowerCase().trim()
+  return existing.find(t => {
+    if (t.accountId !== accountId) return false
+    if (Math.abs(t.amount - amount) > 0.50) return false
+    const tInst = detectInstallment(t.description || '')
+    if (!tInst || tInst.num !== num) return false
+    return tInst.base.toLowerCase().trim() === base
+  }) || null
+}
+
 // Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
 // À-vista calculam a fatura de forma confiável (calcFatura da data do gasto); parcelados X/N
 // usam um offset (num-1) que pode driftar no fechamento — por isso preferimos as à-vista.
@@ -569,19 +582,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaMonthYear: baseFatura, _origDay: rowDay,
         }
         processed.push(baseRow)
-        if (installInfo?.num === 1 && installInfo.total > 1) {
-          // Parcelas 2..N: fatura avança 1 mês, data = dia de vencimento do cartão naquele mês
-          for (let i = 2; i <= installInfo.total; i++) {
-            const faturaI = addMonthToFatura(baseFatura, i - 1)
-            processed.push({
-              ...baseRow, _id: idCtr++ * 100 + i,
-              date: faturaToDate(faturaI, resolvedDueDay) || baseRow.date,
-              faturaMonthYear: faturaI,
-              description: baseRow.description.replace(installInfo.matchStr, `${i}/${installInfo.total}`),
-              _generated: true, _seriesId: baseRow._id, _installmentNum: i,
-            })
-          }
-        } else if (installInfo && installInfo.num > 1) {
+        // As parcelas futuras (num+1 … total) não entram na lista principal — são
+        // exibidas na seção "Parcelas de faturas futuras" (derivada) e criadas na
+        // confirmação. Aqui só detectamos correspondência com lançamento existente.
+        if (installInfo && installInfo.num > 1) {
           const key = installInfo.base.toLowerCase().slice(0, 14)
           const match = transactions.find(t =>
             Math.abs(t.amount - baseRow.amount) < 0.5 &&
@@ -710,6 +714,50 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     })
   }, [rows, selectedAccount, transactions, editingImport])
 
+  // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
+  // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
+  // ausentes → herdam a categoria/gerencial da parcela importada e são criadas na confirmação.
+  const futureParcelas = useMemo(() => {
+    if (editingImport || !selectedAccount) return []
+    const dueDay = selectedAcc?.dueDay || null
+    // Parcelas base já presentes na seção principal — evita duplicar uma parcela futura
+    // que também aparece como item da própria fatura importada.
+    const principalKeys = new Set()
+    for (const row of resolvedRows) {
+      if (!row.selected || row._isDuplicate || !row._installment) continue
+      principalKeys.add(`${row._installment.base.toLowerCase().trim()}|${row._installment.num}`)
+    }
+    const out = []
+    const seen = new Set() // evita repetir a mesma parcela futura vinda de pais diferentes
+    for (const row of resolvedRows) {
+      if (!row.selected || row._isDuplicate) continue
+      const inst = row._installment
+      if (!inst || inst.num >= inst.total) continue
+      const base = inst.base.toLowerCase().trim()
+      const numWidth = inst.matchStr.split('/')[0].length
+      for (let k = inst.num + 1; k <= inst.total; k++) {
+        const key = `${base}|${k}`
+        if (principalKeys.has(key) || seen.has(key)) continue
+        seen.add(key)
+        const futFatura = addMonthToFatura(row.faturaMonthYear, k - inst.num)
+        const futDate = faturaToDate(futFatura, dueDay) || `${futFatura}-01`
+        const futNumStr = String(k).padStart(numWidth, '0')
+        const futDesc = row.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
+        const existing = findExistingParcela(inst, k, row.amount, selectedAccount, transactions)
+        out.push({
+          _id: `fut_${row._id}_${k}`, parentId: row._id,
+          date: futDate, faturaMonthYear: futFatura, description: futDesc, amount: row.amount,
+          num: k, total: inst.total,
+          categoryId: existing ? (existing.categoryId || '') : row.categoryId,
+          grupoGerencial: existing ? (existing.grupoGerencial || defaultGrupoD) : (row.grupoGerencial || defaultGrupoD),
+          payee: existing ? (existing.payee || '') : row.payee,
+          _exists: !!existing,
+        })
+      }
+    }
+    return out
+  }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD])
+
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
   const toggleAll = (v) => setRows(prev => prev.map(r => ({ ...r, selected: r._isDuplicate ? false : v })))
@@ -795,48 +843,39 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       txIds.push(txId)
       if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(saveDate + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
       if (row.grupoGerencial) {
-        // Parcela gerada (siblings 2..N de um parcelado 1/N) é futura → não cria transferência imediata
+        // Item da fatura sendo importada → transferência gerencial imediata.
         const gerResult = processarLancamentoGerencial(
           { accountId: selectedAccount, amount: row.amount, date: saveDate, description: row.description, faturaMonthYear: row.faturaMonthYear },
-          row.grupoGerencial, null, { immediate: !row._generated }
+          row.grupoGerencial, null, { immediate: true }
         )
         if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
       }
 
-      // Gera lançamentos das parcelas futuras (X+1 … N) para parcelados intermediários X/N com X > 1
-      const instRow = row._installment
-      if (!row._generated && instRow && instRow.num > 1 && instRow.num < instRow.total && row.faturaMonthYear) {
-        const numWidth = instRow.matchStr.split('/')[0].length
-        const dia = row._origDay ?? parseInt(saveDate.split('-')[2] || '1', 10)
-        const [baseFY, baseFM] = row.faturaMonthYear.split('-').map(Number)
-        for (let i = instRow.num + 1; i <= instRow.total; i++) {
-          const offset = i - instRow.num
-          const futureD = new Date(baseFY, baseFM - 1 + offset, dia)
-          const futureFatura = `${futureD.getFullYear()}-${String(futureD.getMonth() + 1).padStart(2, '0')}`
-          const futureDate = `${futureFatura}-${String(futureD.getDate()).padStart(2, '0')}`
-          const futureNumStr = String(i).padStart(numWidth, '0')
-          const futureDesc = row.description.replace(instRow.matchStr, `${futureNumStr}/${instRow.total}`)
-          addFaturaAfetada(futureFatura, futureDate)
-          if (!isDuplicateInstallment({ description: futureDesc, amount: row.amount }, transactions, selectedAccount)) {
-            const fId = addTransaction({
-              type: 'expense', accountId: selectedAccount, accountType: 'credit',
-              amount: row.amount, date: futureDate, description: futureDesc,
-              categoryId: row.categoryId, payee: row.payee,
-              grupoGerencial: row.grupoGerencial || defaultGrupoD,
-              faturaMonthYear: futureFatura,
-              _fromImport: true,
-            })
-            if (fId) txIds.push(fId)
-            // Parcela futura: cria apenas os agendamentos (resgate + pagamento) da própria fatura,
-            // sem transferência imediata — esta só ocorre quando a parcela for lançada no mês dela.
-            if (row.grupoGerencial) {
-              processarLancamentoGerencial(
-                { accountId: selectedAccount, amount: row.amount, date: futureDate, description: futureDesc, faturaMonthYear: futureFatura },
-                row.grupoGerencial, null, { immediate: false }
-              )
-            }
-          }
-        }
+    })
+
+    // Parcelas futuras (seção secundária): cria as AUSENTES no banco herdando a
+    // categoria/gerencial da parcela importada; as já existentes não são alteradas.
+    futureParcelas.forEach(fp => {
+      if (fp._exists) return
+      if (isDuplicateInstallment({ description: fp.description, amount: fp.amount }, transactions, selectedAccount)) return
+      addFaturaAfetada(fp.faturaMonthYear, fp.date)
+      if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
+      const fId = addTransaction({
+        type: 'expense', accountId: selectedAccount, accountType: 'credit',
+        amount: fp.amount, date: fp.date, description: fp.description,
+        categoryId: fp.categoryId, payee: fp.payee,
+        grupoGerencial: fp.grupoGerencial || defaultGrupoD,
+        faturaMonthYear: fp.faturaMonthYear,
+        _fromImport: true,
+      })
+      if (fId) txIds.push(fId)
+      if (fp.grupoGerencial) {
+        // Futura: só os agendamentos (resgate + pagamento) da própria fatura, sem
+        // transferência imediata — esta ocorre quando a parcela cair no mês dela.
+        processarLancamentoGerencial(
+          { accountId: selectedAccount, amount: fp.amount, date: fp.date, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
+          fp.grupoGerencial, null, { immediate: false }
+        )
       }
     })
 
@@ -1018,7 +1057,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {resolvedRows.map(row => (
-                    <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''} ${row._generated ? 'bg-indigo-950/20' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''}`}>
+                    <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''}`}>
                       <td className="px-3 py-2">
                         <input type="checkbox" className="accent-[#0F6E56]"
                           checked={row.selected} disabled={row._isDuplicate}
@@ -1043,8 +1082,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                             value={row.description}
                             onChange={e => updateRow(row._id, { description: e.target.value })} />
                           {row._installment && (
-                            <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${row._generated ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-700 text-gray-400'}`}>
-                              {row._generated ? `${row._installmentNum}/${row._installment.total}` : `${row._installment.num}/${row._installment.total}`}
+                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">
+                              {row._installment.num}/{row._installment.total}
                             </span>
                           )}
                         </div>
@@ -1082,6 +1121,63 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               </table>
             </div>
           </div>
+
+          {/* Parcelas de faturas futuras — somente informativo (não importadas agora) */}
+          {futureParcelas.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-gray-800 bg-indigo-950/30 flex items-center gap-2 flex-wrap">
+                <Layers size={13} className="text-indigo-400 shrink-0" />
+                <h3 className="text-xs font-semibold text-indigo-300">Parcelas de faturas futuras — não serão importadas agora</h3>
+                <span className="text-[10px] text-gray-500">
+                  {futureParcelas.length} parcela{futureParcelas.length !== 1 ? 's' : ''}
+                  {' · '}{futureParcelas.filter(f => !f._exists).length} a criar
+                  {' · '}{futureParcelas.filter(f => f._exists).length} já existe{futureParcelas.filter(f => f._exists).length !== 1 ? 'm' : ''}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Data</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Fatura</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Categoria</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium hidden md:table-cell">Ger.</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {futureParcelas.map(fp => {
+                      const cat = categories.find(c => c.id === fp.categoryId)
+                      const ger = gerencialGroups.find(g => g.id === fp.grupoGerencial)
+                      return (
+                        <tr key={fp._id} className="border-b border-gray-800/40 opacity-70">
+                          <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{fp.date?.split('-').reverse().join('/')}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{fp.faturaMonthYear?.split('-').reverse().join('/')}</td>
+                          <td className="px-3 py-2 text-gray-300 max-w-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-xs">{fp.description}</span>
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400">{fp.num}/{fp.total}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-400">{cat ? `${cat.icon} ${cat.name}` : <span className="text-gray-600">—</span>}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400 hidden md:table-cell">{ger ? `${ger.number} · ${ger.name}` : <span className="text-gray-600">—</span>}</td>
+                          <td className="px-3 py-2 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">{fmt(fp.amount)}</td>
+                          <td className="px-3 py-2">
+                            {fp._exists
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400">Já existe</span>
+                              : <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">Será criada</span>
+                            }
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Classification rules */}
           {classificationRules.length > 0 && (
