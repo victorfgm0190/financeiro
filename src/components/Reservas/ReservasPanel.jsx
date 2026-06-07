@@ -59,13 +59,19 @@ function useReservas() {
       prevSaldoInicial: f.saldoInicial,
       prevEntradas: f.entradas,
       prevSaidas: f.saidas,
+      prevEntradasOverride: f.entradasOverride ?? null,
+      prevSaidasOverride: f.saidasOverride ?? null,
       saldoAtualizado: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
     }))
     setPeriods(ps => [...ps, { closedAt: new Date().toISOString().split('T')[0], snapshot }])
+    // Fecha o período: o saldo atualizado vira o novo saldo inicial e as entradas/saídas
+    // são zeradas via override (0), evitando recontar os lançamentos do período já fechado.
     functions.forEach(f => updateReserveFunction(f.id, {
       saldoInicial: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
       entradas: 0,
       saidas: 0,
+      entradasOverride: 0,
+      saidasOverride: 0,
     }))
   }
 
@@ -73,7 +79,13 @@ function useReservas() {
     if (periods.length === 0) return
     const last = periods[periods.length - 1]
     last.snapshot.forEach(snap =>
-      updateReserveFunction(snap.id, { saldoInicial: snap.prevSaldoInicial, entradas: snap.prevEntradas, saidas: snap.prevSaidas })
+      updateReserveFunction(snap.id, {
+        saldoInicial: snap.prevSaldoInicial,
+        entradas: snap.prevEntradas,
+        saidas: snap.prevSaidas,
+        entradasOverride: snap.prevEntradasOverride ?? null,
+        saidasOverride: snap.prevSaidasOverride ?? null,
+      })
     )
     setPeriods(ps => ps.slice(0, -1))
   }
@@ -82,9 +94,10 @@ function useReservas() {
 }
 
 // ── Inline editable number cell ────────────────────────────────────────────
-function InlineEdit({ value, onSave, textClass = 'text-gray-300' }) {
+// isOverride=false → valor calculado automaticamente (mostra selo "auto"); editar grava
+// um override manual. isOverride=true → valor manual; onReset volta ao cálculo automático.
+function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = false, onReset }) {
   const [editing, setEditing] = useState(false)
-  const [val, setVal] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -92,7 +105,7 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300' }) {
   }, [editing, value])
 
   const save = () => {
-    const n = parseFloat(inputRef.current?.value ?? val)
+    const n = parseFloat(inputRef.current?.value ?? '')
     if (!isNaN(n)) onSave(Math.round(n * 100) / 100)
     setEditing(false)
   }
@@ -111,13 +124,27 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300' }) {
   }
 
   return (
-    <button
-      onClick={() => setEditing(true)}
-      className={`text-right w-full text-xs font-semibold hover:underline cursor-pointer ${textClass}`}
-      title="Clique para editar"
-    >
-      {value !== 0 ? fmt(value) : <span className="text-gray-700">0,00</span>}
-    </button>
+    <span className="inline-flex items-center justify-end gap-1 w-full">
+      <button
+        onClick={() => setEditing(true)}
+        className={`text-right text-xs font-semibold hover:underline cursor-pointer ${textClass}`}
+        title={isOverride ? 'Valor manual — clique para editar' : 'Calculado dos lançamentos — clique para sobrescrever'}
+      >
+        {value !== 0 ? fmt(value) : <span className="text-gray-700">0,00</span>}
+      </button>
+      {isOverride
+        ? (onReset && (
+          <button
+            onClick={onReset}
+            title="Voltar ao cálculo automático"
+            className="text-gray-600 hover:text-blue-400 shrink-0"
+          >
+            <RotateCcw size={10} />
+          </button>
+        ))
+        : <span title="Calculado automaticamente a partir dos lançamentos" className="text-[8px] uppercase tracking-wide text-gray-600 shrink-0">auto</span>
+      }
+    </span>
   )
 }
 
@@ -486,11 +513,11 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                     <div className="flex items-center gap-4 text-xs">
                       <div className="flex items-center gap-1.5 flex-1">
                         <span className="text-gray-500">Entradas:</span>
-                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
+                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} textClass="text-blue-600" />
                       </div>
                       <div className="flex items-center gap-1.5 flex-1">
                         <span className="text-gray-500">Saídas:</span>
-                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidas: v })} textClass="text-orange-600" />
+                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
                       </div>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
@@ -572,10 +599,10 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradas: v })} textClass="text-blue-600" />
+                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} textClass="text-blue-600" />
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidas: v })} textClass="text-orange-600" />
+                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
                           </td>
                           <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                             {fmt(saldo)}
@@ -899,10 +926,54 @@ export default function ReservasPanel() {
 
   const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100
 
+  const period = getFinancialPeriod()
+  const periodStart = period.start.toISOString().split('T')[0]
+  const periodEnd = period.end.toISOString().split('T')[0]
+
+  // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada
+  // função (reservaFuncaoId) dentro do período financeiro atual.
+  //   • receita vinculada → entrada | despesa vinculada → saída
+  //   • transferência → entrada se cai numa conta de reserva (depósito);
+  //     saída se sai de uma conta de reserva (resgate) — mesma regra do Fluxo Futuro.
+  const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  const computedMovs = useMemo(() => {
+    const m = {}
+    functions.forEach(f => { m[f.id] = { entradas: 0, saidas: 0 } })
+    transactions.forEach(tx => {
+      const slot = tx.reservaFuncaoId && m[tx.reservaFuncaoId]
+      if (!slot) return
+      if (tx.date < periodStart || tx.date > periodEnd) return
+      if (tx.type === 'income') slot.entradas += tx.amount
+      else if (tx.type === 'expense') slot.saidas += tx.amount
+      else if (tx.type === 'transfer') {
+        if (accById.get(tx.toAccountId)?.isReserva) slot.entradas += tx.amount
+        else if (accById.get(tx.accountId)?.isReserva) slot.saidas += tx.amount
+      }
+    })
+    Object.values(m).forEach(s => {
+      s.entradas = Math.round(s.entradas * 100) / 100
+      s.saidas = Math.round(s.saidas * 100) / 100
+    })
+    return m
+  }, [functions, transactions, periodStart, periodEnd, accById])
+
+  // Funções com entradas/saídas EFETIVAS: override manual quando definido, senão o
+  // valor calculado. Tudo a jusante (saldo, saldo atualizado, fluxo) usa estes valores.
+  const effectiveFunctions = useMemo(() => functions.map(f => {
+    const comp = computedMovs[f.id] || { entradas: 0, saidas: 0 }
+    return {
+      ...f,
+      entradas: f.entradasOverride != null ? f.entradasOverride : comp.entradas,
+      saidas: f.saidasOverride != null ? f.saidasOverride : comp.saidas,
+      entradasAuto: f.entradasOverride == null,
+      saidasAuto: f.saidasOverride == null,
+    }
+  }), [functions, computedMovs])
+
   const saldosAtualizados = useMemo(() => {
     const result = {}
     const byAccount = {}
-    functions.forEach(f => {
+    effectiveFunctions.forEach(f => {
       if (!f.accountId) return
       ;(byAccount[f.accountId] = byAccount[f.accountId] || []).push(f)
     })
@@ -917,9 +988,9 @@ export default function ReservasPanel() {
         result[f.id] = totalSaldo === 0 ? 0 : Math.round(saldo * (saldoReal / totalSaldo) * 100) / 100
       })
     })
-    functions.filter(f => !f.accountId).forEach(f => { result[f.id] = computeSaldo(f) })
+    effectiveFunctions.filter(f => !f.accountId).forEach(f => { result[f.id] = computeSaldo(f) })
     return result
-  }, [functions, accounts, accountBalances])
+  }, [effectiveFunctions, accounts, accountBalances])
 
   const handleVirar = () => {
     virarSaldo(saldosAtualizados)
@@ -929,10 +1000,6 @@ export default function ReservasPanel() {
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
   const lastPeriod = periods[periods.length - 1]
-
-  const period = getFinancialPeriod()
-  const periodStart = period.start.toISOString().split('T')[0]
-  const periodEnd = period.end.toISOString().split('T')[0]
 
   return (
     <div className="space-y-4">
@@ -969,7 +1036,7 @@ export default function ReservasPanel() {
 
       {tab === 'resumo' && (
         <ResumoTab
-          functions={functions}
+          functions={effectiveFunctions}
           accounts={nonCreditAccounts}
           accountBalances={accountBalances}
           periods={periods}
@@ -988,7 +1055,7 @@ export default function ReservasPanel() {
 
       {tab === 'fluxo' && (
         <FluxoTab
-          functions={functions}
+          functions={effectiveFunctions}
           accounts={nonCreditAccounts}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}

@@ -24,6 +24,10 @@ export default async function handler(req, res) {
       ordem INTEGER DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now()
     )`)
+    // Override manual de entradas/saídas calculadas a partir de lançamentos (Etapa 2 das Reservas).
+    // NULL = usar valor calculado; número = sobrescreve o cálculo automático.
+    await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS entradas_override NUMERIC`)
+    await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS saidas_override NUMERIC`)
     await query(`ALTER TABLE reservas ADD COLUMN IF NOT EXISTS import_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reconciled BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true`)

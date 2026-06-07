@@ -253,6 +253,8 @@ export const reserveFunctionToRow = (f) => ({
   deposito_mensal: Number(f.depositoMensal) || 0,
   mes_vencimento: f.mesVencimento != null && f.mesVencimento !== '' ? String(f.mesVencimento) : null,
   ordem: Number.isFinite(f.ordem) ? f.ordem : 0,
+  entradas_override: f.entradasOverride != null ? Number(f.entradasOverride) : null,
+  saidas_override: f.saidasOverride != null ? Number(f.saidasOverride) : null,
 })
 
 export const rowToReserveFunction = (r) => ({
@@ -266,6 +268,12 @@ export const rowToReserveFunction = (r) => ({
   depositoMensal: Number(r.deposito_mensal) || 0,
   mesVencimento: r.mes_vencimento != null && r.mes_vencimento !== '' ? Number(r.mes_vencimento) : null,
   ordem: r.ordem ?? 0,
+  // Override manual; se ausente, herda valores manuais legados (entradas/saidas) para
+  // não perder o que o usuário já preencheu antes da Etapa 2 (cálculo automático).
+  entradasOverride: r.entradas_override != null ? Number(r.entradas_override)
+    : (Number(r.entradas) ? Number(r.entradas) : null),
+  saidasOverride: r.saidas_override != null ? Number(r.saidas_override)
+    : (Number(r.saidas) ? Number(r.saidas) : null),
 })
 
 export const categoryToRow = (c) => ({
