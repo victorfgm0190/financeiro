@@ -30,13 +30,16 @@ function isItauCSV(text) {
   return /^data[,;]lan[çc]amento[,;]valor/im.test(clean)
 }
 
-function parseItauCSV(text) {
+function parseItauCSV(text, categories = []) {
   const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
 
   // Localizar linha de cabeçalho
   const headerIdx = lines.findIndex(l => /^data[,;]lan[çc]amento[,;]valor/i.test(l))
   if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '' }
+
+  // Categoria de estorno (primeira cujo nome contenha "estorno"); vazio se não houver.
+  const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
 
   const sep = lines[headerIdx].includes(';') ? ';' : ','
   const parsed = []
@@ -53,10 +56,21 @@ function parseItauCSV(text) {
     if (!desc) continue
 
     const rawVal = parseFloat(cols[2].replace(',', '.'))
-    if (isNaN(rawVal)) continue
+    if (isNaN(rawVal) || rawVal === 0) continue
 
-    // Valor negativo = pagamento/estorno → ignorar
-    if (rawVal <= 0) continue
+    if (rawVal < 0) {
+      // Pagamento de fatura (negativo) → ignorar.
+      if (desc.toLowerCase().includes('pagamento efetuado')) continue
+      // Demais negativos = estorno → importar como RECEITA (valor absoluto),
+      // pré-classificado na categoria de estorno (se houver).
+      parsed.push({
+        _id: idCtr++,
+        date, description: desc, movimentacao: '', amount: Math.abs(rawVal),
+        isDeposit: true, type: 'income', selected: true, _isDuplicate: false,
+        categoryId: estornoCategoryId, payee: '', grupoGerencial: '',
+      })
+      continue
+    }
 
     parsed.push({
       _id: idCtr++,
@@ -491,6 +505,57 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
   })
 }
 
+// AJUSTE 2: modal "Preencher em Lote" — aplica categoria + gerencial aos itens cuja
+// descrição contém o texto informado.
+function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
+  const [contains, setContains] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [grupoGerencial, setGrupoGerencial] = useState(sortedGrupos[0]?.id || '')
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-gray-100">Preencher em Lote</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="label">Descrição contém</label>
+            <input
+              className="input"
+              value={contains}
+              onChange={e => setContains(e.target.value)}
+              placeholder="ex: uber"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial) }}
+            />
+          </div>
+          <div>
+            <label className="label">Categoria</label>
+            <CategorySelect
+              categories={categories}
+              className="input"
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+              searchable
+            />
+          </div>
+          <div>
+            <label className="label">Grupo Gerencial</label>
+            <select className="input" value={grupoGerencial} onChange={e => setGrupoGerencial(e.target.value)}>
+              {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" disabled={!contains.trim()} onClick={() => onApply(contains, categoryId, grupoGerencial)}>
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
@@ -511,6 +576,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [scheduleMatchQueue, setScheduleMatchQueue] = useState([])
   const [confirmRevertId, setConfirmRevertId] = useState(null)
   const [editingImport, setEditingImport] = useState(null)
+  const [showBatchFill, setShowBatchFill] = useState(false)
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
@@ -535,7 +601,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (isCsv) {
         const text = await readFileAsText(file)
         if (!isItauCSV(text)) { setError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).'); return }
-        ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text))
+        ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text, categories))
       } else {
         const rawRows = await parseFile(file)
         ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
@@ -762,6 +828,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
   const toggleAll = (v) => setRows(prev => prev.map(r => ({ ...r, selected: r._isDuplicate ? false : v })))
 
+  // AJUSTE 2: preenche categoria + gerencial em lote para itens cuja descrição contém o texto.
+  const applyBatchFill = (containsText, categoryId, grupoGerencial) => {
+    setShowBatchFill(false)
+    const t = (containsText || '').trim().toLowerCase()
+    if (!t) return
+    setRows(prev => prev.map(r =>
+      (r.description || '').toLowerCase().includes(t)
+        ? { ...r, categoryId: categoryId || r.categoryId, grupoGerencial: grupoGerencial || r.grupoGerencial }
+        : r
+    ))
+  }
+
   const autoClassify = () => {
     const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
     setRows(prev => prev.map(row => {
@@ -828,20 +906,32 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const [m, y] = ref.split('/')
       faturasAfetadas.add(`${y}-${m}`)
     }
+    // AJUSTE 2: contains (descrições) que já viraram regra — evita duplicar no lote.
+    const ruleContainsSeen = new Set(classificationRules.map(r => (r.contains || '').trim().toLowerCase()).filter(Boolean))
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
+      const isExpense = (row.type || 'expense') === 'expense'
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       if (row.payee && !payees.includes(row.payee)) addPayee(row.payee)
       const txId = addTransaction({
-        type: 'expense', accountId: selectedAccount, accountType: 'credit',
+        type: row.type || 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: row.amount, date: saveDate, description: row.description,
         categoryId: row.categoryId, payee: row.payee,
-        grupoGerencial: row.grupoGerencial || defaultGrupoD,
+        grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
         faturaMonthYear: row.faturaMonthYear || null,
         _fromImport: true,
       })
       txIds.push(txId)
-      if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(saveDate + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial })
+      // AJUSTE 2: cada despesa preenchida vira uma regra de classificação (contém = descrição),
+      // se ainda não houver uma regra com essa mesma descrição. (Estornos/receitas não geram regra.)
+      if (isExpense && row.categoryId) {
+        const ruleContains = (row.description || '').trim()
+        const key = ruleContains.toLowerCase()
+        if (ruleContains && !ruleContainsSeen.has(key)) {
+          ruleContainsSeen.add(key)
+          addRule({ contains: ruleContains, categoryId: row.categoryId, payee: row.payee || null, grupoGerencial: row.grupoGerencial || null })
+        }
+      }
       if (row.grupoGerencial) {
         // Item da fatura sendo importada → transferência gerencial imediata.
         const gerResult = processarLancamentoGerencial(
@@ -947,6 +1037,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   return (
     <div className="space-y-4">
+      {showBatchFill && (
+        <BatchFillModal
+          categories={categories}
+          sortedGrupos={sortedGrupos}
+          onApply={applyBatchFill}
+          onClose={() => setShowBatchFill(false)}
+        />
+      )}
+
       {matchQueue.length > 0 && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -1050,6 +1149,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               {!editingImport && (
                 <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
                   <Wand2 size={12} /> Classificar Auto
+                </button>
+              )}
+              {!editingImport && (
+                <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowBatchFill(true)}>
+                  <Layers size={12} /> Preencher em Lote
                 </button>
               )}
               <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }}>

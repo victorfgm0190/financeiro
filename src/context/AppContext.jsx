@@ -1295,7 +1295,7 @@ export function AppProvider({ children }) {
 
   // ── Classification Rules ────────────────────────────────────────────────────
   const addRule = useCallback((rule) => {
-    const id = 'rule_' + Date.now()
+    const id = 'rule_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
     update(d => ({ ...d, classificationRules: [...d.classificationRules, { ...rule, id }] }))
   }, [update])
 
