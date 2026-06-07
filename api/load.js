@@ -28,6 +28,23 @@ export default async function handler(req, res) {
     // NULL = usar valor calculado; número = sobrescreve o cálculo automático.
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS entradas_override NUMERIC`)
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS saidas_override NUMERIC`)
+    // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
+    // de virarem lançamentos. status: pendente | confirmado | ignorado.
+    await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (
+      id TEXT PRIMARY KEY,
+      origem TEXT NOT NULL DEFAULT 'DINDIN',
+      data TEXT,
+      descricao TEXT,
+      valor NUMERIC DEFAULT 0,
+      tipo TEXT,
+      conta_origem_dindin TEXT,
+      conta_destino_dindin TEXT,
+      conta_origem_finup TEXT,
+      conta_destino_finup TEXT,
+      categoria_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pendente',
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
     await query(`ALTER TABLE reservas ADD COLUMN IF NOT EXISTS import_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reconciled BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true`)

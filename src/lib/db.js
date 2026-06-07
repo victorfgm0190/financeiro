@@ -515,6 +515,36 @@ export async function loadAccountMappings() {
   }
 }
 
+// ─── Importação histórica (staging importacoes_pendentes) ────────────────────
+
+export async function loadImportPendentes({ origem, status } = {}) {
+  const qs = new URLSearchParams()
+  if (origem) qs.set('origem', origem)
+  if (status) qs.set('status', status)
+  const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  try {
+    const data = await apiGet(`/api/importacoes-pendentes${suffix}`)
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+// rows já em snake_case (colunas de importacoes_pendentes), com id.
+export async function insertImportPendentes(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return { ok: true, count: 0 }
+  return apiPost('/api/importacoes-pendentes', { action: 'insert', rows })
+}
+
+export async function updateImportPendentesStatus(ids, status) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true }
+  return apiPost('/api/importacoes-pendentes', { action: 'updateStatus', ids, status })
+}
+
+export async function clearImportPendentes(origem, status) {
+  return apiPost('/api/importacoes-pendentes', { action: 'clear', origem, status })
+}
+
 // ─── Ping ─────────────────────────────────────────────────────────────────────
 
 export async function pingDb() {
