@@ -43,8 +43,10 @@ export default async function handler(req, res) {
       conta_destino_finup TEXT,
       categoria_id TEXT,
       status TEXT NOT NULL DEFAULT 'pendente',
+      fonte TEXT,
       created_at TIMESTAMPTZ DEFAULT now()
     )`)
+    await query(`ALTER TABLE importacoes_pendentes ADD COLUMN IF NOT EXISTS fonte TEXT`)
     await query(`ALTER TABLE reservas ADD COLUMN IF NOT EXISTS import_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reconciled BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true`)

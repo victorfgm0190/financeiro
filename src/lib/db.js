@@ -545,6 +545,12 @@ export async function clearImportPendentes(origem, status) {
   return apiPost('/api/importacoes-pendentes', { action: 'clear', origem, status })
 }
 
+// Grava as linhas (ids) em lancamentos com origin='DINDIN' e marca como confirmado.
+export async function confirmImportPendentes(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true, inserted: 0 }
+  return apiPost('/api/importacoes-pendentes', { action: 'confirm', ids })
+}
+
 // ─── Ping ─────────────────────────────────────────────────────────────────────
 
 export async function pingDb() {

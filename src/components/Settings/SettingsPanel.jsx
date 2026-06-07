@@ -6,6 +6,7 @@ import { STORAGE_KEY } from '../../lib/storage'
 import { fmt } from '../shared/utils'
 import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
+import DindinImportPanel from './DindinImportPanel'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
@@ -1142,6 +1143,9 @@ export default function SettingsPanel() {
           Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
         </p>
       </div>
+
+      {/* Importação histórica Dindin */}
+      <DindinImportPanel />
 
       {/* Manutenção */}
       <div className="card">

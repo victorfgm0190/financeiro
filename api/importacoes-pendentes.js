@@ -15,8 +15,10 @@ async function ensureTable() {
     conta_destino_finup TEXT,
     categoria_id TEXT,
     status TEXT NOT NULL DEFAULT 'pendente',
+    fonte TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
   )`)
+  await query(`ALTER TABLE importacoes_pendentes ADD COLUMN IF NOT EXISTS fonte TEXT`)
 }
 
 export default async function handler(req, res) {
@@ -54,6 +56,44 @@ export default async function handler(req, res) {
           await query(`UPDATE importacoes_pendentes SET status = $1 WHERE id = ANY($2)`, [status, ids])
         }
         return res.json({ ok: true })
+      }
+
+      // Confirma um conjunto de ids: grava em lancamentos (origin='DINDIN') e marca
+      // a linha de staging como 'confirmado'. Só confirma linhas com conta resolvida.
+      if (action === 'confirm') {
+        const { ids } = body
+        if (!Array.isArray(ids) || ids.length === 0) return res.json({ ok: true, inserted: 0 })
+        const rows = await query(
+          `SELECT * FROM importacoes_pendentes WHERE id = ANY($1) AND status <> 'confirmado'`, [ids]
+        )
+        const typeMap = { receita: 'income', despesa: 'expense', transferencia: 'transfer' }
+        const lanc = []
+        const okIds = []
+        for (const r of rows) {
+          const type = typeMap[r.tipo] || 'expense'
+          // receita entra na conta destino; despesa sai da origem; transferência usa ambas.
+          const accountId = type === 'income' ? (r.conta_destino_finup || null) : (r.conta_origem_finup || null)
+          const toAccountId = type === 'transfer' ? (r.conta_destino_finup || null) : null
+          if (!accountId && !toAccountId) continue // sem conta resolvida → não confirma
+          lanc.push({
+            id: 'tx_dindin_' + r.id,
+            type,
+            account_id: accountId,
+            to_account_id: toAccountId,
+            from_account_id: null,
+            amount: Number(r.valor) || 0,
+            date: r.data,
+            description: r.descricao,
+            category_id: r.categoria_id || null,
+            origin: 'DINDIN',
+          })
+          okIds.push(r.id)
+        }
+        if (lanc.length > 0) {
+          await upsertRows('lancamentos', lanc)
+          await query(`UPDATE importacoes_pendentes SET status='confirmado' WHERE id = ANY($1)`, [okIds])
+        }
+        return res.json({ ok: true, inserted: lanc.length, skipped: rows.length - lanc.length })
       }
 
       // Remove staging (de uma origem, ou tudo) — útil para reimportar do zero.
