@@ -597,3 +597,59 @@ export async function syncSettings(settings, costCenters) {
     console.error('[db] sync settings:', err.message)
   }
 }
+
+// ─── Restauração de backup (importação manual) ───────────────────────────────
+
+// Restaura a tabela account_mapping (upsert por id — não remove linhas extras,
+// pois é dado de referência). Os rows já vêm em snake_case (formato exportado).
+export async function restoreAccountMappings(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return
+  try {
+    await apiPost('/api/sync', { type: 'section', table: 'account_mapping', upsert: rows, delete: [] })
+  } catch (err) {
+    console.error('[db] restore account_mapping:', err.message)
+  }
+}
+
+// Restaura um backup completo no Neon: faz upsert de tudo que está no backup e
+// remove do banco o que não existir mais nele (substituição total). Usa o estado
+// atual do Neon como "prev" para calcular as exclusões por id.
+export async function restoreFullBackup(backup, accountMapping) {
+  const empty = {
+    accounts: [], transactions: [], schedules: [], categories: [], budgets: [],
+    classificationRules: [], gerencialRules: [], gerencialGroups: [], payables: [],
+    payees: [], envelopes: [], accountGroups: [], profiles: [], cardImports: [],
+    reserveFunctions: [],
+  }
+  let prev = empty
+  try {
+    const current = await loadFromDb({ settings: {}, costCenters: [] })
+    if (current.status === 'connected') prev = { ...empty, ...current.data }
+  } catch (err) {
+    console.error('[db] restore: falha ao ler estado atual do Neon:', err.message)
+  }
+
+  const d = backup
+  // Mesma estratégia (e ordem) do full-sync de AppContext — FK contas→cartões é
+  // tratada internamente por syncAccounts; demais tabelas não têm FK restritiva.
+  await Promise.all([
+    syncAccounts(prev.accounts, d.accounts || []),
+    syncSection('lancamentos', prev.transactions, d.transactions || [], txToRow),
+    syncSection('agendamentos', prev.schedules, d.schedules || [], scheduleToRow),
+    syncSection('categorias', prev.categories, d.categories || [], categoryToRow),
+    syncSection('orcamento', prev.budgets, d.budgets || [], budgetToRow),
+    syncSection('regras_classificacao', prev.classificationRules, d.classificationRules || [], ruleToRow),
+    syncSection('gerencial_rules', prev.gerencialRules, d.gerencialRules || [], gerencialRuleToRow),
+    syncSection('reservas_funcoes', prev.gerencialGroups, d.gerencialGroups || [], gerencialGroupToRow),
+    syncSection('reservas', prev.payables, d.payables || [], payableToRow),
+    syncPayees(prev.payees, d.payees || []),
+    syncSection('envelopes', prev.envelopes, d.envelopes || [], envelopeToRow),
+    syncSection('grupos_conta', prev.accountGroups, d.accountGroups || [], accountGroupToRow),
+    syncSection('perfis', prev.profiles, d.profiles || [], perfilToRow),
+    syncSection('card_imports', prev.cardImports, d.cardImports || [], importToRow),
+    syncSection('reserve_functions', prev.reserveFunctions, d.reserveFunctions || [], reserveFunctionToRow),
+    syncSettings(d.settings || {}, d.costCenters || []),
+  ])
+
+  await restoreAccountMappings(accountMapping)
+}

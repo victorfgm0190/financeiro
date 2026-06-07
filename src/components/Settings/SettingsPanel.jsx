@@ -4,7 +4,8 @@ import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
 import { fmt } from '../shared/utils'
-import { triggerBackupDownload, getLastBackupTs } from '../../hooks/useAutoBackup'
+import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
+import { restoreFullBackup } from '../../lib/db'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
@@ -279,8 +280,13 @@ export default function SettingsPanel() {
   const importInputRef = useRef(null)
   const [pendingImport, setPendingImport] = useState(null) // { parsed, fileName }
   const [confirmImport, setConfirmImport] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
 
-  const handleExport = () => triggerBackupDownload(data)
+  const handleExport = async () => {
+    setExporting(true)
+    try { await downloadFullBackup(data) } finally { setExporting(false) }
+  }
 
   const handleImportFileChange = (e) => {
     const file = e.target.files[0]
@@ -303,11 +309,23 @@ export default function SettingsPanel() {
     e.target.value = ''
   }
 
-  const handleImportConfirm = () => {
+  const handleImportConfirm = async () => {
     if (!pendingImport) return
-    const { _exportedAt, _app, ...cleanData } = pendingImport.parsed
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData))
-    window.location.reload()
+    const accountMapping = pendingImport.parsed._accountMapping
+    const cleanData = { ...pendingImport.parsed }
+    delete cleanData._exportedAt
+    delete cleanData._app
+    delete cleanData._accountMapping
+    setImporting(true)
+    try {
+      // Restaura no Neon (fonte autoritativa); só então grava o cache local e recarrega.
+      await restoreFullBackup(cleanData, accountMapping)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData))
+      window.location.reload()
+    } catch (err) {
+      setImporting(false)
+      alert('Falha ao restaurar o backup: ' + (err?.message || err))
+    }
   }
 
   const openGroupEdit = (group) => {
@@ -1098,14 +1116,25 @@ export default function SettingsPanel() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <button className="btn-primary flex items-center justify-center gap-2 flex-1" onClick={handleExport}>
-            <Download size={14} /> Exportar backup completo
+          <button
+            className="btn-primary flex items-center justify-center gap-2 flex-1 disabled:opacity-60"
+            onClick={handleExport}
+            disabled={exporting || importing}
+          >
+            <Download size={14} /> {exporting ? 'Exportando…' : 'Exportar backup completo'}
           </button>
-          <label className="btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer">
+          <label className={`btn-secondary flex items-center justify-center gap-2 flex-1 cursor-pointer ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
             <Upload size={14} /> Importar backup
-            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} />
+            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFileChange} disabled={importing} />
           </label>
         </div>
+
+        {importing && (
+          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2">
+            <RefreshCw size={12} className="shrink-0 animate-spin" />
+            <span>Restaurando backup no servidor… não feche a aba.</span>
+          </div>
+        )}
 
         <p className="text-xs text-gray-600 leading-relaxed">
           Os dados são salvos automaticamente no navegador a cada alteração.
