@@ -13,10 +13,10 @@ export function today() {
 }
 
 // ─── Filtros de lançamentos (barra de filtros em tempo real) ────────────────
-export const EMPTY_LANC_FILTROS = { data: '', historico: '', favorecido: '', de: '', para: '' }
+export const EMPTY_LANC_FILTROS = { data: '', historico: '', favorecido: '', de: '', para: '', categoria: '', valorDe: '', valorAte: '' }
 
 export function hasLancFiltros(f) {
-  return !!(f && (f.data || f.historico || f.favorecido || f.de || f.para))
+  return !!(f && (f.data || f.historico || f.favorecido || f.de || f.para || f.categoria || f.valorDe || f.valorAte))
 }
 
 // Nomes "Conta De" / "Conta Para" de um lançamento (absoluto, não relativo à
@@ -43,6 +43,13 @@ export function matchLancFiltros(tx, f, accounts) {
     const { de, para } = txDeParaNames(tx, accounts)
     if (f.de && !norm(de).includes(norm(f.de))) return false
     if (f.para && !norm(para).includes(norm(f.para))) return false
+  }
+  if (f.categoria && tx.categoryId !== f.categoria) return false
+  if (f.valorDe || f.valorAte) {
+    const num = s => { const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n }
+    const de = num(f.valorDe), ate = num(f.valorAte)
+    if (de != null && tx.amount < de) return false
+    if (ate != null && tx.amount > ate) return false
   }
   return true
 }

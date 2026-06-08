@@ -185,7 +185,12 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
       {/* Table */}
       <div className="card p-0 overflow-hidden">
         {txs.length > 0 && (
-          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+          <LancamentoFiltros
+            filtros={filtros}
+            setFiltros={setFiltros}
+            fields={['data', 'historico', 'favorecido', 'de', 'para', 'categoria', 'valor']}
+            categories={categories}
+          />
         )}
         {txs.length === 0 ? (
           <div className="text-center py-10">
