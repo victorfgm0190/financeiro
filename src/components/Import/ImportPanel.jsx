@@ -11,6 +11,7 @@ import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
+import GerencialTotalizer from '../shared/GerencialTotalizer'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -1189,6 +1190,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           </div>
 
           <div className="card p-0 overflow-hidden">
+            <GerencialTotalizer txs={resolvedRows} gerencialGroups={gerencialGroups} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

@@ -9,6 +9,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
+import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ExtratoGerencial from './ExtratoGerencial'
@@ -348,6 +349,7 @@ export default function CreditCardPanel() {
           </div>
         ) : (
           <>
+            <GerencialTotalizer txs={billTxs} gerencialGroups={gerencialGroups} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
