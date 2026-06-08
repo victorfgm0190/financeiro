@@ -6,6 +6,7 @@ import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
 
@@ -84,6 +85,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
+    rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
   } = useApp()
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
@@ -131,6 +133,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const [resgateInfo, setResgateInfo] = useState(null)
   const [scheduleMatch, setScheduleMatch] = useState(null)
   const [debtCtx, setDebtCtx] = useState(null)
+
+  // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
+  const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
+  const [rateioRows, setRateioRows] = useState(() =>
+    initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })) : []
+  )
+  const [showRateio, setShowRateio] = useState(false)
+  const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -253,6 +263,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (initial?.id) {
       updateTransaction(initial.id, txData)
 
+      // Rateio: grava/atualiza ou remove os rateios deste lançamento.
+      if (form.type !== 'transfer') {
+        if (rateioRows.length > 0) saveRateiosFor(initial.id, rateioRows)
+        else if (hadRateio) deleteRateiosFor(initial.id)
+      }
+
       // Ajuste de automações gerenciais em edição de despesa de cartão
       const isCardExpense = initial.accountType === 'credit' && initial.type === 'expense'
       if (isCardExpense) {
@@ -368,6 +384,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     }
 
     const txId = addTransaction(txData)
+
+    // Rateio: salva os rateios para o lançamento recém-criado.
+    if (form.type !== 'transfer' && rateioRows.length > 0 && txId) saveRateiosFor(txId, rateioRows)
 
     // Painel "Repetir este lançamento" (somente em NOVO): cria um agendamento com os
     // mesmos dados, usando a data do lançamento como início. A ocorrência da data de
@@ -577,6 +596,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {showRateio && (
+        <RateioModal
+          total={Number(form.amount) || rateioTotal || 0}
+          categories={categories}
+          categoryType={form.type === 'income' ? 'income' : form.type === 'expense' ? 'expense' : null}
+          initial={rateioRows}
+          onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
+          onDeleteAll={() => { setRateioRows([]); setShowRateio(false) }}
+          onClose={() => setShowRateio(false)}
+        />
+      )}
       <div>
         <label className="label">Tipo</label>
         <div className="flex rounded-lg overflow-hidden border border-gray-700">
@@ -737,12 +767,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <>
           <div>
             <label className="label">Categoria</label>
-            <SearchableSelect
-              options={categoryOpts}
-              value={form.categoryId}
-              onChange={id => set('categoryId', id)}
-              placeholder="Sem categoria"
-            />
+            <div className="flex items-center gap-2">
+              {rateioRows.length > 0 ? (
+                <div className="input flex-1 flex items-center justify-between text-xs text-gray-300">
+                  <span>{rateioRows.length} Categorias Separadas</span>
+                  <span className="text-gray-500">Total: {fmt(rateioTotal)}</span>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <SearchableSelect
+                    options={categoryOpts}
+                    value={form.categoryId}
+                    onChange={id => set('categoryId', id)}
+                    placeholder="Sem categoria"
+                  />
+                </div>
+              )}
+              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+                Separar
+              </button>
+            </div>
           </div>
 
           <div>

@@ -468,6 +468,7 @@ export async function loadFromDb(defaultData) {
         profiles: d.perfis.map(rowToPerfil),
         cardImports: d.imports?.map(rowToImport) || [],
         reserveFunctions: d.rfns?.map(rowToReserveFunction) || [],
+        rateios: d.rateios?.map(rowToRateio) || [],
       },
     }
   } catch (err) {
@@ -520,6 +521,34 @@ export async function loadAccountMappings() {
 }
 
 // ─── Importação histórica (staging importacoes_pendentes) ────────────────────
+
+// ─── Rateio de lançamento ────────────────────────────────────────────────────
+
+export const rowToRateio = (r) => ({
+  id: r.id,
+  lancamentoId: r.lancamento_id,
+  categoriaId: r.categoria_id || '',
+  valor: Number(r.valor) || 0,
+  descricao: r.descricao || '',
+})
+
+export async function loadRateios(lancamentoId) {
+  try {
+    const data = await apiGet(`/api/lancamento-rateios?lancamento_id=${encodeURIComponent(lancamentoId)}`)
+    return Array.isArray(data) ? data.map(rowToRateio) : []
+  } catch {
+    return []
+  }
+}
+
+// rateios: [{ id, categoriaId, valor, descricao }] — substitui todos do lançamento.
+export async function saveRateios(lancamentoId, rateios) {
+  return apiPost('/api/lancamento-rateios', { action: 'save', lancamentoId, rateios: rateios || [] })
+}
+
+export async function deleteRateios(lancamentoId) {
+  return apiPost('/api/lancamento-rateios', { action: 'delete', lancamentoId })
+}
 
 export async function loadImportPendentes({ origem, status } = {}) {
   const qs = new URLSearchParams()

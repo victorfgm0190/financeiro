@@ -6,6 +6,7 @@ import {
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
   importToRow, gerencialRuleToRow, reserveFunctionToRow,
+  saveRateios, deleteRateios,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate } from '../lib/fatura'
@@ -356,6 +357,7 @@ const defaultData = {
   profiles: [],
   cardImports: [],
   reserveFunctions: [],
+  rateios: [],
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
@@ -487,6 +489,7 @@ export function AppProvider({ children }) {
           profiles: result.data.profiles ?? [],
           cardImports: result.data.cardImports ?? [],
           reserveFunctions: result.data.reserveFunctions ?? [],
+          rateios: result.data.rateios ?? [],
         }
 
         // Migração: funções de reserva do localStorage → Neon.
@@ -639,29 +642,57 @@ export function AppProvider({ children }) {
     [data.profiles, activeProfileId],
   )
 
-  // Transações normalizadas para relatórios/KPIs do perfil ativo: uma transferência
-  // ENTRE PERFIS (contas com perfis diferentes, e o perfil ativo é dono de exatamente um
-  // lado) vira receita/despesa sintética, na categoria da visão do perfil ativo:
-  //   • saída do perfil ativo → despesa | entrada no perfil ativo → receita
-  //   • categoria = categoria_cnpj_id (perfil PJ) ou categoria_cpf_id (perfil PF)
-  // Transferências do MESMO perfil (ou sem perfil dos dois lados) permanecem inalteradas.
+  // Rateios indexados por lançamento (lancamento_id → [rateios]).
+  const rateiosByLancamento = useMemo(() => {
+    const m = new Map()
+    for (const r of (data.rateios || [])) {
+      if (!r.lancamentoId) continue
+      const arr = m.get(r.lancamentoId) || []
+      arr.push(r); m.set(r.lancamentoId, arr)
+    }
+    return m
+  }, [data.rateios])
+
+  // Transações normalizadas para relatórios/KPIs:
+  //  1) Transferência ENTRE PERFIS (perfil ativo dono de um lado) vira receita/despesa
+  //     sintética na categoria da visão do perfil (categoria_cnpj_id / categoria_cpf_id).
+  //  2) Lançamento COM RATEIO é explodido em uma transação por rateio (cada categoria com
+  //     seu valor); o valor não atribuído fica na categoria original do lançamento.
   const profileReportTransactions = useMemo(() => {
-    if (!activeProfile) return profileTransactions
+    if (!activeProfile && rateiosByLancamento.size === 0) return profileTransactions
     const accById = new Map(data.accounts.map(a => [a.id, a]))
-    return profileTransactions.map(tx => {
-      if (tx.type !== 'transfer') return tx
+    const interProfile = (tx) => {
+      if (!activeProfile || tx.type !== 'transfer') return tx
       const fromP = accById.get(tx.accountId)?.profileId || null
       const toP = accById.get(tx.toAccountId)?.profileId || null
       if (!fromP || !toP || fromP === toP) return tx
       const fromIsActive = fromP === activeProfile.id
       const toIsActive = toP === activeProfile.id
-      if (fromIsActive === toIsActive) return tx // perfil ativo é dono de ambos ou de nenhum
+      if (fromIsActive === toIsActive) return tx
       const categoryId = (activeProfile.type === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || ''
       return fromIsActive
-        ? { ...tx, type: 'expense', categoryId } // accountId já é o do perfil ativo (origem)
-        : { ...tx, type: 'income', categoryId, accountId: tx.toAccountId } // entra na conta destino (perfil ativo)
-    })
-  }, [profileTransactions, activeProfile, data.accounts])
+        ? { ...tx, type: 'expense', categoryId }
+        : { ...tx, type: 'income', categoryId, accountId: tx.toAccountId }
+    }
+    const out = []
+    for (const tx0 of profileTransactions) {
+      const tx = interProfile(tx0)
+      const rateios = rateiosByLancamento.get(tx0.id)
+      if (rateios && rateios.length > 0 && (tx.type === 'income' || tx.type === 'expense')) {
+        let assigned = 0
+        rateios.forEach((r, i) => {
+          const v = rb(Number(r.valor) || 0)
+          out.push({ ...tx, id: `${tx.id}:r${i}`, categoryId: r.categoriaId, amount: v, _rateioOf: tx0.id })
+          assigned += v
+        })
+        const remainder = rb((tx.amount || 0) - assigned)
+        if (remainder > 0.005) out.push({ ...tx, id: `${tx.id}:rem`, amount: remainder, _rateioOf: tx0.id })
+      } else {
+        out.push(tx)
+      }
+    }
+    return out
+  }, [profileTransactions, activeProfile, data.accounts, rateiosByLancamento])
 
   // ── Registrar automático na inicialização ───────────────────────────────────
   useEffect(() => {
@@ -1050,8 +1081,13 @@ export function AppProvider({ children }) {
       const childIds = new Set(children.map(c => c.id))
       transactions = transactions.filter(t => !childIds.has(t.id))
 
-      return { ...d, accounts, transactions }
+      return { ...d, accounts, transactions, rateios: (d.rateios || []).filter(r => r.lancamentoId !== id && !childIds.has(r.lancamentoId)) }
     })
+
+    // Remove os rateios do lançamento excluído no banco (quando houver).
+    if ((before.rateios || []).some(r => r.lancamentoId === id)) {
+      deleteRateios(id).catch(e => console.error('[rateios] delete', e.message))
+    }
 
     // Recalcula os agendamentos das faturas afetadas (gatilho: deleção de gasto de cartão).
     const seen = new Set()
@@ -1062,6 +1098,31 @@ export function AppProvider({ children }) {
       const [y, m] = mesAno.split('-')
       recalcAgendamentosRef.current?.(cardId, y, m)
     }
+  }, [update])
+
+  // ── Rateio de lançamento ────────────────────────────────────────────────────
+  // Grava (substitui) os rateios de um lançamento no banco (endpoint) e atualiza o
+  // estado global. rateios: [{ id, categoriaId, valor, descricao }].
+  const saveRateiosFor = useCallback((lancamentoId, rateios) => {
+    if (!lancamentoId) return
+    const lista = (rateios || []).map((r, i) => ({
+      id: r.id || ('rat_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 5)),
+      categoriaId: r.categoriaId || '',
+      valor: Number(r.valor) || 0,
+      descricao: r.descricao || '',
+    }))
+    saveRateios(lancamentoId, lista).catch(e => console.error('[rateios] save', e.message))
+    update(d => {
+      const outros = (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId)
+      const novos = lista.map(r => ({ ...r, lancamentoId }))
+      return { ...d, rateios: [...outros, ...novos] }
+    })
+  }, [update])
+
+  const deleteRateiosFor = useCallback((lancamentoId) => {
+    if (!lancamentoId) return
+    deleteRateios(lancamentoId).catch(e => console.error('[rateios] delete', e.message))
+    update(d => ({ ...d, rateios: (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId) }))
   }, [update])
 
   const reverseTransaction = useCallback((id) => {
@@ -2867,6 +2928,7 @@ export function AppProvider({ children }) {
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled,
+      rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
       addCategory, updateCategory, deleteCategory,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,

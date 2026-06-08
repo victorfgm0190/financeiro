@@ -84,7 +84,19 @@ export default async function handler(req, res) {
       grupo_gerencial_id TEXT NOT NULL,
       "order" INTEGER DEFAULT 0
     )`)
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns] =
+    // Rateio de lançamento: divide uma despesa/receita em várias categorias.
+    // lancamento_id referencia lancamentos.id (ou um id de agendamento) — coluna TEXT
+    // sem FK rígida para suportar ambos os casos.
+    await query(`CREATE TABLE IF NOT EXISTS lancamento_rateios (
+      id TEXT PRIMARY KEY,
+      lancamento_id TEXT,
+      categoria_id TEXT,
+      valor NUMERIC DEFAULT 0,
+      descricao TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_rateios_lancamento ON lancamento_rateios (lancamento_id)`)
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -102,12 +114,13 @@ export default async function handler(req, res) {
         query('SELECT * FROM card_imports ORDER BY imported_at DESC'),
         query('SELECT * FROM gerencial_rules ORDER BY "order"'),
         query('SELECT * FROM reserve_functions ORDER BY ordem, name'),
+        query('SELECT * FROM lancamento_rateios'),
       ])
 
     res.json({
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis, imports, grules, rfns,
+      envs, groups, perfis, imports, grules, rfns, rateios,
     })
   } catch (err) {
     const isTableMissing =

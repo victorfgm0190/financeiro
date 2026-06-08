@@ -1,9 +1,10 @@
 import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { today, fmt, groupedAccountOptions, accountPriority } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import RateioModal from '../shared/RateioModal'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -182,7 +183,15 @@ function buildAccOpts(accounts, _accountGroups, excludeId) {
 }
 
 export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, addPayee, getNextOccurrences } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
+
+  // Rateio (divisão em categorias) — keyed pelo id do agendamento.
+  const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
+  const [rateioRows, setRateioRows] = useState(() =>
+    initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })) : []
+  )
+  const [showRateio, setShowRateio] = useState(false)
+  const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -285,10 +294,16 @@ export default function ScheduleForm({ initial, onClose }) {
       installments: Number(form.installments),
       remindDaysBefore: Number(form.remindDaysBefore) || 0,
     }
+    let schedId = initial?.id
     if (initial) {
       updateSchedule(initial.id, data)
     } else {
-      addSchedule(data)
+      schedId = addSchedule(data)
+    }
+    // Rateio do agendamento (apenas receita/despesa).
+    if (form.transactionType !== 'transfer' && schedId) {
+      if (rateioRows.length > 0) saveRateiosFor(schedId, rateioRows)
+      else if (hadRateio) deleteRateiosFor(schedId)
     }
     onClose()
   }
@@ -296,6 +311,17 @@ export default function ScheduleForm({ initial, onClose }) {
   return (
     <>
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+        {showRateio && (
+          <RateioModal
+            total={Number(form.amount) || rateioTotal || 0}
+            categories={categories}
+            categoryType={form.transactionType === 'income' ? 'income' : form.transactionType === 'expense' ? 'expense' : null}
+            initial={rateioRows}
+            onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
+            onDeleteAll={() => { setRateioRows([]); setShowRateio(false) }}
+            onClose={() => setShowRateio(false)}
+          />
+        )}
 
         {/* Movimentação */}
         <div className="col-span-2">
@@ -424,12 +450,26 @@ export default function ScheduleForm({ initial, onClose }) {
         {form.transactionType !== 'transfer' && (
           <div>
             <LabelTip tip={TIPS.category}>Categoria</LabelTip>
-            <SearchableSelect
-              options={categoryOpts}
-              value={form.categoryId}
-              onChange={id => set('categoryId', id)}
-              placeholder="Sem categoria"
-            />
+            <div className="flex items-center gap-2">
+              {rateioRows.length > 0 ? (
+                <div className="input flex-1 flex items-center justify-between text-xs text-gray-300">
+                  <span>{rateioRows.length} Categorias Separadas</span>
+                  <span className="text-gray-500">Total: {fmt(rateioTotal)}</span>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <SearchableSelect
+                    options={categoryOpts}
+                    value={form.categoryId}
+                    onChange={id => set('categoryId', id)}
+                    placeholder="Sem categoria"
+                  />
+                </div>
+              )}
+              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+                Separar
+              </button>
+            </div>
           </div>
         )}
 

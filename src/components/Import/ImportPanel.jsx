@@ -10,6 +10,7 @@ import { loadAccountMappings } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
+import RateioModal from '../shared/RateioModal'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -563,7 +564,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
+    rateiosByLancamento, saveRateiosFor,
   } = useApp()
+  const [rateioRow, setRateioRow] = useState(null)
 
   const [faturaMonthYear, setFaturaMonthYear] = useState('')
   const [filename, setFilename] = useState('')
@@ -755,6 +758,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _generated: false,
         movimentacao: '',
         _origDay: t.date ? new Date(t.date + 'T00:00:00').getDate() : null,
+        _rateios: (rateiosByLancamento?.get(t.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
       }
     })
     reconstructed.sort((a, b) =>
@@ -877,6 +881,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           categoryId: row.categoryId || null,
           grupoGerencial: row.grupoGerencial || null,
         })
+        if (row._rateios?.length > 0) saveRateiosFor(row._id, row._rateios)
       })
       if (faturaMonthYear && faturaMonthYear !== editingImport.mesAno) {
         updateCardImport(editingImport.id, { mesAno: faturaMonthYear })
@@ -922,6 +927,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _fromImport: true,
       })
       txIds.push(txId)
+      // Rateio: grava os rateios desta linha para o lançamento recém-criado.
+      if (txId && row._rateios?.length > 0) saveRateiosFor(txId, row._rateios)
       // AJUSTE 2: cada despesa preenchida vira uma regra de classificação (contém = descrição),
       // se ainda não houver uma regra com essa mesma descrição. (Estornos/receitas não geram regra.)
       if (isExpense && row.categoryId) {
@@ -1043,6 +1050,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           sortedGrupos={sortedGrupos}
           onApply={applyBatchFill}
           onClose={() => setShowBatchFill(false)}
+        />
+      )}
+
+      {rateioRow && (
+        <RateioModal
+          total={Number(rateioRow.amount) || 0}
+          categories={categories}
+          categoryType={rateioRow.type === 'income' ? 'income' : 'expense'}
+          initial={rateioRow._rateios || []}
+          onSave={rs => { updateRow(rateioRow._id, { _rateios: rs }); setRateioRow(null) }}
+          onDeleteAll={() => { updateRow(rateioRow._id, { _rateios: [] }); setRateioRow(null) }}
+          onClose={() => setRateioRow(null)}
         />
       )}
 
@@ -1222,13 +1241,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <CategorySelect
-                          categories={categories}
-                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
-                          value={row.categoryId}
-                          onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial }) }}
-                          searchable
-                        />
+                        <div className="flex items-center gap-1.5">
+                          {row._rateios?.length > 0 ? (
+                            <span className="text-xs text-gray-300 bg-gray-700/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
+                              {row._rateios.length} separadas
+                            </span>
+                          ) : (
+                            <CategorySelect
+                              categories={categories}
+                              className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
+                              value={row.categoryId}
+                              onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial }) }}
+                              searchable
+                            />
+                          )}
+                          <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
+                        </div>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
                         <select
