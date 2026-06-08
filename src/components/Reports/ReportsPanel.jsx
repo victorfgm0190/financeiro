@@ -5,12 +5,13 @@ import {
 } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users } from 'lucide-react'
+import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
+import FluxoCaixaPorConta from './FluxoCaixaPorConta'
 
 const COLORS = ['#6366f1', '#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#84cc16']
 
@@ -33,6 +34,7 @@ export default function ReportsPanel() {
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
   const [showFavorecido, setShowFavorecido] = useState(false)
+  const [showFluxoConta, setShowFluxoConta] = useState(false)
 
   const hasCredit = accounts.some(a => a.type === 'credit')
 
@@ -109,6 +111,17 @@ export default function ReportsPanel() {
     )
   }
 
+  if (showFluxoConta) {
+    return (
+      <div className="space-y-4">
+        <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors" onClick={() => setShowFluxoConta(false)}>
+          <ArrowLeft size={14} /> Voltar aos Relatórios
+        </button>
+        <FluxoCaixaPorConta />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <button
@@ -135,6 +148,20 @@ export default function ReportsPanel() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">Relatório por Favorecido</p>
           <p className="text-xs text-gray-500 mt-0.5">Análise sintética e analítica por favorecido com exportação CSV</p>
+        </div>
+        <span className="text-gray-600 group-hover:text-gray-400 transition-colors text-lg">›</span>
+      </button>
+
+      <button
+        className="w-full card flex items-center gap-3 text-left hover:bg-gray-800 transition-colors group"
+        onClick={() => setShowFluxoConta(true)}
+      >
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(34,197,94,0.15)' }}>
+          <Wallet size={16} style={{ color: '#22c55e' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">Fluxo de Caixa por Conta</p>
+          <p className="text-xs text-gray-500 mt-0.5">Movimentações e saldo acumulado por conta, grupo ou contas principais — com agendamentos futuros</p>
         </div>
         <span className="text-gray-600 group-hover:text-gray-400 transition-colors text-lg">›</span>
       </button>
