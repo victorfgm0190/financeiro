@@ -92,8 +92,13 @@ export default function FluxoCaixaPorConta() {
     }
 
     out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
+    // Só os movimentos FUTUROS (agendamentos) alteram o saldo acumulado — os lançamentos
+    // reais já estão refletidos no saldo atual das contas, então não são somados de novo.
     let bal = currentBalance
-    out.forEach(r => { bal = round2(bal + r.entrada - r.saida); r.saldo = bal })
+    out.forEach(r => {
+      if (!r.real) bal = round2(bal + r.entrada - r.saida)
+      r.saldo = bal
+    })
     return out
   }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences])
 
@@ -206,6 +211,13 @@ export default function FluxoCaixaPorConta() {
         </div>
       )}
 
+      {!noSelection && (
+        <p className="text-xs text-gray-600 leading-relaxed">
+          O <span className="text-gray-400">saldo</span> acumula apenas os movimentos futuros (agendamentos) a partir do saldo atual —
+          os lançamentos já <span className="text-gray-400">Registrados</span> aparecem como referência e não alteram o acumulado, pois já estão refletidos no saldo atual.
+        </p>
+      )}
+
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
@@ -247,7 +259,7 @@ export default function FluxoCaixaPorConta() {
                     <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{movimentacao(r)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>{fmt(r.saldo)}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${r.real ? 'text-gray-600' : (r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600')}`} title={r.real ? 'Já refletido no saldo atual' : undefined}>{fmt(r.saldo)}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
