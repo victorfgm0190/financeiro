@@ -967,6 +967,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _fromImport: true,
       })
       if (fId) txIds.push(fId)
+      // PARTE 2: parcela futura herda o mesmo rateio da parcela principal (parent).
+      const parentRow = resolvedRows.find(r => r._id === fp.parentId)
+      if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
       if (fp.grupoGerencial) {
         // Futura: só os agendamentos (resgate + pagamento) da própria fatura, sem
         // transferência imediata — esta ocorre quando a parcela cair no mês dela.

@@ -131,7 +131,11 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
-  const { payees, transactions, addPayee } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor } = useApp()
+  const scheduleRateios = useMemo(
+    () => (rateiosByLancamento?.get(schedule.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
+    [rateiosByLancamento, schedule.id],
+  )
   const sortedPayees = useMemo(() => {
     const counts = {}
     for (const tx of transactions) { if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1 }
@@ -175,13 +179,14 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
     if (tab === 'pagamento') {
       const amount = parseFloat(payAmount) || 0
       if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
-      addTransaction({
+      const txId = addTransaction({
         type: 'expense', accountId: payAccountId, payee: payPayee,
         amount, date: payDate, categoryId: payCategoryId,
         grupoGerencial: payGrupo || undefined,
         description: schedule.description, notes: payNotes,
       })
       markScheduleRegistered(schedule.id, regDate)
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
         if (grupo && grupo.number !== 'D') {
@@ -200,12 +205,13 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       }
     } else if (tab === 'recebimento') {
       if (recPayee && !payees.includes(recPayee)) addPayee(recPayee)
-      addTransaction({
+      const txId = addTransaction({
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount: parseFloat(recAmount) || 0, date: recDate,
         categoryId: recCategoryId, description: schedule.description, notes: recNotes,
       })
       markScheduleRegistered(schedule.id, regDate)
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
     } else {
       addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,

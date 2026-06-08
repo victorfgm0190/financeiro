@@ -1272,6 +1272,7 @@ export function AppProvider({ children }) {
   }, [update])
 
   const registerScheduleOccurrence = useCallback((scheduleId, date) => {
+    const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
       const schedule = d.schedules.find(s => s.id === scheduleId)
       if (!schedule) return d
@@ -1290,7 +1291,6 @@ export function AppProvider({ children }) {
         reservaFuncaoId: schedule.reservaFuncaoId || null,
         origin: 'agendamento',
       }
-      const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
@@ -1329,7 +1329,13 @@ export function AppProvider({ children }) {
         ),
       }
     })
-  }, [update])
+    // PARTE 1: propaga o rateio do agendamento para o lançamento recém-criado.
+    const schedRateios = (dataRef.current.rateios || []).filter(r => r.lancamentoId === scheduleId)
+    if (schedRateios.length > 0) {
+      saveRateiosFor(newTxId, schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })))
+    }
+    return newTxId
+  }, [update, saveRateiosFor])
 
   const skipScheduleOccurrence = useCallback((scheduleId, date) => {
     update(d => ({
