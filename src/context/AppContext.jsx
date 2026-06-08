@@ -2051,6 +2051,18 @@ export function AppProvider({ children }) {
         // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
       }
 
+      // Estornos da fatura: receitas lançadas no cartão (exceto pagamentos de fatura,
+      // que têm type 'credit_payment'). Abatem o valor do pagamento, mantendo a
+      // consistência com o totalizador visual (despesas - estornos).
+      const totalEstornos = d.transactions
+        .filter(tx =>
+          tx.type === 'income' && tx.accountType === 'credit' && tx.accountId === cardId &&
+          !isAutomacao(tx) &&
+          faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno
+        )
+        .reduce((s, tx) => rb(s + (Number(tx.amount) || 0)), 0)
+      const totalPagamento = rb(totalGeral - totalEstornos)
+
       // Garante a subconta gerencial quando há devolução a agendar (origem da transferência)
       let accounts = d.accounts
       let subcontaId = d.accounts.find(a => a.name === subcontaName)?.id
@@ -2097,13 +2109,13 @@ export function AppProvider({ children }) {
           overrides: { _gerencial: meta },
         })
       }
-      if (totalGeral > 0) {
+      if (totalPagamento > 0) {
         desired.push({
           slot: 'pagamento_fatura',
           id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
           tipo: 'pagamento_fatura',
           transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
-          startDate: dueDate, amount: totalGeral,
+          startDate: dueDate, amount: totalPagamento,
           description: `Pagamento Fatura ${apelido} ${faturaRef}`,
           overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta },
         })
