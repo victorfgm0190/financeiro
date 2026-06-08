@@ -29,14 +29,15 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
     (countsAsReportExpense(tx, aplicSet) || countsAsReportIncome(tx)) &&
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
-    (categoryIds.length === 0 || categoryIds.includes(tx.categoryId))
+    (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
+    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId)))
   )
 
   function buildSection(txList) {
@@ -209,6 +210,8 @@ export default function DemonstrativoFinanceiro() {
   const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
+  const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  const [hideReserva, setHideReserva] = useState(false)
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(1)
@@ -271,8 +274,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet)
-  }, [applied, transactions, categories, aplicSet])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
@@ -285,7 +288,16 @@ export default function DemonstrativoFinanceiro() {
             <FileSpreadsheet size={14} className="text-gray-400" />
             Demonstrativo Financeiro
           </h3>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <div
+                onClick={() => setHideReserva(v => !v)}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hideReserva ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideReserva ? 'left-4' : 'left-0.5'}`} />
+              </div>
+              Ocultar movimentos de reserva
+            </label>
             <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
               <div
                 onClick={() => setShowTxDraft(v => !v)}
