@@ -653,6 +653,31 @@ export function AppProvider({ children }) {
     return m
   }, [data.rateios])
 
+  // ── Rateio de lançamento ────────────────────────────────────────────────────
+  // Grava (substitui) os rateios de um lançamento no banco (endpoint) e atualiza o
+  // estado global. rateios: [{ id, categoriaId, valor, descricao }].
+  const saveRateiosFor = useCallback((lancamentoId, rateios) => {
+    if (!lancamentoId) return
+    const lista = (rateios || []).map((r, i) => ({
+      id: r.id || ('rat_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 5)),
+      categoriaId: r.categoriaId || '',
+      valor: Number(r.valor) || 0,
+      descricao: r.descricao || '',
+    }))
+    saveRateios(lancamentoId, lista).catch(e => console.error('[rateios] save', e.message))
+    update(d => {
+      const outros = (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId)
+      const novos = lista.map(r => ({ ...r, lancamentoId }))
+      return { ...d, rateios: [...outros, ...novos] }
+    })
+  }, [update])
+
+  const deleteRateiosFor = useCallback((lancamentoId) => {
+    if (!lancamentoId) return
+    deleteRateios(lancamentoId).catch(e => console.error('[rateios] delete', e.message))
+    update(d => ({ ...d, rateios: (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId) }))
+  }, [update])
+
   // Transações normalizadas para relatórios/KPIs:
   //  1) Transferência ENTRE PERFIS (perfil ativo dono de um lado) vira receita/despesa
   //     sintética na categoria da visão do perfil (categoria_cnpj_id / categoria_cpf_id).
@@ -699,6 +724,10 @@ export function AppProvider({ children }) {
     if (!initialized || autoRegisterDoneRef.current) return
     autoRegisterDoneRef.current = true
     const todayStr = format(new Date(), 'yyyy-MM-dd')
+    // Rateios a propagar para os lançamentos auto-registrados. Chave estável
+    // (scheduleId|date) para que o double-invoke do StrictMode sobrescreva (e não
+    // duplique) com o txId efetivamente commitado.
+    const collectedRateios = new Map()
 
     setData(prev => {
       let schedules = prev.schedules
@@ -710,10 +739,17 @@ export function AppProvider({ children }) {
         if (!schedule.autoRegister) continue
         const pending = computePendingUpTo(schedule, todayStr)
         if (pending.length === 0) continue
+        const schedRateios = (prev.rateios || []).filter(r => r.lancamentoId === schedule.id)
 
         for (const date of pending) {
           changed = true
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+          if (schedRateios.length > 0) {
+            collectedRateios.set(`${schedule.id}|${date}`, {
+              txId,
+              rateios: schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
+            })
+          }
           const newTx = {
             id: txId,
             type: schedule.transactionType,
@@ -771,6 +807,14 @@ export function AppProvider({ children }) {
       if (!changed) return prev
       return { ...prev, schedules, accounts, transactions }
     })
+
+    // Propaga os rateios dos agendamentos para os novos lançamentos, depois que o
+    // React aplica o auto-registro (mesmo comportamento do registro manual).
+    if (collectedRateios.size > 0) {
+      setTimeout(() => {
+        collectedRateios.forEach(({ txId, rateios }) => saveRateiosFor(txId, rateios))
+      }, 0)
+    }
   }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Settings ────────────────────────────────────────────────────────────────
@@ -1098,31 +1142,6 @@ export function AppProvider({ children }) {
       const [y, m] = mesAno.split('-')
       recalcAgendamentosRef.current?.(cardId, y, m)
     }
-  }, [update])
-
-  // ── Rateio de lançamento ────────────────────────────────────────────────────
-  // Grava (substitui) os rateios de um lançamento no banco (endpoint) e atualiza o
-  // estado global. rateios: [{ id, categoriaId, valor, descricao }].
-  const saveRateiosFor = useCallback((lancamentoId, rateios) => {
-    if (!lancamentoId) return
-    const lista = (rateios || []).map((r, i) => ({
-      id: r.id || ('rat_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 5)),
-      categoriaId: r.categoriaId || '',
-      valor: Number(r.valor) || 0,
-      descricao: r.descricao || '',
-    }))
-    saveRateios(lancamentoId, lista).catch(e => console.error('[rateios] save', e.message))
-    update(d => {
-      const outros = (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId)
-      const novos = lista.map(r => ({ ...r, lancamentoId }))
-      return { ...d, rateios: [...outros, ...novos] }
-    })
-  }, [update])
-
-  const deleteRateiosFor = useCallback((lancamentoId) => {
-    if (!lancamentoId) return
-    deleteRateios(lancamentoId).catch(e => console.error('[rateios] delete', e.message))
-    update(d => ({ ...d, rateios: (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId) }))
   }, [update])
 
   const reverseTransaction = useCallback((id) => {
