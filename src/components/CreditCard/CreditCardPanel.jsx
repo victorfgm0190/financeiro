@@ -125,7 +125,23 @@ export default function CreditCardPanel() {
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [transactions, selectedCard, billKey])
 
-  const billTotal = billTxs.reduce((s, t) => s + t.amount, 0)
+  // Estornos da fatura (receitas lançadas no cartão) — abatem do total e aparecem
+  // em linha separada no totalizador gerencial. Pagamentos de fatura (credit_payment)
+  // não entram aqui (e billTxs já é só despesa).
+  const billEstornos = useMemo(() => {
+    if (!selectedCard || !billKey) return []
+    return transactions.filter(tx =>
+      tx.accountId === selectedCard.id &&
+      tx.type === 'income' &&
+      txBillKey(tx, selectedCard) === billKey
+    )
+  }, [transactions, selectedCard, billKey])
+
+  const estornoTotal = billEstornos.reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  // Total da fatura = despesas - estornos
+  const billTotal = billTxs.reduce((s, t) => s + t.amount, 0) - estornoTotal
+  // Lançamentos alimentados ao totalizador gerencial: despesas + estornos.
+  const totalizerTxs = useMemo(() => [...billTxs, ...billEstornos], [billTxs, billEstornos])
   const hasGer = billTxs.some(tx => tx.grupoGerencial)
 
   // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
@@ -349,7 +365,7 @@ export default function CreditCardPanel() {
           </div>
         ) : (
           <>
-            <GerencialTotalizer txs={billTxs} gerencialGroups={gerencialGroups} />
+            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

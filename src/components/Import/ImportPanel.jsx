@@ -1036,14 +1036,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate).length
 
   // Totalizador da fatura (atualiza em tempo real conforme os checkboxes):
-  //   importar  = itens "Novo" selecionados | jaExistem = itens "Duplicado" (já no banco)
+  //   importar  = despesas "Novo" selecionadas | jaExistem = despesas "Duplicado"
+  //   estornos  = receitas dentro da fatura (abatidas do total)
+  //   total     = despesas - estornos  (pagamentos de fatura já são filtrados no parse)
   const totais = useMemo(() => {
-    let importar = 0, jaExistem = 0
+    let importar = 0, jaExistem = 0, estornos = 0
     for (const r of resolvedRows) {
-      if (r._isDuplicate) jaExistem += r.amount
-      else if (r.selected) importar += r.amount
+      const val = Number(r.amount) || 0
+      if (r.type === 'income') { estornos += val; continue }
+      if (r._isDuplicate) jaExistem += val
+      else if (r.selected) importar += val
     }
-    return { importar, jaExistem, total: importar + jaExistem }
+    return { importar, jaExistem, estornos, total: importar + jaExistem - estornos }
   }, [resolvedRows])
 
   return (
@@ -1159,6 +1163,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <span className="text-xs text-gray-500">Já existem:</span>
               <span className="text-sm font-semibold text-orange-500">{fmt(totais.jaExistem)}</span>
             </div>
+            {totais.estornos > 0 && (
+              <>
+                <span className="text-gray-600 font-medium">−</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs text-gray-500">Estornos:</span>
+                  <span className="text-sm font-semibold text-red-400">{fmt(totais.estornos)}</span>
+                </div>
+              </>
+            )}
             <span className="text-gray-600 font-medium">=</span>
             <div className="flex items-baseline gap-2 sm:ml-auto">
               <span className="text-xs text-gray-400">Total da fatura:</span>

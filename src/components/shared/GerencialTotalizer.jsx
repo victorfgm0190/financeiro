@@ -21,11 +21,21 @@ function tokenColor(g) {
   return 'text-orange-500'
 }
 
-// Totalizador discreto por grupo gerencial — soma apenas despesas (ignora estornos/receitas)
-// e mostra só os grupos com pelo menos um lançamento. Retorna null quando não há nada.
+// Totalizador discreto por grupo gerencial. Regras da fatura:
+//   • Despesas (type 'expense') somam por grupo gerencial.
+//   • Estornos (type 'income') são abatidos do total e exibidos em linha separada.
+//   • Pagamentos de fatura (type 'credit_payment') são ignorados.
+// Mostra só os grupos com pelo menos um lançamento. Retorna null quando não há
+// despesas nem estornos.
 export default function GerencialTotalizer({ txs, gerencialGroups }) {
   const totals = new Map()
+  let estornos = 0
   for (const tx of txs || []) {
+    if (tx.type === 'income') {
+      // Estorno (receita dentro da fatura) → abate do total.
+      estornos = round2(estornos + Math.abs(Number(tx.amount) || 0))
+      continue
+    }
     if (tx.type !== 'expense' || !tx.grupoGerencial) continue
     totals.set(tx.grupoGerencial, round2((totals.get(tx.grupoGerencial) || 0) + (Number(tx.amount) || 0)))
   }
@@ -37,7 +47,7 @@ export default function GerencialTotalizer({ txs, gerencialGroups }) {
     .filter(Boolean)
     .sort((a, b) => sortKey(a.g) - sortKey(b.g))
 
-  if (items.length === 0) return null
+  if (items.length === 0 && estornos === 0) return null
 
   return (
     <div className="px-4 py-2.5 border-b border-gray-800 bg-gray-900/40 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-xs">
@@ -51,6 +61,16 @@ export default function GerencialTotalizer({ txs, gerencialGroups }) {
           </span>
         </Fragment>
       ))}
+      {estornos > 0 && (
+        <>
+          {/* Quebra para linha própria, abaixo dos grupos gerenciais */}
+          <span className="basis-full h-0" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="text-gray-500">Estornos:</span>
+            <span className="font-semibold text-red-400">-{fmt(estornos)}</span>
+          </span>
+        </>
+      )}
     </div>
   )
 }
