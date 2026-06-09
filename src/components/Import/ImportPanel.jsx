@@ -467,9 +467,16 @@ function clampDateToFatura(dateStr, faturaYYYYMM, closingDay) {
   return dateStr
 }
 
-// Reescreve cada linha base para o mês de referência: a fatura_ref vem da data ORIGINAL
-// (date_cartao) pela regra acima; a data de sistema mantém o dia original no mês de
-// referência. As parcelas geradas (siblings) seguem ancoradas à fatura da linha base.
+// Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
+// seguem ancoradas à fatura da linha base.
+//
+// Itaú CSV (row._csvItau): fatura_ref = SEMPRE o mês de referência; a date de sistema
+// mantém a data original do CSV quando ela está dentro do período válido da fatura
+// (início = closingDay+1 do mês anterior; fim = closingDay do mês de referência) e, se
+// estiver fora (parcelados antigos), clampa para o dia de fechamento do mês de referência.
+//
+// Dindin (demais): comportamento anterior — fatura_ref pela data original (dia vs
+// fechamento) e date no mês de referência mantendo o dia original.
 function applyReferenceFatura(rows, reference, closingDay, dueDay) {
   if (!reference) return rows
   const [fy, fm] = reference.split('-').map(Number)
@@ -479,6 +486,13 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay) {
     const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
     const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
     const dateCartao = row._dateCartao || row.date
+    if (row._csvItau) {
+      return {
+        ...row,
+        faturaMonthYear: reference,
+        date: clampDateToFatura(dateCartao, reference, closingDay),
+      }
+    }
     return {
       ...row,
       faturaMonthYear: faturaRefFromReference(dateCartao, reference, closingDay),
@@ -725,6 +739,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaMonthYear: baseFatura, _origDay: rowDay,
           // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
           _dateCartao: row.date,
+          // Itaú CSV usa regra própria de date/fatura_ref em applyReferenceFatura.
+          _csvItau: isCsv,
         }
         processed.push(baseRow)
         // As parcelas futuras (num+1 … total) não entram na lista principal — são
