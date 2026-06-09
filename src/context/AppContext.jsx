@@ -2111,7 +2111,10 @@ export function AppProvider({ children }) {
   //                           → Principal → Cartão, no vencimento.
   // INSERT se valor>0 e não existe; UPDATE se já existe; DELETE se valor zerou.
   // Nunca altera/remove um agendamento já registrado (executado) ou pulado.
-  const recalcularAgendamentosFatura = useCallback((cardId, faturaAno, faturaMs) => {
+  // reservaFuncaoByAccount (opcional): { contaOrigemId → reservaFuncaoId } informado na
+  // importação para vincular o agendamento de resgate_reserva (um por conta-origem) a uma
+  // função de reserva. Sem o parâmetro, preserva o vínculo já existente do slot (se houver).
+  const recalcularAgendamentosFatura = useCallback((cardId, faturaAno, faturaMs, reservaFuncaoByAccount) => {
     update(d => {
       const card = d.accounts.find(a => a.id === cardId)
       if (!card) return d
@@ -2193,6 +2196,15 @@ export function AppProvider({ children }) {
         autoRegister: false, registered: [], skipped: [],
         cardId, faturaMesAno, faturaRef,
       }
+      // Vínculo de função de reserva já existente por conta-origem (resgate_reserva desta
+      // fatura): preservado quando o recálculo é disparado sem o mapa (ex.: "Atualizar").
+      const prevReservaFuncaoByOrigem = {}
+      for (const s of d.schedules) {
+        if (s.tipo === 'resgate_reserva' && s.cardId === cardId && s.faturaMesAno === faturaMesAno && s.reservaFuncaoId) {
+          prevReservaFuncaoByOrigem[s.accountId] = s.reservaFuncaoId
+        }
+      }
+
       const desired = []
       if (totalG > 0 && subcontaId) {
         desired.push({
@@ -2207,6 +2219,9 @@ export function AppProvider({ children }) {
       }
       for (const [origem, soma] of numberedByAccount) {
         if (soma <= 0) continue
+        const reservaFuncaoId =
+          (reservaFuncaoByAccount && reservaFuncaoByAccount[origem]) ||
+          prevReservaFuncaoByOrigem[origem] || null
         desired.push({
           slot: `resgate_reserva_${origem}`,
           id: `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`,
@@ -2214,6 +2229,7 @@ export function AppProvider({ children }) {
           transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
           startDate: dueDate, amount: soma,
           description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+          reservaFuncaoId,
           overrides: { _gerencial: meta },
         })
       }

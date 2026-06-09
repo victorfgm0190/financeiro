@@ -651,7 +651,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
+    reserveFunctions,
   } = useApp()
+
+  // Funções de reserva vinculadas à conta-origem (resgate) de um grupo gerencial numerado.
+  // Vazio para Grupo G (number===1), D, ou grupos sem conta-origem definida.
+  const reserveFuncsForGroup = (grupoId) => {
+    const g = gerencialGroups.find(x => x.id === grupoId)
+    if (!g || typeof g.number !== 'number' || g.number === 1 || !g.defaultAccountId) return []
+    return (reserveFunctions || []).filter(f => f.accountId === g.defaultAccountId)
+  }
   const [rateioRow, setRateioRow] = useState(null)
 
   const [faturaMonthYear, setFaturaMonthYear] = useState('')
@@ -896,6 +905,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           categoryId: existing ? (existing.categoryId || '') : row.categoryId,
           grupoGerencial: existing ? (existing.grupoGerencial || defaultGrupoD) : (row.grupoGerencial || defaultGrupoD),
           payee: existing ? (existing.payee || '') : row.payee,
+          // Replica a função de reserva escolhida na parcela base para as parcelas futuras.
+          _reservaFuncaoId: existing ? null : (row._reservaFuncaoId || null),
           _exists: !!existing,
         })
       }
@@ -987,6 +998,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
     // AJUSTE 2: contains (descrições) que já viraram regra — evita duplicar no lote.
     const ruleContainsSeen = new Set(classificationRules.map(r => (r.contains || '').trim().toLowerCase()).filter(Boolean))
+
+    // Função de reserva escolhida por (fatura → conta-origem): o resgate_reserva de cada
+    // fatura agrupa por conta-origem (grupo.defaultAccountId), então guardamos a função do
+    // lançamento de MAIOR valor como desempate. Lançamentos sem _reservaFuncaoId não entram.
+    const reservaFuncaoPorFatura = new Map() // faturaMesAno → Map(contaOrigem → { funcId, amount })
+    const registrarReservaFuncao = (faturaMY, grupoId, reservaFuncaoId, amount) => {
+      if (!faturaMY || !reservaFuncaoId) return
+      const grupo = gerencialGroups.find(g => g.id === grupoId)
+      if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) return
+      const origem = grupo.defaultAccountId
+      // Ignora valor obsoleto: a função precisa pertencer à conta-origem do grupo atual.
+      const func = (reserveFunctions || []).find(f => f.id === reservaFuncaoId)
+      if (!func || func.accountId !== origem) return
+      if (!reservaFuncaoPorFatura.has(faturaMY)) reservaFuncaoPorFatura.set(faturaMY, new Map())
+      const byOrigem = reservaFuncaoPorFatura.get(faturaMY)
+      const prev = byOrigem.get(origem)
+      const amt = Number(amount) || 0
+      if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: reservaFuncaoId, amount: amt })
+    }
+
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
       const isExpense = (row.type || 'expense') === 'expense'
@@ -1021,6 +1052,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           row.grupoGerencial, null, { immediate: true }
         )
         if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
+        // Vínculo de função de reserva → agendamento de resgate desta fatura.
+        registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       }
 
     })
@@ -1054,6 +1087,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           { accountId: selectedAccount, amount: fp.amount, date: fpDate, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
           fp.grupoGerencial, null, { immediate: false }
         )
+        // Função de reserva replicada da parcela base → agendamento de resgate da fatura da parcela.
+        registrarReservaFuncao(fp.faturaMonthYear, fp.grupoGerencial, fp._reservaFuncaoId, fp.amount)
       }
     })
 
@@ -1077,7 +1112,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // (devolução gerencial / resgate reserva / pagamento) de cada fatura tocada.
       for (const fmy of faturasAfetadas) {
         const [y, m] = fmy.split('-')
-        recalcularAgendamentosFatura(selectedAccount, y, m)
+        const byOrigem = reservaFuncaoPorFatura.get(fmy)
+        const reservaFuncaoByAccount = byOrigem
+          ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
+          : undefined
+        recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
       }
     }
 
@@ -1473,10 +1512,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <select
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={row.grupoGerencial}
-                          onChange={e => updateRow(row._id, { grupoGerencial: e.target.value })}
+                          onChange={e => updateRow(row._id, { grupoGerencial: e.target.value, _reservaFuncaoId: null })}
                         >
                           {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
                         </select>
+                        {(() => {
+                          // Grupo numerado com mais de uma função de reserva na conta-origem:
+                          // permite escolher de qual função virá o resgate (gravado no agendamento).
+                          const funcs = reserveFuncsForGroup(row.grupoGerencial)
+                          if (funcs.length <= 1) return null
+                          return (
+                            <select
+                              className="mt-1 block bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                              value={row._reservaFuncaoId || ''}
+                              onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null })}
+                              title="Função de reserva do resgate"
+                            >
+                              <option value="">— Selecionar —</option>
+                              {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                          )
+                        })()}
                       </td>
                       <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.isDeposit ? 'text-blue-600' : 'text-orange-600'}`}>
                         {fmt(row.amount)}
