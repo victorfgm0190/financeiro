@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, Check, Circle, CheckSquare,
+  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, Check, Circle, CheckSquare, Zap,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
@@ -453,14 +453,26 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     })
   }, [rows, startBalance, account.id])
 
-  // Reconciliação — lançamentos NÃO reconciliados do período (mês) em exibição.
+  // Reconciliação — TODOS os lançamentos reconciliáveis do período (mês) em exibição,
+  // conciliados e pendentes. O modal filtra conforme o modo (Reconciliar / Não reconciliar).
   const [showReconciliar, setShowReconciliar] = useState(false)
-  const periodPending = useMemo(
+  const periodReconcilable = useMemo(
     () => filteredTxs
-      .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id) && !tx.reconciled)
+      .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id))
       .sort((a, b) => a.date.localeCompare(b.date)),
     [filteredTxs, account.id]
   )
+
+  // Conciliar Gerenciais: marca como conciliados todos os lançamentos pendentes do
+  // período/conta cuja descrição começa com "Reserva Gerencial - " (sem abrir modal).
+  const handleConciliarGerenciais = () => {
+    const pend = periodReconcilable.filter(
+      tx => !tx.reconciled && (tx.description || '').startsWith('Reserva Gerencial - ')
+    )
+    if (pend.length === 0) { showToast('Nenhum lançamento gerencial pendente'); return }
+    setReconciled(pend.map(t => t.id), true)
+    showToast(`${pend.length} ${pend.length !== 1 ? 'lançamentos gerenciais conciliados' : 'lançamento gerencial conciliado'}`)
+  }
 
   // Filtros em tempo real — afetam apenas as linhas exibidas; os totais do header
   // continuam calculados sobre o período completo (rowsWithBalance).
@@ -540,6 +552,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 title="Reconciliar transações do período"
               >
                 <CheckSquare size={12} /> Reconciliar
+              </button>
+              <button
+                onClick={handleConciliarGerenciais}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                title='Conciliar todos os lançamentos "Reserva Gerencial" pendentes do período'
+              >
+                <Zap size={12} /> Conciliar Gerenciais
               </button>
               {onNewTx && (
                 <button onClick={onNewTx} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
@@ -718,7 +737,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
       {showReconciliar && (
         <ReconciliarModal
-          items={periodPending}
+          items={periodReconcilable}
           onApply={setReconciled}
           onClose={() => setShowReconciliar(false)}
         />

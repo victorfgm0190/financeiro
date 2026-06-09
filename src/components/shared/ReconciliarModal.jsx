@@ -2,23 +2,39 @@ import { useState, useMemo } from 'react'
 import { X, CheckCircle } from 'lucide-react'
 import { fmt, fmtDate } from './utils'
 
-// Modal de reconciliação em lote. `items` deve conter APENAS os lançamentos
-// NÃO reconciliados do período em exibição (mês/fatura). onApply(ids, value).
-export default function ReconciliarModal({ items, onApply, onClose }) {
-  const [selected, setSelected] = useState(() => new Set(items.map(t => t.id)))
-  const [operation, setOperation] = useState('reconciliar')
+const visibleFor = (items, operation) =>
+  items.filter(t => operation === 'reconciliar' ? !t.reconciled : !!t.reconciled)
 
-  const allSelected = items.length > 0 && selected.size === items.length
+// Modal de reconciliação em lote. `items` deve conter TODOS os lançamentos
+// reconciliáveis do período em exibição (mês/fatura), conciliados e pendentes.
+// A lista exibida é filtrada conforme o modo selecionado no rodapé:
+//   "Reconciliar"      → mostra apenas os NÃO conciliados (aplica reconciled=true)
+//   "Não reconciliar"  → mostra apenas os JÁ conciliados  (aplica reconciled=false)
+// onApply(ids, value).
+export default function ReconciliarModal({ items, onApply, onClose }) {
+  const [operation, setOperation] = useState('reconciliar')
+  // Seleção inicial: todos os itens visíveis no modo inicial (Reconciliar).
+  const [selected, setSelected] = useState(() => new Set(visibleFor(items, 'reconciliar').map(t => t.id)))
+
+  const visibleItems = useMemo(() => visibleFor(items, operation), [items, operation])
+
+  // Trocar de modo redefine a lista exibida e seleciona todos os itens visíveis.
+  const changeOperation = (op) => {
+    setOperation(op)
+    setSelected(new Set(visibleFor(items, op).map(t => t.id)))
+  }
+
+  const allSelected = visibleItems.length > 0 && visibleItems.every(t => selected.has(t.id))
   const toggle = (id) => setSelected(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(items.map(t => t.id)))
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visibleItems.map(t => t.id)))
 
   const total = useMemo(
-    () => items.filter(t => selected.has(t.id)).reduce((s, t) => s + (t.amount || 0), 0),
-    [items, selected]
+    () => visibleItems.filter(t => selected.has(t.id)).reduce((s, t) => s + (t.amount || 0), 0),
+    [visibleItems, selected]
   )
 
   const apply = () => {
@@ -41,9 +57,11 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <p className="text-center text-sm text-gray-500 py-10">
-              Nenhum lançamento pendente de reconciliação neste período.
+              {operation === 'reconciliar'
+                ? 'Nenhum lançamento pendente de reconciliação neste período.'
+                : 'Nenhum lançamento conciliado neste período.'}
             </p>
           ) : (
             <table className="w-full text-sm">
@@ -64,7 +82,7 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {items.map(t => (
+                {visibleItems.map(t => (
                   <tr
                     key={t.id}
                     className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
@@ -102,7 +120,7 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
                     type="radio"
                     name="recOp"
                     checked={operation === 'reconciliar'}
-                    onChange={() => setOperation('reconciliar')}
+                    onChange={() => changeOperation('reconciliar')}
                     className="accent-emerald-500 cursor-pointer"
                   />
                   Reconciliar
@@ -112,7 +130,7 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
                     type="radio"
                     name="recOp"
                     checked={operation === 'nao'}
-                    onChange={() => setOperation('nao')}
+                    onChange={() => changeOperation('nao')}
                     className="accent-emerald-500 cursor-pointer"
                   />
                   Não reconciliar
