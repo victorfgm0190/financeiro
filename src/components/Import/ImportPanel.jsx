@@ -449,6 +449,24 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
   return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
 }
 
+// "Clampa" a data de sistema ao período válido da fatura (YYYY-MM):
+//   de (closingDay+1) do mês anterior até closingDay do mês da fatura.
+// Se a data calculada cair fora desse intervalo, retorna o dia de fechamento do mês da
+// fatura (ex.: date=2026-05-15, fatura='2026-05', closingDay=13 → '2026-05-13').
+// date_cartao NÃO é afetada — esta função só ajusta a date de sistema.
+function clampDateToFatura(dateStr, faturaYYYYMM, closingDay) {
+  if (!dateStr || !faturaYYYYMM || !closingDay) return dateStr
+  const [y, m] = faturaYYYYMM.split('-').map(Number)
+  if (!y || !m) return dateStr
+  const lastDayFatura = new Date(y, m, 0).getDate()
+  const endDay = Math.min(closingDay, lastDayFatura)
+  const end = new Date(y, m - 1, endDay)            // closingDay do mês da fatura
+  const start = new Date(y, m - 2, closingDay + 1)  // (closingDay+1) do mês anterior
+  const d = new Date(dateStr + 'T00:00:00')
+  if (d < start || d > end) return `${faturaYYYYMM}-${String(endDay).padStart(2, '0')}`
+  return dateStr
+}
+
 // Reescreve cada linha base para o mês de referência: a fatura_ref vem da data ORIGINAL
 // (date_cartao) pela regra acima; a data de sistema mantém o dia original no mês de
 // referência. As parcelas geradas (siblings) seguem ancoradas à fatura da linha base.
@@ -935,9 +953,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
 
-    // Data de sistema da linha: já mantida no mês de referência por applyReferenceFatura
-    // (e editável na tabela de revisão). A fatura_ref vive separada em row.faturaMonthYear.
-    const computeSaveDate = (row) => row.date
+    // Data de sistema da linha: mantida no mês de referência por applyReferenceFatura
+    // (e editável na tabela de revisão), com clamp ao período válido da fatura — datas
+    // fora do intervalo caem no dia de fechamento do mês da fatura. A fatura_ref vive
+    // separada em row.faturaMonthYear; date_cartao nunca é alterada.
+    const computeSaveDate = (row) => clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
 
     const txIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
@@ -994,11 +1014,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     futureParcelas.forEach(fp => {
       if (fp._exists) return
       if (isDuplicateInstallment({ description: fp.description, amount: fp.amount }, transactions, selectedAccount)) return
-      addFaturaAfetada(fp.faturaMonthYear, fp.date)
+      // Parcela futura recebe data avançada (dia de vencimento do mês futuro) — clampa ao
+      // período válido da própria fatura. date_cartao permanece null (projeção).
+      const fpDate = clampDateToFatura(fp.date, fp.faturaMonthYear, importClosingDay)
+      addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
       const fId = addTransaction({
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
-        amount: fp.amount, date: fp.date, description: fp.description,
+        amount: fp.amount, date: fpDate, description: fp.description,
         categoryId: fp.categoryId, payee: fp.payee,
         grupoGerencial: fp.grupoGerencial || defaultGrupoD,
         faturaMonthYear: fp.faturaMonthYear,
@@ -1012,7 +1035,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // Futura: só os agendamentos (resgate + pagamento) da própria fatura, sem
         // transferência imediata — esta ocorre quando a parcela cair no mês dela.
         processarLancamentoGerencial(
-          { accountId: selectedAccount, amount: fp.amount, date: fp.date, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
+          { accountId: selectedAccount, amount: fp.amount, date: fpDate, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
           fp.grupoGerencial, null, { immediate: false }
         )
       }
