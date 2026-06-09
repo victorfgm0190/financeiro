@@ -1030,6 +1030,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
         faturaMonthYear: row.faturaMonthYear || null,
+        reservaFuncaoId: row._reservaFuncaoId || null,
         _fromImport: true,
       })
       txIds.push(txId)
@@ -1074,6 +1075,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: fp.categoryId, payee: fp.payee,
         grupoGerencial: fp.grupoGerencial || defaultGrupoD,
         faturaMonthYear: fp.faturaMonthYear,
+        reservaFuncaoId: fp._reservaFuncaoId || null,
         _fromImport: true,
       })
       if (fId) txIds.push(fId)

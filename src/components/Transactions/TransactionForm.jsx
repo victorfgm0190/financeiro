@@ -86,6 +86,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
+    reserveFunctions,
   } = useApp()
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
@@ -117,6 +118,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     faturaMonthYear: initial?.faturaMonthYear || '',
+    reservaFuncaoId: initial?.reservaFuncaoId || '',
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
     repeat: false,
@@ -166,6 +168,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const reservaLinkedCat = reservaTransferAcc?.reservaType === 'especifica'
     ? categories.find(c => c.id === reservaTransferAcc.reservaCategoryId)
     : null
+
+  // Funções de reserva da conta de reserva envolvida na transferência (origem ou destino).
+  // O select só aparece quando há mais de uma função para aquela conta.
+  const reservaFuncs = useMemo(
+    () => reservaTransferAcc ? (reserveFunctions || []).filter(f => f.accountId === reservaTransferAcc.id) : [],
+    [reservaTransferAcc, reserveFunctions]
+  )
+  const showReservaFuncao = form.type === 'transfer' && reservaFuncs.length > 1
 
   // Transferência cujo DESTINO é conta de aplicação financeira (e não é reserva):
   // habilita um campo OPCIONAL de categoria para classificar o aporte nos relatórios.
@@ -249,6 +259,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
       faturaMonthYear: (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear : null,
       dateCartao: form.dateCartao || null,
+      // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
+      // Em não-transferências, preserva o valor existente (ex.: despesa de cartão importada).
+      reservaFuncaoId: form.type === 'transfer'
+        ? (showReservaFuncao ? (form.reservaFuncaoId || null) : null)
+        : (form.reservaFuncaoId || null),
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
@@ -637,7 +652,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
-            onChange={id => set('accountId', id)}
+            onChange={id => setForm(f => ({ ...f, accountId: id, ...(f.type === 'transfer' ? { reservaFuncaoId: '' } : {}) }))}
             placeholder="Selecione a conta..."
             required
           />
@@ -648,7 +663,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
-              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '' }))}
+              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '' }))}
               placeholder="Selecione o destino..."
               required
             />
@@ -710,6 +725,22 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   </span>
                 </p>
               )}
+            </div>
+          )}
+          {showReservaFuncao && (
+            <div>
+              <label className="label">Função de Reserva</label>
+              <select
+                className="input"
+                value={form.reservaFuncaoId}
+                onChange={e => set('reservaFuncaoId', e.target.value)}
+              >
+                <option value="">— Selecionar —</option>
+                {reservaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                {isDepositToReserva ? 'Função de reserva deste depósito.' : 'Função de reserva deste resgate.'}
+              </p>
             </div>
           )}
           {isTransferToAplicacao && (
