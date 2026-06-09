@@ -853,7 +853,17 @@ export function AppProvider({ children }) {
     update(d => {
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
+        if (tx.accountType === 'credit') {
+          // Estorno em cartão → abate a dívida da fatura (consistente com o totalizador
+          // visual e com o agendamento pagamento_fatura).
+          accounts = accounts.map(a => a.id === tx.accountId ? {
+            ...a,
+            creditDebt: Math.max(0, (a.creditDebt || 0) - Number(tx.amount)),
+            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - Number(tx.amount)),
+          } : a)
+        } else {
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
+        }
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
@@ -948,7 +958,16 @@ export function AppProvider({ children }) {
             creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - tx.amount),
           } : a)
         } else if (tx.type === 'income') {
-          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
+          if (tx.accountType === 'credit') {
+            // Desfaz o estorno de cartão → devolve o valor à dívida da fatura.
+            accounts = accounts.map(a => a.id === tx.accountId ? {
+              ...a,
+              creditDebt: (a.creditDebt || 0) + tx.amount,
+              creditMonthBill: (a.creditMonthBill || 0) + tx.amount,
+            } : a)
+          } else {
+            accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - tx.amount) } : a)
+          }
         } else if (tx.type === 'expense') {
           accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + tx.amount) } : a)
         } else if (tx.type === 'transfer') {
@@ -1078,7 +1097,16 @@ export function AppProvider({ children }) {
       // Desfaz o impacto de um lançamento no(s) saldo(s) ao removê-lo.
       const reverseBalance = (t) => {
         if (t.type === 'income') {
-          accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+          if (t.accountType === 'credit') {
+            // Desfaz o estorno de cartão → devolve o valor à dívida da fatura.
+            accounts = accounts.map(a => a.id === t.accountId ? {
+              ...a,
+              creditDebt: (a.creditDebt || 0) + t.amount,
+              creditMonthBill: (a.creditMonthBill || 0) + t.amount,
+            } : a)
+          } else {
+            accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+          }
         } else if (t.type === 'expense') {
           if (t.accountType === 'credit') {
             accounts = accounts.map(a => a.id === t.accountId ? {
@@ -1168,7 +1196,16 @@ export function AppProvider({ children }) {
       let accounts = [...d.accounts]
       const reverseBalance = (t) => {
         if (t.type === 'income') {
-          accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+          if (t.accountType === 'credit') {
+            // Desfaz o estorno de cartão → devolve o valor à dívida da fatura.
+            accounts = accounts.map(a => a.id === t.accountId ? {
+              ...a,
+              creditDebt: (a.creditDebt || 0) + t.amount,
+              creditMonthBill: (a.creditMonthBill || 0) + t.amount,
+            } : a)
+          } else {
+            accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - t.amount) } : a)
+          }
         } else if (t.type === 'expense') {
           if (t.accountType === 'credit') {
             accounts = accounts.map(a => a.id === t.accountId ? {
@@ -1374,7 +1411,17 @@ export function AppProvider({ children }) {
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
-        accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
+        if (tx.accountType === 'credit') {
+          // Estorno em cartão → abate a dívida da fatura (consistente com o totalizador
+          // visual e com o agendamento pagamento_fatura).
+          accounts = accounts.map(a => a.id === tx.accountId ? {
+            ...a,
+            creditDebt: Math.max(0, (a.creditDebt || 0) - Number(tx.amount)),
+            creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - Number(tx.amount)),
+          } : a)
+        } else {
+          accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance + Number(tx.amount)) } : a)
+        }
       } else if (tx.type === 'expense') {
         if (tx.accountType === 'credit') {
           accounts = accounts.map(a => a.id === tx.accountId ? {
