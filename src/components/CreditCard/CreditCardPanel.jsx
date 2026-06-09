@@ -391,7 +391,12 @@ export default function CreditCardPanel() {
                     const cat = categories.find(c => c.id === tx.categoryId)
                     return (
                       <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-70' : ''}`}>
-                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          {fmtDate(tx.date)}
+                          {tx.dateCartao && tx.dateCartao !== tx.date && (
+                            <span className="block text-[10px] text-gray-600">Banco: {tx.dateCartao.split('-').reverse().slice(0, 2).join('/')}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <p className="text-gray-200 text-sm">{tx.description}</p>
                           {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}

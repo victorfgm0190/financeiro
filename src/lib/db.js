@@ -24,6 +24,21 @@ async function apiPost(path, body) {
   return res.json()
 }
 
+// Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
+// pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
+// strings (date é TEXT), então convertemos aqui para manter a consistência.
+function toDateStr(v) {
+  if (!v) return null
+  if (typeof v === 'string') return v.slice(0, 10)
+  if (v instanceof Date) {
+    const y = v.getFullYear()
+    const m = String(v.getMonth() + 1).padStart(2, '0')
+    const d = String(v.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return String(v).slice(0, 10)
+}
+
 // ─── Transformadores camelCase ↔ snake_case ───────────────────────────────────
 
 export const perfilToRow = (p) => ({
@@ -138,6 +153,7 @@ export const txToRow = (tx) => ({
   from_account_id: tx.fromAccountId || null,
   amount: Number(tx.amount),
   date: tx.date,
+  date_cartao: tx.dateCartao || null,
   description: tx.description || null,
   category_id: tx.categoryId || null,
   payee: tx.payee || null,
@@ -166,6 +182,7 @@ export const rowToTx = (r) => ({
   fromAccountId: r.from_account_id,
   amount: Number(r.amount),
   date: r.date,
+  dateCartao: toDateStr(r.date_cartao),
   description: r.description || '',
   categoryId: r.category_id || '',
   payee: r.payee || '',

@@ -425,13 +425,54 @@ function calcFatura(dateStr, closingDay = 14) {
   return `${y}-${String(m).padStart(2, '0')}`
 }
 
-// Avança n meses em um string YYYY-MM.
+// Avança n meses em um string YYYY-MM (aceita n negativo — ex.: mês anterior).
 function addMonthToFatura(yyyymm, n) {
   if (!yyyymm) return ''
   const [y, m] = yyyymm.split('-').map(Number)
-  const raw = m - 1 + n
-  const ty = y + Math.floor(raw / 12), tm = raw % 12
+  const idx = y * 12 + (m - 1) + n
+  const ty = Math.floor(idx / 12)
+  const tm = ((idx % 12) + 12) % 12
   return `${ty}-${String(tm + 1).padStart(2, '0')}`
+}
+
+// fatura_ref (YYYY-MM) a partir do DIA da data ORIGINAL do extrato (date_cartao),
+// relativa ao mês de referência selecionado. Correção do bug de desvio de mês:
+//   dia <= closingDay → fatura = mês de referência
+//   dia >  closingDay → fatura = mês ANTERIOR ao de referência
+// (gastos após o fechamento já entraram na fatura que está sendo importada por terem
+//  ocorrido depois do último fechamento, então pertencem à fatura anterior).
+function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
+  if (!referenceYYYYMM) return ''
+  if (!dateCartaoStr) return referenceYYYYMM
+  const day = parseInt((dateCartaoStr.split('-')[2] || '1'), 10)
+  return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
+}
+
+// Reescreve cada linha base para o mês de referência: a fatura_ref vem da data ORIGINAL
+// (date_cartao) pela regra acima; a data de sistema mantém o dia original no mês de
+// referência. As parcelas geradas (siblings) seguem ancoradas à fatura da linha base.
+function applyReferenceFatura(rows, reference, closingDay, dueDay) {
+  if (!reference) return rows
+  const [fy, fm] = reference.split('-').map(Number)
+  const daysInMonth = new Date(fy, fm, 0).getDate()
+  const step1 = rows.map(row => {
+    if (row._generated) return row
+    const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
+    const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
+    const dateCartao = row._dateCartao || row.date
+    return {
+      ...row,
+      faturaMonthYear: faturaRefFromReference(dateCartao, reference, closingDay),
+      date: `${reference}-${clampedDay}`,
+    }
+  })
+  return step1.map(row => {
+    if (!row._generated) return row
+    const parent = step1.find(r => r._id === row._seriesId)
+    if (!parent) return row
+    const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
+    return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dueDay) || row.date }
+  })
 }
 
 // Retorna a data de vencimento (YYYY-MM-DD) do cartão no mês da fatura.
@@ -650,6 +691,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoFromRules || grupoD, _installment: installInfo, _generated: false,
           faturaMonthYear: baseFatura, _origDay: rowDay,
+          // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
+          _dateCartao: row.date,
         }
         processed.push(baseRow)
         // As parcelas futuras (num+1 … total) não entram na lista principal — são
@@ -669,7 +712,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       // Auto-detectar mês de referência pelo mês de fatura mais frequente e ancorar as parcelas a ele
       const detected = detectMainFatura(sortedRows)
-      const alignedRows = detected ? alignInstallmentsToFatura(sortedRows, detected, resolvedDueDay) : sortedRows
+      let alignedRows = detected ? alignInstallmentsToFatura(sortedRows, detected, resolvedDueDay) : sortedRows
+      // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
+      // data de sistema para o mês de referência, mantendo date_cartao intacta.
+      if (detected) alignedRows = applyReferenceFatura(alignedRows, detected, resolvedClosingDay, resolvedDueDay)
       setRows(alignedRows)
       setCardInfo({ cardName, faturaStr })
       setMatchQueue(pendingMatches)
@@ -687,52 +733,31 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const cl = acc?.closingDay || 14
     const dd = acc?.dueDay || null
     setRows(prev => {
-      const step1 = prev.map(row => {
+      // Recalcula a fatura base de cada linha pela data ORIGINAL (date_cartao) e o novo
+      // fechamento — nunca pela `date` já corrigida (origem do bug de desvio de mês).
+      const rebased = prev.map(row => {
         if (row._generated) return row
         const inst = detectInstallment(row.description)
-        const faturaParc1 = calcFatura(row.date, cl)
+        const faturaParc1 = calcFatura(row._dateCartao || row.date, cl)
         const fatura = (inst && inst.num > 1) ? addMonthToFatura(faturaParc1, inst.num - 1) : faturaParc1
         return { ...row, faturaMonthYear: fatura }
       })
-      const step2 = step1.map(row => {
-        if (!row._generated) return row
-        const parent = step1.find(r => r._id === row._seriesId)
-        if (!parent) return row
-        const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-        return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dd) || row.date }
-      })
-      const detected = detectMainFatura(step2)
+      const detected = detectMainFatura(rebased)
       if (detected) setFaturaMonthYear(detected)
-      return detected ? alignInstallmentsToFatura(step2, detected, dd) : step2
+      return detected ? applyReferenceFatura(rebased, detected, cl, dd) : rebased
     })
   }
 
-  // Propaga o Mês de Referência global para todas as linhas
+  // Propaga o Mês de Referência global para todas as linhas. A data de sistema vai para o
+  // mês de referência (dia original mantido); a fatura_ref vem da data ORIGINAL pela regra
+  // dia vs fechamento (gastos após o fechamento → fatura do mês anterior ao de referência).
   const handleFaturaMonthYearChange = (newFatura) => {
     setFaturaMonthYear(newFatura)
     if (!newFatura || rows.length === 0) return
     const acc = accounts.find(a => a.id === selectedAccount)
+    const cl = acc?.closingDay || 14
     const dd = acc?.dueDay || null
-    const [fatYear, fatMonth] = newFatura.split('-').map(Number)
-    const daysInMonth = new Date(fatYear, fatMonth, 0).getDate()
-    setRows(prev => {
-      // Todas as linhas base recebem exatamente o mês de referência selecionado.
-      // A data é reescrita substituindo mês/ano pelo mês de referência, mantendo o dia original.
-      const step1 = prev.map(row => {
-        if (row._generated) return row
-        const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
-        const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
-        return { ...row, faturaMonthYear: newFatura, date: `${newFatura}-${clampedDay}` }
-      })
-      const step2 = step1.map(row => {
-        if (!row._generated) return row
-        const parent = step1.find(r => r._id === row._seriesId)
-        if (!parent) return row
-        const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-        return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dd) || row.date }
-      })
-      return step2
-    })
+    setRows(prev => applyReferenceFatura(prev, newFatura, cl, dd))
   }
 
   // Carrega uma importação do histórico para reedição
@@ -745,6 +770,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return {
         _id: t.id,
         date: t.date,
+        _dateCartao: t.dateCartao || null,
         description: t.description || '',
         amount: t.amount,
         faturaMonthYear: t.faturaMonthYear || '',
@@ -881,6 +907,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaMonthYear: row.faturaMonthYear || null,
           categoryId: row.categoryId || null,
           grupoGerencial: row.grupoGerencial || null,
+          date: row.date,
+          dateCartao: row._dateCartao || null,
         })
         if (row._rateios?.length > 0) saveRateiosFor(row._id, row._rateios)
       })
@@ -893,14 +921,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
 
-    // Deriva a data final de cada linha: mês/ano do campo Fatura da linha + dia original do CSV.
-    const computeSaveDate = (row) => {
-      const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
-      if (!row.faturaMonthYear) return row.date
-      const [fy, fm] = row.faturaMonthYear.split('-').map(Number)
-      const maxDay = new Date(fy, fm, 0).getDate()
-      return `${row.faturaMonthYear}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
-    }
+    // Data de sistema da linha: já mantida no mês de referência por applyReferenceFatura
+    // (e editável na tabela de revisão). A fatura_ref vive separada em row.faturaMonthYear.
+    const computeSaveDate = (row) => row.date
 
     const txIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
@@ -922,6 +945,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const txId = addTransaction({
         type: row.type || 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: row.amount, date: saveDate, description: row.description,
+        dateCartao: row._dateCartao || null,
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
         faturaMonthYear: row.faturaMonthYear || null,
@@ -1216,7 +1240,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         checked={resolvedRows.filter(r => !r._isDuplicate).every(r => r.selected)}
                         onChange={e => toggleAll(e.target.checked)} />
                     </th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Sistema</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Banco</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
@@ -1233,7 +1258,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           checked={row.selected} disabled={row._isDuplicate}
                           onChange={() => toggleRow(row._id)} />
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{row.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <input
+                          type="date"
+                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                          value={row.date || ''}
+                          onChange={e => updateRow(row._id, { date: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <input
+                          type="date"
+                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                          value={row._dateCartao || ''}
+                          onChange={e => updateRow(row._id, { _dateCartao: e.target.value || null })}
+                        />
+                      </td>
                       <td className="px-3 py-2">
                         <select
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none"
