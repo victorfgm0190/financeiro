@@ -6,7 +6,7 @@ import { EMPTY_LANC_FILTROS, hasLancFiltros } from './utils'
 // `fields` controla quais inputs aparecem (default: os 5 originais). Os filtros
 // 'categoria' e 'valor' são opt-in (precisam estar em `fields`); 'categoria' usa
 // a lista `categories`.
-export default function LancamentoFiltros({ filtros, setFiltros, fields, categories = [] }) {
+export default function LancamentoFiltros({ filtros, setFiltros, fields, categories = [], extra = null }) {
   const show = fields || ['data', 'historico', 'favorecido', 'de', 'para']
   const set = (k, v) => setFiltros(f => ({ ...f, [k]: v }))
   const active = hasLancFiltros(filtros)
@@ -91,6 +91,8 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
           />
         </>
       )}
+
+      {extra}
 
       <button
         type="button"

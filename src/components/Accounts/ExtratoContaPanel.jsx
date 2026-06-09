@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, CheckCircle2, Circle, CheckSquare,
+  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, Check, Circle, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
@@ -157,7 +157,9 @@ function ReconcileBtn({ reconciled, onClick }) {
       className="p-1 rounded hover:bg-gray-700/50 transition-colors"
     >
       {reconciled
-        ? <CheckCircle2 size={15} className="text-emerald-500" />
+        ? <span className="inline-flex items-center justify-center w-[17px] h-[17px] rounded-full bg-green-500 align-middle">
+            <Check size={11} strokeWidth={3} className="text-white" />
+          </span>
         : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
     </button>
   )
@@ -192,7 +194,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
 
   return (
     <tr
-      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? 'opacity-70' : ''}`}
+      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
       onClick={() => onEdit && onEdit(tx)}
     >
       <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
@@ -287,7 +289,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
   return (
     <>
       <tr
-        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? 'opacity-70' : ''}`}
+        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
         <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
@@ -463,14 +465,23 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Filtros em tempo real — afetam apenas as linhas exibidas; os totais do header
   // continuam calculados sobre o período completo (rowsWithBalance).
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
+  // Filtro de conciliação: 'todos' | 'conciliados' | 'pendentes'.
+  const [reconFilter, setReconFilter] = useState('todos')
+  const rowReconciled = (row) => row.kind === 'netted' ? row.txs.every(t => t.reconciled) : !!row.tx.reconciled
   const displayRows = useMemo(() => {
-    if (!hasLancFiltros(filtros)) return rowsWithBalance
-    return rowsWithBalance.filter(row =>
-      row.kind === 'netted'
-        ? row.txs.some(tx => matchLancFiltros(tx, filtros, accounts))
-        : matchLancFiltros(row.tx, filtros, accounts)
-    )
-  }, [rowsWithBalance, filtros, accounts])
+    let out = rowsWithBalance
+    if (hasLancFiltros(filtros)) {
+      out = out.filter(row =>
+        row.kind === 'netted'
+          ? row.txs.some(tx => matchLancFiltros(tx, filtros, accounts))
+          : matchLancFiltros(row.tx, filtros, accounts)
+      )
+    }
+    if (reconFilter !== 'todos') {
+      out = out.filter(row => reconFilter === 'conciliados' ? rowReconciled(row) : !rowReconciled(row))
+    }
+    return out
+  }, [rowsWithBalance, filtros, accounts, reconFilter])
 
   const totals = useMemo(() => {
     let entrada = 0, saida = 0
@@ -604,7 +615,32 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Filtros em tempo real (abaixo do header da tabela) */}
         <div className="border-x border-gray-800 bg-gray-900">
-          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+          <LancamentoFiltros
+            filtros={filtros}
+            setFiltros={setFiltros}
+            extra={
+              <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
+                {[
+                  { v: 'todos', label: 'Todos' },
+                  { v: 'conciliados', label: '✓ Conciliados' },
+                  { v: 'pendentes', label: '○ Pendentes' },
+                ].map(o => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    onClick={() => setReconFilter(o.v)}
+                    className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
+                      reconFilter === o.v
+                        ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
+                        : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            }
+          />
         </div>
       </div>
 
@@ -626,7 +662,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               {displayRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="text-center py-10 text-gray-500 text-xs">
-                    {hasLancFiltros(filtros) ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
+                    {hasLancFiltros(filtros) || reconFilter !== 'todos' ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
                   </td>
                 </tr>
               )}
