@@ -412,6 +412,8 @@ export default function ScheduleForm({ initial, onClose }) {
                   value={form.reservaExpenseCategoryId}
                   onChange={id => set('reservaExpenseCategoryId', id)}
                   placeholder="Sem categoria"
+                  ungroupedLast
+                  ungroupedLabel="Sem grupo"
                 />
                 {!form.reservaExpenseCategoryId && (
                   <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
@@ -463,6 +465,8 @@ export default function ScheduleForm({ initial, onClose }) {
                     value={form.categoryId}
                     onChange={id => set('categoryId', id)}
                     placeholder="Sem categoria"
+                    ungroupedLast
+                    ungroupedLabel="Sem grupo"
                   />
                 </div>
               )}

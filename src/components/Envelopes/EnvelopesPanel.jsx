@@ -61,15 +61,21 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
   const expCats     = categories.filter(c => c.type === 'expense' || c.type === 'both')
   const nonCreditAc = accounts.filter(a => a.type !== 'credit')
 
-  // group categories for display
+  // Categorias agrupadas para exibição: grupos ordenados (pt-BR) e "Sem grupo" ao final.
+  const UNGROUPED = 'Sem grupo'
   const grouped = useMemo(() => {
     const map = {}
     expCats.forEach(cat => {
-      const g = cat.group || '— Sem grupo —'
+      const g = cat.group || UNGROUPED
       if (!map[g]) map[g] = []
       map[g].push(cat)
     })
-    return map
+    const names = Object.keys(map).sort((a, b) => {
+      if (a === UNGROUPED) return 1
+      if (b === UNGROUPED) return -1
+      return a.localeCompare(b, 'pt-BR')
+    })
+    return names.map(g => [g, map[g]])
   }, [expCats])
 
   return (
@@ -112,7 +118,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       <div>
         <label className="label">Categorias Vinculadas ({categoryIds.length} selecionada{categoryIds.length !== 1 ? 's' : ''})</label>
         <div className="max-h-52 overflow-y-auto border border-gray-700 rounded-lg divide-y divide-gray-800/50">
-          {Object.entries(grouped).map(([group, cats]) => (
+          {grouped.map(([group, cats]) => (
             <div key={group}>
               <p className="px-3 py-1.5 text-xs text-gray-500 font-semibold uppercase tracking-wide bg-gray-800/40">{group}</p>
               {cats.map(cat => (

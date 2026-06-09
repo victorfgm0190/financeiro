@@ -448,6 +448,7 @@ export async function loadFromDb(defaultData) {
               financialMonthMode: d.cfg.financial_month_mode || 'custom',
               currency: d.cfg.currency ?? 'BRL',
               recurringMatchExceptions: d.cfg.recurring_match_exceptions ?? [],
+              categoryGroups: d.cfg.category_groups ?? [],
               lastBalanceSnapshot: d.cfg.balance_snapshot || null,
             }
           : defaultData.settings,
@@ -667,6 +668,7 @@ export async function syncSettings(settings, costCenters) {
         currency: settings.currency ?? 'BRL',
         cost_centers: costCenters ?? [],
         recurring_match_exceptions: settings.recurringMatchExceptions ?? [],
+        category_groups: settings.categoryGroups ?? [],
         balance_snapshot: settings.lastBalanceSnapshot || null,
       },
     })

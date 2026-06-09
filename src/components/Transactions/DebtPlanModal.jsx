@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import AccountOptions from '../shared/AccountOptions'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import CategorySelect from '../shared/CategorySelect'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -216,16 +217,14 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
           <Tag size={11} />
           {isEmprestimo ? 'Categoria de rendimento (juros)' : 'Categoria de juros'}
         </label>
-        <select
-          className="input"
+        <CategorySelect
+          categories={categories}
+          type="expense"
           value={form.interestCategoryId}
           onChange={e => set('interestCategoryId', e.target.value)}
-        >
-          <option value="">Nenhuma</option>
-          {expenseCategories.map(c => (
-            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-          ))}
-        </select>
+          placeholder="Nenhuma"
+          searchable
+        />
       </div>
 
       {form.installments > 0 && form.firstDueDate && (

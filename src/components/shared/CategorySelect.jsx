@@ -51,7 +51,10 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
   const matchUngrouped = ungrouped.filter(c => !q || c.name.toLowerCase().includes(q))
   const matchGrouped = {}
   for (const grp of sortedGroups) {
-    const cats = grouped[grp].filter(c => !q || c.name.toLowerCase().includes(q))
+    // A busca casa tanto pelo nome do grupo quanto pelo nome da categoria:
+    // se o grupo casa, todas as suas categorias aparecem.
+    const groupMatches = grp.toLowerCase().includes(q)
+    const cats = grouped[grp].filter(c => !q || groupMatches || c.name.toLowerCase().includes(q))
     if (cats.length) matchGrouped[grp] = cats
   }
   const matchGroups = sortedGroups.filter(g => matchGrouped[g])
@@ -149,22 +152,6 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
               </button>
             )}
 
-            {matchUngrouped.length > 0 && (
-              <>
-                {matchGroups.length > 0 && (
-                  <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">Geral</div>
-                )}
-                {matchUngrouped.map(c => (
-                  <button key={c.id} type="button"
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 ${c.id === value ? 'text-[#0F6E56] font-medium' : 'text-gray-200'}`}
-                    onClick={() => select(c.id)}
-                  >
-                    {c.icon} {c.name}
-                  </button>
-                ))}
-              </>
-            )}
-
             {matchGroups.map(groupName => (
               <div key={groupName}>
                 <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">{groupName}</div>
@@ -178,6 +165,23 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
                 ))}
               </div>
             ))}
+
+            {/* Categorias sem grupo — sempre por último */}
+            {matchUngrouped.length > 0 && (
+              <>
+                {matchGroups.length > 0 && (
+                  <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">Sem grupo</div>
+                )}
+                {matchUngrouped.map(c => (
+                  <button key={c.id} type="button"
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 ${c.id === value ? 'text-[#0F6E56] font-medium' : 'text-gray-200'}`}
+                    onClick={() => select(c.id)}
+                  >
+                    {c.icon} {c.name}
+                  </button>
+                ))}
+              </>
+            )}
 
             {!hasResults && (
               <p className="px-3 py-3 text-xs text-gray-600 text-center">Nenhuma categoria encontrada</p>
@@ -221,18 +225,18 @@ export default function CategorySelect({
   return (
     <select className={className} value={value} onChange={onChange} required={required}>
       <option value="">{placeholder}</option>
-      {ungrouped.length > 0 && hasGroups ? (
-        <optgroup label="— Geral">
-          {ungrouped.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-        </optgroup>
-      ) : (
-        ungrouped.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)
-      )}
       {sortedGroups.map(groupName => (
         <optgroup key={groupName} label={groupName}>
           {grouped[groupName].map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
         </optgroup>
       ))}
+      {ungrouped.length > 0 && hasGroups ? (
+        <optgroup label="Sem grupo">
+          {ungrouped.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+        </optgroup>
+      ) : (
+        ungrouped.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)
+      )}
     </select>
   )
 }

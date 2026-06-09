@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Info, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import CategorySelect from '../shared/CategorySelect'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -424,17 +425,14 @@ export default function AccountForm({ initial, onClose }) {
                 {form.reservaType === 'especifica' ? (
                   <div>
                     <label className="label">Categoria vinculada</label>
-                    <select
-                      className="input"
+                    <CategorySelect
+                      categories={categories}
+                      type="expense"
                       value={form.reservaCategoryId || ''}
                       onChange={e => set('reservaCategoryId', e.target.value || null)}
-                    >
-                      <option value="">Selecione uma categoria...</option>
-                      {categories
-                        .filter(c => c.type === 'expense' || c.type === 'both')
-                        .map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)
-                      }
-                    </select>
+                      placeholder="Selecione uma categoria..."
+                      searchable
+                    />
                   </div>
                 ) : (
                   <p className="text-xs text-gray-500 leading-relaxed">

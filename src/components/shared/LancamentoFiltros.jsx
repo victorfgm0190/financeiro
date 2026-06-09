@@ -54,12 +54,18 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
           className={`flex-1 min-w-[140px] ${inputCls}`}
         >
           <option value="">Todas as categorias</option>
-          {catGroups.ungrouped.map(c => <option key={c.id} value={c.id}>{catLabel(c)}</option>)}
           {catGroups.names.map(g => (
             <optgroup key={g} label={g}>
               {catGroups.grouped[g].map(c => <option key={c.id} value={c.id}>{catLabel(c)}</option>)}
             </optgroup>
           ))}
+          {catGroups.ungrouped.length > 0 && (
+            catGroups.names.length > 0
+              ? <optgroup label="Sem grupo">
+                  {catGroups.ungrouped.map(c => <option key={c.id} value={c.id}>{catLabel(c)}</option>)}
+                </optgroup>
+              : catGroups.ungrouped.map(c => <option key={c.id} value={c.id}>{catLabel(c)}</option>)
+          )}
         </select>
       )}
 

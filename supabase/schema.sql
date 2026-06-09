@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS configuracoes (
 ALTER TABLE configuracoes DISABLE ROW LEVEL SECURITY;
 INSERT INTO configuracoes (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS recurring_match_exceptions JSONB DEFAULT '[]';
+ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]';
 
 -- Categorias de transações
 CREATE TABLE IF NOT EXISTS categorias (

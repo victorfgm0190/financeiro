@@ -113,11 +113,41 @@ function exportCSV(report, showTx, from, to) {
 
 function MultiSelectPanel({ label, items, selected, onChange }) {
   const [open, setOpen] = useState(false)
-  const allSelected = items.every(i => selected.includes(i.id))
+  const [query, setQuery] = useState('')
 
   const toggle = (id) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
   const all = () => onChange(items.map(i => i.id))
   const none = () => onChange([])
+
+  const q = query.trim().toLowerCase()
+  const hasGroups = items.some(i => i.group)
+  // Filtro por digitação: casa nome do item ou nome do grupo.
+  const visible = items.filter(i =>
+    !q || i.label.toLowerCase().includes(q) || (i.group || '').toLowerCase().includes(q)
+  )
+
+  // Quando há grupos, organiza em seções (ordenadas pt-BR, "Sem grupo" por último).
+  const sections = useMemo(() => {
+    if (!hasGroups) return [['', visible]]
+    const map = {}
+    const UNG = '​Sem grupo' // sentinela para ordenar por último
+    for (const it of visible) { const g = it.group || UNG; (map[g] ||= []).push(it) }
+    return Object.keys(map)
+      .sort((a, b) => { if (a === UNG) return 1; if (b === UNG) return -1; return a.localeCompare(b, 'pt-BR') })
+      .map(g => [g === UNG ? 'Sem grupo' : g, map[g]])
+  }, [visible, hasGroups])
+
+  const renderItem = (item) => (
+    <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-gray-800 rounded-lg cursor-pointer">
+      <input
+        type="checkbox"
+        checked={selected.includes(item.id)}
+        onChange={() => toggle(item.id)}
+        className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+      />
+      <span className="text-xs text-gray-300 truncate">{item.label}</span>
+    </label>
+  )
 
   return (
     <div className="relative">
@@ -133,23 +163,30 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
       </button>
       {open && (
         <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
-          <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0">
+          <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0 items-center">
             <button type="button" onClick={all} className="text-xs text-blue-400 hover:text-blue-300">Todos</button>
             <span className="text-gray-700">·</span>
             <button type="button" onClick={none} className="text-xs text-gray-500 hover:text-gray-300">Nenhum</button>
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Buscar..."
+              className="ml-auto bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-gray-200 placeholder:text-gray-600 outline-none w-24"
+            />
           </div>
           <div className="overflow-y-auto flex-1 px-1 py-1">
-            {items.map(item => (
-              <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-gray-800 rounded-lg cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(item.id)}
-                  onChange={() => toggle(item.id)}
-                  className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
-                />
-                <span className="text-xs text-gray-300 truncate">{item.label}</span>
-              </label>
+            {sections.map(([groupName, groupItems]) => (
+              <div key={groupName || '_'}>
+                {groupName && (
+                  <div className="px-2 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">{groupName}</div>
+                )}
+                {groupItems.map(renderItem)}
+              </div>
             ))}
+            {visible.length === 0 && (
+              <p className="px-2 py-3 text-xs text-gray-600 text-center">Nada encontrado</p>
+            )}
           </div>
         </div>
       )}
@@ -226,7 +263,7 @@ export default function DemonstrativoFinanceiro() {
 
   // ── Item lists for multi-selects ──────────────────────────────────────────
   const catItems = useMemo(() =>
-    categories.map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim() }))
+    categories.map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
   , [categories])
 
   const accItems = useMemo(() =>

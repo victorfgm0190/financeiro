@@ -31,6 +31,8 @@ export default function SearchableSelect({
   onChange,
   placeholder = 'Selecione...',
   required = false,
+  ungroupedLast = false,   // quando true, itens sem grupo vão para o FINAL (ex.: categorias "Sem grupo")
+  ungroupedLabel = null,   // rótulo da seção de itens sem grupo (mostrado só se houver grupos)
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -45,7 +47,8 @@ export default function SearchableSelect({
   const filtered = useMemo(() => {
     if (!search.trim()) return options
     const q = search.toLowerCase()
-    return options.filter(o => o.label.toLowerCase().includes(q))
+    // Busca casa pelo rótulo do item OU pelo nome do grupo.
+    return options.filter(o => o.label.toLowerCase().includes(q) || (o.group || '').toLowerCase().includes(q))
   }, [options, search])
 
   // Build flat items list for keyboard nav + grouped structure for rendering
@@ -64,11 +67,13 @@ export default function SearchableSelect({
 
     const allItems = []
     if (!required) allItems.push({ id: '', label: placeholder })
-    for (const opt of ungrouped) allItems.push(opt)
-    for (const g of sortedGroupNames) for (const opt of groupedMap[g]) allItems.push(opt)
+    const pushUngrouped = () => { for (const opt of ungrouped) allItems.push(opt) }
+    const pushGrouped = () => { for (const g of sortedGroupNames) for (const opt of groupedMap[g]) allItems.push(opt) }
+    // ungroupedLast: grupos primeiro, "sem grupo" no final (ordem de navegação por teclado coerente).
+    if (ungroupedLast) { pushGrouped(); pushUngrouped() } else { pushUngrouped(); pushGrouped() }
 
     return { allItems, ungrouped, groupedMap, sortedGroupNames }
-  }, [filtered, required, placeholder])
+  }, [filtered, required, placeholder, ungroupedLast])
 
   const idxMap = useMemo(() => {
     const m = {}
@@ -196,36 +201,49 @@ export default function SearchableSelect({
               </button>
             )}
 
-            {ungrouped.map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                data-item
-                onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
-                className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${itemClass(opt.id)}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-
-            {sortedGroupNames.map(groupName => (
-              <div key={groupName}>
-                <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
-                  {groupName}
-                </p>
-                {groupedMap[groupName].map(opt => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    data-item
-                    onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
-                    className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            ))}
+            {(() => {
+              const ungroupedBlock = ungrouped.length > 0 && (
+                <div key="__ungrouped">
+                  {ungroupedLabel && sortedGroupNames.length > 0 && (
+                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                      {ungroupedLabel}
+                    </p>
+                  )}
+                  {ungrouped.map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      data-item
+                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )
+              const groupedBlock = sortedGroupNames.map(groupName => (
+                <div key={groupName}>
+                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                    {groupName}
+                  </p>
+                  {groupedMap[groupName].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      data-item
+                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              ))
+              return ungroupedLast
+                ? <>{groupedBlock}{ungroupedBlock}</>
+                : <>{ungroupedBlock}{groupedBlock}</>
+            })()}
           </div>
         </div>
       )}

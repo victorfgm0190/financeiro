@@ -31,6 +31,7 @@ export default function SettingsPanel() {
   const {
     settings, updateSettings,
     categories, addCategory, updateCategory, deleteCategory,
+    categoryGroups, addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
     classificationRules, addRule, deleteRule,
     gerencialRules, addGerencialRule, deleteGerencialRule, moveGerencialRule,
     costCenters, addCostCenter,
@@ -52,7 +53,11 @@ export default function SettingsPanel() {
   const [startDay, setStartDay] = useState(settings.financialMonthStartDay || 1)
   const [monthMode, setMonthMode] = useState(settings.financialMonthMode || 'custom')
   const [saved, setSaved] = useState(false)
-  const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌' })
+  const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '' })
+  const [newGroupName, setNewGroupName] = useState('')
+  const [editingCatGroup, setEditingCatGroup] = useState(null)   // nome do grupo de categoria em edição
+  const [catGroupDraft, setCatGroupDraft] = useState('')         // rascunho do rename
+  const [groupDeleteErr, setGroupDeleteErr] = useState(null)     // grupo que falhou ao excluir (tem categorias)
   const [newRule, setNewRule] = useState({ contains: '', categoryId: '', payee: '' })
   const [newGRule, setNewGRule] = useState({ contains: '', isParcelado: 'any', minAmount: '', maxAmount: '', grupoGerencialId: '' })
   const [newCC, setNewCC] = useState('')
@@ -266,10 +271,78 @@ export default function SettingsPanel() {
 
   const handleAddCategory = (e) => {
     e.preventDefault()
-    if (!newCategory.name.trim()) return
+    if (!newCategory.name.trim() || !newCategory.group.trim()) return // Grupo é obrigatório
     addCategory(newCategory)
-    setNewCategory({ name: '', type: 'expense', color: '#6366f1', icon: '📌' })
+    setNewCategory({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '' })
   }
+
+  const handleAddGroup = (e) => {
+    e.preventDefault()
+    const n = newGroupName.trim()
+    if (!n) return
+    addCategoryGroup(n)
+    setNewGroupName('')
+  }
+
+  const startRenameGroup = (name) => { setEditingCatGroup(name); setCatGroupDraft(name) }
+  const commitRenameGroup = () => {
+    const to = catGroupDraft.trim()
+    if (to && to !== editingCatGroup) renameCategoryGroup(editingCatGroup, to)
+    setEditingCatGroup(null); setCatGroupDraft('')
+  }
+  const handleDeleteGroup = (name) => {
+    if (categories.some(c => c.group === name)) { setGroupDeleteErr(name); return }
+    setGroupDeleteErr(null)
+    deleteCategoryGroup(name)
+  }
+
+  // Categorias agrupadas para exibição: grupos (ordenados) + "Sem grupo" ao final.
+  const catsByGroup = categoryGroups.map(g => ({
+    group: g,
+    cats: categories.filter(c => c.group === g),
+  }))
+  const ungroupedCats = categories.filter(c => !c.group)
+
+  // Linha de categoria com reclassificação de grupo (só muda o vínculo — nenhum
+  // lançamento ou saldo é alterado), conta de investimento e exclusão.
+  const renderCategoryRow = (cat) => (
+    <div key={cat.id} className="flex items-center justify-between gap-2 bg-gray-800 rounded-lg px-3 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
+        <span className="text-sm text-gray-200 truncate">{cat.icon} {cat.name}</span>
+        <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0">
+          {cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <select
+          className="input w-auto text-xs py-1 max-w-[140px]"
+          title="Grupo da categoria — reclassifica para outro grupo (não altera lançamentos)"
+          value={cat.group || ''}
+          onChange={e => updateCategory(cat.id, { group: e.target.value || null })}
+        >
+          <option value="">Sem grupo</option>
+          {categoryGroups.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        {aplicAccounts.length > 0 && cat.type !== 'income' && (
+          <select
+            className="input w-auto text-xs py-1 max-w-[150px]"
+            title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
+            value={cat.investmentAccountId || ''}
+            onChange={e => updateCategory(cat.id, { investmentAccountId: e.target.value || null })}
+          >
+            <option value="">Sem investimento</option>
+            {aplicAccounts.map(a => (
+              <option key={a.id} value={a.id}>🐷 {a.apelido || a.name}</option>
+            ))}
+          </select>
+        )}
+        <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
+          <Trash2 size={12} />
+        </button>
+      </div>
+    </div>
+  )
 
   const handleAddRule = (e) => {
     e.preventDefault()
@@ -537,42 +610,99 @@ export default function SettingsPanel() {
         )}
       </div>
 
-      {/* Categorias */}
+      {/* Categorias e Grupos */}
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Categorias ({categories.length})</h2>
-        <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
-          {categories.map(cat => (
-            <div key={cat.id} className="flex items-center justify-between gap-2 bg-gray-800 rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
-                <span className="text-sm text-gray-200 truncate">{cat.icon} {cat.name}</span>
-                <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0">
-                  {cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {aplicAccounts.length > 0 && cat.type !== 'income' && (
-                  <select
-                    className="input w-auto text-xs py-1 max-w-[150px]"
-                    title="Conta de Investimento — despesas de cartão nesta categoria geram um aporte automático nesta conta"
-                    value={cat.investmentAccountId || ''}
-                    onChange={e => updateCategory(cat.id, { investmentAccountId: e.target.value || null })}
-                  >
-                    <option value="">Sem investimento</option>
-                    {aplicAccounts.map(a => (
-                      <option key={a.id} value={a.id}>🐷 {a.apelido || a.name}</option>
-                    ))}
-                  </select>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-300">Categorias ({categories.length})</h2>
+          <span className="text-xs text-gray-500">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
+        </div>
+
+        {/* Criar grupo (só nome) */}
+        <form onSubmit={handleAddGroup} className="flex gap-2 mb-4">
+          <input
+            className="input flex-1"
+            placeholder="Novo grupo de categorias..."
+            value={newGroupName}
+            onChange={e => setNewGroupName(e.target.value)}
+          />
+          <button type="submit" className="btn-secondary flex items-center gap-1 shrink-0"><Plus size={13} /> Grupo</button>
+        </form>
+
+        {/* Lista de grupos com categorias aninhadas */}
+        <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
+          {catsByGroup.map(({ group, cats }) => (
+            <div key={group} className="rounded-lg border border-gray-800">
+              <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-gray-800/60 rounded-t-lg">
+                {editingCatGroup === group ? (
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <input
+                      className="input text-xs py-1 flex-1"
+                      value={catGroupDraft}
+                      autoFocus
+                      onChange={e => setCatGroupDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') commitRenameGroup(); if (e.key === 'Escape') { setEditingCatGroup(null); setCatGroupDraft('') } }}
+                    />
+                    <button onClick={commitRenameGroup} className="p-1 text-emerald-400 hover:text-emerald-300"><Check size={13} /></button>
+                    <button onClick={() => { setEditingCatGroup(null); setCatGroupDraft('') }} className="p-1 text-gray-500 hover:text-gray-300"><X size={13} /></button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide truncate">
+                      {group} <span className="text-gray-600 font-normal normal-case">· {cats.length}</span>
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-gray-500 hover:text-gray-300"><Edit2 size={12} /></button>
+                      <button
+                        onClick={() => handleDeleteGroup(group)}
+                        title={cats.length > 0 ? 'Esvazie o grupo para excluí-lo' : 'Excluir grupo'}
+                        disabled={cats.length > 0}
+                        className={`p-1 ${cats.length > 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-red-400'}`}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </>
                 )}
-                <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
-                  <Trash2 size={12} />
-                </button>
               </div>
+              <div className="p-2 space-y-1.5">
+                {cats.length === 0
+                  ? <p className="text-xs text-gray-600 px-1 py-1">Grupo vazio</p>
+                  : cats.map(renderCategoryRow)}
+              </div>
+              {groupDeleteErr === group && (
+                <p className="text-xs text-red-400 px-3 pb-2">Não é possível excluir: há categorias vinculadas.</p>
+              )}
             </div>
           ))}
+
+          {ungroupedCats.length > 0 && (
+            <div className="rounded-lg border border-gray-800">
+              <div className="px-3 py-1.5 bg-gray-800/60 rounded-t-lg">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  Sem grupo <span className="text-gray-600 font-normal normal-case">· {ungroupedCats.length}</span>
+                </span>
+              </div>
+              <div className="p-2 space-y-1.5">
+                {ungroupedCats.map(renderCategoryRow)}
+              </div>
+            </div>
+          )}
         </div>
-        <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+
+        {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
+        <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <input className="input col-span-2 sm:col-span-1" placeholder="Nome" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
+          <input
+            className="input"
+            list="category-groups-list"
+            placeholder="Grupo *"
+            required
+            value={newCategory.group}
+            onChange={e => setNewCategory(f => ({ ...f, group: e.target.value }))}
+          />
+          <datalist id="category-groups-list">
+            {categoryGroups.map(g => <option key={g} value={g} />)}
+          </datalist>
           <select className="input" value={newCategory.type} onChange={e => setNewCategory(f => ({ ...f, type: e.target.value }))}>
             <option value="expense">Despesa</option>
             <option value="income">Receita</option>
@@ -581,6 +711,7 @@ export default function SettingsPanel() {
           <input className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
+        <p className="text-[11px] text-gray-600 mt-1.5">O campo <span className="text-gray-400">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
       </div>
 
       {/* Regras de Classificação */}

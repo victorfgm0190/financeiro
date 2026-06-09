@@ -693,6 +693,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     value={form.reservaExpenseCategoryId}
                     onChange={id => set('reservaExpenseCategoryId', id)}
                     placeholder="Sem categoria"
+                    ungroupedLast
+                    ungroupedLabel="Sem grupo"
                   />
                   {!form.reservaExpenseCategoryId && (
                     <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
@@ -716,6 +718,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 value={form.categoryId}
                 onChange={id => set('categoryId', id)}
                 placeholder="Sem categoria"
+                ungroupedLast
+                ungroupedLabel="Sem grupo"
               />
               <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
                 Opcional — preencha apenas se quiser classificar o aporte. Com categoria, o
@@ -737,6 +741,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     value={form.categoriaCnpjId}
                     onChange={id => set('categoriaCnpjId', id)}
                     placeholder="Sem categoria"
+                    ungroupedLast
+                    ungroupedLabel="Sem grupo"
                   />
                 </div>
                 <div>
@@ -746,6 +752,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     value={form.categoriaCpfId}
                     onChange={id => set('categoriaCpfId', id)}
                     placeholder="Sem categoria"
+                    ungroupedLast
+                    ungroupedLabel="Sem grupo"
                   />
                 </div>
               </div>
@@ -780,6 +788,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     value={form.categoryId}
                     onChange={id => set('categoryId', id)}
                     placeholder="Sem categoria"
+                    ungroupedLast
+                    ungroupedLabel="Sem grupo"
                   />
                 </div>
               )}

@@ -72,6 +72,7 @@ const defaultData = {
     financialMonthMode: 'custom', // 'calendar' = 01..fim do mês | 'custom' = a partir do dia de início
     currency: 'BRL',
     recurringMatchExceptions: [],
+    categoryGroups: [], // rótulos de grupos de categoria (inclui grupos vazios criados manualmente)
   },
   accounts: [],
   transactions: [],
@@ -1262,17 +1263,77 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Categories ──────────────────────────────────────────────────────────────
+  // Garante que o rótulo de grupo exista em settings.categoryGroups (idempotente,
+  // case-insensitive). Retorna o objeto settings (novo se mudou, mesmo se não).
+  const ensureCategoryGroup = (settings, rawName) => {
+    const name = (rawName || '').trim()
+    if (!name) return settings
+    const list = settings.categoryGroups || []
+    if (list.some(g => g.toLowerCase() === name.toLowerCase())) return settings
+    return { ...settings, categoryGroups: [...list, name] }
+  }
+
   const addCategory = useCallback((category) => {
     const id = 'cat_' + Date.now()
-    update(d => ({ ...d, categories: [...d.categories, { ...category, id }] }))
+    const group = (category.group || '').trim() || null
+    update(d => ({
+      ...d,
+      settings: ensureCategoryGroup(d.settings, group),
+      categories: [...d.categories, { ...category, group, id }],
+    }))
   }, [update])
 
   const updateCategory = useCallback((id, changes) => {
-    update(d => ({ ...d, categories: d.categories.map(c => c.id === id ? { ...c, ...changes } : c) }))
+    update(d => {
+      let next = changes
+      let settings = d.settings
+      // Reclassificação de grupo: normaliza e auto-cria o grupo se for novo.
+      // Nenhum lançamento/saldo é alterado — só o vínculo categoria→grupo.
+      if (Object.prototype.hasOwnProperty.call(changes, 'group')) {
+        const group = (changes.group || '').trim() || null
+        next = { ...changes, group }
+        settings = ensureCategoryGroup(d.settings, group)
+      }
+      return { ...d, settings, categories: d.categories.map(c => c.id === id ? { ...c, ...next } : c) }
+    })
   }, [update])
 
   const deleteCategory = useCallback((id) => {
     update(d => ({ ...d, categories: d.categories.filter(c => c.id !== id) }))
+  }, [update])
+
+  // ── Category groups (rótulos persistidos em settings.categoryGroups) ──────────
+  const addCategoryGroup = useCallback((name) => {
+    const n = (name || '').trim()
+    if (!n) return
+    update(d => ({ ...d, settings: ensureCategoryGroup(d.settings, n) }))
+  }, [update])
+
+  // Renomeia o grupo: atualiza o rótulo na lista e reclassifica as categorias
+  // vinculadas (apenas o campo `group`; lançamentos/saldos não mudam).
+  const renameCategoryGroup = useCallback((oldName, newName) => {
+    const from = (oldName || '').trim()
+    const to = (newName || '').trim()
+    if (!from || !to || from === to) return
+    update(d => {
+      const renamed = (d.settings.categoryGroups || []).map(g => g === from ? to : g)
+      const categoryGroups = [...new Set(renamed)]
+      return {
+        ...d,
+        settings: { ...d.settings, categoryGroups },
+        categories: d.categories.map(c => c.group === from ? { ...c, group: to } : c),
+      }
+    })
+  }, [update])
+
+  // Exclui um grupo — só permitido quando não há categorias vinculadas.
+  const deleteCategoryGroup = useCallback((name) => {
+    const n = (name || '').trim()
+    if (!n) return
+    update(d => {
+      if (d.categories.some(c => c.group === n)) return d // bloqueado: tem categorias
+      return { ...d, settings: { ...d.settings, categoryGroups: (d.settings.categoryGroups || []).filter(g => g !== n) } }
+    })
   }, [update])
 
   // ── Schedules ───────────────────────────────────────────────────────────────
@@ -2921,6 +2982,15 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // Lista unificada de grupos de categoria: rótulos persistidos (settings.categoryGroups,
+  // inclui grupos vazios) ∪ grupos efetivamente usados nas categorias (compat. com dados
+  // legados/importados). Ordenada alfabeticamente (pt-BR).
+  const categoryGroups = useMemo(() => {
+    const set = new Set((data.settings?.categoryGroups || []).filter(Boolean))
+    for (const c of data.categories) if (c.group) set.add(c.group)
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [data.settings?.categoryGroups, data.categories])
+
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
     return (
@@ -2967,6 +3037,8 @@ export function AppProvider({ children }) {
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled,
       rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
       addCategory, updateCategory, deleteCategory,
+      categoryGroups,
+      addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
       addSchedule, updateSchedule, deleteSchedule,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
