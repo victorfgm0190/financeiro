@@ -1398,6 +1398,46 @@ export function AppProvider({ children }) {
     update(d => {
       const schedule = d.schedules.find(s => s.id === scheduleId)
       if (!schedule) return d
+
+      // Resgate com detalhamento por função (Etapa B): gera UMA transferência por linha
+      // de schedule_reserva_funcoes (valor + função própria), em vez da transferência única.
+      const detalhe = (d.scheduleReservaFuncoes || []).filter(srf => srf.scheduleId === scheduleId)
+      if (schedule.transactionType === 'transfer' && detalhe.length > 0) {
+        const funcName = new Map((d.reserveFunctions || []).map(f => [f.id, f.name]))
+        const nowIso = new Date().toISOString()
+        const baseTs = Date.now()
+        const detTxs = detalhe.map((srf, i) => ({
+          id: 'tx_' + baseTs + '_' + i + '_' + Math.random().toString(36).slice(2),
+          type: 'transfer',
+          accountId: schedule.accountId,
+          accountType: schedule.accountType,
+          toAccountId: schedule.toAccountId,
+          amount: Number(srf.valor) || 0,
+          categoryId: schedule.categoryId,
+          description: `${schedule.description} — ${funcName.get(srf.reservaFuncaoId) || 'Função'}`,
+          payee: schedule.payee,
+          costCenter: schedule.costCenter,
+          date,
+          scheduleId,
+          reservaFuncaoId: srf.reservaFuncaoId,
+          origin: 'agendamento',
+          createdAt: nowIso,
+        }))
+        const totalLines = rb(detTxs.reduce((s, t) => s + Number(t.amount), 0))
+        const accounts = d.accounts.map(a => {
+          if (a.id === schedule.accountId) return { ...a, balance: rb(a.balance - totalLines) }
+          if (a.id === schedule.toAccountId) return { ...a, balance: rb(a.balance + totalLines) }
+          return a
+        })
+        return {
+          ...d, accounts,
+          transactions: [...d.transactions, ...detTxs],
+          schedules: d.schedules.map(s =>
+            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date] } : s
+          ),
+        }
+      }
+
       const tx = {
         type: schedule.transactionType,
         accountId: schedule.accountId,

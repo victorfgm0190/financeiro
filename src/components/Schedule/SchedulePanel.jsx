@@ -131,7 +131,18 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions } = useApp()
+  // Detalhamento por função do resgate (Etapa B). Quando presente, a transferência é
+  // registrada por função (registerScheduleOccurrence) e o valor total não é editável.
+  const reservaDetalhe = useMemo(() => {
+    const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
+    return (scheduleReservaFuncoes || [])
+      .filter(srf => srf.scheduleId === schedule.id)
+      .map(srf => ({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 }))
+      .sort((a, b) => b.valor - a.valor)
+  }, [scheduleReservaFuncoes, reserveFunctions, schedule.id])
+  const hasDetalhe = reservaDetalhe.length > 0
+  const detalheTotal = useMemo(() => Math.round(reservaDetalhe.reduce((s, d) => s + d.valor, 0) * 100) / 100, [reservaDetalhe])
   const scheduleRateios = useMemo(
     () => (rateiosByLancamento?.get(schedule.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
     [rateiosByLancamento, schedule.id],
@@ -212,6 +223,10 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       })
       markScheduleRegistered(schedule.id, regDate)
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
+    } else if (hasDetalhe) {
+      // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
+      // e marca a ocorrência. Não usa o valor/contas do formulário (fixos pelo detalhamento).
+      registerScheduleOccurrence(schedule.id, trfDate)
     } else {
       addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,
@@ -326,21 +341,47 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
 
           {tab === 'transferencia' && (
             <>
+              {hasDetalhe && (
+                <div className="rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2.5">
+                  <p className="text-xs text-gray-400 mb-1.5">Detalhamento por função</p>
+                  <ul className="space-y-0.5">
+                    {reservaDetalhe.map((det, i) => (
+                      <li key={i} className="text-xs text-gray-300 flex items-center gap-1.5">
+                        <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                        <span className="flex-1 truncate">{det.name}</span>
+                        <span className="font-medium text-gray-200">{fmt(det.valor)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
+                    <span className="text-xs font-semibold text-gray-300">Total</span>
+                    <span className="text-xs font-bold text-gray-100">{fmt(detalheTotal)}</span>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="label">Banco de</label>
-                <select className="input" value={trfFromId} onChange={e => setTrfFromId(e.target.value)}>
+                <select className="input" value={trfFromId} onChange={e => setTrfFromId(e.target.value)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} />
                 </select>
               </div>
               <div>
                 <label className="label">Banco para</label>
-                <select className="input" value={trfToId} onChange={e => setTrfToId(e.target.value)}>
+                <select className="input" value={trfToId} onChange={e => setTrfToId(e.target.value)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} />
                 </select>
               </div>
               <div>
-                <label className="label">Valor</label>
-                <input className="input" type="number" step="0.01" value={trfAmount} onChange={e => setTrfAmount(e.target.value)} />
+                <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  value={hasDetalhe ? detalheTotal : trfAmount}
+                  onChange={e => setTrfAmount(e.target.value)}
+                  disabled={hasDetalhe}
+                  readOnly={hasDetalhe}
+                />
               </div>
               <div>
                 <label className="label">Data</label>
