@@ -7,6 +7,7 @@ import {
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
   importToRow, gerencialRuleToRow, reserveFunctionToRow,
   saveRateios, deleteRateios,
+  scheduleReservaFuncaoToRow,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate } from '../lib/fatura'
@@ -19,7 +20,7 @@ const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
   budgets: [], classificationRules: [], gerencialGroups: [], gerencialRules: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
-  profiles: [], cardImports: [], reserveFunctions: [],
+  profiles: [], cardImports: [], reserveFunctions: [], scheduleReservaFuncoes: [],
   settings: {}, costCenters: [],
 }
 
@@ -359,6 +360,7 @@ const defaultData = {
   cardImports: [],
   reserveFunctions: [],
   rateios: [],
+  scheduleReservaFuncoes: [],
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
@@ -491,6 +493,7 @@ export function AppProvider({ children }) {
           cardImports: result.data.cardImports ?? [],
           reserveFunctions: result.data.reserveFunctions ?? [],
           rateios: result.data.rateios ?? [],
+          scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
         }
 
         // Migração: funções de reserva do localStorage → Neon.
@@ -586,6 +589,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('card_imports', prev.cardImports || [], data.cardImports || [], importToRow))
       if (prev.reserveFunctions !== data.reserveFunctions)
         tasks.push(syncSection('reserve_functions', prev.reserveFunctions || [], data.reserveFunctions || [], reserveFunctionToRow))
+      if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
+        tasks.push(syncSection('schedule_reserva_funcoes', prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || [], scheduleReservaFuncaoToRow))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
@@ -2149,6 +2154,9 @@ export function AppProvider({ children }) {
       let totalG = 0
       let totalGeral = 0
       const numberedByAccount = new Map() // contaOrigemId → soma dos grupos numerados
+      // Detalhamento por função: contaOrigemId → Map(reservaFuncaoId → soma). Lançamentos
+      // sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
+      const numberedByAccountByFunc = new Map()
       for (const tx of expenses) {
         const amt = Number(tx.amount) || 0
         totalGeral = rb(totalGeral + amt)
@@ -2158,6 +2166,11 @@ export function AppProvider({ children }) {
         } else if (grupo && typeof grupo.number === 'number' && grupo.number !== 1 && grupo.defaultAccountId) {
           const origem = grupo.defaultAccountId
           numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
+          if (tx.reservaFuncaoId) {
+            if (!numberedByAccountByFunc.has(origem)) numberedByAccountByFunc.set(origem, new Map())
+            const fm = numberedByAccountByFunc.get(origem)
+            fm.set(tx.reservaFuncaoId, rb((fm.get(tx.reservaFuncaoId) || 0) + amt))
+          }
         }
         // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
       }
@@ -2299,7 +2312,35 @@ export function AppProvider({ children }) {
         return p.status === 'paid'
       })
 
-      return { ...d, accounts, schedules, payables }
+      // 6. Detalhamento por função (schedule_reserva_funcoes) dos resgates desta fatura.
+      //    Idempotente: para cada resgate_reserva (pendente) recriado, apaga o detalhamento
+      //    antigo do seu schedule_id e reinsere uma linha por função somada. Resgates já
+      //    registrados (executados) preservam seu detalhamento.
+      const pendingResgateIds = new Set(
+        desired
+          .filter(dsh => dsh.tipo === 'resgate_reserva' && !registeredSlots.has(dsh.slot))
+          .map(dsh => dsh.id)
+      )
+      let scheduleReservaFuncoes = (d.scheduleReservaFuncoes || [])
+        .filter(srf => !pendingResgateIds.has(srf.scheduleId))
+      for (const [origem, soma] of numberedByAccount) {
+        if (soma <= 0) continue
+        const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
+        if (!pendingResgateIds.has(schedId)) continue
+        const byFunc = numberedByAccountByFunc.get(origem)
+        if (!byFunc) continue
+        for (const [funcId, valor] of byFunc) {
+          if (!(valor > 0)) continue
+          scheduleReservaFuncoes.push({
+            id: `srf_${schedId}_${funcId}`,
+            scheduleId: schedId,
+            reservaFuncaoId: funcId,
+            valor: rb(valor),
+          })
+        }
+      }
+
+      return { ...d, accounts, schedules, payables, scheduleReservaFuncoes }
     })
   }, [update])
 
@@ -3090,6 +3131,7 @@ export function AppProvider({ children }) {
       profiles: data.profiles || [],
       cardImports: data.cardImports || [],
       reserveFunctions: data.reserveFunctions || [],
+      scheduleReservaFuncoes: data.scheduleReservaFuncoes || [],
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,

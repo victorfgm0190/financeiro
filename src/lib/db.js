@@ -487,6 +487,7 @@ export async function loadFromDb(defaultData) {
         cardImports: d.imports?.map(rowToImport) || [],
         reserveFunctions: d.rfns?.map(rowToReserveFunction) || [],
         rateios: d.rateios?.map(rowToRateio) || [],
+        scheduleReservaFuncoes: d.srfs?.map(rowToScheduleReservaFuncao) || [],
       },
     }
   } catch (err) {
@@ -548,6 +549,22 @@ export const rowToRateio = (r) => ({
   categoriaId: r.categoria_id || '',
   valor: Number(r.valor) || 0,
   descricao: r.descricao || '',
+})
+
+// ─── Detalhamento por função do agendamento de resgate ───────────────────────
+
+export const scheduleReservaFuncaoToRow = (s) => ({
+  id: s.id,
+  schedule_id: s.scheduleId,
+  reserva_funcao_id: s.reservaFuncaoId,
+  valor: Number(s.valor) || 0,
+})
+
+export const rowToScheduleReservaFuncao = (r) => ({
+  id: r.id,
+  scheduleId: r.schedule_id,
+  reservaFuncaoId: r.reserva_funcao_id,
+  valor: Number(r.valor) || 0,
 })
 
 export async function loadRateios(lancamentoId) {

@@ -100,7 +100,16 @@ export default async function handler(req, res) {
       created_at TIMESTAMPTZ DEFAULT now()
     )`)
     await query(`CREATE INDEX IF NOT EXISTS idx_rateios_lancamento ON lancamento_rateios (lancamento_id)`)
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios] =
+    // Detalhamento por função de reserva do agendamento de resgate_reserva.
+    // Recalculado do zero por recalcularAgendamentosFatura a partir dos lançamentos.
+    await query(`CREATE TABLE IF NOT EXISTS schedule_reserva_funcoes (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      schedule_id TEXT NOT NULL,
+      reserva_funcao_id TEXT NOT NULL,
+      valor NUMERIC(12,2) NOT NULL DEFAULT 0
+    )`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id)`)
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -119,12 +128,13 @@ export default async function handler(req, res) {
         query('SELECT * FROM gerencial_rules ORDER BY "order"'),
         query('SELECT * FROM reserve_functions ORDER BY ordem, name'),
         query('SELECT * FROM lancamento_rateios'),
+        query('SELECT * FROM schedule_reserva_funcoes'),
       ])
 
     res.json({
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis, imports, grules, rfns, rateios,
+      envs, groups, perfis, imports, grules, rfns, rateios, srfs,
     })
   } catch (err) {
     const isTableMissing =

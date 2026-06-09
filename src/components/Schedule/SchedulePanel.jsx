@@ -467,6 +467,7 @@ function ScheduleRow({
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
   deleteSchedule, onEditSchedule,
   selectionMode, isSelected, onToggleSelect,
+  srfBySchedule,
 }) {
   const today = format(new Date(), 'yyyy-MM-dd')
   const cat = categories.find(c => c.id === schedule.categoryId)
@@ -488,6 +489,9 @@ function ScheduleRow({
   const [showExcluir, setShowExcluir] = useState(false)
 
   const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
+
+  // Detalhamento por função do resgate (schedule_reserva_funcoes).
+  const reservaDetalhe = srfBySchedule?.get(schedule.id) || null
 
   return (
     <>
@@ -547,6 +551,17 @@ function ScheduleRow({
               </span>
             )}
           </div>
+          {reservaDetalhe && reservaDetalhe.length > 0 && (
+            <ul className="mt-1 space-y-0.5" title="Detalhamento por função de reserva">
+              {reservaDetalhe.map((det, i) => (
+                <li key={i} className="text-[10px] text-gray-500 flex items-center gap-1 whitespace-nowrap">
+                  <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                  <span className="truncate">{det.name}:</span>
+                  <span className="text-gray-400 font-medium">{fmt(det.valor)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {schedule.transactionType === 'transfer' ? (
             <p className="text-xs text-gray-600 mt-0.5 truncate">
               <span className="text-purple-400">↔</span>{' '}
@@ -756,6 +771,19 @@ function Toast({ message }) {
 }
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
+  const { scheduleReservaFuncoes, reserveFunctions } = useApp()
+  // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
+  const srfBySchedule = useMemo(() => {
+    const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
+    const m = new Map()
+    for (const srf of (scheduleReservaFuncoes || [])) {
+      if (!m.has(srf.scheduleId)) m.set(srf.scheduleId, [])
+      m.get(srf.scheduleId).push({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 })
+    }
+    for (const arr of m.values()) arr.sort((a, b) => b.valor - a.valor)
+    return m
+  }, [scheduleReservaFuncoes, reserveFunctions])
+
   const today = format(new Date(), 'yyyy-MM-dd')
   const in7 = format(addDays(new Date(), 7), 'yyyy-MM-dd')
   const in30 = format(addDays(new Date(), 30), 'yyyy-MM-dd')
@@ -862,6 +890,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     registerScheduleOccurrence, skipScheduleOccurrence,
     deleteSchedule, onEditSchedule,
     selectionMode, onToggleSelect: toggleSelect,
+    srfBySchedule,
   }
 
   return (

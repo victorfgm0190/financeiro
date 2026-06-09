@@ -822,8 +822,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const txSet = new Set(imp.txIds || [])
     const impTxs = transactions.filter(t => txSet.has(t.id) && t.type !== 'transfer')
     if (impTxs.length === 0) return
+    // Descrição raiz: descrição sem o sufixo de parcelamento "N/Total".
+    const rootOf = (desc) => {
+      const di = detectInstallment(desc || '')
+      return (di ? di.base : (desc || '')).toLowerCase().trim()
+    }
     const reconstructed = impTxs.map(t => {
       const inst = detectInstallment(t.description || '')
+      // Parcela N/Total (N>1) sem função → herda de outro lançamento do MESMO cartão com a
+      // mesma descrição raiz que tenha reserva_funcao_id preenchido.
+      let reservaFuncaoId = t.reservaFuncaoId || null
+      if (!reservaFuncaoId && inst && inst.num > 1) {
+        const root = inst.base.toLowerCase().trim()
+        const sibling = transactions.find(o =>
+          o.id !== t.id && o.accountId === imp.accountId && o.reservaFuncaoId && rootOf(o.description) === root
+        )
+        reservaFuncaoId = sibling?.reservaFuncaoId || null
+      }
       return {
         _id: t.id,
         date: t.date,
@@ -834,6 +849,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: t.categoryId || '',
         payee: t.payee || '',
         grupoGerencial: t.grupoGerencial || defaultGrupoD,
+        _reservaFuncaoId: reservaFuncaoId,
         type: t.type,
         isDeposit: false,
         selected: true,
@@ -968,6 +984,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           grupoGerencial: row.grupoGerencial || null,
           date: row.date,
           dateCartao: row._dateCartao || null,
+          reservaFuncaoId: row._reservaFuncaoId || null,
         })
         if (row._rateios?.length > 0) saveRateiosFor(row._id, row._rateios)
       })
