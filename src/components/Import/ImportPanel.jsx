@@ -14,6 +14,7 @@ import RateioModal from '../shared/RateioModal'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import Toast from '../shared/Toast'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -475,6 +476,17 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay) {
   })
 }
 
+// Data corrigida (YYYY-MM-DD) de um lançamento no modo reedição: dia de fechamento
+// (closingDay) do mês/ano da fatura_ref. Ex.: '2026-05' + closingDay 20 → '2026-05-20'.
+function correctedDateForFatura(faturaYYYYMM, closingDay) {
+  if (!faturaYYYYMM || !closingDay) return null
+  const [y, m] = faturaYYYYMM.split('-').map(Number)
+  if (!y || !m) return null
+  const lastDay = new Date(y, m, 0).getDate()
+  const day = Math.min(closingDay, lastDay)
+  return `${faturaYYYYMM}-${String(day).padStart(2, '0')}`
+}
+
 // Retorna a data de vencimento (YYYY-MM-DD) do cartão no mês da fatura.
 function faturaToDate(faturaYYYYMM, dueDay) {
   if (!faturaYYYYMM || !dueDay) return null
@@ -622,6 +634,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [confirmRevertId, setConfirmRevertId] = useState(null)
   const [editingImport, setEditingImport] = useState(null)
   const [showBatchFill, setShowBatchFill] = useState(false)
+  const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
+  const [corrigirToast, setCorrigirToast] = useState(null)
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
@@ -1059,6 +1073,50 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const dups = resolvedRows.filter(r => r._isDuplicate).length
   const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate).length
 
+  // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
+  // Para cada lançamento do lote (tx_ids da importação) com date_cartao preenchida,
+  // calcula a data corrigida = dia de fechamento do mês/ano da fatura_ref. Lançamentos
+  // manuais (date_cartao = null) são ignorados; date_cartao nunca é alterada.
+  const corrigirPreview = useMemo(() => {
+    if (!editingImport) return []
+    const closingDay = selectedAcc?.closingDay
+    const idSet = new Set(editingImport.txIds || [])
+    return transactions
+      .filter(t => idSet.has(t.id) && t.type !== 'transfer' && t.dateCartao)
+      .map(t => {
+        const corrected = correctedDateForFatura(t.faturaMonthYear, closingDay)
+        return {
+          id: t.id,
+          description: t.description || '',
+          faturaRef: t.faturaMonthYear || '',
+          dataAtual: t.date,
+          dataCorrigida: corrected,
+          changed: !!corrected && corrected !== t.date,
+        }
+      })
+  }, [editingImport, transactions, selectedAcc])
+
+  const corrigirChangedCount = corrigirPreview.filter(p => p.changed).length
+
+  const handleCorrigirDatas = () => {
+    const changed = corrigirPreview.filter(p => p.changed)
+    changed.forEach(p => updateTransaction(p.id, { date: p.dataCorrigida }))
+    // Reflete a correção nas linhas em edição (estado local) sem precisar recarregar.
+    if (changed.length > 0) {
+      const byId = new Map(changed.map(p => [p.id, p.dataCorrigida]))
+      setRows(prev => prev.map(r => byId.has(r._id) ? { ...r, date: byId.get(r._id) } : r))
+    }
+    // Recalcula os agendamentos gerenciais de cada fatura distinta afetada
+    // (mesmo cartão da importação + cada fatura_mes_ano único).
+    const faturas = new Set(changed.map(p => p.faturaRef).filter(Boolean))
+    for (const f of faturas) {
+      const [y, m] = f.split('-')
+      recalcularAgendamentosFatura(editingImport.accountId, y, m)
+    }
+    setShowCorrigirDatas(false)
+    setCorrigirToast(`${changed.length} data${changed.length !== 1 ? 's' : ''} corrigida${changed.length !== 1 ? 's' : ''}`)
+  }
+
   // Totalizador da fatura (atualiza em tempo real conforme os checkboxes):
   //   importar  = despesas "Novo" selecionadas | jaExistem = despesas "Duplicado"
   //   estornos  = receitas dentro da fatura (abatidas do total)
@@ -1095,6 +1153,59 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           onDeleteAll={() => { updateRow(rateioRow._id, { _rateios: [] }); setRateioRow(null) }}
           onClose={() => setRateioRow(null)}
         />
+      )}
+
+      {showCorrigirDatas && editingImport && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCorrigirDatas(false)} />
+          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-gray-800">
+              <h3 className="text-sm font-semibold text-gray-100">
+                Correção de datas — {corrigirPreview.length} lançamento{corrigirPreview.length !== 1 ? 's' : ''}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                A data de cada lançamento vai para o dia de fechamento ({selectedAcc?.closingDay || '—'}) do mês da fatura. A data original do banco é preservada.
+              </p>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {corrigirPreview.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-10">Nenhum lançamento elegível neste lote.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-900">
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Data atual</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Data corrigida</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {corrigirPreview.map(p => (
+                      <tr key={p.id} className={`border-b border-gray-800/50 ${p.changed ? '' : 'text-gray-600'}`}>
+                        <td className="px-4 py-2 max-w-xs truncate" title={p.description}>{p.description}</td>
+                        <td className="px-4 py-2 text-xs whitespace-nowrap">{p.faturaRef ? p.faturaRef.split('-').reverse().join('/') : '—'}</td>
+                        <td className="px-4 py-2 text-xs whitespace-nowrap">{fmtDate(p.dataAtual)}</td>
+                        <td className={`px-4 py-2 text-xs whitespace-nowrap ${p.changed ? 'text-emerald-400 font-medium' : ''}`}>
+                          {p.changed ? fmtDate(p.dataCorrigida) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-400">
+                {corrigirChangedCount} data{corrigirChangedCount !== 1 ? 's' : ''} ser{corrigirChangedCount !== 1 ? 'ão' : 'á'} corrigida{corrigirChangedCount !== 1 ? 's' : ''}
+              </span>
+              <div className="flex gap-3">
+                <button className="btn-secondary text-sm" onClick={() => setShowCorrigirDatas(false)}>Cancelar</button>
+                <button className="btn-primary text-sm" disabled={corrigirChangedCount === 0} onClick={handleCorrigirDatas}>Confirmar</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {matchQueue.length > 0 && (
@@ -1152,7 +1263,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs">
                 <Pencil size={12} />
                 <span>Modo de reedição — {editingImport.filename || 'importação anterior'} · {editingImport.count} lançamento{editingImport.count !== 1 ? 's' : ''}</span>
-                <button className="ml-auto text-blue-500 hover:text-blue-300" onClick={() => { setEditingImport(null); setRows([]) }}>Cancelar</button>
+                <div className="ml-auto flex items-center gap-3">
+                  <button className="text-blue-300 hover:text-blue-100 font-medium" onClick={() => setShowCorrigirDatas(true)}>🗓 Corrigir Datas</button>
+                  <button className="text-blue-500 hover:text-blue-300" onClick={() => { setEditingImport(null); setRows([]) }}>Cancelar</button>
+                </div>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1476,6 +1590,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         danger
         confirmLabel="Estornar"
       />
+
+      {corrigirToast && <Toast message={corrigirToast} onClose={() => setCorrigirToast(null)} />}
     </div>
   )
 }
