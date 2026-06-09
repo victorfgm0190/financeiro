@@ -975,8 +975,35 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const handleImport = () => {
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)
 
-    // Modo reedição: apenas atualiza campos editáveis das transações existentes
+    // Modo reedição: atualiza campos editáveis das transações existentes e recalcula
+    // os agendamentos de cada fatura afetada, passando o mapa de funções de reserva por
+    // conta-origem (mesma montagem da importação nova) — sem isso o schedule_reserva_funcoes
+    // do resgate não é repopulado quando só a função muda.
     if (editingImport) {
+      const editClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
+      const faturasAfetadas = new Set()
+      const addFaturaAfetada = (faturaMY, dataStr) => {
+        if (faturaMY) { faturasAfetadas.add(faturaMY); return }
+        const ref = computeFaturaRef(new Date(dataStr + 'T00:00:00'), editClosingDay) // MM/YYYY
+        const [m, y] = ref.split('/')
+        faturasAfetadas.add(`${y}-${m}`)
+      }
+      // Função de reserva por (fatura → conta-origem); desempate pelo lançamento de maior valor.
+      const reservaFuncaoPorFatura = new Map() // faturaMesAno → Map(contaOrigem → { funcId, amount })
+      const registrarReservaFuncao = (faturaMY, grupoId, reservaFuncaoId, amount) => {
+        if (!faturaMY || !reservaFuncaoId) return
+        const grupo = gerencialGroups.find(g => g.id === grupoId)
+        if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) return
+        const origem = grupo.defaultAccountId
+        const func = (reserveFunctions || []).find(f => f.id === reservaFuncaoId)
+        if (!func || func.accountId !== origem) return
+        if (!reservaFuncaoPorFatura.has(faturaMY)) reservaFuncaoPorFatura.set(faturaMY, new Map())
+        const byOrigem = reservaFuncaoPorFatura.get(faturaMY)
+        const prev = byOrigem.get(origem)
+        const amt = Number(amount) || 0
+        if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: reservaFuncaoId, amount: amt })
+      }
+
       toImport.forEach(row => {
         updateTransaction(row._id, {
           faturaMonthYear: row.faturaMonthYear || null,
@@ -987,9 +1014,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           reservaFuncaoId: row._reservaFuncaoId || null,
         })
         if (row._rateios?.length > 0) saveRateiosFor(row._id, row._rateios)
+        addFaturaAfetada(row.faturaMonthYear, row.date)
+        if (row.grupoGerencial) {
+          registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
+        }
       })
       if (faturaMonthYear && faturaMonthYear !== editingImport.mesAno) {
         updateCardImport(editingImport.id, { mesAno: faturaMonthYear })
+      }
+      // Recalcula cada fatura afetada com o mapa (igual ao fluxo de importação nova). Roda
+      // após os updateTransaction (todos via update funcional), então enxerga as transações
+      // já atualizadas e o mapa tem prioridade no desempate da função do resgate.
+      for (const fmy of faturasAfetadas) {
+        const [y, m] = fmy.split('-')
+        const byOrigem = reservaFuncaoPorFatura.get(fmy)
+        const reservaFuncaoByAccount = byOrigem
+          ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
+          : undefined
+        recalcularAgendamentosFatura(editingImport.accountId, y, m, reservaFuncaoByAccount)
       }
       setEditingImport(null)
       setResult(toImport.length)

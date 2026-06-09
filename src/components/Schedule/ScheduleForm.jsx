@@ -183,7 +183,19 @@ function buildAccOpts(accounts, _accountGroups, excludeId) {
 }
 
 export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, addSchedule, updateSchedule, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
+
+  // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
+  // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
+  const reservaDetalhe = useMemo(() => {
+    if (!initial?.id) return []
+    const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
+    return (scheduleReservaFuncoes || [])
+      .filter(srf => srf.scheduleId === initial.id)
+      .map(srf => ({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 }))
+      .sort((a, b) => b.valor - a.valor)
+  }, [scheduleReservaFuncoes, reserveFunctions, initial])
+  const hasReservaDetalhe = reservaDetalhe.length > 0
 
   // Rateio (divisão em categorias) — keyed pelo id do agendamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
@@ -428,23 +440,44 @@ export default function ScheduleForm({ initial, onClose }) {
               </p>
             )}
 
-            {/* Função de reserva (vincula o agendamento à função específica) */}
-            <div>
-              <label className="label text-amber-400">Função de Reserva</label>
-              <select
-                className="input"
-                value={form.reservaFuncaoId}
-                onChange={e => set('reservaFuncaoId', e.target.value)}
-              >
-                <option value="">— Nenhuma —</option>
-                {reservaFuncoesDaConta.map(f => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
-              {reservaFuncoesDaConta.length === 0 && (
-                <p className="text-xs text-gray-500 mt-1">Nenhuma função vinculada a esta conta de reserva.</p>
-              )}
-            </div>
+            {/* Função de reserva (vincula o agendamento à função específica). Ocultada quando
+                o resgate já tem detalhamento por função (schedule_reserva_funcoes) — nesse caso
+                exibimos a árvore somente-leitura abaixo. */}
+            {!hasReservaDetalhe && (
+              <div>
+                <label className="label text-amber-400">Função de Reserva</label>
+                <select
+                  className="input"
+                  value={form.reservaFuncaoId}
+                  onChange={e => set('reservaFuncaoId', e.target.value)}
+                >
+                  <option value="">— Nenhuma —</option>
+                  {reservaFuncoesDaConta.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+                {reservaFuncoesDaConta.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">Nenhuma função vinculada a esta conta de reserva.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Detalhamento por função de reserva (somente leitura) — resgate com múltiplas funções */}
+        {form.transactionType === 'transfer' && hasReservaDetalhe && (
+          <div className="col-span-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-xs font-medium text-amber-400 mb-1.5">Detalhamento por função de reserva</p>
+            <ul className="space-y-0.5">
+              {reservaDetalhe.map((det, i) => (
+                <li key={i} className="text-xs text-gray-300 flex items-center gap-1.5">
+                  <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                  <span className="flex-1 truncate">{det.name}</span>
+                  <span className="font-medium text-gray-200">{fmt(det.valor)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-gray-500 mt-1.5">Calculado a partir dos lançamentos da fatura — somente leitura.</p>
           </div>
         )}
 
