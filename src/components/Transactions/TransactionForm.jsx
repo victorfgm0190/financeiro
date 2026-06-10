@@ -151,6 +151,30 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const isCredit = selectedAccount?.type === 'credit'
   const showGerencial = isCredit && form.type === 'expense'
 
+  // Grupo gerencial numerado (2,3,…) selecionado: a reserva é determinada pela conta-origem
+  // do grupo (defaultAccountId), não escolhida pelo usuário. Nesse modo o toggle
+  // "Pago com reserva?" expõe um select de FUNÇÃO de reserva (igual ao inline da importação)
+  // para indicar de qual bucket sai o resgate — o agendamento resgate_reserva é gerado/
+  // acumulado por recalcularAgendamentosFatura ao salvar.
+  const selectedGerencialGroup = useMemo(
+    () => gerencialGroups.find(g => g.id === form.grupoGerencial) || null,
+    [gerencialGroups, form.grupoGerencial]
+  )
+  const isNumberedGerencial = typeof selectedGerencialGroup?.number === 'number' && selectedGerencialGroup.number !== 1
+  const reservaFuncaoMode = showGerencial && isNumberedGerencial
+  const reservaGroupFuncs = useMemo(
+    () => (reservaFuncaoMode && selectedGerencialGroup?.defaultAccountId)
+      ? (reserveFunctions || []).filter(f => f.accountId === selectedGerencialGroup.defaultAccountId)
+      : [],
+    [reservaFuncaoMode, selectedGerencialGroup, reserveFunctions]
+  )
+  const reservaGroupAccount = useMemo(
+    () => (reservaFuncaoMode && selectedGerencialGroup?.defaultAccountId)
+      ? accounts.find(a => a.id === selectedGerencialGroup.defaultAccountId)
+      : null,
+    [reservaFuncaoMode, selectedGerencialGroup, accounts]
+  )
+
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva && a.active !== false), [accounts])
   const matchingSpecificReserva = useMemo(
     () => form.type === 'expense' && form.categoryId
@@ -266,10 +290,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       faturaMonthYear: (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear : null,
       dateCartao: form.dateCartao || null,
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
-      // Em não-transferências, preserva o valor existente (ex.: despesa de cartão importada).
+      // Despesa de cartão em grupo numerado com "Pago com reserva?" ativo: função escolhida no
+      // select (modo função). Em edição, preserva o valor existente (ex.: cartão importado).
       reservaFuncaoId: form.type === 'transfer'
         ? (showReservaFuncao ? (form.reservaFuncaoId || null) : (reservaFuncaoUnica?.id || null))
-        : (form.reservaFuncaoId || null),
+        : (initial?.id
+            ? (form.reservaFuncaoId || null)
+            : ((reservaFuncaoMode && form.useReserva) ? (form.reservaFuncaoId || null) : null)),
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
@@ -439,7 +466,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       markScheduleRegistered(schId, form.date)
     }
 
-    if (form.type === 'expense' && form.useReserva && form.reservaAccountId) {
+    if (form.type === 'expense' && form.useReserva && form.reservaAccountId && !reservaFuncaoMode) {
       const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
       addTransaction({
         type: 'transfer',
@@ -477,6 +504,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           grupoGerencialId: form.grupoGerencial,
           installments: form.installments,
           description: form.description,
+          // Cada parcela futura herda a função de reserva da parcela base; o resgate_reserva
+          // de cada fatura afetada é (re)gerado por recalcularAgendamentosFatura.
+          reservaFuncaoId: txData.reservaFuncaoId || null,
         })
       }
     }
@@ -890,8 +920,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   setForm(f => ({
                     ...f,
                     useReserva: checked,
-                    reservaAccountId: checked
+                    reservaAccountId: checked && !reservaFuncaoMode
                       ? (matchingSpecificReserva?.id || reservaAccounts[0]?.id || '')
+                      : '',
+                    reservaFuncaoId: checked && reservaFuncaoMode
+                      ? (reservaGroupFuncs.length === 1 ? reservaGroupFuncs[0].id : f.reservaFuncaoId)
                       : '',
                   }))
                 }}
@@ -902,30 +935,56 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             </div>
             <PiggyBank size={14} className="text-indigo-400 shrink-0" />
             <span className="text-sm text-indigo-300 select-none">Pago com reserva?</span>
-            {matchingSpecificReserva && !form.useReserva && (
+            {matchingSpecificReserva && !form.useReserva && !reservaFuncaoMode && (
               <span className="text-xs text-indigo-500 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
             )}
           </label>
           {form.useReserva && (
-            <div className="space-y-2">
-              <select
-                className="input"
-                value={form.reservaAccountId}
-                onChange={e => set('reservaAccountId', e.target.value)}
-              >
-                <option value="">Selecione a reserva...</option>
-                {reservaAccounts.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId ? '★ ' : ''}{a.apelido || a.name}
-                  </option>
-                ))}
-              </select>
-              {form.reservaAccountId && (
-                <p className="text-xs text-indigo-400 leading-relaxed">
-                  Será criada uma transferência automática da reserva para a conta da despesa.
-                </p>
-              )}
-            </div>
+            reservaFuncaoMode ? (
+              <div className="space-y-2">
+                {reservaGroupFuncs.length > 0 ? (
+                  <>
+                    <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                    <select
+                      className="input"
+                      value={form.reservaFuncaoId}
+                      onChange={e => set('reservaFuncaoId', e.target.value)}
+                    >
+                      <option value="">Selecione a função...</option>
+                      {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                    <p className="text-xs text-indigo-400 leading-relaxed">
+                      De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sairá
+                      o resgate desta despesa. O agendamento de resgate é gerado no vencimento de cada fatura afetada.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-amber-400 leading-relaxed">
+                    Nenhuma função de reserva configurada para {reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'a conta de reserva'} deste grupo.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <select
+                  className="input"
+                  value={form.reservaAccountId}
+                  onChange={e => set('reservaAccountId', e.target.value)}
+                >
+                  <option value="">Selecione a reserva...</option>
+                  {reservaAccounts.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId ? '★ ' : ''}{a.apelido || a.name}
+                    </option>
+                  ))}
+                </select>
+                {form.reservaAccountId && (
+                  <p className="text-xs text-indigo-400 leading-relaxed">
+                    Será criada uma transferência automática da reserva para a conta da despesa.
+                  </p>
+                )}
+              </div>
+            )
           )}
         </div>
       )}

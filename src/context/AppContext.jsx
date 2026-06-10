@@ -2583,6 +2583,7 @@ export function AppProvider({ children }) {
     startFromInstallment = 2,   // default 2 (TransactionForm); import X>1 passa X+1
     baseFaturaMonthYear = null, // fatura da parcela importada (formato "YYYY-MM")
     baseInstallmentNum = 1,     // número da parcela importada (1 = normal)
+    reservaFuncaoId = null,     // função de reserva herdada da parcela base (grupo numerado)
   }) => {
     if (!installments || installments <= 1) return
     if (startFromInstallment > installments) return
@@ -2619,6 +2620,7 @@ export function AppProvider({ children }) {
         type: 'expense', accountId, accountType: 'credit', amount, date: futureDate,
         description: `${baseDesc} (${i}/${installments})`.trim(),
         grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
+        reservaFuncaoId: reservaFuncaoId || null,
         origin: 'parcela', parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
