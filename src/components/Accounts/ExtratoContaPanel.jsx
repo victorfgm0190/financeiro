@@ -9,6 +9,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
+import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -393,10 +394,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const prevMonth = () => {
     const d = new Date(year, month - 2, 1)
+    setSelEntradas(new Set()); setSelSaidas(new Set())
     setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
   const nextMonth = () => {
     const d = new Date(year, month, 1)
+    setSelEntradas(new Set()); setSelSaidas(new Set())
     setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
@@ -489,8 +492,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   // Filtro de conciliação: 'todos' | 'conciliados' | 'pendentes'.
   const [reconFilter, setReconFilter] = useState('todos')
+  // Filtro de valor (multiselect) por Entrada/Saída — valores reais do período.
+  const [selEntradas, setSelEntradas] = useState(() => new Set())
+  const [selSaidas, setSelSaidas] = useState(() => new Set())
   const rowReconciled = (row) => row.kind === 'netted' ? row.txs.every(t => t.reconciled) : !!row.tx.reconciled
-  const displayRows = useMemo(() => {
+
+  // Linhas após os demais filtros (texto + conciliação), antes do filtro de valor.
+  const baseRows = useMemo(() => {
     let out = rowsWithBalance
     if (hasLancFiltros(filtros)) {
       out = out.filter(row =>
@@ -504,6 +512,31 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     }
     return out
   }, [rowsWithBalance, filtros, accounts, reconFilter])
+
+  // Valores reais (distintos) de Entrada e Saída do período já filtrado, maior → menor.
+  const { entradaValues, saidaValues } = useMemo(() => {
+    const e = new Set(), s = new Set()
+    for (const row of baseRows) {
+      const d = row.kind === 'single' ? txDelta(row.tx, account.id) : row.netFlow
+      if (d > 0) e.add(Math.round(d * 100) / 100)
+      else if (d < 0) s.add(Math.round(-d * 100) / 100)
+    }
+    return {
+      entradaValues: [...e].sort((a, b) => b - a),
+      saidaValues: [...s].sort((a, b) => b - a),
+    }
+  }, [baseRows, account.id])
+
+  const displayRows = useMemo(() => {
+    const hasE = selEntradas.size > 0, hasS = selSaidas.size > 0
+    if (!hasE && !hasS) return baseRows
+    return baseRows.filter(row => {
+      const d = row.kind === 'single' ? txDelta(row.tx, account.id) : row.netFlow
+      if (d > 0) return hasE ? selEntradas.has(Math.round(d * 100) / 100) : true
+      if (d < 0) return hasS ? selSaidas.has(Math.round(-d * 100) / 100) : true
+      return true
+    })
+  }, [baseRows, selEntradas, selSaidas, account.id])
 
   const totals = useMemo(() => {
     let entrada = 0, saida = 0
@@ -648,26 +681,42 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             filtros={filtros}
             setFiltros={setFiltros}
             extra={
-              <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
-                {[
-                  { v: 'todos', label: 'Todos' },
-                  { v: 'conciliados', label: '✓ Conciliados' },
-                  { v: 'pendentes', label: '○ Pendentes' },
-                ].map(o => (
-                  <button
-                    key={o.v}
-                    type="button"
-                    onClick={() => setReconFilter(o.v)}
-                    className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
-                      reconFilter === o.v
-                        ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
-                        : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
-                    }`}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
+              <>
+                <ValueFilterDropdown
+                  label="Entrada"
+                  values={entradaValues}
+                  selected={selEntradas}
+                  onChange={setSelEntradas}
+                  iconColor="text-blue-500"
+                />
+                <ValueFilterDropdown
+                  label="Saída"
+                  values={saidaValues}
+                  selected={selSaidas}
+                  onChange={setSelSaidas}
+                  iconColor="text-orange-500"
+                />
+                <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
+                  {[
+                    { v: 'todos', label: 'Todos' },
+                    { v: 'conciliados', label: '✓ Conciliados' },
+                    { v: 'pendentes', label: '○ Pendentes' },
+                  ].map(o => (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => setReconFilter(o.v)}
+                      className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
+                        reconFilter === o.v
+                          ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
+                          : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </>
             }
           />
         </div>

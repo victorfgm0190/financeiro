@@ -12,6 +12,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
 import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
+import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 
 const FREQ_LABELS = {
@@ -1329,8 +1330,10 @@ export default function SchedulePanel() {
   const [fltCat, setFltCat] = useState('')
   const [fltMin, setFltMin] = useState('')
   const [fltMax, setFltMax] = useState('')
-  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== ''
-  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax('') }
+  // Filtro de valor (multiselect) — valores reais dos agendamentos visíveis.
+  const [selValores, setSelValores] = useState(() => new Set())
+  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0
+  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax(''); setSelValores(new Set()) }
 
   // Filtro por cartão na aba "Cartão de Crédito" ('' = todos os cartões)
   const [cartaoFiltroId, setCartaoFiltroId] = useState('')
@@ -1503,6 +1506,20 @@ export default function SchedulePanel() {
     })
   }, [displaySchedules, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
 
+  // Valores reais (distintos) dos agendamentos visíveis (já filtrados por data/etc.), maior → menor.
+  const valorOptions = useMemo(() => {
+    const set = new Set()
+    for (const s of searchedSchedules) set.add(Math.round((Number(s.amount) || 0) * 100) / 100)
+    return [...set].sort((a, b) => b - a)
+  }, [searchedSchedules])
+  // Lista final após o filtro de valor (multiselect).
+  const finalSchedules = useMemo(
+    () => selValores.size === 0
+      ? searchedSchedules
+      : searchedSchedules.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100)),
+    [searchedSchedules, selValores]
+  )
+
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
 
@@ -1600,6 +1617,9 @@ export default function SchedulePanel() {
                 <label className="label text-xs">Valor até</label>
                 <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="0,00" />
               </div>
+              <div className="mb-0.5">
+                <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
+              </div>
               {hasActiveFilter && (
                 <button onClick={clearFilters} title="Limpar filtros" className="p-1.5 mb-0.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors shrink-0">
                   <X size={14} />
@@ -1609,7 +1629,7 @@ export default function SchedulePanel() {
           </div>
 
           <SchedulesTable
-            schedules={searchedSchedules}
+            schedules={finalSchedules}
             categories={categories}
             accounts={accounts}
             gerencialGroups={gerencialGroups}
