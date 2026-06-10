@@ -1478,9 +1478,21 @@ export function AppProvider({ children }) {
           accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - Number(tx.amount)) } : a)
         }
       } else if (tx.type === 'transfer') {
+        // Pagamento de fatura (agendamento tipo='pagamento_fatura'): a perna de DESTINO é o
+        // cartão. Em vez de creditar o saldo do cartão, abate a dívida da fatura
+        // (creditDebt/creditMonthBill, clampado em 0) — mesma lógica do pagamento manual
+        // (credit_payment). Demais transferências mantêm o comportamento atual.
+        const isFaturaPayment = schedule.tipo === 'pagamento_fatura'
         accounts = accounts.map(a => {
           if (a.id === tx.accountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
-          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance + Number(tx.amount)) }
+          if (a.id === tx.toAccountId) {
+            if (isFaturaPayment) return {
+              ...a,
+              creditDebt: Math.max(0, (a.creditDebt || 0) - Number(tx.amount)),
+              creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - Number(tx.amount)),
+            }
+            return { ...a, balance: rb(a.balance + Number(tx.amount)) }
+          }
           return a
         })
       }
