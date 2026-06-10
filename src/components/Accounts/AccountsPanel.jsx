@@ -208,13 +208,40 @@ function GroupManager({ groups }) {
 const rb = v => Math.round(v * 100) / 100
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getNextOccurrences, getFinancialPeriod } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
   const isInactive = account.active === false
   const [confirmInactivate, setConfirmInactivate] = useState(false)
+
+  // Contas principais (isMain, não-cartão/ativo/passivo): exibem os 5 saldos do ciclo.
+  const isMainChecking = account.isMain && !['credit', 'asset', 'liability'].includes(account.type)
+  const saldos = useMemo(
+    () => isMainChecking ? getAccountSaldos(account) : null,
+    [isMainChecking, account, getAccountSaldos]
+  )
+  // Linhas de saldo a exibir: oculta cada saldo igual ao anterior mostrado; oculta
+  // os saldos de calendário no modo 'calendar'.
+  const saldoRows = useMemo(() => {
+    if (!saldos?.applicable) return null
+    const rows = []
+    let last = saldos.saldoAtual
+    rows.push({ key: 'atual', label: 'Saldo Atual', val: saldos.saldoAtual, primary: true })
+    const push = (key, label, val, cls) => {
+      if (val == null) return
+      if (Math.abs(val - last) < 0.005) return
+      rows.push({ key, label, val, cls }); last = val
+    }
+    push('finalCiclo', 'Final Ciclo', saldos.saldoFinalCiclo, 'text-purple-300/70')
+    push('projetado', 'Projetado', saldos.saldoProjetado, 'text-sky-300/70')
+    if (saldos.mode === 'custom') {
+      push('atualCal', 'Atual Calendário', saldos.saldoAtualCalendario, 'text-amber-300/70')
+      push('finalCal', 'Final Calendário', saldos.saldoFinalCalendario, 'text-amber-200/60')
+    }
+    return rows
+  }, [saldos])
 
   const { projetado, finalBal } = useMemo(() => {
     if (['credit', 'asset', 'liability'].includes(account.type)) return { projetado: null, finalBal: null }
@@ -346,13 +373,25 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
       ) : (
         <div>
-          <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
-          <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
-          {projetado != null && Math.abs(projetado - (account.balance || 0)) >= 0.005 && (
-            <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projetado)}</p>
-          )}
-          {finalBal != null && Math.abs(finalBal - (projetado ?? (account.balance || 0))) >= 0.005 && (
-            <p className="text-xs text-purple-300/60 mt-0.5">Final: {fmt(finalBal)}</p>
+          {isMainChecking && saldoRows ? (
+            <>
+              <p className="text-xs opacity-70 mb-0.5">Saldo Atual</p>
+              <p className="text-xl font-bold">{fmt(saldoRows[0].val)}</p>
+              {saldoRows.slice(1).map(r => (
+                <p key={r.key} className={`text-xs mt-0.5 ${r.cls}`}>{r.label}: {fmt(r.val)}</p>
+              ))}
+            </>
+          ) : (
+            <>
+              <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
+              <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
+              {projetado != null && Math.abs(projetado - (account.balance || 0)) >= 0.005 && (
+                <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projetado)}</p>
+              )}
+              {finalBal != null && Math.abs(finalBal - (projetado ?? (account.balance || 0))) >= 0.005 && (
+                <p className="text-xs text-purple-300/60 mt-0.5">Final: {fmt(finalBal)}</p>
+              )}
+            </>
           )}
           {account.acquisitionValue != null && (
             <p className="text-xs opacity-50 mt-0.5">

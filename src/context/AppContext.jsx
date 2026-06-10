@@ -1716,6 +1716,100 @@ export function AppProvider({ children }) {
     return occurrences
   }, [])
 
+  // ── Saldos por conta (ciclo financeiro) ───────────────────────────────────────
+  // Calcula os 5 saldos do ciclo a partir de initialBalance + transações/agendamentos,
+  // evitando a distorção de `account.balance` (que acumula até lançamentos fora do ciclo).
+  //   1. saldoAtual            : abertura + transações efetivadas com date <= fim do ciclo.
+  //   2. saldoFinalCiclo       : + agendamentos pendentes (ocorrências não registradas) até o fim do ciclo.
+  //   3. saldoProjetado        : − restante dos envelopes ativos do ciclo (limite − gasto) vinculados à conta.
+  //   4. saldoAtualCalendario  : abertura + transações até o último dia do mês calendário (só modo 'custom').
+  //   5. saldoFinalCalendario  : + agendamentos pendentes até o último dia do mês calendário (só modo 'custom').
+  const getAccountSaldos = useCallback((account, referenceDate = new Date()) => {
+    if (!account || ['credit', 'asset', 'liability'].includes(account.type)) return { applicable: false }
+
+    const toStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    const period = getFinancialPeriod(referenceDate)
+    const cycleEndStr = toStr(period.end)
+    const calEnd = new Date(period.end.getFullYear(), period.end.getMonth() + 1, 0) // último dia do mês do fim do ciclo
+    const calendarEndStr = toStr(calEnd)
+    const todayStr = toStr(referenceDate)
+    const mode = data.settings.financialMonthMode || 'custom'
+    const startDay = data.settings.financialMonthStartDay || 1
+    const base = rb(account.initialBalance ?? 0)
+
+    // Transações efetivadas com date <= dateStr (mesma convenção de sinais de recalcularSaldo).
+    const txDeltaUpTo = (dateStr) => {
+      let acc = 0
+      for (const tx of data.transactions) {
+        if (!tx.date || tx.date > dateStr) continue
+        if (tx.type === 'income' && tx.accountId === account.id) acc += tx.amount
+        else if (tx.type === 'expense' && tx.accountId === account.id && tx.accountType !== 'credit') acc -= tx.amount
+        else if (tx.type === 'transfer') {
+          if (tx.accountId === account.id) acc -= tx.amount
+          else if (tx.toAccountId === account.id) acc += tx.amount
+        } else if (tx.type === 'credit_payment' && tx.fromAccountId === account.id) acc -= tx.amount
+      }
+      return acc
+    }
+
+    // Agendamentos pendentes (ocorrências não registradas/puladas) no intervalo (hoje, dateStr].
+    const schedDeltaUpTo = (dateStr) => {
+      let acc = 0
+      for (const s of data.schedules) {
+        const fromAcc = s.accountId === account.id
+        const toAcc = s.toAccountId === account.id
+        if (!fromAcc && !toAcc) continue
+        const occs = getNextOccurrences(s, 60).filter(dt => dt > todayStr && dt <= dateStr)
+        for (let i = 0; i < occs.length; i++) {
+          if (s.transactionType === 'income' && fromAcc) acc += s.amount
+          else if (s.transactionType === 'expense' && fromAcc) acc -= s.amount
+          else if (s.transactionType === 'transfer') {
+            if (fromAcc && !toAcc) acc -= s.amount
+            else if (!fromAcc && toAcc) acc += s.amount
+          }
+        }
+      }
+      return acc
+    }
+
+    // Restante dos envelopes do ciclo vinculados à conta: max(0, limite − gasto na competência atual).
+    const competenciaKeyOf = (ds) => {
+      const [y, m, dd] = ds.split('-').map(Number)
+      let year = y, month0 = m - 1
+      if (dd < startDay) { const p = new Date(y, m - 2, 1); year = p.getFullYear(); month0 = p.getMonth() }
+      return year * 12 + month0
+    }
+    const currentComp = referenceDate.getDate() >= startDay
+      ? referenceDate.getFullYear() * 12 + referenceDate.getMonth()
+      : (() => { const p = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1); return p.getFullYear() * 12 + p.getMonth() })()
+    let envelopesRestante = 0
+    for (const env of (data.envelopes || [])) {
+      if (env.accountId !== account.id) continue
+      let spent = 0
+      for (const tx of data.transactions) {
+        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'investAuto') continue
+        if (!env.categoryIds?.includes(tx.categoryId)) continue
+        if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
+        spent += tx.amount
+      }
+      envelopesRestante = rb(envelopesRestante + Math.max(0, rb((env.limitAmount || 0) - spent)))
+    }
+
+    const saldoAtual = rb(base + txDeltaUpTo(cycleEndStr))
+    const saldoFinalCiclo = rb(saldoAtual + schedDeltaUpTo(cycleEndStr))
+    const saldoProjetado = rb(saldoFinalCiclo - envelopesRestante)
+    const isCustom = mode === 'custom'
+    const saldoAtualCalendario = isCustom ? rb(base + txDeltaUpTo(calendarEndStr)) : null
+    const saldoFinalCalendario = isCustom ? rb(saldoAtualCalendario + schedDeltaUpTo(calendarEndStr)) : null
+
+    return {
+      applicable: true, mode,
+      saldoAtual, saldoFinalCiclo, saldoProjetado,
+      saldoAtualCalendario, saldoFinalCalendario,
+      cycleEnd: cycleEndStr, calendarEnd: calendarEndStr,
+    }
+  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod])
+
   // ── Classification ───────────────────────────────────────────────────────────
   const classifyByRules = useCallback((description, { dayOfMonth = null, amountApprox = null } = {}) => {
     const lower = description.toLowerCase()
@@ -3353,6 +3447,7 @@ export function AppProvider({ children }) {
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,
       getFinancialPeriod,
+      getAccountSaldos,
       getNextOccurrences,
       classifyByRules,
       learnClassification,

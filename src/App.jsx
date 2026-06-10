@@ -31,14 +31,22 @@ function AppContent() {
   const [showPosicao, setShowPosicao] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
-  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, data } = useApp()
+  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, data } = useApp()
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
 
-  const saldoPrincipal = activeProfileId
-    ? profileAccounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
-    : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
+  // Saldo principal (sidebar/header): usa o novo Saldo Atual do ciclo (exclui lançamentos
+  // fora do ciclo); cai para o balance armazenado em contas sem saldo de ciclo (ativo/passivo).
+  const saldoPrincipal = useMemo(() => {
+    const pool = activeProfileId
+      ? profileAccounts.filter(a => a.type !== 'credit')
+      : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
+    return pool.reduce((s, a) => {
+      const sal = getAccountSaldos(a)
+      return s + (sal.applicable ? sal.saldoAtual : (a.balance || 0))
+    }, 0)
+  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos])
 
   const alertCount = useMemo(() => {
     const today = new Date()
