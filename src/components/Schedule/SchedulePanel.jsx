@@ -228,10 +228,18 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       // e marca a ocorrência. Não usa o valor/contas do formulário (fixos pelo detalhamento).
       registerScheduleOccurrence(schedule.id, trfDate)
     } else {
+      // Resgate/depósito sem detalhamento: se a conta de reserva envolvida (origem ou
+      // destino) tem função ÚNICA, preenche reserva_funcao_id automaticamente — mesma
+      // regra do formulário de transferência (TransactionForm).
+      const resvAcc = accounts.find(a => a.id === trfFromId && a.isReserva)
+        || accounts.find(a => a.id === trfToId && a.isReserva)
+      const resvFuncs = resvAcc ? (reserveFunctions || []).filter(f => f.accountId === resvAcc.id) : []
+      const autoFuncId = resvFuncs.length === 1 ? resvFuncs[0].id : null
       addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,
         amount: parseFloat(trfAmount) || 0, date: trfDate,
         description: schedule.description, notes: trfNotes,
+        reservaFuncaoId: autoFuncId,
       })
       markScheduleRegistered(schedule.id, regDate)
     }

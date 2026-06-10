@@ -176,6 +176,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     [reservaTransferAcc, reserveFunctions]
   )
   const showReservaFuncao = form.type === 'transfer' && reservaFuncs.length > 1
+  // Conta de reserva com função ÚNICA: reserva_funcao_id é determinado automaticamente
+  // (não precisa de select nem de categoria manual — a única função já é a escolha).
+  const reservaFuncaoUnica = form.type === 'transfer' && reservaFuncs.length === 1 ? reservaFuncs[0] : null
 
   // Transferência cujo DESTINO é conta de aplicação financeira (e não é reserva):
   // habilita um campo OPCIONAL de categoria para classificar o aporte nos relatórios.
@@ -243,7 +246,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
-    if (form.type === 'transfer' && needsReservaCategorySelect && !form.reservaExpenseCategoryId) return
+    // Reserva livre exige categoria manual — EXCETO quando a conta tem função única
+    // (categoria determinada automaticamente, sem seleção obrigatória).
+    if (form.type === 'transfer' && needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaExpenseCategoryId) return
 
     const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1
     const installmentAmount = isParcelado
@@ -262,7 +267,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
       // Em não-transferências, preserva o valor existente (ex.: despesa de cartão importada).
       reservaFuncaoId: form.type === 'transfer'
-        ? (showReservaFuncao ? (form.reservaFuncaoId || null) : null)
+        ? (showReservaFuncao ? (form.reservaFuncaoId || null) : (reservaFuncaoUnica?.id || null))
         : (form.reservaFuncaoId || null),
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
@@ -703,7 +708,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
                 📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
               </p>
-              {needsReservaCategorySelect ? (
+              {needsReservaCategorySelect && !reservaFuncaoUnica ? (
                 <>
                   <SearchableSelect
                     options={expenseCatOpts}
