@@ -78,8 +78,30 @@ export default function CreditCardPanel() {
     profileSchedules: schedules,
     categories, gerencialGroups,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
+    reconciliarGerencial,
   } = useApp()
   const [toast, setToast] = useState(null)
+  const [reconciling, setReconciling] = useState(false)
+
+  const handleReconciliarGerencial = async () => {
+    if (!selectedCard || reconciling) return
+    setReconciling(true)
+    try {
+      const r = await reconciliarGerencial(selectedCard.id)
+      const totalAgendas = r.agendasCriadas + r.agendasAtualizadas + r.agendasRemovidas
+      if (totalAgendas === 0 && r.saldosCorrigidos === 0) {
+        setToast('✓ Tudo sincronizado')
+      } else {
+        const ag = `${totalAgendas} agendamento${totalAgendas !== 1 ? 's' : ''} ajustado${totalAgendas !== 1 ? 's' : ''}`
+        const sl = `${r.saldosCorrigidos} saldo${r.saldosCorrigidos !== 1 ? 's' : ''} corrigido${r.saldosCorrigidos !== 1 ? 's' : ''}`
+        setToast(`🔄 ${ag}, ${sl}`)
+      }
+    } catch (e) {
+      setToast(`Erro ao reconciliar: ${e.message}`)
+    } finally {
+      setReconciling(false)
+    }
+  }
 
   const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
   const bankAccounts = useMemo(() => accounts.filter(a => a.type !== 'credit'), [accounts])
@@ -366,6 +388,15 @@ export default function CreditCardPanel() {
             title="Recalcula o total da fatura e atualiza a conta a pagar"
           >
             <RotateCcw size={14} /> Atualizar
+          </button>
+          <button
+            className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 disabled:opacity-50 transition-colors py-1"
+            onClick={handleReconciliarGerencial}
+            disabled={reconciling}
+            title="Reconcilia agendamentos gerenciais e saldos das contas Ger. deste cartão"
+          >
+            <RotateCcw size={12} className={reconciling ? 'animate-spin' : ''} />
+            {reconciling ? 'Reconciliando…' : '🔄 Reconciliar Gerenciais'}
           </button>
         </div>
       </div>

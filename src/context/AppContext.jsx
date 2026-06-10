@@ -460,6 +460,9 @@ export function AppProvider({ children }) {
   // Recálculo dos agendamentos acumulativos de fatura (definido mais abaixo); ref p/ contornar
   // a ordem de declaração — chamado por deleteTransaction/reverseTransaction/revertCardImport.
   const recalcAgendamentosRef = useRef(null)
+  // Reconciliador gerencial (definido mais abaixo); ref p/ ser chamado pelos gatilhos
+  // add/update/deleteTransaction de cartão antes da sua declaração.
+  const reconcileGerencialRef = useRef(null)
   const dataRef = useRef(data)
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
@@ -916,6 +919,8 @@ export function AppProvider({ children }) {
     // pagar da fatura — mesmo comportamento da importação (por grupo gerencial).
     if (!_fromImport && newTx.type === 'expense' && newTx.accountType === 'credit') {
       recalcFaturaRef.current?.(newTx.accountId, newTx.date, newTx.faturaMonthYear)
+      // Gatilho do reconciliador gerencial (cartão): mantém agendamentos geridos + saldos Ger. consistentes.
+      reconcileGerencialRef.current?.(newTx.accountId)
     }
     return id
   }, [update])
@@ -1069,6 +1074,8 @@ export function AppProvider({ children }) {
       if (recalcArgs.faturaChanged) {
         recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.old.date, recalcArgs.old.faturaMonthYear)
       }
+      // Gatilho do reconciliador gerencial (cartão): agendamentos geridos + saldos Ger.
+      reconcileGerencialRef.current?.(recalcArgs.cartaoId)
     }
   }, [update])
 
@@ -1175,6 +1182,10 @@ export function AppProvider({ children }) {
       seen.add(key)
       const [y, m] = mesAno.split('-')
       recalcAgendamentosRef.current?.(cardId, y, m)
+    }
+    // Gatilho do reconciliador gerencial: reconcilia os cartões afetados pela deleção.
+    for (const cardId of new Set(faturasParaRecalcular.map(([c]) => c))) {
+      reconcileGerencialRef.current?.(cardId)
     }
   }, [update])
 
@@ -2171,8 +2182,10 @@ export function AppProvider({ children }) {
   // reservaFuncaoByAccount (opcional): { contaOrigemId → reservaFuncaoId } informado na
   // importação para vincular o agendamento de resgate_reserva (um por conta-origem) a uma
   // função de reserva. Sem o parâmetro, preserva o vínculo já existente do slot (se houver).
-  const recalcularAgendamentosFatura = useCallback((cardId, faturaAno, faturaMs, reservaFuncaoByAccount) => {
-    update(d => {
+  // Núcleo PURO do recálculo de agendamentos de fatura: recebe e devolve o estado `d`.
+  // Extraído para ser composto pelo reconciliador gerencial (várias faturas + saldos num
+  // único update). recalcularAgendamentosFatura (abaixo) é o wrapper que aplica via update().
+  const reconcileFaturaState = useCallback((d, cardId, faturaAno, faturaMs, reservaFuncaoByAccount) => {
       const card = d.accounts.find(a => a.id === cardId)
       if (!card) return d
 
@@ -2393,14 +2406,122 @@ export function AppProvider({ children }) {
       }
 
       return { ...d, accounts, schedules, payables, scheduleReservaFuncoes }
+  }, [])
+
+  const recalcularAgendamentosFatura = useCallback(
+    (cardId, faturaAno, faturaMs, reservaFuncaoByAccount) =>
+      update(d => reconcileFaturaState(d, cardId, faturaAno, faturaMs, reservaFuncaoByAccount)),
+    [update, reconcileFaturaState]
+  )
+
+  // ── Reconciliador gerencial ───────────────────────────────────────────────────
+  // Garante consistência entre as despesas de cartão, os agendamentos de fatura geridos
+  // (gerencial_devolucao / resgate_reserva / pagamento_fatura) e o balance das contas Ger.
+  // Tudo num ÚNICO update atômico, reusando reconcileFaturaState (a MESMA lógica da engine):
+  //   A) Para cada fatura afetada do(s) cartão(ões)-alvo, roda reconcileFaturaState — idempotente,
+  //      cria/atualiza/remove agendamentos pendentes e NUNCA toca em ocorrências registradas.
+  //   B) Recalcula o balance de cada conta Ger. (subconta do grupo G, number===1) como
+  //      Σ(transferências de entrada) − Σ(transferências de saída).
+  // Não cria lançamentos de estorno. Idempotente: sem mudanças, devolve o estado original (no-op).
+  // Retorna um Promise com o resumo { agendasCriadas, agendasAtualizadas, agendasRemovidas,
+  // saldosCorrigidos, detalhes }. (cardId omitido → todos os cartões de crédito.)
+  const reconciliarGerencial = useCallback((cardId = null) => {
+    return new Promise(resolve => {
+      let resolved = false
+      const managedTipos = new Set(['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'])
+      update(d => {
+        const targetCards = cardId
+          ? d.accounts.filter(a => a.id === cardId && a.type === 'credit')
+          : d.accounts.filter(a => a.type === 'credit')
+        const cardIdSet = new Set(targetCards.map(c => c.id))
+
+        // Snapshot ANTES dos agendamentos geridos (para contagem de mudanças).
+        const before = new Map()
+        for (const s of d.schedules) {
+          if (managedTipos.has(s.tipo) && cardIdSet.has(s.cardId)) before.set(s.id, Number(s.amount) || 0)
+        }
+
+        // A) Recalcula cada fatura afetada de cada cartão-alvo (mesma lógica da engine).
+        let nd = d
+        for (const card of targetCards) {
+          const faturas = new Set()
+          for (const tx of nd.transactions) {
+            if (tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === card.id) {
+              if (tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto') continue
+              const fmy = faturaMesAnoOf(card, tx.date, tx.faturaMonthYear)
+              if (fmy) faturas.add(fmy)
+            }
+          }
+          // Inclui faturas que já têm agendamento gerido, p/ detectar fatura zerada → remoção.
+          for (const s of nd.schedules) {
+            if (managedTipos.has(s.tipo) && s.cardId === card.id && s.faturaMesAno) faturas.add(s.faturaMesAno)
+          }
+          for (const fmy of faturas) {
+            const [y, m] = fmy.split('-')
+            nd = reconcileFaturaState(nd, card.id, y, m)
+          }
+        }
+
+        // Contagem de mudanças nos agendamentos geridos.
+        const after = new Map()
+        for (const s of nd.schedules) {
+          if (managedTipos.has(s.tipo) && cardIdSet.has(s.cardId)) after.set(s.id, Number(s.amount) || 0)
+        }
+        let agendasCriadas = 0, agendasAtualizadas = 0, agendasRemovidas = 0
+        const detalhes = []
+        for (const [id, amt] of after) {
+          if (!before.has(id)) { agendasCriadas++; detalhes.push({ tipo: 'agenda_criada', id, amount: amt }) }
+          else if (Math.abs(before.get(id) - amt) > 0.005) { agendasAtualizadas++; detalhes.push({ tipo: 'agenda_atualizada', id, de: before.get(id), para: amt }) }
+        }
+        for (const [id, amt] of before) {
+          if (!after.has(id)) { agendasRemovidas++; detalhes.push({ tipo: 'agenda_removida', id, amount: amt }) }
+        }
+
+        // B) Saldo das contas Ger. (subcontas do grupo G = number 1) = Σ entradas − Σ saídas (transferências).
+        const grupoG = nd.gerencialGroups?.find(g => g.number === 1)
+        const gerIds = new Set(
+          nd.accounts
+            .filter(a => (grupoG && a.grupoGerencial === grupoG.id) || /^Ger\. /.test(a.name || ''))
+            .map(a => a.id)
+        )
+        let saldosCorrigidos = 0
+        if (gerIds.size > 0) {
+          const inSum = new Map(), outSum = new Map()
+          for (const tx of nd.transactions) {
+            if (tx.type !== 'transfer') continue
+            const amt = Number(tx.amount) || 0
+            if (gerIds.has(tx.toAccountId)) inSum.set(tx.toAccountId, rb((inSum.get(tx.toAccountId) || 0) + amt))
+            if (gerIds.has(tx.accountId)) outSum.set(tx.accountId, rb((outSum.get(tx.accountId) || 0) + amt))
+          }
+          let mutated = false
+          const accounts = nd.accounts.map(a => {
+            if (!gerIds.has(a.id)) return a
+            const real = rb((inSum.get(a.id) || 0) - (outSum.get(a.id) || 0))
+            if (Math.abs((Number(a.balance) || 0) - real) > 0.005) {
+              saldosCorrigidos++; mutated = true
+              detalhes.push({ tipo: 'saldo_corrigido', id: a.id, name: a.name, de: Number(a.balance) || 0, para: real })
+              return { ...a, balance: real }
+            }
+            return a
+          })
+          if (mutated) nd = { ...nd, accounts }
+        }
+
+        const summary = { agendasCriadas, agendasAtualizadas, agendasRemovidas, saldosCorrigidos, detalhes }
+        if (!resolved) { resolved = true; resolve(summary) }
+        // Idempotente: sem nenhuma mudança, devolve o estado original (evita re-render/sync desnecessários).
+        const changed = agendasCriadas || agendasAtualizadas || agendasRemovidas || saldosCorrigidos
+        return changed ? nd : d
+      })
     })
-  }, [update])
+  }, [update, reconcileFaturaState])
 
   // Mantém dataRef e o recalc-por-tx atualizados (lidos por addTransaction/
   // updateTransaction em event handlers, após o commit).
   useEffect(() => {
     dataRef.current = data
     recalcAgendamentosRef.current = recalcularAgendamentosFatura
+    reconcileGerencialRef.current = reconciliarGerencial
     recalcFaturaRef.current = (cartaoId, date, faturaMonthYear) => {
       const card = dataRef.current.accounts.find(a => a.id === cartaoId)
       const mesAno = faturaMesAnoOf(card, date, faturaMonthYear)
@@ -3208,6 +3329,7 @@ export function AppProvider({ children }) {
       processarLancamentoGerencial,
       criarParcelasGerencial,
       recalcularAgendamentosFatura,
+      reconciliarGerencial,
       ajustarParcelasGrupoGerencial,
       propagarValorParcelas,
       getProvisoesPendentes,
