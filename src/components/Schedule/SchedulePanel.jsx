@@ -1171,13 +1171,49 @@ function faturaLabel(ym) {
 
 function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
   const [selected, setSelected] = useState(() => new Set(provisoes.map(p => p.id)))
+  const [faturaFiltro, setFaturaFiltro] = useState('')
+  const [cartaoFiltro, setCartaoFiltro] = useState('')
   const toggle = (id) => setSelected(prev => {
     const n = new Set(prev)
     if (n.has(id)) n.delete(id); else n.add(id)
     return n
   })
-  const total = provisoes.filter(p => selected.has(p.id)).reduce((s, p) => s + p.amount, 0)
   const accName = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
+
+  // Opções de filtro derivadas dos itens da lista (distinct), em tempo real.
+  const faturaOptions = useMemo(
+    () => [...new Set(provisoes.map(p => p.faturaMonthYear).filter(Boolean))].sort(), // YYYY-MM ordena cronologicamente
+    [provisoes]
+  )
+  const cartaoOptions = useMemo(() => {
+    const ids = [...new Set(provisoes.map(p => p.cardId).filter(Boolean))]
+    return ids
+      .map(id => ({ id, name: accName(id) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [provisoes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const matchFiltros = (p, fat, cart) =>
+    (!fat || p.faturaMonthYear === fat) && (!cart || p.cardId === cart)
+
+  // Lista visível conforme filtros (aplicados em tempo real).
+  const visibleProvisoes = useMemo(
+    () => provisoes.filter(p => matchFiltros(p, faturaFiltro, cartaoFiltro)),
+    [provisoes, faturaFiltro, cartaoFiltro]
+  )
+
+  // Ao mudar um filtro, manter checados apenas os que continuam visíveis (nunca re-seleciona).
+  // Prune feito no próprio handler (ação do usuário) com os filtros já atualizados.
+  const pruneSelected = (fat, cart) => {
+    const visibleIds = new Set(provisoes.filter(p => matchFiltros(p, fat, cart)).map(p => p.id))
+    setSelected(prev => new Set([...prev].filter(id => visibleIds.has(id))))
+  }
+  const handleFaturaFiltro = (val) => { setFaturaFiltro(val); pruneSelected(val, cartaoFiltro) }
+  const handleCartaoFiltro = (val) => { setCartaoFiltro(val); pruneSelected(faturaFiltro, val) }
+
+  // Contador, total e confirmação consideram só itens visíveis E marcados.
+  const selectedVisible = visibleProvisoes.filter(p => selected.has(p.id))
+  const selCount = selectedVisible.length
+  const total = selectedVisible.reduce((s, p) => s + p.amount, 0)
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1191,8 +1227,40 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"><X size={16} /></button>
         </div>
 
+        {/* Filtros (fatura + cartão) — aplicados em tempo real na lista */}
+        <div className="grid grid-cols-2 gap-3 px-5 py-3 border-b border-gray-800 shrink-0">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Fatura</label>
+            <select
+              className="input text-sm py-1.5"
+              value={faturaFiltro}
+              onChange={e => handleFaturaFiltro(e.target.value)}
+            >
+              <option value="">Todas as faturas</option>
+              {faturaOptions.map(ym => (
+                <option key={ym} value={ym}>{faturaLabel(ym)}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Cartão</label>
+            <select
+              className="input text-sm py-1.5"
+              value={cartaoFiltro}
+              onChange={e => handleCartaoFiltro(e.target.value)}
+            >
+              <option value="">Todos os cartões</option>
+              {cartaoOptions.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-          {provisoes.map(p => (
+          {visibleProvisoes.length === 0 ? (
+            <p className="text-center text-xs text-gray-600 py-8">Nenhuma provisão para os filtros selecionados</p>
+          ) : visibleProvisoes.map(p => (
             <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800/30 cursor-pointer">
               <input
                 type="checkbox"
@@ -1212,7 +1280,7 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
         </div>
 
         <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
-          <span className="text-sm text-gray-400">{selected.size} selecionada{selected.size !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-gray-400">{selCount} selecionada{selCount !== 1 ? 's' : ''}</span>
           <span className="text-base font-bold text-gray-100">{fmt(total)}</span>
         </div>
 
@@ -1220,10 +1288,10 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            disabled={selected.size === 0}
-            onClick={() => onConfirm([...selected])}
+            disabled={selCount === 0}
+            onClick={() => onConfirm(selectedVisible.map(p => p.id))}
           >
-            <CheckCircle size={14} /> Confirmar ({selected.size})
+            <CheckCircle size={14} /> Confirmar ({selCount})
           </button>
         </div>
       </div>

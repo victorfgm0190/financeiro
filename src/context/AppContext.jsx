@@ -2996,6 +2996,7 @@ export function AppProvider({ children }) {
           faturaMonthYear: tx.faturaMonthYear,
           amount: tx.amount,
           date: tx.date,
+          cardId: tx.accountId || null,
           contaOrigemId: contaPrincipal?.id || null,
           contaDestinoId: subconta?.id || null,
         }
