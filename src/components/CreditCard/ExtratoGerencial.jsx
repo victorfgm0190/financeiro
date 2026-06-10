@@ -127,7 +127,7 @@ export default function ExtratoGerencial({ initialCardId }) {
                 return (
                   <tr
                     key={tx.id}
-                    className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-60' : ''}`}
+                    className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}
                   >
                     <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 text-xs">{tx._seq}</td>

@@ -482,7 +482,7 @@ export default function CreditCardPanel() {
                   {displayBillTxs.map(tx => {
                     const cat = categories.find(c => c.id === tx.categoryId)
                     return (
-                      <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-70' : ''}`}>
+                      <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}>
                         <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                           {fmtDate(tx.date)}
                           {tx.dateCartao && tx.dateCartao !== tx.date && (

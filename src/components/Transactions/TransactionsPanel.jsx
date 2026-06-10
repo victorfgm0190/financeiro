@@ -222,7 +222,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 {displayTxs.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId)
                   return (
-                    <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? 'opacity-70' : ''}`}>
+                    <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}>
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
                         <p className="text-gray-200 text-sm">{tx.description}</p>
