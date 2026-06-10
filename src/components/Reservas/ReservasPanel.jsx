@@ -655,7 +655,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
 }
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOccurrences }) {
+function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
   const round2 = (n) => Math.round(n * 100) / 100
 
@@ -679,31 +679,51 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
   }
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
-  // Apenas agendamentos com reservaFuncaoId entram — sem vínculo de função, ficam fora do fluxo.
+  // Resgates com detalhamento (schedule_reserva_funcoes) projetam UMA saída por função
+  // (valor da linha); os demais usam o campo único reservaFuncaoId + schedule.amount.
   const scheduledByFunction = useMemo(() => {
     const accById = new Map(accounts.map(a => [a.id, a]))
-    const transfers = (schedules || []).filter(s => s.transactionType === 'transfer' && s.reservaFuncaoId)
+    // schedule_id → [{ reservaFuncaoId, valor }] (detalhamento por função do resgate)
+    const detBySchedule = new Map()
+    for (const srf of (scheduleReservaFuncoes || [])) {
+      if (!detBySchedule.has(srf.scheduleId)) detBySchedule.set(srf.scheduleId, [])
+      detBySchedule.get(srf.scheduleId).push(srf)
+    }
+    // Entram no fluxo agendamentos de transferência com detalhamento OU com função única.
+    const transfers = (schedules || []).filter(s =>
+      s.transactionType === 'transfer' && (s.reservaFuncaoId || detBySchedule.has(s.id))
+    )
     const result = {}
     for (const f of linked) {
       const deps = new Array(12).fill(0)
       const ress = new Array(12).fill(0)
       for (const s of transfers) {
-        if (s.reservaFuncaoId !== f.id) continue
         const isDep = !!accById.get(s.toAccountId)?.isReserva
         const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
         if (!isDep && !isRes) continue
+        // Valor atribuível a ESTA função neste agendamento:
+        //  - com detalhamento → soma das linhas desta função (ignora o reservaFuncaoId único)
+        //  - sem detalhamento → schedule.amount quando a função única é esta
+        const det = detBySchedule.get(s.id)
+        let amt = 0
+        if (det && det.length > 0) {
+          amt = det.reduce((sum, srf) => srf.reservaFuncaoId === f.id ? round2(sum + (Number(srf.valor) || 0)) : sum, 0)
+        } else if (s.reservaFuncaoId === f.id) {
+          amt = s.amount || 0
+        }
+        if (!amt) continue
         for (const dateStr of getNextOccurrences(s, 140)) {
           if (dateStr < winStart || dateStr > winEnd) continue
           const idx = winIndexOf(dateStr)
           if (idx < 0 || idx > 11) continue
-          if (isDep) deps[idx] = round2(deps[idx] + (s.amount || 0))
-          else ress[idx] = round2(ress[idx] + (s.amount || 0))
+          if (isDep) deps[idx] = round2(deps[idx] + amt)
+          else ress[idx] = round2(ress[idx] + amt)
         }
       }
       result[f.id] = { deps, ress }
     }
     return result
-  }, [linked, accounts, schedules, getNextOccurrences, winStart, winEnd]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, winStart, winEnd]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const projections = useMemo(() => {
     return linked.map(f => {
@@ -915,7 +935,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, getNextOc
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, scheduleReservaFuncoes, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions } = useApp()
   const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
   const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)
@@ -1059,6 +1079,7 @@ export default function ReservasPanel() {
           accounts={nonCreditAccounts}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}
+          scheduleReservaFuncoes={scheduleReservaFuncoes}
           getNextOccurrences={getNextOccurrences}
         />
       )}
