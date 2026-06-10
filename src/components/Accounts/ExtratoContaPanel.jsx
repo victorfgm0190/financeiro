@@ -373,10 +373,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
   const now = new Date()
+  // Mês de exibição inicial = mês do FIM do ciclo financeiro atual (ex.: ciclo 15/05–14/06
+  // → junho). Construção local para evitar o desvio de fuso do toISOString().
   const defaultMonth = (() => {
     try {
       const fp = getFinancialPeriod()
-      return fp.start.toISOString().slice(0, 7)
+      return `${fp.end.getFullYear()}-${String(fp.end.getMonth() + 1).padStart(2, '0')}`
     } catch {
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     }
