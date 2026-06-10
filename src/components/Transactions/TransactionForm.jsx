@@ -247,8 +247,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
     // Reserva livre exige categoria manual — EXCETO quando a conta tem função única
-    // (categoria determinada automaticamente, sem seleção obrigatória).
-    if (form.type === 'transfer' && needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaExpenseCategoryId) return
+    // (categoria determinada automaticamente) ou quando o usuário já selecionou uma
+    // função de reserva (a função substitui a necessidade da categoria).
+    if (form.type === 'transfer' && needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaFuncaoId && !form.reservaExpenseCategoryId) return
 
     const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1
     const installmentAmount = isParcelado
@@ -703,7 +704,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </div>
             )
           })()}
-          {(isDepositToReserva || isWithdrawFromReserva) && (
+          {(isDepositToReserva || isWithdrawFromReserva) && !form.reservaFuncaoId && (
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
               <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
                 📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
