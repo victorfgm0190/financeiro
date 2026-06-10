@@ -94,7 +94,7 @@ function AppContent() {
   const financialPeriod = getFinancialPeriod()
 
   const panels = {
-    dashboard: <DashboardPanel setActivePage={setActivePage} onShowPosicao={() => setShowPosicao(true)} />,
+    dashboard: <DashboardPanel setActivePage={setActivePage} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
     accounts: <AccountsPanel />,
     transactions: <TransactionsPanel />,
     credit: <CreditCardPanel />,

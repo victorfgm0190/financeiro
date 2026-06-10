@@ -48,7 +48,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
   )
 }
 
-export default function DashboardPanel({ setActivePage, onShowPosicao }) {
+export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
   const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
@@ -81,7 +81,31 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
 
   const totalAssets = accounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
   const totalDebt = accounts.filter(a => a.type === 'credit').reduce((s, a) => s + (a.creditDebt || 0), 0)
-  const saldoPrincipal = accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
+  // Saldo Principal do ciclo (mesmos valores de saldosPrincipais do App; fallback ao
+  // somatório de balance caso a prop não venha). Mantém o painel consistente com sidebar/header.
+  const saldoPrincipal = saldosPrincipais
+    ? saldosPrincipais.saldoAtual
+    : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
+
+  // Linha secundária do hero: saldos do ciclo (igual à sidebar). Oculta cada saldo igual
+  // ao anterior mostrado; calendário só no modo custom.
+  const saldoSecRows = (() => {
+    const s = saldosPrincipais
+    if (!s) return []
+    const rows = []
+    let last = s.saldoAtual
+    const push = (label, val) => {
+      if (val == null || Math.abs(val - last) < 0.005) return
+      rows.push({ label, val }); last = val
+    }
+    push('Final Ciclo', s.saldoFinalCiclo)
+    push('Projetado', s.saldoProjetado)
+    if (s.mode === 'custom') {
+      push('Atual Cal.', s.saldoAtualCalendario)
+      push('Final Cal.', s.saldoFinalCalendario)
+    }
+    return rows
+  })()
 
   // Budget progress (expense as % of income)
   const budgetPct = income > 0 ? Math.min((expense / income) * 100, 120) : 0
@@ -314,11 +338,14 @@ export default function DashboardPanel({ setActivePage, onShowPosicao }) {
         <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
           {fmt(saldoPrincipal)}
         </p>
-        {saldoProjetado && (
-          <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-2.5 flex-wrap">
-            <span>Projetado <span className={`font-semibold ${saldoProjetado.projetado >= 0 ? 'text-teal-400' : 'text-red-400'}`}>{fmt(saldoProjetado.projetado)}</span></span>
-            <span className="text-gray-700">·</span>
-            <span>Final <span className={`font-semibold ${saldoProjetado.final >= 0 ? 'text-purple-400' : 'text-red-400'}`}>{fmt(saldoProjetado.final)}</span></span>
+        {saldoSecRows.length > 0 && (
+          <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-x-2.5 gap-y-0.5 flex-wrap">
+            {saldoSecRows.map(r => (
+              <span key={r.label}>
+                <span className="text-gray-600">{r.label}</span>{' '}
+                <span className="font-semibold text-gray-300">{fmt(r.val)}</span>
+              </span>
+            ))}
           </p>
         )}
       </button>
