@@ -819,6 +819,16 @@ function Toast({ message }) {
   )
 }
 
+// Totalizador da seleção múltipla: metadados de exibição por grupo de movimentação.
+const SELECTION_GROUP_META = {
+  aplicacao: { glyph: '↑', label: 'Aplicação', cls: 'text-emerald-400' },
+  resgate:   { glyph: '↓', label: 'Resgate',   cls: 'text-orange-500' },
+  despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-orange-500' },
+  receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-blue-400' },
+  fatura:    { glyph: '🧾', label: 'Fatura',    cls: 'text-indigo-400' },
+}
+const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
+
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
   const { scheduleReservaFuncoes, reserveFunctions } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
@@ -858,6 +868,37 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const selectableRows = rows.filter(r => r.nextDate)
   const allSelected = selectableRows.length > 0 && selectableRows.every(r => selected.has(r.schedule.id))
   const selectedRows = rows.filter(r => selected.has(r.schedule.id) && r.nextDate)
+
+  // Totalizador dinâmico da seleção: agrupa por tipo de movimentação e calcula o saldo
+  // líquido de caixa (receita + resgate − despesa − aplicação). Fatura é grupo à parte,
+  // fora do saldo. Atualiza em tempo real conforme a seleção muda.
+  const selectionTotals = useMemo(() => {
+    const r2 = (n) => Math.round(n * 100) / 100
+    const g = {
+      aplicacao: { items: [], total: 0 },
+      resgate:   { items: [], total: 0 },
+      despesa:   { items: [], total: 0 },
+      receita:   { items: [], total: 0 },
+      fatura:    { items: [], total: 0 },
+    }
+    for (const { schedule: s } of selectedRows) {
+      const amt = Number(s.amount) || 0
+      let key = null
+      if (s.tipo === 'pagamento_fatura') key = 'fatura'
+      else if (s.transactionType === 'transfer') {
+        if (accounts.find(a => a.id === s.toAccountId)?.isReserva) key = 'aplicacao'
+        else if (accounts.find(a => a.id === s.accountId)?.isReserva) key = 'resgate'
+      } else if (s.transactionType === 'expense') key = 'despesa'
+      else if (s.transactionType === 'income') key = 'receita'
+      if (!key) continue
+      g[key].items.push({ description: s.description || '—', amount: amt })
+      g[key].total = r2(g[key].total + amt)
+    }
+    const hasInflow = g.receita.items.length > 0 || g.resgate.items.length > 0
+    const hasOutflow = g.despesa.items.length > 0 || g.aplicacao.items.length > 0
+    const saldo = r2(g.receita.total - g.despesa.total + g.resgate.total - g.aplicacao.total)
+    return { g, saldo, showSaldo: hasInflow && hasOutflow }
+  }, [selectedRows, accounts])
 
   const toggleSelect = (id) => setSelected(prev => {
     const next = new Set(prev)
@@ -946,10 +987,48 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     <>
       {/* Selection action bar */}
       {selectionMode && (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-          <span className="text-sm font-medium text-indigo-300">
-            {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
-          </span>
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium text-indigo-300">
+              {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
+            </span>
+            {/* Totalizador por movimentação (apenas grupos com itens selecionados) */}
+            {selected.size > 0 && (
+              <div className="flex flex-col gap-0.5 text-xs">
+                {SELECTION_GROUP_ORDER.map(key => {
+                  const grp = selectionTotals.g[key]
+                  if (!grp.items.length) return null
+                  const meta = SELECTION_GROUP_META[key]
+                  return (
+                    <div key={key}>
+                      <div className="flex items-center gap-1.5">
+                        <span className={meta.cls}>{meta.glyph}</span>
+                        <span className="text-gray-300 font-medium">{meta.label}:</span>
+                        <span className={`font-semibold ${meta.cls}`}>{fmt(grp.total)}</span>
+                      </div>
+                      {grp.items.length > 1 && (
+                        <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
+                          {grp.items.map((it, i) => (
+                            <div key={i} className="flex items-center justify-between gap-3 text-gray-500">
+                              <span className="truncate max-w-[180px]">{it.description}</span>
+                              <span className="shrink-0">{fmt(it.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {selectionTotals.showSaldo && (
+                  <div className="flex items-center gap-1.5 pt-1 mt-0.5 border-t border-indigo-500/20">
+                    <span className="text-gray-400">=</span>
+                    <span className="text-gray-300 font-medium">Saldo:</span>
+                    <span className={`font-bold ${selectionTotals.saldo < 0 ? 'text-orange-500' : 'text-emerald-400'}`}>{fmt(selectionTotals.saldo)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowBatchRegister(true)}
