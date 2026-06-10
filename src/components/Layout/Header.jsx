@@ -19,9 +19,29 @@ const PAGE_TITLES = {
   settings: 'Configurações',
 }
 
-export default function Header({ page, financialPeriod, saldoPrincipal, onShowPosicao }) {
+export default function Header({ page, financialPeriod, saldoPrincipal, saldosPrincipais, onShowPosicao }) {
   const today = new Date()
   const { profiles, activeProfileId, setActiveProfileId } = useApp()
+
+  // Linha secundária do saldo (igual à sidebar): saldos do ciclo em formato compacto.
+  // Oculta cada saldo igual ao anterior mostrado; calendário só no modo custom.
+  const saldoSecRows = (() => {
+    const s = saldosPrincipais
+    if (!s) return []
+    const rows = []
+    let last = s.saldoAtual
+    const push = (label, val) => {
+      if (val == null || Math.abs(val - last) < 0.005) return
+      rows.push({ label, val }); last = val
+    }
+    push('Final Ciclo', s.saldoFinalCiclo)
+    push('Projetado', s.saldoProjetado)
+    if (s.mode === 'custom') {
+      push('Atual Cal.', s.saldoAtualCalendario)
+      push('Final Cal.', s.saldoFinalCalendario)
+    }
+    return rows
+  })()
 
   return (
     <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 py-2.5 flex items-center gap-3 sticky top-0 z-10">
@@ -83,6 +103,15 @@ export default function Header({ page, financialPeriod, saldoPrincipal, onShowPo
           <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
             {fmt(saldoPrincipal ?? 0)}
           </p>
+          {saldoSecRows.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-x-1.5 gap-y-0.5 mt-0.5 text-[10px] leading-tight text-gray-500 max-w-[180px]">
+              {saldoSecRows.map(r => (
+                <span key={r.label}>
+                  <span className="text-gray-600">{r.label}</span> {fmt(r.val)}
+                </span>
+              ))}
+            </div>
+          )}
         </button>
         <div className="text-right hidden md:block">
           <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
