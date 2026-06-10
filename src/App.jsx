@@ -36,17 +36,41 @@ function AppContent() {
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
 
-  // Saldo principal (sidebar/header): usa o novo Saldo Atual do ciclo (exclui lançamentos
-  // fora do ciclo); cai para o balance armazenado em contas sem saldo de ciclo (ativo/passivo).
-  const saldoPrincipal = useMemo(() => {
+  // Saldos principais (sidebar/header): os 5 saldos do ciclo agregados sobre o pool de
+  // contas (mesmos definidos em getAccountSaldos). Exclui lançamentos fora do ciclo;
+  // contas sem saldo de ciclo (ativo/passivo) entram pelo balance armazenado.
+  const saldosPrincipais = useMemo(() => {
     const pool = activeProfileId
       ? profileAccounts.filter(a => a.type !== 'credit')
       : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
-    return pool.reduce((s, a) => {
-      const sal = getAccountSaldos(a)
-      return s + (sal.applicable ? sal.saldoAtual : (a.balance || 0))
-    }, 0)
-  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos])
+    const agg = { saldoAtual: 0, saldoFinalCiclo: 0, saldoProjetado: 0, saldoAtualCalendario: 0, saldoFinalCalendario: 0 }
+    let isCustom = (data.settings?.financialMonthMode || 'custom') === 'custom'
+    for (const a of pool) {
+      const s = getAccountSaldos(a)
+      if (s.applicable) {
+        isCustom = s.mode === 'custom'
+        agg.saldoAtual += s.saldoAtual
+        agg.saldoFinalCiclo += s.saldoFinalCiclo
+        agg.saldoProjetado += s.saldoProjetado
+        agg.saldoAtualCalendario += (s.saldoAtualCalendario ?? s.saldoAtual)
+        agg.saldoFinalCalendario += (s.saldoFinalCalendario ?? s.saldoFinalCiclo)
+      } else {
+        const b = a.balance || 0
+        agg.saldoAtual += b; agg.saldoFinalCiclo += b; agg.saldoProjetado += b
+        agg.saldoAtualCalendario += b; agg.saldoFinalCalendario += b
+      }
+    }
+    const round = v => Math.round(v * 100) / 100
+    return {
+      saldoAtual: round(agg.saldoAtual),
+      saldoFinalCiclo: round(agg.saldoFinalCiclo),
+      saldoProjetado: round(agg.saldoProjetado),
+      saldoAtualCalendario: isCustom ? round(agg.saldoAtualCalendario) : null,
+      saldoFinalCalendario: isCustom ? round(agg.saldoFinalCalendario) : null,
+      mode: isCustom ? 'custom' : 'calendar',
+    }
+  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos, data.settings])
+  const saldoPrincipal = saldosPrincipais.saldoAtual
 
   const alertCount = useMemo(() => {
     const today = new Date()
@@ -88,7 +112,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-950">
-      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} onShowPosicao={() => setShowPosicao(true)} />
+      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} saldoPrincipal={saldoPrincipal} onShowPosicao={() => setShowPosicao(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">

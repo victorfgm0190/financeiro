@@ -39,9 +39,29 @@ function DbStatusBadge({ status }) {
   )
 }
 
-export default function Sidebar({ active, setActive, alertCount, saldoPrincipal, onShowPosicao }) {
+export default function Sidebar({ active, setActive, alertCount, saldoPrincipal, saldosPrincipais, onShowPosicao }) {
   const { dbStatus, profiles, activeProfileId } = useApp()
   const activeProfile = profiles?.find(p => p.id === activeProfileId) || null
+
+  // Linha secundária do widget: mesmos saldos do ciclo dos cards isMain, em formato
+  // compacto. Oculta cada saldo igual ao anterior mostrado; calendário só no modo custom.
+  const saldoSecRows = (() => {
+    const s = saldosPrincipais
+    if (!s) return []
+    const rows = []
+    let last = s.saldoAtual
+    const push = (label, val) => {
+      if (val == null || Math.abs(val - last) < 0.005) return
+      rows.push({ label, val }); last = val
+    }
+    push('Final Ciclo', s.saldoFinalCiclo)
+    push('Projetado', s.saldoProjetado)
+    if (s.mode === 'custom') {
+      push('Atual Cal.', s.saldoAtualCalendario)
+      push('Final Cal.', s.saldoFinalCalendario)
+    }
+    return rows
+  })()
 
   return (
     <aside className="hidden md:flex w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex-col h-screen sticky top-0">
@@ -86,6 +106,15 @@ export default function Sidebar({ active, setActive, alertCount, saldoPrincipal,
           <p className={`text-base font-bold mt-0.5 group-hover:opacity-80 transition-opacity ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
             {fmt(saldoPrincipal ?? 0)}
           </p>
+          {saldoSecRows.length > 0 && (
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[10px] leading-tight text-gray-500">
+              {saldoSecRows.map(r => (
+                <span key={r.label}>
+                  <span className="text-gray-600">{r.label}</span> {fmt(r.val)}
+                </span>
+              ))}
+            </div>
+          )}
         </button>
 
         <div className="border-t border-gray-800/60 pt-2">
