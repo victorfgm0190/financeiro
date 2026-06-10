@@ -1810,6 +1810,131 @@ export function AppProvider({ children }) {
     }
   }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod])
 
+  // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal agregado sobre o pool de
+  // contas (perfil ativo → contas do perfil; senão → fluxoCaixaPrincipal). Devolve, por seção,
+  // os componentes e itens (agendamentos, envelopes, lançamentos fora do ciclo) que somam cada saldo.
+  const getSaldoPrincipalBreakdown = useCallback((referenceDate = new Date()) => {
+    const toStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    const period = getFinancialPeriod(referenceDate)
+    const cycleStartStr = toStr(period.start)
+    const cycleEndStr = toStr(period.end)
+    const calEnd = new Date(period.end.getFullYear(), period.end.getMonth() + 1, 0)
+    const calendarEndStr = toStr(calEnd)
+    const todayStr = toStr(referenceDate)
+    const mode = data.settings.financialMonthMode || 'custom'
+    const isCustom = mode === 'custom'
+    const startDay = data.settings.financialMonthStartDay || 1
+
+    const pool = activeProfileId
+      ? data.accounts.filter(a => a.profileId === activeProfileId && a.type !== 'credit')
+      : data.accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
+    const poolIds = new Set(pool.map(a => a.id))
+
+    // Contas Ger. (subcontas do grupo G) — para separar transferências gerenciais.
+    const grupoG = data.gerencialGroups?.find(g => g.number === 1)
+    const gerIds = new Set(
+      data.accounts.filter(a => (grupoG && a.grupoGerencial === grupoG.id) || /^Ger\. /.test(a.name || '')).map(a => a.id)
+    )
+
+    const signedTx = (tx) => {
+      if (tx.type === 'income' && poolIds.has(tx.accountId)) return tx.amount
+      if (tx.type === 'expense' && poolIds.has(tx.accountId) && tx.accountType !== 'credit') return -tx.amount
+      if (tx.type === 'transfer') {
+        return (poolIds.has(tx.toAccountId) ? tx.amount : 0) - (poolIds.has(tx.accountId) ? tx.amount : 0)
+      }
+      if (tx.type === 'credit_payment' && poolIds.has(tx.fromAccountId)) return -tx.amount
+      return 0
+    }
+    const isGerencialTransfer = (tx) =>
+      tx.type === 'transfer' && (tx.grupoGerencial || gerIds.has(tx.accountId) || gerIds.has(tx.toAccountId))
+
+    // Saldo Atual = abertura + transações efetivadas até o fim do ciclo.
+    const baseAbertura = pool.reduce((s, a) => s + rb(a.initialBalance ?? 0), 0)
+    let txAteCiclo = 0, gerencialAteCiclo = 0, txAlemCiclo = 0
+    const itensAlemCiclo = []
+    for (const tx of data.transactions) {
+      if (!tx.date) continue
+      const v = signedTx(tx)
+      if (v === 0) continue
+      if (tx.date <= cycleEndStr) {
+        txAteCiclo += v
+        if (isGerencialTransfer(tx)) gerencialAteCiclo += v
+      } else if (isCustom && tx.date <= calendarEndStr) {
+        txAlemCiclo += v
+        itensAlemCiclo.push({ description: tx.description || '(sem descrição)', amount: rb(v) })
+      }
+    }
+    const saldoAtual = rb(baseAbertura + txAteCiclo)
+    const saldoBase = rb(saldoAtual - gerencialAteCiclo) // base = atual − transferências gerenciais
+
+    // Agendamentos pendentes (ocorrências não registradas) no intervalo (hoje, dateStr], por agendamento.
+    const collectSched = (endStr) => {
+      const items = []
+      let total = 0
+      for (const s of data.schedules) {
+        const fromAcc = poolIds.has(s.accountId)
+        const toAcc = poolIds.has(s.toAccountId)
+        if (!fromAcc && !toAcc) continue
+        const occs = getNextOccurrences(s, 60).filter(dt => dt > todayStr && dt <= endStr)
+        if (occs.length === 0) continue
+        let unit = 0
+        if (s.transactionType === 'income' && fromAcc) unit = s.amount
+        else if (s.transactionType === 'expense' && fromAcc) unit = -s.amount
+        else if (s.transactionType === 'transfer') unit = (toAcc ? s.amount : 0) - (fromAcc ? s.amount : 0)
+        if (unit === 0) continue
+        const amount = rb(unit * occs.length)
+        items.push({ description: s.description || '(agendamento)', amount, count: occs.length })
+        total += amount
+      }
+      return { items, total: rb(total) }
+    }
+    const schedCiclo = collectSched(cycleEndStr)
+    const saldoFinalCiclo = rb(saldoAtual + schedCiclo.total)
+
+    // Envelopes do ciclo vinculados a contas do pool: restante (limite − gasto na competência).
+    const competenciaKeyOf = (ds) => {
+      const [y, m, dd] = ds.split('-').map(Number)
+      let year = y, month0 = m - 1
+      if (dd < startDay) { const p = new Date(y, m - 2, 1); year = p.getFullYear(); month0 = p.getMonth() }
+      return year * 12 + month0
+    }
+    const currentComp = referenceDate.getDate() >= startDay
+      ? referenceDate.getFullYear() * 12 + referenceDate.getMonth()
+      : (() => { const p = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1); return p.getFullYear() * 12 + p.getMonth() })()
+    const envItems = []
+    let envTotal = 0
+    for (const env of (data.envelopes || [])) {
+      if (!poolIds.has(env.accountId)) continue
+      let spent = 0
+      for (const tx of data.transactions) {
+        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'investAuto') continue
+        if (!env.categoryIds?.includes(tx.categoryId)) continue
+        if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
+        spent += tx.amount
+      }
+      const restante = Math.max(0, rb((env.limitAmount || 0) - spent))
+      if (restante <= 0) continue
+      envItems.push({ name: env.name || '(envelope)', restante: rb(restante) })
+      envTotal += restante
+    }
+    envTotal = rb(envTotal)
+    const saldoProjetado = rb(saldoFinalCiclo - envTotal)
+
+    // Calendário (só modo custom).
+    const saldoAtualCalendario = isCustom ? rb(saldoAtual + txAlemCiclo) : null
+    const schedCal = isCustom ? collectSched(calendarEndStr) : { items: [], total: 0 }
+    const saldoFinalCalendario = isCustom ? rb(saldoAtualCalendario + schedCal.total) : null
+
+    return {
+      mode, cycleStart: cycleStartStr, cycleEnd: cycleEndStr, calendarEnd: calendarEndStr,
+      saldoAtual: { base: saldoBase, gerencialTransfers: rb(gerencialAteCiclo), total: saldoAtual },
+      finalCiclo: { saldoAtual, agendamentos: schedCiclo.items, agendamentosTotal: schedCiclo.total, total: saldoFinalCiclo },
+      projetado: { finalCiclo: saldoFinalCiclo, envelopes: envItems, envelopesTotal: envTotal, total: saldoProjetado },
+      atualCalendario: isCustom ? { saldoAtual, lancamentos: itensAlemCiclo, lancamentosTotal: rb(txAlemCiclo), total: saldoAtualCalendario } : null,
+      finalCalendario: isCustom ? { atualCalendario: saldoAtualCalendario, agendamentos: schedCal.items, agendamentosTotal: schedCal.total, total: saldoFinalCalendario } : null,
+    }
+  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod])
+
   // ── Classification ───────────────────────────────────────────────────────────
   const classifyByRules = useCallback((description, { dayOfMonth = null, amountApprox = null } = {}) => {
     const lower = description.toLowerCase()
@@ -3448,6 +3573,7 @@ export function AppProvider({ children }) {
       dbStatus,
       getFinancialPeriod,
       getAccountSaldos,
+      getSaldoPrincipalBreakdown,
       getNextOccurrences,
       classifyByRules,
       learnClassification,

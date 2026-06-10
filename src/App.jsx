@@ -8,7 +8,7 @@ import BottomNav from './components/Layout/BottomNav'
 import Header from './components/Layout/Header'
 import Modal from './components/shared/Modal'
 import TransactionForm from './components/Transactions/TransactionForm'
-import PosicaoFinanceiraModal from './components/Dashboard/PosicaoFinanceiraModal'
+import SaldoPrincipalBreakdownModal from './components/Dashboard/SaldoPrincipalBreakdownModal'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
 import AccountsPanel from './components/Accounts/AccountsPanel'
 import TransactionsPanel from './components/Transactions/TransactionsPanel'
@@ -123,8 +123,8 @@ function AppContent() {
       <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
         <TransactionForm onClose={() => setShowQuickAdd(false)} onToast={setGenericToast} />
       </Modal>
-      <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Posição Financeira" size="lg">
-        <PosicaoFinanceiraModal />
+      <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Como chegamos aqui" size="lg">
+        <SaldoPrincipalBreakdownModal />
       </Modal>
       {backupToast && (
         <Toast
