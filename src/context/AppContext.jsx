@@ -3008,6 +3008,12 @@ export function AppProvider({ children }) {
   const executarProvisoesGerenciais = useCallback((parcelaIds) => {
     const ids = new Set(parcelaIds)
     if (ids.size === 0) return
+    // Cartões afetados pelas parcelas executadas — para reconciliar saldos/agendamentos depois.
+    const affectedCardIds = new Set()
+    for (const id of ids) {
+      const tx = dataRef.current.transactions.find(t => t.id === id)
+      if (tx?.accountId) affectedCardIds.add(tx.accountId)
+    }
     update(d => {
       const g1 = d.gerencialGroups?.find(g => g.number === 1)
       if (!g1) return d
@@ -3062,6 +3068,10 @@ export function AppProvider({ children }) {
       if (newTxs.length === 0) return d
       return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
     })
+    // Reconcilia os saldos das contas Ger. (recálculo absoluto = Σ transferências) e os
+    // agendamentos geridos dos cartões afetados — garante o valor correto imediatamente,
+    // sem reconciliação manual, e evita que o sync sobrescreva com saldo incremental defasado.
+    for (const cardId of affectedCardIds) reconcileGerencialRef.current?.(cardId)
   }, [update])
 
   // ── Corrigir dados gerenciais: elimina provisões erradas de parcelados e reconstrói agendamentos ──
