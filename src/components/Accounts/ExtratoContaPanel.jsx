@@ -103,27 +103,30 @@ function buildRows(transactions, accountId, netize, aplicacaoIds) {
           return
         }
 
-        const opposing = dayTxs.find(t =>
+        // Par de contas (não-ordenado) em relação à conta visualizada.
+        const otherAccountId = tx.accountId === accountId ? tx.toAccountId : tx.accountId
+        // Todos os transfers do dia entre ESTE par, em qualquer sentido (A→B e B→A).
+        const pairTxs = dayTxs.filter(t =>
           !processed.has(t.id) &&
-          t.id !== tx.id &&
           t.type === 'transfer' &&
-          t.accountId === tx.toAccountId &&
-          t.toAccountId === tx.accountId
+          ((t.accountId === accountId && t.toAccountId === otherAccountId) ||
+           (t.accountId === otherAccountId && t.toAccountId === accountId))
         )
-
-        if (!opposing) {
+        // Netiza apenas quando há movimento nos DOIS sentidos entre o par. Movimento em
+        // uma única direção mantém o comportamento atual (linhas individuais).
+        const hasIn = pairTxs.some(t => t.toAccountId === accountId)
+        const hasOut = pairTxs.some(t => t.accountId === accountId)
+        if (pairTxs.length < 2 || !hasIn || !hasOut) {
           rows.push({ kind: 'single', tx })
           processed.add(tx.id)
           return
         }
 
         const flow = (t) => (t.toAccountId === accountId ? t.amount : -t.amount)
-        const netFlow = Math.round((flow(tx) + flow(opposing)) * 100) / 100
-        const otherAccountId = tx.accountId === accountId ? tx.toAccountId : tx.accountId
+        const netFlow = Math.round(pairTxs.reduce((s, t) => s + flow(t), 0) * 100) / 100
 
-        rows.push({ kind: 'netted', txs: [tx, opposing], date, netFlow, otherAccountId })
-        processed.add(tx.id)
-        processed.add(opposing.id)
+        rows.push({ kind: 'netted', txs: pairTxs, date, netFlow, otherAccountId, bidirectional: true })
+        pairTxs.forEach(t => processed.add(t.id))
       })
     })
   }
@@ -301,6 +304,11 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
             {row.caIncoming && (
               <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
                 {otherName} · netizado
+              </span>
+            )}
+            {row.bidirectional && (
+              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
+                {thisName} ↔ {otherName} · netizado
               </span>
             )}
           </div>
