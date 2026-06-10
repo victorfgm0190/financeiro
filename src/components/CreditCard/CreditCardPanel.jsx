@@ -75,6 +75,7 @@ export default function CreditCardPanel() {
   const {
     profileAccounts: accounts,
     profileTransactions: transactions,
+    profileSchedules: schedules,
     categories, gerencialGroups,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
   } = useApp()
@@ -143,6 +144,36 @@ export default function CreditCardPanel() {
   // Lançamentos alimentados ao totalizador gerencial: despesas + estornos.
   const totalizerTxs = useMemo(() => [...billTxs, ...billEstornos], [billTxs, billEstornos])
   const hasGer = billTxs.some(tx => tx.grupoGerencial)
+
+  // ── Pagamentos da fatura selecionada ─────────────────────────────────────
+  // Lançamentos credit_payment do cartão atual cuja fatura_ref OU mês da data caem na
+  // fatura selecionada. Não entram no totalizador gerencial nem no billTotal.
+  const billPayments = useMemo(() => {
+    if (!selectedCard || !billKey) return []
+    return transactions
+      .filter(tx =>
+        tx.type === 'credit_payment' &&
+        tx.accountId === selectedCard.id &&
+        ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey)
+      )
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [transactions, selectedCard, billKey])
+
+  // Agendamentos tipo='pagamento_fatura' já registrados (ocorrências) deste cartão/fatura.
+  const scheduledPaidTotal = useMemo(() => {
+    if (!selectedCard || !billKey) return 0
+    return (schedules || [])
+      .filter(s => s.tipo === 'pagamento_fatura' && s.cardId === selectedCard.id && s.faturaMesAno === billKey)
+      .reduce((sum, s) => sum + (s.registered?.length || 0) * (Number(s.amount) || 0), 0)
+  }, [schedules, selectedCard, billKey])
+
+  const totalPago = useMemo(
+    () => Math.round((billPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0) + scheduledPaidTotal) * 100) / 100,
+    [billPayments, scheduledPaidTotal]
+  )
+  const saldoRestante = Math.max(0, Math.round((billTotal - totalPago) * 100) / 100)
+  const isFaturaPaga = billTotal > 0 && totalPago >= billTotal - 0.005
+  const isFaturaParcial = totalPago > 0 && !isFaturaPaga
 
   // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
   // calculado sobre a fatura completa (billTotal).
@@ -272,7 +303,7 @@ export default function CreditCardPanel() {
       </div>
 
       {/* ── KPIs + botões de ação ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
         <div className="card">
           <div className="flex items-center gap-2 mb-2 text-gray-400">
             <Calendar size={13} />
@@ -298,6 +329,18 @@ export default function CreditCardPanel() {
           </div>
           <p className="text-2xl font-bold text-gray-200">{fmt(selectedCard?.creditDebt || 0)}</p>
           <p className="text-xs text-gray-500 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
+        </div>
+        <div className="card">
+          <div className="flex items-center gap-2 mb-2 text-gray-400">
+            <CheckCircle2 size={13} />
+            <span className="text-xs uppercase tracking-wide">{totalPago === 0 ? 'Saldo a Pagar' : 'Valor Pago'}</span>
+          </div>
+          <p className={`text-2xl font-bold ${isFaturaPaga ? 'text-emerald-400' : isFaturaParcial ? 'text-orange-500' : 'text-gray-200'}`}>
+            {fmt(totalPago === 0 ? saldoRestante : totalPago)}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            de {fmt(billTotal)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           <button
@@ -380,6 +423,24 @@ export default function CreditCardPanel() {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Pagamentos da fatura (credit_payment) — linhas destacadas no topo */}
+                  {billPayments.map(p => (
+                    <tr key={p.id} className="border-b border-gray-800/50 bg-green-900/30">
+                      <td className="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">{fmtDate(p.date)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                          <span className="text-emerald-300 text-sm font-medium">Pagamento de Fatura</span>
+                          <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">PAGAMENTO</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell" />
+                      {hasGer && <td className="px-4 py-3" />}
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-400 whitespace-nowrap text-sm">{fmt(p.amount)}</td>
+                      <td className="px-4 py-3" />
+                      <td className="px-2 py-3" />
+                    </tr>
+                  ))}
                   {displayBillTxs.length === 0 && (
                     <tr>
                       <td colSpan={hasGer ? 7 : 6} className="text-center py-8 text-gray-500 text-xs">
