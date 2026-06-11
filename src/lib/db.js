@@ -276,6 +276,9 @@ export const reserveFunctionToRow = (f) => ({
   ordem: Number.isFinite(f.ordem) ? f.ordem : 0,
   entradas_override: f.entradasOverride != null ? Number(f.entradasOverride) : null,
   saidas_override: f.saidasOverride != null ? Number(f.saidasOverride) : null,
+  // Ajuste manual por mês { "YYYY-MM": valor }; null quando vazio.
+  ajuste_override: f.ajusteOverride && typeof f.ajusteOverride === 'object' && Object.keys(f.ajusteOverride).length > 0
+    ? f.ajusteOverride : null,
 })
 
 export const rowToReserveFunction = (r) => ({
@@ -295,6 +298,7 @@ export const rowToReserveFunction = (r) => ({
     : (Number(r.entradas) ? Number(r.entradas) : null),
   saidasOverride: r.saidas_override != null ? Number(r.saidas_override)
     : (Number(r.saidas) ? Number(r.saidas) : null),
+  ajusteOverride: r.ajuste_override && typeof r.ajuste_override === 'object' ? r.ajuste_override : {},
 })
 
 export const categoryToRow = (c) => ({

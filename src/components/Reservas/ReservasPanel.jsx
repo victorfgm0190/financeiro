@@ -53,7 +53,7 @@ function useReservas() {
     setAccountBalancesState(b => ({ ...b, [accountId]: Number(value) }))
   }
 
-  const virarSaldo = (saldosAtualizados) => {
+  const virarSaldo = (saldosAtualizados, monthKey = null) => {
     const snapshot = functions.map(f => ({
       id: f.id,
       prevSaldoInicial: f.saldoInicial,
@@ -61,18 +61,25 @@ function useReservas() {
       prevSaidas: f.saidas,
       prevEntradasOverride: f.entradasOverride ?? null,
       prevSaidasOverride: f.saidasOverride ?? null,
+      prevAjusteOverride: f.ajusteOverride ?? null,
       saldoAtualizado: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
     }))
     setPeriods(ps => [...ps, { closedAt: new Date().toISOString().split('T')[0], snapshot }])
     // Fecha o período: o saldo atualizado vira o novo saldo inicial e as entradas/saídas
     // são zeradas via override (0), evitando recontar os lançamentos do período já fechado.
-    functions.forEach(f => updateReserveFunction(f.id, {
-      saldoInicial: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
-      entradas: 0,
-      saidas: 0,
-      entradasOverride: 0,
-      saidasOverride: 0,
-    }))
+    // O ajuste do mês fechado é removido (já está embutido no saldo atualizado → novo saldo inicial).
+    functions.forEach(f => {
+      const ajuste = { ...(f.ajusteOverride || {}) }
+      if (monthKey) delete ajuste[monthKey]
+      updateReserveFunction(f.id, {
+        saldoInicial: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
+        entradas: 0,
+        saidas: 0,
+        entradasOverride: 0,
+        saidasOverride: 0,
+        ajusteOverride: ajuste,
+      })
+    })
   }
 
   const undoVirarSaldo = () => {
@@ -85,6 +92,7 @@ function useReservas() {
         saidas: snap.prevSaidas,
         entradasOverride: snap.prevEntradasOverride ?? null,
         saidasOverride: snap.prevSaidasOverride ?? null,
+        ajusteOverride: snap.prevAjusteOverride ?? {},
       })
     )
     setPeriods(ps => ps.slice(0, -1))
@@ -355,8 +363,12 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
+  // Grupo (conta + funções) cujo modal de ajustes está aberto.
+  const [ajusteGroup, setAjusteGroup] = useState(null)
+  // Cor do valor de ajuste: azul (+), laranja (−), cinza (0).
+  const ajusteColor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-600'
   const groups = useMemo(() => {
     const byAccount = {}
     functions.forEach(f => {
@@ -519,6 +531,17 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                         <span className="text-gray-500">Saídas:</span>
                         <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
                       </div>
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-gray-500">Ajuste:</span>
+                        <button
+                          onClick={() => setAjusteGroup({ account, fns })}
+                          className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
+                          title="Editar ajuste do mês"
+                        >
+                          {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                          {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
+                        </button>
+                      </div>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
                           <Edit2 size={12} />
@@ -573,6 +596,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
                       <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
                       <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-emerald-400 font-medium w-32">Saldo Atualizado</th>
                       <th className="w-14" />
@@ -603,6 +627,16 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                           </td>
                           <td className="px-4 py-2 text-right">
                             <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => setAjusteGroup({ account, fns })}
+                              title="Editar ajuste do mês"
+                              className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
+                            >
+                              {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                              {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
+                            </button>
                           </td>
                           <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                             {fmt(saldo)}
@@ -635,6 +669,11 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                       <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">
                         {fmt(fns.reduce((s, f) => s + f.saidas, 0))}
                       </td>
+                      {(() => { const ta = fns.reduce((s, f) => s + (f.ajuste || 0), 0); return (
+                        <td className={`px-4 py-2 text-right text-xs font-semibold ${ajusteColor(ta)}`}>
+                          {ta !== 0 ? (ta > 0 ? '+' : '') + fmt(ta) : <span className="text-gray-700">0,00</span>}
+                        </td>
+                      ) })()}
                       <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                         {fmt(totalSaldo)}
                       </td>
@@ -650,7 +689,101 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
           </div>
         )
       })}
+
+      {ajusteGroup && (
+        <AjusteModal
+          account={ajusteGroup.account}
+          fns={ajusteGroup.fns}
+          defaultMonthKey={currentMonthKey}
+          onUpdateFunction={onUpdateFunction}
+          onClose={() => setAjusteGroup(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// ── Modal de Ajustes de Reserva (por conta, por mês) ────────────────────────
+function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose }) {
+  // Campos editáveis por função para um mês (string p/ aceitar '-'/'+'/vazio).
+  const buildVals = (mk) => Object.fromEntries(fns.map(f => {
+    const v = Number(f.ajusteOverride?.[mk])
+    return [f.id, v ? String(v) : '']
+  }))
+  const [monthKey, setMonthKey] = useState(defaultMonthKey)
+  const [vals, setVals] = useState(() => buildVals(defaultMonthKey))
+  // Troca de mês recarrega os campos (sem efeito → evita set-state-in-effect).
+  const changeMonth = (mk) => { setMonthKey(mk); setVals(buildVals(mk)) }
+
+  // Opções de mês: 12 meses ao redor do mês padrão (mês anterior … +10).
+  const monthOptions = useMemo(() => {
+    const [y, m] = defaultMonthKey.split('-').map(Number)
+    return Array.from({ length: 13 }, (_, i) => {
+      const d = new Date(y, m - 1 - 1 + i, 1) // começa um mês antes
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      return { key, label: `${MONTH_LABELS[d.getMonth()]}/${d.getFullYear()}` }
+    })
+  }, [defaultMonthKey])
+
+  const setVal = (id, v) => setVals(s => ({ ...s, [id]: v }))
+
+  // Grava o ajuste do mês em cada função: valor 0/inválido remove a chave do mês.
+  const persist = (getValor) => {
+    fns.forEach(f => {
+      const valor = getValor(f)
+      const next = { ...(f.ajusteOverride || {}) }
+      if (valor && Number.isFinite(valor)) next[monthKey] = Math.round(valor * 100) / 100
+      else delete next[monthKey]
+      onUpdateFunction(f.id, { ajusteOverride: next })
+    })
+  }
+
+  const handleSave = () => {
+    persist(f => parseFloat(vals[f.id]))
+    onClose()
+  }
+  const handleClearAll = () => {
+    persist(() => 0)
+    setVals(Object.fromEntries(fns.map(f => [f.id, ''])))
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Ajustes de Reserva — ${account ? (account.apelido || account.name) : 'Sem conta'}`} size="md">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500 shrink-0">Mês de referência:</label>
+          <select className="input py-1.5 text-xs max-w-[180px]" value={monthKey} onChange={e => changeMonth(e.target.value)}>
+            {monthOptions.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+        </div>
+
+        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+          {fns.map(f => (
+            <div key={f.id} className="flex items-center gap-3">
+              <span className="text-sm text-gray-300 flex-1 truncate">{f.name}</span>
+              <input
+                type="number"
+                step="0.01"
+                value={vals[f.id] ?? ''}
+                onChange={e => setVal(f.id, e.target.value)}
+                placeholder="0,00 (± )"
+                className="input w-32 text-xs py-1.5 text-right"
+              />
+            </div>
+          ))}
+        </div>
+
+        <p className="text-xs text-gray-600 leading-relaxed">
+          O ajuste entra no saldo do mês (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores
+          negativos (ex.: -500). Zero remove o ajuste do mês.
+        </p>
+
+        <div className="flex gap-3 pt-1">
+          <button type="button" className="btn-secondary flex-1" onClick={handleClearAll}>Limpar tudo</button>
+          <button type="button" className="btn-primary flex-1" onClick={handleSave}>Salvar</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -944,11 +1077,14 @@ export default function ReservasPanel() {
   const [confirmUndo, setConfirmUndo] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
 
-  const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100
+  // Saldo = Saldo Inicial + Entradas − Saídas + Ajuste (ajuste do mês atual, pode ser ±).
+  const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0)) * 100) / 100
 
   const period = getFinancialPeriod()
   const periodStart = period.start.toISOString().split('T')[0]
   const periodEnd = period.end.toISOString().split('T')[0]
+  // Mês de referência do ajuste (mês do fim do ciclo financeiro atual), formato YYYY-MM.
+  const currentMonthKey = `${period.end.getFullYear()}-${String(period.end.getMonth() + 1).padStart(2, '0')}`
 
   // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada
   // função (reservaFuncaoId) dentro do período financeiro atual.
@@ -987,8 +1123,10 @@ export default function ReservasPanel() {
       saidas: f.saidasOverride != null ? f.saidasOverride : comp.saidas,
       entradasAuto: f.entradasOverride == null,
       saidasAuto: f.saidasOverride == null,
+      // Ajuste manual do mês atual (0 quando não definido).
+      ajuste: Number(f.ajusteOverride?.[currentMonthKey]) || 0,
     }
-  }), [functions, computedMovs])
+  }), [functions, computedMovs, currentMonthKey])
 
   const saldosAtualizados = useMemo(() => {
     const result = {}
@@ -1013,7 +1151,7 @@ export default function ReservasPanel() {
   }, [effectiveFunctions, accounts, accountBalances])
 
   const handleVirar = () => {
-    virarSaldo(saldosAtualizados)
+    virarSaldo(saldosAtualizados, currentMonthKey)
     setConfirmVirar(false)
   }
 
@@ -1062,6 +1200,7 @@ export default function ReservasPanel() {
           periods={periods}
           saldosAtualizados={saldosAtualizados}
           computeSaldo={computeSaldo}
+          currentMonthKey={currentMonthKey}
           onAdd={() => { setEditFn(null); setShowForm(true) }}
           onEdit={f => { setEditFn(f); setShowForm(true) }}
           onDelete={f => setConfirmDelete(f)}

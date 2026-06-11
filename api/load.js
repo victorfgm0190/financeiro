@@ -34,6 +34,8 @@ export default async function handler(req, res) {
     // NULL = usar valor calculado; número = sobrescreve o cálculo automático.
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS entradas_override NUMERIC`)
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS saidas_override NUMERIC`)
+    // Ajuste manual por mês: { "YYYY-MM": valor } (positivo ou negativo).
+    await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS ajuste_override JSONB`)
     // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
     // de virarem lançamentos. status: pendente | confirmado | ignorado.
     await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (
