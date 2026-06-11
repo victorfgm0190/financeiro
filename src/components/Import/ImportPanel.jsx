@@ -732,7 +732,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const movCat = categories.find(c => c.name.toLowerCase() === row.movimentacao.toLowerCase())
         const categoryId = classified?.categoryId || movCat?.id || ''
-        const payee = classified?.payee || ''
+        // Favorecido: regra de classificação > favorecido já vindo do parser > o próprio
+        // lançamento (descrição/estabelecimento, ex.: CSV Itaú e XLS de cartão).
+        const payee = classified?.payee || row.payee || row.description || ''
         const installInfo = detectInstallment(row.description)
         const isParcelado = !!installInfo
         const grupoFromRules = classified?.grupoGerencial
