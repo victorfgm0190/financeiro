@@ -4,7 +4,6 @@ import {
   Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2, Gem,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -39,29 +38,8 @@ function DbStatusBadge({ status }) {
   )
 }
 
-export default function Sidebar({ active, setActive, alertCount, saldoPrincipal, saldosPrincipais, onShowPosicao }) {
-  const { dbStatus, profiles, activeProfileId } = useApp()
-  const activeProfile = profiles?.find(p => p.id === activeProfileId) || null
-
-  // Linha secundária do widget: mesmos saldos do ciclo dos cards isMain, em formato
-  // compacto. Oculta cada saldo igual ao anterior mostrado; calendário só no modo custom.
-  const saldoSecRows = (() => {
-    const s = saldosPrincipais
-    if (!s) return []
-    const rows = []
-    let last = s.saldoAtual
-    const push = (label, val) => {
-      if (val == null || Math.abs(val - last) < 0.005) return
-      rows.push({ label, val }); last = val
-    }
-    push('Final Ciclo', s.saldoFinalCiclo)
-    push('Projetado', s.saldoProjetado)
-    if (s.mode === 'custom') {
-      push('Atual Cal.', s.saldoAtualCalendario)
-      push('Final Cal.', s.saldoFinalCalendario)
-    }
-    return rows
-  })()
+export default function Sidebar({ active, setActive, alertCount }) {
+  const { dbStatus } = useApp()
 
   return (
     <aside className="hidden md:flex w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex-col h-screen sticky top-0">
@@ -89,35 +67,7 @@ export default function Sidebar({ active, setActive, alertCount, saldoPrincipal,
         ))}
       </nav>
       <div className="px-4 pt-3 pb-2 border-t border-gray-800 space-y-2.5">
-        {/* Saldo Principal */}
-        <button
-          onClick={onShowPosicao}
-          className="w-full text-left group"
-          title="Ver posição financeira"
-        >
-          {activeProfile ? (
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeProfile.color }} />
-              <p className="text-xs font-medium truncate" style={{ color: activeProfile.color }}>{activeProfile.name}</p>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-600 uppercase tracking-wide">Saldo Principal</p>
-          )}
-          <p className={`text-base font-bold mt-0.5 group-hover:opacity-80 transition-opacity ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
-            {fmt(saldoPrincipal ?? 0)}
-          </p>
-          {saldoSecRows.length > 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[10px] leading-tight text-gray-500">
-              {saldoSecRows.map(r => (
-                <span key={r.label}>
-                  <span className="text-gray-600">{r.label}</span> {fmt(r.val)}
-                </span>
-              ))}
-            </div>
-          )}
-        </button>
-
-        <div className="border-t border-gray-800/60 pt-2">
+        <div>
           <DbStatusBadge status={dbStatus} />
         </div>
 

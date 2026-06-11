@@ -87,15 +87,17 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     ? saldosPrincipais.saldoAtual
     : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
 
-  // Linha secundária do hero: saldos do ciclo (igual à sidebar). Oculta cada saldo igual
-  // ao anterior mostrado; calendário só no modo custom.
+  // Saldos do ciclo promovidos no hero (Final Ciclo · Projetado · Atual Cal. · Final Cal.).
+  // Oculta cada saldo igual ao anterior mostrado; o primeiro sempre aparece (seed null) para
+  // o widget nunca ficar vazio. Calendário só no modo custom.
   const saldoSecRows = (() => {
     const s = saldosPrincipais
     if (!s) return []
     const rows = []
-    let last = s.saldoAtual
+    let last = null
     const push = (label, val) => {
-      if (val == null || Math.abs(val - last) < 0.005) return
+      if (val == null) return
+      if (last != null && Math.abs(val - last) < 0.005) return
       rows.push({ label, val }); last = val
     }
     push('Final Ciclo', s.saldoFinalCiclo)
@@ -335,17 +337,20 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           </div>
           <ChevronRight size={16} className="text-gray-600 group-hover:text-emerald-600 transition-colors shrink-0" />
         </div>
-        <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
-          {fmt(saldoPrincipal)}
-        </p>
-        {saldoSecRows.length > 0 && (
-          <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-x-2.5 gap-y-0.5 flex-wrap">
-            {saldoSecRows.map(r => (
-              <span key={r.label}>
-                <span className="text-gray-600">{r.label}</span>{' '}
-                <span className="font-semibold text-gray-300">{fmt(r.val)}</span>
-              </span>
+        {saldoSecRows.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2.5">
+            {saldoSecRows.map((r, i) => (
+              <div key={r.label}>
+                <p className="text-[11px] uppercase tracking-wide text-gray-500">{r.label}</p>
+                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                  {fmt(r.val)}
+                </p>
+              </div>
             ))}
+          </div>
+        ) : (
+          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+            {fmt(saldoPrincipal)}
           </p>
         )}
       </button>
