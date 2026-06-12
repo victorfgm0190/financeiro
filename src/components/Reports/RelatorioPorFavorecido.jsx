@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import DateInput from '../shared/DateInput'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -206,11 +207,11 @@ export default function RelatorioPorFavorecido() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Data Inicial</label>
-            <input className="input" type="date" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
+            <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
           <div>
             <label className="label">Data Final</label>
-            <input className="input" type="date" value={toDraft} onChange={e => setToDraft(e.target.value)} />
+            <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
           <div>
             <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>

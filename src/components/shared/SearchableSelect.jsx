@@ -39,6 +39,7 @@ export default function SearchableSelect({
   const [active, setActive] = useState(-1)
   const [rect, setRect] = useState(null)
   const triggerRef = useRef(null)
+  const panelRef = useRef(null)
   const searchRef = useRef(null)
   const listRef = useRef(null)
 
@@ -119,7 +120,12 @@ export default function SearchableSelect({
 
   useEffect(() => {
     if (!open) return
-    const onClick = (e) => { if (!triggerRef.current?.contains(e.target)) closeDropdown() }
+    const onClick = (e) => {
+      // Não fechar em cliques no gatilho nem no próprio painel (inclui a scrollbar do container).
+      if (triggerRef.current?.contains(e.target)) return
+      if (panelRef.current?.contains(e.target)) return
+      closeDropdown()
+    }
     const onScroll = (e) => { if (listRef.current?.contains(e.target)) return; closeDropdown() }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)
@@ -168,6 +174,7 @@ export default function SearchableSelect({
 
       {open && rect && (
         <div
+          ref={panelRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
           className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
         >

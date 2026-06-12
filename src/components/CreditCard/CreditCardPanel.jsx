@@ -16,6 +16,7 @@ import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
+import DateInput from '../shared/DateInput'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
@@ -658,7 +659,7 @@ export default function CreditCardPanel() {
           </div>
           <div>
             <label className="label">Data do Pagamento</label>
-            <input className="input" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+            <DateInput className="input" value={payDate} onChange={e => setPayDate(e.target.value)} />
           </div>
           <div className="flex gap-3">
             <button className="btn-secondary flex-1" onClick={() => setShowPayModal(false)}>Cancelar</button>

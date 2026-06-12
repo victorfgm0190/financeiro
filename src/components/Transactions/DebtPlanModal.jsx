@@ -6,6 +6,7 @@ import { fmt } from '../shared/utils'
 import AccountOptions from '../shared/AccountOptions'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import CategorySelect from '../shared/CategorySelect'
+import DateInput from '../shared/DateInput'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -189,9 +190,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
 
       <div>
         <label className="label">Primeira parcela em</label>
-        <input
+        <DateInput
           className="input"
-          type="date"
           value={form.firstDueDate}
           onChange={e => set('firstDueDate', e.target.value)}
         />

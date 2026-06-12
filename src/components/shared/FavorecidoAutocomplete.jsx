@@ -40,7 +40,12 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
 
   useEffect(() => {
     if (!open) return
-    const onClick = (e) => { if (!inputRef.current?.contains(e.target)) setOpen(false) }
+    const onClick = (e) => {
+      // Não fechar em cliques no input nem no dropdown (inclui a scrollbar da lista).
+      if (inputRef.current?.contains(e.target)) return
+      if (dropdownRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     const onScroll = (e) => { if (dropdownRef.current?.contains(e.target)) return; setOpen(false) }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)

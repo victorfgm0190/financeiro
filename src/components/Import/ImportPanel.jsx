@@ -15,6 +15,7 @@ import GerencialTotalizer from '../shared/GerencialTotalizer'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import DateInput from '../shared/DateInput'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -1514,17 +1515,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           onChange={() => toggleRow(row._id)} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <input
-                          type="date"
-                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                        <DateInput
+                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row.date || ''}
                           onChange={e => updateRow(row._id, { date: e.target.value })}
                         />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <input
-                          type="date"
-                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                        <DateInput
+                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row._dateCartao || ''}
                           onChange={e => updateRow(row._id, { _dateCartao: e.target.value || null })}
                         />

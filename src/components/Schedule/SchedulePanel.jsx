@@ -15,6 +15,7 @@ import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import DateInput from '../shared/DateInput'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -298,7 +299,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                <DateInput className="input" value={payDate} onChange={e => setPayDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -336,7 +337,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={recDate} onChange={e => setRecDate(e.target.value)} />
+                <DateInput className="input" value={recDate} onChange={e => setRecDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -395,7 +396,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={trfDate} onChange={e => setTrfDate(e.target.value)} />
+                <DateInput className="input" value={trfDate} onChange={e => setTrfDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Anotações</label>
@@ -781,8 +782,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
           {/* Date picker */}
           <div>
             <label className="label">Data de registro</label>
-            <input
-              type="date"
+            <DateInput
               className="input"
               value={date}
               onChange={e => setDate(e.target.value)}
@@ -1614,11 +1614,11 @@ export default function SchedulePanel() {
           <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
             <div>
               <label className="label text-xs">Data de</label>
-              <input type="date" className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
             </div>
             <div>
               <label className="label text-xs">Data até</label>
-              <input type="date" className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="label text-xs">Descrição</label>

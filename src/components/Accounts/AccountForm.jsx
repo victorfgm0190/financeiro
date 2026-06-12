@@ -3,6 +3,7 @@ import { Info, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
+import DateInput from '../shared/DateInput'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -294,9 +295,8 @@ export default function AccountForm({ initial, onClose }) {
             </div>
             <div>
               <label className="label">Data de Aquisição</label>
-              <input
+              <DateInput
                 className="input"
-                type="date"
                 value={form.acquisitionDate}
                 onChange={e => set('acquisitionDate', e.target.value)}
               />

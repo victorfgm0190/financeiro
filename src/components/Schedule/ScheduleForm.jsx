@@ -5,6 +5,7 @@ import { today, fmt, groupedAccountOptions, accountPriority } from '../shared/ut
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
+import DateInput from '../shared/DateInput'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -123,8 +124,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
           <div className="space-y-2.5">
             <div>
               <label className="label">Nova data</label>
-              <input
-                type="date"
+              <DateInput
                 className="input"
                 value={date}
                 onChange={e => setDate(e.target.value)}
@@ -537,9 +537,8 @@ export default function ScheduleForm({ initial, onClose }) {
         {/* Data de Início */}
         <div>
           <LabelTip tip={TIPS.startDate} required>Data de Início</LabelTip>
-          <input
+          <DateInput
             className="input"
-            type="date"
             value={form.startDate}
             onChange={e => set('startDate', e.target.value)}
             required

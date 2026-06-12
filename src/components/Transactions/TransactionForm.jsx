@@ -9,6 +9,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
+import DateInput from '../shared/DateInput'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -837,13 +838,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
       <div>
         <label className="label">Data *</label>
-        <input className="input" type="date" value={form.date} onChange={e => set('date', e.target.value)} required />
+        <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
       </div>
 
       {isCredit && form.type === 'expense' && (
         <div>
           <label className="label">Data Banco</label>
-          <input className="input" type="date" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} />
+          <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} />
           <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
             Data original do extrato do cartão. Em branco para lançamentos manuais — preencha
             só para corrigir quando o banco enviou a data errada.

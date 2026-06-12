@@ -3,6 +3,7 @@ import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
@@ -174,11 +175,11 @@ export default function FluxoCaixaPorConta() {
           )}
           <div>
             <label className="label">Data inicial</label>
-            <input className="input" type="date" value={start} onChange={e => setStart(e.target.value)} />
+            <DateInput className="input" value={start} onChange={e => setStart(e.target.value)} />
           </div>
           <div>
             <label className="label">Data final</label>
-            <input className="input" type="date" value={end} onChange={e => setEnd(e.target.value)} />
+            <DateInput className="input" value={end} onChange={e => setEnd(e.target.value)} />
           </div>
         </div>
 

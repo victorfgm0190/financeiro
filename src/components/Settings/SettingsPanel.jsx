@@ -9,6 +9,7 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
+import DateInput from '../shared/DateInput'
 
 const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
 
@@ -1422,8 +1423,7 @@ export default function SettingsPanel() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="label">Data de referência</label>
-                      <input
-                        type="date"
+                      <DateInput
                         className="input text-sm"
                         value={ajusteData}
                         onChange={e => { setAjusteData(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
