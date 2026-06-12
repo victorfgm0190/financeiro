@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw,
+  MousePointer2, X, Eye, RotateCcw, Circle,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -518,8 +518,11 @@ function ScheduleRow({
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
   deleteSchedule, onEditSchedule,
   selectionMode, isSelected, onToggleSelect,
-  srfBySchedule,
+  srfBySchedule, onToggleConfirmado,
 }) {
+  // Flag "Confirmado / A Confirmar" aplica-se a tudo, exceto automação pura
+  // (gerencial_devolucao / resgate_reserva). Em pagamento_fatura é só visual.
+  const canConfirm = schedule.tipo !== 'gerencial_devolucao' && schedule.tipo !== 'resgate_reserva'
   const today = format(new Date(), 'yyyy-MM-dd')
   const cat = categories.find(c => c.id === schedule.categoryId)
   const acc = accounts.find(a => a.id === schedule.accountId)
@@ -546,7 +549,7 @@ function ScheduleRow({
 
   return (
     <>
-      <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-indigo-500/5' : ''}`}>
+      <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-indigo-500/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-blue-500 bg-blue-500/[0.03]' : ''}`}>
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
@@ -600,6 +603,23 @@ function ScheduleRow({
               <span className="text-xs bg-gray-700/60 text-gray-400 px-1 py-0.5 rounded whitespace-nowrap">
                 {totalDone}/{schedule.installments}x
               </span>
+            )}
+            {canConfirm && nextDate && (
+              <button
+                type="button"
+                onClick={() => onToggleConfirmado(schedule.id)}
+                title={schedule.confirmado
+                  ? 'Valor confirmado para o próximo vencimento — clique para desmarcar'
+                  : 'Marcar valor como confirmado para o próximo vencimento'}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap transition-colors ${
+                  schedule.confirmado
+                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                    : 'bg-gray-700/60 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {schedule.confirmado ? <CheckCircle size={10} /> : <Circle size={10} />}
+                {schedule.confirmado ? 'Confirmado' : 'A confirmar'}
+              </button>
             )}
           </div>
           {reservaDetalhe && reservaDetalhe.length > 0 && (
@@ -832,7 +852,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
-  const { scheduleReservaFuncoes, reserveFunctions } = useApp()
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -982,7 +1002,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     registerScheduleOccurrence, skipScheduleOccurrence,
     deleteSchedule, onEditSchedule,
     selectionMode, onToggleSelect: toggleSelect,
-    srfBySchedule,
+    srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
   }
 
   return (

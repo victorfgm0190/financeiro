@@ -230,6 +230,7 @@ export const scheduleToRow = (s) => ({
   card_id: s.cardId || null,
   fatura_mes_ano: s.faturaMesAno || null,
   tipo: s.tipo || null,
+  confirmado: !!s.confirmado,
 })
 
 export const rowToSchedule = (r) => ({
@@ -259,6 +260,7 @@ export const rowToSchedule = (r) => ({
   cardId: r.card_id || null,
   faturaMesAno: r.fatura_mes_ano || null,
   tipo: r.tipo || null,
+  confirmado: r.confirmado ?? false,
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

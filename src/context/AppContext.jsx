@@ -809,7 +809,7 @@ export function AppProvider({ children }) {
           }
           transactions = [...transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])]
           schedules = schedules.map(s => s.id === schedule.id
-            ? { ...s, registered: [...(s.registered || []), date] } : s)
+            ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s)
         }
       }
 
@@ -1400,6 +1400,11 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.map(s => s.id === id ? { ...s, ...changes } : s) }))
   }, [update])
 
+  // Alterna a flag visual "Confirmado / A Confirmar" do agendamento.
+  const toggleScheduleConfirmado = useCallback((id) => {
+    update(d => ({ ...d, schedules: d.schedules.map(s => s.id === id ? { ...s, confirmado: !s.confirmado } : s) }))
+  }, [update])
+
   const deleteSchedule = useCallback((id) => {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
   }, [update])
@@ -1444,7 +1449,7 @@ export function AppProvider({ children }) {
           ...d, accounts,
           transactions: [...d.transactions, ...detTxs],
           schedules: d.schedules.map(s =>
-            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date] } : s
+            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s
           ),
         }
       }
@@ -1520,7 +1525,7 @@ export function AppProvider({ children }) {
         ...d, accounts,
         transactions: [...d.transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])],
         schedules: d.schedules.map(s =>
-          s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date] } : s
+          s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s
         ),
       }
     })
@@ -2801,7 +2806,7 @@ export function AppProvider({ children }) {
       ...d,
       schedules: d.schedules.map(s =>
         s.id === scheduleId
-          ? { ...s, registered: [...(s.registered || []).filter(d => d !== date), date] }
+          ? { ...s, registered: [...(s.registered || []).filter(d => d !== date), date], confirmado: false }
           : s
       ),
     }))
@@ -3549,7 +3554,7 @@ export function AppProvider({ children }) {
       addCategory, updateCategory, deleteCategory,
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
-      addSchedule, updateSchedule, deleteSchedule,
+      addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,

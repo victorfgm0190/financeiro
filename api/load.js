@@ -17,6 +17,9 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_mes_ano TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo TEXT`)
+    // Flag visual "Confirmado / A Confirmar": marca que o valor da próxima
+    // ocorrência já foi confirmado. Reseta para false ao registrar a ocorrência.
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS confirmado BOOLEAN DEFAULT false`)
     await query(`CREATE TABLE IF NOT EXISTS reserve_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
