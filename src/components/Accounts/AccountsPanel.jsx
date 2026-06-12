@@ -447,8 +447,8 @@ function calcGroupBalance(accounts) {
 }
 
 function balColor(amount) {
-  if (amount > 0.005) return 'text-emerald-400'
-  if (amount < -0.005) return 'text-red-400'
+  if (amount > 0.005) return 'text-receita'
+  if (amount < -0.005) return 'text-despesa'
   return 'text-gray-300'
 }
 
@@ -579,15 +579,15 @@ export default function AccountsPanel() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
-          <p className="text-2xl font-bold text-emerald-400 mt-1">{fmt(totalAssets)}</p>
+          <p className="text-2xl font-bold text-receita mt-1">{fmt(totalAssets)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
-          <p className="text-2xl font-bold text-red-400 mt-1">{fmt(totalCredit)}</p>
+          <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Patrimônio Líquido</p>
-          <p className={`text-2xl font-bold mt-1 ${totalAssets - totalCredit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-2xl font-bold mt-1 ${totalAssets - totalCredit >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(totalAssets - totalCredit)}
           </p>
         </div>

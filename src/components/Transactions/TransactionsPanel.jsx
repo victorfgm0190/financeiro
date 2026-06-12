@@ -66,7 +66,7 @@ function AccountPickerButton({ a, onSelect }) {
           <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
         </div>
       </div>
-      <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+      <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
         {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
       </span>
     </button>
@@ -295,7 +295,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-700 bg-gray-900/30">
+                <tr className="border-t-2 border-gray-700 bg-surface/30">
                   <td colSpan={3} className="px-4 py-3 text-sm font-bold text-gray-300">Total da Fatura</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-orange-600">{fmt(total)}</td>
                   <td colSpan={2} />
@@ -304,7 +304,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
             </table>
             </div>
             {/* Total da fatura — mobile */}
-            <div className="md:hidden flex items-center justify-between px-4 py-3 border-t-2 border-gray-700 bg-gray-900/30">
+            <div className="md:hidden flex items-center justify-between px-4 py-3 border-t-2 border-gray-700 bg-surface/30">
               <span className="text-sm font-bold text-gray-300">Total da Fatura</span>
               <span className="text-sm font-bold text-orange-600">{fmt(total)}</span>
             </div>
@@ -406,7 +406,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                   </div>
                   <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
                 </div>
-                <p className={`text-2xl font-bold ${(a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                <p className={`text-2xl font-bold ${(a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(a.balance || 0)}
                 </p>
                 <p className="text-xs text-gray-600 mt-0.5">Saldo atual</p>

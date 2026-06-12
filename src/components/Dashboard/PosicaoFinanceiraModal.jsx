@@ -59,7 +59,7 @@ export default function PosicaoFinanceiraModal() {
               <tr className="border-b border-gray-800/60 hover:bg-gray-800/20 transition-colors">
                 <td className="px-3 py-3 text-gray-200 font-medium">{account.apelido || account.name}</td>
                 <td className="px-3 py-3 text-right">
-                  <span className={`font-semibold ${saldoAtual >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                  <span className={`font-semibold ${saldoAtual >= 0 ? 'text-receita' : 'text-despesa'}`}>
                     {fmt(saldoAtual)}
                   </span>
                 </td>
@@ -76,7 +76,7 @@ export default function PosicaoFinanceiraModal() {
                     <span className="text-gray-600">—</span>
                   )}
                 </td>
-                <td className={`px-3 py-3 text-right font-bold ${saldoFinal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                <td className={`px-3 py-3 text-right font-bold ${saldoFinal >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(saldoFinal)}
                 </td>
               </tr>
@@ -101,15 +101,15 @@ export default function PosicaoFinanceiraModal() {
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-gray-700 bg-gray-900/40">
+          <tr className="border-t-2 border-gray-700 bg-surface/40">
             <td className="px-3 py-3 text-sm font-bold text-gray-100">Total</td>
-            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoAtual >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoAtual >= 0 ? 'text-receita' : 'text-despesa'}`}>
               {fmt(totals.saldoAtual)}
             </td>
             <td className={`px-3 py-3 text-right text-sm font-bold ${totals.liquido >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
               {totals.liquido >= 0 ? '+' : '-'}{fmt(Math.abs(totals.liquido))}
             </td>
-            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoFinal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoFinal >= 0 ? 'text-receita' : 'text-despesa'}`}>
               {fmt(totals.saldoFinal)}
             </td>
           </tr>

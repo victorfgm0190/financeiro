@@ -192,7 +192,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
     else if (tx.grupoGerencial)
       badge = { label: 'Gerencial', cls: 'bg-violet-500/20 text-violet-400' }
     else if (tx.reservaAuto)
-      badge = { label: 'Reserva', cls: 'bg-teal-500/20 text-teal-400' }
+      badge = { label: 'Reserva', cls: 'bg-reserva/20 text-reserva' }
     else
       badge = { label: 'Futuro', cls: 'bg-gray-500/20 text-gray-400' }
   }
@@ -652,7 +652,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
 
         {/* Table column header (desktop) */}
-        <div className="hidden md:block bg-gray-900 border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
+        <div className="hidden md:block bg-surface border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <thead>
@@ -677,7 +677,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
 
         {/* Filtros em tempo real (abaixo do header da tabela) */}
-        <div className="border-x border-gray-800 bg-gray-900">
+        <div className="border-x border-gray-800 bg-surface">
           <LancamentoFiltros
             filtros={filtros}
             setFiltros={setFiltros}
@@ -724,7 +724,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       </div>
 
       {/* ── Table body (desktop) ── */}
-      <div className="hidden md:block bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
+      <div className="hidden md:block bg-surface border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             {colGroup}
@@ -770,7 +770,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       </div>
 
       {/* ── Lista mobile (cards estilo app bancário) ── */}
-      <div className="md:hidden bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
+      <div className="md:hidden bg-surface border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800/20 border-b border-gray-800/60">
           <span className="text-xs text-gray-500 italic">Saldo inicial · {fmtDate(from)}</span>
           <span className={`text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>{fmt(startBalance)}</span>

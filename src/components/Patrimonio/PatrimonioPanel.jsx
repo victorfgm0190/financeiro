@@ -80,9 +80,9 @@ function ValueHistoryList({ account }) {
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 shadow-xl text-xs">
+    <div className="bg-surface border border-gray-700 rounded-lg px-3 py-2 shadow-xl text-xs">
       <p className="text-gray-400 mb-1">{label}</p>
-      <p className="text-emerald-400 font-bold">{fmt(payload[0]?.value ?? 0)}</p>
+      <p className="text-receita font-bold">{fmt(payload[0]?.value ?? 0)}</p>
     </div>
   )
 }
@@ -174,11 +174,11 @@ export default function PatrimonioPanel() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Contas</p>
-          <p className="text-lg font-bold text-emerald-400 mt-1">{fmt(totals.contas)}</p>
+          <p className="text-lg font-bold text-receita mt-1">{fmt(totals.contas)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Dívidas</p>
-          <p className="text-lg font-bold text-red-400 mt-1">{fmt(totals.dividas)}</p>
+          <p className="text-lg font-bold text-despesa mt-1">{fmt(totals.dividas)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Cartão</p>
@@ -186,7 +186,7 @@ export default function PatrimonioPanel() {
         </div>
         <div className="card border border-[#0F6E56]/30 bg-[#0F6E56]/5">
           <p className="text-xs text-[#0F6E56] uppercase tracking-wide font-semibold">Patrimônio Líquido</p>
-          <p className={`text-lg font-bold mt-1 ${totals.pl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(totals.pl)}</p>
+          <p className={`text-lg font-bold mt-1 ${totals.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(totals.pl)}</p>
         </div>
       </div>
 
@@ -256,7 +256,7 @@ export default function PatrimonioPanel() {
                           Aquisição: {fmt(a.acquisitionValue)}
                           {a.acquisitionDate && ` em ${a.acquisitionDate}`}
                           {gain !== null && (
-                            <span className={`ml-2 font-medium ${gain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span className={`ml-2 font-medium ${gain >= 0 ? 'text-receita' : 'text-despesa'}`}>
                               {gain >= 0 ? '+' : ''}{fmt(gain)} ({pct?.toFixed(1)}%)
                             </span>
                           )}
@@ -319,7 +319,7 @@ export default function PatrimonioPanel() {
                       )}
                     </div>
                     <div className="text-right shrink-0 ml-3">
-                      <p className="text-lg font-bold text-red-400">{fmt(a.balance || 0)}</p>
+                      <p className="text-lg font-bold text-despesa">{fmt(a.balance || 0)}</p>
                       <p className="text-xs text-gray-600">Saldo devedor</p>
                     </div>
                   </div>
@@ -359,11 +359,11 @@ export default function PatrimonioPanel() {
           </div>
           <div className="flex justify-between py-1.5 border-b border-gray-800">
             <span className="text-gray-400">(+) Contas Financeiras</span>
-            <span className="text-emerald-400 font-medium">{fmt(totals.contas)}</span>
+            <span className="text-receita font-medium">{fmt(totals.contas)}</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-gray-800">
             <span className="text-gray-400">(−) Dívidas e Passivos</span>
-            <span className="text-red-400 font-medium">{fmt(totals.dividas + totals.emprestimos)}</span>
+            <span className="text-despesa font-medium">{fmt(totals.dividas + totals.emprestimos)}</span>
           </div>
           <div className="flex justify-between py-1.5 border-b border-gray-800">
             <span className="text-gray-400">(−) Dívida Cartão de Crédito</span>
@@ -371,7 +371,7 @@ export default function PatrimonioPanel() {
           </div>
           <div className="flex justify-between py-2 font-semibold">
             <span className="text-gray-200">= Patrimônio Líquido</span>
-            <span className={totals.pl >= 0 ? 'text-emerald-400' : 'text-red-400'}>{fmt(totals.pl)}</span>
+            <span className={totals.pl >= 0 ? 'text-receita' : 'text-despesa'}>{fmt(totals.pl)}</span>
           </div>
         </div>
       </div>

@@ -14,7 +14,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md">
 
         {/* Header */}
         <div className="flex items-start gap-3 p-5 border-b border-gray-800">
@@ -47,7 +47,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
                 )}
                 <p className="text-xs text-gray-500 mt-0.5">{fmtDate(tx.date)}</p>
               </div>
-              <p className="text-base font-bold text-red-400 shrink-0">{fmt(tx.amount)}</p>
+              <p className="text-base font-bold text-despesa shrink-0">{fmt(tx.amount)}</p>
             </div>
           </div>
 
@@ -77,7 +77,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
                   </span>
                 </div>
               </div>
-              <p className="text-base font-bold text-red-400 shrink-0">{fmt(schedule.amount)}</p>
+              <p className="text-base font-bold text-despesa shrink-0">{fmt(schedule.amount)}</p>
             </div>
           </div>
 

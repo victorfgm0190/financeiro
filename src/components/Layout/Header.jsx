@@ -100,7 +100,7 @@ export default function Header({ page, financialPeriod, saldoPrincipal, saldosPr
       <div className="flex items-center gap-4 shrink-0">
         <button onClick={onShowPosicao} className="md:hidden text-right">
           <p className="text-xs text-gray-600 leading-none">Principal</p>
-          <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+          <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(saldoPrincipal ?? 0)}
           </p>
           {saldoSecRows.length > 0 && (

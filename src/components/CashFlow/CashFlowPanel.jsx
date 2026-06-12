@@ -9,7 +9,7 @@ import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-surface border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
       <p className="text-gray-400 mb-1">{label}</p>
       {payload.map(p => (
         <p key={p.name} style={{ color: p.color }} className="font-medium">
@@ -382,7 +382,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 shrink-0">lançamento</span>
                         )}
                         {row.isNetized && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">líquido</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-receita/20 text-receita shrink-0">líquido</span>
                         )}
                         {row.isEnvelope && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">envelope</span>

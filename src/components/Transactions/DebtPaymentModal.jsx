@@ -76,11 +76,11 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
         </div>
         <div className="card py-2.5">
           <p className="text-xs text-gray-500">Saldo devedor</p>
-          <p className="text-base font-bold text-red-400">{fmt(account.balance || 0)}</p>
+          <p className="text-base font-bold text-despesa">{fmt(account.balance || 0)}</p>
         </div>
         <div className="card py-2.5">
           <p className="text-xs text-gray-500">Após pagar</p>
-          <p className="text-base font-bold text-emerald-400">{fmt(remainingAfter)}</p>
+          <p className="text-base font-bold text-receita">{fmt(remainingAfter)}</p>
         </div>
       </div>
 
@@ -88,7 +88,7 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
       <div className="space-y-3">
         <div>
           <label className="label">Valor pago</label>
-          <div className="input bg-gray-900 text-gray-400 pointer-events-none">{fmt(amount)}</div>
+          <div className="input bg-surface text-gray-400 pointer-events-none">{fmt(amount)}</div>
         </div>
 
         <div>
@@ -125,11 +125,11 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
         <p className="text-xs text-gray-500 uppercase tracking-wide">O que será lançado</p>
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-400">Saída da conta corrente</span>
-          <span className="text-red-400 font-medium">−{fmt(amount)}</span>
+          <span className="text-despesa font-medium">−{fmt(amount)}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-gray-400">Redução da dívida ({account.name})</span>
-          <span className="text-emerald-400 font-medium">−{fmt(Number(principal) || 0)}</span>
+          <span className="text-receita font-medium">−{fmt(Number(principal) || 0)}</span>
         </div>
         {interest > 0 && (
           <div className="flex items-center justify-between text-sm">

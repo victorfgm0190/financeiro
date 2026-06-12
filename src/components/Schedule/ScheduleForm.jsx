@@ -60,7 +60,7 @@ function Tooltip({ text }) {
       {show && rect && (
         <div
           style={{ position: 'fixed', left: rect.right + 8, top: rect.top - 6, zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
+          className="bg-surface border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
         >
           {text}
         </div>
@@ -101,7 +101,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-64 p-4">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-64 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-200">Ocorrência de {fmtD(originalDate)}</p>
           <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-300 p-0.5 rounded transition-colors">
@@ -346,9 +346,9 @@ export default function ScheduleForm({ initial, onClose }) {
                 onClick={() => set('transactionType', t)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.transactionType === t
-                    ? t === 'income' ? 'bg-emerald-600 text-white'
-                    : t === 'transfer' ? 'bg-blue-600 text-white'
-                    : 'bg-red-600 text-white'
+                    ? t === 'income' ? 'bg-blue-600 text-white'
+                    : t === 'transfer' ? 'bg-purple-600 text-white'
+                    : 'bg-orange-600 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
@@ -649,7 +649,7 @@ export default function ScheduleForm({ initial, onClose }) {
                 <p className="text-xs text-gray-500 leading-snug">Apenas registra o lançamento, sem movimentar saldo.</p>
               )
               if (g.number === 1) return (
-                <p className="text-xs text-emerald-500/70 leading-snug">
+                <p className="text-xs text-reserva/70 leading-snug">
                   Ao efetivar, transferirá para a conta de reserva do grupo.
                 </p>
               )

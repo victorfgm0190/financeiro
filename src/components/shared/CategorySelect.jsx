@@ -119,7 +119,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
 
       {open && createPortal(
         <div id="cat-select-portal" style={dropdownStyle}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
         >
           <div className="p-1.5 border-b border-gray-800 shrink-0">
             <div className="flex items-center gap-1.5 bg-gray-800 rounded px-2 py-1">

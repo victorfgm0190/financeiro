@@ -22,7 +22,7 @@ const PERIOD_OPTS = [
 function Delta({ abs, pct, goodWhenPositive = true }) {
   if (abs === null || abs === undefined) return null
   const isGood = goodWhenPositive ? abs >= 0 : abs <= 0
-  const color = isGood ? 'text-emerald-400' : 'text-orange-600'
+  const color = isGood ? 'text-receita' : 'text-despesa'
   const Icon = abs >= 0 ? TrendingUp : TrendingDown
   return (
     <div className={`flex items-center gap-1 mt-1.5 text-xs ${color}`}>
@@ -342,14 +342,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             {saldoSecRows.map((r, i) => (
               <div key={r.label}>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500">{r.label}</p>
-                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(r.val)}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(saldoPrincipal)}
           </p>
         )}
@@ -433,14 +433,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <div className="shrink-0 text-right space-y-1.5">
               <div>
                 <p className="text-xs text-gray-500 mb-0.5">Projetado</p>
-                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-teal-400' : 'text-red-400'}`}>
+                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(saldoProjetado.projetado)}
                 </p>
               </div>
               {Math.abs(saldoProjetado.final - saldoProjetado.projetado) >= 0.005 && (
                 <div>
                   <p className="text-xs text-gray-500 mb-0.5">Final</p>
-                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
+                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-reserva' : 'text-despesa'}`}>
                     {fmt(saldoProjetado.final)}
                   </p>
                 </div>
@@ -479,7 +479,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             </span>
             <span className="text-gray-400">
               {budgetPct.toFixed(0)}% usado
-              {income - expense > 0 && <span className="ml-2 text-emerald-400">· disponível: {fmt(income - expense)}</span>}
+              {income - expense > 0 && <span className="ml-2 text-receita">· disponível: {fmt(income - expense)}</span>}
             </span>
           </div>
         </div>
@@ -679,7 +679,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           {totalDebt > 0 && (
             <span className="text-xs text-gray-500 flex items-center gap-1">
               <CreditCard size={11} className="text-purple-400" />
-              Dívida cartão: <span className="text-red-400 font-medium ml-1">{fmt(totalDebt)}</span>
+              Dívida cartão: <span className="text-despesa font-medium ml-1">{fmt(totalDebt)}</span>
             </span>
           )}
         </div>
@@ -712,7 +712,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                   <p className="text-xs text-gray-400 truncate">{a.apelido || a.name}</p>
                   {a.isMain && <span className="text-yellow-400 text-xs shrink-0 ml-1">★</span>}
                 </div>
-                <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
                 </p>
                 <p className="text-xs text-gray-600 mt-0.5">{a.type === 'credit' ? 'Dívida' : 'Saldo'}</p>

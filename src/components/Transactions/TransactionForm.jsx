@@ -670,9 +670,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               onClick={() => set('type', t.value)}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
                 form.type === t.value
-                  ? t.value === 'income' ? 'bg-emerald-600 text-white'
-                    : t.value === 'expense' ? 'bg-red-600 text-white'
-                    : 'bg-blue-600 text-white'
+                  ? t.value === 'income' ? 'bg-blue-600 text-white'
+                    : t.value === 'expense' ? 'bg-orange-600 text-white'
+                    : 'bg-purple-600 text-white'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
               }`}
             >

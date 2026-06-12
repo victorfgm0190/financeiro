@@ -66,7 +66,7 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-y-auto max-h-48"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-y-auto max-h-48"
         >
           {filtered.map((item, i) => (
             <button

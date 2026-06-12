@@ -162,7 +162,7 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
         {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
       </button>
       {open && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
           <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0 items-center">
             <button type="button" onClick={all} className="text-xs text-blue-400 hover:text-blue-300">Todos</button>
             <span className="text-gray-700">·</span>
@@ -423,7 +423,7 @@ export default function DemonstrativoFinanceiro() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 420 }}>
               <thead>
-                <tr className="border-b border-gray-700 bg-gray-900/60">
+                <tr className="border-b border-gray-700 bg-surface/60">
                   <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium w-28">Data</th>
                   <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
                   <th className="text-right px-4 py-2.5 text-xs text-gray-500 font-medium">Valor</th>

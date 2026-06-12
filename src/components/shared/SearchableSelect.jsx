@@ -169,7 +169,7 @@ export default function SearchableSelect({
       {open && rect && (
         <div
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
         >
           <div className="px-2 py-2 border-b border-gray-800 shrink-0">
             <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-800 rounded-lg">
@@ -205,7 +205,7 @@ export default function SearchableSelect({
               const ungroupedBlock = ungrouped.length > 0 && (
                 <div key="__ungrouped">
                   {ungroupedLabel && sortedGroupNames.length > 0 && (
-                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
                       {ungroupedLabel}
                     </p>
                   )}
@@ -224,7 +224,7 @@ export default function SearchableSelect({
               )
               const groupedBlock = sortedGroupNames.map(groupName => (
                 <div key={groupName}>
-                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
                     {groupName}
                   </p>
                   {groupedMap[groupName].map(opt => (

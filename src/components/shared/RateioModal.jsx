@@ -37,7 +37,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-100">Rateio do lançamento</h3>
           <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={16} /></button>
@@ -87,11 +87,11 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
 
         <div className="flex items-center justify-between text-xs border-t border-gray-800 pt-3 flex-wrap gap-3">
           <span className="text-gray-400">
-            Total atribuído: <span className="font-semibold text-emerald-400">{fmt(atribuido)}</span>
+            Total atribuído: <span className="font-semibold text-receita">{fmt(atribuido)}</span>
           </span>
           <span className="text-gray-400">
             Não atribuído:{' '}
-            <span className={`font-semibold ${Math.abs(naoAtribuido) < 0.005 ? 'text-gray-400' : naoAtribuido < 0 ? 'text-red-400' : 'text-orange-400'}`}>
+            <span className={`font-semibold ${Math.abs(naoAtribuido) < 0.005 ? 'text-gray-400' : naoAtribuido < 0 ? 'text-despesa' : 'text-orange-400'}`}>
               {fmt(naoAtribuido)}
             </span>
           </span>

@@ -46,7 +46,7 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h3 className="font-semibold text-gray-100 flex items-center gap-2">
             <CheckCircle size={16} className="text-emerald-400" /> Reconciliar Transações
@@ -65,7 +65,7 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
             </p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-900">
+              <thead className="sticky top-0 bg-surface">
                 <tr className="border-b border-gray-800">
                   <th className="px-3 py-2.5 w-10 text-center">
                     <input

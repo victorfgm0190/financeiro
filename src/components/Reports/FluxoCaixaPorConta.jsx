@@ -120,8 +120,8 @@ export default function FluxoCaixaPorConta() {
 
   const statusBadge = (status) => {
     if (status === 'Registrada') return 'bg-gray-600/30 text-gray-300'
-    if (status === 'A receber')  return 'bg-emerald-500/20 text-emerald-400'
-    return 'bg-orange-500/20 text-orange-400' // A pagar
+    if (status === 'A receber')  return 'bg-receita/20 text-receita'
+    return 'bg-despesa/20 text-despesa' // A pagar
   }
 
   const noSelection = accountIds.size === 0

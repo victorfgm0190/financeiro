@@ -70,7 +70,7 @@ export default function BudgetPanel() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo do Orçamento</p>
-          <p className={`text-xl font-bold mt-1 ${totalBudgeted - totalSpent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-xl font-bold mt-1 ${totalBudgeted - totalSpent >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(totalBudgeted - totalSpent)}
           </p>
         </div>
@@ -124,7 +124,7 @@ export default function BudgetPanel() {
                 </div>
                 <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                   <div
-                    className={`h-2 rounded-full transition-all ${overBudget ? 'bg-red-500' : nearLimit ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    className={`h-2 rounded-full transition-all ${overBudget ? 'bg-red-500' : nearLimit ? 'bg-amber-500' : 'bg-blue-500'}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>

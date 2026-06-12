@@ -65,7 +65,7 @@ function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
-  if (grupo.number === 1) cls += ' bg-emerald-500/20 text-emerald-400'
+  if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
   else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
   else cls += ' bg-orange-500/20 text-orange-600'
   return <span className={cls}>{grupo.alias}</span>
@@ -351,7 +351,7 @@ export default function CreditCardPanel() {
             <DollarSign size={13} />
             <span className="text-xs uppercase tracking-wide">Limite Disponível</span>
           </div>
-          <p className="text-2xl font-bold text-emerald-400">
+          <p className="text-2xl font-bold text-receita">
             {fmt((selectedCard?.creditLimit || 0) - (selectedCard?.creditDebt || 0))}
           </p>
           <p className="text-xs text-gray-500 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
@@ -421,7 +421,7 @@ export default function CreditCardPanel() {
           <div className="flex items-center gap-3">
             {hasGer && (
               <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold">G</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-reserva/20 text-reserva text-xs font-bold">G</span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-xs font-bold">2+</span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span>
               </div>
@@ -600,7 +600,7 @@ export default function CreditCardPanel() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t-2 border-gray-700 bg-gray-900/30 flex items-center justify-between">
+            <div className="px-4 py-3 border-t-2 border-gray-700 bg-surface/30 flex items-center justify-between">
               <span className="text-sm font-bold text-gray-300">Total da Fatura</span>
               <span className="text-sm font-bold text-orange-600">{fmt(billTotal)}</span>
             </div>
