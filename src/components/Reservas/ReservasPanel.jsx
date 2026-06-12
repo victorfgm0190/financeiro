@@ -886,10 +886,28 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
     const transfers = (schedules || []).filter(s =>
       s.transactionType === 'transfer' && (s.reservaFuncaoId || detBySchedule.has(s.id))
     )
+    // Provisões de despesa ainda não efetivadas, vinculadas a uma função de reserva. Projetam
+    // uma SAÍDA provisória ("Resgate futuro (provisão)") — adicional ao resgate real. Quando a
+    // provisão é efetivada vira o resgate real (transfer) e deixa de entrar aqui.
+    const provisoes = (schedules || []).filter(s =>
+      s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId
+    )
     const result = {}
     for (const f of linked) {
       const deps = new Array(12).fill(0)
       const ress = new Array(12).fill(0)
+      const provs = new Array(12).fill(0)
+      for (const p of provisoes) {
+        if (p.reservaFuncaoId !== f.id) continue
+        const amt = Number(p.amount) || 0
+        if (!amt) continue
+        for (const dateStr of getNextOccurrences(p, 140)) {
+          if (dateStr < winStart || dateStr > winEnd) continue
+          const idx = winIndexOf(dateStr)
+          if (idx < 0 || idx > 11) continue
+          provs[idx] = round2(provs[idx] + amt)
+        }
+      }
       for (const s of transfers) {
         const isDep = !!accById.get(s.toAccountId)?.isReserva
         const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
@@ -913,7 +931,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
           else ress[idx] = round2(ress[idx] + amt)
         }
       }
-      result[f.id] = { deps, ress }
+      result[f.id] = { deps, ress, provs }
     }
     return result
   }, [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, winStart, winEnd]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -922,14 +940,16 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
     return linked.map(f => {
       const account = accounts.find(a => a.id === f.accountId)
       const start = saldosAtualizados[f.id] ?? round2(f.saldoInicial + f.entradas - f.saidas)
-      const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0) }
+      const schd = scheduledByFunction[f.id] || { deps: new Array(12).fill(0), ress: new Array(12).fill(0), provs: new Array(12).fill(0) }
       let bal = start
       const monthly = windowMonths.map((wm, i) => {
         const dep = schd.deps[i]
         const res = schd.ress[i]
-        // mês anterior (i=0) é a referência do saldo atual; projeção começa no mês corrente
-        if (i > 0) bal = round2(bal + dep - res)
-        return { dep, res, saldo: bal, neg: bal < 0, ...wm }
+        const prov = schd.provs[i]
+        // mês anterior (i=0) é a referência do saldo atual; projeção começa no mês corrente.
+        // Provisões contam como saída adicional (resgate provisório).
+        if (i > 0) bal = round2(bal + dep - res - prov)
+        return { dep, res, prov, saldo: bal, neg: bal < 0, ...wm }
       })
       const hasAlert = monthly.some(d => d.neg)
       return { f, account, monthly, hasAlert }
@@ -937,6 +957,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
   }, [linked, accounts, saldosAtualizados, scheduledByFunction, windowMonths])
 
   const totalInvested = linked.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
+  const hasProvisao = projections.some(p => p.monthly.some(m => m.prov > 0))
   const [mobilePage, setMobilePage] = useState(0)
 
   const yy = (y) => String(y).slice(2)
@@ -980,6 +1001,11 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
         {alertCount > 0 && (
           <span className="flex items-center gap-1 text-xs text-orange-600 ml-2">
             <AlertTriangle size={12} /> {alertCount} {alertCount === 1 ? 'função ficará negativa' : 'funções ficarão negativas'}
+          </span>
+        )}
+        {hasProvisao && (
+          <span className="text-xs text-orange-400/70 italic ml-2" title="Resgates projetados a partir de provisões de despesa ainda não efetivadas">
+            ~ resgate provisório (provisão)
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
@@ -1045,6 +1071,11 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
                     <p className={`text-xs ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
                       ↑ {d.res > 0 ? fmt(d.res) : '—'}
                     </p>
+                    {d.prov > 0 && (
+                      <p className="text-[11px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
+                        ↑ ~{fmt(d.prov)}
+                      </p>
+                    )}
                     <p className={`text-xs font-semibold mt-1 ${d.neg ? 'text-orange-400' : d.saldo === 0 ? 'text-gray-600' : 'text-gray-300'}`}>
                       {fmt(d.saldo)}
                     </p>
@@ -1110,6 +1141,11 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
                       </td>
                       <td className={`px-2 py-2 text-right ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
                         {d.res > 0 ? fmt(d.res) : '—'}
+                        {d.prov > 0 && (
+                          <span className="block text-[10px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
+                            ~{fmt(d.prov)}
+                          </span>
+                        )}
                       </td>
                       <td className={`px-2 py-2 text-right font-semibold ${d.neg ? 'text-orange-400 bg-orange-500/15' : d.saldo === 0 ? 'text-gray-600' : 'text-gray-300'}`}>
                         {fmt(d.saldo)}

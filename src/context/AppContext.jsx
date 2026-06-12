@@ -1409,6 +1409,61 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
   }, [update])
 
+  // Efetiva uma Provisão de Despesa: grava o valor/data reais no registro da provisão e o
+  // marca como efetivado (passa a se comportar como agendamento de despesa normal — volta a
+  // auto-registrar). Quando a provisão estava vinculada a uma função de reserva, cria também
+  // um agendamento de Transferência (Uma vez) da conta da reserva → conta principal, com o
+  // mesmo reservaFuncaoId: é o resgate REAL que substitui a projeção provisória no Fluxo
+  // Futuro da reserva. Sem função vinculada, apenas atualiza valor/data.
+  const efetivarProvisao = useCallback((id, { amount, date }) => {
+    update(d => {
+      const prov = d.schedules.find(s => s.id === id)
+      if (!prov) return d
+      const valor = Number(amount)
+      let schedules = d.schedules.map(s => s.id === id
+        ? { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
+        : s)
+
+      if (prov.reservaFuncaoId) {
+        const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
+        const contaReserva = func?.accountId ? d.accounts.find(a => a.id === func.accountId) : null
+        const contaPrincipal =
+          d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+          d.accounts.find(a => a.isMain && a.type !== 'credit') ||
+          d.accounts.find(a => a.type === 'checking')
+        if (contaReserva && contaPrincipal) {
+          schedules = [...schedules, {
+            id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            description: `Resgate provisão — ${prov.description}`,
+            transactionType: 'transfer',
+            accountId: contaReserva.id,
+            accountType: contaReserva.type || null,
+            toAccountId: contaPrincipal.id,
+            amount: valor,
+            categoryId: '',
+            payee: '',
+            costCenter: '',
+            frequency: 'once',
+            startDate: date,
+            occurrenceType: 'continuous',
+            installments: 0,
+            registered: [],
+            skipped: [],
+            remindDaysBefore: 3,
+            autoRegister: true,
+            overrides: {},
+            grupoGerencial: null,
+            reservaExpenseCategoryId: null,
+            reservaFuncaoId: prov.reservaFuncaoId,
+            isProvisao: false,
+            provisaoEfetivada: false,
+          }]
+        }
+      }
+      return { ...d, schedules }
+    })
+  }, [update])
+
   const registerScheduleOccurrence = useCallback((scheduleId, date) => {
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
@@ -3555,6 +3610,7 @@ export function AppProvider({ children }) {
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
       addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado,
+      efetivarProvisao,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,

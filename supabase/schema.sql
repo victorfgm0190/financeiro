@@ -359,6 +359,12 @@ ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_mes_ano TEXT;
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo TEXT;
 CREATE INDEX IF NOT EXISTS idx_agendamentos_fatura ON agendamentos (card_id, fatura_mes_ano, tipo);
 
+-- Provisão de Despesa: agendamento "Uma vez" de despesa futura estimada (sem data/valor
+-- definitivos). is_provisao identifica a provisão; provisao_efetivada marca quando o
+-- valor/data reais foram confirmados (passa a se comportar como despesa normal).
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS is_provisao BOOLEAN DEFAULT false;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS provisao_efetivada BOOLEAN DEFAULT false;
+
 -- Plano de contas completo v2 (novas categorias — ON CONFLICT DO NOTHING preserva existentes)
 INSERT INTO categorias (id, name, type, color, icon, category_group) VALUES
   -- Alimentação
