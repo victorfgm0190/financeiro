@@ -144,7 +144,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
             </div>
           </div>
 
-          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
+          <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: 220 }}>
             {!query && (
               <button type="button"
                 className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-800"

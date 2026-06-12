@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 
 const GROUP_ORDER = [
@@ -180,7 +181,7 @@ export default function SearchableSelect({
         </div>
       </button>
 
-      {open && rect && (
+      {open && rect && createPortal(
         <div
           ref={panelRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
@@ -200,7 +201,7 @@ export default function SearchableSelect({
             </div>
           </div>
 
-          <div ref={listRef} className="overflow-y-auto min-h-0">
+          <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0">
             {allItems.length === 0 && (
               <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhum resultado</p>
             )}
@@ -209,7 +210,7 @@ export default function SearchableSelect({
               <button
                 type="button"
                 data-item
-                onMouseDown={e => { e.preventDefault(); handleSelect('') }}
+                onClick={() => handleSelect('')}
                 className={`w-full text-left px-3 py-2 text-sm transition-colors ${itemClass('')}`}
               >
                 {placeholder}
@@ -229,7 +230,7 @@ export default function SearchableSelect({
                       key={opt.id}
                       type="button"
                       data-item
-                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      onClick={() => handleSelect(opt.id)}
                       className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
                     >
                       {opt.label}
@@ -247,7 +248,7 @@ export default function SearchableSelect({
                       key={opt.id}
                       type="button"
                       data-item
-                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      onClick={() => handleSelect(opt.id)}
                       className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
                     >
                       {opt.label}
@@ -260,7 +261,8 @@ export default function SearchableSelect({
                 : <>{ungroupedBlock}{groupedBlock}</>
             })()}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
