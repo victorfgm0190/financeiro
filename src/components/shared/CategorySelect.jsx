@@ -78,7 +78,9 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
       width: dropW,
       zIndex: 9999,
     })
-    if (inputRef.current) inputRef.current.focus()
+    // Foca a busca no próximo frame (painel já no DOM) p/ digitar sem clique extra.
+    const raf = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
   }, [open])
 
   // close on outside click

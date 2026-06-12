@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, Fragment } from 'react'
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
@@ -115,6 +115,14 @@ function exportCSV(report, showTx, from, to) {
 function MultiSelectPanel({ label, items, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const searchRef = useRef(null)
+
+  // Ao abrir, foca a busca para filtrar sem clique extra.
+  useEffect(() => {
+    if (!open) return
+    const raf = requestAnimationFrame(() => searchRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [open])
 
   const toggle = (id) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
   const all = () => onChange(items.map(i => i.id))
@@ -169,6 +177,7 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
             <span className="text-gray-700">·</span>
             <button type="button" onClick={none} className="text-xs text-gray-500 hover:text-gray-300">Nenhum</button>
             <input
+              ref={searchRef}
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}

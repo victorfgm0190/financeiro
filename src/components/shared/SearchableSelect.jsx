@@ -89,7 +89,7 @@ export default function SearchableSelect({
     setOpen(true)
     setSearch('')
     setActive(-1)
-    setTimeout(() => searchRef.current?.focus(), 0)
+    // O foco é aplicado no useEffect [open] abaixo, depois que o painel é renderizado.
   }
 
   const closeDropdown = () => {
@@ -117,6 +117,14 @@ export default function SearchableSelect({
       closeDropdown()
     }
   }
+
+  // Ao abrir, foca o campo de busca para digitar/filtrar sem clique extra.
+  // rAF garante que o painel já está no DOM (o ref já está atribuído).
+  useEffect(() => {
+    if (!open) return
+    const raf = requestAnimationFrame(() => searchRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
