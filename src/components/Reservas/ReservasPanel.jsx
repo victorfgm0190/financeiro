@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
-  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
@@ -362,6 +362,40 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
   )
 }
 
+// ── Indicador de observação do ajuste ───────────────────────────────────────
+// Ícone ao lado do valor de ajuste. Desktop: tooltip nativo (hover via title).
+// Mobile: popover ao tocar (fecha ao tocar fora). Renderiza fora do botão que
+// abre o modal (evita botão aninhado).
+function ObsIndicator({ text }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('touchstart', onDoc)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
+  }, [open])
+  return (
+    <span ref={ref} className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
+        title={text}
+        aria-label="Ver observação do ajuste"
+        className="text-gray-500 hover:text-gray-300 transition-colors"
+      >
+        <MessageSquare size={11} />
+      </button>
+      {open && (
+        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-48 max-w-[60vw] rounded-lg border border-gray-700 bg-gray-900 px-2.5 py-2 text-[11px] font-normal normal-case leading-snug text-left text-gray-200 shadow-xl whitespace-pre-wrap">
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
+
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
 function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
@@ -541,6 +575,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                           {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
                           {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
                         </button>
+                        {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                       </div>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
@@ -629,14 +664,17 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                             <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <button
-                              onClick={() => setAjusteGroup({ account, fns })}
-                              title="Editar ajuste do mês"
-                              className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
-                            >
-                              {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
-                              {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
-                            </button>
+                            <span className="inline-flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setAjusteGroup({ account, fns })}
+                                title="Editar ajuste do mês"
+                                className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
+                              >
+                                {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                                {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
+                              </button>
+                              {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
+                            </span>
                           </td>
                           <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                             {fmt(saldo)}
@@ -706,14 +744,17 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
 // ── Modal de Ajustes de Reserva (por conta, por mês) ────────────────────────
 function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose }) {
   // Campos editáveis por função para um mês (string p/ aceitar '-'/'+'/vazio).
+  // ajusteOverride[mk] tem o formato { valor, observacao } (migrado on-the-fly).
   const buildVals = (mk) => Object.fromEntries(fns.map(f => {
-    const v = Number(f.ajusteOverride?.[mk])
+    const v = Number(f.ajusteOverride?.[mk]?.valor)
     return [f.id, v ? String(v) : '']
   }))
+  const buildObs = (mk) => Object.fromEntries(fns.map(f => [f.id, f.ajusteOverride?.[mk]?.observacao || '']))
   const [monthKey, setMonthKey] = useState(defaultMonthKey)
   const [vals, setVals] = useState(() => buildVals(defaultMonthKey))
+  const [obs, setObs] = useState(() => buildObs(defaultMonthKey))
   // Troca de mês recarrega os campos (sem efeito → evita set-state-in-effect).
-  const changeMonth = (mk) => { setMonthKey(mk); setVals(buildVals(mk)) }
+  const changeMonth = (mk) => { setMonthKey(mk); setVals(buildVals(mk)); setObs(buildObs(mk)) }
 
   // Opções de mês: 12 meses ao redor do mês padrão (mês anterior … +10).
   const monthOptions = useMemo(() => {
@@ -726,25 +767,34 @@ function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose 
   }, [defaultMonthKey])
 
   const setVal = (id, v) => setVals(s => ({ ...s, [id]: v }))
+  const setObsVal = (id, v) => setObs(s => ({ ...s, [id]: v }))
 
-  // Grava o ajuste do mês em cada função: valor 0/inválido remove a chave do mês.
-  const persist = (getValor) => {
+  // Grava o ajuste do mês em cada função como { valor, observacao }; valor
+  // 0/inválido remove a chave do mês (e a observação junto).
+  const persist = (getValor, getObs) => {
     fns.forEach(f => {
       const valor = getValor(f)
       const next = { ...(f.ajusteOverride || {}) }
-      if (valor && Number.isFinite(valor)) next[monthKey] = Math.round(valor * 100) / 100
-      else delete next[monthKey]
+      if (valor && Number.isFinite(valor)) {
+        next[monthKey] = {
+          valor: Math.round(valor * 100) / 100,
+          observacao: (getObs ? getObs(f) : '').trim(),
+        }
+      } else {
+        delete next[monthKey]
+      }
       onUpdateFunction(f.id, { ajusteOverride: next })
     })
   }
 
   const handleSave = () => {
-    persist(f => parseFloat(vals[f.id]))
+    persist(f => parseFloat(vals[f.id]), f => obs[f.id] || '')
     onClose()
   }
   const handleClearAll = () => {
     persist(() => 0)
     setVals(Object.fromEntries(fns.map(f => [f.id, ''])))
+    setObs(Object.fromEntries(fns.map(f => [f.id, ''])))
   }
 
   return (
@@ -757,17 +807,26 @@ function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose 
           </select>
         </div>
 
-        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-0.5">
           {fns.map(f => (
-            <div key={f.id} className="flex items-center gap-3">
-              <span className="text-sm text-gray-300 flex-1 truncate">{f.name}</span>
-              <input
-                type="number"
-                step="0.01"
-                value={vals[f.id] ?? ''}
-                onChange={e => setVal(f.id, e.target.value)}
-                placeholder="0,00 (± )"
-                className="input w-32 text-xs py-1.5 text-right"
+            <div key={f.id} className="space-y-1.5 pb-3 border-b border-gray-800/50 last:border-0 last:pb-0">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-300 flex-1 truncate">{f.name}</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={vals[f.id] ?? ''}
+                  onChange={e => setVal(f.id, e.target.value)}
+                  placeholder="0,00 (± )"
+                  className="input w-32 text-xs py-1.5 text-right"
+                />
+              </div>
+              <textarea
+                value={obs[f.id] ?? ''}
+                onChange={e => setObsVal(f.id, e.target.value)}
+                placeholder="Observação (opcional)"
+                rows={2}
+                className="input w-full text-xs py-1.5 resize-none"
               />
             </div>
           ))}
@@ -775,7 +834,8 @@ function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose 
 
         <p className="text-xs text-gray-600 leading-relaxed">
           O ajuste entra no saldo do mês (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores
-          negativos (ex.: -500). Zero remove o ajuste do mês.
+          negativos (ex.: -500). Zero remove o ajuste do mês (e sua observação). A observação aparece
+          como ícone no Resumo, ao lado do valor.
         </p>
 
         <div className="flex gap-3 pt-1">
@@ -1123,8 +1183,9 @@ export default function ReservasPanel() {
       saidas: f.saidasOverride != null ? f.saidasOverride : comp.saidas,
       entradasAuto: f.entradasOverride == null,
       saidasAuto: f.saidasOverride == null,
-      // Ajuste manual do mês atual (0 quando não definido).
-      ajuste: Number(f.ajusteOverride?.[currentMonthKey]) || 0,
+      // Ajuste manual do mês atual (0 quando não definido) + observação.
+      ajuste: Number(f.ajusteOverride?.[currentMonthKey]?.valor) || 0,
+      ajusteObs: f.ajusteOverride?.[currentMonthKey]?.observacao || '',
     }
   }), [functions, computedMovs, currentMonthKey])
 

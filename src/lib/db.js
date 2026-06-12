@@ -281,6 +281,22 @@ export const reserveFunctionToRow = (f) => ({
     ? f.ajusteOverride : null,
 })
 
+// Normaliza ajuste_override para o formato { "YYYY-MM": { valor, observacao } }.
+// Migração on-the-fly: valores legados (número puro) viram { valor, observacao: '' }.
+// Não roda UPDATE em massa — a conversão é persistida na próxima gravação da função.
+const normalizeAjusteOverride = (raw) => {
+  if (!raw || typeof raw !== 'object') return {}
+  const out = {}
+  for (const [mk, v] of Object.entries(raw)) {
+    if (v && typeof v === 'object') {
+      out[mk] = { valor: Number(v.valor) || 0, observacao: typeof v.observacao === 'string' ? v.observacao : '' }
+    } else {
+      out[mk] = { valor: Number(v) || 0, observacao: '' }
+    }
+  }
+  return out
+}
+
 export const rowToReserveFunction = (r) => ({
   id: r.id,
   name: r.name,
@@ -298,7 +314,7 @@ export const rowToReserveFunction = (r) => ({
     : (Number(r.entradas) ? Number(r.entradas) : null),
   saidasOverride: r.saidas_override != null ? Number(r.saidas_override)
     : (Number(r.saidas) ? Number(r.saidas) : null),
-  ajusteOverride: r.ajuste_override && typeof r.ajuste_override === 'object' ? r.ajuste_override : {},
+  ajusteOverride: normalizeAjusteOverride(r.ajuste_override),
 })
 
 export const categoryToRow = (c) => ({
