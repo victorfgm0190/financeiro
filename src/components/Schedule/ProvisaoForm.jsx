@@ -4,9 +4,24 @@ import { useApp } from '../../context/AppContext'
 import { today } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
 
-// Formulário enxuto de "Provisão de Despesa": uma despesa futura estimada (valor/data ainda
-// não definitivos), gravada como agendamento "Uma vez" de despesa com is_provisao = true.
-// Opcionalmente vinculada a uma Função de Reserva (de onde o dinheiro virá ao efetivar).
+// Mesmas frequências do ScheduleForm.
+const FREQUENCIES = [
+  { value: 'once', label: 'Única' },
+  { value: 'daily', label: 'Diária' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'biweekly', label: 'Quinzenal' },
+  { value: 'monthly', label: 'Mensal' },
+  { value: 'bimonthly', label: 'Bimestral' },
+  { value: 'quarterly', label: 'Trimestral' },
+  { value: 'quadrimestral', label: 'Quadrimestral' },
+  { value: 'semiannual', label: 'Semestral' },
+  { value: 'annual', label: 'Anual' },
+]
+const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
+
+// Formulário de "Provisão de Despesa": uma despesa futura estimada (valor/data ainda não
+// definitivos), gravada como agendamento de despesa com is_provisao = true. Pode ser "Uma vez"
+// ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 export default function ProvisaoForm({ onClose }) {
   const { accounts, categories, reserveFunctions, addSchedule } = useApp()
 
@@ -42,14 +57,19 @@ export default function ProvisaoForm({ onClose }) {
     amount: '',
     startDate: today(),
     categoryId: '',
+    frequency: 'once',
+    occurrenceType: 'continuous',
+    installments: 0,
     comReserva: false,
     reservaFuncaoId: '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const isRecorrente = form.frequency && form.frequency !== 'once'
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!form.description || !form.amount || !form.startDate) return
+    if (!form.description || !form.amount || !form.startDate || !form.frequency) return
+    if (isRecorrente && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.comReserva && !form.reservaFuncaoId) return
 
     addSchedule({
@@ -62,10 +82,10 @@ export default function ProvisaoForm({ onClose }) {
       categoryId: form.categoryId || '',
       payee: '',
       costCenter: '',
-      frequency: 'once',
+      frequency: form.frequency,
       startDate: form.startDate,
-      occurrenceType: 'continuous',
-      installments: 0,
+      occurrenceType: isRecorrente ? form.occurrenceType : 'continuous',
+      installments: isRecorrente ? Number(form.installments) : 0,
       remindDaysBefore: 3,
       // Provisão é uma estimativa: não auto-registra até ser efetivada. Continua aparecendo
       // como despesa futura projetada no Fluxo de Caixa Principal.
@@ -85,8 +105,9 @@ export default function ProvisaoForm({ onClose }) {
       <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
         <Info size={14} className="text-amber-400 shrink-0 mt-0.5" />
         <p className="text-xs text-amber-300/90 leading-snug">
-          Uma provisão é uma despesa futura estimada. Aparece no Fluxo de Caixa Principal como
-          despesa "Uma vez" e pode ser efetivada depois com o valor e a data reais.
+          Uma provisão é uma despesa futura estimada. Pode ser Única ou recorrente
+          (Contínua/Parcelada). Aparece no Fluxo de Caixa Principal e pode ser efetivada depois,
+          ocorrência a ocorrência, com o valor e a data reais.
         </p>
       </div>
 
@@ -118,9 +139,9 @@ export default function ProvisaoForm({ onClose }) {
           />
         </div>
 
-        {/* Data estimada */}
+        {/* Data estimada (1ª ocorrência quando recorrente) */}
         <div>
-          <label className="label">Data estimada *</label>
+          <label className="label">{isRecorrente ? 'Data estimada (1ª ocorrência) *' : 'Data estimada *'}</label>
           <input
             className="input"
             type="date"
@@ -130,6 +151,54 @@ export default function ProvisaoForm({ onClose }) {
           />
         </div>
       </div>
+
+      {/* Frequência + Ocorrência (mesmo padrão do agendamento normal) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Frequência *</label>
+          <SearchableSelect
+            options={FREQ_OPTIONS}
+            value={form.frequency}
+            onChange={id => setForm(f => ({ ...f, frequency: id, ...(id === 'once' || !id ? { occurrenceType: 'continuous' } : {}) }))}
+            placeholder="Selecione a frequência..."
+            required
+          />
+        </div>
+
+        {isRecorrente && (
+          <div className={form.occurrenceType === 'installment' ? '' : 'col-span-1'}>
+            <label className="label">Ocorrência</label>
+            <div className="flex rounded-lg overflow-hidden border border-gray-700">
+              {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
+                <button
+                  type="button"
+                  key={v}
+                  onClick={() => set('occurrenceType', v)}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    form.occurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {isRecorrente && form.occurrenceType === 'installment' && (
+        <div>
+          <label className="label">Nº de Parcelas</label>
+          <input
+            className="input"
+            type="number"
+            min="1"
+            max="360"
+            value={form.installments}
+            onChange={e => set('installments', e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Categoria (opcional) */}
       <div>

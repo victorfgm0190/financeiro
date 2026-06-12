@@ -233,6 +233,7 @@ export const scheduleToRow = (s) => ({
   confirmado: !!s.confirmado,
   is_provisao: !!s.isProvisao,
   provisao_efetivada: !!s.provisaoEfetivada,
+  provisao_efetivada_until: s.provisaoEfetivadaUntil || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -265,6 +266,7 @@ export const rowToSchedule = (r) => ({
   confirmado: r.confirmado ?? false,
   isProvisao: !!r.is_provisao,
   provisaoEfetivada: !!r.provisao_efetivada,
+  provisaoEfetivadaUntil: toDateStr(r.provisao_efetivada_until),
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

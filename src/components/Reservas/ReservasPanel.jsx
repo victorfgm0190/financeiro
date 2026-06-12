@@ -901,12 +901,16 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
         if (p.reservaFuncaoId !== f.id) continue
         const amt = Number(p.amount) || 0
         if (!amt) continue
-        for (const dateStr of getNextOccurrences(p, 140)) {
-          if (dateStr < winStart || dateStr > winEnd) continue
-          const idx = winIndexOf(dateStr)
-          if (idx < 0 || idx > 11) continue
-          provs[idx] = round2(provs[idx] + amt)
-        }
+        // Projeta APENAS a próxima ocorrência ainda não efetivada (primeira após
+        // provisao_efetivada_until, ou a próxima se until null) — não a janela inteira.
+        // Ocorrências já efetivadas viram resgate real (transfer) e entram em `ress`.
+        const occs = getNextOccurrences(p, 24)
+        const until = p.provisaoEfetivadaUntil || null
+        const proxima = until ? occs.find(dd => dd > until) : occs[0]
+        if (!proxima || proxima < winStart || proxima > winEnd) continue
+        const idx = winIndexOf(proxima)
+        if (idx < 0 || idx > 11) continue
+        provs[idx] = round2(provs[idx] + amt)
       }
       for (const s of transfers) {
         const isDep = !!accById.get(s.toAccountId)?.isReserva

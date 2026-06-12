@@ -518,12 +518,18 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 function ScheduleRow({
   schedule, nextDate, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
-  deleteSchedule, onEditSchedule, efetivarProvisao,
+  deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
   srfBySchedule, onToggleConfirmado,
 }) {
-  // Provisão de despesa ainda não efetivada: exibe badge "Provisão" e botão "Efetivar".
-  const isProvisaoPendente = !!schedule.isProvisao && !schedule.provisaoEfetivada
+  // Provisão de despesa exibe badge "Provisão". O botão "Efetivar" aparece enquanto houver uma
+  // próxima ocorrência a efetivar: para "Uma vez", até provisao_efetivada virar true; para
+  // recorrente, sempre que existir ocorrência após provisao_efetivada_until.
+  const isProvisao = !!schedule.isProvisao
+  const proximaProvisao = isProvisao && !schedule.provisaoEfetivada
+    ? ((schedule.frequency || 'once') === 'once' ? schedule.startDate : getProximaProvisaoOccurrence?.(schedule))
+    : null
+  const isProvisaoPendente = isProvisao && !schedule.provisaoEfetivada && !!proximaProvisao
   // Flag "Confirmado / A Confirmar" aplica-se a tudo, exceto automação pura
   // (gerencial_devolucao / resgate_reserva). Em pagamento_fatura é só visual.
   const canConfirm = schedule.tipo !== 'gerencial_devolucao' && schedule.tipo !== 'resgate_reserva'
@@ -596,9 +602,9 @@ function ScheduleRow({
         <td className="px-3 py-3 max-w-[200px]">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
-            {isProvisaoPendente && (
-              <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title="Despesa provisionada — valor/data estimados">
-                <Hourglass size={9} /> Provisão
+            {isProvisao && !schedule.provisaoEfetivada && (
+              <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
+                <Hourglass size={9} /> Provisão{schedule.frequency !== 'once' ? ' recorrente' : ''}
               </span>
             )}
             {schedule.transactionType === 'expense' && (
@@ -779,20 +785,27 @@ function ScheduleRow({
           schedule={schedule}
           accounts={accounts}
           onClose={() => setShowEfetivar(false)}
-          onConfirm={({ amount, date }) => { efetivarProvisao(schedule.id, { amount, date }); setShowEfetivar(false) }}
+          onConfirm={(payload) => { efetivarProvisao(schedule.id, payload); setShowEfetivar(false) }}
         />
       )}
     </>
   )
 }
 
-// Modal de "Efetivar Provisão": edita valor e data REAIS. Ao confirmar, a provisão é gravada
-// com esses valores, marcada como efetivada e — se vinculada a uma função de reserva — gera o
-// agendamento de resgate (transferência reserva → conta principal) via efetivarProvisao.
+// Modal de "Efetivar Provisão": edita valor e data REAIS.
+//   • Provisão "Uma vez": ao confirmar, grava valor/data no registro e o marca como efetivado.
+//   • Provisão recorrente: efetiva apenas a próxima ocorrência (override) e avança a série; o
+//     botão volta a ficar disponível para a ocorrência seguinte.
+// Havendo função de reserva, gera o resgate real (transferência reserva → conta principal).
 function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
-  const { reserveFunctions } = useApp()
-  const [amount, setAmount] = useState(String(schedule.amount ?? ''))
-  const [date, setDate] = useState(schedule.startDate || format(new Date(), 'yyyy-MM-dd'))
+  const { reserveFunctions, getProximaProvisaoOccurrence } = useApp()
+  const isOnce = (schedule.frequency || 'once') === 'once'
+  // Ocorrência alvo (recorrente): primeira ainda não efetivada.
+  const occDate = isOnce ? null : getProximaProvisaoOccurrence(schedule)
+  const ov = !isOnce && occDate ? schedule.overrides?.[occDate] : null
+
+  const [amount, setAmount] = useState(String(ov?.amount ?? schedule.amount ?? ''))
+  const [date, setDate] = useState(ov?.date || (isOnce ? schedule.startDate : occDate) || format(new Date(), 'yyyy-MM-dd'))
 
   const func = schedule.reservaFuncaoId
     ? (reserveFunctions || []).find(f => f.id === schedule.reservaFuncaoId)
@@ -817,6 +830,11 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
           <div>
             <p className="text-xs text-gray-500">Provisão</p>
             <p className="text-sm text-gray-200 font-medium">{schedule.description}</p>
+            {!isOnce && occDate && (
+              <p className="text-xs text-amber-400/90 mt-1">
+                Ocorrência de {fmtDate(occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -848,6 +866,13 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
               Sem reserva vinculada — apenas o valor e a data serão atualizados.
             </p>
           )}
+
+          {!isOnce && (
+            <p className="text-xs text-gray-500 leading-snug">
+              A série continua: as próximas ocorrências permanecem como provisão e poderão ser
+              efetivadas depois.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
@@ -855,7 +880,7 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
             disabled={!valido}
-            onClick={() => valido && onConfirm({ amount: Number(amount), date })}
+            onClick={() => valido && onConfirm({ amount: Number(amount), date, occurrenceDate: occDate })}
           >
             <CheckCircle size={14} /> Efetivar
           </button>
@@ -959,7 +984,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado } = useApp()
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1107,7 +1132,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
-    deleteSchedule, onEditSchedule, efetivarProvisao,
+    deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
     selectionMode, onToggleSelect: toggleSelect,
     srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
   }

@@ -1409,20 +1409,36 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
   }, [update])
 
-  // Efetiva uma Provisão de Despesa: grava o valor/data reais no registro da provisão e o
-  // marca como efetivado (passa a se comportar como agendamento de despesa normal — volta a
-  // auto-registrar). Quando a provisão estava vinculada a uma função de reserva, cria também
-  // um agendamento de Transferência (Uma vez) da conta da reserva → conta principal, com o
-  // mesmo reservaFuncaoId: é o resgate REAL que substitui a projeção provisória no Fluxo
-  // Futuro da reserva. Sem função vinculada, apenas atualiza valor/data.
-  const efetivarProvisao = useCallback((id, { amount, date }) => {
+  // Efetiva uma Provisão de Despesa com o valor/data reais informados.
+  //
+  // • Provisão "Uma vez" (frequency === 'once'): grava valor/data no próprio registro e o marca
+  //   como efetivado (provisao_efetivada = true; volta a auto-registrar como despesa normal).
+  //
+  // • Provisão recorrente (Contínua/Parcelada): efetiva apenas UMA ocorrência (occurrenceDate).
+  //   Grava o valor/data ajustados como override dessa ocorrência e avança provisao_efetivada_until
+  //   para a data da ocorrência efetivada — a série continua (is_provisao/provisao_efetivada
+  //   inalterados) e a próxima ocorrência fica disponível para efetivar mais tarde.
+  //
+  // Em ambos os casos, havendo reservaFuncaoId, cria um agendamento de Transferência (Uma vez)
+  // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
+  // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
+  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
     update(d => {
       const prov = d.schedules.find(s => s.id === id)
       if (!prov) return d
       const valor = Number(amount)
-      let schedules = d.schedules.map(s => s.id === id
-        ? { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
-        : s)
+      const isOnce = (prov.frequency || 'once') === 'once'
+
+      let schedules = d.schedules.map(s => {
+        if (s.id !== id) return s
+        if (isOnce) {
+          return { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
+        }
+        // Recorrente: override da ocorrência + avanço de provisao_efetivada_until.
+        const origDate = occurrenceDate || s.startDate
+        const overrides = { ...(s.overrides || {}), [origDate]: { date, amount: valor } }
+        return { ...s, overrides, provisaoEfetivadaUntil: origDate }
+      })
 
       if (prov.reservaFuncaoId) {
         const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
@@ -1775,6 +1791,18 @@ export function AppProvider({ children }) {
     }
     return occurrences
   }, [])
+
+  // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
+  // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
+  // provisão "Uma vez" devolve a própria startDate (a única ocorrência). Devolve null quando
+  // não há mais ocorrências a efetivar (ex.: parcelada já totalmente efetivada).
+  const getProximaProvisaoOccurrence = useCallback((schedule) => {
+    if (!schedule) return null
+    const occs = getNextOccurrences(schedule, 24)
+    const until = schedule.provisaoEfetivadaUntil || null
+    if (!until) return occs[0] || null
+    return occs.find(d => d > until) || null
+  }, [getNextOccurrences])
 
   // ── Saldos por conta (ciclo financeiro) ───────────────────────────────────────
   // Calcula os 5 saldos do ciclo a partir de initialBalance + transações/agendamentos,
@@ -3610,7 +3638,7 @@ export function AppProvider({ children }) {
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
       addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado,
-      efetivarProvisao,
+      efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,
