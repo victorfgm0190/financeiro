@@ -24,9 +24,11 @@ export default function FluxoCaixaPorConta() {
   const [end, setEnd] = useState(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'))
   const [includeSchedules, setIncludeSchedules] = useState(true)
   const [hideReserva, setHideReserva] = useState(false)
+  const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  const patrimonioSet = useMemo(() => new Set(accounts.filter(a => a.vinculoTipo === 'patrimonio').map(a => a.id)), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
 
   const groups = useMemo(
@@ -49,6 +51,9 @@ export default function FluxoCaixaPorConta() {
     const tdy = todayStr()
     // Movimento que toca uma conta de reserva (origem ou destino) — ocultado quando ligado.
     const tocaReserva = (from, to) => hideReserva && (reservaSet.has(from) || reservaSet.has(to))
+    // Idem para contas com vínculo Patrimônio.
+    const tocaPatrimonio = (from, to) => hidePatrimonio && (patrimonioSet.has(from) || patrimonioSet.has(to))
+    const oculto = (from, to) => tocaReserva(from, to) || tocaPatrimonio(from, to)
 
     // Entrada (depósito) / saída (pagamento) de um movimento em relação ao conjunto selecionado.
     // Transferências internas (ambos os lados no conjunto) são neutralizadas.
@@ -69,7 +74,7 @@ export default function FluxoCaixaPorConta() {
     // Passadas e presentes: lançamentos reais dentro do período → "Registrada".
     transactions.forEach(tx => {
       if (tx.date < start || tx.date > end) return
-      if (tocaReserva(tx.accountId, tx.toAccountId)) return
+      if (oculto(tx.accountId, tx.toAccountId)) return
       const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
       if (!m) return
       out.push({
@@ -83,7 +88,7 @@ export default function FluxoCaixaPorConta() {
     if (includeSchedules) {
       schedules.forEach(s => {
         if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
-        if (tocaReserva(s.accountId, s.toAccountId)) return
+        if (oculto(s.accountId, s.toAccountId)) return
         getNextOccurrences(s, 400).forEach(date => {
           if (date <= tdy || date < start || date > end) return
           const m = classify(s.transactionType, s.accountId, s.toAccountId, s.amount)
@@ -107,7 +112,7 @@ export default function FluxoCaixaPorConta() {
       r.saldo = bal
     })
     return out
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
@@ -200,6 +205,14 @@ export default function FluxoCaixaPorConta() {
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
               <span className="text-sm text-gray-300 select-none">Ocultar movimentos de reserva</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <div className="relative shrink-0">
+                <input type="checkbox" checked={hidePatrimonio} onChange={e => setHidePatrimonio(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+              </div>
+              <span className="text-sm text-gray-300 select-none">Ocultar movimentos de patrimônio</span>
             </label>
           </div>
           {!noSelection && (

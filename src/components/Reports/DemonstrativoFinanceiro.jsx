@@ -30,7 +30,7 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
@@ -38,7 +38,8 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
-    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId)))
+    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId))) &&
+    !(hidePatrimonio && tx.origin === 'patrimonioAuto')
   )
 
   function buildSection(txList) {
@@ -259,6 +260,7 @@ export default function DemonstrativoFinanceiro() {
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const [hideReserva, setHideReserva] = useState(false)
+  const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(1)
@@ -321,8 +323,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
@@ -344,6 +346,15 @@ export default function DemonstrativoFinanceiro() {
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideReserva ? 'left-4' : 'left-0.5'}`} />
               </div>
               Ocultar movimentos de reserva
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <div
+                onClick={() => setHidePatrimonio(v => !v)}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hidePatrimonio ? 'left-4' : 'left-0.5'}`} />
+              </div>
+              Ocultar movimentos de patrimônio
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
               <div

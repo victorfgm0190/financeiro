@@ -103,7 +103,10 @@ export default function PatrimonioPanel() {
 
     for (const a of accounts) {
       const group = accountGroups.find(g => g.id === a.accountGroupId)
-      if (group?.type === 'patrimonial') {
+      // Contas com vínculo "Patrimônio" são sempre tratadas como investimento.
+      if (a.vinculoTipo === 'patrimonio') {
+        investimentos.push(a)
+      } else if (group?.type === 'patrimonial') {
         if (group.behavior === 'divida') dividas.push(a)
         else if (group.behavior === 'emprestimo') emprestimos.push(a)
         else bens.push(a)
@@ -296,6 +299,32 @@ export default function PatrimonioPanel() {
         </div>
       )}
 
+      {/* Investimentos (inclui contas com vínculo Patrimônio) */}
+      {categorized.investimentos.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Landmark size={14} className="text-blue-400" /> Investimentos
+          </h2>
+          <div className="space-y-2">
+            {categorized.investimentos.map(a => (
+              <div key={a.id} className="card">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-200 text-sm">{a.name}</p>
+                    <p className="text-xs text-gray-600">
+                      {a.bank ? `${a.bank} · ` : ''}{a.vinculoTipo === 'patrimonio' ? 'Patrimônio' : 'Aplicação'}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className="text-lg font-bold text-blue-400">{fmt(a.balance || 0)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Dívidas e Passivos */}
       {(categorized.dividas.length > 0 || categorized.emprestimos.length > 0) && (
         <div className="space-y-3">
@@ -377,7 +406,7 @@ export default function PatrimonioPanel() {
       </div>
 
       {/* Empty state */}
-      {categorized.bens.length === 0 && categorized.dividas.length === 0 && categorized.emprestimos.length === 0 && (
+      {categorized.bens.length === 0 && categorized.dividas.length === 0 && categorized.emprestimos.length === 0 && categorized.investimentos.length === 0 && (
         <div className="card text-center py-12">
           <Landmark size={32} className="text-gray-700 mx-auto mb-3" />
           <p className="text-gray-500 text-sm">Nenhuma conta patrimonial cadastrada</p>

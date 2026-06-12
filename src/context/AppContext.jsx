@@ -363,7 +363,9 @@ const defaultData = {
   scheduleReservaFuncoes: [],
 }
 
-// Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true)
+// Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true) e de
+// patrimônio (accountId: null, origin: 'patrimonioAuto'). Ambos seguem a mesma mecânica:
+// transferência PARA a conta vinculada = despesa; transferência DA conta = receita.
 function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
   if (tx.type !== 'transfer') return []
   const extraTxs = []
@@ -371,6 +373,30 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
   const fromAcc = accounts.find(a => a.id === tx.accountId)
   const now = new Date().toISOString()
   const base = Date.now()
+
+  // ── Patrimônio/Investimento ──────────────────────────────────────────────
+  // Ida (Principal → Patrimônio) = despesa; volta (Patrimônio → Principal) = receita.
+  const isPatrimonio = (acc) => acc?.vinculoTipo === 'patrimonio' && !!acc?.patrimonioCategoryId
+  if (isPatrimonio(toAcc)) {
+    extraTxs.push({
+      id: 'tx_patr_' + base + '_' + Math.random().toString(36).slice(2),
+      type: 'expense', accountId: null, amount: Number(tx.amount),
+      categoryId: toAcc.patrimonioCategoryId,
+      description: `Patrimônio: ${toAcc.apelido || toAcc.name}`,
+      date: tx.date, createdAt: now, origin: 'patrimonioAuto',
+      ...(parentTxId ? { parentTxId } : {}),
+    })
+  }
+  if (isPatrimonio(fromAcc)) {
+    extraTxs.push({
+      id: 'tx_patr_' + base + '_' + Math.random().toString(36).slice(2) + '_r',
+      type: 'income', accountId: null, amount: Number(tx.amount),
+      categoryId: fromAcc.patrimonioCategoryId,
+      description: `Resgate Patrimônio: ${fromAcc.apelido || fromAcc.name}`,
+      date: tx.date, createdAt: now, origin: 'patrimonioAuto',
+      ...(parentTxId ? { parentTxId } : {}),
+    })
+  }
 
   if (toAcc?.isReserva) {
     const catId = tx.reservaExpenseCategoryId ||
@@ -1008,7 +1034,8 @@ export function AppProvider({ children }) {
         !txIds.has(t.id) &&
         !(t.reservaAuto && txIds.has(t.parentTxId)) &&
         !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId)) &&
-        !(t.origin === 'investAuto' && txIds.has(t.parentTxId))
+        !(t.origin === 'investAuto' && txIds.has(t.parentTxId)) &&
+        !(t.origin === 'patrimonioAuto' && txIds.has(t.parentTxId))
       )
 
       // Remove os contas-a-pagar (payables) gerados por ESTE lote. Operação SOMENTE de
@@ -1157,10 +1184,10 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, auto-provisão, investAuto)
+      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, patrimonioAuto, auto-provisão, investAuto)
       const children = transactions.filter(t =>
         t.parentTxId === id &&
-        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.reservaAuto)
+        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto' || t.reservaAuto)
       )
       for (const c of children) reverseBalance(c)
       const childIds = new Set(children.map(c => c.id))
@@ -1270,10 +1297,10 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, auto-provisão, investAuto)
+      // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, patrimonioAuto, auto-provisão, investAuto)
       const children = transactions.filter(t =>
         t.parentTxId === id &&
-        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.reservaAuto)
+        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto' || t.reservaAuto)
       )
       for (const c of children) reverseBalance(c)
       const childIds = new Set(children.map(c => c.id))
@@ -1792,7 +1819,7 @@ export function AppProvider({ children }) {
       if (env.accountId !== account.id) continue
       let spent = 0
       for (const tx of data.transactions) {
-        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'investAuto') continue
+        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
         if (!env.categoryIds?.includes(tx.categoryId)) continue
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
         spent += tx.amount
@@ -1912,7 +1939,7 @@ export function AppProvider({ children }) {
       if (!poolIds.has(env.accountId)) continue
       let spent = 0
       for (const tx of data.transactions) {
-        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'investAuto') continue
+        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
         if (!env.categoryIds?.includes(tx.categoryId)) continue
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
         spent += tx.amount
@@ -2432,7 +2459,7 @@ export function AppProvider({ children }) {
       const subcontaName = `Ger. ${apelido}`
 
       // 1. Gastos reais desta fatura (ignora automações: reservaAuto / auto-provisao / investAuto)
-      const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto'
+      const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto'
       const belongs = (tx) =>
         tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === cardId &&
         !isAutomacao(tx) &&
@@ -2671,7 +2698,7 @@ export function AppProvider({ children }) {
           const faturas = new Set()
           for (const tx of nd.transactions) {
             if (tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === card.id) {
-              if (tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto') continue
+              if (tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto') continue
               const fmy = faturaMesAnoOf(card, tx.date, tx.faturaMonthYear)
               if (fmy) faturas.add(fmy)
             }

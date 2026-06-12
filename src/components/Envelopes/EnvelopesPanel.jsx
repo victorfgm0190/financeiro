@@ -302,7 +302,7 @@ export default function EnvelopesPanel() {
     return envelopes.map(env => {
       const txs = transactions.filter(tx =>
         tx.type === 'expense' &&
-        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'investAuto' &&
+        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto' &&
         env.categoryIds.includes(tx.categoryId) &&
         competenciaKeyOf(tx.date, startDay) === compKey
       )

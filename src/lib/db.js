@@ -107,6 +107,10 @@ export const accountToRow = (a) => ({
   is_reserva: !!a.isReserva,
   reserva_type: a.reservaType || null,
   reserva_category_id: a.reservaCategoryId || null,
+  // Vínculo da conta: 'none' | 'reserva' | 'patrimonio' (fonte de verdade).
+  // is_reserva é mantido sincronizado (= vinculo_tipo === 'reserva') por compatibilidade.
+  vinculo_tipo: a.vinculoTipo || (a.isReserva ? 'reserva' : 'none'),
+  patrimonio_category_id: a.patrimonioCategoryId || null,
   conta_aplicacao: !!a.contaAplicacao,
   projected_balance: a.projectedBalance != null ? Math.round(Number(a.projectedBalance) * 100) / 100 : null,
   active: a.active !== false,
@@ -140,6 +144,8 @@ export const rowToAccount = (r) => ({
   isReserva: !!r.is_reserva,
   reservaType: r.reserva_type || null,
   reservaCategoryId: r.reserva_category_id || null,
+  vinculoTipo: r.vinculo_tipo || (r.is_reserva ? 'reserva' : 'none'),
+  patrimonioCategoryId: r.patrimonio_category_id || null,
   contaAplicacao: !!r.conta_aplicacao,
   projectedBalance: r.projected_balance != null ? Math.round(Number(r.projected_balance) * 100) / 100 : null,
   active: r.active !== false,
