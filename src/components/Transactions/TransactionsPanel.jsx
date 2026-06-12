@@ -4,10 +4,12 @@ import {
   ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2, CheckCircle2, Circle, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import TransactionForm from './TransactionForm'
@@ -138,8 +140,8 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Breadcrumb — fixo no topo ao rolar (mobile) */}
+      <div className="flex items-center gap-2 flex-wrap sticky top-0 z-20 bg-gray-950 py-2 -my-2 md:static md:bg-transparent md:py-0 md:my-0">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -163,7 +165,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           )}
           <button
             onClick={onNewTx}
-            className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5"
+            className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5"
           >
             <Plus size={12} /> Novo
           </button>
@@ -199,7 +201,26 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
             <button onClick={onNewTx} className="btn-primary mt-3 text-xs">Adicionar lançamento</button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile: cards estilo app bancário */}
+            <div className="md:hidden">
+              {displayTxs.length === 0 ? (
+                <p className="text-center py-8 text-gray-500 text-xs">Nenhum lançamento corresponde aos filtros</p>
+              ) : displayTxs.map(tx => (
+                <TxMobileItem
+                  key={tx.id}
+                  type="expense"
+                  title={tx.payee || tx.description || 'Despesa'}
+                  subtitle={tx.payee ? tx.description : null}
+                  dateLabel={fmtDate(tx.date)}
+                  amount={tx.amount}
+                  dimmed={!tx.reconciled}
+                  onClick={() => { setEditTx(tx); setShowEdit(true) }}
+                />
+              ))}
+            </div>
+            {/* Desktop: tabela */}
+            <div className="overflow-x-auto hidden md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
@@ -281,7 +302,13 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 </tr>
               </tfoot>
             </table>
-          </div>
+            </div>
+            {/* Total da fatura — mobile */}
+            <div className="md:hidden flex items-center justify-between px-4 py-3 border-t-2 border-gray-700 bg-gray-900/30">
+              <span className="text-sm font-bold text-gray-300">Total da Fatura</span>
+              <span className="text-sm font-bold text-orange-600">{fmt(total)}</span>
+            </div>
+          </>
         )}
       </div>
 
@@ -351,7 +378,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-300">Contas</h2>
-          <button onClick={() => onNewTx()} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
+          <button onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
             <Plus size={12} /> Novo
           </button>
         </div>
@@ -520,6 +547,14 @@ export default function TransactionsPanel() {
     setModalAccount(null)
     setModalStep('pick')
   }
+
+  // FAB mobile: abre o novo lançamento já no contexto da view atual
+  // (conta em extrato, cartão em fatura) ou no seletor de conta na lista.
+  useRegisterFab(() => {
+    if (view?.type === 'account') openNewTx(view.account)
+    else if (view?.type === 'fatura') openNewTx(view.card)
+    else openNewTx()
+  }, [view, accounts.length])
 
   // Account extrato view
   if (view?.type === 'account') {

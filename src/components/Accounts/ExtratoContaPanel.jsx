@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
@@ -604,7 +605,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 <Zap size={12} /> Conciliar Gerenciais
               </button>
               {onNewTx && (
-                <button onClick={onNewTx} className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5">
+                <button onClick={onNewTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
                 </button>
               )}
@@ -650,8 +651,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           </div>
         </div>
 
-        {/* Table column header */}
-        <div className="bg-gray-900 border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
+        {/* Table column header (desktop) */}
+        <div className="hidden md:block bg-gray-900 border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <thead>
@@ -722,8 +723,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
       </div>
 
-      {/* ── Table body ── */}
-      <div className="bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
+      {/* ── Table body (desktop) ── */}
+      <div className="hidden md:block bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             {colGroup}
@@ -766,6 +767,77 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ── Lista mobile (cards estilo app bancário) ── */}
+      <div className="md:hidden bg-gray-900 border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800/20 border-b border-gray-800/60">
+          <span className="text-xs text-gray-500 italic">Saldo inicial · {fmtDate(from)}</span>
+          <span className={`text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>{fmt(startBalance)}</span>
+        </div>
+        {displayRows.length === 0 ? (
+          <p className="text-center py-10 text-gray-500 text-xs">
+            {hasLancFiltros(filtros) || reconFilter !== 'todos' ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
+          </p>
+        ) : displayRows.map((row, i) => {
+          const saldoNode = (
+            <p className={`text-[11px] mt-0.5 ${row.runningBalance >= 0 ? 'text-gray-500' : 'text-orange-600'}`}>
+              Saldo {fmt(row.runningBalance)}
+            </p>
+          )
+          if (row.kind === 'netted') {
+            const allRec = row.txs.every(t => t.reconciled)
+            const otherAcc = accounts.find(a => a.id === row.otherAccountId)
+            const otherName = otherAcc ? (otherAcc.apelido || otherAcc.name) : '?'
+            return (
+              <TxMobileItem
+                key={i}
+                type="transfer"
+                title="Transf. líquida"
+                subtitle={`${otherName} · ${row.txs.length} mov.`}
+                dateLabel={fmtDate(row.date)}
+                amount={Math.abs(row.netFlow)}
+                dimmed={allRec}
+                trailing={saldoNode}
+              />
+            )
+          }
+          const tx = row.tx
+          const delta = txDelta(tx, account.id)
+          const isTransfer = tx.type === 'transfer' || tx.type === 'credit_payment'
+          const fromAcc = accounts.find(a => a.id === tx.accountId)
+          const toAcc = accounts.find(a => a.id === tx.toAccountId)
+          const subtitle = isTransfer
+            ? `${fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'} → ${toAcc ? (toAcc.apelido || toAcc.name) : '—'}`
+            : (tx.payee && tx.description && tx.description !== tx.payee ? tx.description : null)
+          const title = tx.payee || tx.description ||
+            (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
+          return (
+            <TxMobileItem
+              key={i}
+              type={tx.type}
+              title={title}
+              subtitle={subtitle}
+              dateLabel={fmtDate(tx.date)}
+              amount={Math.abs(delta)}
+              dimmed={!tx.reconciled}
+              onClick={onEdit ? () => onEdit(tx) : undefined}
+              trailing={saldoNode}
+              leading={
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
+                  className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
+                  title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                >
+                  {tx.reconciled
+                    ? <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-green-500"><Check size={12} strokeWidth={3} className="text-white" /></span>
+                    : <Circle size={16} className="text-gray-600" />}
+                </button>
+              }
+            />
+          )
+        })}
       </div>
 
       <ConfirmDialog

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
+import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -1322,6 +1323,9 @@ export default function SchedulePanel() {
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
   const [showZeroed, setShowZeroed] = useState(false)
 
+  // FAB mobile: abre o formulário de novo agendamento.
+  useRegisterFab(() => { setEditSchedule(null); setShowForm(true) }, [])
+
   // Filtros em tempo real (aba Agendamentos)
   const [fltFrom, setFltFrom] = useState('')
   const [fltTo, setFltTo] = useState('')
@@ -1537,7 +1541,7 @@ export default function SchedulePanel() {
             </button>
           )}
           {activeTab === 'conta' && (
-            <button className="btn-primary flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
+            <button className="btn-primary hidden md:flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
               <Plus size={14} /> Novo Agendamento
             </button>
           )}

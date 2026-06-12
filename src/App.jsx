@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
+import { FabProvider, useFab } from './context/FabContext'
 import { useAutoBackup } from './hooks/useAutoBackup'
 import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
@@ -32,6 +33,14 @@ function AppContent() {
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
   const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, data } = useApp()
+  const { fabAction } = useFab()
+
+  // FAB central (BottomNav mobile): usa a ação contextual registrada pela tela
+  // ativa (ex.: novo lançamento na conta/cartão atual); senão, quick-add global.
+  const handleFab = useCallback(() => {
+    if (fabAction) fabAction()
+    else setShowQuickAdd(true)
+  }, [fabAction])
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
@@ -119,7 +128,7 @@ function AppContent() {
           {panels[activePage] ?? panels.dashboard}
         </main>
       </div>
-      <BottomNav active={activePage} setActive={setActivePage} onFab={() => setShowQuickAdd(true)} />
+      <BottomNav active={activePage} setActive={setActivePage} onFab={handleFab} />
       <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
         <TransactionForm onClose={() => setShowQuickAdd(false)} onToast={setGenericToast} />
       </Modal>
@@ -143,7 +152,9 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <FabProvider>
+        <AppContent />
+      </FabProvider>
     </AppProvider>
   )
 }

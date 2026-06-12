@@ -4,10 +4,12 @@ import {
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
@@ -212,6 +214,13 @@ export default function CreditCardPanel() {
     [billTxs]
   )
 
+  // FAB mobile: novo lançamento no cartão/fatura selecionados (inativo nas
+  // subtelas de extrato/relatório, onde o modal não está montado).
+  useRegisterFab(
+    () => { if (!showExtrato && !showRelatorio) setShowNewTx(true) },
+    [showExtrato, showRelatorio]
+  )
+
   // ── Pay invoice ──────────────────────────────────────────────────────────
   const handlePay = () => {
     if (!selectedCard || !payAmount || !payFromAccount) return
@@ -271,6 +280,9 @@ export default function CreditCardPanel() {
   // ── Main render ──────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
+
+      {/* ── Header (seletor + KPIs) — fixo no topo ao rolar (mobile) ── */}
+      <div className="sticky top-0 z-20 bg-gray-950 space-y-4 pb-2 -mb-2 md:static md:bg-transparent md:pb-0 md:mb-0">
 
       {/* ── Seletor de cartão + navegador de fatura ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -366,7 +378,7 @@ export default function CreditCardPanel() {
         </div>
         <div className="flex flex-col gap-2">
           <button
-            className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm"
+            className="btn-primary flex-1 hidden md:flex items-center justify-center gap-2 text-sm"
             onClick={() => setShowNewTx(true)}
           >
             <Plus size={14} /> Novo Lançamento
@@ -399,6 +411,7 @@ export default function CreditCardPanel() {
             {reconciling ? 'Reconciliando…' : '🔄 Reconciliar Gerenciais'}
           </button>
         </div>
+      </div>
       </div>
 
       {/* ── Tabela de lançamentos da fatura ── */}
@@ -440,7 +453,48 @@ export default function CreditCardPanel() {
         ) : (
           <>
             <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} />
-            <div className="overflow-x-auto">
+
+            {/* Mobile: cards estilo app bancário */}
+            <div className="md:hidden">
+              {billPayments.map(p => (
+                <TxMobileItem
+                  key={p.id}
+                  type="credit_payment"
+                  title="Pagamento de Fatura"
+                  dateLabel={fmtDate(p.date)}
+                  amount={p.amount}
+                />
+              ))}
+              {displayBillTxs.length === 0 ? (
+                <p className="text-center py-8 text-gray-500 text-xs">Nenhum lançamento corresponde aos filtros</p>
+              ) : displayBillTxs.map(tx => (
+                <TxMobileItem
+                  key={tx.id}
+                  type="expense"
+                  title={tx.payee || tx.description || 'Despesa'}
+                  subtitle={tx.payee ? tx.description : null}
+                  dateLabel={fmtDate(tx.date)}
+                  amount={tx.amount}
+                  dimmed={!tx.reconciled}
+                  onClick={() => setEditTx(tx)}
+                  leading={
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
+                      className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
+                      title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                    >
+                      {tx.reconciled
+                        ? <CheckCircle2 size={16} className="text-emerald-500" />
+                        : <Circle size={16} className="text-gray-600" />}
+                    </button>
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Desktop: tabela */}
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
