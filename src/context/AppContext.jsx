@@ -2865,6 +2865,16 @@ export function AppProvider({ children }) {
       }
 
       const txDescription = lancamento.description || ''
+      // Data da transferência ETAPA A (Conta Principal → Ger.):
+      //  • Parcela 1 (ou sem padrão X/N / à vista): data original do lançamento (sem alteração).
+      //  • Parcelas X>=2 (ex.: importação de parcela intermediária "2/3"): dia financeiro do mês
+      //    ANTERIOR ao mês da fatura_ref — mesma regra aplicada em executarProvisoesGerenciais.
+      const financialStartDay = data.settings?.financialMonthStartDay || 1
+      const etapaAInstMatches = [...txDescription.matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
+      const etapaAInstNum = etapaAInstMatches.length ? Number(etapaAInstMatches[etapaAInstMatches.length - 1][1]) : 1
+      const etapaADate = (etapaAInstNum >= 2 && faturaRef)
+        ? prevMonthScheduleDate(faturaRef, financialStartDay)
+        : lancamento.date
       // Grupo G: única automação imediata é a transferência Conta Principal → Ger. subconta.
       // Os agendamentos da fatura (devolução/pagamento) são gerados por recalcularAgendamentosFatura.
       // Parcela futura (immediate=false): nenhuma transferência imediata (a subconta só é
@@ -2928,7 +2938,7 @@ export function AppProvider({ children }) {
             accountId: contaPrincipal.id,
             toAccountId: subcontaId,
             amount: lancamento.amount,
-            date: lancamento.date,
+            date: etapaADate,
             description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
             grupoGerencial: grupoId,
             createdAt: new Date().toISOString(),
@@ -2943,7 +2953,7 @@ export function AppProvider({ children }) {
     // Grupos numerados (2,3,…) e Grupo D: sem transferência imediata. Os agendamentos
     // (resgate de reserva e pagamento da fatura) são gerados por recalcularAgendamentosFatura.
     return { needsResgate: false }
-  }, [data.gerencialGroups, data.accounts, update])
+  }, [data.gerencialGroups, data.accounts, data.settings, update])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
   // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na
