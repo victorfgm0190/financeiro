@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import DateInput from '../shared/DateInput'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -42,7 +44,7 @@ function MultiSelectPanel({ items, selected, onChange }) {
         {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
       </button>
       {open && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
           <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0">
             <button type="button" onClick={() => onChange(items.map(i => i.id))} className="text-xs text-blue-400 hover:text-blue-300">Todas</button>
             <span className="text-gray-700">·</span>
@@ -103,6 +105,7 @@ function doExport(filtered, totals, accounts, categories, applied, analytic) {
 
 export default function RelatorioPorFavorecido() {
   const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
 
   const [months, setMonths] = useState(1)
@@ -113,7 +116,7 @@ export default function RelatorioPorFavorecido() {
   const [applied, setApplied] = useState(null)
   const [expanded, setExpanded] = useState({})
 
-  const accItems = useMemo(() => accounts.map(a => ({ id: a.id, label: a.apelido || a.name })), [accounts])
+  const accItems = useMemo(() => accountsForView(accounts, isMobile).map(a => ({ id: a.id, label: a.apelido || a.name })), [accounts, isMobile])
 
   // Default init
   useEffect(() => {
@@ -206,11 +209,11 @@ export default function RelatorioPorFavorecido() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Data Inicial</label>
-            <input className="input" type="date" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
+            <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
           <div>
             <label className="label">Data Final</label>
-            <input className="input" type="date" value={toDraft} onChange={e => setToDraft(e.target.value)} />
+            <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
           <div>
             <label className="label">Contas ({selectedAccsDraft.length}/{accItems.length})</label>
@@ -257,7 +260,7 @@ export default function RelatorioPorFavorecido() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 520 }}>
               <thead>
-                <tr className="border-b border-gray-700 bg-gray-900/60">
+                <tr className="border-b border-gray-700 bg-surface/60">
                   <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium">Favorecido</th>
                   <th className="text-right px-4 py-2.5 text-xs text-orange-600/80 font-medium whitespace-nowrap">Total Pago</th>
                   <th className="text-right px-4 py-2.5 text-xs text-blue-500/80 font-medium whitespace-nowrap">Total Recebido</th>
@@ -303,7 +306,7 @@ export default function RelatorioPorFavorecido() {
                       {/* Analytic rows (expanded) */}
                       {isOpen && (
                         <tr className="border-b border-gray-800">
-                          <td colSpan={5} className="p-0 bg-gray-900/50">
+                          <td colSpan={5} className="p-0 bg-surface/50">
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="border-b border-gray-800/60">

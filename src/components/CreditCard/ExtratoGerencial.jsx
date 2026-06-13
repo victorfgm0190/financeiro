@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react'
 import { CheckSquare, Square } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
+import DateInput from '../shared/DateInput'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
-  if (grupo.number === 1) cls += ' bg-emerald-500/20 text-emerald-400'
+  if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
   else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
   else cls += ' bg-orange-500/20 text-orange-600'
   return <span className={cls}>{grupo.alias}</span>
@@ -87,11 +88,11 @@ export default function ExtratoGerencial({ initialCardId }) {
           </div>
           <div>
             <label className="label">De</label>
-            <input className="input" type="date" value={from} onChange={e => setFrom(e.target.value)} />
+            <DateInput className="input" value={from} onChange={e => setFrom(e.target.value)} />
           </div>
           <div>
             <label className="label">Até</label>
-            <input className="input" type="date" value={to} onChange={e => setTo(e.target.value)} />
+            <DateInput className="input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
         </div>
       </div>

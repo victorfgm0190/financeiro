@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect, Fragment } from 'react'
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import DateInput from '../shared/DateInput'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -29,7 +31,7 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
@@ -37,7 +39,8 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
-    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId)))
+    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId))) &&
+    !(hidePatrimonio && tx.origin === 'patrimonioAuto')
   )
 
   function buildSection(txList) {
@@ -114,6 +117,14 @@ function exportCSV(report, showTx, from, to) {
 function MultiSelectPanel({ label, items, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const searchRef = useRef(null)
+
+  // Ao abrir, foca a busca para filtrar sem clique extra.
+  useEffect(() => {
+    if (!open) return
+    const raf = requestAnimationFrame(() => searchRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [open])
 
   const toggle = (id) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
   const all = () => onChange(items.map(i => i.id))
@@ -162,12 +173,13 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
         {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
       </button>
       {open && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-gray-900 border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
           <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0 items-center">
             <button type="button" onClick={all} className="text-xs text-blue-400 hover:text-blue-300">Todos</button>
             <span className="text-gray-700">·</span>
             <button type="button" onClick={none} className="text-xs text-gray-500 hover:text-gray-300">Nenhum</button>
             <input
+              ref={searchRef}
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -245,10 +257,12 @@ function TxRow({ tx, indent }) {
 
 export default function DemonstrativoFinanceiro() {
   const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const [hideReserva, setHideReserva] = useState(false)
+  const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(1)
@@ -267,8 +281,8 @@ export default function DemonstrativoFinanceiro() {
   , [categories])
 
   const accItems = useMemo(() =>
-    accounts.map(a => ({ id: a.id, label: a.apelido || a.name }))
-  , [accounts])
+    accountsForView(accounts, isMobile).map(a => ({ id: a.id, label: a.apelido || a.name }))
+  , [accounts, isMobile])
 
   // ── Default initialisation ────────────────────────────────────────────────
   useEffect(() => {
@@ -311,8 +325,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
@@ -334,6 +348,15 @@ export default function DemonstrativoFinanceiro() {
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideReserva ? 'left-4' : 'left-0.5'}`} />
               </div>
               Ocultar movimentos de reserva
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <div
+                onClick={() => setHidePatrimonio(v => !v)}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hidePatrimonio ? 'left-4' : 'left-0.5'}`} />
+              </div>
+              Ocultar movimentos de patrimônio
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
               <div
@@ -368,11 +391,11 @@ export default function DemonstrativoFinanceiro() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">Data Inicial</label>
-            <input className="input" type="date" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
+            <DateInput className="input" value={fromDraft} onChange={e => setFromDraft(e.target.value)} />
           </div>
           <div>
             <label className="label">Data Final</label>
-            <input className="input" type="date" value={toDraft} onChange={e => setToDraft(e.target.value)} />
+            <DateInput className="input" value={toDraft} onChange={e => setToDraft(e.target.value)} />
           </div>
         </div>
 
@@ -423,7 +446,7 @@ export default function DemonstrativoFinanceiro() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 420 }}>
               <thead>
-                <tr className="border-b border-gray-700 bg-gray-900/60">
+                <tr className="border-b border-gray-700 bg-surface/60">
                   <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium w-28">Data</th>
                   <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
                   <th className="text-right px-4 py-2.5 text-xs text-gray-500 font-medium">Valor</th>

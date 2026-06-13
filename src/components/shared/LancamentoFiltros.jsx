@@ -35,7 +35,7 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
   const catLabel = c => `${c.icon ? c.icon + ' ' : ''}${c.name}`
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800 bg-gray-900/60 flex-wrap">
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800 bg-surface/60 flex-wrap">
       {textInputs.map(i => (
         <input
           key={i.key}

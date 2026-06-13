@@ -34,7 +34,7 @@ function Divider() {
 function Section({ title, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900/40">
+    <div className="rounded-lg border border-gray-800 bg-surface/40">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}

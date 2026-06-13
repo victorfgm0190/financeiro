@@ -78,7 +78,9 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
       width: dropW,
       zIndex: 9999,
     })
-    if (inputRef.current) inputRef.current.focus()
+    // Foca a busca no próximo frame (painel já no DOM) p/ digitar sem clique extra.
+    const raf = requestAnimationFrame(() => inputRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
   }, [open])
 
   // close on outside click
@@ -119,7 +121,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
 
       {open && createPortal(
         <div id="cat-select-portal" style={dropdownStyle}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
         >
           <div className="p-1.5 border-b border-gray-800 shrink-0">
             <div className="flex items-center gap-1.5 bg-gray-800 rounded px-2 py-1">
@@ -142,7 +144,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
             </div>
           </div>
 
-          <div className="overflow-y-auto" style={{ maxHeight: 220 }}>
+          <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: 220 }}>
             {!query && (
               <button type="button"
                 className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-800"

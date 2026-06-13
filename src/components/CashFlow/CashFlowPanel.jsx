@@ -3,13 +3,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, R
 import { addDays, format } from 'date-fns'
 import { ArrowDownCircle, ArrowUpCircle, Wallet, AlertTriangle, Calendar } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-surface border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
       <p className="text-gray-400 mb-1">{label}</p>
       {payload.map(p => (
         <p key={p.name} style={{ color: p.color }} className="font-medium">
@@ -23,6 +24,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function CashFlowPanel({ setActivePage }) {
   const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getNextOccurrences, envelopes } = useApp()
   const accounts = profileAccounts
+  const isMobile = useIsMobile()
   const transactions = profileTransactions
   const schedules = profileSchedules
   const [filterAccount, setFilterAccount] = useState('fluxo')
@@ -243,8 +245,8 @@ export default function CashFlowPanel({ setActivePage }) {
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* KPI cards — fixos no topo ao rolar apenas no desktop (md+) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:sticky md:top-0 md:z-20 md:bg-gray-950 md:py-2 md:-my-2">
         <div className="card">
           <div className="flex items-center gap-2 mb-1 text-gray-400">
             <Wallet size={14} />
@@ -270,7 +272,7 @@ export default function CashFlowPanel({ setActivePage }) {
             <select className="input w-auto text-xs py-1.5" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
               <option value="fluxo">FC Principal</option>
               <option value="all">Todas as Contas</option>
-              {accounts.filter(a => a.type !== 'credit').map(a => (
+              {accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile).map(a => (
                 <option key={a.id} value={a.id}>{a.apelido || a.name}</option>
               ))}
             </select>
@@ -382,7 +384,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 shrink-0">lançamento</span>
                         )}
                         {row.isNetized && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 shrink-0">líquido</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-receita/20 text-receita shrink-0">líquido</span>
                         )}
                         {row.isEnvelope && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 shrink-0">envelope</span>

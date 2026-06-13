@@ -49,7 +49,7 @@ export default function ValueFilterDropdown({ label = 'Valor', values = [], sele
         )}
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 right-0 w-44 max-h-64 overflow-y-auto bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1">
+        <div className="absolute z-30 mt-1 right-0 w-44 max-h-64 overflow-y-auto bg-surface border border-gray-700 rounded-lg shadow-xl py-1">
           {values.length === 0 ? (
             <p className="px-3 py-2 text-xs text-gray-600">Nenhum valor no período</p>
           ) : values.map(v => (

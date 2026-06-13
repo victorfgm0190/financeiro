@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar } from 'lucide-react'
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
@@ -17,15 +19,20 @@ export default function FluxoCaixaPorConta() {
   const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
-  const [accountId, setAccountId] = useState(() => accounts[0]?.id || '')
+  // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
+  const [selectedAccountIds, setSelectedAccountIds] = useState(() => accounts[0]?.id ? [accounts[0].id] : [])
+  const [contaDropOpen, setContaDropOpen] = useState(false)
   const [groupId, setGroupId] = useState('')
   const [start, setStart] = useState(() => todayStr())
   const [end, setEnd] = useState(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'))
   const [includeSchedules, setIncludeSchedules] = useState(true)
   const [hideReserva, setHideReserva] = useState(false)
+  const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  const isMobile = useIsMobile()
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  const patrimonioSet = useMemo(() => new Set(accounts.filter(a => a.vinculoTipo === 'patrimonio').map(a => a.id)), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
 
   const groups = useMemo(
@@ -34,10 +41,10 @@ export default function FluxoCaixaPorConta() {
   )
 
   const selectedAccounts = useMemo(() => {
-    if (visao === 'conta')      return accounts.filter(a => a.id === accountId)
+    if (visao === 'conta')      return accounts.filter(a => selectedAccountIds.includes(a.id))
     if (visao === 'grupo')      return accounts.filter(a => a.accountGroupId === groupId)
     return accounts.filter(a => a.isMain) // 'principais'
-  }, [visao, accountId, groupId, accounts])
+  }, [visao, selectedAccountIds, groupId, accounts])
 
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
@@ -48,6 +55,9 @@ export default function FluxoCaixaPorConta() {
     const tdy = todayStr()
     // Movimento que toca uma conta de reserva (origem ou destino) — ocultado quando ligado.
     const tocaReserva = (from, to) => hideReserva && (reservaSet.has(from) || reservaSet.has(to))
+    // Idem para contas com vínculo Patrimônio.
+    const tocaPatrimonio = (from, to) => hidePatrimonio && (patrimonioSet.has(from) || patrimonioSet.has(to))
+    const oculto = (from, to) => tocaReserva(from, to) || tocaPatrimonio(from, to)
 
     // Entrada (depósito) / saída (pagamento) de um movimento em relação ao conjunto selecionado.
     // Transferências internas (ambos os lados no conjunto) são neutralizadas.
@@ -68,7 +78,7 @@ export default function FluxoCaixaPorConta() {
     // Passadas e presentes: lançamentos reais dentro do período → "Registrada".
     transactions.forEach(tx => {
       if (tx.date < start || tx.date > end) return
-      if (tocaReserva(tx.accountId, tx.toAccountId)) return
+      if (oculto(tx.accountId, tx.toAccountId)) return
       const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
       if (!m) return
       out.push({
@@ -82,7 +92,7 @@ export default function FluxoCaixaPorConta() {
     if (includeSchedules) {
       schedules.forEach(s => {
         if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
-        if (tocaReserva(s.accountId, s.toAccountId)) return
+        if (oculto(s.accountId, s.toAccountId)) return
         getNextOccurrences(s, 400).forEach(date => {
           if (date <= tdy || date < start || date > end) return
           const m = classify(s.transactionType, s.accountId, s.toAccountId, s.amount)
@@ -106,7 +116,7 @@ export default function FluxoCaixaPorConta() {
       r.saldo = bal
     })
     return out
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
@@ -120,16 +130,32 @@ export default function FluxoCaixaPorConta() {
 
   const statusBadge = (status) => {
     if (status === 'Registrada') return 'bg-gray-600/30 text-gray-300'
-    if (status === 'A receber')  return 'bg-emerald-500/20 text-emerald-400'
-    return 'bg-orange-500/20 text-orange-400' // A pagar
+    if (status === 'A receber')  return 'bg-receita/20 text-receita'
+    return 'bg-despesa/20 text-despesa' // A pagar
   }
 
   const noSelection = accountIds.size === 0
 
+  // Multi-select de contas (visão "Por Conta")
+  const contaDropRef = useRef(null)
+  useEffect(() => {
+    if (!contaDropOpen) return
+    const onDoc = (e) => { if (contaDropRef.current && !contaDropRef.current.contains(e.target)) setContaDropOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [contaDropOpen])
+  const pickableAccounts = accountsForView(accounts, isMobile)
+  const toggleAccount = (id) => setSelectedAccountIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+  const contaLabel = selectedAccountIds.length === 0
+    ? 'Selecione...'
+    : selectedAccountIds.length === 1
+      ? accName(selectedAccountIds[0])
+      : `${selectedAccountIds.length} contas selecionadas`
+
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className="card space-y-3">
+      {/* Filtros — fixos no topo ao rolar apenas no desktop (md+) */}
+      <div className="card space-y-3 md:sticky md:top-0 md:z-20">
         {/* Visão (toggle) */}
         <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 w-full sm:w-auto">
           {VISOES.map(v => (
@@ -147,12 +173,39 @@ export default function FluxoCaixaPorConta() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {visao === 'conta' && (
-            <div className="lg:col-span-2">
-              <label className="label">Conta</label>
-              <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                <option value="">Selecione...</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
-              </select>
+            <div className="lg:col-span-2 relative" ref={contaDropRef}>
+              <label className="label">Contas</label>
+              <button
+                type="button"
+                onClick={() => setContaDropOpen(o => !o)}
+                className={`input flex items-center justify-between gap-2 text-left w-full ${selectedAccountIds.length === 0 ? 'text-gray-500' : ''}`}
+              >
+                <span className="truncate min-w-0">{contaLabel}</span>
+                <ChevronDown size={14} className={`text-gray-500 shrink-0 transition-transform ${contaDropOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {contaDropOpen && (
+                <div className="absolute z-30 left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto overscroll-contain">
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-800 sticky top-0 bg-surface">
+                    <button type="button" onClick={() => setSelectedAccountIds(pickableAccounts.map(a => a.id))} className="text-xs text-[#0F6E56] hover:underline">Todas</button>
+                    <span className="text-gray-700">·</span>
+                    <button type="button" onClick={() => setSelectedAccountIds([])} className="text-xs text-gray-500 hover:text-gray-300">Nenhuma</button>
+                  </div>
+                  {pickableAccounts.map(a => (
+                    <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+                        checked={selectedAccountIds.includes(a.id)}
+                        onChange={() => toggleAccount(a.id)}
+                      />
+                      <span className="text-sm text-gray-300 truncate">{a.apelido || a.name}</span>
+                    </label>
+                  ))}
+                  {pickableAccounts.length === 0 && (
+                    <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhuma conta</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {visao === 'grupo' && (
@@ -174,11 +227,11 @@ export default function FluxoCaixaPorConta() {
           )}
           <div>
             <label className="label">Data inicial</label>
-            <input className="input" type="date" value={start} onChange={e => setStart(e.target.value)} />
+            <DateInput className="input" value={start} onChange={e => setStart(e.target.value)} />
           </div>
           <div>
             <label className="label">Data final</label>
-            <input className="input" type="date" value={end} onChange={e => setEnd(e.target.value)} />
+            <DateInput className="input" value={end} onChange={e => setEnd(e.target.value)} />
           </div>
         </div>
 
@@ -199,6 +252,14 @@ export default function FluxoCaixaPorConta() {
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
               <span className="text-sm text-gray-300 select-none">Ocultar movimentos de reserva</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <div className="relative shrink-0">
+                <input type="checkbox" checked={hidePatrimonio} onChange={e => setHidePatrimonio(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+              </div>
+              <span className="text-sm text-gray-300 select-none">Ocultar movimentos de patrimônio</span>
             </label>
           </div>
           {!noSelection && (

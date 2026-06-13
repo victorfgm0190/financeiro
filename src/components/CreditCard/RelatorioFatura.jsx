@@ -172,10 +172,10 @@ export default function RelatorioFatura({ initialCardId }) {
           </div>
           {grp1 && totals[grp1.id] > 0 && (
             <div className="card" style={{ borderColor: 'rgba(16,185,129,0.25)', borderWidth: 1 }}>
-              <p className="text-xs text-emerald-400 uppercase tracking-wide mb-1">{grp1.alias} · {grp1.name}</p>
-              <p className="text-xl font-bold text-emerald-400">{fmt(totals[grp1.id])}</p>
+              <p className="text-xs text-reserva uppercase tracking-wide mb-1">{grp1.alias} · {grp1.name}</p>
+              <p className="text-xl font-bold text-reserva">{fmt(totals[grp1.id])}</p>
               {totals.total > 0 && (
-                <p className="text-xs text-emerald-600 mt-0.5">{((totals[grp1.id] / totals.total) * 100).toFixed(0)}%</p>
+                <p className="text-xs text-reserva mt-0.5">{((totals[grp1.id] / totals.total) * 100).toFixed(0)}%</p>
               )}
             </div>
           )}
@@ -220,7 +220,7 @@ export default function RelatorioFatura({ initialCardId }) {
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
                 {grp1 && (
-                  <th className="text-right px-3 py-3 text-xs text-emerald-400 font-medium whitespace-nowrap">{grp1.alias}</th>
+                  <th className="text-right px-3 py-3 text-xs text-reserva font-medium whitespace-nowrap">{grp1.alias}</th>
                 )}
                 {customGroups.map(g => (
                   <th key={g.id} className="text-right px-3 py-3 text-xs text-orange-600 font-medium whitespace-nowrap">{g.alias}</th>
@@ -235,7 +235,7 @@ export default function RelatorioFatura({ initialCardId }) {
                 const isGrp1 = gid === grp1?.id
                 const isGrpD = !gid || gid === grpD?.id
                 const rowCls = isGrp1
-                  ? 'border-b border-gray-800/50 bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors'
+                  ? 'border-b border-gray-800/50 bg-reserva/5 hover:bg-reserva/10 transition-colors'
                   : !isGrpD
                   ? 'border-b border-gray-800/50 bg-orange-500/5 hover:bg-orange-500/10 transition-colors'
                   : 'border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors'
@@ -254,7 +254,7 @@ export default function RelatorioFatura({ initialCardId }) {
                     <td className="px-3 py-2.5 text-right font-semibold text-orange-600 whitespace-nowrap">{fmt(tx.amount)}</td>
                     {grp1 && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        {isGrp1 && <span className="text-emerald-400 font-medium">{fmt(tx.amount)}</span>}
+                        {isGrp1 && <span className="text-reserva font-medium">{fmt(tx.amount)}</span>}
                       </td>
                     )}
                     {customGroups.map(g => (
@@ -275,7 +275,7 @@ export default function RelatorioFatura({ initialCardId }) {
                 <td className="hidden md:table-cell" />
                 <td className="px-3 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{fmt(totals.total)}</td>
                 {grp1 && (
-                  <td className="px-3 py-3 text-right font-bold text-emerald-400 whitespace-nowrap">
+                  <td className="px-3 py-3 text-right font-bold text-reserva whitespace-nowrap">
                     {totals[grp1.id] > 0 ? fmt(totals[grp1.id]) : <span className="text-gray-700">—</span>}
                   </td>
                 )}

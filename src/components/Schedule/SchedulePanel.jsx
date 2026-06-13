@@ -16,6 +16,7 @@ import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import DateInput from '../shared/DateInput'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -49,7 +50,7 @@ function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
-  if (grupo.number === 1) cls += ' bg-emerald-500/20 text-emerald-400'
+  if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
   else if (grupo.number === 'D') cls += ' bg-gray-700/50 text-gray-500'
   else cls += ' bg-orange-500/20 text-orange-600'
   const label = grupo.number === 1 ? '1' : grupo.alias
@@ -255,7 +256,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <div>
             <h3 className="font-semibold text-gray-100">Registrar Agendamento</h3>
@@ -300,7 +301,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                <DateInput className="input" value={payDate} onChange={e => setPayDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -338,7 +339,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={recDate} onChange={e => setRecDate(e.target.value)} />
+                <DateInput className="input" value={recDate} onChange={e => setRecDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -397,7 +398,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Data</label>
-                <input className="input" type="date" value={trfDate} onChange={e => setTrfDate(e.target.value)} />
+                <DateInput className="input" value={trfDate} onChange={e => setTrfDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Anotações</label>
@@ -423,7 +424,7 @@ function EstornarModal({ schedule, nextDate, accounts, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
           <h3 className="font-semibold text-gray-100">Estornar Ocorrência</h3>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
@@ -471,7 +472,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
           <h3 className="font-semibold text-gray-100">Excluir Agendamento</h3>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
@@ -666,7 +667,7 @@ function ScheduleRow({
               <ArrowDownCircle size={11} /> Receita
             </span>
           ) : isDepositoReserva ? (
-            <span className="inline-flex items-center gap-1 text-xs bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded font-medium">
+            <span className="inline-flex items-center gap-1 text-xs bg-reserva/15 text-reserva px-2 py-0.5 rounded font-medium">
               <ArrowDownCircle size={11} /> Depósito Reserva
             </span>
           ) : isResgateReserva ? (
@@ -698,7 +699,7 @@ function ScheduleRow({
 
         {/* Valor */}
         <td className="px-3 py-3 whitespace-nowrap text-right">
-          <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-blue-600' : isDepositoReserva ? 'text-emerald-400' : isResgateReserva ? 'text-orange-600' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-orange-600'}`}>
+          <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-receita' : isDepositoReserva ? 'text-reserva' : isResgateReserva ? 'text-despesa' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-despesa'}`}>
             {fmt(schedule.amount)}
           </span>
         </td>
@@ -897,7 +898,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h3 className="font-semibold text-gray-100">
@@ -913,8 +914,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
           {/* Date picker */}
           <div>
             <label className="label">Data de registro</label>
-            <input
-              type="date"
+            <DateInput
               className="input"
               value={date}
               onChange={e => setDate(e.target.value)}
@@ -966,7 +966,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
 
 function Toast({ message }) {
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-gray-900 border border-emerald-500/30 text-gray-100 text-sm px-4 py-3 rounded-xl shadow-2xl pointer-events-none">
+    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-surface border border-emerald-500/30 text-gray-100 text-sm px-4 py-3 rounded-xl shadow-2xl pointer-events-none">
       <CheckCircle size={16} className="text-emerald-400 shrink-0" />
       {message}
     </div>
@@ -975,7 +975,7 @@ function Toast({ message }) {
 
 // Totalizador da seleção múltipla: metadados de exibição por grupo de movimentação.
 const SELECTION_GROUP_META = {
-  aplicacao: { glyph: '↑', label: 'Aplicação', cls: 'text-emerald-400' },
+  aplicacao: { glyph: '↑', label: 'Aplicação', cls: 'text-reserva' },
   resgate:   { glyph: '↓', label: 'Resgate',   cls: 'text-orange-500' },
   despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-orange-500' },
   receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-blue-400' },
@@ -1177,7 +1177,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                   <div className="flex items-center gap-1.5 pt-1 mt-0.5 border-t border-indigo-500/20">
                     <span className="text-gray-400">=</span>
                     <span className="text-gray-300 font-medium">Saldo:</span>
-                    <span className={`font-bold ${selectionTotals.saldo < 0 ? 'text-orange-500' : 'text-emerald-400'}`}>{fmt(selectionTotals.saldo)}</span>
+                    <span className={`font-bold ${selectionTotals.saldo < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(selectionTotals.saldo)}</span>
                   </div>
                 )}
               </div>
@@ -1372,7 +1372,7 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <div>
             <h3 className="font-semibold text-gray-100">Executar Provisões Gerenciais</h3>
@@ -1750,15 +1750,15 @@ export default function SchedulePanel() {
             ))}
           </div>
 
-          {/* Barra de filtros (tempo real) */}
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
+          {/* Barra de filtros (tempo real) — fixa no topo ao rolar apenas no desktop (md+) */}
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end md:sticky md:top-0 md:z-20">
             <div>
               <label className="label text-xs">Data de</label>
-              <input type="date" className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
             </div>
             <div>
               <label className="label text-xs">Data até</label>
-              <input type="date" className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="label text-xs">Descrição</label>

@@ -176,7 +176,7 @@ function EnvelopeCard({ envelope, spent, onClick }) {
           <span className="text-gray-400">Gasto: <span className="text-gray-200 font-medium">{fmt(spent)}</span></span>
           <span className="text-gray-400">
             Saldo:{' '}
-            <span className={`font-medium ${remaining >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`font-medium ${remaining >= 0 ? 'text-receita' : 'text-despesa'}`}>
               {remaining >= 0 ? fmt(remaining) : `−${fmt(-remaining)}`}
             </span>
           </span>
@@ -213,7 +213,7 @@ function DetailModal({ data, compLabel, categories, accounts }) {
         </div>
         <div className="card py-3 text-center">
           <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Restante</p>
-          <p className={`text-base font-bold ${remaining >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+          <p className={`text-base font-bold ${remaining >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(Math.abs(remaining))}
           </p>
         </div>
@@ -302,7 +302,7 @@ export default function EnvelopesPanel() {
     return envelopes.map(env => {
       const txs = transactions.filter(tx =>
         tx.type === 'expense' &&
-        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'investAuto' &&
+        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto' &&
         env.categoryIds.includes(tx.categoryId) &&
         competenciaKeyOf(tx.date, startDay) === compKey
       )
@@ -377,7 +377,7 @@ export default function EnvelopesPanel() {
           </div>
           <div className="card">
             <p className="text-xs text-gray-400 uppercase tracking-wide">Total Saldo</p>
-            <p className={`text-xl font-bold mt-1 ${totalRemain >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <p className={`text-xl font-bold mt-1 ${totalRemain >= 0 ? 'text-receita' : 'text-despesa'}`}>
               {totalRemain >= 0 ? fmt(totalRemain) : `−${fmt(-totalRemain)}`}
             </p>
           </div>

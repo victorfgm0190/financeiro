@@ -7,7 +7,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 
@@ -22,7 +23,7 @@ const PERIOD_OPTS = [
 function Delta({ abs, pct, goodWhenPositive = true }) {
   if (abs === null || abs === undefined) return null
   const isGood = goodWhenPositive ? abs >= 0 : abs <= 0
-  const color = isGood ? 'text-emerald-400' : 'text-orange-600'
+  const color = isGood ? 'text-receita' : 'text-despesa'
   const Icon = abs >= 0 ? TrendingUp : TrendingDown
   return (
     <div className={`flex items-center gap-1 mt-1.5 text-xs ${color}`}>
@@ -35,9 +36,16 @@ function Delta({ abs, pct, goodWhenPositive = true }) {
   )
 }
 
-function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive }) {
+function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive, onClick }) {
+  const clickable = typeof onClick === 'function'
   return (
-    <div className="card">
+    <div
+      className={`card ${clickable ? 'cursor-pointer hover:bg-gray-800/60 transition-colors' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+    >
       <div className={`flex items-center gap-2 mb-2 ${iconColor}`}>
         <Icon size={15} />
         <span className="text-xs uppercase tracking-wide text-gray-400">{label}</span>
@@ -51,6 +59,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
   const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
+  const isMobile = useIsMobile()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
 
@@ -65,6 +74,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const income = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
+
+  // Maps p/ rótulos no drill-down de receitas/despesas do mês.
+  const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  const catById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
+  const accLabel = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
+  const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : 'Sem categoria' }
 
   // Previous period (same duration, shifted back)
   const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
@@ -272,6 +287,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // ── P17: Pie chart state ─────────────────────────────────────────────────
   const [pieFilter, setPieFilter] = useState('current')
   const [catModal, setCatModal] = useState(null) // { name, cat, txs, value, color }
+  const [txModal, setTxModal] = useState(null) // { title, total, color, txs } — receitas/despesas do mês
 
   const pieRange = useMemo(() => {
     const now = new Date()
@@ -342,14 +358,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             {saldoSecRows.map((r, i) => (
               <div key={r.label}>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500">{r.label}</p>
-                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(r.val)}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-emerald-400' : 'text-orange-500'}`}>
+          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(saldoPrincipal)}
           </p>
         )}
@@ -366,6 +382,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           deltaAbs={mkDelta(income, prevIncome).abs}
           deltaPct={mkDelta(income, prevIncome).pct}
           goodWhenPositive={true}
+          onClick={() => setTxModal({
+            title: 'Receitas do Mês',
+            total: income,
+            color: 'text-blue-600',
+            txs: periodTxs.filter(t => t.type === 'income'),
+          })}
         />
         <KpiCard
           icon={TrendingDown}
@@ -376,6 +398,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           deltaAbs={mkDelta(expense, prevExpense).abs}
           deltaPct={mkDelta(expense, prevExpense).pct}
           goodWhenPositive={false}
+          onClick={() => setTxModal({
+            title: 'Despesas do Mês',
+            total: expense,
+            color: 'text-orange-600',
+            txs: periodTxs.filter(t => t.type === 'expense'),
+          })}
         />
         <KpiCard
           icon={Wallet}
@@ -433,14 +461,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <div className="shrink-0 text-right space-y-1.5">
               <div>
                 <p className="text-xs text-gray-500 mb-0.5">Projetado</p>
-                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-teal-400' : 'text-red-400'}`}>
+                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(saldoProjetado.projetado)}
                 </p>
               </div>
               {Math.abs(saldoProjetado.final - saldoProjetado.projetado) >= 0.005 && (
                 <div>
                   <p className="text-xs text-gray-500 mb-0.5">Final</p>
-                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-purple-400' : 'text-red-400'}`}>
+                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-reserva' : 'text-despesa'}`}>
                     {fmt(saldoProjetado.final)}
                   </p>
                 </div>
@@ -479,7 +507,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             </span>
             <span className="text-gray-400">
               {budgetPct.toFixed(0)}% usado
-              {income - expense > 0 && <span className="ml-2 text-emerald-400">· disponível: {fmt(income - expense)}</span>}
+              {income - expense > 0 && <span className="ml-2 text-receita">· disponível: {fmt(income - expense)}</span>}
             </span>
           </div>
         </div>
@@ -672,6 +700,43 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </Modal>
       )}
 
+      {/* Receitas/Despesas do mês drill-down modal */}
+      {txModal && (
+        <Modal open={!!txModal} onClose={() => setTxModal(null)} title={txModal.title} size="md">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-gray-800">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">
+                Total · {txModal.txs.length} lançamento{txModal.txs.length !== 1 ? 's' : ''}
+              </span>
+              <span className={`text-lg font-bold ${txModal.color}`}>{fmt(txModal.total)}</span>
+            </div>
+            {txModal.txs.length === 0 ? (
+              <p className="text-xs text-gray-500 text-center py-6">Nenhum lançamento no período.</p>
+            ) : (
+              <div className="space-y-0 max-h-96 overflow-y-auto overscroll-contain">
+                {[...txModal.txs]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map(tx => (
+                    <div key={tx.id} className="flex items-start justify-between gap-3 py-2.5 border-b border-gray-800/50 last:border-0">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-200 truncate">{tx.description || tx.payee || catLabel(tx.categoryId)}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {fmtDate(tx.date)}
+                          {tx.payee && tx.description ? ` · ${tx.payee}` : ''}
+                          {` · ${catLabel(tx.categoryId)}`}
+                          {` · ${accLabel(tx.accountId)}`}
+                        </p>
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ${txModal.color}`}>{fmt(tx.amount)}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
       {/* Accounts grid */}
       <div className="card">
         <div className="flex items-center justify-between mb-3">
@@ -679,12 +744,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           {totalDebt > 0 && (
             <span className="text-xs text-gray-500 flex items-center gap-1">
               <CreditCard size={11} className="text-purple-400" />
-              Dívida cartão: <span className="text-red-400 font-medium ml-1">{fmt(totalDebt)}</span>
+              Dívida cartão: <span className="text-despesa font-medium ml-1">{fmt(totalDebt)}</span>
             </span>
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {accounts.map(a => {
+          {accountsForView(accounts, isMobile).map(a => {
             // Last activity label for credit cards (current fatura)
             let lastActivityNode = null
             if (a.type === 'credit') {
@@ -712,7 +777,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                   <p className="text-xs text-gray-400 truncate">{a.apelido || a.name}</p>
                   {a.isMain && <span className="text-yellow-400 text-xs shrink-0 ml-1">★</span>}
                 </div>
-                <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
                 </p>
                 <p className="text-xs text-gray-600 mt-0.5">{a.type === 'credit' ? 'Dívida' : 'Saldo'}</p>

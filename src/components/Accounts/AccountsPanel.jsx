@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
@@ -447,8 +448,8 @@ function calcGroupBalance(accounts) {
 }
 
 function balColor(amount) {
-  if (amount > 0.005) return 'text-emerald-400'
-  if (amount < -0.005) return 'text-red-400'
+  if (amount > 0.005) return 'text-receita'
+  if (amount < -0.005) return 'text-despesa'
   return 'text-gray-300'
 }
 
@@ -510,6 +511,7 @@ export default function AccountsPanel() {
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [showTxForm, setShowTxForm] = useState(false)
   const [editTxInitial, setEditTxInitial] = useState(null)
+  const isMobile = useIsMobile()
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
@@ -522,10 +524,12 @@ export default function AccountsPanel() {
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')
   const patrimonialGroups = sortedGroups.filter(g => g.type === 'patrimonial')
 
+  // No mobile, contas marcadas como "Ocultar no Mobile" somem da grade (saldos/totais acima ficam intactos).
+  const visibleAccounts = accountsForView(accounts, isMobile)
   const getGroupAccounts = (groupId) =>
-    accounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    visibleAccounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-  const ungrouped = accounts.filter(a => !a.accountGroupId)
+  const ungrouped = visibleAccounts.filter(a => !a.accountGroupId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
@@ -579,15 +583,15 @@ export default function AccountsPanel() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
-          <p className="text-2xl font-bold text-emerald-400 mt-1">{fmt(totalAssets)}</p>
+          <p className="text-2xl font-bold text-receita mt-1">{fmt(totalAssets)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
-          <p className="text-2xl font-bold text-red-400 mt-1">{fmt(totalCredit)}</p>
+          <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
         </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Patrimônio Líquido</p>
-          <p className={`text-2xl font-bold mt-1 ${totalAssets - totalCredit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <p className={`text-2xl font-bold mt-1 ${totalAssets - totalCredit >= 0 ? 'text-receita' : 'text-despesa'}`}>
             {fmt(totalAssets - totalCredit)}
           </p>
         </div>

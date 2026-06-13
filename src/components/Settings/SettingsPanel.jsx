@@ -9,6 +9,7 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
+import DateInput from '../shared/DateInput'
 
 const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
 
@@ -1422,8 +1423,7 @@ export default function SettingsPanel() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="label">Data de referência</label>
-                      <input
-                        type="date"
+                      <DateInput
                         className="input text-sm"
                         value={ajusteData}
                         onChange={e => { setAjusteData(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
@@ -1454,7 +1454,7 @@ export default function SettingsPanel() {
             </div>
 
             {ajusteResult && (
-              <div className="bg-gray-900 rounded-lg p-3 space-y-1.5 text-xs">
+              <div className="bg-surface rounded-lg p-3 space-y-1.5 text-xs">
                 <p className="font-medium text-gray-300 mb-2">Resumo do ajuste</p>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Saldo calculado pelo sistema</span>
@@ -1466,7 +1466,7 @@ export default function SettingsPanel() {
                 </div>
                 <div className="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
                   <span className="text-gray-500">Diferença</span>
-                  <span className={ajusteResult.difference === 0 ? 'text-gray-400' : ajusteResult.difference > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                  <span className={ajusteResult.difference === 0 ? 'text-gray-400' : ajusteResult.difference > 0 ? 'text-receita' : 'text-despesa'}>
                     {ajusteResult.difference > 0 ? '+' : ''}{fmt(ajusteResult.difference)}
                   </span>
                 </div>
@@ -1476,7 +1476,7 @@ export default function SettingsPanel() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Novo saldo inicial da âncora</span>
-                  <span className={ajusteResult.newInitialBalance < 0 ? 'text-red-300' : 'text-sky-300'}>{fmt(ajusteResult.newInitialBalance)}</span>
+                  <span className={ajusteResult.newInitialBalance < 0 ? 'text-despesa' : 'text-sky-300'}>{fmt(ajusteResult.newInitialBalance)}</span>
                 </div>
                 {ajusteResult.difference === 0 ? (
                   <p className="text-gray-500 italic text-xs pt-1">Nenhum ajuste necessário — saldos já coincidem.</p>

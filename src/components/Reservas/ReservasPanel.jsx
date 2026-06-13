@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -158,6 +159,7 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = f
 
 // ── Function Form (modal) ───────────────────────────────────────────────────
 function FunctionForm({ initial, accounts, onSubmit, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm] = useState({
     name: initial?.name || '',
     accountId: initial?.accountId || '',
@@ -185,7 +187,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
         <label className="label">Conta Vinculada</label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
-          {accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+          {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
       <div>
@@ -266,7 +268,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
         </div>
         <div className="card py-3 text-center">
           <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Depósitos no Mês</p>
-          <p className="text-xl font-bold text-emerald-400">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
+          <p className="text-xl font-bold text-receita">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
         </div>
         <div className="card py-3 text-center">
           <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resgates no Mês</p>
@@ -294,7 +296,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                 </div>
                 <div className="flex gap-4 flex-wrap text-xs">
                   {entradas > 0
-                    ? <span className="flex items-center gap-1 text-emerald-500"><ArrowDownCircle size={11} /> +{fmt(entradas)}</span>
+                    ? <span className="flex items-center gap-1 text-receita"><ArrowDownCircle size={11} /> +{fmt(entradas)}</span>
                     : <span className="text-gray-700">Sem depósitos no mês</span>
                   }
                   {saidas > 0 && (
@@ -339,7 +341,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                     <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
                         {isEntrada
-                          ? <ArrowDownCircle size={13} className="text-emerald-500 shrink-0" />
+                          ? <ArrowDownCircle size={13} className="text-receita shrink-0" />
                           : <ArrowUpCircle size={13} className="text-orange-400 shrink-0" />
                         }
                         <div className="min-w-0">
@@ -347,7 +349,7 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                           <p className="text-xs text-gray-500">{d.slice(8)}/{d.slice(5,7)}/{d.slice(0,4)}</p>
                         </div>
                       </div>
-                      <span className={`text-sm font-semibold shrink-0 ml-3 ${isEntrada ? 'text-emerald-400' : 'text-orange-400'}`}>
+                      <span className={`text-sm font-semibold shrink-0 ml-3 ${isEntrada ? 'text-receita' : 'text-despesa'}`}>
                         {isEntrada ? '+' : '−'}{fmt(tx.amount)}
                       </span>
                     </div>
@@ -388,7 +390,7 @@ function ObsIndicator({ text }) {
         <MessageSquare size={11} />
       </button>
       {open && (
-        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-48 max-w-[60vw] rounded-lg border border-gray-700 bg-gray-900 px-2.5 py-2 text-[11px] font-normal normal-case leading-snug text-left text-gray-200 shadow-xl whitespace-pre-wrap">
+        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-48 max-w-[60vw] rounded-lg border border-gray-700 bg-surface px-2.5 py-2 text-[11px] font-normal normal-case leading-snug text-left text-gray-200 shadow-xl whitespace-pre-wrap">
           {text}
         </span>
       )}
@@ -507,7 +509,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                   : <span className="text-xs font-semibold text-gray-500 italic uppercase tracking-wide">Sem conta vinculada</span>
                 }
                 <div className="flex-1 h-px bg-gray-800" />
-                <span className={`text-xs font-bold ${totalAtualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                <span className={`text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                   {fmt(totalAtualizado)}
                 </span>
               </div>
@@ -552,7 +554,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                         <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
                       )}
                     </div>
-                    <div className={`text-lg font-bold ${atualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                    <div className={`text-lg font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                       {fmt(atualizado)}
                     </div>
                     <div className="h-px bg-gray-800" />
@@ -633,7 +635,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                       <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
-                      <th className="text-right px-4 py-2 text-xs text-emerald-400 font-medium w-32">Saldo Atualizado</th>
+                      <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
                       <th className="w-14" />
                     </tr>
                   </thead>
@@ -679,7 +681,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                           <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                             {fmt(saldo)}
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                          <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                             {fmt(atualizado)}
                           </td>
                           <td className="px-4 py-2">
@@ -715,7 +717,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                       <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
                         {fmt(totalSaldo)}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-orange-600' : 'text-emerald-400'}`}>
+                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                         {fmt(totalAtualizado)}
                       </td>
                       <td />
@@ -1096,7 +1098,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
             <thead>
-              <tr className="border-b border-gray-800 bg-gray-900">
+              <tr className="border-b border-gray-800 bg-surface">
                 <th className="text-left px-3 py-2.5 text-gray-400 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
                 <th className="text-left px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 80 }}>Conta</th>
                 <th className="text-right px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 100 }}>Total Investido</th>
@@ -1111,7 +1113,7 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
                   </th>
                 ))}
               </tr>
-              <tr className="border-b border-gray-700 bg-gray-900/80">
+              <tr className="border-b border-gray-700 bg-surface/80">
                 <th /><th /><th />
                 {windowMonths.map((wm, i) => (
                   <Fragment key={i}>

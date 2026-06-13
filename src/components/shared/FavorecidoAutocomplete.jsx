@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function FavorecidoAutocomplete({ value, onChange, suggestions, placeholder = 'Nome do favorecido' }) {
   const [open, setOpen] = useState(false)
@@ -40,7 +41,12 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
 
   useEffect(() => {
     if (!open) return
-    const onClick = (e) => { if (!inputRef.current?.contains(e.target)) setOpen(false) }
+    const onClick = (e) => {
+      // Não fechar em cliques no input nem no dropdown (inclui a scrollbar da lista).
+      if (inputRef.current?.contains(e.target)) return
+      if (dropdownRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     const onScroll = (e) => { if (dropdownRef.current?.contains(e.target)) return; setOpen(false) }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)
@@ -62,17 +68,17 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
         placeholder={placeholder}
         autoComplete="off"
       />
-      {open && filtered.length > 0 && rect && (
+      {open && filtered.length > 0 && rect && createPortal(
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl overflow-y-auto max-h-48"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-y-auto overscroll-contain max-h-48"
         >
           {filtered.map((item, i) => (
             <button
               key={item}
               type="button"
-              onMouseDown={e => { e.preventDefault(); handleSelect(item) }}
+              onClick={() => handleSelect(item)}
               className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${
                 i === active ? 'bg-gray-700 text-gray-100' : 'text-gray-300 hover:bg-gray-800'
               }`}
@@ -80,7 +86,8 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
               {item}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

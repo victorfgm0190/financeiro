@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 
 const GROUP_ORDER = [
@@ -39,6 +40,7 @@ export default function SearchableSelect({
   const [active, setActive] = useState(-1)
   const [rect, setRect] = useState(null)
   const triggerRef = useRef(null)
+  const panelRef = useRef(null)
   const searchRef = useRef(null)
   const listRef = useRef(null)
 
@@ -88,7 +90,7 @@ export default function SearchableSelect({
     setOpen(true)
     setSearch('')
     setActive(-1)
-    setTimeout(() => searchRef.current?.focus(), 0)
+    // O foco é aplicado no useEffect [open] abaixo, depois que o painel é renderizado.
   }
 
   const closeDropdown = () => {
@@ -117,9 +119,22 @@ export default function SearchableSelect({
     }
   }
 
+  // Ao abrir, foca o campo de busca para digitar/filtrar sem clique extra.
+  // rAF garante que o painel já está no DOM (o ref já está atribuído).
   useEffect(() => {
     if (!open) return
-    const onClick = (e) => { if (!triggerRef.current?.contains(e.target)) closeDropdown() }
+    const raf = requestAnimationFrame(() => searchRef.current?.focus())
+    return () => cancelAnimationFrame(raf)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onClick = (e) => {
+      // Não fechar em cliques no gatilho nem no próprio painel (inclui a scrollbar do container).
+      if (triggerRef.current?.contains(e.target)) return
+      if (panelRef.current?.contains(e.target)) return
+      closeDropdown()
+    }
     const onScroll = (e) => { if (listRef.current?.contains(e.target)) return; closeDropdown() }
     document.addEventListener('mousedown', onClick)
     window.addEventListener('scroll', onScroll, true)
@@ -166,10 +181,11 @@ export default function SearchableSelect({
         </div>
       </button>
 
-      {open && rect && (
+      {open && rect && createPortal(
         <div
+          ref={panelRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
+          className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
         >
           <div className="px-2 py-2 border-b border-gray-800 shrink-0">
             <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-800 rounded-lg">
@@ -185,7 +201,7 @@ export default function SearchableSelect({
             </div>
           </div>
 
-          <div ref={listRef} className="overflow-y-auto min-h-0">
+          <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0">
             {allItems.length === 0 && (
               <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhum resultado</p>
             )}
@@ -194,7 +210,7 @@ export default function SearchableSelect({
               <button
                 type="button"
                 data-item
-                onMouseDown={e => { e.preventDefault(); handleSelect('') }}
+                onClick={() => handleSelect('')}
                 className={`w-full text-left px-3 py-2 text-sm transition-colors ${itemClass('')}`}
               >
                 {placeholder}
@@ -205,7 +221,7 @@ export default function SearchableSelect({
               const ungroupedBlock = ungrouped.length > 0 && (
                 <div key="__ungrouped">
                   {ungroupedLabel && sortedGroupNames.length > 0 && (
-                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
                       {ungroupedLabel}
                     </p>
                   )}
@@ -214,7 +230,7 @@ export default function SearchableSelect({
                       key={opt.id}
                       type="button"
                       data-item
-                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      onClick={() => handleSelect(opt.id)}
                       className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
                     >
                       {opt.label}
@@ -224,7 +240,7 @@ export default function SearchableSelect({
               )
               const groupedBlock = sortedGroupNames.map(groupName => (
                 <div key={groupName}>
-                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-gray-900 sticky top-0">
+                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
                     {groupName}
                   </p>
                   {groupedMap[groupName].map(opt => (
@@ -232,7 +248,7 @@ export default function SearchableSelect({
                       key={opt.id}
                       type="button"
                       data-item
-                      onMouseDown={e => { e.preventDefault(); handleSelect(opt.id) }}
+                      onClick={() => handleSelect(opt.id)}
                       className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
                     >
                       {opt.label}
@@ -245,7 +261,8 @@ export default function SearchableSelect({
                 : <>{ungroupedBlock}{groupedBlock}</>
             })()}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

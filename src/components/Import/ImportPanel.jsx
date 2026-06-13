@@ -15,6 +15,7 @@ import GerencialTotalizer from '../shared/GerencialTotalizer'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import DateInput from '../shared/DateInput'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -601,7 +602,7 @@ function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
         <h3 className="text-sm font-semibold text-gray-100">Preencher em Lote</h3>
         <div className="space-y-3">
           <div>
@@ -1299,7 +1300,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {showCorrigirDatas && editingImport && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCorrigirDatas(false)} />
-          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+          <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
             <div className="px-5 py-4 border-b border-gray-800">
               <h3 className="text-sm font-semibold text-gray-100">
                 Correção de datas — {corrigirPreview.length} lançamento{corrigirPreview.length !== 1 ? 's' : ''}
@@ -1313,7 +1314,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 <p className="text-sm text-gray-500 text-center py-10">Nenhum lançamento elegível neste lote.</p>
               ) : (
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-gray-900">
+                  <thead className="sticky top-0 bg-surface">
                     <tr className="border-b border-gray-800">
                       <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                       <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
@@ -1352,7 +1353,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {matchQueue.length > 0 && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+          <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-100">Parcela correspondente encontrada</h3>
             <p className="text-xs text-gray-400">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
             <div className="flex gap-3">
@@ -1435,7 +1436,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
             <div className="flex items-baseline gap-2">
               <span className="text-xs text-gray-500">Total a ser importado:</span>
-              <span className="text-sm font-semibold text-emerald-400">{fmt(totais.importar)}</span>
+              <span className="text-sm font-semibold text-receita">{fmt(totais.importar)}</span>
             </div>
             <span className="text-gray-600 font-medium">+</span>
             <div className="flex items-baseline gap-2">
@@ -1447,7 +1448,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 <span className="text-gray-600 font-medium">−</span>
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs text-gray-500">Estornos:</span>
-                  <span className="text-sm font-semibold text-red-400">{fmt(totais.estornos)}</span>
+                  <span className="text-sm font-semibold text-despesa">{fmt(totais.estornos)}</span>
                 </div>
               </>
             )}
@@ -1514,17 +1515,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           onChange={() => toggleRow(row._id)} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <input
-                          type="date"
-                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                        <DateInput
+                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row.date || ''}
                           onChange={e => updateRow(row._id, { date: e.target.value })}
                         />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <input
-                          type="date"
-                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                        <DateInput
+                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row._dateCartao || ''}
                           onChange={e => updateRow(row._id, { _dateCartao: e.target.value || null })}
                         />

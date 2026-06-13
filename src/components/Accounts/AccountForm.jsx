@@ -3,6 +3,7 @@ import { Info, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
+import DateInput from '../shared/DateInput'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -56,16 +57,19 @@ export default function AccountForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || null,
     accountGroupId: initial?.accountGroupId || null,
     appPriority: initial?.appPriority || false,
+    hideOnMobile: initial?.hideOnMobile || false,
     profileId: initial?.profileId || null,
     initialBalance: (!initial || (initial.type !== 'credit' && initial.type !== 'asset' && initial.type !== 'liability'))
       ? Math.round(((initial?.initialBalance ?? initial?.balance) ?? 0) * 100) / 100
       : '',
     acquisitionValue: initial?.acquisitionValue ?? '',
     acquisitionDate: initial?.acquisitionDate || '',
-    isReserva: initial?.isReserva || false,
+    vinculoTipo: initial?.vinculoTipo || (initial?.isReserva ? 'reserva' : 'none'),
     reservaType: initial?.reservaType || 'geral',
     reservaCategoryId: initial?.reservaCategoryId || null,
+    patrimonioCategoryId: initial?.patrimonioCategoryId || null,
   })
+  const [vinculoError, setVinculoError] = useState(false)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -81,6 +85,13 @@ export default function AccountForm({ initial, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.name.trim()) return
+
+    // Vínculo Patrimônio exige categoria.
+    const vinculoAtivo = !isCredit && !isPatrimonial ? form.vinculoTipo : 'none'
+    if (vinculoAtivo === 'patrimonio' && !form.patrimonioCategoryId) {
+      setVinculoError(true)
+      return
+    }
 
     if (form.contaCorrentePrincipal && isChecking) {
       accounts
@@ -112,13 +123,17 @@ export default function AccountForm({ initial, onClose }) {
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
       appPriority: form.appPriority,
+      hideOnMobile: form.hideOnMobile,
       profileId: form.profileId || null,
       acquisitionValue: isPatrimonial && form.acquisitionValue !== '' ? Number(form.acquisitionValue) : null,
       acquisitionDate: isPatrimonial ? form.acquisitionDate || null : null,
       valueHistory: initial?.valueHistory || [],
-      isReserva: !isCredit && !isPatrimonial ? form.isReserva : false,
-      reservaType: form.isReserva && !isCredit && !isPatrimonial ? form.reservaType : null,
-      reservaCategoryId: form.isReserva && form.reservaType === 'especifica' && !isCredit && !isPatrimonial ? form.reservaCategoryId : null,
+      // vinculo_tipo é a fonte de verdade; is_reserva é mantido sincronizado p/ compat.
+      vinculoTipo: vinculoAtivo,
+      isReserva: vinculoAtivo === 'reserva',
+      reservaType: vinculoAtivo === 'reserva' ? form.reservaType : null,
+      reservaCategoryId: vinculoAtivo === 'reserva' && form.reservaType === 'especifica' ? form.reservaCategoryId : null,
+      patrimonioCategoryId: vinculoAtivo === 'patrimonio' ? form.patrimonioCategoryId : null,
     }
 
     if (initial) {
@@ -294,9 +309,8 @@ export default function AccountForm({ initial, onClose }) {
             </div>
             <div>
               <label className="label">Data de Aquisição</label>
-              <input
+              <DateInput
                 className="input"
-                type="date"
                 value={form.acquisitionDate}
                 onChange={e => set('acquisitionDate', e.target.value)}
               />
@@ -369,6 +383,16 @@ export default function AccountForm({ initial, onClose }) {
           tooltip="Esta conta aparece no painel de Fluxo de Caixa geral"
         />
 
+        {/* Configuração de exibição mobile — disponível só no desktop */}
+        <div className="hidden md:block">
+          <Toggle
+            checked={form.hideOnMobile}
+            onChange={e => set('hideOnMobile', e.target.checked)}
+            label="Ocultar no Mobile"
+            tooltip="A conta continua aparecendo no desktop, mas fica oculta nas listas e seletores no celular. Dados e saldos não são afetados."
+          />
+        </div>
+
         {!isCredit && (
           <Toggle
             checked={form.contaAplicacao}
@@ -398,19 +422,32 @@ export default function AccountForm({ initial, onClose }) {
           </>
         )}
 
-        {!isCredit && (
+        {!isCredit && !isPatrimonial && (
           <>
-            <Toggle
-              checked={form.isReserva}
-              onChange={e => {
-                set('isReserva', e.target.checked)
-                if (!e.target.checked) { set('reservaType', 'geral'); set('reservaCategoryId', null) }
-              }}
-              label="É conta de reserva"
-              tooltip="Identifica esta conta como reserva orçamentária para controle de gastos futuros"
-            />
-            {form.isReserva && (
-              <div className="ml-11 space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+            <div>
+              <label className="label flex items-center">
+                Vínculo da conta
+                <Tooltip text="Transferências para/desta conta geram automaticamente despesa (ida) e receita (volta). Reserva = reserva orçamentária; Patrimônio = investimento/aplicação (ex.: Consórcio)." />
+              </label>
+              <select
+                className="input"
+                value={form.vinculoTipo}
+                onChange={e => {
+                  const v = e.target.value
+                  set('vinculoTipo', v)
+                  setVinculoError(false)
+                  if (v !== 'reserva') { set('reservaType', 'geral'); set('reservaCategoryId', null) }
+                  if (v !== 'patrimonio') set('patrimonioCategoryId', null)
+                }}
+              >
+                <option value="none">Nenhum</option>
+                <option value="reserva">Reserva</option>
+                <option value="patrimonio">Patrimônio / Investimento</option>
+              </select>
+            </div>
+
+            {form.vinculoTipo === 'reserva' && (
+              <div className="ml-3 space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
                 <div>
                   <label className="label">Tipo de reserva</label>
                   <select
@@ -439,6 +476,29 @@ export default function AccountForm({ initial, onClose }) {
                     Esta conta usará a categoria <span className="text-gray-300 font-medium">🏦 Reservas Gerais</span> automaticamente em lançamentos de reserva.
                   </p>
                 )}
+              </div>
+            )}
+
+            {form.vinculoTipo === 'patrimonio' && (
+              <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                <div>
+                  <label className="label">Categoria vinculada *</label>
+                  <CategorySelect
+                    categories={categories}
+                    type="expense"
+                    value={form.patrimonioCategoryId || ''}
+                    onChange={e => { set('patrimonioCategoryId', e.target.value || null); setVinculoError(false) }}
+                    placeholder="Selecione uma categoria..."
+                    searchable
+                  />
+                  {vinculoError && (
+                    <p className="text-xs text-despesa mt-1">Selecione a categoria do patrimônio.</p>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Transferências para esta conta geram <span className="text-gray-300 font-medium">despesa</span> automática na categoria;
+                  resgates geram <span className="text-gray-300 font-medium">receita</span>. O saldo soma no KPI de Investimentos.
+                </p>
               </div>
             )}
           </>

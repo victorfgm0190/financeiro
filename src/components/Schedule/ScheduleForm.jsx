@@ -2,9 +2,11 @@ import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
+import DateInput from '../shared/DateInput'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -60,7 +62,7 @@ function Tooltip({ text }) {
       {show && rect && (
         <div
           style={{ position: 'fixed', left: rect.right + 8, top: rect.top - 6, zIndex: 9999 }}
-          className="bg-gray-900 border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
+          className="bg-surface border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
         >
           {text}
         </div>
@@ -101,7 +103,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-64 p-4">
+      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-64 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-200">Ocorrência de {fmtD(originalDate)}</p>
           <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-300 p-0.5 rounded transition-colors">
@@ -123,8 +125,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
           <div className="space-y-2.5">
             <div>
               <label className="label">Nova data</label>
-              <input
-                type="date"
+              <DateInput
                 className="input"
                 value={date}
                 onChange={e => setDate(e.target.value)}
@@ -173,9 +174,9 @@ function buildCatOpts(categories, type) {
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
 }
 
-function buildAccOpts(accounts, _accountGroups, excludeId) {
-  // Contas inativas não aparecem nos selects de formulário.
-  const pool = accounts.filter(a => a.active !== false && (!excludeId || a.id !== excludeId))
+function buildAccOpts(accounts, _accountGroups, excludeId, isMobile) {
+  // Contas inativas (e, no mobile, as marcadas como "Ocultar no Mobile") não aparecem nos selects.
+  const pool = accounts.filter(a => a.active !== false && (!isMobile || !a.hideOnMobile) && (!excludeId || a.id !== excludeId))
   return [...pool]
     .sort((a, b) => accountPriority(a) - accountPriority(b))
     .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null })
@@ -258,8 +259,9 @@ export default function ScheduleForm({ initial, onClose }) {
   )
 
   // Options for SearchableSelect fields
-  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups), [accounts, accountGroups])
-  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId), [accounts, accountGroups, form.accountId])
+  const isMobile = useIsMobile()
+  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, null, isMobile), [accounts, accountGroups, isMobile])
+  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId, isMobile), [accounts, accountGroups, form.accountId, isMobile])
   const categoryOpts = useMemo(() => buildCatOpts(categories, form.transactionType === 'transfer' ? null : form.transactionType), [categories, form.transactionType])
   const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
 
@@ -346,9 +348,9 @@ export default function ScheduleForm({ initial, onClose }) {
                 onClick={() => set('transactionType', t)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.transactionType === t
-                    ? t === 'income' ? 'bg-emerald-600 text-white'
-                    : t === 'transfer' ? 'bg-blue-600 text-white'
-                    : 'bg-red-600 text-white'
+                    ? t === 'income' ? 'bg-blue-600 text-white'
+                    : t === 'transfer' ? 'bg-purple-600 text-white'
+                    : 'bg-orange-600 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
@@ -537,9 +539,8 @@ export default function ScheduleForm({ initial, onClose }) {
         {/* Data de Início */}
         <div>
           <LabelTip tip={TIPS.startDate} required>Data de Início</LabelTip>
-          <input
+          <DateInput
             className="input"
-            type="date"
             value={form.startDate}
             onChange={e => set('startDate', e.target.value)}
             required
@@ -649,7 +650,7 @@ export default function ScheduleForm({ initial, onClose }) {
                 <p className="text-xs text-gray-500 leading-snug">Apenas registra o lançamento, sem movimentar saldo.</p>
               )
               if (g.number === 1) return (
-                <p className="text-xs text-emerald-500/70 leading-snug">
+                <p className="text-xs text-reserva/70 leading-snug">
                   Ao efetivar, transferirá para a conta de reserva do grupo.
                 </p>
               )

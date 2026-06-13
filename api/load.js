@@ -74,6 +74,19 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS initial_balance NUMERIC DEFAULT NULL`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS projected_balance NUMERIC DEFAULT NULL`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE`)
+    // Oculta a conta apenas nas listas/seletores no mobile (<md). Dados/saldos intactos.
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS hide_on_mobile BOOLEAN DEFAULT FALSE`)
+    // Índices para a Busca Global (filtro por valor).
+    await query(`CREATE INDEX IF NOT EXISTS idx_lancamentos_amount ON lancamentos (amount)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_agendamentos_amount ON agendamentos (amount)`)
+    // Vínculo da conta: 'none' | 'reserva' | 'patrimonio'. Fonte de verdade do tipo
+    // de vínculo (is_reserva/reserva_type/reserva_category_id permanecem para a Reserva).
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS vinculo_tipo TEXT DEFAULT 'none'`)
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS patrimonio_category_id TEXT`)
+    // Migração de dados: contas que já eram reserva passam a ter vinculo_tipo='reserva'.
+    await query(`UPDATE contas SET vinculo_tipo = 'reserva' WHERE is_reserva = true AND (vinculo_tipo IS NULL OR vinculo_tipo = 'none')`)
+    // Mantém is_reserva sincronizado com vinculo_tipo (compat. com código legado).
+    await query(`UPDATE contas SET is_reserva = (vinculo_tipo = 'reserva') WHERE vinculo_tipo IS NOT NULL`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)

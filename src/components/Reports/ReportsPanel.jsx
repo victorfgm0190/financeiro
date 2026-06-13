@@ -18,7 +18,7 @@ const COLORS = ['#6366f1', '#22c55e', '#f97316', '#ef4444', '#3b82f6', '#8b5cf6'
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-surface border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
       <p className="text-gray-400 mb-1">{label}</p>
       {payload.map(p => (
         <p key={p.name} style={{ color: p.color }}>{p.name}: {fmt(p.value)}</p>
