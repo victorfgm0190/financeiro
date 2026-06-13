@@ -11,7 +11,7 @@ const visibleFor = (items, operation) =>
 //   "Reconciliar"      → mostra apenas os NÃO conciliados (aplica reconciled=true)
 //   "Não reconciliar"  → mostra apenas os JÁ conciliados  (aplica reconciled=false)
 // onApply(ids, value).
-export default function ReconciliarModal({ items, onApply, onClose }) {
+export default function ReconciliarModal({ items, onApply, onClose, onAlterar }) {
   const [operation, setOperation] = useState('reconciliar')
   // Seleção inicial: todos os itens visíveis no modo inicial (Reconciliar).
   const [selected, setSelected] = useState(() => new Set(visibleFor(items, 'reconciliar').map(t => t.id)))
@@ -142,6 +142,16 @@ export default function ReconciliarModal({ items, onApply, onClose }) {
             </div>
             <div className="flex gap-3">
               <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+              {onAlterar && (
+                <button
+                  className="btn-secondary flex-1"
+                  onClick={() => onAlterar(items.filter(t => selected.has(t.id)))}
+                  disabled={selected.size === 0}
+                  title="Alterar Data/Categoria dos selecionados"
+                >
+                  Alterar Selecionados
+                </button>
+              )}
               <button
                 className="btn-primary flex-1 flex items-center justify-center gap-2"
                 onClick={apply}

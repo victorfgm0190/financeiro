@@ -10,6 +10,7 @@ import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
+import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -470,6 +471,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Reconciliação — TODOS os lançamentos reconciliáveis do período (mês) em exibição,
   // conciliados e pendentes. O modal filtra conforme o modo (Reconciliar / Não reconciliar).
   const [showReconciliar, setShowReconciliar] = useState(false)
+  const [bulkEditTxs, setBulkEditTxs] = useState(null)
   const periodReconcilable = useMemo(
     () => filteredTxs
       .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id))
@@ -872,6 +874,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           items={periodReconcilable}
           onApply={setReconciled}
           onClose={() => setShowReconciliar(false)}
+          onAlterar={(txs) => { setShowReconciliar(false); setBulkEditTxs(txs) }}
+        />
+      )}
+
+      {bulkEditTxs && (
+        <BulkEditModal
+          txs={bulkEditTxs}
+          onClose={() => setBulkEditTxs(null)}
+          onApplied={(n) => showToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`)}
         />
       )}
     </div>

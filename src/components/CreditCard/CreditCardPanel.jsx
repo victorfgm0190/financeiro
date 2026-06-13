@@ -14,6 +14,7 @@ import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
+import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
@@ -212,6 +213,7 @@ export default function CreditCardPanel() {
 
   // Reconciliação — lançamentos NÃO reconciliados da fatura em exibição.
   const [showReconciliar, setShowReconciliar] = useState(false)
+  const [bulkEditTxs, setBulkEditTxs] = useState(null)
   const billPending = useMemo(
     () => billTxs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
     [billTxs]
@@ -619,6 +621,15 @@ export default function CreditCardPanel() {
           items={billPending}
           onApply={setReconciled}
           onClose={() => setShowReconciliar(false)}
+          onAlterar={(txs) => { setShowReconciliar(false); setBulkEditTxs(txs) }}
+        />
+      )}
+
+      {bulkEditTxs && (
+        <BulkEditModal
+          txs={bulkEditTxs}
+          onClose={() => setBulkEditTxs(null)}
+          onApplied={(n) => setToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`)}
         />
       )}
 

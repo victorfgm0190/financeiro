@@ -8,6 +8,7 @@ import {
   importToRow, gerencialRuleToRow, reserveFunctionToRow,
   saveRateios, deleteRateios,
   scheduleReservaFuncaoToRow,
+  bulkUpdateTransactionsApi,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
@@ -1111,6 +1112,26 @@ export function AppProvider({ children }) {
     const idSet = new Set(Array.isArray(ids) ? ids : [ids])
     update(d => ({ ...d, transactions: d.transactions.map(t => idSet.has(t.id) ? { ...t, reconciled: !!value } : t) }))
   }, [update])
+
+  // Edição em lote de lançamentos: altera Data e/ou Categoria de vários registros.
+  // Reaproveita updateTransaction por id para herdar o recálculo de fatura/saldo do cartão
+  // (mudança de data realoca a fatura → recalcula creditDebt) e a persistência via sync.
+  // Dispara também o endpoint /api/transactions-bulk-update para a gravação em lote no banco.
+  const bulkUpdateTransactions = useCallback((ids, { date, categoryId } = {}) => {
+    const list = Array.isArray(ids) ? ids.filter(Boolean) : []
+    if (list.length === 0) return
+    const changes = {}
+    if (date) changes.date = date
+    if (categoryId !== undefined && categoryId !== null && categoryId !== '') changes.categoryId = categoryId
+    if (Object.keys(changes).length === 0) return
+
+    // Gravação atômica em lote no banco (não bloqueia a UI; o sync por estado é o backstop).
+    bulkUpdateTransactionsApi(list, { date: changes.date || null, categoryId: 'categoryId' in changes ? changes.categoryId : undefined })
+      .catch(e => console.error('[bulkUpdate] api', e.message))
+
+    // Estado + recálculo de fatura/saldo por lançamento (e persistência via diff-sync).
+    for (const id of list) updateTransaction(id, changes)
+  }, [updateTransaction])
 
   const deleteTransaction = useCallback((id) => {
     // Captura as faturas afetadas (gasto + parcelas-filhas) antes do update p/ recalcular depois.
@@ -3603,7 +3624,7 @@ export function AppProvider({ children }) {
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
-      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled,
+      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions,
       rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
       addCategory, updateCategory, deleteCategory,
       categoryGroups,

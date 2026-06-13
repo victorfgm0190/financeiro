@@ -30,6 +30,11 @@ export async function searchEntries(filters) {
   return apiPost('/api/search', filters || {})
 }
 
+// Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
+export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId } = {}) {
+  return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
+}
+
 // Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
 // pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
 // strings (date é TEXT), então convertemos aqui para manter a consistência.

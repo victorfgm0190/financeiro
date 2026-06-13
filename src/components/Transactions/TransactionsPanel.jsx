@@ -13,6 +13,7 @@ import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
+import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -103,6 +104,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, reverseTransaction, setReconciled } = useApp()
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [showReconciliar, setShowReconciliar] = useState(false)
+  const [bulkEditTxs, setBulkEditTxs] = useState(null)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmEstorno, setConfirmEstorno] = useState(null)
@@ -318,6 +320,15 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           items={billPending}
           onApply={setReconciled}
           onClose={() => setShowReconciliar(false)}
+          onAlterar={(txs) => { setShowReconciliar(false); setBulkEditTxs(txs) }}
+        />
+      )}
+
+      {bulkEditTxs && (
+        <BulkEditModal
+          txs={bulkEditTxs}
+          onClose={() => setBulkEditTxs(null)}
+          onApplied={(n) => showToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`)}
         />
       )}
 
