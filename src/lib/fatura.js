@@ -42,6 +42,21 @@ export function nextMonthScheduleDate(faturaRef, financialStartDay) {
 }
 
 /**
+ * Retorna a data (YYYY-MM-DD) do dia `financialStartDay` do mês ANTERIOR ao mês de
+ * vencimento da fatura. Usado nas transferências gerenciais das parcelas 2..N do Grupo G
+ * (a provisão é feita no início do ciclo anterior ao ciclo da fatura da parcela).
+ * Trata a virada de ano (faturaRef de janeiro → dezembro do ano anterior).
+ */
+export function prevMonthScheduleDate(faturaRef, financialStartDay) {
+  const [mm, yyyy] = faturaRef.split('/')
+  // mm é 1-indexed; new Date com (mm - 2) já recua um mês (e -1 a mais p/ o índice 0-based).
+  const prev = new Date(Number(yyyy), Number(mm) - 2, 1)
+  const pM = String(prev.getMonth() + 1).padStart(2, '0')
+  const pY = prev.getFullYear()
+  return `${pY}-${pM}-${String(financialStartDay).padStart(2, '0')}`
+}
+
+/**
  * Chave única de um agendamento gerencial: identifica fatura + cartão.
  */
 export function gerencialKey(cardId, faturaRef) {

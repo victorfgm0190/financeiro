@@ -10,7 +10,7 @@ import {
   scheduleReservaFuncaoToRow,
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
-import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate } from '../lib/fatura'
+import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
@@ -3274,6 +3274,9 @@ export function AppProvider({ children }) {
         d.accounts.find(a => a.type === 'checking')
       if (!contaPrincipal) return d
 
+      // Dia de início do ciclo financeiro: base das datas das transferências das parcelas 2..N.
+      const financialStartDay = d.settings?.financialMonthStartDay || 1
+
       let accounts = [...d.accounts]
       const newTxs = []
       for (const parcela of d.transactions) {
@@ -3283,6 +3286,20 @@ export function AppProvider({ children }) {
           (t.parentTxId === parcela.id || t.description === `Reserva Gerencial - ${parcela.description}`)
         )
         if (jaProvisionada) continue
+
+        // Data da transferência gerencial (Conta Principal → Ger.):
+        //  • Parcela 1 (ou sem padrão X/N): data original do lançamento (comportamento atual).
+        //  • Parcelas 2..N: dia financeiro do mês ANTERIOR ao mês da fatura_ref da parcela
+        //    (provisão no início do ciclo anterior ao da fatura).
+        // Número da parcela = último "X/N" da descrição (sufixo "(i/N)" gerado em criarParcelasGerencial);
+        // pegar a última ocorrência evita confundir com uma data "5/6" no início da descrição.
+        const instMatches = [...(parcela.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
+        const instNum = instMatches.length ? Number(instMatches[instMatches.length - 1][1]) : 1
+        let transferDate = parcela.date
+        if (instNum >= 2 && parcela.faturaMonthYear) {
+          const [fy, fm] = parcela.faturaMonthYear.split('-')
+          transferDate = prevMonthScheduleDate(`${fm}/${fy}`, financialStartDay)
+        }
 
         const card = d.accounts.find(a => a.id === parcela.accountId)
         const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
@@ -3308,7 +3325,7 @@ export function AppProvider({ children }) {
           accountId: contaPrincipal.id,
           toAccountId: subconta.id,
           amount: parcela.amount,
-          date: parcela.date,
+          date: transferDate,
           description: `Reserva Gerencial - ${parcela.description}`,
           grupoGerencial: g1.id,
           origin: 'auto-provisao',
