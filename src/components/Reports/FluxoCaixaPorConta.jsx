@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar } from 'lucide-react'
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -19,7 +19,9 @@ export default function FluxoCaixaPorConta() {
   const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
-  const [accountId, setAccountId] = useState(() => accounts[0]?.id || '')
+  // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
+  const [selectedAccountIds, setSelectedAccountIds] = useState(() => accounts[0]?.id ? [accounts[0].id] : [])
+  const [contaDropOpen, setContaDropOpen] = useState(false)
   const [groupId, setGroupId] = useState('')
   const [start, setStart] = useState(() => todayStr())
   const [end, setEnd] = useState(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'))
@@ -39,10 +41,10 @@ export default function FluxoCaixaPorConta() {
   )
 
   const selectedAccounts = useMemo(() => {
-    if (visao === 'conta')      return accounts.filter(a => a.id === accountId)
+    if (visao === 'conta')      return accounts.filter(a => selectedAccountIds.includes(a.id))
     if (visao === 'grupo')      return accounts.filter(a => a.accountGroupId === groupId)
     return accounts.filter(a => a.isMain) // 'principais'
-  }, [visao, accountId, groupId, accounts])
+  }, [visao, selectedAccountIds, groupId, accounts])
 
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
@@ -134,6 +136,22 @@ export default function FluxoCaixaPorConta() {
 
   const noSelection = accountIds.size === 0
 
+  // Multi-select de contas (visão "Por Conta")
+  const contaDropRef = useRef(null)
+  useEffect(() => {
+    if (!contaDropOpen) return
+    const onDoc = (e) => { if (contaDropRef.current && !contaDropRef.current.contains(e.target)) setContaDropOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [contaDropOpen])
+  const pickableAccounts = accountsForView(accounts, isMobile)
+  const toggleAccount = (id) => setSelectedAccountIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+  const contaLabel = selectedAccountIds.length === 0
+    ? 'Selecione...'
+    : selectedAccountIds.length === 1
+      ? accName(selectedAccountIds[0])
+      : `${selectedAccountIds.length} contas selecionadas`
+
   return (
     <div className="space-y-4">
       {/* Filtros — fixos no topo ao rolar apenas no desktop (md+) */}
@@ -155,12 +173,39 @@ export default function FluxoCaixaPorConta() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {visao === 'conta' && (
-            <div className="lg:col-span-2">
-              <label className="label">Conta</label>
-              <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                <option value="">Selecione...</option>
-                {accountsForView(accounts, isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
-              </select>
+            <div className="lg:col-span-2 relative" ref={contaDropRef}>
+              <label className="label">Contas</label>
+              <button
+                type="button"
+                onClick={() => setContaDropOpen(o => !o)}
+                className={`input flex items-center justify-between gap-2 text-left w-full ${selectedAccountIds.length === 0 ? 'text-gray-500' : ''}`}
+              >
+                <span className="truncate min-w-0">{contaLabel}</span>
+                <ChevronDown size={14} className={`text-gray-500 shrink-0 transition-transform ${contaDropOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {contaDropOpen && (
+                <div className="absolute z-30 left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto overscroll-contain">
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-800 sticky top-0 bg-surface">
+                    <button type="button" onClick={() => setSelectedAccountIds(pickableAccounts.map(a => a.id))} className="text-xs text-[#0F6E56] hover:underline">Todas</button>
+                    <span className="text-gray-700">·</span>
+                    <button type="button" onClick={() => setSelectedAccountIds([])} className="text-xs text-gray-500 hover:text-gray-300">Nenhuma</button>
+                  </div>
+                  {pickableAccounts.map(a => (
+                    <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+                        checked={selectedAccountIds.includes(a.id)}
+                        onChange={() => toggleAccount(a.id)}
+                      />
+                      <span className="text-sm text-gray-300 truncate">{a.apelido || a.name}</span>
+                    </label>
+                  ))}
+                  {pickableAccounts.length === 0 && (
+                    <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhuma conta</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {visao === 'grupo' && (

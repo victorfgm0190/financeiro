@@ -24,6 +24,12 @@ async function apiPost(path, body) {
   return res.json()
 }
 
+// Busca Global: consulta combinada de lançamentos + agendamentos via /api/search.
+// Retorna { transactions: [rows], schedules: [rows] } (rows em snake_case do banco).
+export async function searchEntries(filters) {
+  return apiPost('/api/search', filters || {})
+}
+
 // Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
 // pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
 // strings (date é TEXT), então convertemos aqui para manter a consistência.

@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { User, Building2 } from 'lucide-react'
+import { User, Building2, Search } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { useApp } from '../../context/AppContext'
 
@@ -19,7 +19,7 @@ const PAGE_TITLES = {
   settings: 'Configurações',
 }
 
-export default function Header({ page, financialPeriod, saldoPrincipal, saldosPrincipais, onShowPosicao }) {
+export default function Header({ page, financialPeriod, saldoPrincipal, saldosPrincipais, onShowPosicao, onOpenSearch }) {
   const today = new Date()
   const { profiles, activeProfileId, setActiveProfileId } = useApp()
 
@@ -96,8 +96,16 @@ export default function Header({ page, financialPeriod, saldoPrincipal, saldosPr
       {/* Spacer when no profiles */}
       {profiles.length === 0 && <div className="flex-1" />}
 
-      {/* Right: mobile balance / desktop date */}
+      {/* Right: busca global + mobile balance / desktop date */}
       <div className="flex items-center gap-4 shrink-0">
+        <button
+          onClick={onOpenSearch}
+          title="Busca global (lançamentos e agendamentos)"
+          aria-label="Busca global"
+          className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"
+        >
+          <Search size={18} />
+        </button>
         <button onClick={onShowPosicao} className="md:hidden text-right">
           <p className="text-xs text-gray-600 leading-none">Principal</p>
           <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>

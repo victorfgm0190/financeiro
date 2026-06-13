@@ -25,11 +25,13 @@ import AlertsPanel from './components/Alerts/AlertsPanel'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import MonthStartModal from './components/shared/MonthStartModal'
+import GlobalSearch from './components/shared/GlobalSearch'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
   const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, data } = useApp()
@@ -123,7 +125,7 @@ function AppContent() {
     <div className="flex h-screen overflow-hidden bg-gray-950">
       <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header page={activePage} financialPeriod={financialPeriod} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+        <Header page={activePage} financialPeriod={financialPeriod} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} onOpenSearch={() => setShowSearch(true)} />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           {panels[activePage] ?? panels.dashboard}
         </main>
@@ -145,6 +147,7 @@ function AppContent() {
         <Toast message={genericToast} onClose={() => setGenericToast(null)} />
       )}
       <MonthStartModal />
+      <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
     </div>
   )
 }

@@ -68,6 +68,9 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE`)
     // Oculta a conta apenas nas listas/seletores no mobile (<md). Dados/saldos intactos.
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS hide_on_mobile BOOLEAN DEFAULT FALSE`)
+    // Índices para a Busca Global (filtro por valor).
+    await query(`CREATE INDEX IF NOT EXISTS idx_lancamentos_amount ON lancamentos (amount)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_agendamentos_amount ON agendamentos (amount)`)
     // Vínculo da conta: 'none' | 'reserva' | 'patrimonio'. Fonte de verdade do tipo
     // de vínculo (is_reserva/reserva_type/reserva_category_id permanecem para a Reserva).
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS vinculo_tipo TEXT DEFAULT 'none'`)
