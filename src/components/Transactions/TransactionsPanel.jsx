@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
+import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -140,8 +141,8 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumb — fixo no topo ao rolar (mobile) */}
-      <div className="flex items-center gap-2 flex-wrap sticky top-0 z-20 bg-gray-950 py-2 -my-2 md:static md:bg-transparent md:py-0 md:my-0">
+      {/* Breadcrumb — fixo no topo ao rolar apenas no desktop (md+); no mobile rola normal */}
+      <div className="flex items-center gap-2 flex-wrap md:sticky md:top-0 md:z-20 md:bg-gray-950 md:py-2 md:-my-2">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -484,6 +485,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
 export default function TransactionsPanel() {
   const { profileAccounts, accountGroups } = useApp()
   const accounts = profileAccounts
+  const isMobile = useIsMobile()
 
   // view: null | { type: 'account', account } | { type: 'fatura', card, billKey }
   const [view, setView] = useState(null)
@@ -495,12 +497,12 @@ export default function TransactionsPanel() {
   const [editTx, setEditTx] = useState(null)
 
   const bankAccounts = useMemo(
-    () => accounts.filter(a => a.type !== 'credit').sort((a, b) => accountPriority(a) - accountPriority(b)),
-    [accounts]
+    () => accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile).sort((a, b) => accountPriority(a) - accountPriority(b)),
+    [accounts, isMobile]
   )
   const creditCards = useMemo(
-    () => accounts.filter(a => a.type === 'credit').sort((a, b) => (a.appPriority ? 0 : 1) - (b.appPriority ? 0 : 1)),
-    [accounts]
+    () => accountsForView(accounts.filter(a => a.type === 'credit'), isMobile).sort((a, b) => (a.appPriority ? 0 : 1) - (b.appPriority ? 0 : 1)),
+    [accounts, isMobile]
   )
 
   const { profileTransactions: transactions } = useApp()

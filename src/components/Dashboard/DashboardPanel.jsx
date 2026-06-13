@@ -7,7 +7,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 
@@ -51,6 +52,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
   const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
+  const isMobile = useIsMobile()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
 
@@ -684,7 +686,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           )}
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {accounts.map(a => {
+          {accountsForView(accounts, isMobile).map(a => {
             // Last activity label for credit cards (current fatura)
             let lastActivityNode = null
             if (a.type === 'credit') {

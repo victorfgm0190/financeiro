@@ -5,7 +5,8 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
@@ -510,6 +511,7 @@ export default function AccountsPanel() {
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [showTxForm, setShowTxForm] = useState(false)
   const [editTxInitial, setEditTxInitial] = useState(null)
+  const isMobile = useIsMobile()
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
@@ -522,10 +524,12 @@ export default function AccountsPanel() {
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')
   const patrimonialGroups = sortedGroups.filter(g => g.type === 'patrimonial')
 
+  // No mobile, contas marcadas como "Ocultar no Mobile" somem da grade (saldos/totais acima ficam intactos).
+  const visibleAccounts = accountsForView(accounts, isMobile)
   const getGroupAccounts = (groupId) =>
-    accounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    visibleAccounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
-  const ungrouped = accounts.filter(a => !a.accountGroupId)
+  const ungrouped = visibleAccounts.filter(a => !a.accountGroupId)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }

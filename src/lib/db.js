@@ -112,6 +112,7 @@ export const accountToRow = (a) => ({
   vinculo_tipo: a.vinculoTipo || (a.isReserva ? 'reserva' : 'none'),
   patrimonio_category_id: a.patrimonioCategoryId || null,
   conta_aplicacao: !!a.contaAplicacao,
+  hide_on_mobile: !!a.hideOnMobile,
   projected_balance: a.projectedBalance != null ? Math.round(Number(a.projectedBalance) * 100) / 100 : null,
   active: a.active !== false,
 })
@@ -147,6 +148,7 @@ export const rowToAccount = (r) => ({
   vinculoTipo: r.vinculo_tipo || (r.is_reserva ? 'reserva' : 'none'),
   patrimonioCategoryId: r.patrimonio_category_id || null,
   contaAplicacao: !!r.conta_aplicacao,
+  hideOnMobile: !!r.hide_on_mobile,
   projectedBalance: r.projected_balance != null ? Math.round(Number(r.projected_balance) * 100) / 100 : null,
   active: r.active !== false,
 })

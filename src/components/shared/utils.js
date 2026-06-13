@@ -89,6 +89,14 @@ export function countsAsReportExpense(tx, aplicSet) {
 }
 
 // 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest
+// Filtra contas marcadas como "Ocultar no Mobile" quando em viewport mobile.
+// Use APENAS em listas/seletores/filtros de conta — nunca em cálculos de saldo,
+// pois os dados/saldos da conta devem permanecer intactos.
+export function accountsForView(accounts, isMobile) {
+  if (!isMobile) return accounts
+  return (accounts || []).filter(a => !a.hideOnMobile)
+}
+
 export function accountPriority(a) {
   if (a.isMain || a.type === 'credit') return 0
   if (a.appPriority) return 1

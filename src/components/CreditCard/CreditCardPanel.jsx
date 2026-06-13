@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -83,6 +84,7 @@ export default function CreditCardPanel() {
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
     reconciliarGerencial,
   } = useApp()
+  const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
   const [reconciling, setReconciling] = useState(false)
 
@@ -106,8 +108,8 @@ export default function CreditCardPanel() {
     }
   }
 
-  const creditCards = useMemo(() => accounts.filter(a => a.type === 'credit' && a.active !== false), [accounts])
-  const bankAccounts = useMemo(() => accounts.filter(a => a.type !== 'credit'), [accounts])
+  const creditCards = useMemo(() => accountsForView(accounts.filter(a => a.type === 'credit' && a.active !== false), isMobile), [accounts, isMobile])
+  const bankAccounts = useMemo(() => accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile), [accounts, isMobile])
 
   // ── State ────────────────────────────────────────────────────────────────
   const [selectedCardId, setSelectedCardId] = useState(() => creditCards[0]?.id || '')
@@ -282,8 +284,9 @@ export default function CreditCardPanel() {
   return (
     <div className="space-y-4">
 
-      {/* ── Header (seletor + KPIs) — fixo no topo ao rolar (mobile) ── */}
-      <div className="sticky top-0 z-20 bg-gray-950 space-y-4 pb-2 -mb-2 md:static md:bg-transparent md:pb-0 md:mb-0">
+      {/* ── Header (seletor + KPIs) — fixo no topo ao rolar apenas no desktop (md+);
+             no mobile rola normalmente para liberar a tela à lista ── */}
+      <div className="space-y-4 md:sticky md:top-0 md:z-20 md:bg-gray-950 md:pb-2 md:-mb-2">
 
       {/* ── Seletor de cartão + navegador de fatura ── */}
       <div className="flex flex-wrap items-center gap-3">

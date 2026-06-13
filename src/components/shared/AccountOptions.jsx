@@ -1,4 +1,5 @@
 import { accountPriority } from './utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 // Renders <optgroup>/<option> elements inside a <select>, sorted by priority.
 // Tier 0 (isMain / credit) and Tier 1 (appPriority) appear ungrouped at top.
@@ -12,7 +13,10 @@ export default function AccountOptions({
   labelFn,
 }) {
   // Contas inativas (active === false) nunca aparecem nos selects de formulário.
-  const pool = (filter ? accounts.filter(filter) : accounts).filter(a => a.active !== false)
+  // No mobile (<md), contas marcadas como "Ocultar no Mobile" também são omitidas.
+  const isMobile = useIsMobile()
+  const pool = (filter ? accounts.filter(filter) : accounts)
+    .filter(a => a.active !== false && (!isMobile || !a.hideOnMobile))
   const label = labelFn || (a => a.name)
 
   const top = pool.filter(a => accountPriority(a) === 0)

@@ -1610,8 +1610,8 @@ export default function SchedulePanel() {
             ))}
           </div>
 
-          {/* Barra de filtros (tempo real) */}
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end">
+          {/* Barra de filtros (tempo real) — fixa no topo ao rolar apenas no desktop (md+) */}
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end md:sticky md:top-0 md:z-20">
             <div>
               <label className="label text-xs">Data de</label>
               <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />

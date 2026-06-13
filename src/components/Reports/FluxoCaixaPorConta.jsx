@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
@@ -27,6 +28,7 @@ export default function FluxoCaixaPorConta() {
   const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  const isMobile = useIsMobile()
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const patrimonioSet = useMemo(() => new Set(accounts.filter(a => a.vinculoTipo === 'patrimonio').map(a => a.id)), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
@@ -134,8 +136,8 @@ export default function FluxoCaixaPorConta() {
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className="card space-y-3">
+      {/* Filtros — fixos no topo ao rolar apenas no desktop (md+) */}
+      <div className="card space-y-3 md:sticky md:top-0 md:z-20">
         {/* Visão (toggle) */}
         <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 w-full sm:w-auto">
           {VISOES.map(v => (
@@ -157,7 +159,7 @@ export default function FluxoCaixaPorConta() {
               <label className="label">Conta</label>
               <select className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
                 <option value="">Selecione...</option>
-                {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+                {accountsForView(accounts, isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
               </select>
             </div>
           )}

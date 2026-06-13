@@ -57,6 +57,7 @@ export default function AccountForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || null,
     accountGroupId: initial?.accountGroupId || null,
     appPriority: initial?.appPriority || false,
+    hideOnMobile: initial?.hideOnMobile || false,
     profileId: initial?.profileId || null,
     initialBalance: (!initial || (initial.type !== 'credit' && initial.type !== 'asset' && initial.type !== 'liability'))
       ? Math.round(((initial?.initialBalance ?? initial?.balance) ?? 0) * 100) / 100
@@ -122,6 +123,7 @@ export default function AccountForm({ initial, onClose }) {
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
       appPriority: form.appPriority,
+      hideOnMobile: form.hideOnMobile,
       profileId: form.profileId || null,
       acquisitionValue: isPatrimonial && form.acquisitionValue !== '' ? Number(form.acquisitionValue) : null,
       acquisitionDate: isPatrimonial ? form.acquisitionDate || null : null,
@@ -380,6 +382,16 @@ export default function AccountForm({ initial, onClose }) {
           label="Fluxo de Caixa Principal"
           tooltip="Esta conta aparece no painel de Fluxo de Caixa geral"
         />
+
+        {/* Configuração de exibição mobile — disponível só no desktop */}
+        <div className="hidden md:block">
+          <Toggle
+            checked={form.hideOnMobile}
+            onChange={e => set('hideOnMobile', e.target.checked)}
+            label="Ocultar no Mobile"
+            tooltip="A conta continua aparecendo no desktop, mas fica oculta nas listas e seletores no celular. Dados e saldos não são afetados."
+          />
+        </div>
 
         {!isCredit && (
           <Toggle

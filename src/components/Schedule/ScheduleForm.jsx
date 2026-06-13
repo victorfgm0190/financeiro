@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
@@ -173,9 +174,9 @@ function buildCatOpts(categories, type) {
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
 }
 
-function buildAccOpts(accounts, _accountGroups, excludeId) {
-  // Contas inativas não aparecem nos selects de formulário.
-  const pool = accounts.filter(a => a.active !== false && (!excludeId || a.id !== excludeId))
+function buildAccOpts(accounts, _accountGroups, excludeId, isMobile) {
+  // Contas inativas (e, no mobile, as marcadas como "Ocultar no Mobile") não aparecem nos selects.
+  const pool = accounts.filter(a => a.active !== false && (!isMobile || !a.hideOnMobile) && (!excludeId || a.id !== excludeId))
   return [...pool]
     .sort((a, b) => accountPriority(a) - accountPriority(b))
     .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null })
@@ -258,8 +259,9 @@ export default function ScheduleForm({ initial, onClose }) {
   )
 
   // Options for SearchableSelect fields
-  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups), [accounts, accountGroups])
-  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId), [accounts, accountGroups, form.accountId])
+  const isMobile = useIsMobile()
+  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, null, isMobile), [accounts, accountGroups, isMobile])
+  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId, isMobile), [accounts, accountGroups, form.accountId, isMobile])
   const categoryOpts = useMemo(() => buildCatOpts(categories, form.transactionType === 'transfer' ? null : form.transactionType), [categories, form.transactionType])
   const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
 

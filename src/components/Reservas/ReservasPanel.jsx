@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 
@@ -158,6 +159,7 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = f
 
 // ── Function Form (modal) ───────────────────────────────────────────────────
 function FunctionForm({ initial, accounts, onSubmit, onClose }) {
+  const isMobile = useIsMobile()
   const [form, setForm] = useState({
     name: initial?.name || '',
     accountId: initial?.accountId || '',
@@ -185,7 +187,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
         <label className="label">Conta Vinculada</label>
         <select className="input" value={form.accountId} onChange={e => set('accountId', e.target.value)}>
           <option value="">— Sem conta —</option>
-          {accounts.filter(a => a.active !== false).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+          {accountsForView(accounts.filter(a => a.active !== false), isMobile).map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
         </select>
       </div>
       <div>

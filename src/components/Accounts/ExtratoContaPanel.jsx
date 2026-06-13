@@ -570,8 +570,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   return (
     <div>
-      {/* ── Sticky block: title · filters · KPIs · table header ── */}
-      <div className="sticky top-0 z-10 bg-gray-950">
+      {/* ── Bloco sticky (apenas desktop md+): title · filters · KPIs · table header.
+             No mobile rola normalmente para liberar a tela à lista. ── */}
+      <div className="md:sticky md:top-0 md:z-10 md:bg-gray-950">
         <div className="space-y-3 pb-3">
           {/* Title row */}
           <div className="flex items-center gap-3">

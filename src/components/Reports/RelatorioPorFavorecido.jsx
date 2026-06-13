@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
@@ -104,6 +105,7 @@ function doExport(filtered, totals, accounts, categories, applied, analytic) {
 
 export default function RelatorioPorFavorecido() {
   const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
 
   const [months, setMonths] = useState(1)
@@ -114,7 +116,7 @@ export default function RelatorioPorFavorecido() {
   const [applied, setApplied] = useState(null)
   const [expanded, setExpanded] = useState({})
 
-  const accItems = useMemo(() => accounts.map(a => ({ id: a.id, label: a.apelido || a.name })), [accounts])
+  const accItems = useMemo(() => accountsForView(accounts, isMobile).map(a => ({ id: a.id, label: a.apelido || a.name })), [accounts, isMobile])
 
   // Default init
   useEffect(() => {

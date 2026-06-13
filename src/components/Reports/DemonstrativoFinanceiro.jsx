@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView } from '../shared/utils'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -256,6 +257,7 @@ function TxRow({ tx, indent }) {
 
 export default function DemonstrativoFinanceiro() {
   const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
@@ -279,8 +281,8 @@ export default function DemonstrativoFinanceiro() {
   , [categories])
 
   const accItems = useMemo(() =>
-    accounts.map(a => ({ id: a.id, label: a.apelido || a.name }))
-  , [accounts])
+    accountsForView(accounts, isMobile).map(a => ({ id: a.id, label: a.apelido || a.name }))
+  , [accounts, isMobile])
 
   // ── Default initialisation ────────────────────────────────────────────────
   useEffect(() => {
