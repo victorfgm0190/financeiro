@@ -36,9 +36,16 @@ function Delta({ abs, pct, goodWhenPositive = true }) {
   )
 }
 
-function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive }) {
+function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive, onClick }) {
+  const clickable = typeof onClick === 'function'
   return (
-    <div className="card">
+    <div
+      className={`card ${clickable ? 'cursor-pointer hover:bg-gray-800/60 transition-colors' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } } : undefined}
+    >
       <div className={`flex items-center gap-2 mb-2 ${iconColor}`}>
         <Icon size={15} />
         <span className="text-xs uppercase tracking-wide text-gray-400">{label}</span>
@@ -67,6 +74,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const income = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
+
+  // Maps p/ rótulos no drill-down de receitas/despesas do mês.
+  const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  const catById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
+  const accLabel = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
+  const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : 'Sem categoria' }
 
   // Previous period (same duration, shifted back)
   const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
@@ -274,6 +287,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // ── P17: Pie chart state ─────────────────────────────────────────────────
   const [pieFilter, setPieFilter] = useState('current')
   const [catModal, setCatModal] = useState(null) // { name, cat, txs, value, color }
+  const [txModal, setTxModal] = useState(null) // { title, total, color, txs } — receitas/despesas do mês
 
   const pieRange = useMemo(() => {
     const now = new Date()
@@ -368,6 +382,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           deltaAbs={mkDelta(income, prevIncome).abs}
           deltaPct={mkDelta(income, prevIncome).pct}
           goodWhenPositive={true}
+          onClick={() => setTxModal({
+            title: 'Receitas do Mês',
+            total: income,
+            color: 'text-blue-600',
+            txs: periodTxs.filter(t => t.type === 'income'),
+          })}
         />
         <KpiCard
           icon={TrendingDown}
@@ -378,6 +398,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           deltaAbs={mkDelta(expense, prevExpense).abs}
           deltaPct={mkDelta(expense, prevExpense).pct}
           goodWhenPositive={false}
+          onClick={() => setTxModal({
+            title: 'Despesas do Mês',
+            total: expense,
+            color: 'text-orange-600',
+            txs: periodTxs.filter(t => t.type === 'expense'),
+          })}
         />
         <KpiCard
           icon={Wallet}
@@ -670,6 +696,43 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                 ))
               }
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Receitas/Despesas do mês drill-down modal */}
+      {txModal && (
+        <Modal open={!!txModal} onClose={() => setTxModal(null)} title={txModal.title} size="md">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-gray-800">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">
+                Total · {txModal.txs.length} lançamento{txModal.txs.length !== 1 ? 's' : ''}
+              </span>
+              <span className={`text-lg font-bold ${txModal.color}`}>{fmt(txModal.total)}</span>
+            </div>
+            {txModal.txs.length === 0 ? (
+              <p className="text-xs text-gray-500 text-center py-6">Nenhum lançamento no período.</p>
+            ) : (
+              <div className="space-y-0 max-h-96 overflow-y-auto overscroll-contain">
+                {[...txModal.txs]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map(tx => (
+                    <div key={tx.id} className="flex items-start justify-between gap-3 py-2.5 border-b border-gray-800/50 last:border-0">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-200 truncate">{tx.description || tx.payee || catLabel(tx.categoryId)}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {fmtDate(tx.date)}
+                          {tx.payee && tx.description ? ` · ${tx.payee}` : ''}
+                          {` · ${catLabel(tx.categoryId)}`}
+                          {` · ${accLabel(tx.accountId)}`}
+                        </p>
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ${txModal.color}`}>{fmt(tx.amount)}</span>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
           </div>
         </Modal>
       )}
