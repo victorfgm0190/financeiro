@@ -1490,8 +1490,16 @@ export default function SchedulePanel() {
   const [showForm, setShowForm] = useState(false)
   const [showProvisaoForm, setShowProvisaoForm] = useState(false)
   const [editSchedule, setEditSchedule] = useState(null)
+  const [editProvisao, setEditProvisao] = useState(null)
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
   const [showZeroed, setShowZeroed] = useState(false)
+
+  // Edição de agendamento: provisões abrem no ProvisaoForm (campos próprios:
+  // valor/data estimados, "será pago com reserva" + função); os demais no ScheduleForm.
+  const openEditSchedule = (s) => {
+    if (s?.isProvisao) { setEditProvisao(s); setShowProvisaoForm(true) }
+    else { setEditSchedule(s); setShowForm(true) }
+  }
 
   // FAB mobile: abre o formulário de novo agendamento.
   useRegisterFab(() => { setEditSchedule(null); setShowForm(true) }, [])
@@ -1713,7 +1721,7 @@ export default function SchedulePanel() {
           )}
           {activeTab === 'conta' && (
             <>
-              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={() => setShowProvisaoForm(true)}>
+              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={() => { setEditProvisao(null); setShowProvisaoForm(true) }}>
                 <Hourglass size={14} /> Lançar Provisão
               </button>
               <button className="btn-primary hidden md:flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
@@ -1822,7 +1830,7 @@ export default function SchedulePanel() {
             getNextOccurrences={getNextOccurrences}
             efetivarProvisao={efetivarProvisao}
             onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-            onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+            onEditSchedule={openEditSchedule}
           />
         </>
       )}
@@ -1875,7 +1883,7 @@ export default function SchedulePanel() {
                   skipScheduleOccurrence={skipScheduleOccurrence}
                   getNextOccurrences={getNextOccurrences}
                   onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-                  onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+                  onEditSchedule={openEditSchedule}
                 />
               )}
             </>
@@ -1903,7 +1911,7 @@ export default function SchedulePanel() {
             skipScheduleOccurrence={skipScheduleOccurrence}
             getNextOccurrences={getNextOccurrences}
             onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-            onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
+            onEditSchedule={openEditSchedule}
           />
         )
       )}
@@ -1912,8 +1920,8 @@ export default function SchedulePanel() {
         <ScheduleForm initial={editSchedule} onClose={() => { setShowForm(false); setEditSchedule(null) }} />
       </Modal>
 
-      <Modal open={showProvisaoForm} onClose={() => setShowProvisaoForm(false)} title="Lançar Provisão de Despesa">
-        <ProvisaoForm onClose={() => setShowProvisaoForm(false)} />
+      <Modal open={showProvisaoForm} onClose={() => { setShowProvisaoForm(false); setEditProvisao(null) }} title={editProvisao ? 'Editar Provisão de Despesa' : 'Lançar Provisão de Despesa'}>
+        <ProvisaoForm initial={editProvisao} onClose={() => { setShowProvisaoForm(false); setEditProvisao(null) }} />
       </Modal>
 
       <ConfirmDialog

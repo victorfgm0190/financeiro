@@ -22,8 +22,9 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // Formulário de "Provisão de Despesa": uma despesa futura estimada (valor/data ainda não
 // definitivos), gravada como agendamento de despesa com is_provisao = true. Pode ser "Uma vez"
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
-export default function ProvisaoForm({ onClose }) {
-  const { accounts, categories, reserveFunctions, addSchedule } = useApp()
+// Com `initial`, abre em modo edição (todos os campos editáveis).
+export default function ProvisaoForm({ initial, onClose }) {
+  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule } = useApp()
 
   // Conta principal (Itaú Principal): a provisão é uma despesa futura debitada da conta
   // principal — aparece no Fluxo de Caixa Principal como despesa "Uma vez".
@@ -40,28 +41,33 @@ export default function ProvisaoForm({ onClose }) {
       .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null })),
   [categories])
 
-  // Funções de reserva vinculadas a uma conta (só essas podem originar o resgate ao efetivar).
+  // TODAS as funções de reserva de TODAS as contas (cada função pertence a uma conta via
+  // accountId). Formato "Nome (apelido)"; ordenado por conta e depois por nome da função.
   const funcoesReserva = useMemo(() => {
     const accById = new Map(accounts.map(a => [a.id, a]))
     return (reserveFunctions || [])
       .filter(f => f.accountId && accById.has(f.accountId))
-      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name))
       .map(f => {
         const acc = accById.get(f.accountId)
-        return { id: f.id, label: acc ? `${f.name} (${acc.apelido || acc.name})` : f.name }
+        const accLabel = acc.apelido || acc.name
+        return { id: f.id, name: f.name, accLabel, label: `${f.name} (${accLabel})` }
       })
+      .sort((a, b) =>
+        a.accLabel.localeCompare(b.accLabel, 'pt-BR') ||
+        a.name.localeCompare(b.name, 'pt-BR')
+      )
   }, [reserveFunctions, accounts])
 
   const [form, setForm] = useState({
-    description: '',
-    amount: '',
-    startDate: today(),
-    categoryId: '',
-    frequency: 'once',
-    occurrenceType: 'continuous',
-    installments: 0,
-    comReserva: false,
-    reservaFuncaoId: '',
+    description: initial?.description || '',
+    amount: initial?.amount ?? '',
+    startDate: initial?.startDate || today(),
+    categoryId: initial?.categoryId || '',
+    frequency: initial?.frequency || 'once',
+    occurrenceType: initial?.occurrenceType || 'continuous',
+    installments: initial?.installments ?? 0,
+    comReserva: !!initial?.reservaFuncaoId,
+    reservaFuncaoId: initial?.reservaFuncaoId || '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isRecorrente = form.frequency && form.frequency !== 'once'
@@ -72,31 +78,35 @@ export default function ProvisaoForm({ onClose }) {
     if (isRecorrente && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.comReserva && !form.reservaFuncaoId) return
 
-    addSchedule({
+    const payload = {
       description: form.description,
       transactionType: 'expense',
-      accountId: contaPrincipal?.id || '',
-      accountType: contaPrincipal?.type || null,
+      // Em edição mantém a conta original; na criação usa a conta principal.
+      accountId: initial?.accountId || contaPrincipal?.id || '',
+      accountType: initial?.accountType ?? (contaPrincipal?.type || null),
       toAccountId: '',
       amount: Number(form.amount),
       categoryId: form.categoryId || '',
-      payee: '',
-      costCenter: '',
+      payee: initial?.payee || '',
+      costCenter: initial?.costCenter || '',
       frequency: form.frequency,
       startDate: form.startDate,
       occurrenceType: isRecorrente ? form.occurrenceType : 'continuous',
       installments: isRecorrente ? Number(form.installments) : 0,
-      remindDaysBefore: 3,
+      remindDaysBefore: initial?.remindDaysBefore ?? 3,
       // Provisão é uma estimativa: não auto-registra até ser efetivada. Continua aparecendo
       // como despesa futura projetada no Fluxo de Caixa Principal.
       autoRegister: false,
-      grupoGerencial: null,
-      skipped: [],
-      overrides: {},
+      grupoGerencial: initial?.grupoGerencial ?? null,
+      skipped: initial?.skipped || [],
+      overrides: initial?.overrides || {},
       reservaFuncaoId: form.comReserva ? form.reservaFuncaoId : '',
       isProvisao: true,
-      provisaoEfetivada: false,
-    })
+      provisaoEfetivada: initial?.provisaoEfetivada ?? false,
+    }
+
+    if (initial?.id) updateSchedule(initial.id, payload)
+    else addSchedule(payload)
     onClose()
   }
 
@@ -250,7 +260,7 @@ export default function ProvisaoForm({ onClose }) {
 
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">Lançar Provisão</button>
+        <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
       </div>
     </form>
   )
