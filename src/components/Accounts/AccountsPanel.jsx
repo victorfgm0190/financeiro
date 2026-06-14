@@ -313,6 +313,9 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             {account.fluxoCaixaPrincipal && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-blue-200">FC</span>
             )}
+            {account.isInvestimento && (
+              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-500/30 text-purple-200">INV</span>
+            )}
             {account.contaCorrentePrincipal && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-emerald-200">CC</span>
             )}

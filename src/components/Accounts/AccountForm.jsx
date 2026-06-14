@@ -68,14 +68,19 @@ export default function AccountForm({ initial, onClose }) {
     reservaType: initial?.reservaType || 'geral',
     reservaCategoryId: initial?.reservaCategoryId || null,
     patrimonioCategoryId: initial?.patrimonioCategoryId || null,
+    isInvestimento: initial?.isInvestimento || false,
+    investmentCategoryId: initial?.investmentCategoryId || null,
   })
   const [vinculoError, setVinculoError] = useState(false)
+  const [investError, setInvestError] = useState(false)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const isCredit = form.type === 'credit'
   const isChecking = form.type === 'checking'
   const isPatrimonial = form.type === 'asset' || form.type === 'liability'
+  // "É Investimento?" disponível apenas para Poupança e Bem/Ativo.
+  const isInvestible = form.type === 'savings' || form.type === 'asset'
   const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
 
   const conflictAccount = isChecking && form.contaCorrentePrincipal
@@ -90,6 +95,13 @@ export default function AccountForm({ initial, onClose }) {
     const vinculoAtivo = !isCredit && !isPatrimonial ? form.vinculoTipo : 'none'
     if (vinculoAtivo === 'patrimonio' && !form.patrimonioCategoryId) {
       setVinculoError(true)
+      return
+    }
+
+    // Investimento (Poupança / Bem-Ativo) ativo exige categoria.
+    const investimentoAtivo = isInvestible && form.isInvestimento
+    if (investimentoAtivo && !form.investmentCategoryId) {
+      setInvestError(true)
       return
     }
 
@@ -134,6 +146,8 @@ export default function AccountForm({ initial, onClose }) {
       reservaType: vinculoAtivo === 'reserva' ? form.reservaType : null,
       reservaCategoryId: vinculoAtivo === 'reserva' && form.reservaType === 'especifica' ? form.reservaCategoryId : null,
       patrimonioCategoryId: vinculoAtivo === 'patrimonio' ? form.patrimonioCategoryId : null,
+      isInvestimento: investimentoAtivo,
+      investmentCategoryId: investimentoAtivo ? form.investmentCategoryId : null,
     }
 
     if (initial) {
@@ -504,6 +518,39 @@ export default function AccountForm({ initial, onClose }) {
           </>
         )}
       </div>
+      )}
+
+      {isInvestible && (
+        <div className="space-y-3 pt-1 border-t border-gray-800">
+          <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Investimento</p>
+          <Toggle
+            checked={form.isInvestimento}
+            onChange={e => {
+              const v = e.target.checked
+              set('isInvestimento', v)
+              setInvestError(false)
+              if (!v) set('investmentCategoryId', null)
+            }}
+            label="É Investimento?"
+            tooltip="Conta que acumula patrimônio com liquidez condicional (consórcio, imóvel na planta, previdência). Transferências para a conta geram despesa automática; resgates geram receita, na categoria vinculada."
+          />
+          {form.isInvestimento && (
+            <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+              <label className="label">Categoria do Investimento *</label>
+              <CategorySelect
+                categories={categories}
+                type="expense"
+                value={form.investmentCategoryId || ''}
+                onChange={e => { set('investmentCategoryId', e.target.value || null); setInvestError(false) }}
+                placeholder="Selecione uma categoria..."
+                searchable
+              />
+              {investError && (
+                <p className="text-xs text-despesa mt-1">Selecione a categoria do investimento.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex gap-3 pt-2">

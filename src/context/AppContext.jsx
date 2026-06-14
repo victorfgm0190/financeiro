@@ -399,6 +399,32 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
     })
   }
 
+  // ── Investimento (Poupança / Bem-Ativo) ─────────────────────────────────
+  // Igual à reserva específica em comportamento: ida (→ conta) = despesa,
+  // volta (conta →) = receita, na investment_category_id. Usa o flag reservaAuto
+  // para herdar o cascade de estorno/deleção já existente.
+  const isInvestimento = (acc) => !!acc?.isInvestimento && !!acc?.investmentCategoryId
+  if (isInvestimento(toAcc)) {
+    extraTxs.push({
+      id: 'tx_inv_' + base + '_' + Math.random().toString(36).slice(2),
+      type: 'expense', accountId: null, amount: Number(tx.amount),
+      categoryId: toAcc.investmentCategoryId,
+      description: `Investimento - ${toAcc.apelido || toAcc.name}`,
+      date: tx.date, createdAt: now, reservaAuto: true,
+      ...(parentTxId ? { parentTxId } : {}),
+    })
+  }
+  if (isInvestimento(fromAcc)) {
+    extraTxs.push({
+      id: 'tx_inv_' + base + '_' + Math.random().toString(36).slice(2) + '_r',
+      type: 'income', accountId: null, amount: Number(tx.amount),
+      categoryId: fromAcc.investmentCategoryId,
+      description: `Resgate Investimento - ${fromAcc.apelido || fromAcc.name}`,
+      date: tx.date, createdAt: now, reservaAuto: true,
+      ...(parentTxId ? { parentTxId } : {}),
+    })
+  }
+
   if (toAcc?.isReserva) {
     const catId = tx.reservaExpenseCategoryId ||
       (toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')

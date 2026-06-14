@@ -83,6 +83,11 @@ export default async function handler(req, res) {
     // de vínculo (is_reserva/reserva_type/reserva_category_id permanecem para a Reserva).
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS vinculo_tipo TEXT DEFAULT 'none'`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS patrimonio_category_id TEXT`)
+    // Investimento (Poupança / Bem-Ativo): conta que acumula patrimônio com liquidez
+    // condicional (consórcio, imóvel na planta, previdência). Comportamento igual à
+    // reserva específica; categoria vinculada gera despesa/receita automática.
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_investimento BOOLEAN DEFAULT false`)
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS investment_category_id TEXT`)
     // Migração de dados: contas que já eram reserva passam a ter vinculo_tipo='reserva'.
     await query(`UPDATE contas SET vinculo_tipo = 'reserva' WHERE is_reserva = true AND (vinculo_tipo IS NULL OR vinculo_tipo = 'none')`)
     // Mantém is_reserva sincronizado com vinculo_tipo (compat. com código legado).
@@ -101,6 +106,23 @@ export default async function handler(req, res) {
       WHERE c.name ILIKE '%brasil%cap%'
         AND NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_capitalizacao' OR name = 'Capitalização')
       LIMIT 1
+    `)
+    // Seed idempotente: categoria "Consórcio" (despesa) p/ contas de investimento.
+    await query(`
+      INSERT INTO categorias (id, name, type, color, icon, category_group)
+      SELECT 'cat_consorcio', 'Consórcio', 'expense', '#a855f7', '🏠', 'Aplicações'
+      WHERE NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio')
+    `)
+    // Conversão única da conta "Consórcio HS" em investimento, vinculada à categoria
+    // Consórcio. Só aplica enquanto a conta nunca foi configurada como investimento
+    // (não sobrescreve ajustes posteriores feitos pelo usuário).
+    await query(`
+      UPDATE contas
+      SET is_investimento = true,
+          investment_category_id = (SELECT id FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio' ORDER BY (id = 'cat_consorcio') DESC LIMIT 1)
+      WHERE (name ILIKE '%consorcio%hs%' OR name ILIKE '%consórcio%hs%')
+        AND is_investimento IS NOT TRUE
+        AND investment_category_id IS NULL
     `)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS day_of_month INTEGER`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS amount_approx NUMERIC`)
