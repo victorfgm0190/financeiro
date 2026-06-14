@@ -24,7 +24,7 @@ function parseValor(s) {
 
 const STATUS_OPTIONS = [
   { id: 'todos', label: 'Todos' },
-  { id: 'pago', label: 'Pago / Registrado' },
+  { id: 'pago', label: 'Registrado' },
   { id: 'naopago', label: 'Pendente' },
 ]
 
@@ -124,7 +124,7 @@ export default function GlobalSearch({ open, onClose }) {
         payee: t.payee || '',
         categoria: catLabel(t.categoryId),
         gerencial: (t.type === 'expense' && t.accountType === 'credit' && t.grupoGerencial) ? (gerById.get(t.grupoGerencial)?.name || null) : null,
-        statusLabel: paid ? 'Pago' : 'Não pago',
+        statusLabel: paid ? 'Registrado' : 'Pendente',
         statusCls: paid ? 'bg-receita/15 text-receita' : 'bg-gray-600/30 text-gray-400',
       })
     }
@@ -132,6 +132,9 @@ export default function GlobalSearch({ open, onClose }) {
       const st = scheduleStatus(s)
       if (status === 'pago' && st.registered === 0) continue
       if (status === 'naopago' && !st.next) continue
+      // Pendente = tem próxima ocorrência a executar; senão (só ocorrências já
+      // registradas) = Registrado. Mantém a paleta azul/cinza (sem verde/vermelho).
+      const pendente = !!st.next
       out.push({
         kind: 'sched', id: s.id, obj: s,
         sortDate: st.next || s.startDate || '',
@@ -144,8 +147,8 @@ export default function GlobalSearch({ open, onClose }) {
         payee: s.payee || '',
         categoria: catLabel(s.categoryId),
         gerencial: null,
-        statusLabel: st.label,
-        statusCls: st.cls,
+        statusLabel: pendente ? 'Pendente' : 'Registrado',
+        statusCls: pendente ? 'bg-gray-600/30 text-gray-400' : 'bg-receita/15 text-receita',
       })
     }
     out.sort((a, b) => (b.sortDate || '').localeCompare(a.sortDate || ''))
@@ -159,6 +162,41 @@ export default function GlobalSearch({ open, onClose }) {
     if (r.kind === 'tx') setEditTx(r.obj)
     else setEditSchedule(r.obj)
   }
+
+  const renderItem = (r) => (
+    <button
+      key={`${r.kind}_${r.id}`}
+      type="button"
+      onClick={() => handleClickResult(r)}
+      className="w-full text-left card p-3 hover:bg-gray-800/60 transition-colors flex items-start gap-3 group"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${r.kind === 'tx' ? 'bg-indigo-500/15 text-indigo-300' : 'bg-amber-500/15 text-amber-300'}`}>
+            {r.kind === 'tx' ? 'Lançamento' : 'Agendamento'}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.statusCls}`}>{r.statusLabel}</span>
+          <span className="text-xs text-gray-500">
+            {r.date ? fmtDate(r.date) : '—'}
+            {r.dateCartao && <span className="text-gray-600"> · cartão {fmtDate(r.dateCartao)}</span>}
+          </span>
+        </div>
+        <p className="text-sm text-gray-200 truncate mt-1">
+          {r.desc || r.payee || '(sem descrição)'}
+          {r.payee && r.desc && <span className="text-gray-500"> · {r.payee}</span>}
+        </p>
+        <p className="text-xs text-gray-500 truncate mt-0.5">
+          {r.conta}
+          {r.categoria && <span> · {r.categoria}</span>}
+          {r.gerencial && <span className="text-purple-400"> · {r.gerencial}</span>}
+        </p>
+      </div>
+      <div className="text-right shrink-0">
+        <p className={`text-sm font-bold ${amountColor(r.type)}`}>{fmt(r.amount)}</p>
+        <ArrowRight size={14} className="text-gray-600 group-hover:text-gray-300 ml-auto mt-1 transition-colors" />
+      </div>
+    </button>
+  )
 
   const reset = () => {
     setValue(''); setText(''); setFrom(''); setTo(''); setStatus('todos'); setResults(null); setError('')
@@ -223,50 +261,42 @@ export default function GlobalSearch({ open, onClose }) {
           {error && <p className="text-xs text-despesa">{error}</p>}
         </form>
 
-        {/* Resultados */}
-        {results !== null && (
-          <div className="mt-4">
-            <p className="text-xs text-gray-500 mb-2">
-              {results.length === 0 ? 'Nenhum resultado encontrado.' : `${results.length} resultado${results.length > 1 ? 's' : ''}${results.length === 50 ? ' (máx.)' : ''}`}
-            </p>
-            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto overscroll-contain">
-              {results.map(r => (
-                <button
-                  key={`${r.kind}_${r.id}`}
-                  type="button"
-                  onClick={() => handleClickResult(r)}
-                  className="w-full text-left card p-3 hover:bg-gray-800/60 transition-colors flex items-start gap-3 group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${r.kind === 'tx' ? 'bg-indigo-500/15 text-indigo-300' : 'bg-amber-500/15 text-amber-300'}`}>
-                        {r.kind === 'tx' ? 'Lançamento' : 'Agendamento'}
-                      </span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.statusCls}`}>{r.statusLabel}</span>
-                      <span className="text-xs text-gray-500">
-                        {r.date ? fmtDate(r.date) : '—'}
-                        {r.dateCartao && <span className="text-gray-600"> · cartão {fmtDate(r.dateCartao)}</span>}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-200 truncate mt-1">
-                      {r.desc || r.payee || '(sem descrição)'}
-                      {r.payee && r.desc && <span className="text-gray-500"> · {r.payee}</span>}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {r.conta}
-                      {r.categoria && <span> · {r.categoria}</span>}
-                      {r.gerencial && <span className="text-purple-400"> · {r.gerencial}</span>}
-                    </p>
+        {/* Resultados — combinados, ordenados por data, separados por seção. */}
+        {results !== null && (() => {
+          const txResults = results.filter(r => r.kind === 'tx')
+          const schedResults = results.filter(r => r.kind === 'sched')
+          return (
+            <div className="mt-4">
+              {results.length === 0 ? (
+                <p className="text-xs text-gray-500 mb-2">Nenhum resultado encontrado.</p>
+              ) : (
+                <>
+                  {results.length === 50 && (
+                    <p className="text-[11px] text-gray-600 mb-2">Mostrando os 50 resultados mais recentes.</p>
+                  )}
+                  <div className="space-y-4 max-h-[55vh] overflow-y-auto overscroll-contain">
+                    {txResults.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 mb-1.5 sticky top-0 bg-surface py-1 z-10">
+                          Lançamentos ({txResults.length})
+                        </p>
+                        <div className="space-y-1.5">{txResults.map(renderItem)}</div>
+                      </div>
+                    )}
+                    {schedResults.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-400 mb-1.5 sticky top-0 bg-surface py-1 z-10">
+                          Agendamentos ({schedResults.length})
+                        </p>
+                        <div className="space-y-1.5">{schedResults.map(renderItem)}</div>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${amountColor(r.type)}`}>{fmt(r.amount)}</p>
-                    <ArrowRight size={14} className="text-gray-600 group-hover:text-gray-300 ml-auto mt-1 transition-colors" />
-                  </div>
-                </button>
-              ))}
+                </>
+              )}
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Modal>
 
       {/* Editores reaproveitados */}
