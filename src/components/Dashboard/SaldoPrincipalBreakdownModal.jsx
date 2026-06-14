@@ -57,6 +57,13 @@ export default function SaldoPrincipalBreakdownModal() {
       {/* 1. Saldo Atual Ciclo */}
       <Section title={`Saldo Atual do Ciclo (${ddmm(b.cycleStart)} a ${ddmm(b.cycleEnd)})`}>
         <Row label="Saldo base (lançamentos efetivados)" value={b.saldoAtual.base} />
+        {/* Detalhe informativo: contas que compõem o Saldo base (badge FC). */}
+        {b.saldoAtual.contas?.map((c, i) => (
+          <div key={c.id || i} className="flex items-baseline justify-between gap-3 pl-4">
+            <span className="text-xs text-gray-400 min-w-0 truncate">• {c.name}</span>
+            <span className="text-xs text-gray-400 tabular-nums whitespace-nowrap">{fmt(c.saldo)}</span>
+          </div>
+        ))}
         {b.saldoAtual.gerencialTransfers !== 0 && (
           <Row label="+ Transferências gerenciais executadas" value={b.saldoAtual.gerencialTransfers} />
         )}

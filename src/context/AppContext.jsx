@@ -2003,6 +2003,27 @@ export function AppProvider({ children }) {
     const saldoAtual = rb(baseAbertura + txAteCiclo)
     const saldoBase = rb(saldoAtual - gerencialAteCiclo) // base = atual − transferências gerenciais
 
+    // Decomposição informativa do Saldo base por conta do pool (badge FC). Reparte o
+    // saldoBase entre as contas usando as MESMAS regras (abertura + lançamentos
+    // efetivados não-gerenciais até o fim do ciclo). Loop separado e aditivo, para não
+    // alterar a lógica de cálculo agregada acima — a soma das contas reproduz o saldoBase.
+    const contaBaseMap = new Map(pool.map(a => [a.id, rb(a.initialBalance ?? 0)]))
+    const addContaLeg = (tx) => {
+      if (tx.type === 'income' && poolIds.has(tx.accountId)) contaBaseMap.set(tx.accountId, contaBaseMap.get(tx.accountId) + tx.amount)
+      else if (tx.type === 'expense' && poolIds.has(tx.accountId) && tx.accountType !== 'credit') contaBaseMap.set(tx.accountId, contaBaseMap.get(tx.accountId) - tx.amount)
+      else if (tx.type === 'transfer') {
+        if (poolIds.has(tx.toAccountId)) contaBaseMap.set(tx.toAccountId, contaBaseMap.get(tx.toAccountId) + tx.amount)
+        if (poolIds.has(tx.accountId)) contaBaseMap.set(tx.accountId, contaBaseMap.get(tx.accountId) - tx.amount)
+      }
+      else if (tx.type === 'credit_payment' && poolIds.has(tx.fromAccountId)) contaBaseMap.set(tx.fromAccountId, contaBaseMap.get(tx.fromAccountId) - tx.amount)
+    }
+    for (const tx of data.transactions) {
+      if (!tx.date || tx.date > cycleEndStr) continue
+      if (isGerencialTransfer(tx)) continue
+      addContaLeg(tx)
+    }
+    const contasBase = pool.map(a => ({ id: a.id, name: a.apelido || a.name, saldo: rb(contaBaseMap.get(a.id) ?? 0) }))
+
     // Agendamentos pendentes (ocorrências não registradas) no intervalo (hoje, dateStr], por agendamento.
     const collectSched = (endStr) => {
       const items = []
@@ -2063,7 +2084,7 @@ export function AppProvider({ children }) {
 
     return {
       mode, cycleStart: cycleStartStr, cycleEnd: cycleEndStr, calendarEnd: calendarEndStr,
-      saldoAtual: { base: saldoBase, gerencialTransfers: rb(gerencialAteCiclo), total: saldoAtual },
+      saldoAtual: { base: saldoBase, contas: contasBase, gerencialTransfers: rb(gerencialAteCiclo), total: saldoAtual },
       finalCiclo: { saldoAtual, agendamentos: schedCiclo.items, agendamentosTotal: schedCiclo.total, total: saldoFinalCiclo },
       projetado: { finalCiclo: saldoFinalCiclo, envelopes: envItems, envelopesTotal: envTotal, total: saldoProjetado },
       atualCalendario: isCustom ? { saldoAtual, lancamentos: itensAlemCiclo, lancamentosTotal: rb(txAlemCiclo), total: saldoAtualCalendario } : null,
