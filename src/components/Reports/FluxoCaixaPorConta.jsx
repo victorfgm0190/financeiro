@@ -4,11 +4,32 @@ import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'l
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
+
+// Ciclos de um envelope (dueDay D: período de D+1 de um mês até D do mês seguinte)
+// que se SOBREPÕEM ao intervalo [start, end] — sobreposição quando
+// ciclo.from <= end E ciclo.to >= start. Retorna [{ from, to }] em 'yyyy-MM-dd'.
+function envelopeCyclesOverlapping(dueDay, start, end) {
+  const startD = new Date(start + 'T00:00:00')
+  const endD = new Date(end + 'T00:00:00')
+  const cycles = []
+  // Itera o mês de término do ciclo, de um mês antes do início a um mês após o fim.
+  let cur = new Date(startD.getFullYear(), startD.getMonth() - 1, 1)
+  const stop = new Date(endD.getFullYear(), endD.getMonth() + 2, 1)
+  while (cur < stop) {
+    const y = cur.getFullYear(), mo = cur.getMonth()
+    const to = new Date(y, mo, dueDay)          // fim do ciclo: dia dueDay
+    const from = new Date(y, mo - 1, dueDay + 1) // início: dia dueDay+1 do mês anterior
+    if (from <= endD && to >= startD) {
+      cycles.push({ from: format(from, 'yyyy-MM-dd'), to: format(to, 'yyyy-MM-dd') })
+    }
+    cur = new Date(y, mo + 1, 1)
+  }
+  return cycles
+}
 
 const VISOES = [
   { id: 'conta',      label: 'Por Conta' },
@@ -17,7 +38,7 @@ const VISOES = [
 ]
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, settings, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
   // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
@@ -109,40 +130,33 @@ export default function FluxoCaixaPorConta() {
         })
       })
 
-      // Envelopes ativos das contas selecionadas: saída projetada do valor restante
-      // (limite − gasto na competência atual), datada no vencimento do envelope.
-      // Mesma conta de restante usada no modal "Como chegamos aqui" do Saldo Projetado.
-      const startDay = settings?.financialMonthStartDay || 1
-      const compKeyOf = (ds) => {
-        const [y, m, d] = ds.split('-').map(Number)
-        if (d < startDay) { const p = new Date(y, m - 2, 1); return p.getFullYear() * 12 + p.getMonth() }
-        return y * 12 + (m - 1)
-      }
-      const nowD = new Date()
-      const currentComp = nowD.getDate() >= startDay
-        ? nowD.getFullYear() * 12 + nowD.getMonth()
-        : (() => { const p = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1); return p.getFullYear() * 12 + p.getMonth() })()
+      // Envelopes: uma linha "Projetado" por CICLO de envelope que se sobrepõe ao
+      // período [start, end] — não só o ciclo atual. Para cada ciclo, o valor é o
+      // restante (limite − gasto naquele ciclo), datado no fim do ciclo (vencimento).
+      const isEnvExpense = (tx) =>
+        tx.type === 'expense' && !tx.reservaAuto &&
+        tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto'
 
       ;(envelopes || []).forEach(env => {
         if (!env.accountId || !accountIds.has(env.accountId)) return
         if (oculto(env.accountId, null)) return
-        let spent = 0
-        for (const tx of transactions) {
-          if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
-          if (!env.categoryIds?.includes(tx.categoryId)) continue
-          if (!tx.date || compKeyOf(tx.date) !== currentComp) continue
-          spent += tx.amount
+        for (const cyc of envelopeCyclesOverlapping(env.dueDay || 1, start, end)) {
+          let spent = 0
+          for (const tx of transactions) {
+            if (!isEnvExpense(tx)) continue
+            if (!env.categoryIds?.includes(tx.categoryId)) continue
+            if (!tx.date || tx.date < cyc.from || tx.date > cyc.to) continue
+            spent += tx.amount
+          }
+          const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
+          if (restante <= 0) continue
+          out.push({
+            date: cyc.to, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',
+            fromAccountId: env.accountId, toAccountId: null,
+            entrada: 0, saida: restante,
+            status: 'Projetado', real: false, _key: 'env_' + env.id + '_' + cyc.to,
+          })
         }
-        const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
-        if (restante <= 0) return
-        const venc = getEnvelopePeriod(env.dueDay || 1).to
-        if (venc < start || venc > end) return
-        out.push({
-          date: venc, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',
-          fromAccountId: env.accountId, toAccountId: null,
-          entrada: 0, saida: restante,
-          status: 'Projetado', real: false, _key: 'env_' + env.id,
-        })
       })
     }
 
@@ -155,7 +169,7 @@ export default function FluxoCaixaPorConta() {
       r.saldo = bal
     })
     return out
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, settings])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
