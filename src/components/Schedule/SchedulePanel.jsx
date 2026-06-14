@@ -8,6 +8,7 @@ import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate } from '../shared/utils'
+import { prevMonthScheduleDate } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -1191,7 +1192,20 @@ function faturaLabel(ym) {
   return `${MONTHS_PT_FULL[m - 1]}/${y}`
 }
 
-function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
+// Data real da transferência gerencial de cada parcela (espelha executarProvisoesGerenciais):
+//  • parcela 1 (ou sem padrão X/N): data original do gasto
+//  • parcelas 2..N: dia financeiro do mês ANTERIOR ao da fatura (prevMonthScheduleDate)
+function dataLancamentoProvisao(p, financialMonthStartDay) {
+  const matches = [...(p.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
+  const instNum = matches.length ? Number(matches[matches.length - 1][1]) : 1
+  if (instNum >= 2 && p.faturaMonthYear) {
+    const [fy, fm] = p.faturaMonthYear.split('-')
+    return prevMonthScheduleDate(`${fm}/${fy}`, financialMonthStartDay)
+  }
+  return p.date
+}
+
+function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay = 1, onConfirm, onClose }) {
   const [selected, setSelected] = useState(() => new Set(provisoes.map(p => p.id)))
   const [faturaFiltro, setFaturaFiltro] = useState('')
   const [cartaoFiltro, setCartaoFiltro] = useState('')
@@ -1295,6 +1309,9 @@ function ExecutarGerenciaisModal({ provisoes, accounts, onConfirm, onClose }) {
                 <p className="text-xs text-gray-600 mt-0.5 truncate">
                   Fatura {faturaLabel(p.faturaMonthYear)} · {accName(p.contaOrigemId)} → {accName(p.contaDestinoId)}
                 </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Data do lançamento: {fmtDate(dataLancamentoProvisao(p, financialMonthStartDay))}
+                </p>
               </div>
               <span className="text-xs font-bold text-orange-600 shrink-0">{fmt(p.amount)}</span>
             </label>
@@ -1330,7 +1347,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, executarProvisoesGerenciais,
-    activeProfileId,
+    activeProfileId, settings,
   } = useApp()
 
   const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
@@ -1767,6 +1784,7 @@ export default function SchedulePanel() {
         <ExecutarGerenciaisModal
           provisoes={provisoesPendentes}
           accounts={accounts}
+          financialMonthStartDay={settings?.financialMonthStartDay || 1}
           onClose={() => setShowExecutarGer(false)}
           onConfirm={(ids) => { executarProvisoesGerenciais(ids); setShowExecutarGer(false) }}
         />
