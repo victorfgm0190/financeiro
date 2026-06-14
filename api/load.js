@@ -20,6 +20,14 @@ export default async function handler(req, res) {
     // Flag visual "Confirmado / A Confirmar": marca que o valor da próxima
     // ocorrência já foi confirmado. Reseta para false ao registrar a ocorrência.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS confirmado BOOLEAN DEFAULT false`)
+    // Provisão de Despesa: agendamento "Uma vez" que representa uma despesa futura
+    // estimada (valor/data ainda não definitivos). is_provisao marca o registro como
+    // provisão; provisao_efetivada vira true quando o valor/data reais são confirmados.
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS is_provisao BOOLEAN DEFAULT false`)
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS provisao_efetivada BOOLEAN DEFAULT false`)
+    // Provisão recorrente (Contínua/Parcelada): data da última ocorrência já efetivada. A
+    // próxima ocorrência a efetivar é a primeira após esta data; null = nenhuma efetivada.
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS provisao_efetivada_until DATE`)
     await query(`CREATE TABLE IF NOT EXISTS reserve_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

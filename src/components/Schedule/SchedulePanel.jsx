@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -12,6 +12,7 @@ import { prevMonthScheduleDate } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
+import ProvisaoForm from './ProvisaoForm'
 import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
@@ -32,12 +33,13 @@ const FREQ_LABELS = {
 }
 
 const VIEW_FILTERS = [
-  { id: 'future',  label: 'Todos os futuros' },
-  { id: 'next30',  label: 'Próximos 30 dias' },
-  { id: 'month',   label: 'Este mês' },
-  { id: 'all',     label: 'Todos' },
-  { id: 'history', label: 'Histórico' },
-  { id: 'ra',      label: 'Resgates Anuais' },
+  { id: 'future',    label: 'Todos os futuros' },
+  { id: 'next30',    label: 'Próximos 30 dias' },
+  { id: 'month',     label: 'Este mês' },
+  { id: 'all',       label: 'Todos' },
+  { id: 'provisoes', label: 'Provisões' },
+  { id: 'history',   label: 'Histórico' },
+  { id: 'ra',        label: 'Resgates Anuais' },
 ]
 
 function GerBadge({ grupoId, gerencialGroups }) {
@@ -518,10 +520,18 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 function ScheduleRow({
   schedule, nextDate, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
-  deleteSchedule, onEditSchedule,
+  deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
   srfBySchedule, onToggleConfirmado,
 }) {
+  // Provisão de despesa exibe badge "Provisão". O botão "Efetivar" aparece enquanto houver uma
+  // próxima ocorrência a efetivar: para "Uma vez", até provisao_efetivada virar true; para
+  // recorrente, sempre que existir ocorrência após provisao_efetivada_until.
+  const isProvisao = !!schedule.isProvisao
+  const proximaProvisao = isProvisao && !schedule.provisaoEfetivada
+    ? ((schedule.frequency || 'once') === 'once' ? schedule.startDate : getProximaProvisaoOccurrence?.(schedule))
+    : null
+  const isProvisaoPendente = isProvisao && !schedule.provisaoEfetivada && !!proximaProvisao
   // Flag "Confirmado / A Confirmar" aplica-se a tudo, exceto automação pura
   // (gerencial_devolucao / resgate_reserva). Em pagamento_fatura é só visual.
   const canConfirm = schedule.tipo !== 'gerencial_devolucao' && schedule.tipo !== 'resgate_reserva'
@@ -543,6 +553,7 @@ function ScheduleRow({
   const [showPay, setShowPay] = useState(false)
   const [showEstornar, setShowEstornar] = useState(false)
   const [showExcluir, setShowExcluir] = useState(false)
+  const [showEfetivar, setShowEfetivar] = useState(false)
 
   const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
 
@@ -593,6 +604,11 @@ function ScheduleRow({
         <td className="px-3 py-3 max-w-[200px]">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
+            {isProvisao && !schedule.provisaoEfetivada && (
+              <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
+                <Hourglass size={9} /> Provisão{schedule.frequency !== 'once' ? ' recorrente' : ''}
+              </span>
+            )}
             {schedule.transactionType === 'expense' && (
               <GerBadge grupoId={schedule.grupoGerencial} gerencialGroups={gerencialGroups} />
             )}
@@ -697,6 +713,15 @@ function ScheduleRow({
         {/* Ações */}
         <td className="px-3 py-3 whitespace-nowrap">
           <div className="flex items-center gap-1">
+            {isProvisaoPendente && (
+              <button
+                onClick={() => setShowEfetivar(true)}
+                title="Efetivar Provisão — informar valor e data reais"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors font-medium"
+              >
+                <Hourglass size={12} /> Efetivar Provisão
+              </button>
+            )}
             {nextDate && (
               <>
                 <button
@@ -756,7 +781,114 @@ function ScheduleRow({
           onConfirm={() => { deleteSchedule(schedule.id); setShowExcluir(false) }}
         />
       )}
+
+      {showEfetivar && (
+        <EfetivarProvisaoModal
+          schedule={schedule}
+          accounts={accounts}
+          onClose={() => setShowEfetivar(false)}
+          onConfirm={(payload) => { efetivarProvisao(schedule.id, payload); setShowEfetivar(false) }}
+        />
+      )}
     </>
+  )
+}
+
+// Modal de "Efetivar Provisão": edita valor e data REAIS.
+//   • Provisão "Uma vez": ao confirmar, grava valor/data no registro e o marca como efetivado.
+//   • Provisão recorrente: efetiva apenas a próxima ocorrência (override) e avança a série; o
+//     botão volta a ficar disponível para a ocorrência seguinte.
+// Havendo função de reserva, gera o resgate real (transferência reserva → conta principal).
+function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
+  const { reserveFunctions, getProximaProvisaoOccurrence } = useApp()
+  const isOnce = (schedule.frequency || 'once') === 'once'
+  // Ocorrência alvo (recorrente): primeira ainda não efetivada.
+  const occDate = isOnce ? null : getProximaProvisaoOccurrence(schedule)
+  const ov = !isOnce && occDate ? schedule.overrides?.[occDate] : null
+
+  const [amount, setAmount] = useState(String(ov?.amount ?? schedule.amount ?? ''))
+  const [date, setDate] = useState(ov?.date || (isOnce ? schedule.startDate : occDate) || format(new Date(), 'yyyy-MM-dd'))
+
+  const func = schedule.reservaFuncaoId
+    ? (reserveFunctions || []).find(f => f.id === schedule.reservaFuncaoId)
+    : null
+  const contaReserva = func?.accountId ? accounts.find(a => a.id === func.accountId) : null
+  const valido = Number(amount) > 0 && !!date
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+          <h3 className="font-semibold text-gray-100 flex items-center gap-2">
+            <Hourglass size={15} className="text-amber-400" /> Efetivar Provisão
+          </h3>
+          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <p className="text-xs text-gray-500">Provisão</p>
+            <p className="text-sm text-gray-200 font-medium">{schedule.description}</p>
+            {!isOnce && occDate && (
+              <p className="text-xs text-amber-400/90 mt-1">
+                Ocorrência de {fmtDate(occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Valor real (R$) *</label>
+              <input
+                type="number" step="0.01" min="0.01" className="input"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+              />
+            </div>
+            <div>
+              <label className="label">Data real *</label>
+              <input
+                type="date" className="input"
+                value={date} onChange={e => setDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {func ? (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300/90 leading-snug">
+              Será criado um resgate (transferência) de{' '}
+              <span className="font-semibold">{contaReserva?.apelido || contaReserva?.name || 'conta da reserva'}</span>{' '}
+              → conta principal, vinculado à função <span className="font-semibold">{func.name}</span>.
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 leading-snug">
+              Sem reserva vinculada — apenas o valor e a data serão atualizados.
+            </p>
+          )}
+
+          {!isOnce && (
+            <p className="text-xs text-gray-500 leading-snug">
+              A série continua: as próximas ocorrências permanecem como provisão e poderão ser
+              efetivadas depois.
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
+          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+          <button
+            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
+            disabled={!valido}
+            onClick={() => valido && onConfirm({ amount: Number(amount), date, occurrenceDate: occDate })}
+          >
+            <CheckCircle size={14} /> Efetivar
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -852,8 +984,8 @@ const SELECTION_GROUP_META = {
 }
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, onNewSchedule, onEditSchedule }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado } = useApp()
+function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule }) {
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1001,7 +1133,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
-    deleteSchedule, onEditSchedule,
+    deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
     selectionMode, onToggleSelect: toggleSelect,
     srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
   }
@@ -1346,7 +1478,7 @@ export default function SchedulePanel() {
     gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
-    getProvisoesPendentes, executarProvisoesGerenciais,
+    getProvisoesPendentes, executarProvisoesGerenciais, efetivarProvisao,
     activeProfileId, settings,
   } = useApp()
 
@@ -1356,6 +1488,7 @@ export default function SchedulePanel() {
   const [activeTab, setActiveTab] = useState('conta')
   const [viewFilter, setViewFilter] = useState('future')
   const [showForm, setShowForm] = useState(false)
+  const [showProvisaoForm, setShowProvisaoForm] = useState(false)
   const [editSchedule, setEditSchedule] = useState(null)
   const [confirmDeletePayable, setConfirmDeletePayable] = useState(null)
   const [showZeroed, setShowZeroed] = useState(false)
@@ -1502,6 +1635,7 @@ export default function SchedulePanel() {
     const monthEnd   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
     if (viewFilter === 'all')     return schedules
+    if (viewFilter === 'provisoes') return schedules.filter(s => s.isProvisao)
     if (viewFilter === 'history') return schedules.filter(s => getNextOccurrences(s, 1).length === 0)
     if (viewFilter === 'future')  return schedules.filter(s => getNextOccurrences(s, 1).length > 0)
     if (viewFilter === 'next30')  return schedules.filter(s => {
@@ -1578,9 +1712,14 @@ export default function SchedulePanel() {
             </button>
           )}
           {activeTab === 'conta' && (
-            <button className="btn-primary hidden md:flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
-              <Plus size={14} /> Novo Agendamento
-            </button>
+            <>
+              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={() => setShowProvisaoForm(true)}>
+                <Hourglass size={14} /> Lançar Provisão
+              </button>
+              <button className="btn-primary hidden md:flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
+                <Plus size={14} /> Novo Agendamento
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1621,6 +1760,7 @@ export default function SchedulePanel() {
               >
                 {f.id === 'history' && <History size={11} />}
                 {f.id === 'ra' && <ArrowLeftRight size={11} />}
+                {f.id === 'provisoes' && <Hourglass size={11} />}
                 {f.label}
                 {f.id === 'future' && <span className="text-xs opacity-70">{allPending.length}</span>}
               </button>
@@ -1680,6 +1820,7 @@ export default function SchedulePanel() {
             registerScheduleOccurrence={registerScheduleOccurrence}
             skipScheduleOccurrence={skipScheduleOccurrence}
             getNextOccurrences={getNextOccurrences}
+            efetivarProvisao={efetivarProvisao}
             onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
             onEditSchedule={s => { setEditSchedule(s); setShowForm(true) }}
           />
@@ -1769,6 +1910,10 @@ export default function SchedulePanel() {
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditSchedule(null) }} title={editSchedule ? 'Editar Agendamento' : 'Novo Agendamento'} size="lg">
         <ScheduleForm initial={editSchedule} onClose={() => { setShowForm(false); setEditSchedule(null) }} />
+      </Modal>
+
+      <Modal open={showProvisaoForm} onClose={() => setShowProvisaoForm(false)} title="Lançar Provisão de Despesa">
+        <ProvisaoForm onClose={() => setShowProvisaoForm(false)} />
       </Modal>
 
       <ConfirmDialog

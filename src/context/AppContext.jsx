@@ -1457,6 +1457,77 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
   }, [update])
 
+  // Efetiva uma Provisão de Despesa com o valor/data reais informados.
+  //
+  // • Provisão "Uma vez" (frequency === 'once'): grava valor/data no próprio registro e o marca
+  //   como efetivado (provisao_efetivada = true; volta a auto-registrar como despesa normal).
+  //
+  // • Provisão recorrente (Contínua/Parcelada): efetiva apenas UMA ocorrência (occurrenceDate).
+  //   Grava o valor/data ajustados como override dessa ocorrência e avança provisao_efetivada_until
+  //   para a data da ocorrência efetivada — a série continua (is_provisao/provisao_efetivada
+  //   inalterados) e a próxima ocorrência fica disponível para efetivar mais tarde.
+  //
+  // Em ambos os casos, havendo reservaFuncaoId, cria um agendamento de Transferência (Uma vez)
+  // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
+  // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
+  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
+    update(d => {
+      const prov = d.schedules.find(s => s.id === id)
+      if (!prov) return d
+      const valor = Number(amount)
+      const isOnce = (prov.frequency || 'once') === 'once'
+
+      let schedules = d.schedules.map(s => {
+        if (s.id !== id) return s
+        if (isOnce) {
+          return { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
+        }
+        // Recorrente: override da ocorrência + avanço de provisao_efetivada_until.
+        const origDate = occurrenceDate || s.startDate
+        const overrides = { ...(s.overrides || {}), [origDate]: { date, amount: valor } }
+        return { ...s, overrides, provisaoEfetivadaUntil: origDate }
+      })
+
+      if (prov.reservaFuncaoId) {
+        const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
+        const contaReserva = func?.accountId ? d.accounts.find(a => a.id === func.accountId) : null
+        const contaPrincipal =
+          d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
+          d.accounts.find(a => a.isMain && a.type !== 'credit') ||
+          d.accounts.find(a => a.type === 'checking')
+        if (contaReserva && contaPrincipal) {
+          schedules = [...schedules, {
+            id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            description: `Resgate provisão — ${prov.description}`,
+            transactionType: 'transfer',
+            accountId: contaReserva.id,
+            accountType: contaReserva.type || null,
+            toAccountId: contaPrincipal.id,
+            amount: valor,
+            categoryId: '',
+            payee: '',
+            costCenter: '',
+            frequency: 'once',
+            startDate: date,
+            occurrenceType: 'continuous',
+            installments: 0,
+            registered: [],
+            skipped: [],
+            remindDaysBefore: 3,
+            autoRegister: true,
+            overrides: {},
+            grupoGerencial: null,
+            reservaExpenseCategoryId: null,
+            reservaFuncaoId: prov.reservaFuncaoId,
+            isProvisao: false,
+            provisaoEfetivada: false,
+          }]
+        }
+      }
+      return { ...d, schedules }
+    })
+  }, [update])
+
   const registerScheduleOccurrence = useCallback((scheduleId, date) => {
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
@@ -1768,6 +1839,18 @@ export function AppProvider({ children }) {
     }
     return occurrences
   }, [])
+
+  // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
+  // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
+  // provisão "Uma vez" devolve a própria startDate (a única ocorrência). Devolve null quando
+  // não há mais ocorrências a efetivar (ex.: parcelada já totalmente efetivada).
+  const getProximaProvisaoOccurrence = useCallback((schedule) => {
+    if (!schedule) return null
+    const occs = getNextOccurrences(schedule, 24)
+    const until = schedule.provisaoEfetivadaUntil || null
+    if (!until) return occs[0] || null
+    return occs.find(d => d > until) || null
+  }, [getNextOccurrences])
 
   // ── Saldos por conta (ciclo financeiro) ───────────────────────────────────────
   // Calcula os 5 saldos do ciclo a partir de initialBalance + transações/agendamentos,
@@ -3630,6 +3713,7 @@ export function AppProvider({ children }) {
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
       addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado,
+      efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,
