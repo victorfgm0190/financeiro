@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
   ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, Check, Circle, CheckSquare, Zap,
+  ListChecks, PencilLine,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
@@ -10,6 +11,7 @@ import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
+import AlterarLoteModal from '../shared/AlterarLoteModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -170,7 +172,7 @@ function ReconcileBtn({ reconciled, onClick }) {
   )
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -199,9 +201,20 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
 
   return (
     <tr
-      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? '' : 'opacity-60'}`}
-      onClick={() => onEdit && onEdit(tx)}
+      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? '' : 'opacity-60'} ${selectMode && selected ? 'bg-blue-500/10' : ''}`}
+      onClick={() => selectMode ? onToggleSelect(tx.id) : (onEdit && onEdit(tx))}
     >
+      {selectMode && (
+        <td className="px-2 py-2.5 text-center">
+          <input
+            type="checkbox"
+            checked={!!selected}
+            onChange={() => onToggleSelect(tx.id)}
+            onClick={e => e.stopPropagation()}
+            className="w-4 h-4 rounded accent-blue-500 cursor-pointer align-middle"
+          />
+        </td>
+      )}
       <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
       <td className="px-3 py-2.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
@@ -281,7 +294,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   )
 }
 
-function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
+function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selectMode }) {
   const [open, setOpen] = useState(false)
   const { netFlow, otherAccountId, txs } = row
   const isIn = netFlow > 0
@@ -297,6 +310,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
         className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
+        {selectMode && <td className="px-2 py-2.5" title="Transferências não são alteráveis em lote" />}
         <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
         <td className="px-3 py-2.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
@@ -344,6 +358,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
         const toAcc = accounts.find(a => a.id === tx.toAccountId)
         return (
           <tr key={tx.id} className="border-b border-gray-800/30 bg-indigo-500/5">
+            {selectMode && <td className="px-2 py-1.5" />}
             <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 truncate">{fmtDate(tx.date)}</td>
             <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic truncate">
               {tx.description || 'Transferência'}
@@ -370,7 +385,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile }) {
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, reverseTransaction, deleteTransaction, getFinancialPeriod, setReconciled } = useApp()
+  const { transactions, accounts, categories, reverseTransaction, deleteTransaction, updateTransaction, getFinancialPeriod, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -395,12 +410,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const prevMonth = () => {
     const d = new Date(year, month - 2, 1)
-    setSelEntradas(new Set()); setSelSaidas(new Set())
+    setSelEntradas(new Set()); setSelSaidas(new Set()); setSelectedIds(new Set())
     setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
   const nextMonth = () => {
     const d = new Date(year, month, 1)
-    setSelEntradas(new Set()); setSelSaidas(new Set())
+    setSelEntradas(new Set()); setSelSaidas(new Set()); setSelectedIds(new Set())
     setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
@@ -470,6 +485,25 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   // Reconciliação — TODOS os lançamentos reconciliáveis do período (mês) em exibição,
   // conciliados e pendentes. O modal filtra conforme o modo (Reconciliar / Não reconciliar).
   const [showReconciliar, setShowReconciliar] = useState(false)
+
+  // ── Seleção múltipla (modo "Selecionar") ──
+  // Permite selecionar lançamentos diretamente no extrato, sem passar pela
+  // reconciliação. Opera apenas sobre lançamentos individuais (linhas 'single');
+  // transferências netizadas não são selecionáveis. Reaproveita setReconciled e
+  // updateTransaction — não altera nenhuma lógica de reconciliação.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [showAlterar, setShowAlterar] = useState(false)
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+
+  const exitSelect = () => { setSelectMode(false); setSelectedIds(new Set()); setShowAlterar(false) }
+  const toggleSelectMode = () => selectMode ? exitSelect() : setSelectMode(true)
+
   const periodReconcilable = useMemo(
     () => filteredTxs
       .filter(tx => (tx.accountId === account.id || tx.toAccountId === account.id))
@@ -539,6 +573,40 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     })
   }, [baseRows, selEntradas, selSaidas, account.id])
 
+  // Lançamentos individuais (não-transfer netizado) atualmente visíveis e selecionáveis.
+  const selectableIds = useMemo(
+    () => displayRows.filter(r => r.kind === 'single').map(r => r.tx.id),
+    [displayRows]
+  )
+  const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
+  const toggleSelectAllVisible = () => setSelectedIds(prev => {
+    if (allVisibleSelected) {
+      const next = new Set(prev)
+      selectableIds.forEach(id => next.delete(id))
+      return next
+    }
+    return new Set([...prev, ...selectableIds])
+  })
+
+  const selectedTxs = useMemo(
+    () => transactions.filter(tx => selectedIds.has(tx.id)),
+    [transactions, selectedIds]
+  )
+
+  const handleApplyAlterar = (changes) => {
+    selectedTxs.forEach(tx => updateTransaction(tx.id, changes))
+    const n = selectedTxs.length
+    exitSelect()
+    showToast(`${n} ${n !== 1 ? 'lançamentos alterados' : 'lançamento alterado'}`)
+  }
+
+  const handleBulkReconcile = (value) => {
+    if (selectedIds.size === 0) return
+    setReconciled([...selectedIds], value)
+    const n = selectedIds.size
+    showToast(`${n} ${n !== 1 ? 'lançamentos' : 'lançamento'} ${value ? (n !== 1 ? 'conciliados' : 'conciliado') : (n !== 1 ? 'desconciliados' : 'desconciliado')}`)
+  }
+
   const totals = useMemo(() => {
     let entrada = 0, saida = 0
     rowsWithBalance.forEach(row => {
@@ -555,6 +623,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const colGroup = (
     <colgroup>
+      {selectMode && <col style={{ width: '36px' }} />}
       <col style={{ width: '84px' }} />
       <col />
       <col style={{ width: '64px' }} />
@@ -591,6 +660,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
             </h2>
             <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={toggleSelectMode}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
+                title={selectMode ? 'Sair do modo de seleção' : 'Selecionar lançamentos para alterar ou conciliar'}
+              >
+                <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
+              </button>
               <button
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
@@ -658,6 +734,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             {colGroup}
             <thead>
               <tr className="border-b border-gray-800">
+                {selectMode && (
+                  <th className="px-2 py-2.5 text-center">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      className="w-4 h-4 rounded accent-blue-500 cursor-pointer align-middle"
+                      title="Selecionar todos os visíveis"
+                    />
+                  </th>
+                )}
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
@@ -732,6 +819,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             <tbody>
               {/* Starting balance row */}
               <tr className="border-b border-gray-800/50 bg-gray-800/20">
+                {selectMode && <td className="px-2 py-2" />}
                 <td className="px-3 py-2 text-xs text-gray-600">{fmtDate(from)}</td>
                 <td className="px-3 py-2 text-xs text-gray-500 italic" colSpan={6}>Saldo inicial do período</td>
                 <td className={`px-3 py-2 text-right text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
@@ -741,14 +829,14 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               </tr>
               {displayRows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="text-center py-10 text-gray-500 text-xs">
+                  <td colSpan={selectMode ? 11 : 10} className="text-center py-10 text-gray-500 text-xs">
                     {hasLancFiltros(filtros) || reconFilter !== 'todos' ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
                   </td>
                 </tr>
               )}
               {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
-                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} />
+                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} />
                 ) : (
                   <SingleRow
                     key={i}
@@ -762,6 +850,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     onDelete={setConfirmDelete}
                     onToggleReconcile={setReconciled}
                     todayStr={todayStr}
+                    selectMode={selectMode}
+                    selected={selectedIds.has(row.tx.id)}
+                    onToggleSelect={toggleSelect}
                   />
                 )
               )}
@@ -813,6 +904,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             : (tx.payee && tx.description && tx.description !== tx.payee ? tx.description : null)
           const title = tx.payee || tx.description ||
             (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
+          const isSelected = selectedIds.has(tx.id)
           return (
             <TxMobileItem
               key={i}
@@ -821,20 +913,30 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               subtitle={subtitle}
               dateLabel={fmtDate(tx.date)}
               amount={Math.abs(delta)}
-              dimmed={!tx.reconciled}
-              onClick={onEdit ? () => onEdit(tx) : undefined}
+              dimmed={selectMode ? false : !tx.reconciled}
+              onClick={selectMode ? () => toggleSelect(tx.id) : (onEdit ? () => onEdit(tx) : undefined)}
               trailing={saldoNode}
               leading={
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                  className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
-                  title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
-                >
-                  {tx.reconciled
-                    ? <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-green-500"><Check size={12} strokeWidth={3} className="text-white" /></span>
-                    : <Circle size={16} className="text-gray-600" />}
-                </button>
+                selectMode ? (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(tx.id)}
+                    onClick={e => e.stopPropagation()}
+                    className="w-5 h-5 rounded accent-blue-500 cursor-pointer shrink-0"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
+                    className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
+                    title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                  >
+                    {tx.reconciled
+                      ? <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-green-500"><Check size={12} strokeWidth={3} className="text-white" /></span>
+                      : <Circle size={16} className="text-gray-600" />}
+                  </button>
+                )
               }
             />
           )
@@ -872,6 +974,62 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           items={periodReconcilable}
           onApply={setReconciled}
           onClose={() => setShowReconciliar(false)}
+        />
+      )}
+
+      {/* Espaçador para a barra de ações fixa não cobrir o último lançamento
+          (mais alto no mobile por causa da navegação inferior) */}
+      {selectMode && <div className="h-36 md:h-24" />}
+
+      {/* ── Barra de ações (modo Selecionar) ──
+          Acima do BottomNav (h-16) no mobile; rente à base no desktop. */}
+      {selectMode && (
+        <div className="fixed bottom-16 md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
+          <div className="pointer-events-auto mx-auto max-w-3xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-gray-300 font-medium">
+              {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <button
+                onClick={() => setShowAlterar(true)}
+                disabled={selectedIds.size === 0}
+                className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <PencilLine size={12} /> Alterar Selecionados
+              </button>
+              <button
+                onClick={() => handleBulkReconcile(true)}
+                disabled={selectedIds.size === 0}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Conciliar lançamentos selecionados"
+              >
+                <Check size={12} /> Conciliar
+              </button>
+              <button
+                onClick={() => handleBulkReconcile(false)}
+                disabled={selectedIds.size === 0}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Desconciliar lançamentos selecionados"
+              >
+                <Circle size={12} /> Desconciliar
+              </button>
+              <button
+                onClick={exitSelect}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+              >
+                <X size={12} /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAlterar && (
+        <AlterarLoteModal
+          items={selectedTxs}
+          categories={categories}
+          onApply={handleApplyAlterar}
+          onClose={() => setShowAlterar(false)}
         />
       )}
     </div>
