@@ -4,6 +4,7 @@ import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'l
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
@@ -16,7 +17,7 @@ const VISOES = [
 ]
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, settings, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
   // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
@@ -43,7 +44,9 @@ export default function FluxoCaixaPorConta() {
   const selectedAccounts = useMemo(() => {
     if (visao === 'conta')      return accounts.filter(a => selectedAccountIds.includes(a.id))
     if (visao === 'grupo')      return accounts.filter(a => a.accountGroupId === groupId)
-    return accounts.filter(a => a.isMain) // 'principais'
+    // 'principais': contas do Fluxo de Caixa Principal (badge FC), não-cartão — mesmo
+    // conjunto usado no Saldo Principal do Dashboard / Posição Financeira.
+    return accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
   }, [visao, selectedAccountIds, groupId, accounts])
 
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
@@ -105,6 +108,42 @@ export default function FluxoCaixaPorConta() {
           })
         })
       })
+
+      // Envelopes ativos das contas selecionadas: saída projetada do valor restante
+      // (limite − gasto na competência atual), datada no vencimento do envelope.
+      // Mesma conta de restante usada no modal "Como chegamos aqui" do Saldo Projetado.
+      const startDay = settings?.financialMonthStartDay || 1
+      const compKeyOf = (ds) => {
+        const [y, m, d] = ds.split('-').map(Number)
+        if (d < startDay) { const p = new Date(y, m - 2, 1); return p.getFullYear() * 12 + p.getMonth() }
+        return y * 12 + (m - 1)
+      }
+      const nowD = new Date()
+      const currentComp = nowD.getDate() >= startDay
+        ? nowD.getFullYear() * 12 + nowD.getMonth()
+        : (() => { const p = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1); return p.getFullYear() * 12 + p.getMonth() })()
+
+      ;(envelopes || []).forEach(env => {
+        if (!env.accountId || !accountIds.has(env.accountId)) return
+        if (oculto(env.accountId, null)) return
+        let spent = 0
+        for (const tx of transactions) {
+          if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
+          if (!env.categoryIds?.includes(tx.categoryId)) continue
+          if (!tx.date || compKeyOf(tx.date) !== currentComp) continue
+          spent += tx.amount
+        }
+        const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
+        if (restante <= 0) return
+        const venc = getEnvelopePeriod(env.dueDay || 1).to
+        if (venc < start || venc > end) return
+        out.push({
+          date: venc, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',
+          fromAccountId: env.accountId, toAccountId: null,
+          entrada: 0, saida: restante,
+          status: 'Projetado', real: false, _key: 'env_' + env.id,
+        })
+      })
     }
 
     out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
@@ -116,7 +155,7 @@ export default function FluxoCaixaPorConta() {
       r.saldo = bal
     })
     return out
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, settings])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
@@ -131,6 +170,7 @@ export default function FluxoCaixaPorConta() {
   const statusBadge = (status) => {
     if (status === 'Registrada') return 'bg-gray-600/30 text-gray-300'
     if (status === 'A receber')  return 'bg-receita/20 text-receita'
+    if (status === 'Projetado')  return 'bg-indigo-500/20 text-indigo-400'
     return 'bg-despesa/20 text-despesa' // A pagar
   }
 
@@ -220,7 +260,7 @@ export default function FluxoCaixaPorConta() {
           {visao === 'principais' && (
             <div className="lg:col-span-2 flex items-end">
               <p className="text-xs text-gray-500">
-                Soma automática das contas marcadas com estrela (principais):{' '}
+                Soma automática das contas do Fluxo de Caixa Principal (FC):{' '}
                 <span className="text-gray-300">{selectedAccounts.length} conta{selectedAccounts.length !== 1 ? 's' : ''}</span>
               </p>
             </div>
@@ -305,7 +345,7 @@ export default function FluxoCaixaPorConta() {
 
         {noSelection ? (
           <div className="text-center py-10 text-gray-500 text-sm">
-            {visao === 'principais' ? 'Nenhuma conta marcada como principal (estrela).' : 'Selecione uma conta/grupo para ver o fluxo.'}
+            {visao === 'principais' ? 'Nenhuma conta marcada como Fluxo de Caixa Principal (FC).' : 'Selecione uma conta/grupo para ver o fluxo.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
