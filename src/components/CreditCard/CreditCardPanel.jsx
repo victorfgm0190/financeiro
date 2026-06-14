@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -199,9 +199,7 @@ export default function CreditCardPanel() {
     () => Math.round((billPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0) + scheduledPaidTotal) * 100) / 100,
     [billPayments, scheduledPaidTotal]
   )
-  const saldoRestante = Math.max(0, Math.round((billTotal - totalPago) * 100) / 100)
-  const isFaturaPaga = billTotal > 0 && totalPago >= billTotal - 0.005
-  const isFaturaParcial = totalPago > 0 && !isFaturaPaga
+  const { saldoRestante, isFaturaPaga, isFaturaParcial } = classifyFatura(billTotal, totalPago)
 
   // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
   // calculado sobre a fatura completa (billTotal).

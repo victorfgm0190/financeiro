@@ -120,3 +120,58 @@ export function groupedAccountOptions(accounts, accountGroups) {
   if (ungrouped.length > 0) result.push({ group: null, accounts: ungrouped })
   return result
 }
+
+// ── Cartão de crédito: fatura e status de pagamento ──────────────────────────
+// Convenção da fatura (igual a getBillKey do CreditCard/TransactionsPanel): dia do
+// lançamento <= closingDay → fatura do mês corrente; senão, fatura do mês seguinte.
+export function creditBillKey(date, card) {
+  if (!date || !card) return ''
+  const closingDay = card.closingDay || 1
+  const d = new Date(date + 'T00:00:00')
+  const day = d.getDate()
+  let month0, year
+  if (day <= closingDay) { month0 = d.getMonth(); year = d.getFullYear() }
+  else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); month0 = n.getMonth(); year = n.getFullYear() }
+  return `${year}-${String(month0 + 1).padStart(2, '0')}`
+}
+
+function billKeyOfTx(tx, card) {
+  return tx.faturaMonthYear || creditBillKey(tx.date, card)
+}
+
+// Classificação de pagamento de uma fatura — fonte única da lógica usada no KPI
+// "Valor Pago" do Cartão de Crédito. Paleta (azul/laranja) é resolvida na UI.
+export function classifyFatura(billTotal, totalPago) {
+  const isFaturaPaga = billTotal > 0 && totalPago >= billTotal - 0.005
+  const isFaturaParcial = totalPago > 0 && !isFaturaPaga
+  const saldoRestante = Math.max(0, Math.round((billTotal - totalPago) * 100) / 100)
+  return { isFaturaPaga, isFaturaParcial, saldoRestante }
+}
+
+// Status completo da fatura `billKey` de um cartão. Reproduz o cálculo do
+// CreditCardPanel: total = despesas − estornos; pago = credit_payment do cartão na
+// fatura + agendamentos 'pagamento_fatura' já registrados.
+export function creditBillStatus(card, transactions, schedules, billKey) {
+  if (!card || !billKey) return { billKey: '', billTotal: 0, totalPago: 0, isFaturaPaga: false, isFaturaParcial: false, saldoRestante: 0 }
+  let despesas = 0, estornos = 0, pago = 0
+  for (const tx of (transactions || [])) {
+    if (tx.accountId !== card.id) continue
+    if (tx.type === 'credit_payment') {
+      if ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey) {
+        pago += Number(tx.amount) || 0
+      }
+      continue
+    }
+    if (billKeyOfTx(tx, card) !== billKey) continue
+    if (tx.type === 'expense') despesas += tx.amount
+    else if (tx.type === 'income') estornos += Number(tx.amount) || 0
+  }
+  for (const s of (schedules || [])) {
+    if (s.tipo === 'pagamento_fatura' && s.cardId === card.id && s.faturaMesAno === billKey) {
+      pago += (s.registered?.length || 0) * (Number(s.amount) || 0)
+    }
+  }
+  const billTotal = despesas - estornos
+  const totalPago = Math.round(pago * 100) / 100
+  return { billKey, billTotal, totalPago, ...classifyFatura(billTotal, totalPago) }
+}

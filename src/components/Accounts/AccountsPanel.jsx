@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, accountsForView } from '../shared/utils'
+import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -38,6 +38,17 @@ const TYPE_COLORS = {
   cash: 'from-amber-600 to-amber-800',
   asset: 'from-teal-600 to-teal-800',
   liability: 'from-rose-700 to-rose-900',
+}
+
+// Dias (>= 0) até o próximo vencimento do cartão (dueDay). Se o dueDay já passou
+// no mês atual, conta para o mês seguinte. Hoje == dueDay → 0.
+function daysUntilDue(dueDay) {
+  const d = dueDay || 1
+  const now = new Date()
+  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let due = new Date(now.getFullYear(), now.getMonth(), d)
+  if (due < t0) due = new Date(now.getFullYear(), now.getMonth() + 1, d)
+  return Math.round((due - t0) / 86400000)
 }
 
 function UpdateValueModal({ account, onClose }) {
@@ -208,9 +219,19 @@ function GroupManager({ groups }) {
 
 const rb = v => Math.round(v * 100) / 100
 
-function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue }) {
+function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue, isNextDue = false, nextDueDays = null }) {
   const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
+  const isCredit = account.type === 'credit'
+  const highlightCard = isCredit && isNextDue
+
+  // Status de pagamento da fatura atual — só para o cartão destacado (próximo a vencer).
+  // Reaproveita creditBillStatus (mesma lógica do KPI "Valor Pago" do Cartão de Crédito).
+  const faturaStatus = useMemo(() => {
+    if (!highlightCard) return null
+    const todayLocal = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
+    return creditBillStatus(account, transactions, schedules, creditBillKey(todayLocal, account))
+  }, [highlightCard, account, transactions, schedules])
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
@@ -289,6 +310,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     <>
     <div
       className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
+      style={highlightCard ? { border: '2px solid #185FA5' } : undefined}
       draggable
       onDragStart={e => {
         e.dataTransfer.effectAllowed = 'move'
@@ -296,6 +318,14 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
       }}
       onClick={() => onExtrato(account)}
     >
+      {highlightCard && (
+        <span
+          className="absolute text-[10px] font-semibold text-white px-2 py-0.5 rounded-full shadow whitespace-nowrap"
+          style={{ top: '-11px', left: '14px', backgroundColor: '#185FA5' }}
+        >
+          Próxima fatura · {nextDueDays === 0 ? 'hoje' : `${nextDueDays} dia${nextDueDays !== 1 ? 's' : ''}`}
+        </span>
+      )}
       {account.isMain && (
         <span className="absolute top-3 right-10 text-yellow-300"><Star size={13} fill="currentColor" /></span>
       )}
@@ -356,25 +386,59 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
       </div>
 
       {account.type === 'credit' ? (
-        <div>
-          <p className="text-xs opacity-70">Fatura do Mês</p>
-          <p className="text-lg font-bold">{fmt(account.creditMonthBill || 0)}</p>
-          <div className="flex gap-3 text-xs opacity-60 mt-1">
-            <span>Fecha dia {account.closingDay}</span>
-            <span>Vence dia {account.dueDay}</span>
-          </div>
-          {account.creditLimit > 0 && (
-            <div className="mt-2">
-              <div className="h-1 bg-white/20 rounded-full">
-                <div
-                  className="h-1 bg-white rounded-full"
-                  style={{ width: `${Math.min(100, ((account.creditDebt || 0) / account.creditLimit) * 100)}%` }}
-                />
-              </div>
-              <p className="text-xs opacity-50 mt-0.5">Limite: {fmt(account.creditLimit)}</p>
+        highlightCard ? (
+          /* ── Cartão destacado: próxima fatura a vencer ── */
+          <div>
+            <div className="flex items-baseline gap-2">
+              <p className="font-bold" style={{ fontSize: '22px', lineHeight: 1.1 }}>{fmt(account.creditMonthBill || 0)}</p>
+              <span className="text-xs opacity-75">a pagar</span>
             </div>
-          )}
-        </div>
+            <p className="text-xs opacity-70 mt-0.5">Dívida total: {fmt(account.creditDebt || 0)}</p>
+            <div className="flex gap-3 text-xs opacity-60 mt-1">
+              <span>Fecha dia {account.closingDay}</span>
+              <span>Vence dia {account.dueDay}</span>
+            </div>
+            {account.creditLimit > 0 && (
+              <p className="text-xs opacity-50 mt-1">Limite: {fmt(account.creditLimit)}</p>
+            )}
+            {faturaStatus && (() => {
+              const { label, cls } = faturaStatus.isFaturaPaga
+                ? { label: 'Paga ✓', cls: 'bg-blue-600/40 text-blue-50' }
+                : faturaStatus.isFaturaParcial
+                  ? { label: 'Parcialmente paga', cls: 'bg-orange-400/30 text-orange-50' }
+                  : { label: 'Não paga', cls: 'bg-sky-400/25 text-sky-50' }
+              return (
+                <div className="mt-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+                </div>
+              )
+            })()}
+          </div>
+        ) : (
+          /* ── Demais cartões: fatura atual + dívida total ── */
+          <div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-lg font-bold">{fmt(account.creditMonthBill || 0)}</p>
+              <span className="text-xs opacity-60">fatura</span>
+            </div>
+            <p className="text-xs opacity-60 mt-0.5">Total {fmt(account.creditDebt || 0)}</p>
+            <div className="flex gap-3 text-xs opacity-60 mt-1">
+              <span>Fecha dia {account.closingDay}</span>
+              <span>Vence dia {account.dueDay}</span>
+            </div>
+            {account.creditLimit > 0 && (
+              <div className="mt-2">
+                <div className="h-1 bg-white/20 rounded-full">
+                  <div
+                    className="h-1 bg-white rounded-full"
+                    style={{ width: `${Math.min(100, ((account.creditDebt || 0) / account.creditLimit) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs opacity-50 mt-0.5">Limite: {fmt(account.creditLimit)}</p>
+              </div>
+            )}
+          </div>
+        )
       ) : (
         <div>
           {isMainChecking && saldoRows ? (
@@ -456,7 +520,7 @@ function balColor(amount) {
   return 'text-gray-300'
 }
 
-function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup }) {
+function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
   const [collapsed, setCollapsed] = useState(false)
   const total = calcGroupBalance(accounts)
   const typeBadge = group.type === 'financeiro'
@@ -493,6 +557,8 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
               onDelete={onDelete}
               onExtrato={onExtrato}
               onUpdateValue={onUpdateValue}
+              isNextDue={a.id === nextDueCardId}
+              nextDueDays={nextDueDays}
             />
           ))}
           {accounts.length === 0 && (
@@ -522,6 +588,21 @@ export default function AccountsPanel() {
   const totalCredit = accounts
     .filter(a => a.type === 'credit')
     .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
+
+  // Cartão de crédito com vencimento mais próximo (menor nº de dias até o dueDay);
+  // empate → maior fatura atual (creditMonthBill). Destacado entre os cards de cartão.
+  const { nextDueCardId, nextDueDays } = useMemo(() => {
+    let best = null
+    for (const c of accounts) {
+      if (c.type !== 'credit' || c.active === false) continue
+      const days = daysUntilDue(c.dueDay)
+      const bill = c.creditMonthBill || 0
+      if (!best || days < best.days || (days === best.days && bill > best.bill)) {
+        best = { id: c.id, days, bill }
+      }
+    }
+    return { nextDueCardId: best?.id ?? null, nextDueDays: best?.days ?? null }
+  }, [accounts])
 
   const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')
@@ -637,6 +718,8 @@ export default function AccountsPanel() {
                     isDragOver={dragOverGroup === g.id}
                     onDragOverGroup={() => setDragOverGroup(g.id)}
                     onDragLeaveGroup={() => setDragOverGroup(null)}
+                    nextDueCardId={nextDueCardId}
+                    nextDueDays={nextDueDays}
                   />
                 ))}
               </div>
@@ -660,6 +743,8 @@ export default function AccountsPanel() {
                     isDragOver={dragOverGroup === g.id}
                     onDragOverGroup={() => setDragOverGroup(g.id)}
                     onDragLeaveGroup={() => setDragOverGroup(null)}
+                    nextDueCardId={nextDueCardId}
+                    nextDueDays={nextDueDays}
                   />
                 ))}
               </div>
@@ -689,6 +774,8 @@ export default function AccountsPanel() {
                       onDelete={handleDelete}
                       onExtrato={handleExtrato}
                       onUpdateValue={handleUpdateValue}
+                      isNextDue={a.id === nextDueCardId}
+                      nextDueDays={nextDueDays}
                     />
                   ))}
                 </div>
