@@ -647,7 +647,7 @@ function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    addTransaction, updateTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, classifyGerencialByRules,
+    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
@@ -678,6 +678,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showBatchFill, setShowBatchFill] = useState(false)
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
+
+  // ── Modo Conciliação de Fatura ───────────────────────────────────────────
+  const [conciliarMode, setConciliarMode] = useState(false)
+  const [concMatched, setConcMatched] = useState([])   // [{ csv, sys }]
+  const [concSoItau, setConcSoItau] = useState([])      // itens do CSV ausentes no sistema
+  const [concSoSistema, setConcSoSistema] = useState([])// lançamentos do sistema ausentes no CSV
+  const [concError, setConcError] = useState('')
+  const [concToast, setConcToast] = useState(null)
+  const concFileRef = useRef()
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
@@ -1274,6 +1283,392 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return { importar, jaExistem, estornos, total: importar + jaExistem - estornos }
   }, [resolvedRows])
 
+  // ── Conciliação de Fatura ──────────────────────────────────────────────────
+  // Normaliza descrição p/ comparação (trim, lower, colapsa espaços).
+  const normDesc = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  // Lançamentos da fatura já existentes no sistema (despesas + estornos do cartão/mês).
+  const faturaItensSistema = (cardId, mesAno) => {
+    const card = accounts.find(a => a.id === cardId)
+    if (!card || !mesAno) return []
+    const closingDay = card.closingDay || 14
+    const billKeyOf = (t) => t.faturaMonthYear || calcFatura(t.date, closingDay)
+    return transactions.filter(t =>
+      t.accountId === cardId &&
+      (t.type === 'expense' || t.type === 'income') &&
+      billKeyOf(t) === mesAno
+    )
+  }
+
+  // Monta as 3 seções comparando o CSV do Itaú com a fatura do sistema.
+  const startConciliacao = async (file) => {
+    setConcError('')
+    if (!selectedAccount || !faturaMonthYear) {
+      setConcError('Selecione o cartão e o mês de referência antes de conciliar.')
+      return
+    }
+    try {
+      setFilename(file.name)
+      const text = await readFileAsText(file)
+      if (!isItauCSV(text)) {
+        setConcError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).')
+        return
+      }
+      const { rows: csvRows } = parseItauCSV(text, categories)
+      if (csvRows.length === 0) {
+        setConcError('Nenhum lançamento encontrado no CSV.')
+        return
+      }
+
+      // Classifica cada item do CSV (categoria/gerencial/favorecido) p/ o caso de importação.
+      const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+      let idCtr = 0
+      const csvClassified = csvRows.map(row => {
+        const rowDay = new Date(row.date + 'T00:00:00').getDate()
+        const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
+        const isParcelado = !!detectInstallment(row.description)
+        const grupo = classified?.grupoGerencial || classifyGerencialByRules(row.description, row.amount, isParcelado) || grupoD
+        return {
+          ...row,
+          _id: `conc_${idCtr++}`,
+          categoryId: classified?.categoryId || row.categoryId || '',
+          payee: classified?.payee || row.payee || row.description || '',
+          grupoGerencial: grupo,
+          _dateCartao: row.date,
+          acao: 'importar',
+        }
+      })
+
+      // Lançamentos do sistema para esta fatura.
+      const sysItens = faturaItensSistema(selectedAccount, faturaMonthYear)
+
+      // Match guloso 1:1 por descrição (normalizada) + valor (tolerância R$ 0,50) + tipo.
+      const usedSys = new Set()
+      const matched = []
+      const soItau = []
+      for (const c of csvClassified) {
+        const sys = sysItens.find(t =>
+          !usedSys.has(t.id) &&
+          t.type === c.type &&
+          Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) <= 0.50 &&
+          normDesc(t.description) === normDesc(c.description)
+        )
+        if (sys) { usedSys.add(sys.id); matched.push({ csv: c, sys }) }
+        else soItau.push(c)
+      }
+      const soSistema = sysItens
+        .filter(t => !usedSys.has(t.id))
+        .map(t => ({ ...t, acao: 'manter' }))
+
+      setConcMatched(matched)
+      setConcSoItau(soItau)
+      setConcSoSistema(soSistema)
+      setConciliarMode(true)
+      setRows([])
+      setResult(null)
+    } catch (err) {
+      setConcError('Erro ao ler arquivo: ' + err.message)
+    }
+  }
+
+  const exitConciliacao = () => {
+    setConciliarMode(false)
+    setConcMatched([])
+    setConcSoItau([])
+    setConcSoSistema([])
+    setConcError('')
+  }
+
+  const setItauField = (id, changes) =>
+    setConcSoItau(prev => prev.map(i => i._id === id ? { ...i, ...changes } : i))
+  const setSistemaAcao = (id, acao) =>
+    setConcSoSistema(prev => prev.map(i => i.id === id ? { ...i, acao } : i))
+
+  // Totalizador em tempo real (sinal: despesa +, estorno/receita −).
+  const concTotais = useMemo(() => {
+    const sgn = (r) => (r.type === 'income' ? -1 : 1) * (Number(r.amount) || 0)
+    let csv = 0, sistema = 0
+    for (const m of concMatched) { csv += sgn(m.csv); sistema += sgn(m.sys) }
+    for (const i of concSoItau) { csv += sgn(i); if (i.acao === 'importar') sistema += sgn(i) }
+    for (const i of concSoSistema) { if (i.acao === 'manter') sistema += sgn(i) }
+    return { csv, sistema, diff: csv - sistema }
+  }, [concMatched, concSoItau, concSoSistema])
+
+  // Importa um item "Só no Itaú" como lançamento da fatura (mesmo fluxo da importação normal).
+  const importConcItem = (item) => {
+    const closingDay = selectedAcc?.closingDay || 14
+    const saveDate = clampDateToFatura(item.date, faturaMonthYear, closingDay)
+    const isExpense = (item.type || 'expense') === 'expense'
+    if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
+    const txId = addTransaction({
+      type: item.type || 'expense', accountId: selectedAccount, accountType: 'credit',
+      amount: item.amount, date: saveDate, description: item.description,
+      dateCartao: item._dateCartao || item.date || null,
+      categoryId: item.categoryId, payee: item.payee,
+      grupoGerencial: isExpense ? (item.grupoGerencial || defaultGrupoD) : null,
+      faturaMonthYear: faturaMonthYear || null,
+      _fromImport: true,
+    })
+    if (isExpense && item.grupoGerencial) {
+      processarLancamentoGerencial(
+        { accountId: selectedAccount, amount: item.amount, date: saveDate, description: item.description, faturaMonthYear },
+        item.grupoGerencial, null, { immediate: true }
+      )
+    }
+    return txId
+  }
+
+  const confirmarConciliacao = () => {
+    const importar = concSoItau.filter(i => i.acao === 'importar')
+    const excluir = concSoSistema.filter(i => i.acao === 'excluir')
+
+    const txIds = []
+    importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
+    excluir.forEach(i => deleteTransaction(i.id))
+
+    // Recalcula os agendamentos acumulativos da fatura conciliada (resgate/devolução/pagamento).
+    if (faturaMonthYear) {
+      const [y, m] = faturaMonthYear.split('-')
+      recalcularAgendamentosFatura(selectedAccount, y, m)
+    }
+
+    // Registra os importados no histórico (permite estornar como uma importação normal).
+    if (txIds.length > 0) {
+      addCardImport({
+        id: 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        importedAt: new Date().toISOString(),
+        count: txIds.length,
+        mesAno: faturaMonthYear || '',
+        filename: `Conciliação · ${filename || 'Itaú CSV'}`,
+        accountId: selectedAccount,
+        txIds,
+      })
+    }
+
+    const totalFinal = concTotais.sistema
+    setConcToast(`Fatura conciliada. Total: ${fmt(totalFinal)}`)
+    exitConciliacao()
+  }
+
+  // ── Render: Modo Conciliação ───────────────────────────────────────────────
+  if (conciliarMode) {
+    const importarCount = concSoItau.filter(i => i.acao === 'importar').length
+    const excluirCount = concSoSistema.filter(i => i.acao === 'excluir').length
+    const diffZero = Math.abs(concTotais.diff) < 0.005
+    return (
+      <div className="space-y-4">
+        {/* Cabeçalho */}
+        <div className="card flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-blue-400">
+            <ArrowLeftRight size={16} />
+            <span className="text-sm font-semibold">Conciliação de Fatura</span>
+          </div>
+          <span className="text-xs text-gray-500">
+            {selectedAcc?.apelido || selectedAcc?.name} · {faturaMonthYear?.split('-').reverse().join('/')}
+            {filename ? ` · ${filename}` : ''}
+          </span>
+          <button className="ml-auto btn-secondary text-xs py-1.5" onClick={exitConciliacao}>
+            <X size={12} className="mr-1 inline" /> Sair
+          </button>
+        </div>
+
+        {/* Totalizador */}
+        <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-gray-500">Total CSV Itaú:</span>
+            <span className="text-sm font-semibold text-gray-200">{fmt(concTotais.csv)}</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-gray-500">Total sistema (após ações):</span>
+            <span className="text-sm font-semibold text-gray-200">{fmt(concTotais.sistema)}</span>
+          </div>
+          <div className="flex items-baseline gap-2 sm:ml-auto">
+            <span className="text-xs text-gray-400">Diferença:</span>
+            <span className={`text-lg font-bold ${diffZero ? 'text-blue-400' : 'text-orange-500'}`}>
+              {fmt(concTotais.diff)}
+            </span>
+            {diffZero && <Check size={16} className="text-blue-400" />}
+          </div>
+        </div>
+
+        {concError && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {concError}</div>}
+
+        {/* Ação */}
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-xs text-gray-500 mr-auto">
+            {concMatched.length} conciliado{concMatched.length !== 1 ? 's' : ''} ·
+            {' '}{importarCount} a importar · {excluirCount} a excluir
+          </span>
+          <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao}>Cancelar</button>
+          <button
+            className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
+            disabled={importarCount === 0 && excluirCount === 0}
+            onClick={confirmarConciliacao}
+          >
+            <Check size={12} /> Confirmar Conciliação
+          </button>
+        </div>
+
+        {/* SEÇÃO B — Só no Itaú */}
+        <div className="card p-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-800 bg-emerald-950/30 flex items-center gap-2 flex-wrap">
+            <ArrowDownCircle size={13} className="text-emerald-400 shrink-0" />
+            <h3 className="text-xs font-semibold text-emerald-300">Só no Itaú — falta no sistema</h3>
+            <span className="text-[10px] text-gray-500">{concSoItau.length} item{concSoItau.length !== 1 ? 's' : ''}</span>
+          </div>
+          {concSoItau.length === 0 ? (
+            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item exclusivo do Itaú.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Ger.</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 font-medium">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {concSoItau.map(item => (
+                    <tr key={item._id} className={`border-b border-gray-800/50 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}>
+                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate" title={item.description}>{item.description}</td>
+                      <td className="px-3 py-2">
+                        <CategorySelect
+                          categories={categories}
+                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
+                          value={item.categoryId}
+                          onChange={e => setItauField(item._id, { categoryId: e.target.value })}
+                          searchable
+                        />
+                      </td>
+                      <td className="px-3 py-2 hidden md:table-cell">
+                        <select
+                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                          value={item.grupoGerencial}
+                          onChange={e => setItauField(item._id, { grupoGerencial: e.target.value })}
+                        >
+                          {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
+                        </select>
+                      </td>
+                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {fmt(item.amount)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-3 text-xs">
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" className="accent-[#0F6E56]" name={`itau_${item._id}`}
+                              checked={item.acao === 'importar'} onChange={() => setItauField(item._id, { acao: 'importar' })} />
+                            <span className="text-emerald-400">Importar</span>
+                          </label>
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" className="accent-gray-500" name={`itau_${item._id}`}
+                              checked={item.acao === 'ignorar'} onChange={() => setItauField(item._id, { acao: 'ignorar' })} />
+                            <span className="text-gray-400">Ignorar</span>
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* SEÇÃO C — Só no sistema */}
+        <div className="card p-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-800 bg-orange-950/30 flex items-center gap-2 flex-wrap">
+            <ArrowUpCircle size={13} className="text-orange-400 shrink-0" />
+            <h3 className="text-xs font-semibold text-orange-300">Só no sistema — não está no CSV do Itaú</h3>
+            <span className="text-[10px] text-gray-500">{concSoSistema.length} item{concSoSistema.length !== 1 ? 's' : ''}</span>
+          </div>
+          {concSoSistema.length === 0 ? (
+            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item exclusivo do sistema.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 font-medium">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {concSoSistema.map(item => (
+                    <tr key={item.id} className={`border-b border-gray-800/50 ${item.acao === 'excluir' ? 'opacity-40 bg-orange-500/5' : ''}`}>
+                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate" title={item.description}>{item.description}</td>
+                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {fmt(item.amount)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-3 text-xs">
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" className="accent-[#0F6E56]" name={`sys_${item.id}`}
+                              checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
+                            <span className="text-gray-300">Manter</span>
+                          </label>
+                          <label className="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" className="accent-orange-500" name={`sys_${item.id}`}
+                              checked={item.acao === 'excluir'} onChange={() => setSistemaAcao(item.id, 'excluir')} />
+                            <span className="text-orange-400">Excluir</span>
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* SEÇÃO A — Conciliados */}
+        <div className="card p-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-800 bg-gray-800/40 flex items-center gap-2 flex-wrap">
+            <Check size={13} className="text-gray-400 shrink-0" />
+            <h3 className="text-xs font-semibold text-gray-300">Conciliados</h3>
+            <span className="text-[10px] text-gray-500">{concMatched.length} item{concMatched.length !== 1 ? 's' : ''} · sem ação necessária</span>
+          </div>
+          {concMatched.length === 0 ? (
+            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item conciliado.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor Itaú</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor sistema</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {concMatched.map(m => (
+                    <tr key={m.sys.id} className="border-b border-gray-800/40 text-gray-400">
+                      <td className="px-3 py-2 text-xs whitespace-nowrap">{m.csv.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2 text-xs max-w-xs truncate" title={m.csv.description}>{m.csv.description}</td>
+                      <td className="px-3 py-2 text-right text-xs whitespace-nowrap">{fmt(m.csv.amount)}</td>
+                      <td className="px-3 py-2 text-right text-xs whitespace-nowrap">{fmt(m.sys.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {concToast && <Toast message={concToast} onClose={() => setConcToast(null)} />}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {showBatchFill && (
@@ -1388,13 +1783,55 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {rows.length === 0 && result === null && (
         <div className="space-y-4">
+          {/* Cartão + mês de referência (usados na conciliação; na importação normal o
+              arquivo detecta automaticamente e sobrescreve). */}
+          <div className="card grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label">Cartão</label>
+              <select className="input" value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}>
+                <AccountOptions accounts={creditAccounts} accountGroups={accountGroups} placeholder="Selecione o cartão..." />
+              </select>
+            </div>
+            <div>
+              <label className="label">Mês de Referência</label>
+              <select className="input" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
+                <option value="">Selecione...</option>
+                {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+
           <DropZone
             onFile={handleFile}
             label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
             subtitle="Formato Dindin (XLS) ou Itaú (CSV) — fatura detectada automaticamente"
             accept=".xlsx,.xls,.csv"
           />
+
+          {/* Conciliar Fatura: compara o CSV do Itaú com a fatura já existente no sistema. */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              ref={concFileRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => { if (e.target.files[0]) { startConciliacao(e.target.files[0]); e.target.value = '' } }}
+            />
+            <button
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5"
+              disabled={!selectedAccount || !faturaMonthYear}
+              onClick={() => concFileRef.current?.click()}
+              title={!selectedAccount || !faturaMonthYear ? 'Selecione o cartão e o mês de referência' : 'Conciliar fatura com CSV do Itaú'}
+            >
+              <ArrowLeftRight size={12} /> Conciliar Fatura
+            </button>
+            <span className="text-xs text-gray-600">
+              Compara o CSV do Itaú com os lançamentos já existentes na fatura selecionada.
+            </span>
+          </div>
+
           {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
+          {concError && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {concError}</div>}
         </div>
       )}
 
