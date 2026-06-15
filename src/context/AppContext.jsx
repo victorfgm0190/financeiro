@@ -972,8 +972,11 @@ export function AppProvider({ children }) {
     // pagar da fatura — mesmo comportamento da importação (por grupo gerencial).
     if (!_fromImport && newTx.type === 'expense' && newTx.accountType === 'credit') {
       recalcFaturaRef.current?.(newTx.accountId, newTx.date, newTx.faturaMonthYear)
-      // Gatilho do reconciliador gerencial (cartão): mantém agendamentos geridos + saldos Ger. consistentes.
-      reconcileGerencialRef.current?.(newTx.accountId)
+      // Gatilho do reconciliador gerencial (cartão): mantém agendamentos geridos + saldos Ger.
+      // consistentes. Restrito à fatura do próprio lançamento — não varre as demais faturas.
+      const card = dataRef.current.accounts.find(a => a.id === newTx.accountId)
+      const fMesAno = faturaMesAnoOf(card, newTx.date, newTx.faturaMonthYear)
+      reconcileGerencialRef.current?.(newTx.accountId, fMesAno ? [fMesAno] : null)
     }
     return id
   }, [update])
@@ -1129,7 +1132,17 @@ export function AppProvider({ children }) {
         recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.old.date, recalcArgs.old.faturaMonthYear)
       }
       // Gatilho do reconciliador gerencial (cartão): agendamentos geridos + saldos Ger.
-      reconcileGerencialRef.current?.(recalcArgs.cartaoId)
+      // Restrito às faturas REALMENTE afetadas (nova + antiga quando a fatura mudou) — não
+      // varre as demais faturas do cartão (evitava criar agendamento fantasma em outro mês).
+      const card = dataRef.current.accounts.find(a => a.id === recalcArgs.cartaoId)
+      const faturasAfetadas = new Set()
+      const fNova = faturaMesAnoOf(card, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
+      if (fNova) faturasAfetadas.add(fNova)
+      if (recalcArgs.faturaChanged) {
+        const fAntiga = faturaMesAnoOf(card, recalcArgs.old.date, recalcArgs.old.faturaMonthYear)
+        if (fAntiga) faturasAfetadas.add(fAntiga)
+      }
+      reconcileGerencialRef.current?.(recalcArgs.cartaoId, [...faturasAfetadas])
     }
   }, [update])
 
@@ -2827,10 +2840,15 @@ export function AppProvider({ children }) {
   // Não cria lançamentos de estorno. Idempotente: sem mudanças, devolve o estado original (no-op).
   // Retorna um Promise com o resumo { agendasCriadas, agendasAtualizadas, agendasRemovidas,
   // saldosCorrigidos, detalhes }. (cardId omitido → todos os cartões de crédito.)
-  const reconciliarGerencial = useCallback((cardId = null) => {
+  // faturasFilter (opcional, só faz sentido com cardId): lista de 'YYYY-MM' a reconciliar.
+  // Quando informado, restringe o passo (A) EXATAMENTE a essas faturas — não varre as demais
+  // faturas do cartão (evita re-asserir agendamentos de meses não afetados pela edição). O
+  // recálculo dos saldos Ger. (passo B) permanece global e idempotente.
+  const reconciliarGerencial = useCallback((cardId = null, faturasFilter = null) => {
     return new Promise(resolve => {
       let resolved = false
       const managedTipos = new Set(['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'])
+      const faturasFiltro = faturasFilter && faturasFilter.length ? new Set(faturasFilter) : null
       update(d => {
         const targetCards = cardId
           ? d.accounts.filter(a => a.id === cardId && a.type === 'credit')
@@ -2858,7 +2876,12 @@ export function AppProvider({ children }) {
           for (const s of nd.schedules) {
             if (managedTipos.has(s.tipo) && s.cardId === card.id && s.faturaMesAno) faturas.add(s.faturaMesAno)
           }
-          for (const fmy of faturas) {
+          // Quando há filtro de faturas (gatilho de add/update por lançamento), reconcilia
+          // SOMENTE essas faturas — não as demais do cartão (não toca meses não afetados).
+          const faturasAlvo = faturasFiltro
+            ? new Set([...faturas].filter(f => faturasFiltro.has(f)))
+            : faturas
+          for (const fmy of faturasAlvo) {
             const [y, m] = fmy.split('-')
             nd = reconcileFaturaState(nd, card.id, y, m)
           }

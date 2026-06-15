@@ -360,13 +360,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             const contaId = gerencialContaId
             if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
             processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
               newGrupoId, contaId || null
             )
           }
           if (isNumbered) {
             const res = processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
               newGrupoId, null
             )
             if (res.gerencialScheduleId) updateTransaction(initial.id, { gerencialScheduleId: res.gerencialScheduleId })
@@ -387,7 +387,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           if (wasGerencial1) {
             reverseGerencialCascadeOnly(initial)
             processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description },
+              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
               newGrupoId, gerencialContaId || null
             )
           }
@@ -506,7 +506,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
       }
       const resultado = processarLancamentoGerencial(
-        { accountId: form.accountId, amount: installmentAmount, date: form.date, description: form.description },
+        { accountId: form.accountId, amount: installmentAmount, date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
         form.grupoGerencial,
         contaId,
       )
