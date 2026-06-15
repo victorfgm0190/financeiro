@@ -83,7 +83,7 @@ function buildAccOpts(accounts, _accountGroups, excludeId, isMobile) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, propagarValorParcelas, reverseGerencialCascadeOnly,
+    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -403,6 +403,23 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 else updateSchedule(oldSch.id, { amount: newAmt })
               }
             }
+          }
+        }
+
+        // Reconstrói os agendamentos da fatura (incl. schedule_reserva_funcoes do resgate)
+        // quando a despesa está/estava em grupo numerado — captura também a mudança de
+        // função de reserva, que não passa pelas ramificações de grupo/valor acima.
+        if (isNumbered || wasNumbered) {
+          const card = accounts.find(a => a.id === initial.accountId)
+          let fmy = txData.faturaMonthYear
+          if (!fmy) {
+            const ref = computeFaturaRef(new Date((txData.date || initial.date) + 'T00:00:00'), card?.closingDay || 14) // MM/YYYY
+            const [mm, yyyy] = ref.split('/')
+            fmy = `${yyyy}-${mm}`
+          }
+          if (fmy) {
+            const [y, m] = fmy.split('-')
+            recalcularAgendamentosFatura(initial.accountId, y, m)
           }
         }
       }
@@ -1117,20 +1134,44 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             const faturaRef3 = computeFaturaRef(txDate3, selectedAccount?.closingDay || 14)
             const [fmm3, fyyyy3] = faturaRef3.split('/')
             const dueDate3 = `${fyyyy3}-${fmm3}-${String(selectedAccount?.dueDay || 10).padStart(2, '0')}`
-            return acc ? (
-              <div className="space-y-1">
-                <p className="text-xs text-blue-300 leading-relaxed">
-                  Agendamento de resgate automático:{' '}
-                  <strong className="text-blue-200">{acc.apelido || acc.name}</strong> → conta corrente principal.
-                </p>
-                <p className="text-xs text-blue-400">
-                  📅 Fatura {faturaRef3} · Resgate em {fmtDate(dueDate3)}
-                </p>
+            return (
+              <div className="space-y-2">
+                {acc ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-blue-300 leading-relaxed">
+                      Agendamento de resgate automático:{' '}
+                      <strong className="text-blue-200">{acc.apelido || acc.name}</strong> → conta corrente principal.
+                    </p>
+                    <p className="text-xs text-blue-400">
+                      📅 Fatura {faturaRef3} · Resgate em {fmtDate(dueDate3)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-400">
+                    Configure uma conta padrão neste grupo para ativar o resgate automático.
+                  </p>
+                )}
+
+                {/* Função de reserva específica deste lançamento (edição). Oculto quando a
+                    conta de reserva do grupo não tem funções cadastradas. */}
+                {initial?.id && reservaGroupFuncs.length > 0 && (
+                  <div>
+                    <label className="label text-xs uppercase tracking-wide text-blue-400">Função de Reserva</label>
+                    <select
+                      className="input"
+                      value={form.reservaFuncaoId || ''}
+                      onChange={e => set('reservaFuncaoId', e.target.value)}
+                    >
+                      <option value="">Sem função específica</option>
+                      {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
+                      o resgate desta despesa.
+                    </p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <p className="text-xs text-amber-400">
-                Configure uma conta padrão neste grupo para ativar o resgate automático.
-              </p>
             )
           })()}
         </div>
