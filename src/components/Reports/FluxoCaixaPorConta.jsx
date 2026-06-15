@@ -73,8 +73,8 @@ export default function FluxoCaixaPorConta() {
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
 
-  const rows = useMemo(() => {
-    if (accountIds.size === 0 || !start || !end || start > end) return []
+  const { rows, saldoAnterior } = useMemo(() => {
+    if (accountIds.size === 0 || !start || !end || start > end) return { rows: [], saldoAnterior: currentBalance }
     const out = []
     const tdy = todayStr()
     // Movimento que toca uma conta de reserva (origem ou destino) — ocultado quando ligado.
@@ -161,19 +161,36 @@ export default function FluxoCaixaPorConta() {
     }
 
     out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
-    // Só os movimentos FUTUROS (agendamentos) alteram o saldo acumulado — os lançamentos
-    // reais já estão refletidos no saldo atual das contas, então não são somados de novo.
-    let bal = currentBalance
+
+    // Saldo anterior = saldo no dia imediatamente anterior à data inicial. O saldo atual
+    // das contas reflete TODAS as transações reais (inclusive as do período e posteriores);
+    // subtraímos o efeito líquido das transações reais com date >= start para obter a base
+    // correta do período. (Movimentos ocultos seguem a mesma regra dos exibidos.)
+    let efeitoDesdeStart = 0
+    transactions.forEach(tx => {
+      if (tx.date < start) return
+      if (oculto(tx.accountId, tx.toAccountId)) return
+      const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
+      if (!m) return
+      efeitoDesdeStart = round2(efeitoDesdeStart + m.entrada - m.saida)
+    })
+    const saldoAnterior = round2(currentBalance - efeitoDesdeStart)
+
+    // A partir do saldo anterior, acumula TODOS os movimentos do período (registrados e
+    // projetados), em ordem cronológica.
+    let bal = saldoAnterior
     out.forEach(r => {
-      if (!r.real) bal = round2(bal + r.entrada - r.saida)
+      bal = round2(bal + r.entrada - r.saida)
       r.saldo = bal
     })
-    return out
+    return { rows: out, saldoAnterior }
   }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
-  const saldoFinal = rows.length ? rows[rows.length - 1].saldo : currentBalance
+  const saldoFinal = rows.length ? rows[rows.length - 1].saldo : saldoAnterior
+  // Dia imediatamente anterior à data inicial (rótulo do saldo base).
+  const prevDayStr = start ? format(addDays(new Date(start + 'T00:00:00'), -1), 'yyyy-MM-dd') : ''
 
   const movimentacao = (r) => {
     if (r.type === 'transfer') return `${accName(r.fromAccountId)} → ${accName(r.toAccountId)}`
@@ -318,7 +335,7 @@ export default function FluxoCaixaPorConta() {
           </div>
           {!noSelection && (
             <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-              <Wallet size={13} /> Saldo atual: <span className="font-semibold text-gray-200">{fmt(currentBalance)}</span>
+              <Wallet size={13} /> Saldo anterior: <span className="font-semibold text-gray-200">{fmt(saldoAnterior)}</span>
             </span>
           )}
         </div>
@@ -344,8 +361,8 @@ export default function FluxoCaixaPorConta() {
 
       {!noSelection && (
         <p className="text-xs text-gray-600 leading-relaxed">
-          O <span className="text-gray-400">saldo</span> acumula apenas os movimentos futuros (agendamentos) a partir do saldo atual —
-          os lançamentos já <span className="text-gray-400">Registrados</span> aparecem como referência e não alteram o acumulado, pois já estão refletidos no saldo atual.
+          O <span className="text-gray-400">saldo</span> parte do <span className="text-gray-400">saldo anterior</span> (dia imediatamente anterior à data inicial)
+          e acumula todos os movimentos do período — tanto os já <span className="text-gray-400">Registrados</span> quanto os projetados (agendamentos/envelopes).
         </p>
       )}
 
@@ -376,11 +393,11 @@ export default function FluxoCaixaPorConta() {
                 </tr>
               </thead>
               <tbody>
-                {/* Saldo inicial */}
+                {/* Saldo anterior (dia imediatamente anterior à data inicial) */}
                 <tr className="border-b border-gray-800/50 bg-gray-800/20">
-                  <td className="px-3 py-2 text-xs text-gray-500">Hoje</td>
-                  <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo atual</td>
-                  <td className={`px-3 py-2 text-right text-xs font-bold ${currentBalance >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(currentBalance)}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
+                  <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior</td>
+                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnterior >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnterior)}</td>
                   <td className="px-3 py-2" />
                 </tr>
                 {rows.map(r => (
@@ -390,7 +407,7 @@ export default function FluxoCaixaPorConta() {
                     <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{movimentacao(r)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${r.real ? 'text-gray-600' : (r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600')}`} title={r.real ? 'Já refletido no saldo atual' : undefined}>{fmt(r.saldo)}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>{fmt(r.saldo)}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
