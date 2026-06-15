@@ -399,21 +399,15 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, reverseTransaction, deleteTransaction, getFinancialPeriod, setReconciled } = useApp()
+  const { transactions, accounts, reverseTransaction, deleteTransaction, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
   const now = new Date()
-  // Mês de exibição inicial = mês do FIM do ciclo financeiro atual (ex.: ciclo 15/05–14/06
-  // → junho). Construção local para evitar o desvio de fuso do toISOString().
-  const defaultMonth = (() => {
-    try {
-      const fp = getFinancialPeriod()
-      return `${fp.end.getFullYear()}-${String(fp.end.getMonth() + 1).padStart(2, '0')}`
-    } catch {
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    }
-  })()
+  // Mês de exibição inicial = mês CALENDÁRIO da data atual (qualquer dia de junho → junho),
+  // independente de financialMonthStartDay/ciclo financeiro. Construção local para evitar o
+  // desvio de fuso do toISOString().
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth)
 
