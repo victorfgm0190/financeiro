@@ -3,7 +3,7 @@ import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -343,6 +343,12 @@ export default function FluxoCaixaPorConta() {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [contaDropOpen])
   const pickableAccounts = accountsForView(accounts, isMobile)
+  // Agrupadas e ordenadas pela ordem dos Grupos de Contas (Config.) e, dentro de cada grupo,
+  // pela ordem das contas — mesma sequência exibida em Configurações → Grupos de Contas.
+  const pickableGroups = useMemo(
+    () => groupedAccountOptions(pickableAccounts, accountGroups),
+    [pickableAccounts, accountGroups],
+  )
   const toggleAccount = (id) => setSelectedAccountIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
   const contaLabel = selectedAccountIds.length === 0
     ? 'Selecione...'
@@ -388,16 +394,23 @@ export default function FluxoCaixaPorConta() {
                     <span className="text-gray-700">·</span>
                     <button type="button" onClick={() => setSelectedAccountIds([])} className="text-xs text-gray-500 hover:text-gray-300">Nenhuma</button>
                   </div>
-                  {pickableAccounts.map(a => (
-                    <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-800 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
-                        checked={selectedAccountIds.includes(a.id)}
-                        onChange={() => toggleAccount(a.id)}
-                      />
-                      <span className="text-sm text-gray-300 truncate">{a.apelido || a.name}</span>
-                    </label>
+                  {pickableGroups.map(({ group, accounts: groupAccs }) => (
+                    <div key={group?.id || 'sem-grupo'}>
+                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide font-semibold text-gray-500 border-t border-gray-800/60 first:border-t-0">
+                        {group?.name || 'Sem grupo'}
+                      </p>
+                      {groupAccs.map(a => (
+                        <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-800 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+                            checked={selectedAccountIds.includes(a.id)}
+                            onChange={() => toggleAccount(a.id)}
+                          />
+                          <span className="text-sm text-gray-300 truncate">{a.apelido || a.name}</span>
+                        </label>
+                      ))}
+                    </div>
                   ))}
                   {pickableAccounts.length === 0 && (
                     <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhuma conta</p>
