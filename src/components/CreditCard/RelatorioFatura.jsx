@@ -25,7 +25,14 @@ function getBillPeriod(dateStr, closingDay) {
 }
 
 export default function RelatorioFatura({ initialCardId }) {
-  const { accounts, transactions, categories, gerencialGroups } = useApp()
+  const { accounts, transactions, categories, gerencialGroups, reserveFunctions } = useApp()
+
+  // Lookup id → nome da função de reserva (reserve_functions já está no contexto).
+  const reserveFuncName = useMemo(() => {
+    const idx = {}
+    for (const f of reserveFunctions || []) idx[f.id] = f.name
+    return idx
+  }, [reserveFunctions])
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')
@@ -88,7 +95,7 @@ export default function RelatorioFatura({ initialCardId }) {
 
   const handleExportCSV = () => {
     const headers = [
-      'Data', 'Descrição', 'Categoria', 'Valor',
+      'Data', 'Descrição', 'Categoria', 'reserva', 'Valor',
       grp1 ? grp1.alias : 'G',
       ...customGroups.map(g => g.alias),
       'D',
@@ -103,6 +110,7 @@ export default function RelatorioFatura({ initialCardId }) {
         q(tx.date),
         q(tx.description),
         q(cat ? `${cat.icon} ${cat.name}` : ''),
+        q(tx.reservaFuncaoId ? (reserveFuncName[tx.reservaFuncaoId] || '') : ''),
         q(tx.amount.toFixed(2).replace('.', ',')),
         q(isGrp1 ? tx.amount.toFixed(2).replace('.', ',') : ''),
         ...customGroups.map(g => q(gid === g.id ? tx.amount.toFixed(2).replace('.', ',') : '')),
@@ -218,6 +226,7 @@ export default function RelatorioFatura({ initialCardId }) {
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Reserva</th>
                 <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
                 {grp1 && (
                   <th className="text-right px-3 py-3 text-xs text-reserva font-medium whitespace-nowrap">{grp1.alias}</th>
@@ -251,6 +260,9 @@ export default function RelatorioFatura({ initialCardId }) {
                         <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">{cat.icon} {cat.name}</span>
                       )}
                     </td>
+                    <td className="px-3 py-2.5 hidden md:table-cell text-xs text-gray-300 whitespace-nowrap">
+                      {tx.reservaFuncaoId ? (reserveFuncName[tx.reservaFuncaoId] || '') : ''}
+                    </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-orange-600 whitespace-nowrap">{fmt(tx.amount)}</td>
                     {grp1 && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
@@ -272,6 +284,7 @@ export default function RelatorioFatura({ initialCardId }) {
             <tfoot>
               <tr className="border-t-2 border-gray-700 bg-gray-800/60">
                 <td className="px-3 py-3 text-xs text-gray-300 font-bold" colSpan={2}>Total</td>
+                <td className="hidden md:table-cell" />
                 <td className="hidden md:table-cell" />
                 <td className="px-3 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{fmt(totals.total)}</td>
                 {grp1 && (
