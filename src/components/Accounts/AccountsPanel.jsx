@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, accountsForView, creditBillKey, creditBillStatus, classifyFatura } from '../shared/utils'
+import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -30,6 +30,11 @@ const ACCOUNT_LABELS = {
   asset: 'Bem / Ativo',
   liability: 'Dívida / Passivo',
 }
+
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+]
 
 const TYPE_COLORS = {
   checking: 'from-blue-600 to-blue-800',
@@ -225,18 +230,33 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const isCredit = account.type === 'credit'
   const highlightCard = isCredit && isNextDue
 
-  // Status de pagamento da FATURA DO MÊS (creditMonthBill — o mesmo valor exibido em
-  // "a pagar"), não da dívida total. creditMonthBill é líquido (bruto − estornos −
-  // pagamentos); somando os pagamentos da fatura reconstruímos o bruto para distinguir
-  // "Parcialmente paga" de "Não paga", classificando com a mesma regra do KPI "Valor Pago".
-  const faturaStatus = useMemo(() => {
-    if (!highlightCard) return null
-    const todayLocal = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
-    const { totalPago } = creditBillStatus(account, transactions, schedules, creditBillKey(todayLocal, account))
-    const bruto = (account.creditMonthBill || 0) + totalPago
-    if (bruto <= 0.005) return null // sem fatura no mês → sem badge de status
-    return classifyFatura(bruto, totalPago)
-  }, [highlightCard, account, transactions, schedules])
+  // Fatura do MÊS ATUAL e PRÓXIMA fatura, calculadas AO VIVO a partir dos lançamentos
+  // (não do campo account.creditMonthBill, que pode estar defasado e refletir a dívida
+  // total). billTotal = despesas − estornos da fatura; status (Paga/Parcial/Não paga)
+  // pela mesma regra do KPI "Valor Pago" do Cartão de Crédito.
+  const creditInfo = useMemo(() => {
+    if (!isCredit) return null
+    const n = new Date()
+    const todayLocal = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+    const currentKey = creditBillKey(todayLocal, account)
+    const current = creditBillStatus(account, transactions, schedules, currentKey)
+    // Próxima fatura = mês seguinte ao da fatura atual (trata virada de ano).
+    const [cy, cm] = currentKey.split('-').map(Number)
+    const nd = new Date(cy, cm, 1) // cm é 1-indexed → este Date já é o mês seguinte
+    const nextKey = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`
+    const next = creditBillStatus(account, transactions, schedules, nextKey)
+    return { current, nextTotal: next.billTotal, nextLabel: MONTH_NAMES[nd.getMonth()] }
+  }, [isCredit, account, transactions, schedules])
+
+  // Badge de status só quando há fatura no mês atual (billTotal > 0).
+  const faturaStatus = creditInfo && creditInfo.current.billTotal > 0.005 ? creditInfo.current : null
+  const statusBadge = faturaStatus
+    ? (faturaStatus.isFaturaPaga
+        ? { label: 'Paga ✓', cls: 'bg-blue-600/40 text-blue-50' }
+        : faturaStatus.isFaturaParcial
+          ? { label: 'Parcialmente paga', cls: 'bg-orange-400/30 text-orange-50' }
+          : { label: 'Não paga', cls: 'bg-sky-400/25 text-sky-50' })
+    : null
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
@@ -392,12 +412,17 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
 
       {account.type === 'credit' ? (
         highlightCard ? (
-          /* ── Cartão destacado: próxima fatura a vencer ── */
+          /* ── Cartão destacado: fatura do mês atual + status + próxima fatura ── */
           <div>
-            <div className="flex items-baseline gap-2">
-              <p className="font-bold" style={{ fontSize: '22px', lineHeight: 1.1 }}>{fmt(account.creditMonthBill || 0)}</p>
-              <span className="text-xs opacity-75">a pagar</span>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <p className="font-bold" style={{ fontSize: '22px', lineHeight: 1.1 }}>{fmt(creditInfo?.current.billTotal || 0)}</p>
+              {statusBadge
+                ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>{statusBadge.label}</span>
+                : <span className="text-xs opacity-75">a pagar</span>}
             </div>
+            {creditInfo && creditInfo.nextTotal > 0.005 && (
+              <p className="text-xs opacity-75 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
+            )}
             <p className="text-xs opacity-70 mt-0.5">Dívida total: {fmt(account.creditDebt || 0)}</p>
             <div className="flex gap-3 text-xs opacity-60 mt-1">
               <span>Fecha dia {account.closingDay}</span>
@@ -406,27 +431,20 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             {account.creditLimit > 0 && (
               <p className="text-xs opacity-50 mt-1">Limite: {fmt(account.creditLimit)}</p>
             )}
-            {faturaStatus && (() => {
-              const { label, cls } = faturaStatus.isFaturaPaga
-                ? { label: 'Paga ✓', cls: 'bg-blue-600/40 text-blue-50' }
-                : faturaStatus.isFaturaParcial
-                  ? { label: 'Parcialmente paga', cls: 'bg-orange-400/30 text-orange-50' }
-                  : { label: 'Não paga', cls: 'bg-sky-400/25 text-sky-50' }
-              return (
-                <div className="mt-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
-                </div>
-              )
-            })()}
           </div>
         ) : (
-          /* ── Demais cartões: fatura atual + dívida total ── */
+          /* ── Demais cartões: fatura do mês atual + status + próxima fatura ── */
           <div>
-            <div className="flex items-baseline gap-2">
-              <p className="text-lg font-bold">{fmt(account.creditMonthBill || 0)}</p>
-              <span className="text-xs opacity-60">fatura</span>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <p className="text-lg font-bold">{fmt(creditInfo?.current.billTotal || 0)}</p>
+              {statusBadge
+                ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>{statusBadge.label}</span>
+                : <span className="text-xs opacity-60">fatura</span>}
             </div>
-            <p className="text-xs opacity-60 mt-0.5">Total {fmt(account.creditDebt || 0)}</p>
+            {creditInfo && creditInfo.nextTotal > 0.005 && (
+              <p className="text-xs opacity-60 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
+            )}
+            <p className="text-xs opacity-60 mt-0.5">Dívida total: {fmt(account.creditDebt || 0)}</p>
             <div className="flex gap-3 text-xs opacity-60 mt-1">
               <span>Fecha dia {account.closingDay}</span>
               <span>Vence dia {account.dueDay}</span>
