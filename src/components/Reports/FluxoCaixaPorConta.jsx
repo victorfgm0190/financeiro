@@ -76,7 +76,6 @@ export default function FluxoCaixaPorConta() {
   const { rows, saldoAnterior } = useMemo(() => {
     if (accountIds.size === 0 || !start || !end || start > end) return { rows: [], saldoAnterior: currentBalance }
     const out = []
-    const tdy = todayStr()
     // Movimento que toca uma conta de reserva (origem ou destino) — ocultado quando ligado.
     const tocaReserva = (from, to) => hideReserva && (reservaSet.has(from) || reservaSet.has(to))
     // Idem para contas com vínculo Patrimônio.
@@ -112,13 +111,18 @@ export default function FluxoCaixaPorConta() {
       })
     })
 
-    // Futuras: ocorrências pendentes de agendamentos (data > hoje) dentro do período.
+    // Projetadas: ocorrências de agendamentos ainda NÃO registradas dentro do período.
+    // Inclui pendentes em atraso (data <= hoje) — getNextOccurrences já exclui as datas
+    // registradas/puladas, então não há duplicidade com os lançamentos reais acima. Uma
+    // transferência entra aqui sempre que ao menos um lado pertence ao conjunto (mesma
+    // regra do classify usada pelas transações registradas: origem no conjunto → saída,
+    // destino no conjunto → entrada — ex.: FC → Reserva aparece como saída).
     if (includeSchedules) {
       schedules.forEach(s => {
         if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
         if (oculto(s.accountId, s.toAccountId)) return
         getNextOccurrences(s, 400).forEach(date => {
-          if (date <= tdy || date < start || date > end) return
+          if (date < start || date > end) return
           const m = classify(s.transactionType, s.accountId, s.toAccountId, s.amount)
           if (!m) return
           out.push({
