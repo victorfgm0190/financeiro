@@ -10,6 +10,20 @@ import DateInput from '../shared/DateInput'
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
+// Aplica o override de uma ocorrência específica do agendamento. Os overrides ficam em
+// schedule.overrides[dataOriginal] = { date?, amount? } (mesma estrutura editada no
+// ScheduleForm). Retorna a data e o valor EFETIVOS da ocorrência — usando o valor/data
+// editados quando existirem, senão o padrão da série. (Chaves não-data, como _gerencialKey,
+// nunca casam com uma data 'YYYY-MM-DD', então são ignoradas com segurança.)
+function occEfetiva(schedule, dataOriginal) {
+  const ov = schedule.overrides?.[dataOriginal]
+  if (!ov || typeof ov !== 'object') return { date: dataOriginal, amount: schedule.amount }
+  return {
+    date: ov.date || dataOriginal,
+    amount: ov.amount != null ? Number(ov.amount) : schedule.amount,
+  }
+}
+
 // Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
 function exportSheet(rows, filename) {
   const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -145,29 +159,31 @@ export default function FluxoCaixaPorConta() {
         if (reservaAccId) {
           const principalId = s.accountId
           if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)) return
-          getNextOccurrences(s, 400).forEach(date => {
+          getNextOccurrences(s, 400).forEach(origDate => {
+            // Aplica o valor/data editados da ocorrência (override), se houver.
+            const { date, amount } = occEfetiva(s, origDate)
             if (date < start || date > end) return
             // Linha 1 — Resgate: conta de reserva → principal (entrada no principal).
             if (!oculto(reservaAccId, principalId)) {
-              const m1 = classify('transfer', reservaAccId, principalId, s.amount)
+              const m1 = classify('transfer', reservaAccId, principalId, amount)
               if (m1) out.push({
                 date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
                 fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
                 reservaFuncaoId: s.reservaFuncaoId || null,
                 entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
-                _key: s.id + '_resg_' + date,
+                _key: s.id + '_resg_' + origDate,
               })
             }
             // Linha 2 — Despesa: principal → externo (saída do principal).
             if (!oculto(principalId, null)) {
-              const m2 = classify('expense', principalId, null, s.amount)
+              const m2 = classify('expense', principalId, null, amount)
               if (m2) out.push({
                 date, description: s.description || '(agendamento)', type: 'expense',
                 fromAccountId: principalId, toAccountId: null,
                 categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
                 reservaFuncaoId: s.reservaFuncaoId || null,
                 entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
-                _key: s.id + '_desp_' + date,
+                _key: s.id + '_desp_' + origDate,
               })
             }
           })
@@ -176,9 +192,11 @@ export default function FluxoCaixaPorConta() {
 
         if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
         if (oculto(s.accountId, s.toAccountId)) return
-        getNextOccurrences(s, 400).forEach(date => {
+        getNextOccurrences(s, 400).forEach(origDate => {
+          // Aplica o valor/data editados da ocorrência (override), se houver.
+          const { date, amount } = occEfetiva(s, origDate)
           if (date < start || date > end) return
-          const m = classify(s.transactionType, s.accountId, s.toAccountId, s.amount)
+          const m = classify(s.transactionType, s.accountId, s.toAccountId, amount)
           if (!m) return
           out.push({
             date, description: s.description || '(agendamento)', type: s.transactionType,
@@ -187,7 +205,7 @@ export default function FluxoCaixaPorConta() {
             fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
             reservaFuncaoId: s.reservaFuncaoId || null,
             entrada: m.entrada, saida: m.saida,
-            status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + date,
+            status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + origDate,
           })
         })
       })
