@@ -120,7 +120,7 @@ export default function FluxoCaixaPorConta() {
       if (!m) return
       out.push({
         date: tx.date, description: tx.description || '(sem descrição)', type: tx.type,
-        fromAccountId: tx.accountId, toAccountId: tx.toAccountId, categoryId: tx.categoryId || null,
+        fromAccountId: tx.accountId, toAccountId: tx.toAccountId, categoryId: tx.categoryId || tx.reservaExpenseCategoryId || null,
         entrada: m.entrada, saida: m.saida, status: 'Registrada', real: true, _key: tx.id,
       })
     })
@@ -141,7 +141,9 @@ export default function FluxoCaixaPorConta() {
           if (!m) return
           out.push({
             date, description: s.description || '(agendamento)', type: s.transactionType,
-            fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || null,
+            // "RA -" (transferência p/ reserva com função): a categoria fica em
+            // reservaExpenseCategoryId ("Despesa a classificar"), não em categoryId.
+            fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
             entrada: m.entrada, saida: m.saida,
             status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + date,
           })
