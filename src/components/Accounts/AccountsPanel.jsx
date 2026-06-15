@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
+import { fmt, accountsForView, creditBillKey, creditBillStatus, classifyFatura } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -225,12 +225,17 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const isCredit = account.type === 'credit'
   const highlightCard = isCredit && isNextDue
 
-  // Status de pagamento da fatura atual — só para o cartão destacado (próximo a vencer).
-  // Reaproveita creditBillStatus (mesma lógica do KPI "Valor Pago" do Cartão de Crédito).
+  // Status de pagamento da FATURA DO MÊS (creditMonthBill — o mesmo valor exibido em
+  // "a pagar"), não da dívida total. creditMonthBill é líquido (bruto − estornos −
+  // pagamentos); somando os pagamentos da fatura reconstruímos o bruto para distinguir
+  // "Parcialmente paga" de "Não paga", classificando com a mesma regra do KPI "Valor Pago".
   const faturaStatus = useMemo(() => {
     if (!highlightCard) return null
     const todayLocal = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`
-    return creditBillStatus(account, transactions, schedules, creditBillKey(todayLocal, account))
+    const { totalPago } = creditBillStatus(account, transactions, schedules, creditBillKey(todayLocal, account))
+    const bruto = (account.creditMonthBill || 0) + totalPago
+    if (bruto <= 0.005) return null // sem fatura no mês → sem badge de status
+    return classifyFatura(bruto, totalPago)
   }, [highlightCard, account, transactions, schedules])
   const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
   const idx = siblings.findIndex(a => a.id === account.id)

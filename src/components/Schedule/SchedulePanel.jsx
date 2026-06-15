@@ -520,7 +520,8 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 function ScheduleRow({
   schedule, nextDate, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
-  deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
+  deleteSchedule, updateSchedule, getNextOccurrences, onToast,
+  onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
   srfBySchedule, onToggleConfirmado,
 }) {
@@ -554,6 +555,22 @@ function ScheduleRow({
   const [showEstornar, setShowEstornar] = useState(false)
   const [showExcluir, setShowExcluir] = useState(false)
   const [showEfetivar, setShowEfetivar] = useState(false)
+  const [showPularUnico, setShowPularUnico] = useState(false)
+
+  // Pular a próxima ocorrência pendente:
+  //  • único (frequency 'once'): confirma e cancela (deleteSchedule);
+  //  • recorrente: avança a data adicionando a ocorrência atual aos "skipped" via
+  //    updateSchedule (sem criar lançamento nem registrar ocorrência).
+  const isRecorrente = (schedule.frequency || 'once') !== 'once'
+  const handlePular = () => {
+    if (!nextDate) return
+    if (!isRecorrente) { setShowPularUnico(true); return }
+    const proximo = getNextOccurrences?.(schedule, 2)[1] || null
+    updateSchedule(schedule.id, { skipped: [...(schedule.skipped || []), nextDate] })
+    onToast?.(proximo
+      ? `Agendamento pulado. Próximo vencimento: ${fmtDate(proximo)}`
+      : 'Agendamento pulado.')
+  }
 
   const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
 
@@ -738,6 +755,13 @@ function ScheduleRow({
                 >
                   <RotateCcw size={12} /> Estornar
                 </button>
+                <button
+                  onClick={handlePular}
+                  title={isRecorrente ? 'Pular esta ocorrência (avança para a próxima)' : 'Pular (cancela o agendamento único)'}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-500/15 text-gray-300 rounded hover:bg-gray-500/25 transition-colors font-medium"
+                >
+                  <SkipForward size={12} /> Pular
+                </button>
               </>
             )}
             <button onClick={() => onEditSchedule(schedule)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
@@ -781,6 +805,16 @@ function ScheduleRow({
           onConfirm={() => { deleteSchedule(schedule.id); setShowExcluir(false) }}
         />
       )}
+
+      <ConfirmDialog
+        open={showPularUnico}
+        onClose={() => setShowPularUnico(false)}
+        onConfirm={() => deleteSchedule(schedule.id)}
+        title="Pular Agendamento"
+        message="Este agendamento é único e não terá próxima ocorrência. Pular irá cancelá-lo permanentemente. Confirmar?"
+        confirmLabel="Confirmar"
+        danger
+      />
 
       {showEfetivar && (
         <EfetivarProvisaoModal
@@ -985,7 +1019,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence } = useApp()
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, updateSchedule } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1133,7 +1167,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
-    deleteSchedule, onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
+    deleteSchedule, updateSchedule, getNextOccurrences, onToast: showToastMsg,
+    onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
     selectionMode, onToggleSelect: toggleSelect,
     srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
   }
