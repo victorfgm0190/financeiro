@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown } from 'lucide-react'
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -8,6 +9,17 @@ import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
+
+// Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
+function exportSheet(rows, filename) {
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa')
+  XLSX.writeFile(wb, filename)
+}
+
+// Token de visão para o nome do arquivo.
+const VISAO_FILE = { conta: 'PorConta', grupo: 'PorGrupo', principais: 'ContasPrincipais' }
 
 // Ciclos de um envelope (dueDay D: período de D+1 de um mês até D do mês seguinte)
 // que se SOBREPÕEM ao intervalo [start, end] — sobreposição quando
@@ -209,6 +221,40 @@ export default function FluxoCaixaPorConta() {
     return 'bg-despesa/20 text-despesa' // A pagar
   }
 
+  // Conta De / Conta Para na perspectiva do conjunto selecionado (mesma semântica da coluna
+  // "Movimentação" da tabela): transferência → De/Para reais; entrada → vem de externo,
+  // entra na conta; saída → sai da conta, vai para externo.
+  const contaDe = (r) => {
+    if (r.type === 'transfer') return accName(r.fromAccountId)
+    return r.entrada > 0 ? '' : accName(r.fromAccountId)
+  }
+  const contaPara = (r) => {
+    if (r.type === 'transfer') return accName(r.toAccountId)
+    return r.entrada > 0 ? accName(r.fromAccountId) : ''
+  }
+
+  // Exporta EXATAMENTE as linhas visíveis na tabela (já refletem filtros de data, toggles de
+  // ocultar reserva/patrimônio e a visão selecionada). Inclui a linha de Saldo anterior e o Total.
+  const handleExport = () => {
+    const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
+    const aoa = [header]
+    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior', '', '', '', '', round2(saldoAnterior), ''])
+    rows.forEach(r => {
+      aoa.push([
+        fmtDate(r.date),
+        r.description,
+        contaDe(r),
+        contaPara(r),
+        r.entrada > 0 ? round2(r.entrada) : '',
+        r.saida > 0 ? round2(r.saida) : '',
+        round2(r.saldo),
+        r.status,
+      ])
+    })
+    aoa.push(['', 'Total', '', '', round2(totalEntrada), round2(totalSaida), round2(saldoFinal), ''])
+    exportSheet(aoa, `FluxoCaixa_${VISAO_FILE[visao] || visao}_${start}_${end}.xlsx`)
+  }
+
   const noSelection = accountIds.size === 0
 
   // Multi-select de contas (visão "Por Conta")
@@ -372,10 +418,15 @@ export default function FluxoCaixaPorConta() {
 
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
+        <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-3">
           <Calendar size={14} className="text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-300">Movimentações</h2>
           <span className="text-xs text-gray-500 ml-auto">{rows.length} linha{rows.length !== 1 ? 's' : ''}</span>
+          {!noSelection && rows.length > 0 && (
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
+              <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
+            </button>
+          )}
         </div>
 
         {noSelection ? (
