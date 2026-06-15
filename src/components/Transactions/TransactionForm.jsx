@@ -406,10 +406,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           }
         }
 
-        // Reconstrói os agendamentos da fatura (incl. schedule_reserva_funcoes do resgate)
-        // quando a despesa está/estava em grupo numerado — captura também a mudança de
+        // Reconstrói os agendamentos da fatura (gerencial_devolucao do Grupo G,
+        // resgate_reserva + schedule_reserva_funcoes dos numerados e pagamento_fatura)
+        // quando a despesa está/estava em grupo gerido — captura também a mudança de
         // função de reserva, que não passa pelas ramificações de grupo/valor acima.
-        if (isNumbered || wasNumbered) {
+        // Inclui o Grupo G (number 1): sem este recálculo explícito, o gerencial_devolucao
+        // dependia só do gatilho implícito e podia não ser (re)gerado para cartões cuja
+        // subconta ainda não existia.
+        if (isNumbered || wasNumbered || isGerencial1 || wasGerencial1) {
           const card = accounts.find(a => a.id === initial.accountId)
           let fmy = txData.faturaMonthYear
           if (!fmy) {
@@ -528,6 +532,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           // de cada fatura afetada é (re)gerado por recalcularAgendamentosFatura.
           reservaFuncaoId: txData.reservaFuncaoId || null,
         })
+      }
+
+      // Recálculo EXPLÍCITO da fatura da parcela base (Grupo G ou numerado). Roda DEPOIS de
+      // processarLancamentoGerencial — que já garantiu a subconta "Ger. {apelido}" — então o
+      // gerencial_devolucao/resgate é gerado de forma confiável, sem depender do timing do
+      // gatilho implícito (antes, a subconta podia não existir quando o gatilho rodava, e o
+      // agendamento de devolução não era gerado para cartões usados pela 1ª vez no Grupo G).
+      const ehGerido = g && (g.number === 1 || (typeof g.number === 'number' && g.number !== 1))
+      if (ehGerido) {
+        const card = accounts.find(a => a.id === form.accountId)
+        let fmy = txData.faturaMonthYear
+        if (!fmy) {
+          const ref = computeFaturaRef(new Date(form.date + 'T00:00:00'), card?.closingDay || 14) // MM/YYYY
+          const [mm, yyyy] = ref.split('/')
+          fmy = `${yyyy}-${mm}`
+        }
+        if (fmy) {
+          const [y, m] = fmy.split('-')
+          recalcularAgendamentosFatura(form.accountId, y, m)
+        }
       }
     }
 
