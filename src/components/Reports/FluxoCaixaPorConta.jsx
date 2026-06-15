@@ -50,7 +50,7 @@ const VISOES = [
 ]
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
   // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
@@ -70,6 +70,8 @@ export default function FluxoCaixaPorConta() {
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
   const catById = useMemo(() => new Map((categories || []).map(c => [c.id, c])), [categories])
   const catName = (id) => { const c = catById.get(id); return c ? c.name : '' }
+  const funcById = useMemo(() => new Map((reserveFunctions || []).map(f => [f.id, f])), [reserveFunctions])
+  const funcName = (id) => { const f = funcById.get(id); return f ? f.name : '' }
 
   const groups = useMemo(
     () => [...accountGroups].filter(g => !g.inibido).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -121,6 +123,7 @@ export default function FluxoCaixaPorConta() {
       out.push({
         date: tx.date, description: tx.description || '(sem descrição)', type: tx.type,
         fromAccountId: tx.accountId, toAccountId: tx.toAccountId, categoryId: tx.categoryId || tx.reservaExpenseCategoryId || null,
+        reservaFuncaoId: tx.reservaFuncaoId || null,
         entrada: m.entrada, saida: m.saida, status: 'Registrada', real: true, _key: tx.id,
       })
     })
@@ -144,6 +147,7 @@ export default function FluxoCaixaPorConta() {
             // "RA -" (transferência p/ reserva com função): a categoria fica em
             // reservaExpenseCategoryId ("Despesa a classificar"), não em categoryId.
             fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
+            reservaFuncaoId: s.reservaFuncaoId || null,
             entrada: m.entrada, saida: m.saida,
             status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + date,
           })
@@ -236,9 +240,13 @@ export default function FluxoCaixaPorConta() {
     if (r.type === 'transfer') return accName(r.toAccountId)
     return r.entrada > 0 ? accName(r.fromAccountId) : ''
   }
-  // Conta de reserva envolvida (origem ou destino). Cobre os agendamentos "RA -" (entradas
-  // na conta de reserva, ex.: CA), pois o destino é a própria conta de reserva.
+  // Coluna "Conta Reserva": prioriza a FUNÇÃO de reserva vinculada (ex.: "Salão GI"),
+  // depois o nome da conta de reserva envolvida (origem/destino, ex.: "CA"), senão vazio.
   const contaReserva = (r) => {
+    if (r.reservaFuncaoId) {
+      const nome = funcName(r.reservaFuncaoId)
+      if (nome) return nome
+    }
     if (reservaSet.has(r.fromAccountId)) return accName(r.fromAccountId)
     if (reservaSet.has(r.toAccountId)) return accName(r.toAccountId)
     return ''
