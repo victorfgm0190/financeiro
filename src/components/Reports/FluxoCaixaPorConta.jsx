@@ -136,6 +136,44 @@ export default function FluxoCaixaPorConta() {
     // destino no conjunto → entrada — ex.: FC → Reserva aparece como saída).
     if (includeSchedules) {
       schedules.forEach(s => {
+        // Provisão de despesa COM reserva vinculada (ainda não efetivada): projeta DUAS linhas
+        // por ocorrência — o resgate (conta de reserva → principal) e a despesa (principal →
+        // externo) — refletindo o fluxo real (a reserva libera o dinheiro; o principal paga).
+        const provFunc = (s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId)
+          ? funcById.get(s.reservaFuncaoId) : null
+        const reservaAccId = provFunc?.accountId || null
+        if (reservaAccId) {
+          const principalId = s.accountId
+          if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)) return
+          getNextOccurrences(s, 400).forEach(date => {
+            if (date < start || date > end) return
+            // Linha 1 — Resgate: conta de reserva → principal (entrada no principal).
+            if (!oculto(reservaAccId, principalId)) {
+              const m1 = classify('transfer', reservaAccId, principalId, s.amount)
+              if (m1) out.push({
+                date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
+                fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
+                reservaFuncaoId: s.reservaFuncaoId || null,
+                entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
+                _key: s.id + '_resg_' + date,
+              })
+            }
+            // Linha 2 — Despesa: principal → externo (saída do principal).
+            if (!oculto(principalId, null)) {
+              const m2 = classify('expense', principalId, null, s.amount)
+              if (m2) out.push({
+                date, description: s.description || '(agendamento)', type: 'expense',
+                fromAccountId: principalId, toAccountId: null,
+                categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
+                reservaFuncaoId: s.reservaFuncaoId || null,
+                entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
+                _key: s.id + '_desp_' + date,
+              })
+            }
+          })
+          return
+        }
+
         if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
         if (oculto(s.accountId, s.toAccountId)) return
         getNextOccurrences(s, 400).forEach(date => {
@@ -208,7 +246,7 @@ export default function FluxoCaixaPorConta() {
       r.saldo = bal
     })
     return { rows: out, saldoAnterior }
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, funcById])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
