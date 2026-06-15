@@ -850,7 +850,7 @@ function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose 
 }
 
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
-function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
+function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
   const round2 = (n) => Math.round(n * 100) / 100
 
@@ -969,15 +969,25 @@ function FluxoTab({ functions, accounts, saldosAtualizados, schedules, scheduleR
   const yy = (y) => String(y).slice(2)
   const rangeLabel = `${windowMonths[0].label}/${yy(windowMonths[0].year)} – ${lastWm.label}/${yy(lastWm.year)}`
 
+  const catById = new Map((categories || []).map(c => [c.id, c]))
+  // Categoria da função = categoria vinculada à conta de reserva (reservaType 'especifica').
+  const catOf = (account) => {
+    if (account?.reservaType !== 'especifica') return ''
+    const c = catById.get(account.reservaCategoryId)
+    return c ? c.name : ''
+  }
+  // Conta de reserva vinculada à função (ex.: CA, Pharma).
+  const contaReservaOf = (account) => account ? (account.apelido || account.name) : ''
+
   const handleExport = () => {
-    const header = ['Função', 'Conta', 'Total Investido']
+    const header = ['Função', 'Conta', 'Categoria', 'Conta Reserva', 'Total Investido']
     windowMonths.forEach(wm => {
       const lbl = `${wm.label}/${yy(wm.year)}`
       header.push(`${lbl} Dep`, `${lbl} Res`, `${lbl} Saldo`)
     })
     const rows = [header]
     projections.forEach(({ f, account, monthly }) => {
-      const row = [f.name, account ? (account.apelido || account.name) : '', saldosAtualizados[f.id] || 0]
+      const row = [f.name, account ? (account.apelido || account.name) : '', catOf(account), contaReservaOf(account), saldosAtualizados[f.id] || 0]
       monthly.forEach(d => row.push(d.dep, d.res, d.saldo))
       rows.push(row)
     })
@@ -1319,6 +1329,7 @@ export default function ReservasPanel() {
         <FluxoTab
           functions={effectiveFunctions}
           accounts={nonCreditAccounts}
+          categories={categories}
           saldosAtualizados={saldosAtualizados}
           schedules={schedules}
           scheduleReservaFuncoes={scheduleReservaFuncoes}

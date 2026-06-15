@@ -50,7 +50,7 @@ const VISOES = [
 ]
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, getNextOccurrences } = useApp()
 
   const [visao, setVisao] = useState('conta')
   // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
@@ -68,6 +68,8 @@ export default function FluxoCaixaPorConta() {
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const patrimonioSet = useMemo(() => new Set(accounts.filter(a => a.vinculoTipo === 'patrimonio').map(a => a.id)), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
+  const catById = useMemo(() => new Map((categories || []).map(c => [c.id, c])), [categories])
+  const catName = (id) => { const c = catById.get(id); return c ? c.name : '' }
 
   const groups = useMemo(
     () => [...accountGroups].filter(g => !g.inibido).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -118,7 +120,7 @@ export default function FluxoCaixaPorConta() {
       if (!m) return
       out.push({
         date: tx.date, description: tx.description || '(sem descrição)', type: tx.type,
-        fromAccountId: tx.accountId, toAccountId: tx.toAccountId,
+        fromAccountId: tx.accountId, toAccountId: tx.toAccountId, categoryId: tx.categoryId || null,
         entrada: m.entrada, saida: m.saida, status: 'Registrada', real: true, _key: tx.id,
       })
     })
@@ -139,7 +141,7 @@ export default function FluxoCaixaPorConta() {
           if (!m) return
           out.push({
             date, description: s.description || '(agendamento)', type: s.transactionType,
-            fromAccountId: s.accountId, toAccountId: s.toAccountId,
+            fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || null,
             entrada: m.entrada, saida: m.saida,
             status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + date,
           })
@@ -232,26 +234,35 @@ export default function FluxoCaixaPorConta() {
     if (r.type === 'transfer') return accName(r.toAccountId)
     return r.entrada > 0 ? accName(r.fromAccountId) : ''
   }
+  // Conta de reserva envolvida (origem ou destino). Cobre os agendamentos "RA -" (entradas
+  // na conta de reserva, ex.: CA), pois o destino é a própria conta de reserva.
+  const contaReserva = (r) => {
+    if (reservaSet.has(r.fromAccountId)) return accName(r.fromAccountId)
+    if (reservaSet.has(r.toAccountId)) return accName(r.toAccountId)
+    return ''
+  }
 
   // Exporta EXATAMENTE as linhas visíveis na tabela (já refletem filtros de data, toggles de
   // ocultar reserva/patrimônio e a visão selecionada). Inclui a linha de Saldo anterior e o Total.
   const handleExport = () => {
-    const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
+    const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Categoria', 'Conta Reserva', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
     const aoa = [header]
-    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior', '', '', '', '', round2(saldoAnterior), ''])
+    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior', '', '', '', '', '', '', round2(saldoAnterior), ''])
     rows.forEach(r => {
       aoa.push([
         fmtDate(r.date),
         r.description,
         contaDe(r),
         contaPara(r),
+        catName(r.categoryId),
+        contaReserva(r),
         r.entrada > 0 ? round2(r.entrada) : '',
         r.saida > 0 ? round2(r.saida) : '',
         round2(r.saldo),
         r.status,
       ])
     })
-    aoa.push(['', 'Total', '', '', round2(totalEntrada), round2(totalSaida), round2(saldoFinal), ''])
+    aoa.push(['', 'Total', '', '', '', '', round2(totalEntrada), round2(totalSaida), round2(saldoFinal), ''])
     exportSheet(aoa, `FluxoCaixa_${VISAO_FILE[visao] || visao}_${start}_${end}.xlsx`)
   }
 
