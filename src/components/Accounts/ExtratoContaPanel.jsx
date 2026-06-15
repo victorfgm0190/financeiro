@@ -80,13 +80,20 @@ function netCAIncoming(rows, accountId, aplicacaoIds) {
 // do mesmo dia quando contaAplicacao=true (conta de aplicação), e — via netCAIncoming
 // — também netiza múltiplas transferências recebidas de uma mesma conta de aplicação
 // no extrato da conta destino.
-function buildRows(transactions, accountId, netize, aplicacaoIds) {
+function buildRows(transactions, accountId, isAplicacao, aplicacaoIds) {
   const relevant = transactions
     .filter(tx => tx.accountId === accountId || tx.toAccountId === accountId)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''))
 
+  // A netização bidirecional (round-trip do mesmo dia) ocorre sempre que o PAR envolve uma
+  // conta de aplicação — seja a conta visualizada (isAplicacao), seja a conta oposta
+  // (aplicacaoIds.has(otherAccountId)). Isso garante a netização nas DUAS pontas do par:
+  // tanto no extrato da conta de aplicação quanto no da conta comum do outro lado.
+  const aplIds = aplicacaoIds || new Set()
+  const canNet = isAplicacao || aplIds.size > 0
+
   let rows
-  if (!netize) {
+  if (!canNet) {
     rows = relevant.map(tx => ({ kind: 'single', tx }))
   } else {
     const byDate = {}
@@ -109,6 +116,13 @@ function buildRows(transactions, accountId, netize, aplicacaoIds) {
 
         // Par de contas (não-ordenado) em relação à conta visualizada.
         const otherAccountId = tx.accountId === accountId ? tx.toAccountId : tx.accountId
+        // Só netiza o par quando ele envolve uma conta de aplicação (esta ponta ou a oposta).
+        const pairInvolvesAplicacao = isAplicacao || aplIds.has(otherAccountId)
+        if (!pairInvolvesAplicacao) {
+          rows.push({ kind: 'single', tx })
+          processed.add(tx.id)
+          return
+        }
         // Todos os transfers do dia entre ESTE par, em qualquer sentido (A→B e B→A).
         const pairTxs = dayTxs.filter(t =>
           !processed.has(t.id) &&
