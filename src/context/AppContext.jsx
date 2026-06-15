@@ -68,6 +68,25 @@ function computePendingUpTo(schedule, upToDateStr) {
   return pending
 }
 
+// Avança uma data (YYYY-MM-DD) por UM intervalo da frequência informada (ex.: semanal → +7d).
+// Usado ao efetivar uma provisão recorrente: a série reinicia em data_real + 1 intervalo.
+function advanceByFrequency(dateStr, frequency) {
+  let d = parseISO(dateStr)
+  switch (frequency) {
+    case 'daily':         d = addDays(d, 1); break
+    case 'weekly':        d = addWeeks(d, 1); break
+    case 'biweekly':      d = addWeeks(d, 2); break
+    case 'monthly':       d = addMonths(d, 1); break
+    case 'bimonthly':     d = addMonths(d, 2); break
+    case 'quarterly':     d = addMonths(d, 3); break
+    case 'quadrimestral': d = addMonths(d, 4); break
+    case 'semiannual':    d = addMonths(d, 6); break
+    case 'annual':        d = addYears(d, 1); break
+    default: break
+  }
+  return format(d, 'yyyy-MM-dd')
+}
+
 const defaultData = {
   settings: {
     financialMonthStartDay: 1,
@@ -1501,15 +1520,16 @@ export function AppProvider({ children }) {
   // • Provisão "Uma vez" (frequency === 'once'): grava valor/data no próprio registro e o marca
   //   como efetivado (provisao_efetivada = true; volta a auto-registrar como despesa normal).
   //
-  // • Provisão recorrente (Contínua/Parcelada): efetiva apenas UMA ocorrência (occurrenceDate).
-  //   Grava o valor/data ajustados como override dessa ocorrência e avança provisao_efetivada_until
-  //   para a data da ocorrência efetivada — a série continua (is_provisao/provisao_efetivada
-  //   inalterados) e a próxima ocorrência fica disponível para efetivar mais tarde.
+  // • Provisão recorrente (Contínua/Parcelada): cria um agendamento NORMAL de despesa
+  //   (is_provisao = false, autoRegister = false) com o valor/data reais — entra na lista normal
+  //   para ser pago — e AVANÇA a própria provisão para data_real + 1 intervalo da frequência
+  //   (ex.: semanal efetivada em 15/06 → próxima ocorrência 22/06). A série continua como
+  //   provisão recorrente para as próximas ocorrências.
   //
   // Em ambos os casos, havendo reservaFuncaoId, cria um agendamento de Transferência (Uma vez)
   // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
   // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
-  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
+  const efetivarProvisao = useCallback((id, { amount, date }) => {
     update(d => {
       const prov = d.schedules.find(s => s.id === id)
       if (!prov) return d
@@ -1521,11 +1541,47 @@ export function AppProvider({ children }) {
         if (isOnce) {
           return { ...s, amount: valor, startDate: date, provisaoEfetivada: true, autoRegister: true }
         }
-        // Recorrente: override da ocorrência + avanço de provisao_efetivada_until.
-        const origDate = occurrenceDate || s.startDate
-        const overrides = { ...(s.overrides || {}), [origDate]: { date, amount: valor } }
-        return { ...s, overrides, provisaoEfetivadaUntil: origDate }
+        // Recorrente: a série continua como provisão, reiniciando em data_real + 1 intervalo
+        // da frequência (ex.: semanal efetivada em 15/06 → próxima ocorrência 22/06). O
+        // lançamento real vira um agendamento NORMAL separado (criado abaixo). Limpa o
+        // provisao_efetivada_until legado (o modelo agora avança a própria startDate).
+        const proximaInicio = advanceByFrequency(date, s.frequency || 'weekly')
+        return { ...s, startDate: proximaInicio, provisaoEfetivadaUntil: null }
       })
+
+      // Provisão recorrente: cria o agendamento NORMAL de despesa (is_provisao=false) com
+      // valor/data REAIS, copiando os campos definitivos da provisão. Não auto-registra —
+      // entra na lista normal para ser pago. (Provisão "Uma vez" continua virando ela mesma
+      // a despesa efetivada, acima — sem agendamento duplicado.)
+      if (!isOnce) {
+        schedules = [...schedules, {
+          id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          description: prov.description,
+          transactionType: prov.transactionType || 'expense',
+          accountId: prov.accountId,
+          accountType: prov.accountType || null,
+          toAccountId: prov.toAccountId || '',
+          amount: valor,
+          categoryId: prov.categoryId || '',
+          payee: prov.payee || '',
+          costCenter: prov.costCenter || '',
+          frequency: 'once',
+          startDate: date,
+          occurrenceType: 'continuous',
+          installments: 0,
+          registered: [],
+          skipped: [],
+          remindDaysBefore: prov.remindDaysBefore ?? 3,
+          autoRegister: false,
+          overrides: {},
+          grupoGerencial: prov.grupoGerencial ?? null,
+          reservaExpenseCategoryId: prov.reservaExpenseCategoryId ?? null,
+          // O resgate da reserva (transferência) é criado à parte; a despesa em si não carrega função.
+          reservaFuncaoId: null,
+          isProvisao: false,
+          provisaoEfetivada: false,
+        }]
+      }
 
       if (prov.reservaFuncaoId) {
         const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
