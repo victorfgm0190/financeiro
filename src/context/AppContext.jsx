@@ -1960,10 +1960,10 @@ export function AppProvider({ children }) {
 
     const toStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
     const period = getFinancialPeriod(referenceDate)
+    const cycleStartStr = toStr(period.start)
     const cycleEndStr = toStr(period.end)
     const calEnd = new Date(period.end.getFullYear(), period.end.getMonth() + 1, 0) // último dia do mês do fim do ciclo
     const calendarEndStr = toStr(calEnd)
-    const todayStr = toStr(referenceDate)
     const mode = data.settings.financialMonthMode || 'custom'
     const startDay = data.settings.financialMonthStartDay || 1
     const base = rb(account.initialBalance ?? 0)
@@ -1983,14 +1983,17 @@ export function AppProvider({ children }) {
       return acc
     }
 
-    // Agendamentos pendentes (ocorrências não registradas/puladas) no intervalo (hoje, dateStr].
+    // Agendamentos pendentes (ocorrências não registradas/puladas) DENTRO do ciclo, no
+    // intervalo [início do ciclo, dateStr] — inclui os pendentes EM ATRASO (data <= hoje),
+    // alinhando com o relatório Fluxo de Caixa por Conta (que projeta todas as ocorrências do
+    // período). Antes usava (hoje, dateStr], omitindo os vencidos não registrados do ciclo.
     const schedDeltaUpTo = (dateStr) => {
       let acc = 0
       for (const s of data.schedules) {
         const fromAcc = s.accountId === account.id
         const toAcc = s.toAccountId === account.id
         if (!fromAcc && !toAcc) continue
-        const occs = getNextOccurrences(s, 60).filter(dt => dt > todayStr && dt <= dateStr)
+        const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= dateStr)
         for (let i = 0; i < occs.length; i++) {
           if (s.transactionType === 'income' && fromAcc) acc += s.amount
           else if (s.transactionType === 'expense' && fromAcc) acc -= s.amount
@@ -2051,7 +2054,6 @@ export function AppProvider({ children }) {
     const cycleEndStr = toStr(period.end)
     const calEnd = new Date(period.end.getFullYear(), period.end.getMonth() + 1, 0)
     const calendarEndStr = toStr(calEnd)
-    const todayStr = toStr(referenceDate)
     const mode = data.settings.financialMonthMode || 'custom'
     const isCustom = mode === 'custom'
     const startDay = data.settings.financialMonthStartDay || 1
@@ -2119,7 +2121,9 @@ export function AppProvider({ children }) {
     }
     const contasBase = pool.map(a => ({ id: a.id, name: a.apelido || a.name, saldo: rb(contaBaseMap.get(a.id) ?? 0) }))
 
-    // Agendamentos pendentes (ocorrências não registradas) no intervalo (hoje, dateStr], por agendamento.
+    // Agendamentos pendentes (ocorrências não registradas) no intervalo [início do ciclo,
+    // dateStr] — inclui os vencidos não registrados do ciclo (alinha com getAccountSaldos e
+    // com o relatório Fluxo de Caixa por Conta).
     const collectSched = (endStr) => {
       const items = []
       let total = 0
@@ -2127,7 +2131,7 @@ export function AppProvider({ children }) {
         const fromAcc = poolIds.has(s.accountId)
         const toAcc = poolIds.has(s.toAccountId)
         if (!fromAcc && !toAcc) continue
-        const occs = getNextOccurrences(s, 60).filter(dt => dt > todayStr && dt <= endStr)
+        const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= endStr)
         if (occs.length === 0) continue
         let unit = 0
         if (s.transactionType === 'income' && fromAcc) unit = s.amount
