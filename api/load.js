@@ -127,6 +127,7 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS day_of_month INTEGER`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS amount_approx NUMERIC`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS grupo_gerencial TEXT`)
+    await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`CREATE TABLE IF NOT EXISTS gerencial_rules (
       id TEXT PRIMARY KEY,
       contains TEXT NOT NULL,

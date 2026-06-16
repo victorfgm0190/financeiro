@@ -390,6 +390,7 @@ export const ruleToRow = (r) => ({
   day_of_month: r.dayOfMonth ?? null,
   amount_approx: r.amountApprox ?? null,
   grupo_gerencial: r.grupoGerencial || null,
+  reserva_funcao_id: r.reservaFuncaoId || null,
 })
 
 export const rowToRule = (r) => ({
@@ -400,6 +401,7 @@ export const rowToRule = (r) => ({
   dayOfMonth: r.day_of_month ?? null,
   amountApprox: r.amount_approx != null ? Number(r.amount_approx) : null,
   grupoGerencial: r.grupo_gerencial || null,
+  reservaFuncaoId: r.reserva_funcao_id || null,
 })
 
 export const gerencialGroupToRow = (g) => ({

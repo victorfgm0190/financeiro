@@ -595,10 +595,15 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
 
 // AJUSTE 2: modal "Preencher em Lote" — aplica categoria + gerencial aos itens cuja
 // descrição contém o texto informado.
-function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
+function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onApply, onClose }) {
   const [contains, setContains] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [grupoGerencial, setGrupoGerencial] = useState(sortedGrupos[0]?.id || '')
+  const [reservaFuncaoId, setReservaFuncaoId] = useState('')
+  // Mesma regra do select inline: só oferece função de reserva quando a conta-origem
+  // do grupo numerado tem mais de uma função.
+  const funcs = reserveFuncsForGroup(grupoGerencial)
+  const showFuncs = funcs.length > 1
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -613,7 +618,7 @@ function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
               onChange={e => setContains(e.target.value)}
               placeholder="ex: uber"
               autoFocus
-              onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial) }}
+              onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '') }}
             />
           </div>
           <div>
@@ -628,14 +633,23 @@ function BatchFillModal({ categories, sortedGrupos, onApply, onClose }) {
           </div>
           <div>
             <label className="label">Grupo Gerencial</label>
-            <select className="input" value={grupoGerencial} onChange={e => setGrupoGerencial(e.target.value)}>
+            <select className="input" value={grupoGerencial} onChange={e => { setGrupoGerencial(e.target.value); setReservaFuncaoId('') }}>
               {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
             </select>
           </div>
+          {showFuncs && (
+            <div>
+              <label className="label">Função de Reserva</label>
+              <select className="input" value={reservaFuncaoId} onChange={e => setReservaFuncaoId(e.target.value)}>
+                <option value="">— Selecionar —</option>
+                {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex gap-3 justify-end">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={!contains.trim()} onClick={() => onApply(contains, categoryId, grupoGerencial)}>
+          <button className="btn-primary" disabled={!contains.trim()} onClick={() => onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '')}>
             Aplicar
           </button>
         </div>
@@ -749,6 +763,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const isParcelado = !!installInfo
         const grupoFromRules = classified?.grupoGerencial
           || classifyGerencialByRules(row.description, row.amount, isParcelado)
+        // Função de reserva da regra → só pré-preenche quando a conta-origem do grupo
+        // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
+        const grupoFinal = grupoFromRules || grupoD
+        const funcsDoGrupo = reserveFuncsForGroup(grupoFinal)
+        const reservaFuncaoFromRule = (classified?.reservaFuncaoId
+          && funcsDoGrupo.length > 1
+          && funcsDoGrupo.some(f => f.id === classified.reservaFuncaoId))
+          ? classified.reservaFuncaoId : null
         const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
         // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses
         const baseFatura = (installInfo && installInfo.num > 1)
@@ -756,7 +778,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : faturaParc1
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
-          grupoGerencial: grupoFromRules || grupoD, _installment: installInfo, _generated: false,
+          grupoGerencial: grupoFinal, _installment: installInfo, _generated: false,
+          _reservaFuncaoId: reservaFuncaoFromRule,
           faturaMonthYear: baseFatura, _origDay: rowDay,
           // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
           _dateCartao: row.date,
@@ -946,14 +969,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
   const toggleAll = (v) => setRows(prev => prev.map(r => ({ ...r, selected: r._isDuplicate ? false : v })))
 
-  // AJUSTE 2: preenche categoria + gerencial em lote para itens cuja descrição contém o texto.
-  const applyBatchFill = (containsText, categoryId, grupoGerencial) => {
+  // AJUSTE 2: preenche categoria + gerencial (+ função de reserva) em lote para itens
+  // cuja descrição contém o texto. Ao trocar o grupo, redefine a função de reserva da linha
+  // (mesma semântica do select inline, que zera _reservaFuncaoId quando o grupo muda).
+  const applyBatchFill = (containsText, categoryId, grupoGerencial, reservaFuncaoId) => {
     setShowBatchFill(false)
     const t = (containsText || '').trim().toLowerCase()
     if (!t) return
     setRows(prev => prev.map(r =>
       (r.description || '').toLowerCase().includes(t)
-        ? { ...r, categoryId: categoryId || r.categoryId, grupoGerencial: grupoGerencial || r.grupoGerencial }
+        ? {
+            ...r,
+            categoryId: categoryId || r.categoryId,
+            grupoGerencial: grupoGerencial || r.grupoGerencial,
+            _reservaFuncaoId: grupoGerencial ? (reservaFuncaoId || null) : r._reservaFuncaoId,
+          }
         : r
     ))
   }
@@ -974,6 +1004,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
       // Apply gerencial rule if found and category rule didn't set a grupo
       if (gerencialId && !updates.grupoGerencial) updates.grupoGerencial = gerencialId
+
+      // Função de reserva da regra → só aplica quando a conta-origem do grupo final
+      // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
+      if (c?.reservaFuncaoId) {
+        const grupoFinal = updates.grupoGerencial || row.grupoGerencial
+        const funcs = reserveFuncsForGroup(grupoFinal)
+        if (funcs.length > 1 && funcs.some(f => f.id === c.reservaFuncaoId)) {
+          updates._reservaFuncaoId = c.reservaFuncaoId
+        }
+      }
 
       // Reset to grupoD when no rule applies and still on default
       if (!updates.grupoGerencial && row.grupoGerencial === grupoD) {
@@ -1114,7 +1154,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const key = ruleContains.toLowerCase()
         if (ruleContains && !ruleContainsSeen.has(key)) {
           ruleContainsSeen.add(key)
-          addRule({ contains: ruleContains, categoryId: row.categoryId, payee: row.payee || null, grupoGerencial: row.grupoGerencial || null })
+          addRule({ contains: ruleContains, categoryId: row.categoryId, payee: row.payee || null, grupoGerencial: row.grupoGerencial || null, reservaFuncaoId: row._reservaFuncaoId || null })
         }
       }
       if (row.grupoGerencial) {
@@ -1328,12 +1368,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const isParcelado = !!detectInstallment(row.description)
         const grupo = classified?.grupoGerencial || classifyGerencialByRules(row.description, row.amount, isParcelado) || grupoD
+        const funcsDoGrupo = reserveFuncsForGroup(grupo)
+        const reservaFuncaoFromRule = (classified?.reservaFuncaoId
+          && funcsDoGrupo.length > 1
+          && funcsDoGrupo.some(f => f.id === classified.reservaFuncaoId))
+          ? classified.reservaFuncaoId : null
         return {
           ...row,
           _id: `conc_${idCtr++}`,
           categoryId: classified?.categoryId || row.categoryId || '',
           payee: classified?.payee || row.payee || row.description || '',
           grupoGerencial: grupo,
+          _reservaFuncaoId: reservaFuncaoFromRule,
           _dateCartao: row.date,
           acao: 'importar',
         }
@@ -1675,6 +1721,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         <BatchFillModal
           categories={categories}
           sortedGrupos={sortedGrupos}
+          reserveFuncsForGroup={reserveFuncsForGroup}
           onApply={applyBatchFill}
           onClose={() => setShowBatchFill(false)}
         />
@@ -2000,7 +2047,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               categories={categories}
                               className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                               value={row.categoryId}
-                              onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial }) }}
+                              onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId }) }}
                               searchable
                             />
                           )}

@@ -2231,10 +2231,10 @@ export function AppProvider({ children }) {
       const score = 1 + (rule.dayOfMonth != null ? 1 : 0) + (rule.amountApprox != null ? 1 : 0)
       if (score > bestScore) { bestScore = score; best = rule }
     }
-    return best ? { categoryId: best.categoryId, payee: best.payee || '', grupoGerencial: best.grupoGerencial || null } : null
+    return best ? { categoryId: best.categoryId, payee: best.payee || '', grupoGerencial: best.grupoGerencial || null, reservaFuncaoId: best.reservaFuncaoId || null } : null
   }, [data.classificationRules])
 
-  const learnClassification = useCallback((description, categoryId, payee, { dayOfMonth = null, amountApprox = null, grupoGerencial = null } = {}) => {
+  const learnClassification = useCallback((description, categoryId, payee, { dayOfMonth = null, amountApprox = null, grupoGerencial = null, reservaFuncaoId = null } = {}) => {
     const words = description.toLowerCase().split(/\s+/).filter(w => w.length > 3)
     if (words.length === 0) return
     const keyword = words[0]
@@ -2247,9 +2247,9 @@ export function AppProvider({ children }) {
         return bothNull || bothClose
       })
       if (exact) {
-        return { ...d, classificationRules: d.classificationRules.map(r => r.id === exact.id ? { ...r, categoryId, payee: payee || r.payee, grupoGerencial: grupoGerencial || r.grupoGerencial } : r) }
+        return { ...d, classificationRules: d.classificationRules.map(r => r.id === exact.id ? { ...r, categoryId, payee: payee || r.payee, grupoGerencial: grupoGerencial || r.grupoGerencial, reservaFuncaoId: reservaFuncaoId || r.reservaFuncaoId } : r) }
       }
-      return { ...d, classificationRules: [...d.classificationRules, { id: 'rule_' + Date.now(), contains: keyword, categoryId, payee: payee || '', dayOfMonth, amountApprox, grupoGerencial }] }
+      return { ...d, classificationRules: [...d.classificationRules, { id: 'rule_' + Date.now(), contains: keyword, categoryId, payee: payee || '', dayOfMonth, amountApprox, grupoGerencial, reservaFuncaoId }] }
     })
   }, [update])
 
