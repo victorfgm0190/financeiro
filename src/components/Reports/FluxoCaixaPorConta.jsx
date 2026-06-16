@@ -9,6 +9,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
+const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
 // Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
 function exportSheet(rows, filename) {
