@@ -4,25 +4,11 @@ import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpre
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
+import { computeFluxoCaixa } from '../../lib/fluxoCaixa'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
 const round2 = n => Math.round(n * 100) / 100
-const todayStr = () => format(new Date(), 'yyyy-MM-dd')
-
-// Aplica o override de uma ocorrência específica do agendamento. Os overrides ficam em
-// schedule.overrides[dataOriginal] = { date?, amount? } (mesma estrutura editada no
-// ScheduleForm). Retorna a data e o valor EFETIVOS da ocorrência — usando o valor/data
-// editados quando existirem, senão o padrão da série. (Chaves não-data, como _gerencialKey,
-// nunca casam com uma data 'YYYY-MM-DD', então são ignoradas com segurança.)
-function occEfetiva(schedule, dataOriginal) {
-  const ov = schedule.overrides?.[dataOriginal]
-  if (!ov || typeof ov !== 'object') return { date: dataOriginal, amount: schedule.amount }
-  return {
-    date: ov.date || dataOriginal,
-    amount: ov.amount != null ? Number(ov.amount) : schedule.amount,
-  }
-}
 
 // Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
 function exportSheet(rows, filename) {
@@ -34,28 +20,6 @@ function exportSheet(rows, filename) {
 
 // Token de visão para o nome do arquivo.
 const VISAO_FILE = { conta: 'PorConta', grupo: 'PorGrupo', principais: 'ContasPrincipais' }
-
-// Ciclos de um envelope (dueDay D: período de D+1 de um mês até D do mês seguinte)
-// que se SOBREPÕEM ao intervalo [start, end] — sobreposição quando
-// ciclo.from <= end E ciclo.to >= start. Retorna [{ from, to }] em 'yyyy-MM-dd'.
-function envelopeCyclesOverlapping(dueDay, start, end) {
-  const startD = new Date(start + 'T00:00:00')
-  const endD = new Date(end + 'T00:00:00')
-  const cycles = []
-  // Itera o mês de término do ciclo, de um mês antes do início a um mês após o fim.
-  let cur = new Date(startD.getFullYear(), startD.getMonth() - 1, 1)
-  const stop = new Date(endD.getFullYear(), endD.getMonth() + 2, 1)
-  while (cur < stop) {
-    const y = cur.getFullYear(), mo = cur.getMonth()
-    const to = new Date(y, mo, dueDay)          // fim do ciclo: dia dueDay
-    const from = new Date(y, mo - 1, dueDay + 1) // início: dia dueDay+1 do mês anterior
-    if (from <= endD && to >= startD) {
-      cycles.push({ from: format(from, 'yyyy-MM-dd'), to: format(to, 'yyyy-MM-dd') })
-    }
-    cur = new Date(y, mo + 1, 1)
-  }
-  return cycles
-}
 
 const VISOES = [
   { id: 'conta',      label: 'Por Conta' },
@@ -103,168 +67,16 @@ export default function FluxoCaixaPorConta() {
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
 
+  // Fonte ÚNICA do cálculo (compartilhada com os KPIs FINAL CICLO/PROJETADO do Painel Geral).
   const { rows, saldoAnterior } = useMemo(() => {
-    if (accountIds.size === 0 || !start || !end || start > end) return { rows: [], saldoAnterior: currentBalance }
-    const out = []
-    // Movimento que toca uma conta de reserva (origem ou destino) — ocultado quando ligado.
-    const tocaReserva = (from, to) => hideReserva && (reservaSet.has(from) || reservaSet.has(to))
-    // Idem para contas com vínculo Patrimônio.
-    const tocaPatrimonio = (from, to) => hidePatrimonio && (patrimonioSet.has(from) || patrimonioSet.has(to))
-    const oculto = (from, to) => tocaReserva(from, to) || tocaPatrimonio(from, to)
-
-    // Entrada (depósito) / saída (pagamento) de um movimento em relação ao conjunto selecionado.
-    // Transferências internas (ambos os lados no conjunto) são neutralizadas.
-    const classify = (type, fromAcc, toAcc, amount) => {
-      const fromIn = accountIds.has(fromAcc)
-      const toIn = accountIds.has(toAcc)
-      if (!fromIn && !toIn) return null
-      if (type === 'transfer' && fromIn && toIn) return null
-      if (type === 'income'  && fromIn) return { entrada: amount, saida: 0 }
-      if (type === 'expense' && fromIn) return { entrada: 0, saida: amount }
-      if (type === 'transfer') {
-        if (toIn && !fromIn) return { entrada: amount, saida: 0 }
-        if (fromIn && !toIn) return { entrada: 0, saida: amount }
-      }
-      return null
-    }
-
-    // Passadas e presentes: lançamentos reais dentro do período → "Registrada".
-    transactions.forEach(tx => {
-      if (tx.date < start || tx.date > end) return
-      if (oculto(tx.accountId, tx.toAccountId)) return
-      const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
-      if (!m) return
-      out.push({
-        date: tx.date, description: tx.description || '(sem descrição)', type: tx.type,
-        fromAccountId: tx.accountId, toAccountId: tx.toAccountId, categoryId: tx.categoryId || tx.reservaExpenseCategoryId || null,
-        reservaFuncaoId: tx.reservaFuncaoId || null,
-        entrada: m.entrada, saida: m.saida, status: 'Registrada', real: true, _key: tx.id,
-      })
+    const r = computeFluxoCaixa({
+      accountIds, currentBalance, start, end,
+      transactions, schedules, envelopes, reserveFunctions,
+      getNextOccurrences, includeSchedules,
+      hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
     })
-
-    // Projetadas: ocorrências de agendamentos ainda NÃO registradas dentro do período.
-    // Inclui pendentes em atraso (data <= hoje) — getNextOccurrences já exclui as datas
-    // registradas/puladas, então não há duplicidade com os lançamentos reais acima. Uma
-    // transferência entra aqui sempre que ao menos um lado pertence ao conjunto (mesma
-    // regra do classify usada pelas transações registradas: origem no conjunto → saída,
-    // destino no conjunto → entrada — ex.: FC → Reserva aparece como saída).
-    if (includeSchedules) {
-      schedules.forEach(s => {
-        // Provisão de despesa COM reserva vinculada (ainda não efetivada): projeta DUAS linhas
-        // por ocorrência — o resgate (conta de reserva → principal) e a despesa (principal →
-        // externo) — refletindo o fluxo real (a reserva libera o dinheiro; o principal paga).
-        const provFunc = (s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId)
-          ? funcById.get(s.reservaFuncaoId) : null
-        const reservaAccId = provFunc?.accountId || null
-        if (reservaAccId) {
-          const principalId = s.accountId
-          if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)) return
-          getNextOccurrences(s, 400).forEach(origDate => {
-            // Aplica o valor/data editados da ocorrência (override), se houver.
-            const { date, amount } = occEfetiva(s, origDate)
-            if (date < start || date > end) return
-            // Linha 1 — Resgate: conta de reserva → principal (entrada no principal).
-            if (!oculto(reservaAccId, principalId)) {
-              const m1 = classify('transfer', reservaAccId, principalId, amount)
-              if (m1) out.push({
-                date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
-                fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
-                reservaFuncaoId: s.reservaFuncaoId || null,
-                entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
-                _key: s.id + '_resg_' + origDate,
-              })
-            }
-            // Linha 2 — Despesa: principal → externo (saída do principal).
-            if (!oculto(principalId, null)) {
-              const m2 = classify('expense', principalId, null, amount)
-              if (m2) out.push({
-                date, description: s.description || '(agendamento)', type: 'expense',
-                fromAccountId: principalId, toAccountId: null,
-                categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
-                reservaFuncaoId: s.reservaFuncaoId || null,
-                entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
-                _key: s.id + '_desp_' + origDate,
-              })
-            }
-          })
-          return
-        }
-
-        if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
-        if (oculto(s.accountId, s.toAccountId)) return
-        getNextOccurrences(s, 400).forEach(origDate => {
-          // Aplica o valor/data editados da ocorrência (override), se houver.
-          const { date, amount } = occEfetiva(s, origDate)
-          if (date < start || date > end) return
-          const m = classify(s.transactionType, s.accountId, s.toAccountId, amount)
-          if (!m) return
-          out.push({
-            date, description: s.description || '(agendamento)', type: s.transactionType,
-            // "RA -" (transferência p/ reserva com função): a categoria fica em
-            // reservaExpenseCategoryId ("Despesa a classificar"), não em categoryId.
-            fromAccountId: s.accountId, toAccountId: s.toAccountId, categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
-            reservaFuncaoId: s.reservaFuncaoId || null,
-            entrada: m.entrada, saida: m.saida,
-            status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + origDate,
-          })
-        })
-      })
-
-      // Envelopes: uma linha "Projetado" por CICLO de envelope que se sobrepõe ao
-      // período [start, end] — não só o ciclo atual. Para cada ciclo, o valor é o
-      // restante (limite − gasto naquele ciclo), datado no fim do ciclo (vencimento).
-      const isEnvExpense = (tx) =>
-        tx.type === 'expense' && !tx.reservaAuto &&
-        tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto'
-
-      ;(envelopes || []).forEach(env => {
-        if (!env.accountId || !accountIds.has(env.accountId)) return
-        if (oculto(env.accountId, null)) return
-        for (const cyc of envelopeCyclesOverlapping(env.dueDay || 1, start, end)) {
-          let spent = 0
-          for (const tx of transactions) {
-            if (!isEnvExpense(tx)) continue
-            if (!env.categoryIds?.includes(tx.categoryId)) continue
-            if (!tx.date || tx.date < cyc.from || tx.date > cyc.to) continue
-            spent += tx.amount
-          }
-          const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
-          if (restante <= 0) continue
-          out.push({
-            date: cyc.to, description: `Envelope: ${env.name || '(envelope)'}`, type: 'expense',
-            fromAccountId: env.accountId, toAccountId: null,
-            entrada: 0, saida: restante,
-            status: 'Projetado', real: false, _key: 'env_' + env.id + '_' + cyc.to,
-          })
-        }
-      })
-    }
-
-    out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
-
-    // Saldo anterior = saldo no dia imediatamente anterior à data inicial. O saldo atual
-    // das contas reflete TODAS as transações reais (inclusive as do período e posteriores);
-    // subtraímos o efeito líquido das transações reais com date >= start para obter a base
-    // correta do período. (Movimentos ocultos seguem a mesma regra dos exibidos.)
-    let efeitoDesdeStart = 0
-    transactions.forEach(tx => {
-      if (tx.date < start) return
-      if (oculto(tx.accountId, tx.toAccountId)) return
-      const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
-      if (!m) return
-      efeitoDesdeStart = round2(efeitoDesdeStart + m.entrada - m.saida)
-    })
-    const saldoAnterior = round2(currentBalance - efeitoDesdeStart)
-
-    // A partir do saldo anterior, acumula TODOS os movimentos do período (registrados e
-    // projetados), em ordem cronológica.
-    let bal = saldoAnterior
-    out.forEach(r => {
-      bal = round2(bal + r.entrada - r.saida)
-      r.saldo = bal
-    })
-    return { rows: out, saldoAnterior }
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, funcById])
+    return { rows: r.rows, saldoAnterior: r.saldoAnterior }
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))

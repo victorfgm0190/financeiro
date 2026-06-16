@@ -34,7 +34,7 @@ function AppContent() {
   const [showSearch, setShowSearch] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
-  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, data } = useApp()
+  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, getFluxoCaixaPrincipal, data } = useApp()
   const { fabAction } = useFab()
 
   // FAB central (BottomNav mobile): usa a ação contextual registrada pela tela
@@ -72,15 +72,18 @@ function AppContent() {
       }
     }
     const round = v => Math.round(v * 100) / 100
+    // FINAL CICLO e PROJETADO usam a MESMA engine do relatório Fluxo de Caixa por Conta
+    // (ancorada no saldo real das contas), garantindo valores idênticos aos do relatório.
+    const fc = getFluxoCaixaPrincipal()
     return {
       saldoAtual: round(agg.saldoAtual),
-      saldoFinalCiclo: round(agg.saldoFinalCiclo),
-      saldoProjetado: round(agg.saldoProjetado),
+      saldoFinalCiclo: round(fc.saldoFinalCiclo),
+      saldoProjetado: round(fc.saldoProjetado),
       saldoAtualCalendario: isCustom ? round(agg.saldoAtualCalendario) : null,
       saldoFinalCalendario: isCustom ? round(agg.saldoFinalCalendario) : null,
       mode: isCustom ? 'custom' : 'calendar',
     }
-  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos, data.settings])
+  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos, getFluxoCaixaPrincipal, data.settings])
   const saldoPrincipal = saldosPrincipais.saldoAtual
 
   const alertCount = useMemo(() => {

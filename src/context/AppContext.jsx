@@ -12,6 +12,7 @@ import {
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
+import { computeFluxoCaixa } from '../lib/fluxoCaixa'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
@@ -2044,6 +2045,34 @@ export function AppProvider({ children }) {
     }
   }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod])
 
+  // FINAL CICLO / PROJETADO do Saldo Principal usando EXATAMENTE a engine do relatório
+  // Fluxo de Caixa por Conta (computeFluxoCaixa) — ancorada no saldo REAL das contas. Pool:
+  // perfil ativo → contas do perfil; senão → contas FC (fluxoCaixaPrincipal), sempre não-cartão.
+  // saldoProjetado = saldoFinal (com envelopes); saldoFinalCiclo = saldoFinal sem envelopes.
+  const getFluxoCaixaPrincipal = useCallback((referenceDate = new Date()) => {
+    const toStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    const period = getFinancialPeriod(referenceDate)
+    const start = toStr(period.start)
+    const end = toStr(period.end)
+    const pool = activeProfileId
+      ? data.accounts.filter(a => a.profileId === activeProfileId && a.type !== 'credit')
+      : data.accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
+    const accountIds = new Set(pool.map(a => a.id))
+    const currentBalance = pool.reduce((s, a) => s + (a.balance || 0), 0)
+    const r = computeFluxoCaixa({
+      accountIds, currentBalance, start, end,
+      transactions: data.transactions, schedules: data.schedules,
+      envelopes: data.envelopes, reserveFunctions: data.reserveFunctions,
+      getNextOccurrences, includeSchedules: true,
+    })
+    return {
+      saldoAnterior: r.saldoAnterior,
+      saldoProjetado: r.saldoFinal,            // com envelopes restantes subtraídos
+      saldoFinalCiclo: r.saldoFinalSemEnvelopes, // sem subtrair envelopes
+      envelopesTotal: r.envelopesTotal,
+    }
+  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod])
+
   // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal agregado sobre o pool de
   // contas (perfil ativo → contas do perfil; senão → fluxoCaixaPrincipal). Devolve, por seção,
   // os componentes e itens (agendamentos, envelopes, lançamentos fora do ciclo) que somam cada saldo.
@@ -3867,6 +3896,7 @@ export function AppProvider({ children }) {
       dbStatus,
       getFinancialPeriod,
       getAccountSaldos,
+      getFluxoCaixaPrincipal,
       getSaldoPrincipalBreakdown,
       getNextOccurrences,
       classifyByRules,
