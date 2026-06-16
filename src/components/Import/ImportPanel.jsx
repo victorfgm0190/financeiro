@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
+import { detectInstallment } from '../../lib/installments'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -397,14 +398,6 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
       </div>
     </div>
   )
-}
-
-function detectInstallment(description) {
-  const match = description.match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/)
-  if (!match) return null
-  const num = parseInt(match[1]), total = parseInt(match[2])
-  if (num < 1 || total < 2 || num > total || total > 99) return null
-  return { num, total, base: description.replace(match[0], '').trim().replace(/\s+/g, ' '), matchStr: match[0] }
 }
 
 function addMonthSafe(dateStr, n) {
@@ -923,7 +916,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
   // ausentes → herdam a categoria/gerencial da parcela importada e são criadas na confirmação.
   const futureParcelas = useMemo(() => {
-    if (editingImport || !selectedAccount) return []
+    // Item 1: também no modo reedição — parcelas futuras ausentes de um parcelado já
+    // importado são geradas/exibidas (as já existentes vêm marcadas _exists e não mudam).
+    if (!selectedAccount) return []
     const dueDay = selectedAcc?.dueDay || null
     // Parcelas base já presentes na seção principal — evita duplicar uma parcela futura
     // que também aparece como item da própria fatura importada.
@@ -1071,8 +1066,45 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
         }
       })
-      if (faturaMonthYear && faturaMonthYear !== editingImport.mesAno) {
-        updateCardImport(editingImport.id, { mesAno: faturaMonthYear })
+
+      // Item 1: parcelas futuras AUSENTES de um parcelado reeditado também são criadas
+      // (mesma regra da importação nova). As já existentes (fp._exists) não são tocadas.
+      // Os ids criados são anexados ao histórico para permanecerem editáveis numa próxima
+      // reedição. Suas faturas entram em faturasAfetadas antes do recálculo abaixo.
+      const novosTxIds = []
+      futureParcelas.forEach(fp => {
+        if (fp._exists) return
+        if (isDuplicateInstallment({ description: fp.description, amount: fp.amount }, transactions, selectedAccount)) return
+        const fpDate = clampDateToFatura(fp.date, fp.faturaMonthYear, editClosingDay)
+        addFaturaAfetada(fp.faturaMonthYear, fpDate)
+        if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
+        const fId = addTransaction({
+          type: 'expense', accountId: selectedAccount, accountType: 'credit',
+          amount: fp.amount, date: fpDate, description: fp.description,
+          categoryId: fp.categoryId, payee: fp.payee,
+          grupoGerencial: fp.grupoGerencial || defaultGrupoD,
+          faturaMonthYear: fp.faturaMonthYear,
+          reservaFuncaoId: fp._reservaFuncaoId || null,
+          installmentNum: fp.num, installmentTotal: fp.total,
+          _fromImport: true,
+        })
+        if (fId) novosTxIds.push(fId)
+        const parentRow = resolvedRows.find(r => r._id === fp.parentId)
+        if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
+        if (fp.grupoGerencial) {
+          processarLancamentoGerencial(
+            { accountId: selectedAccount, amount: fp.amount, date: fpDate, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
+            fp.grupoGerencial, null, { immediate: false }
+          )
+          registrarReservaFuncao(fp.faturaMonthYear, fp.grupoGerencial, fp._reservaFuncaoId, fp.amount)
+        }
+      })
+
+      const impChanges = {}
+      if (faturaMonthYear && faturaMonthYear !== editingImport.mesAno) impChanges.mesAno = faturaMonthYear
+      if (novosTxIds.length > 0) impChanges.txIds = [...(editingImport.txIds || []), ...novosTxIds]
+      if (Object.keys(impChanges).length > 0) {
+        updateCardImport(editingImport.id, impChanges)
       }
       // Recalcula cada fatura afetada com o mapa (igual ao fluxo de importação nova). Roda
       // após os updateTransaction (todos via update funcional), então enxerga as transações
@@ -1142,6 +1174,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
         faturaMonthYear: row.faturaMonthYear || null,
         reservaFuncaoId: row._reservaFuncaoId || null,
+        installmentNum: row._installment?.num || null,
+        installmentTotal: row._installment?.total || null,
         _fromImport: true,
       })
       txIds.push(txId)
@@ -1187,6 +1221,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         grupoGerencial: fp.grupoGerencial || defaultGrupoD,
         faturaMonthYear: fp.faturaMonthYear,
         reservaFuncaoId: fp._reservaFuncaoId || null,
+        installmentNum: fp.num, installmentTotal: fp.total,
         _fromImport: true,
       })
       if (fId) txIds.push(fId)

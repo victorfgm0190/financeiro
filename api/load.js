@@ -9,6 +9,9 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS date_cartao DATE`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS parent_tx_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
+    // Parcela N de M: número e total da série, preenchidos na criação (import e manual).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_num INTEGER`)
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_total INTEGER`)
     // Transferências entre perfis CPF/CNPJ: categoria na visão de cada perfil.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)

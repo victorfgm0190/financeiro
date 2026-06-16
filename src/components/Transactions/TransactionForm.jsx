@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
+import { detectInstallment } from '../../lib/installments'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -138,6 +139,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const [resgateInfo, setResgateInfo] = useState(null)
   const [scheduleMatch, setScheduleMatch] = useState(null)
   const [debtCtx, setDebtCtx] = useState(null)
+  // Item 2: "N/Total" detectado na descrição sem "Parcelado" marcado → guarda a parcela
+  // detectada para o passo de confirmação (a decisão é passada explícita ao re-submeter).
+  const [installmentPrompt, setInstallmentPrompt] = useState(null)
 
   // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
@@ -267,9 +271,23 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     })
   }, [initial, transactions])
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = (e, installmentDecision) => {
+    e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
+
+    // Item 2: descrição com "N/Total" e "Parcelado" não marcado → nunca decidir em silêncio.
+    // Mostra o passo de confirmação; a decisão volta como `installmentDecision` no re-submit
+    // ({num,total} = é parcela; {skip:true} = lançar como está). Só em NOVA despesa de cartão.
+    const isNewCardExpense = !initial?.id && isCredit && form.type === 'expense'
+    if (isNewCardExpense && form.installments <= 1 && !installmentDecision) {
+      const det = detectInstallment(form.description || '')
+      if (det) {
+        setInstallmentPrompt(det)
+        setStep('installment-detect')
+        return
+      }
+    }
+
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     if (form.costCenter && !costCenters.includes(form.costCenter)) addCostCenter(form.costCenter)
 
@@ -283,6 +301,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       ? Math.round(Number(form.amount) / form.installments * 100) / 100
       : Number(form.amount)
 
+    // Item 4: tags de parcela na criação. "Parcelado" marcado → base é a parcela 1 de N.
+    // Item 2 confirmado → usa o N/Total detectado na descrição. Caso contrário, sem tag.
+    const decidedInst = installmentDecision && !installmentDecision.skip ? installmentDecision : null
+    const installmentNum = isParcelado ? 1 : (decidedInst ? decidedInst.num : null)
+    const installmentTotal = isParcelado ? form.installments : (decidedInst ? decidedInst.total : null)
+
     // eslint-disable-next-line no-unused-vars
     const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
     const txData = {
@@ -292,6 +316,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
       faturaMonthYear: (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear : null,
       dateCartao: form.dateCartao || null,
+      installmentNum,
+      installmentTotal,
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
       // Despesa de cartão em grupo numerado com "Pago com reserva?" ativo: função escolhida no
       // select (modo função). Em edição, preserva o valor existente (ex.: cartão importado).
@@ -654,6 +680,43 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             onClick={() => { propagarValorParcelas(initial.id, novoValor); onClose() }}
           >
             Sim, aplicar a todas
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'installment-detect' && installmentPrompt) {
+    const { num, total } = installmentPrompt
+    return (
+      <div className="space-y-5 py-2">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto">
+            <Repeat size={22} className="text-amber-400" />
+          </div>
+          <h3 className="font-semibold text-gray-100">Isto é uma parcela?</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            A descrição contém{' '}
+            <span className="text-white font-semibold">{num}/{total}</span> e o campo
+            “Parcelado” não está marcado. Deseja registrar este lançamento como{' '}
+            <span className="text-white font-semibold">parcela {num} de {total}</span>?
+          </p>
+          <p className="text-xs text-gray-600">
+            “Sim” apenas marca a parcela neste lançamento (não cria as demais). “Não” lança como está.
+          </p>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button
+            className="btn-secondary flex-1"
+            onClick={() => { setStep('form'); handleSubmit(null, { skip: true }) }}
+          >
+            Não, lançar como está
+          </button>
+          <button
+            className="btn-primary flex-1"
+            onClick={() => { setStep('form'); handleSubmit(null, { num, total }) }}
+          >
+            Sim, parcela {num}/{total}
           </button>
         </div>
       </div>

@@ -3266,6 +3266,7 @@ export function AppProvider({ children }) {
         description: `${baseDesc} (${i}/${installments})`.trim(),
         grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
         reservaFuncaoId: reservaFuncaoId || null,
+        installmentNum: i, installmentTotal: installments,
         origin: 'parcela', parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
