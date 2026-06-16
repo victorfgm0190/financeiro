@@ -75,8 +75,12 @@ export default function CashFlowPanel({ setActivePage }) {
       if (!accountIds.includes(s.accountId) && !accountIds.includes(s.toAccountId)) return
       getNextOccurrences(s, 365).forEach(date => {
         if (date < todayStr || date > endDateStr) return
-        if (s.transactionType === 'income') dailyFlow[date] = (dailyFlow[date] || 0) + s.amount
-        if (s.transactionType === 'expense') dailyFlow[date] = (dailyFlow[date] || 0) - s.amount
+        if (s.transactionType === 'income' && accountIds.includes(s.accountId)) dailyFlow[date] = (dailyFlow[date] || 0) + s.amount
+        if (s.transactionType === 'expense' && accountIds.includes(s.accountId)) dailyFlow[date] = (dailyFlow[date] || 0) - s.amount
+        if (s.transactionType === 'transfer') {
+          if (accountIds.includes(s.toAccountId) && !accountIds.includes(s.accountId)) dailyFlow[date] = (dailyFlow[date] || 0) + s.amount
+          else if (accountIds.includes(s.accountId) && !accountIds.includes(s.toAccountId)) dailyFlow[date] = (dailyFlow[date] || 0) - s.amount
+        }
       })
     })
 
@@ -131,11 +135,17 @@ export default function CashFlowPanel({ setActivePage }) {
 
     // Scheduled future occurrences
     schedules.forEach(s => {
-      if (!accountIds.includes(s.accountId)) return
+      if (!accountIds.includes(s.accountId) && !accountIds.includes(s.toAccountId)) return
       getNextOccurrences(s, 365).forEach(date => {
         if (date < todayStr || date > endDateStr) return
-        const entrada = s.transactionType === 'income' ? s.amount : 0
-        const saida = s.transactionType === 'expense' ? s.amount : 0
+        let entrada = 0, saida = 0
+        if (s.transactionType === 'income' && accountIds.includes(s.accountId)) entrada = s.amount
+        if (s.transactionType === 'expense' && accountIds.includes(s.accountId)) saida = s.amount
+        if (s.transactionType === 'transfer') {
+          if (accountIds.includes(s.toAccountId) && !accountIds.includes(s.accountId)) entrada = s.amount
+          else if (accountIds.includes(s.accountId) && !accountIds.includes(s.toAccountId)) saida = s.amount
+        }
+        if (entrada === 0 && saida === 0) return
         events.push({
           date, description: s.description, entrada, saida, scheduled: true,
           isTransfer: s.transactionType === 'transfer', fromAccountId: s.accountId, toAccountId: s.toAccountId,
