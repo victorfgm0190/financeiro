@@ -12,6 +12,10 @@ export default async function handler(req, res) {
     // Parcela N de M: número e total da série, preenchidos na criação (import e manual).
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_num INTEGER`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_total INTEGER`)
+    // Chave única da parcela (account_id | base | num/total | centavos | serie_inicio),
+    // calculada em txToRow. Índice parcial protege contra importação duplicada.
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_key TEXT`)
+    await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL`)
     // Transferências entre perfis CPF/CNPJ: categoria na visão de cada perfil.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)

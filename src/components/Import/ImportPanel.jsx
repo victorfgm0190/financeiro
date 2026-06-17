@@ -9,6 +9,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment } from '../../lib/installments'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -400,14 +401,6 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   )
 }
 
-function addMonthSafe(dateStr, n) {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const raw = m - 1 + n
-  const ty = y + Math.floor(raw / 12), tm = raw % 12
-  const td = Math.min(d, new Date(ty, tm + 1, 0).getDate())
-  return `${ty}-${String(tm + 1).padStart(2, '0')}-${String(td).padStart(2, '0')}`
-}
-
 // Calcula o mês da fatura (YYYY-MM) de um lançamento dado o dia de fechamento do cartão.
 // dia <= closingDay → fatura do mês corrente; dia > closingDay → fatura do mês seguinte.
 function calcFatura(dateStr, closingDay = 14) {
@@ -418,16 +411,6 @@ function calcFatura(dateStr, closingDay = 14) {
   if (day <= closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
   else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); m = n.getMonth() + 1; y = n.getFullYear() }
   return `${y}-${String(m).padStart(2, '0')}`
-}
-
-// Avança n meses em um string YYYY-MM (aceita n negativo — ex.: mês anterior).
-function addMonthToFatura(yyyymm, n) {
-  if (!yyyymm) return ''
-  const [y, m] = yyyymm.split('-').map(Number)
-  const idx = y * 12 + (m - 1) + n
-  const ty = Math.floor(idx / 12)
-  const tm = ((idx % 12) + 12) % 12
-  return `${ty}-${String(tm + 1).padStart(2, '0')}`
 }
 
 // fatura_ref (YYYY-MM) a partir do DIA da data ORIGINAL do extrato (date_cartao),
@@ -441,24 +424,6 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
   if (!dateCartaoStr) return referenceYYYYMM
   const day = parseInt((dateCartaoStr.split('-')[2] || '1'), 10)
   return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
-}
-
-// "Clampa" a data de sistema ao período válido da fatura (YYYY-MM):
-//   de (closingDay+1) do mês anterior até closingDay do mês da fatura.
-// Se a data calculada cair fora desse intervalo, retorna o dia de fechamento do mês da
-// fatura (ex.: date=2026-05-15, fatura='2026-05', closingDay=13 → '2026-05-13').
-// date_cartao NÃO é afetada — esta função só ajusta a date de sistema.
-function clampDateToFatura(dateStr, faturaYYYYMM, closingDay) {
-  if (!dateStr || !faturaYYYYMM || !closingDay) return dateStr
-  const [y, m] = faturaYYYYMM.split('-').map(Number)
-  if (!y || !m) return dateStr
-  const lastDayFatura = new Date(y, m, 0).getDate()
-  const endDay = Math.min(closingDay, lastDayFatura)
-  const end = new Date(y, m - 1, endDay)            // closingDay do mês da fatura
-  const start = new Date(y, m - 2, closingDay + 1)  // (closingDay+1) do mês anterior
-  const d = new Date(dateStr + 'T00:00:00')
-  if (d < start || d > end) return `${faturaYYYYMM}-${String(endDay).padStart(2, '0')}`
-  return dateStr
 }
 
 // Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
@@ -511,42 +476,6 @@ function correctedDateForFatura(faturaYYYYMM, closingDay) {
   const lastDay = new Date(y, m, 0).getDate()
   const day = Math.min(closingDay, lastDay)
   return `${faturaYYYYMM}-${String(day).padStart(2, '0')}`
-}
-
-// Retorna a data de vencimento (YYYY-MM-DD) do cartão no mês da fatura.
-function faturaToDate(faturaYYYYMM, dueDay) {
-  if (!faturaYYYYMM || !dueDay) return null
-  const [y, m] = faturaYYYYMM.split('-').map(Number)
-  const lastDay = new Date(y, m, 0).getDate()
-  return `${faturaYYYYMM}-${String(Math.min(dueDay, lastDay)).padStart(2, '0')}`
-}
-
-// Detecta duplicata de parcelado: mesma base de descrição + mesmo número de parcela + valor dentro de R$ 0,50.
-// Não compara fatura — se a parcela já existe no cartão, é duplicata independente do mês.
-function isDuplicateInstallment(row, existing, accountId) {
-  const rowInst = detectInstallment(row.description)
-  if (!rowInst) return false
-  const rowBase = rowInst.base.toLowerCase().trim()
-  return existing.some(t => {
-    if (t.accountId !== accountId) return false
-    if (Math.abs(t.amount - row.amount) > 0.50) return false
-    const tInst = detectInstallment(t.description || '')
-    if (!tInst || tInst.num !== rowInst.num) return false
-    return tInst.base.toLowerCase().trim() === rowBase
-  })
-}
-
-// Encontra no banco a transação de uma parcela específica (mesma base + número + conta,
-// valor dentro de R$ 0,50). Usado para saber se uma parcela futura já existe.
-function findExistingParcela(inst, num, amount, accountId, existing) {
-  const base = inst.base.toLowerCase().trim()
-  return existing.find(t => {
-    if (t.accountId !== accountId) return false
-    if (Math.abs(t.amount - amount) > 0.50) return false
-    const tInst = detectInstallment(t.description || '')
-    if (!tInst || tInst.num !== num) return false
-    return tInst.base.toLowerCase().trim() === base
-  }) || null
 }
 
 // Retorna o mês de fatura mais frequente entre os lançamentos base (não gerados).
@@ -958,6 +887,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
     }
     return out
+    // editingImport mantido nas deps: o React Compiler exige o array idêntico (preserve-
+    // manual-memoization); o corpo não o usa mais, daí o aviso benigno de dep desnecessária.
   }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))

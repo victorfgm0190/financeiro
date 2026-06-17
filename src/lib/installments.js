@@ -20,3 +20,33 @@ export function detectInstallment(description) {
 export function normalizeInstallmentBase(base) {
   return (base || '').toLowerCase().trim().replace(/\s+/g, ' ')
 }
+
+// Avança n meses num 'YYYY-MM' (aceita n negativo).
+function addMonthsYM(ym, n) {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, (m - 1) + n, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+// Extrai 'YYYY-MM' de uma data (string 'YYYY-MM-DD' ou Date).
+function ymFromAny(date) {
+  if (!date) return null
+  if (date instanceof Date) return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+  if (typeof date === 'string' && date.length >= 7) return date.slice(0, 7)
+  return null
+}
+
+// installment_key — chave única de uma parcela. FONTE ÚNICA da fórmula, reusada pelo
+// backfill (scripts/backfill-installments.mjs) e por txToRow (inserções novas):
+//   account_id | base_normalizada | num/total | valor_em_centavos | serie_inicio
+// serie_inicio = fatura_month_year − (num − 1) meses (fallback: YYYY-MM da date).
+// Diferencia séries paralelas de mesmo preço/total que começam em meses distintos.
+// Retorna null quando num/total não estão preenchidos (não entra no índice parcial).
+export function installmentKey({ accountId, description, installmentNum, installmentTotal, amount, faturaMonthYear, date }) {
+  if (installmentNum == null || installmentTotal == null) return null
+  const det = detectInstallment(description || '')
+  const base = normalizeInstallmentBase(det ? det.base : (description || ''))
+  const cents = Math.round((Number(amount) || 0) * 100)
+  const ym = faturaMonthYear || ymFromAny(date)
+  const serieInicio = ym ? addMonthsYM(ym, -((Number(installmentNum) || 1) - 1)) : 'sem-fatura'
+  return `${accountId}|${base}|${installmentNum}/${installmentTotal}|${cents}|${serieInicio}`
+}

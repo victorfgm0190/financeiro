@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, PiggyBank, Repeat } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, fmtDate, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { today, fmt, fmtDate, accountPriority } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment } from '../../lib/installments'
+import { buildSeries, clampDateToFatura } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -136,12 +137,19 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   })
 
   const [step, setStep] = useState('form')
-  const [resgateInfo, setResgateInfo] = useState(null)
+  const [resgateInfo] = useState(null)
   const [scheduleMatch, setScheduleMatch] = useState(null)
   const [debtCtx, setDebtCtx] = useState(null)
   // Item 2: "N/Total" detectado na descrição sem "Parcelado" marcado → guarda a parcela
   // detectada para o passo de confirmação (a decisão é passada explícita ao re-submeter).
   const [installmentPrompt, setInstallmentPrompt] = useState(null)
+
+  // Item 6: série de parcelas do lançamento em edição (Parcela N de M + irmãs + faltantes).
+  const parcelaSeries = useMemo(() => {
+    if (!initial?.id || initial.installmentNum == null || initial.installmentTotal == null) return null
+    const acc = accounts.find(a => a.id === initial.accountId)
+    return buildSeries(initial, transactions, acc)
+  }, [initial, transactions, accounts])
 
   // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
@@ -593,6 +601,45 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     onClose()
   }
 
+  // Item 6 / Gate 3: insere as parcelas faltantes da série (só após clique de confirmação
+  // no passo de prévia). Reusa a saída de buildSeries e dispara recalcularAgendamentosFatura
+  // por fatura afetada (igual ao fluxo de parcelas futuras do ImportPanel).
+  const confirmarGerarParcelas = () => {
+    const missing = parcelaSeries?.missing || []
+    if (missing.length === 0) { onClose(); return }
+    const card = accounts.find(a => a.id === initial.accountId)
+    const closingDay = card?.closingDay || 14
+    const faturas = new Set()
+    for (const p of missing) {
+      const grupo = p.grupoGerencial || defaultGrupoId
+      const date = clampDateToFatura(p.date, p.faturaMonthYear, closingDay)
+      if (p.payee && !payees.includes(p.payee)) addPayee(p.payee)
+      addTransaction({
+        type: 'expense', accountId: initial.accountId, accountType: 'credit',
+        amount: p.amount, date, description: p.description,
+        categoryId: p.categoryId || null, payee: p.payee || null,
+        grupoGerencial: grupo,
+        faturaMonthYear: p.faturaMonthYear,
+        reservaFuncaoId: p.reservaFuncaoId || null,
+        installmentNum: p.num, installmentTotal: p.total,
+        _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
+      })
+      if (grupo) {
+        processarLancamentoGerencial(
+          { accountId: initial.accountId, amount: p.amount, date, description: p.description, faturaMonthYear: p.faturaMonthYear },
+          grupo, null, { immediate: false }
+        )
+      }
+      faturas.add(p.faturaMonthYear)
+    }
+    for (const fmy of faturas) {
+      const [y, m] = (fmy || '').split('-')
+      if (y && m) recalcularAgendamentosFatura(initial.accountId, y, m)
+    }
+    onToast?.(`${missing.length} parcela${missing.length !== 1 ? 's' : ''} gerada${missing.length !== 1 ? 's' : ''}.`)
+    onClose()
+  }
+
   const handleResgate = () => {
     if (resgateInfo?.contaResgate && contaPrincipal) {
       addTransaction({
@@ -717,6 +764,42 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             onClick={() => { setStep('form'); handleSubmit(null, { num, total }) }}
           >
             Sim, parcela {num}/{total}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Gate 3: prévia explícita do que será inserido. Nada é gravado sem o clique em "Confirmar".
+  if (step === 'gerar-parcelas' && parcelaSeries) {
+    const missing = parcelaSeries.missing
+    return (
+      <div className="space-y-5 py-2">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto">
+            <Repeat size={22} className="text-amber-400" />
+          </div>
+          <h3 className="font-semibold text-gray-100">Gerar parcelas futuras</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            Serão criadas <span className="text-white font-semibold">{missing.length}</span> parcela{missing.length !== 1 ? 's' : ''} faltante{missing.length !== 1 ? 's' : ''} desta série
+            (herdando categoria, grupo gerencial, favorecido e função de reserva da parcela mais próxima):
+          </p>
+        </div>
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700/60 divide-y divide-gray-800">
+          {missing.map(p => (
+            <div key={p.num} className="px-3 py-2 text-sm flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-gray-200 truncate">{p.description}</div>
+                <div className="text-xs text-gray-500">parcela {p.num}/{p.total} · {p.date} · fatura {p.faturaMonthYear}</div>
+              </div>
+              <div className="text-gray-100 font-semibold whitespace-nowrap">{fmt(p.amount)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button className="btn-secondary flex-1" onClick={() => setStep('form')}>Cancelar</button>
+          <button className="btn-primary flex-1" onClick={confirmarGerarParcelas}>
+            Confirmar e gerar {missing.length}
           </button>
         </div>
       </div>
@@ -1009,6 +1092,35 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <label className="label">Descrição</label>
         <input className="input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Descrição do lançamento" />
       </div>
+
+      {/* Item 6: indicador read-only "Parcela N de M" + irmãs da série + geração das faltantes. */}
+      {parcelaSeries && (
+        <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-amber-300">
+              Parcela {initial.installmentNum} de {initial.installmentTotal}
+            </span>
+            <span className="text-xs text-gray-500">{parcelaSeries.siblings.length}/{parcelaSeries.total} no histórico</span>
+          </div>
+          <div className="rounded-md border border-gray-700/50 divide-y divide-gray-800 max-h-40 overflow-y-auto">
+            {parcelaSeries.siblings.map(s => (
+              <div key={s.id} className={`px-2.5 py-1.5 text-xs flex items-center justify-between gap-2 ${s.id === initial.id ? 'bg-amber-500/10' : ''}`}>
+                <span className="text-gray-300 whitespace-nowrap">{s._num}/{parcelaSeries.total}</span>
+                <span className="text-gray-500 truncate flex-1">fatura {s.faturaMonthYear || '—'}</span>
+                <span className="text-gray-200 whitespace-nowrap">{fmt(s.amount)}</span>
+                {s.id === initial.id && <span className="text-amber-400">atual</span>}
+              </div>
+            ))}
+          </div>
+          {parcelaSeries.missing.length > 0 ? (
+            <button type="button" className="btn-secondary w-full text-sm" onClick={() => setStep('gerar-parcelas')}>
+              Gerar parcelas futuras ({parcelaSeries.missing.length} faltando)
+            </button>
+          ) : (
+            <p className="text-xs text-gray-600">Série completa — nenhuma parcela faltando.</p>
+          )}
+        </div>
+      )}
 
       <div>
         <label className="label">Observações</label>

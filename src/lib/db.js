@@ -1,3 +1,5 @@
+import { installmentKey } from './installments.js'
+
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
 async function apiGet(path) {
@@ -194,6 +196,17 @@ export const txToRow = (tx) => ({
   reserva_funcao_id: tx.reservaFuncaoId || null,
   installment_num: tx.installmentNum ?? null,
   installment_total: tx.installmentTotal ?? null,
+  // Chave única da parcela (mesma fórmula do backfill) — protege contra importação
+  // duplicada via uq_lancamentos_installment. null quando não é parcela.
+  installment_key: installmentKey({
+    accountId: tx.accountId,
+    description: tx.description,
+    installmentNum: tx.installmentNum,
+    installmentTotal: tx.installmentTotal,
+    amount: tx.amount,
+    faturaMonthYear: tx.faturaMonthYear,
+    date: tx.date,
+  }),
   categoria_cnpj_id: tx.categoriaCnpjId || null,
   categoria_cpf_id: tx.categoriaCpfId || null,
   created_at: tx.createdAt || new Date().toISOString(),
