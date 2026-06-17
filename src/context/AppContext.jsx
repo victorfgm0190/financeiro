@@ -12,7 +12,7 @@ import {
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
-import { computeFluxoCaixa } from '../lib/fluxoCaixa'
+import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
@@ -2002,12 +2002,15 @@ export function AppProvider({ children }) {
         const toAcc = s.toAccountId === account.id
         if (!fromAcc && !toAcc) continue
         const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= dateStr)
-        for (let i = 0; i < occs.length; i++) {
-          if (s.transactionType === 'income' && fromAcc) acc += s.amount
-          else if (s.transactionType === 'expense' && fromAcc) acc -= s.amount
+        for (const dt of occs) {
+          // Valor EFETIVO da ocorrência: respeita overrides[dataOriginal].amount (mesmo
+          // critério do relatório). Sem override → schedule.amount.
+          const amount = occEfetiva(s, dt).amount
+          if (s.transactionType === 'income' && fromAcc) acc += amount
+          else if (s.transactionType === 'expense' && fromAcc) acc -= amount
           else if (s.transactionType === 'transfer') {
-            if (fromAcc && !toAcc) acc -= s.amount
-            else if (!fromAcc && toAcc) acc += s.amount
+            if (fromAcc && !toAcc) acc -= amount
+            else if (!fromAcc && toAcc) acc += amount
           }
         }
       }
@@ -2169,12 +2172,17 @@ export function AppProvider({ children }) {
         if (!fromAcc && !toAcc) continue
         const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= endStr)
         if (occs.length === 0) continue
-        let unit = 0
-        if (s.transactionType === 'income' && fromAcc) unit = s.amount
-        else if (s.transactionType === 'expense' && fromAcc) unit = -s.amount
-        else if (s.transactionType === 'transfer') unit = (toAcc ? s.amount : 0) - (fromAcc ? s.amount : 0)
-        if (unit === 0) continue
-        const amount = rb(unit * occs.length)
+        // Soma o valor EFETIVO de cada ocorrência (respeita overrides[dataOriginal].amount) —
+        // antes multiplicava um valor único por contagem, ignorando overrides por ocorrência.
+        let amount = 0
+        for (const dt of occs) {
+          const val = occEfetiva(s, dt).amount
+          if (s.transactionType === 'income' && fromAcc) amount += val
+          else if (s.transactionType === 'expense' && fromAcc) amount -= val
+          else if (s.transactionType === 'transfer') amount += (toAcc ? val : 0) - (fromAcc ? val : 0)
+        }
+        amount = rb(amount)
+        if (amount === 0) continue
         items.push({ description: s.description || '(agendamento)', amount, count: occs.length })
         total += amount
       }
