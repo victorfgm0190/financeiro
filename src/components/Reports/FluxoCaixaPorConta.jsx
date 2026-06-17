@@ -28,19 +28,45 @@ const VISOES = [
   { id: 'principais', label: 'Contas Principais' },
 ]
 
+// Persistência da última seleção do relatório (aba, contas, grupo, datas) entre navegações
+// e reloads. Só leitura/escrita de UI — não afeta dados nem cálculo.
+const SELECAO_STORAGE_KEY = 'finup_relatorio_fluxo_selecao'
+function loadSelecaoSalva() {
+  try {
+    const raw = localStorage.getItem(SELECAO_STORAGE_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw)
+    return o && typeof o === 'object' ? o : null
+  } catch { return null }
+}
+
 export default function FluxoCaixaPorConta() {
   const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getNextOccurrences } = useApp()
 
-  const [visao, setVisao] = useState('conta')
+  // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
+  const [selecaoSalva] = useState(loadSelecaoSalva)
+  const [visao, setVisao] = useState(() =>
+    VISOES.some(v => v.id === selecaoSalva?.visao) ? selecaoSalva.visao : 'conta')
   // Visão "Por Conta" permite selecionar múltiplas contas (fluxo combinado).
-  const [selectedAccountIds, setSelectedAccountIds] = useState(() => accounts[0]?.id ? [accounts[0].id] : [])
+  const [selectedAccountIds, setSelectedAccountIds] = useState(() =>
+    Array.isArray(selecaoSalva?.selectedAccountIds)
+      ? selecaoSalva.selectedAccountIds
+      : (accounts[0]?.id ? [accounts[0].id] : []))
   const [contaDropOpen, setContaDropOpen] = useState(false)
-  const [groupId, setGroupId] = useState('')
-  const [start, setStart] = useState(() => todayStr())
-  const [end, setEnd] = useState(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'))
+  const [groupId, setGroupId] = useState(() => selecaoSalva?.groupId || '')
+  const [start, setStart] = useState(() => selecaoSalva?.start || todayStr())
+  const [end, setEnd] = useState(() => selecaoSalva?.end || format(addDays(new Date(), 30), 'yyyy-MM-dd'))
   const [includeSchedules, setIncludeSchedules] = useState(true)
   const [hideReserva, setHideReserva] = useState(false)
   const [hidePatrimonio, setHidePatrimonio] = useState(false)
+
+  // Salva a seleção sempre que aba/contas/grupo/datas mudarem (inclui a montagem, gravando
+  // o estado restaurado ou o padrão). Falhas de localStorage são ignoradas silenciosamente.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SELECAO_STORAGE_KEY, JSON.stringify({ visao, selectedAccountIds, groupId, start, end }))
+    } catch { /* storage indisponível — ignora */ }
+  }, [visao, selectedAccountIds, groupId, start, end])
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const isMobile = useIsMobile()
