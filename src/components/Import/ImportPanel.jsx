@@ -20,6 +20,7 @@ import Toast from '../shared/Toast'
 import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
+import TransactionHistoryModal from '../shared/TransactionHistoryModal'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -1886,7 +1887,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {concSoItau.map(item => (
-                    <tr key={item._id} className={`border-b border-gray-800/50 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}>
+                    <tr
+                      key={item._id}
+                      onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(item.description) }}
+                      title="Ver histórico do fornecedor"
+                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
+                    >
                       <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex flex-col gap-1">
@@ -1982,7 +1988,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {concSoSistema.map(item => (
-                    <tr key={item.id} className={`border-b border-gray-800/50 ${item.acao === 'excluir' ? 'opacity-40 bg-orange-500/5' : ''}`}>
+                    <tr
+                      key={item.id}
+                      onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(item.description) }}
+                      title="Ver histórico do fornecedor"
+                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao === 'excluir' ? 'opacity-40 bg-orange-500/5' : ''}`}
+                    >
                       <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
                       <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate" title={item.description}>{item.description}</td>
                       <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
@@ -2033,7 +2044,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {concMatched.map(m => (
-                    <tr key={m.sys.id} className="border-b border-gray-800/40 text-gray-400">
+                    <tr
+                      key={m.sys.id}
+                      onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(m.csv.description) }}
+                      title="Ver histórico do fornecedor"
+                      className="border-b border-gray-800/40 text-gray-400 cursor-pointer hover:bg-gray-800/30"
+                    >
                       <td className="px-3 py-2 text-xs whitespace-nowrap">{m.csv.date?.split('-').reverse().join('/')}</td>
                       <td className="px-3 py-2 text-xs max-w-xs truncate" title={m.csv.description}>{m.csv.description}</td>
                       <td className="px-3 py-2 text-right text-xs whitespace-nowrap">{fmt(m.csv.amount)}</td>
@@ -2059,6 +2075,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         <Modal open={!!concEditTx} onClose={() => setConcEditTx(null)} title="Editar Lançamento" size="lg">
           <TransactionForm initial={concEditTx} onClose={() => setConcEditTx(null)} />
         </Modal>
+
+        <TransactionHistoryModal state={historyModal} onClose={() => setHistoryModal(null)} />
 
         {concToast && <Toast message={concToast} onClose={() => setConcToast(null)} />}
       </div>
@@ -2090,50 +2108,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       )}
 
       {/* Melhoria 2: histórico do fornecedor (últimas 5 ocorrências) ao clicar na linha. */}
-      <Modal
-        open={!!historyModal}
-        onClose={() => setHistoryModal(null)}
-        title={historyModal ? (historyModal.description.length > 60 ? historyModal.description.slice(0, 60) + '…' : historyModal.description) : ''}
-        size="lg"
-      >
-        {historyModal && (
-          <div className="space-y-3">
-            <p className="text-xs text-gray-500">Últimas 5 ocorrências</p>
-            {historyModal.loading ? (
-              <p className="text-sm text-gray-500 py-6 text-center">Carregando…</p>
-            ) : historyModal.error ? (
-              <p className="text-sm text-orange-500 py-6 text-center">Erro ao buscar o histórico.</p>
-            ) : historyModal.items.length === 0 ? (
-              <p className="text-sm text-gray-500 py-6 text-center">Nenhuma ocorrência anterior encontrada</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-gray-700/60">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-800 text-left">
-                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
-                      <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
-                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Categoria</th>
-                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Grupo</th>
-                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Reserva</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyModal.items.map(it => (
-                      <tr key={it.id} className="border-b border-gray-800/40">
-                        <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
-                        <td className="px-3 py-2 text-xs text-gray-100 text-right whitespace-nowrap font-medium">{fmt(it.amount)}</td>
-                        <td className="px-3 py-2 text-xs text-gray-400">{it.categoria_nome || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-400">{it.grupo_nome || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-gray-400">{it.reserva_funcao_nome || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+      <TransactionHistoryModal state={historyModal} onClose={() => setHistoryModal(null)} />
 
       {showCorrigirDatas && editingImport && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
