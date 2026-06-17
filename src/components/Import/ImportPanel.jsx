@@ -6,7 +6,7 @@ import {
 import { parseFile, normalizeDate, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
-import { loadAccountMappings } from '../../lib/db'
+import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment, installmentKey } from '../../lib/installments'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela } from '../../lib/parcelas'
@@ -99,6 +99,43 @@ function isDuplicate(row, existing) {
     (t.accountId === row.accountId || t.toAccountId === row.accountId ||
      (row.toAccountId && (t.accountId === row.toAccountId || t.toAccountId === row.toAccountId)))
   )
+}
+
+// ── Conciliação inteligente (Melhoria 1) ──────────────────────────────────────
+// Normaliza texto (maiúsculas, sem acentos) e mede similaridade: 1 = idêntico, 0.9 = um
+// contém o outro, senão Jaccard de palavras (% de palavras em comum). Mesmo critério do
+// backend (/api/transaction-history) para a busca por fornecedor.
+function normText(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim().replace(/\s+/g, ' ')
+}
+function descSimilarity(a, b) {
+  const x = normText(a), y = normText(b)
+  if (!x || !y) return 0
+  if (x === y) return 1
+  if (x.includes(y) || y.includes(x)) return 0.9
+  const wx = x.split(' ').filter(Boolean), wy = y.split(' ').filter(Boolean)
+  const sx = new Set(wx), sy = new Set(wy)
+  let inter = 0
+  for (const w of sx) if (sy.has(w)) inter++
+  const union = new Set([...wx, ...wy]).size
+  return union ? inter / union : 0
+}
+
+// Nível de duplicata, testado em ordem (primeiro match vence). Candidatos = lançamentos da
+// MESMA fatura do cartão. Retorna 'certeza' | 'provavel' | 'possivel' | null.
+//   certeza : date_cartao igual + valor ±0,50 + descrição idêntica
+//   provavel: date_cartao igual + valor ±0,50 + descrição similar (≥70%)
+//   possivel: valor ±0,50 + descrição similar (≥70%), sem considerar data
+function computeDupLevel(row, candidates) {
+  if (!candidates || candidates.length === 0) return null
+  const amt = Number(row.amount) || 0
+  const rowCardDate = row._dateCartao || row.date
+  const amtClose = (t) => Math.abs((Number(t.amount) || 0) - amt) <= 0.50
+  const dateEq = (t) => !!rowCardDate && (t.dateCartao || t.date) === rowCardDate
+  for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return 'certeza'
+  for (const t of candidates) if (amtClose(t) && dateEq(t) && descSimilarity(t.description, row.description) >= 0.7) return 'provavel'
+  for (const t of candidates) if (amtClose(t) && descSimilarity(t.description, row.description) >= 0.7) return 'possivel'
+  return null
 }
 
 function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false }) {
@@ -732,6 +769,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [concEditTx, setConcEditTx] = useState(null) // lançamento existente em edição (seção Conciliados)
   const concFileRef = useRef()
 
+  // Conciliação inteligente: linhas de nível provável/possível que o usuário FORÇOU a importar.
+  const [forcedDupSelect, setForcedDupSelect] = useState(() => new Set())
+  const toggleForcedDup = (id) => setForcedDupSelect(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
+  // Modal de histórico do fornecedor (Melhoria 2).
+  const [historyModal, setHistoryModal] = useState(null) // { description, items, loading, error }
+  const openHistory = async (description) => {
+    const desc = (description || '').trim()
+    if (!desc) return
+    setHistoryModal({ description: desc, items: [], loading: true })
+    try {
+      const { transactions: items } = await fetchTransactionHistory(desc, 5)
+      setHistoryModal({ description: desc, items: items || [], loading: false })
+    } catch {
+      setHistoryModal({ description: desc, items: [], loading: false, error: true })
+    }
+  }
+
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
@@ -959,19 +1015,38 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setCardInfo({ cardName: '', faturaStr: '' })
   }
 
+  // Lançamentos do cartão selecionado, agrupados por fatura — candidatos da conciliação.
+  const cardTxsByFatura = useMemo(() => {
+    const m = new Map()
+    if (!selectedAccount) return m
+    for (const t of transactions) {
+      if (t.accountId !== selectedAccount) continue
+      if (t.type !== 'expense' && t.type !== 'income') continue
+      const f = t.faturaMonthYear || ''
+      if (!m.has(f)) m.set(f, [])
+      m.get(f).push(t)
+    }
+    return m
+  }, [transactions, selectedAccount])
+
   const resolvedRows = useMemo(() => {
-    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null }))
-    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null }))
+    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
+    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
       const k = keyOfImportRow(r, selectedAccount)
       const collisionTx = k ? existingParcelaByKey.get(k) : null
-      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, selected: false }
-      const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount)
-      return { ...r, _isDuplicate: dup, _collisionTx: null, selected: row.selected && !dup }
+      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, _dupLevel: null, selected: false }
+      // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura.
+      const dupLevel = r._generated ? null : computeDupLevel(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
+      const isCerteza = dupLevel === 'certeza'
+      // Certeza: nunca selecionável. Provável/Possível: desmarcado por padrão, salvo se o
+      // usuário forçar. Sem duplicata: segue o `selected` da linha.
+      const selected = isCerteza ? false : (dupLevel ? forcedDupSelect.has(r._id) : row.selected)
+      return { ...r, _isDuplicate: isCerteza, _collisionTx: null, _dupLevel: dupLevel, selected }
     })
-  }, [rows, selectedAccount, transactions, editingImport, existingParcelaByKey])
+  }, [rows, selectedAccount, editingImport, existingParcelaByKey, cardTxsByFatura, forcedDupSelect])
 
   // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
   // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
@@ -2014,6 +2089,52 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         />
       )}
 
+      {/* Melhoria 2: histórico do fornecedor (últimas 5 ocorrências) ao clicar na linha. */}
+      <Modal
+        open={!!historyModal}
+        onClose={() => setHistoryModal(null)}
+        title={historyModal ? (historyModal.description.length > 60 ? historyModal.description.slice(0, 60) + '…' : historyModal.description) : ''}
+        size="lg"
+      >
+        {historyModal && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">Últimas 5 ocorrências</p>
+            {historyModal.loading ? (
+              <p className="text-sm text-gray-500 py-6 text-center">Carregando…</p>
+            ) : historyModal.error ? (
+              <p className="text-sm text-orange-500 py-6 text-center">Erro ao buscar o histórico.</p>
+            ) : historyModal.items.length === 0 ? (
+              <p className="text-sm text-gray-500 py-6 text-center">Nenhuma ocorrência anterior encontrada</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800 text-left">
+                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
+                      <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Categoria</th>
+                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Grupo</th>
+                      <th className="px-3 py-2 text-xs text-gray-400 font-medium">Reserva</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyModal.items.map(it => (
+                      <tr key={it.id} className="border-b border-gray-800/40">
+                        <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-100 text-right whitespace-nowrap font-medium">{fmt(it.amount)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-400">{it.categoria_nome || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-gray-400">{it.grupo_nome || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-gray-400">{it.reserva_funcao_nome || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       {showCorrigirDatas && editingImport && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCorrigirDatas(false)} />
@@ -2254,7 +2375,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   <tr className="border-b border-gray-800">
                     <th className="px-3 py-2.5 w-8">
                       <input type="checkbox" className="accent-[#0F6E56]"
-                        checked={resolvedRows.filter(r => !r._isDuplicate).every(r => r.selected)}
+                        checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
                         onChange={e => toggleAll(e.target.checked)} />
                     </th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Sistema</th>
@@ -2269,11 +2390,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {resolvedRows.map(row => (
-                    <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''} ${row._collisionTx ? 'bg-amber-500/5' : ''}`}>
+                    <tr
+                      key={row._id}
+                      onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
+                      title="Ver histórico do fornecedor"
+                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${!row.selected ? 'opacity-40' : ''} ${row._dupLevel === 'certeza' ? 'bg-red-500/5' : row._dupLevel ? 'bg-amber-500/5' : ''} ${row._collisionTx ? 'bg-amber-500/5' : ''}`}
+                    >
                       <td className="px-3 py-2">
                         <input type="checkbox" className="accent-[#0F6E56]"
-                          checked={row.selected} disabled={row._isDuplicate || !!row._collisionTx}
-                          onChange={() => toggleRow(row._id)} />
+                          checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
+                          onChange={() => { (row._dupLevel === 'provavel' || row._dupLevel === 'possivel') ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <DateInput
@@ -2363,9 +2489,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       <td className="px-3 py-2">
                         {row._collisionTx
                           ? <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400" title="Já existe no banco (mesma installment_key) — ver seção 'atualizar?'">No banco ↻</span>
-                          : row._isDuplicate
-                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500">Duplicado</span>
-                            : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                          : row._dupLevel === 'certeza'
+                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400" title="date_cartao + valor + descrição idênticos — já existe na fatura">🔴 Já existe</span>
+                            : row._dupLevel === 'provavel'
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400" title="date_cartao + valor iguais e descrição similar — pode importar marcando">🟠 Provável duplicata</span>
+                              : row._dupLevel === 'possivel'
+                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-500" title="valor e descrição similares (data ignorada) — pode importar marcando">🟡 Possível duplicata</span>
+                                : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
                         }
                       </td>
                     </tr>

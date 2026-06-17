@@ -32,6 +32,13 @@ export async function searchEntries(filters) {
   return apiPost('/api/search', filters || {})
 }
 
+// Histórico do fornecedor: últimas `limit` ocorrências cuja descrição corresponde a
+// `description` (busca por similaridade). Retorna { transactions: [...] } já com os nomes
+// de categoria/grupo/função de reserva resolvidos por JOIN no backend.
+export async function fetchTransactionHistory(description, limit = 5) {
+  return apiPost('/api/transaction-history', { description, limit })
+}
+
 // Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
 export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId } = {}) {
   return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
