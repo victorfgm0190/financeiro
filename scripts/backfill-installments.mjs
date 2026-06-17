@@ -33,6 +33,9 @@ const MANUAL_MARKS = [
   { desc: 'BR1*PRIVALIA 7216002/03', num: 2, total: 3 },
   { desc: 'LOJAS RENNER FL 7601/03', num: 1, total: 3 },
   { desc: 'LOJAS RENNER FL 7602/03', num: 2, total: 3 },
+  { desc: 'LOJAS AMERIC-CT 502/05', num: 2, total: 5 },
+  { desc: 'LOJAS AMERIC-CT 503/05', num: 3, total: 5 },
+  { desc: 'LOJAS AMERIC-CT 504/05', num: 4, total: 5 },
 ]
 
 // Duplicatas reais aprovadas para remoção (a linha "mais novo" de cada par PAYSERVICE,
@@ -379,13 +382,24 @@ async function deleteDups(client) {
 }
 
 // ── manual-mark (preview read-only / apply write) ────────────────────────────
+// Pattern ILIKE tolerante a espaços: cada espaço da descrição vira '%', casando
+// qualquer diferença de espaçamento (duplo, leading/trailing). '502/05' fica intacto.
+function ilikePattern(desc) {
+  return '%' + desc.trim().split(/\s+/).join('%') + '%'
+}
 async function loadManualTargets(client) {
+  // --filter="texto" restringe às marcações cuja descrição contém o texto (case-insensitive).
+  const f = (flags.filter || '').toLowerCase()
+  const marks = f ? MANUAL_MARKS.filter(mk => mk.desc.toLowerCase().includes(f)) : MANUAL_MARKS
   const out = []
-  for (const mk of MANUAL_MARKS) {
+  for (const mk of marks) {
     const { rows } = await client.query(
       `SELECT id, account_id, description, amount, date, fatura_month_year,
               installment_num, installment_total, installment_key
-       FROM lancamentos WHERE description = $1`, [mk.desc])
+       FROM lancamentos
+       WHERE description ILIKE $1
+         AND type = 'expense' AND account_type = 'credit'
+         AND description NOT ILIKE 'Reserva Gerencial -%'`, [ilikePattern(mk.desc)])
     out.push({ mk, rows })
   }
   return out
@@ -401,7 +415,26 @@ async function manualMarkPreview(client) {
   const targets = await loadManualTargets(client)
   console.log('\n[MANUAL-MARK] Prévia (ANTES → DEPOIS) — nada aplicado:\n')
   for (const { mk, rows } of targets) {
-    if (rows.length === 0) { console.log(`  ⚠ NÃO ENCONTRADO (descrição exata): "${mk.desc}"\n`); continue }
+    if (rows.length === 0) {
+      console.log(`  ⚠ NÃO ENCONTRADO: "${mk.desc}"  (ILIKE ${ilikePattern(mk.desc)})`)
+      // Diagnóstico: lista descrições reais com o mesmo prefixo de loja.
+      const prefix = mk.desc.replace(/\s*\d+\/\d+\s*$/, '').trim()
+      const cand = await client.query(
+        `SELECT DISTINCT description FROM lancamentos
+         WHERE description ILIKE $1
+           AND type = 'expense' AND account_type = 'credit'
+           AND description NOT ILIKE 'Reserva Gerencial -%'
+         ORDER BY description LIMIT 15`,
+        ['%' + prefix.split(/\s+/).join('%') + '%'])
+      if (cand.rows.length) {
+        console.log(`      candidatos com prefixo "${prefix}":`)
+        cand.rows.forEach(c => console.log(`        "${c.description}"`))
+      } else {
+        console.log(`      (nenhum candidato nem pelo prefixo "${prefix}")`)
+      }
+      console.log('')
+      continue
+    }
     if (rows.length > 1) console.log(`  ⚠ ${rows.length} linhas casam "${mk.desc}" — TODAS seriam marcadas:`)
     for (const r of rows) {
       console.log(`  id=${r.id}  "${r.description}"  ${fmtBRL(r.amount)}  fatura=${r.fatura_month_year || '-'}`)
