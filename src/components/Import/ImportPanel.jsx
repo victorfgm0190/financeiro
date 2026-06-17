@@ -8,7 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
-import { detectInstallment } from '../../lib/installments'
+import { detectInstallment, installmentKey } from '../../lib/installments'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
@@ -580,6 +580,29 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   )
 }
 
+// installment_key de um lançamento EXISTENTE (usa num/total gravados; cai p/ detecção
+// quando faltarem). null quando não é parcela reconhecível.
+function keyOfExistingTx(tx) {
+  const det = detectInstallment(tx.description || '')
+  const num = tx.installmentNum ?? det?.num
+  const total = tx.installmentTotal ?? det?.total
+  if (num == null || total == null) return null
+  return installmentKey({
+    accountId: tx.accountId, description: tx.description,
+    installmentNum: num, installmentTotal: total,
+    amount: tx.amount, faturaMonthYear: tx.faturaMonthYear, date: tx.date,
+  })
+}
+// installment_key PROSPECTIVA de uma linha de importação (o que txToRow gravaria no insert).
+function keyOfImportRow(row, accountId) {
+  if (!row._installment) return null
+  return installmentKey({
+    accountId, description: row.description,
+    installmentNum: row._installment.num, installmentTotal: row._installment.total,
+    amount: row.amount, faturaMonthYear: row.faturaMonthYear, date: row.date,
+  })
+}
+
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
@@ -627,6 +650,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
+
+  // Item 7: índice das parcelas já existentes do cartão por installment_key, para detectar
+  // colisão na reimportação (mesma chave = mesma parcela → atualizar, não inserir).
+  const existingParcelaByKey = useMemo(() => {
+    const m = new Map()
+    if (!selectedAccount) return m
+    for (const t of transactions) {
+      if (t.accountId !== selectedAccount || t.type !== 'expense' || t.accountType !== 'credit') continue
+      const k = keyOfExistingTx(t)
+      if (k && !m.has(k)) m.set(k, t)
+    }
+    return m
+  }, [transactions, selectedAccount])
+  // Linhas de colisão que o usuário desmarcou (não atualizar). Default: todas aplicam.
+  const [collisionSkip, setCollisionSkip] = useState(() => new Set())
+  const toggleCollision = (id) => setCollisionSkip(prev => {
+    const n = new Set(prev)
+    if (n.has(id)) n.delete(id); else n.add(id)
+    return n
+  })
 
   const sortedGrupos = useMemo(() => [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -832,14 +875,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }
 
   const resolvedRows = useMemo(() => {
-    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false }))
-    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false }))
+    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null }))
+    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null }))
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
+      // Colisão por installment_key → atualizar o existente (não inserir, não pular).
+      const k = keyOfImportRow(r, selectedAccount)
+      const collisionTx = k ? existingParcelaByKey.get(k) : null
+      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, selected: false }
       const dup = isDuplicate(r, transactions) || isDuplicateInstallment(r, transactions, selectedAccount)
-      return { ...r, _isDuplicate: dup, selected: row.selected && !dup }
+      return { ...r, _isDuplicate: dup, _collisionTx: null, selected: row.selected && !dup }
     })
-  }, [rows, selectedAccount, transactions, editingImport])
+  }, [rows, selectedAccount, transactions, editingImport, existingParcelaByKey])
 
   // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
   // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
@@ -951,7 +998,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }
 
   const handleImport = () => {
-    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate)
+    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
 
     // Modo reedição: atualiza campos editáveis das transações existentes e recalcula
     // os agendamentos de cada fatura afetada, passando o mapa de funções de reserva por
@@ -1171,6 +1218,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
     })
 
+    // Item 7: colisões por installment_key — ATUALIZA o lançamento existente (UPDATE) em
+    // vez de inserir/pular. Só as confirmadas (não desmarcadas pelo usuário na prévia).
+    const collisionsToApply = resolvedRows.filter(r => r._collisionTx && !collisionSkip.has(r._id))
+    collisionsToApply.forEach(row => {
+      const tx = row._collisionTx
+      const saveDate = computeSaveDate(row)
+      addFaturaAfetada(row.faturaMonthYear, saveDate)
+      updateTransaction(tx.id, {
+        date: saveDate,
+        dateCartao: row._dateCartao || tx.dateCartao || null,
+        categoryId: row.categoryId || null,
+        grupoGerencial: row.grupoGerencial || null,
+        faturaMonthYear: row.faturaMonthYear || null,
+        reservaFuncaoId: row._reservaFuncaoId || null,
+      })
+      if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
+      if (row.grupoGerencial) registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
+    })
+
     if (toImport.length > 0) {
       const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
@@ -1186,19 +1252,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         accountId: selectedAccount,
         txIds,
       })
-
-      // Gatilho: importação de fatura em lote → recálculo acumulativo dos agendamentos
-      // (devolução gerencial / resgate reserva / pagamento) de cada fatura tocada.
-      for (const fmy of faturasAfetadas) {
-        const [y, m] = fmy.split('-')
-        const byOrigem = reservaFuncaoPorFatura.get(fmy)
-        const reservaFuncaoByAccount = byOrigem
-          ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
-          : undefined
-        recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
-      }
     }
 
+    // Gatilho: recálculo acumulativo dos agendamentos (devolução gerencial / resgate /
+    // pagamento) de TODA fatura tocada — por inserções novas OU por colisões atualizadas.
+    for (const fmy of faturasAfetadas) {
+      const [y, m] = fmy.split('-')
+      const byOrigem = reservaFuncaoPorFatura.get(fmy)
+      const reservaFuncaoByAccount = byOrigem
+        ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
+        : undefined
+      recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
+    }
+
+    const totalProcessed = toImport.length + collisionsToApply.length
     const pending = []
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
@@ -1206,9 +1273,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (s) pending.push({ schedule: s, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate } })
     })
 
-    if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(toImport.length); setRows([]); return }
-    setResult(toImport.length)
+    if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(totalProcessed); setRows([]); setCollisionSkip(new Set()); return }
+    setResult(totalProcessed)
     setRows([])
+    setCollisionSkip(new Set())
   }
 
   const resolveMatch = (linked, catId, payee) => {
@@ -1228,7 +1296,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const found = resolvedRows.length
   const dups = resolvedRows.filter(r => r._isDuplicate).length
-  const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate).length
+  const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx).length
+  // Item 7: linhas que colidem com parcela já existente (mesma installment_key).
+  const collisionRows = resolvedRows.filter(r => r._collisionTx)
+  const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id)).length
 
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
   // Para cada lançamento do lote (tx_ids da importação) com date_cartao preenchida,
@@ -1927,10 +1998,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               </button>
               <button
                 className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
-                disabled={toImportCount === 0 || !selectedAccount}
+                disabled={(toImportCount === 0 && collisionsToApplyCount === 0) || !selectedAccount}
                 onClick={handleImport}
               >
-                <Save size={12} /> {editingImport ? `Salvar (${toImportCount})` : `Confirmar (${toImportCount})`}
+                <Save size={12} /> {editingImport
+                  ? `Salvar (${toImportCount})`
+                  : `Confirmar (${toImportCount}${collisionsToApplyCount > 0 ? ` +${collisionsToApplyCount}↻` : ''})`}
               </button>
             </div>
           </div>
@@ -1958,10 +2031,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </thead>
                 <tbody>
                   {resolvedRows.map(row => (
-                    <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''}`}>
+                    <tr key={row._id} className={`border-b border-gray-800/50 ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''} ${row._collisionTx ? 'bg-amber-500/5' : ''}`}>
                       <td className="px-3 py-2">
                         <input type="checkbox" className="accent-[#0F6E56]"
-                          checked={row.selected} disabled={row._isDuplicate}
+                          checked={row.selected} disabled={row._isDuplicate || !!row._collisionTx}
                           onChange={() => toggleRow(row._id)} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
@@ -2050,9 +2123,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         {fmt(row.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        {row._isDuplicate
-                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500">Duplicado</span>
-                          : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                        {row._collisionTx
+                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400" title="Já existe no banco (mesma installment_key) — ver seção 'atualizar?'">No banco ↻</span>
+                          : row._isDuplicate
+                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500">Duplicado</span>
+                            : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
                         }
                       </td>
                     </tr>
@@ -2061,6 +2136,65 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               </table>
             </div>
           </div>
+
+          {/* Item 7: parcelas que JÁ existem no banco (mesma installment_key) — prévia
+              antes/depois e confirmação item a item; aplicar = UPDATE, não INSERT. */}
+          {collisionRows.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-gray-800 bg-amber-950/30 flex items-center gap-2 flex-wrap">
+                <Layers size={13} className="text-amber-400 shrink-0" />
+                <h3 className="text-xs font-semibold text-amber-300">Parcelas já no banco — atualizar?</h3>
+                <span className="text-[10px] text-gray-500">
+                  {collisionRows.length} colisã{collisionRows.length !== 1 ? 'ões' : 'o'} (mesma installment_key)
+                  {' · '}{collisionsToApplyCount} marcada{collisionsToApplyCount !== 1 ? 's' : ''} p/ atualizar
+                </span>
+              </div>
+              <div className="divide-y divide-gray-800">
+                {collisionRows.map(r => {
+                  const tx = r._collisionTx
+                  const apply = !collisionSkip.has(r._id)
+                  const nm = (arr, id) => (id && arr.find(x => x.id === id)?.name) || '—'
+                  const dt = (s) => (s || '').split('-').reverse().join('/')
+                  const fields = [
+                    ['Data', dt(tx.date), dt(r.date)],
+                    ['Valor', fmt(tx.amount), fmt(r.amount)],
+                    ['Categoria', nm(categories, tx.categoryId), nm(categories, r.categoryId)],
+                    ['Grupo', nm(gerencialGroups, tx.grupoGerencial), nm(gerencialGroups, r.grupoGerencial)],
+                    ['Reserva', nm(reserveFunctions, tx.reservaFuncaoId), nm(reserveFunctions, r._reservaFuncaoId)],
+                  ]
+                  return (
+                    <div key={r._id} className={`px-3 py-2.5 ${apply ? '' : 'opacity-50'}`}>
+                      <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
+                        <input type="checkbox" checked={apply} onChange={() => toggleCollision(r._id)} className="accent-amber-500" />
+                        <span className="text-xs text-gray-300 truncate">{r.description}</span>
+                        {r._installment && (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{r._installment.num}/{r._installment.total}</span>
+                        )}
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-1 pl-6">
+                        {fields.map(([label, before, after]) => {
+                          const changed = before !== after
+                          return (
+                            <div key={label} className="text-[11px] min-w-0">
+                              <div className="text-gray-600">{label}</div>
+                              {changed ? (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-gray-500 line-through truncate">{before}</span>
+                                  <span className="text-amber-300 truncate">→ {after}</span>
+                                </div>
+                              ) : (
+                                <div className="text-gray-400 truncate">{before}</div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Parcelas de faturas futuras — somente informativo (não importadas agora) */}
           {futureParcelas.length > 0 && (
