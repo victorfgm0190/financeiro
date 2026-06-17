@@ -18,6 +18,8 @@ import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import DateInput from '../shared/DateInput'
+import Modal from '../shared/Modal'
+import TransactionForm from '../Transactions/TransactionForm'
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -727,6 +729,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [concSoSistema, setConcSoSistema] = useState([])// lançamentos do sistema ausentes no CSV
   const [concError, setConcError] = useState('')
   const [concToast, setConcToast] = useState(null)
+  const [concEditTx, setConcEditTx] = useState(null) // lançamento existente em edição (seção Conciliados)
   const concFileRef = useRef()
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
@@ -1950,6 +1953,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                     <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
                     <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor Itaú</th>
                     <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor sistema</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 font-medium w-10">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1959,6 +1963,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       <td className="px-3 py-2 text-xs max-w-xs truncate" title={m.csv.description}>{m.csv.description}</td>
                       <td className="px-3 py-2 text-right text-xs whitespace-nowrap">{fmt(m.csv.amount)}</td>
                       <td className="px-3 py-2 text-right text-xs whitespace-nowrap">{fmt(m.sys.amount)}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setConcEditTx(m.sys)}
+                          title="Editar lançamento"
+                          className="p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1966,6 +1980,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             </div>
           )}
         </div>
+
+        <Modal open={!!concEditTx} onClose={() => setConcEditTx(null)} title="Editar Lançamento" size="lg">
+          <TransactionForm initial={concEditTx} onClose={() => setConcEditTx(null)} />
+        </Modal>
 
         {concToast && <Toast message={concToast} onClose={() => setConcToast(null)} />}
       </div>
