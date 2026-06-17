@@ -603,6 +603,88 @@ function keyOfImportRow(row, accountId) {
   })
 }
 
+// Override manual de parcelamento (camada sobre detectInstallment, sem alterá-lo). Quando a
+// descrição tem N/M, reaproveita base/matchStr do detector; senão base = descrição inteira e
+// matchStr = null (as parcelas futuras recebem sufixo " N/M" — ver futureParcelas).
+function buildManualInstallment(description, num, total) {
+  const det = detectInstallment(description || '')
+  return {
+    num, total,
+    base: det ? det.base : (description || '').trim().replace(/\s+/g, ' '),
+    matchStr: det ? det.matchStr : null,
+    _manual: true,
+  }
+}
+
+// Chip + popover inline de parcelamento, compartilhado por importação e conciliação.
+//   installment = { num, total, ... } ou null (à vista). onChange recebe o novo override (ou null).
+function InstallmentControl({ installment, description, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [num, setNum] = useState(installment?.num || 1)
+  const [total, setTotal] = useState(installment?.total || 2)
+  const ref = useRef(null)
+
+  const openEditor = () => {
+    setNum(installment?.num || 1)
+    setTotal(installment?.total || 2)
+    setOpen(true)
+  }
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  const confirm = () => {
+    const t = Math.max(2, Math.min(99, parseInt(total, 10) || 2))
+    const n = Math.max(1, Math.min(t, parseInt(num, 10) || 1))
+    onChange(buildManualInstallment(description, n, t))
+    setOpen(false)
+  }
+  const clear = () => { onChange(null); setOpen(false) }
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button
+        type="button"
+        onClick={() => (open ? setOpen(false) : openEditor())}
+        title={installment ? 'Editar parcelamento' : 'Marcar como parcelado'}
+        className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+          installment ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+        }`}
+      >
+        <Layers size={9} />
+        {installment ? `Parcela ${installment.num} de ${installment.total}` : 'À vista'}
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 right-0 bg-surface border border-gray-700 rounded-lg shadow-xl p-2.5 w-44 space-y-2">
+          <div className="flex items-end gap-1.5">
+            <label className="text-[10px] text-gray-400 flex-1">
+              Nº da parcela
+              <input type="number" min="1" max="99" value={num} onChange={e => setNum(e.target.value)}
+                className="mt-0.5 w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-xs text-gray-200 focus:outline-none" />
+            </label>
+            <span className="text-gray-500 text-xs pb-1.5">/</span>
+            <label className="text-[10px] text-gray-400 flex-1">
+              Total
+              <input type="number" min="2" max="99" value={total} onChange={e => setTotal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') confirm() }}
+                className="mt-0.5 w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-xs text-gray-200 focus:outline-none" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            {installment
+              ? <button type="button" onClick={clear} className="text-[10px] text-gray-400 hover:text-gray-200">↩ À vista</button>
+              : <span />}
+            <button type="button" onClick={confirm} className="text-[10px] px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]">Confirmar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
@@ -910,7 +992,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const inst = row._installment
       if (!inst || inst.num >= inst.total) continue
       const base = inst.base.toLowerCase().trim()
-      const numWidth = inst.matchStr.split('/')[0].length
+      // Override manual sem N/M na descrição (matchStr null): a futura recebe o sufixo " N/M".
+      const numWidth = inst.matchStr ? inst.matchStr.split('/')[0].length : String(inst.total).length
       for (let k = inst.num + 1; k <= inst.total; k++) {
         const key = `${base}|${k}`
         if (principalKeys.has(key) || seen.has(key)) continue
@@ -918,7 +1001,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const futFatura = addMonthToFatura(row.faturaMonthYear, k - inst.num)
         const futDate = faturaToDate(futFatura, dueDay) || `${futFatura}-01`
         const futNumStr = String(k).padStart(numWidth, '0')
-        const futDesc = row.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
+        const futDesc = inst.matchStr
+          ? row.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
+          : `${row.description} ${futNumStr}/${inst.total}`
         const existing = findExistingParcela(inst, k, row.amount, selectedAccount, transactions)
         out.push({
           _id: `fut_${row._id}_${k}`, parentId: row._id,
@@ -1418,6 +1503,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           payee: classified?.payee || row.payee || row.description || '',
           grupoGerencial: grupo,
           _reservaFuncaoId: reservaFuncaoFromRule,
+          _installment: detectInstallment(row.description) || null,
           _dateCartao: row.date,
           acao: 'importar',
         }
@@ -1514,6 +1600,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       categoryId: item.categoryId, payee: item.payee,
       grupoGerencial: isExpense ? (item.grupoGerencial || defaultGrupoD) : null,
       reservaFuncaoId: isExpense ? (item._reservaFuncaoId || null) : null,
+      installmentNum: item._installment?.num || null,
+      installmentTotal: item._installment?.total || null,
       faturaMonthYear: faturaMonthYear || null,
       _fromImport: true,
     })
@@ -1534,28 +1622,89 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
     excluir.forEach(i => deleteTransaction(i.id))
 
-    // Função de reserva por conta-origem (desempate pelo lançamento de maior valor) — mesmo
-    // mecanismo da importação normal: o resgate da fatura adota a função escolhida no recalc.
-    const byOrigem = new Map() // contaOrigem → { funcId, amount }
-    for (const i of importar) {
-      if ((i.type || 'expense') !== 'expense' || !i.grupoGerencial || !i._reservaFuncaoId) continue
-      const grupo = gerencialGroups.find(g => g.id === i.grupoGerencial)
-      if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) continue
+    // Função de reserva por (fatura → conta-origem), desempate pelo maior valor — mesmo
+    // mecanismo da importação normal: o resgate de cada fatura adota a função escolhida.
+    const funcPorFatura = new Map() // faturaMY → Map(origem → { funcId, amount })
+    const registrarFunc = (faturaMY, grupoId, reservaFuncaoId, amount) => {
+      if (!faturaMY || !reservaFuncaoId) return
+      const grupo = gerencialGroups.find(g => g.id === grupoId)
+      if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) return
       const origem = grupo.defaultAccountId
-      const func = (reserveFunctions || []).find(f => f.id === i._reservaFuncaoId)
-      if (!func || func.accountId !== origem) continue
-      const amt = Number(i.amount) || 0
-      const prev = byOrigem.get(origem)
-      if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: i._reservaFuncaoId, amount: amt })
+      const func = (reserveFunctions || []).find(f => f.id === reservaFuncaoId)
+      if (!func || func.accountId !== origem) return
+      if (!funcPorFatura.has(faturaMY)) funcPorFatura.set(faturaMY, new Map())
+      const m = funcPorFatura.get(faturaMY)
+      const amt = Number(amount) || 0
+      const prev = m.get(origem)
+      if (!prev || amt > prev.amount) m.set(origem, { funcId: reservaFuncaoId, amount: amt })
     }
-    const reservaFuncaoByAccount = byOrigem.size
-      ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
-      : undefined
+    // Itens-base da própria fatura conciliada.
+    for (const i of importar) {
+      if ((i.type || 'expense') === 'expense' && i.grupoGerencial) {
+        registrarFunc(faturaMonthYear, i.grupoGerencial, i._reservaFuncaoId, i.amount)
+      }
+    }
 
-    // Recalcula os agendamentos acumulativos da fatura conciliada (resgate/devolução/pagamento).
+    // Parcelas futuras dos itens parcelados (mesma lógica do fluxo de importação normal):
+    // cria as ausentes em faturas futuras, herdando categoria/grupo/favorecido/função.
+    const dueDay = selectedAcc?.dueDay || null
+    const closingDay = selectedAcc?.closingDay || 14
+    const futurasFaturas = new Set()
+    const seenFut = new Set()
+    for (const item of importar) {
+      const inst = item._installment
+      if ((item.type || 'expense') !== 'expense' || !inst || inst.num >= inst.total) continue
+      const base = inst.base.toLowerCase().trim()
+      const numWidth = inst.matchStr ? inst.matchStr.split('/')[0].length : String(inst.total).length
+      for (let k = inst.num + 1; k <= inst.total; k++) {
+        const futFatura = addMonthToFatura(faturaMonthYear, k - inst.num)
+        const dedupKey = `${base}|${k}|${futFatura}`
+        if (seenFut.has(dedupKey)) continue
+        seenFut.add(dedupKey)
+        const futNumStr = String(k).padStart(numWidth, '0')
+        const futDesc = inst.matchStr
+          ? item.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
+          : `${item.description} ${futNumStr}/${inst.total}`
+        if (findExistingParcela(inst, k, item.amount, selectedAccount, transactions)) continue
+        if (isDuplicateInstallment({ description: futDesc, amount: item.amount }, transactions, selectedAccount)) continue
+        const futDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
+        if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
+        const fId = addTransaction({
+          type: 'expense', accountId: selectedAccount, accountType: 'credit',
+          amount: item.amount, date: futDate, description: futDesc,
+          categoryId: item.categoryId, payee: item.payee,
+          grupoGerencial: item.grupoGerencial || defaultGrupoD,
+          reservaFuncaoId: item._reservaFuncaoId || null,
+          faturaMonthYear: futFatura,
+          installmentNum: k, installmentTotal: inst.total,
+          _fromImport: true,
+        })
+        if (fId) txIds.push(fId)
+        if (item.grupoGerencial) {
+          processarLancamentoGerencial(
+            { accountId: selectedAccount, amount: item.amount, date: futDate, description: futDesc, faturaMonthYear: futFatura },
+            item.grupoGerencial, null, { immediate: false }
+          )
+          registrarFunc(futFatura, item.grupoGerencial, item._reservaFuncaoId, item.amount)
+        }
+        futurasFaturas.add(futFatura)
+      }
+    }
+
+    const mapFor = (faturaMY) => {
+      const m = funcPorFatura.get(faturaMY)
+      return m ? Object.fromEntries([...m].map(([o, v]) => [o, v.funcId])) : undefined
+    }
+
+    // Recalcula os agendamentos acumulativos da fatura conciliada + de cada fatura futura afetada.
     if (faturaMonthYear) {
       const [y, m] = faturaMonthYear.split('-')
-      recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
+      recalcularAgendamentosFatura(selectedAccount, y, m, mapFor(faturaMonthYear))
+    }
+    for (const fmy of futurasFaturas) {
+      if (fmy === faturaMonthYear) continue
+      const [y, m] = fmy.split('-')
+      recalcularAgendamentosFatura(selectedAccount, y, m, mapFor(fmy))
     }
 
     // Registra os importados no histórico (permite estornar como uma importação normal).
@@ -1661,7 +1810,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   {concSoItau.map(item => (
                     <tr key={item._id} className={`border-b border-gray-800/50 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}>
                       <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
-                      <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate" title={item.description}>{item.description}</td>
+                      <td className="px-3 py-2 max-w-xs">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
+                          <div className="flex">
+                            <InstallmentControl
+                              installment={item._installment}
+                              description={item.description}
+                              onChange={inst => setItauField(item._id, { _installment: inst })}
+                            />
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-3 py-2">
                         <CategorySelect
                           categories={categories}
@@ -2128,11 +2288,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           <input className="bg-transparent text-xs focus:outline-none focus:bg-gray-800 rounded px-1 min-w-0 flex-1"
                             value={row.description}
                             onChange={e => updateRow(row._id, { description: e.target.value })} />
-                          {row._installment && (
-                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">
-                              {row._installment.num}/{row._installment.total}
-                            </span>
-                          )}
+                          <InstallmentControl
+                            installment={row._installment}
+                            description={row.description}
+                            onChange={inst => updateRow(row._id, { _installment: inst })}
+                          />
                         </div>
                       </td>
                       <td className="px-3 py-2">
