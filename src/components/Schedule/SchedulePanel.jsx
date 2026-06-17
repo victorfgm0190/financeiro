@@ -629,6 +629,7 @@ function ScheduleRow({
   const [showPularUnico, setShowPularUnico] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const hasFuture = futureItems.length > 0
+  const toggleExpand = () => setExpanded(v => !v)
 
   // Pular a próxima ocorrência pendente:
   //  • único (frequency 'once'): confirma e cancela (deleteSchedule);
@@ -690,15 +691,18 @@ function ScheduleRow({
           )}
         </td>
 
-        {/* Descrição */}
-        <td className="px-3 py-3 max-w-[200px]">
+        {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras */}
+        <td
+          className={`px-3 py-3 max-w-[200px] ${hasFuture ? 'cursor-pointer' : ''}`}
+          onClick={hasFuture ? toggleExpand : undefined}
+        >
           <div className="flex items-center gap-1.5 flex-wrap">
             {hasFuture && (
               <button
                 type="button"
-                onClick={() => setExpanded(v => !v)}
+                onClick={(e) => { e.stopPropagation(); toggleExpand() }}
                 title={expanded ? 'Recolher' : `Ver ${futureItems.length} ocorrência(s) seguinte(s)`}
-                className="inline-flex items-center gap-0.5 -ml-1 text-gray-500 hover:text-gray-200 transition-colors shrink-0"
+                className="inline-flex items-center gap-0.5 -ml-1 p-0.5 text-gray-500 hover:text-gray-200 transition-colors shrink-0"
               >
                 {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 <span className="text-[10px] font-semibold">{futureItems.length}</span>
@@ -726,7 +730,7 @@ function ScheduleRow({
             {canConfirm && nextDate && (
               <button
                 type="button"
-                onClick={() => onToggleConfirmado(schedule.id)}
+                onClick={(e) => { e.stopPropagation(); onToggleConfirmado(schedule.id) }}
                 title={schedule.confirmado
                   ? 'Valor confirmado para o próximo vencimento — clique para desmarcar'
                   : 'Marcar valor como confirmado para o próximo vencimento'}
