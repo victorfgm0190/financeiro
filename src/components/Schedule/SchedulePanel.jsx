@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -41,6 +41,77 @@ const VIEW_FILTERS = [
   { id: 'history',   label: 'Histórico' },
   { id: 'ra',        label: 'Resgates Anuais' },
 ]
+
+// Quantas ocorrências futuras listar ao expandir um agendamento recorrente de valor fixo.
+const FUTURE_OCC_COUNT = 12
+
+// Tipos de agendamento de cartão/gerencial que o motor gera UM POR FATURA (frequency 'once',
+// id fsch_<card>_<yyyymm>_<slot>). Várias faturas da mesma série devem virar UMA linha.
+const SERIES_TIPOS = new Set(['pagamento_fatura', 'resgate_reserva', 'gerencial_devolucao'])
+
+// Chave lógica da série (independente da fatura): agrupa as ocorrências por-fatura de um mesmo
+// fluxo. Para o resgate, accountId (conta-origem) entra na chave → origens distintas ficam
+// separadas. Devolve null para agendamentos que NÃO são série de fatura.
+function seriesKeyOf(s) {
+  if (SERIES_TIPOS.has(s.tipo)) {
+    return `${s.tipo}|${s.cardId || ''}|${s.accountId || ''}|${s.toAccountId || ''}`
+  }
+  // Legado "Pagamento Fatura" (sem tipo, _gerencialKey terminando em _payment).
+  const k = s.overrides?._gerencialKey || ''
+  if (!s.tipo && k.endsWith('_payment')) {
+    const card = s.cardId || s.overrides?._gerencial?.cardId || s.toAccountId || ''
+    return `pagamento_fatura|${card}|${s.accountId || ''}|${s.toAccountId || ''}`
+  }
+  return null
+}
+
+// Aglutina a lista de agendamentos em "grupos" de exibição (somente visual — não toca dados):
+//   • Série de fatura: vira 1 linha; primary = fatura pendente mais próxima; futureItems = as
+//     demais faturas pendentes (cada uma com seu amount já calculado pelo reconcileFaturaState).
+//   • Recorrente de verdade (frequency != once): 1 linha; futureItems = próximas ocorrências
+//     (getNextOccurrences) com o valor fixo do agendamento.
+//   • Único 'once' avulso: 1 linha, sem futureItems (inalterado).
+function buildScheduleGroups(schedules, getNextOccurrences) {
+  const seriesMap = new Map()
+  const singles = []
+  for (const s of schedules) {
+    const key = seriesKeyOf(s)
+    if (key) {
+      if (!seriesMap.has(key)) seriesMap.set(key, [])
+      seriesMap.get(key).push(s)
+    } else {
+      singles.push(s)
+    }
+  }
+
+  const groups = []
+  for (const members of seriesMap.values()) {
+    const withNext = members.map(s => ({ s, next: getNextOccurrences(s, 1)[0] || null }))
+    const pending = withNext.filter(m => m.next).sort((a, b) => a.next.localeCompare(b.next))
+    if (pending.length === 0) {
+      // Série inteiramente concluída: representa pela fatura mais recente (linha "Concluído").
+      const rep = members.slice().sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))[0]
+      groups.push({ schedule: rep, nextDate: null, futureItems: [] })
+      continue
+    }
+    const primary = pending[0]
+    const futureItems = pending.slice(1).map(m => ({ date: m.next, amount: Number(m.s.amount) || 0 }))
+    groups.push({ schedule: primary.s, nextDate: primary.next, futureItems })
+  }
+
+  for (const s of singles) {
+    const nextDate = getNextOccurrences(s, 1)[0] || null
+    const recurring = (s.frequency || 'once') !== 'once'
+    let futureItems = []
+    if (recurring && nextDate) {
+      futureItems = getNextOccurrences(s, FUTURE_OCC_COUNT + 1)
+        .slice(1)
+        .map(d => ({ date: d, amount: Number(s.amount) || 0 }))
+    }
+    groups.push({ schedule: s, nextDate, futureItems })
+  }
+  return groups
+}
 
 function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupoId) {
@@ -518,7 +589,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 }
 
 function ScheduleRow({
-  schedule, nextDate, categories, accounts, gerencialGroups,
+  schedule, nextDate, futureItems = [], cols = 9, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
   deleteSchedule, updateSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
@@ -556,6 +627,8 @@ function ScheduleRow({
   const [showExcluir, setShowExcluir] = useState(false)
   const [showEfetivar, setShowEfetivar] = useState(false)
   const [showPularUnico, setShowPularUnico] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const hasFuture = futureItems.length > 0
 
   // Pular a próxima ocorrência pendente:
   //  • único (frequency 'once'): confirma e cancela (deleteSchedule);
@@ -620,6 +693,17 @@ function ScheduleRow({
         {/* Descrição */}
         <td className="px-3 py-3 max-w-[200px]">
           <div className="flex items-center gap-1.5 flex-wrap">
+            {hasFuture && (
+              <button
+                type="button"
+                onClick={() => setExpanded(v => !v)}
+                title={expanded ? 'Recolher' : `Ver ${futureItems.length} ocorrência(s) seguinte(s)`}
+                className="inline-flex items-center gap-0.5 -ml-1 text-gray-500 hover:text-gray-200 transition-colors shrink-0"
+              >
+                {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                <span className="text-[10px] font-semibold">{futureItems.length}</span>
+              </button>
+            )}
             <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
             {isProvisao && !schedule.provisaoEfetivada && (
               <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
@@ -773,6 +857,26 @@ function ScheduleRow({
           </div>
         </td>
       </tr>
+
+      {/* Painel inline: ocorrências futuras seguintes (faturas futuras com valor dinâmico,
+          ou próximas ocorrências de recorrente com valor fixo). Somente visual. */}
+      {expanded && hasFuture && (
+        <tr className="bg-gray-900/40 border-b border-gray-800/50">
+          <td colSpan={cols} className="px-3 py-2">
+            <div className="pl-6">
+              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Próximas ocorrências</p>
+              <ul className="space-y-0.5 max-w-md">
+                {futureItems.map((it, i) => (
+                  <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-gray-800/30 last:border-0">
+                    <span className="text-gray-400">{fmtDate(it.date)}</span>
+                    <span className="text-gray-300 font-medium">{fmt(it.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </td>
+        </tr>
+      )}
 
       {showPay && (
         <PayModal
@@ -1043,10 +1147,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const [showBatchSkip, setShowBatchSkip] = useState(false)
   const [toast, setToast] = useState(null)
 
-  const rows = useMemo(() => schedules.map(s => ({
-    schedule: s,
-    nextDate: getNextOccurrences(s, 1)[0] || null,
-  })), [schedules, getNextOccurrences])
+  // Linhas aglutinadas: 1 por agendamento lógico (séries de fatura colapsadas; recorrentes
+  // com ocorrências futuras em futureItems). Particionamento/seleção seguem usando nextDate.
+  const rows = useMemo(() => buildScheduleGroups(schedules, getNextOccurrences), [schedules, getNextOccurrences])
 
   const overdue    = rows.filter(r => r.nextDate && r.nextDate < today).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
   const next7      = rows.filter(r => r.nextDate && r.nextDate >= today && r.nextDate <= in7).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
@@ -1171,6 +1274,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
     selectionMode, onToggleSelect: toggleSelect,
     srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
+    cols,
   }
 
   return (
@@ -1285,40 +1389,40 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
               {overdue.length > 0 && (
                 <>
                   <SectionHeader label="Em atraso" count={overdue.length} variant="overdue" cols={cols} />
-                  {overdue.map(({ schedule, nextDate }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {overdue.map(({ schedule, nextDate, futureItems }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {next7.length > 0 && (
                 <>
                   <SectionHeader label="Próximos 7 dias" count={next7.length} variant="soon" cols={cols} />
-                  {next7.map(({ schedule, nextDate }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {next7.map(({ schedule, nextDate, futureItems }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {next30.length > 0 && (
                 <>
                   <SectionHeader label="Próximos 30 dias" count={next30.length} variant="month" cols={cols} />
-                  {next30.map(({ schedule, nextDate }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {next30.map(({ schedule, nextDate, futureItems }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {future.length > 0 && (
                 <>
                   <SectionHeader label="Futuros" count={future.length} variant="default" cols={cols} />
-                  {future.map(({ schedule, nextDate }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {future.map(({ schedule, nextDate, futureItems }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {completed.length > 0 && (
                 <>
                   <SectionHeader label="Concluídos" count={completed.length} variant="history" cols={cols} />
-                  {completed.map(({ schedule, nextDate }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {completed.map(({ schedule, nextDate, futureItems }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
