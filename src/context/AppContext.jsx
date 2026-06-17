@@ -2703,6 +2703,23 @@ export function AppProvider({ children }) {
       const devolDate = computeScheduleDate(faturaRef, financialStartDay) // dia financeiro do mês da fatura
       const dueDate = `${yyyy}-${mm}-${dueDay}`                            // vencimento do cartão no mês da fatura
 
+      // Variante A — "ciclo no passado": se o vencimento (dueDate) cai ANTES do início do
+      // ciclo financeiro ATUAL (mesma regra de getFinancialPeriod, lida de d.settings), a
+      // fatura está num ciclo já encerrado. Nesse caso NÃO materializamos pendência
+      // retroativa (preservamos o que já foi registrado/pulado e seguimos com as limpezas).
+      // Não afeta faturas do ciclo atual/futuro.
+      const _ref = new Date()
+      let _cicloStart
+      if ((d.settings?.financialMonthMode || 'custom') === 'calendar') {
+        _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth(), 1)
+      } else {
+        const _startDay = d.settings?.financialMonthStartDay || 1
+        _cicloStart = _ref.getDate() >= _startDay
+          ? new Date(_ref.getFullYear(), _ref.getMonth(), _startDay)
+          : new Date(_ref.getFullYear(), _ref.getMonth() - 1, _startDay)
+      }
+      const faturaCicloNoPassado = new Date(`${dueDate}T00:00:00`) < _cicloStart
+
       const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
         || d.accounts.find(a => a.isMain && a.type !== 'credit')
         || d.accounts.find(a => a.type === 'checking')
@@ -2866,6 +2883,7 @@ export function AppProvider({ children }) {
       }
       for (const dsh of desired) {
         if (registeredSlots.has(dsh.slot)) continue // já há um executado nesse slot
+        if (faturaCicloNoPassado) continue // ciclo encerrado: não materializa pendência retroativa
         const { slot, ...rest } = dsh
         schedules.push({ ...baseSch, ...rest })
       }
@@ -2890,9 +2908,13 @@ export function AppProvider({ children }) {
           .filter(dsh => dsh.tipo === 'resgate_reserva' && !registeredSlots.has(dsh.slot))
           .map(dsh => dsh.id)
       )
+      // Limpa o SRF antigo dos resgates pendentes (recriados) — vale também p/ ciclo passado,
+      // removendo órfãos dos resgates que NÃO serão re-materializados pela guarda acima.
       let scheduleReservaFuncoes = (d.scheduleReservaFuncoes || [])
         .filter(srf => !pendingResgateIds.has(srf.scheduleId))
-      for (const [origem, soma] of numberedByAccount) {
+      // Só reinsere o detalhamento quando a fatura NÃO é de ciclo passado (senão não há
+      // schedule de resgate correspondente — evita SRF órfão).
+      if (!faturaCicloNoPassado) for (const [origem, soma] of numberedByAccount) {
         if (soma <= 0) continue
         const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
         if (!pendingResgateIds.has(schedId)) continue
