@@ -65,34 +65,61 @@ export function findExistingParcela(inst, num, amount, accountId, existing) {
   }) || null
 }
 
-// Monta a visão de uma série de parcelas a partir de um lançamento âncora (a parcela
-// sendo editada). Reusa a MESMA lógica de futureParcelas/findExistingParcela do
-// ImportPanel, mas escopada a UMA série (mesma conta + base normalizada + total).
+// Prefixo PERMISSIVO para AGRUPAR parcelas irmãs já marcadas — remove o ÚLTIMO bloco
+// "<dígitos>/<dígitos>" da descrição (tudo antes dele). Diferente do detectInstallment:
+// não tem lookbehind nem valida se é parcela; serve só para casar irmãs de uma série já
+// reconhecida (inclui formatos que o detector ignora, ex.: "BR1*PRIVALIA 7216001/03").
+export function installmentPrefix(description) {
+  const s = description || ''
+  const re = /\d+\/\d+/g
+  let last = null, m
+  while ((m = re.exec(s)) !== null) last = m
+  return normalizeInstallmentBase(last ? s.slice(0, last.index) : s)
+}
+
+// Gera a descrição de uma parcela k a partir de uma irmã âncora.
+//  - formato reconhecido pelo detector → substitui "N/total" preservando a largura;
+//  - formato permissivo (código de loja) → incrementa o bloco numérico antes da barra
+//    em (k − anchorNum), preservando a largura, e mantém o total.
+export function buildSiblingDescription(anchorDesc, anchorNum, k, total) {
+  const det = detectInstallment(anchorDesc || '')
+  if (det) {
+    const numWidth = det.matchStr.split('/')[0].length
+    return anchorDesc.replace(det.matchStr, `${String(k).padStart(numWidth, '0')}/${total}`)
+  }
+  const m = (anchorDesc || '').match(/(\d+)\/(\d+)(\s*)$/)
+  if (!m) return anchorDesc || ''
+  const code = m[1]
+  const newCode = String(Number(code) + (k - anchorNum)).padStart(code.length, '0')
+  return anchorDesc.slice(0, m.index) + newCode + '/' + m[2] + m[3]
+}
+
+// Monta a visão de uma série a partir de um lançamento âncora (a parcela sendo editada).
+// NÃO depende do detectInstallment para achar as irmãs: usa installment_num/installment_total
+// JÁ gravados (detecção automática OU marcação manual) + prefixo permissivo. Assim o card
+// "Parcela N de M" e o botão aparecem também para formatos que o detector ignora.
 //
-// Retorna null se o lançamento não for parcela reconhecível. Caso contrário:
-//   { inst, base, total, siblings, missing }
-//   - siblings: parcelas existentes da série, com _num, ordenadas por número
-//   - missing : parcelas de 1..total AUSENTES, já com os campos herdados da irmã mais
-//               próxima (categoria/grupo/payee/reserva) e data/fatura calculadas.
-//               Não inclui parcelas que já existem no banco (findExistingParcela).
+// Retorna null se o lançamento ainda não estiver marcado como parcela. Caso contrário:
+//   { base, total, siblings, missing }
+//   - siblings: parcelas existentes da série (mesma conta + total + prefixo), com _num
+//   - missing : parcelas de 1..total AUSENTES, com campos herdados da irmã mais próxima
 export function buildSeries(tx, transactions, account) {
-  const inst = detectInstallment(tx.description || '')
-  const total = Number(tx.installmentTotal) || (inst ? inst.total : null)
-  if (!inst || !total) return null
-  const base = normalizeInstallmentBase(inst.base)
+  const total = Number(tx.installmentTotal) || null
+  const myNum = Number(tx.installmentNum) || null
+  if (!total || !myNum) return null
   const accountId = tx.accountId
+  const prefix = installmentPrefix(tx.description)
 
   const siblings = transactions
-    .map(t => {
-      const ti = detectInstallment(t.description || '')
-      return ti ? { t, ti } : null
-    })
-    .filter(x => x
-      && x.t.accountId === accountId
-      && (Number(x.t.installmentTotal) || x.ti.total) === total
-      && normalizeInstallmentBase(x.ti.base) === base)
-    .map(x => ({ ...x.t, _num: x.ti.num }))
-    .sort((a, b) => a._num - b._num)
+    .filter(t =>
+      t.accountId === accountId &&
+      t.installmentNum != null &&
+      (Number(t.installmentTotal) || null) === total &&
+      installmentPrefix(t.description) === prefix)
+    .map(t => ({ ...t, _num: Number(t.installmentNum) }))
+  // Garante a própria parcela na lista (o array pode estar desatualizado em alguns fluxos).
+  if (!siblings.some(s => s.id === tx.id)) siblings.push({ ...tx, _num: myNum })
+  siblings.sort((a, b) => a._num - b._num)
 
   const presentNums = new Set(siblings.map(s => s._num))
   const dueDay = account?.dueDay || null
@@ -101,17 +128,14 @@ export function buildSeries(tx, transactions, account) {
   const missing = []
   for (let k = 1; k <= total; k++) {
     if (presentNums.has(k)) continue
-    // Âncora = irmã existente de número mais próximo de k.
     const anchor = [...siblings].sort((a, b) => Math.abs(a._num - k) - Math.abs(b._num - k))[0]
     if (!anchor) continue
-    const anchorInst = detectInstallment(anchor.description)
-    const numWidth = anchorInst.matchStr.split('/')[0].length
     const futFatura = addMonthToFatura(anchor.faturaMonthYear, k - anchor._num)
     const futDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
-    const numStr = String(k).padStart(numWidth, '0')
-    const description = anchor.description.replace(anchorInst.matchStr, `${numStr}/${total}`)
-    const existing = findExistingParcela(inst, k, anchor.amount, accountId, transactions)
-    if (existing) continue
+    const description = buildSiblingDescription(anchor.description, anchor._num, k, total)
+    // Guarda: se a descrição gerada já existe na conta, não oferece (cobre parcela
+    // existente porém não-marcada no formato permissivo).
+    if (transactions.some(t => t.accountId === accountId && t.description === description)) continue
     missing.push({
       num: k,
       total,
@@ -125,5 +149,5 @@ export function buildSeries(tx, transactions, account) {
       reservaFuncaoId: anchor.reservaFuncaoId || null,
     })
   }
-  return { inst, base, total, siblings, missing }
+  return { base: prefix, total, siblings, missing }
 }

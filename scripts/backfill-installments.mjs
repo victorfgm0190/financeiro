@@ -22,8 +22,18 @@ import pg from 'pg'
 import { detectInstallment, normalizeInstallmentBase, installmentKey } from '../src/lib/installments.js'
 
 const cmd = process.argv[2]
-const KNOWN = ['check-columns', 'gate1', 'gate2', 'series', 'refs', 'delete-dups', 'apply-backfill', 'apply-keys', 'create-index']
-const WRITES = new Set(['delete-dups', 'apply-backfill', 'apply-keys', 'create-index'])
+const KNOWN = ['check-columns', 'gate1', 'gate2', 'series', 'refs', 'delete-dups', 'manual-mark-preview', 'manual-mark-apply', 'apply-backfill', 'apply-keys', 'create-index']
+const WRITES = new Set(['delete-dups', 'manual-mark-apply', 'apply-backfill', 'apply-keys', 'create-index'])
+
+// Marcação manual aprovada: parcelas cujo formato o detector NÃO reconhece (código da
+// loja com muitos dígitos antes da barra). num/total fixados à mão; installment_key
+// calculado pela mesma fórmula (installmentKey).
+const MANUAL_MARKS = [
+  { desc: 'BR1*PRIVALIA 7216001/03', num: 1, total: 3 },
+  { desc: 'BR1*PRIVALIA 7216002/03', num: 2, total: 3 },
+  { desc: 'LOJAS RENNER FL 7601/03', num: 1, total: 3 },
+  { desc: 'LOJAS RENNER FL 7602/03', num: 2, total: 3 },
+]
 
 // Duplicatas reais aprovadas para remoção (a linha "mais novo" de cada par PAYSERVICE,
 // mesmo created_at e mesmo card_import nos dois lados = inserção dupla na importação).
@@ -368,6 +378,59 @@ async function deleteDups(client) {
   }
 }
 
+// ── manual-mark (preview read-only / apply write) ────────────────────────────
+async function loadManualTargets(client) {
+  const out = []
+  for (const mk of MANUAL_MARKS) {
+    const { rows } = await client.query(
+      `SELECT id, account_id, description, amount, date, fatura_month_year,
+              installment_num, installment_total, installment_key
+       FROM lancamentos WHERE description = $1`, [mk.desc])
+    out.push({ mk, rows })
+  }
+  return out
+}
+function keyForMark(r, mk) {
+  return installmentKey({
+    accountId: r.account_id, description: r.description,
+    installmentNum: mk.num, installmentTotal: mk.total,
+    amount: r.amount, faturaMonthYear: r.fatura_month_year, date: r.date,
+  })
+}
+async function manualMarkPreview(client) {
+  const targets = await loadManualTargets(client)
+  console.log('\n[MANUAL-MARK] Prévia (ANTES → DEPOIS) — nada aplicado:\n')
+  for (const { mk, rows } of targets) {
+    if (rows.length === 0) { console.log(`  ⚠ NÃO ENCONTRADO (descrição exata): "${mk.desc}"\n`); continue }
+    if (rows.length > 1) console.log(`  ⚠ ${rows.length} linhas casam "${mk.desc}" — TODAS seriam marcadas:`)
+    for (const r of rows) {
+      console.log(`  id=${r.id}  "${r.description}"  ${fmtBRL(r.amount)}  fatura=${r.fatura_month_year || '-'}`)
+      console.log(`      num/total: ${r.installment_num ?? 'NULL'}/${r.installment_total ?? 'NULL'} → ${mk.num}/${mk.total}`)
+      console.log(`      installment_key: ${r.installment_key || 'NULL'} → ${keyForMark(r, mk)}\n`)
+    }
+  }
+  console.log('Após aprovação explícita: manual-mark-apply')
+}
+async function manualMarkApply(client) {
+  const targets = await loadManualTargets(client)
+  const missing = targets.filter(t => t.rows.length === 0).map(t => t.mk.desc)
+  if (missing.length) { console.log(`✖ Abortado: descrição(ões) não encontrada(s):\n  ${missing.join('\n  ')}`); return }
+  await client.query('BEGIN')
+  try {
+    let n = 0
+    for (const { mk, rows } of targets) {
+      for (const r of rows) {
+        const res = await client.query(
+          'UPDATE lancamentos SET installment_num = $1, installment_total = $2, installment_key = $3 WHERE id = $4',
+          [mk.num, mk.total, keyForMark(r, mk), r.id])
+        n += res.rowCount
+      }
+    }
+    await client.query('COMMIT')
+    console.log(`✔ ${n} linha(s) marcada(s) (installment_num/total + installment_key).`)
+  } catch (err) { await client.query('ROLLBACK'); throw err }
+}
+
 async function main() {
   const client = await pool.connect()
   try {
@@ -378,6 +441,8 @@ async function main() {
     else if (cmd === 'series') await series(client)
     else if (cmd === 'refs') await refs(client)
     else if (cmd === 'delete-dups') await deleteDups(client)
+    else if (cmd === 'manual-mark-preview') await manualMarkPreview(client)
+    else if (cmd === 'manual-mark-apply') await manualMarkApply(client)
     else if (cmd === 'apply-backfill') await applyBackfill(client)
     else if (cmd === 'apply-keys') await applyKeys(client)
     else if (cmd === 'create-index') await createIndex(client)
