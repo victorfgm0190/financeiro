@@ -103,19 +103,31 @@ export function buildSiblingDescription(anchorDesc, anchorNum, k, total) {
 //   { base, total, siblings, missing }
 //   - siblings: parcelas existentes da série (mesma conta + total + prefixo), com _num
 //   - missing : parcelas de 1..total AUSENTES, com campos herdados da irmã mais próxima
+// serie_inicio (YYYY-MM) de uma parcela: fatura − (num − 1) meses (fallback: YYYY-MM da date).
+// Mesma definição usada na installmentKey — distingue séries PARALELAS (mesma loja/total)
+// que começam em meses diferentes, ex.: visitas distintas à mesma clínica.
+function serieInicioOf(t) {
+  const num = Number(t.installmentNum) || 1
+  const ym = t.faturaMonthYear || (typeof t.date === 'string' && t.date.length >= 7 ? t.date.slice(0, 7) : null)
+  if (!ym) return 'sem-fatura'
+  return addMonthToFatura(ym, -(num - 1))
+}
+
 export function buildSeries(tx, transactions, account) {
   const total = Number(tx.installmentTotal) || null
   const myNum = Number(tx.installmentNum) || null
   if (!total || !myNum) return null
   const accountId = tx.accountId
   const prefix = installmentPrefix(tx.description)
+  const serieInicio = serieInicioOf(tx)
 
   const siblings = transactions
     .filter(t =>
       t.accountId === accountId &&
       t.installmentNum != null &&
       (Number(t.installmentTotal) || null) === total &&
-      installmentPrefix(t.description) === prefix)
+      installmentPrefix(t.description) === prefix &&
+      serieInicioOf(t) === serieInicio)
     .map(t => ({ ...t, _num: Number(t.installmentNum) }))
   // Garante a própria parcela na lista (o array pode estar desatualizado em alguns fluxos).
   if (!siblings.some(s => s.id === tx.id)) siblings.push({ ...tx, _num: myNum })

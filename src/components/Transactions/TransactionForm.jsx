@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ArrowLeftRight, PiggyBank, Repeat } from 'lucide-react'
+import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, accountPriority } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -144,12 +144,21 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // detectada para o passo de confirmação (a decisão é passada explícita ao re-submeter).
   const [installmentPrompt, setInstallmentPrompt] = useState(null)
 
+  // Edição inline de num/total no card "Parcela N de M". instOverride: undefined = intacto
+  // (usa initial); null = à vista; { num, total } = parcelado aplicado localmente (feedback
+  // imediato, já que o prop `initial` não se atualiza após updateTransaction).
+  const [instOverride, setInstOverride] = useState(undefined)
+  const [editInst, setEditInst] = useState(false)
+  const [instInput, setInstInput] = useState('')
+  const effInstNum = instOverride !== undefined ? (instOverride?.num ?? null) : (initial?.installmentNum ?? null)
+  const effInstTotal = instOverride !== undefined ? (instOverride?.total ?? null) : (initial?.installmentTotal ?? null)
+
   // Item 6: série de parcelas do lançamento em edição (Parcela N de M + irmãs + faltantes).
   const parcelaSeries = useMemo(() => {
-    if (!initial?.id || initial.installmentNum == null || initial.installmentTotal == null) return null
+    if (!initial?.id || effInstNum == null || effInstTotal == null) return null
     const acc = accounts.find(a => a.id === initial.accountId)
-    return buildSeries(initial, transactions, acc)
-  }, [initial, transactions, accounts])
+    return buildSeries({ ...initial, installmentNum: effInstNum, installmentTotal: effInstTotal }, transactions, acc)
+  }, [initial, transactions, accounts, effInstNum, effInstTotal])
 
   // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
@@ -640,6 +649,36 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     onClose()
   }
 
+  // Edição manual de num/total no card. Override que prevalece sobre o detectInstallment.
+  const eligivelParcela = !!initial?.id && isCredit && form.type === 'expense'
+  const openInstEditor = () => {
+    setInstInput(effInstNum != null && effInstTotal != null ? `${effInstNum}/${effInstTotal}` : '')
+    setEditInst(true)
+  }
+  const confirmInstEdit = () => {
+    const m = (instInput || '').trim().match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/)
+    if (!m) { onToast?.('Use o formato N/M (ex: 2/3).'); return }
+    const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
+    if (num < 1 || total < 2 || num > total || total > 99) { onToast?.('Parcela inválida (ex: 2/3).'); return }
+    // Irmãs já existentes da série ATUAL (antes da troca) — passam a usar o novo total,
+    // mantendo o próprio num, para a série ficar consistente.
+    const oldSiblings = parcelaSeries?.siblings || []
+    updateTransaction(initial.id, { installmentNum: num, installmentTotal: total })
+    for (const s of oldSiblings) {
+      if (s.id === initial.id) continue
+      if ((Number(s.installmentTotal) || null) !== total) updateTransaction(s.id, { installmentTotal: total })
+    }
+    setInstOverride({ num, total })
+    setEditInst(false)
+    onToast?.(`Marcado como parcela ${num}/${total}.`)
+  }
+  const clearInst = () => {
+    updateTransaction(initial.id, { installmentNum: null, installmentTotal: null })
+    setInstOverride(null)
+    setEditInst(false)
+    onToast?.('Marcado como à vista.')
+  }
+
   const handleResgate = () => {
     if (resgateInfo?.contaResgate && contaPrincipal) {
       addTransaction({
@@ -1093,31 +1132,70 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <input className="input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Descrição do lançamento" />
       </div>
 
-      {/* Item 6: indicador read-only "Parcela N de M" + irmãs da série + geração das faltantes. */}
-      {parcelaSeries && (
-        <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-amber-300">
-              Parcela {initial.installmentNum} de {initial.installmentTotal}
-            </span>
-            <span className="text-xs text-gray-500">{parcelaSeries.siblings.length}/{parcelaSeries.total} no histórico</span>
-          </div>
-          <div className="rounded-md border border-gray-700/50 divide-y divide-gray-800 max-h-40 overflow-y-auto">
-            {parcelaSeries.siblings.map(s => (
-              <div key={s.id} className={`px-2.5 py-1.5 text-xs flex items-center justify-between gap-2 ${s.id === initial.id ? 'bg-amber-500/10' : ''}`}>
-                <span className="text-gray-300 whitespace-nowrap">{s._num}/{parcelaSeries.total}</span>
-                <span className="text-gray-500 truncate flex-1">fatura {s.faturaMonthYear || '—'}</span>
-                <span className="text-gray-200 whitespace-nowrap">{fmt(s.amount)}</span>
-                {s.id === initial.id && <span className="text-amber-400">atual</span>}
+      {/* Item 6: card "Parcela N de M" editável (override manual) + irmãs + geração das faltantes. */}
+      {eligivelParcela && (
+        <div className={`p-3 rounded-lg space-y-2 border ${parcelaSeries ? 'bg-amber-500/5 border-amber-500/20' : 'bg-gray-800/40 border-gray-700/50'}`}>
+          <div className="flex items-center justify-between gap-2">
+            {editInst ? (
+              <div className="flex items-center gap-1.5 flex-1">
+                <input
+                  autoFocus
+                  value={instInput}
+                  onChange={e => setInstInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmInstEdit() } }}
+                  placeholder="N/M (ex: 2/3)"
+                  className="input py-1 text-sm w-28"
+                />
+                <button type="button" onClick={confirmInstEdit} title="Confirmar" className="p-1 text-emerald-400 hover:bg-emerald-500/15 rounded">
+                  <Check size={14} />
+                </button>
+                <button type="button" onClick={() => setEditInst(false)} title="Cancelar" className="p-1 text-gray-400 hover:bg-gray-700 rounded">
+                  <X size={14} />
+                </button>
+                {effInstTotal != null && (
+                  <button type="button" onClick={clearInst} className="text-[11px] text-gray-400 hover:text-gray-200 ml-1">↩ à vista</button>
+                )}
               </div>
-            ))}
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-sm font-semibold ${parcelaSeries ? 'text-amber-300' : 'text-gray-300'}`}>
+                    {parcelaSeries ? `Parcela ${effInstNum} de ${effInstTotal}` : 'À vista'}
+                  </span>
+                  <button type="button" onClick={openInstEditor} title={parcelaSeries ? 'Editar parcelamento' : 'Marcar como parcelado'} className="p-0.5 text-gray-500 hover:text-gray-200">
+                    <Pencil size={12} />
+                  </button>
+                </div>
+                {parcelaSeries
+                  ? <span className="text-xs text-gray-500">{parcelaSeries.siblings.length}/{parcelaSeries.total} no histórico</span>
+                  : (
+                    <button type="button" onClick={openInstEditor} className="text-xs text-amber-400 hover:text-amber-300">
+                      Marcar como parcelado
+                    </button>
+                  )}
+              </>
+            )}
           </div>
-          {parcelaSeries.missing.length > 0 ? (
-            <button type="button" className="btn-secondary w-full text-sm" onClick={() => setStep('gerar-parcelas')}>
-              Gerar parcelas futuras ({parcelaSeries.missing.length} faltando)
-            </button>
-          ) : (
-            <p className="text-xs text-gray-600">Série completa — nenhuma parcela faltando.</p>
+          {parcelaSeries && (
+            <>
+              <div className="rounded-md border border-gray-700/50 divide-y divide-gray-800 max-h-40 overflow-y-auto">
+                {parcelaSeries.siblings.map(s => (
+                  <div key={s.id} className={`px-2.5 py-1.5 text-xs flex items-center justify-between gap-2 ${s.id === initial.id ? 'bg-amber-500/10' : ''}`}>
+                    <span className="text-gray-300 whitespace-nowrap">{s._num}/{parcelaSeries.total}</span>
+                    <span className="text-gray-500 truncate flex-1">fatura {s.faturaMonthYear || '—'}</span>
+                    <span className="text-gray-200 whitespace-nowrap">{fmt(s.amount)}</span>
+                    {s.id === initial.id && <span className="text-amber-400">atual</span>}
+                  </div>
+                ))}
+              </div>
+              {parcelaSeries.missing.length > 0 ? (
+                <button type="button" className="btn-secondary w-full text-sm" onClick={() => setStep('gerar-parcelas')}>
+                  Gerar parcelas futuras ({parcelaSeries.missing.length} faltando)
+                </button>
+              ) : (
+                <p className="text-xs text-gray-600">Série completa — nenhuma parcela faltando.</p>
+              )}
+            </>
           )}
         </div>
       )}
