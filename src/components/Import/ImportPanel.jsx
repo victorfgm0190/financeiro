@@ -1170,12 +1170,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
       }
       if (row.grupoGerencial) {
-        // Item da fatura sendo importada → transferência gerencial imediata.
-        const gerResult = processarLancamentoGerencial(
+        // Item 8: a etapa A (transferência imediata do Grupo G) não é mais criada aqui —
+        // o motor (reconcileFaturaState) a deriva no recálculo abaixo, com id determinístico
+        // (tx_gerA_<id>) e só para a fatura do ciclo atual.
+        processarLancamentoGerencial(
           { accountId: selectedAccount, amount: row.amount, date: saveDate, description: row.description, faturaMonthYear: row.faturaMonthYear },
           row.grupoGerencial, null, { immediate: true }
         )
-        if (gerResult?.etapaATxId) txIds.push(gerResult.etapaATxId)
         // Vínculo de função de reserva → agendamento de resgate desta fatura.
         registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       }

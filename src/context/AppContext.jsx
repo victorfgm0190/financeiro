@@ -16,6 +16,9 @@ import { computeFluxoCaixa } from '../lib/fluxoCaixa'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
+// Item 8: id determinístico da transferência imediata do Grupo G ("etapa A"),
+// derivado da despesa que a originou. Fonte única (reconcile, delete, reverse, revert).
+const etapaAId = (expenseId) => `tx_gerA_${expenseId}`
 
 // Prev vazio para forçar full-sync ao reconectar
 const EMPTY_PREV = {
@@ -1079,9 +1082,26 @@ export function AppProvider({ children }) {
         accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
       }
 
+      // Item 8: etapa A determinística (tx_gerA_<expenseId>) das despesas G do lote — reverte
+      // saldo e marca para remoção. Imports antigos guardavam a etapa A (id aleatório) em
+      // txIds e já caem no loop acima; este cobre as criadas pelo motor (pós-migração).
+      const etapaAIds = new Set()
+      for (const tx of txs) {
+        if (tx.type !== 'expense' || tx.accountType !== 'credit') continue
+        const a = d.transactions.find(t => t.id === etapaAId(tx.id))
+        if (!a || txIds.has(a.id)) continue
+        etapaAIds.add(a.id)
+        accounts = accounts.map(acc => {
+          if (acc.id === a.accountId) return { ...acc, balance: rb(acc.balance + a.amount) }
+          if (acc.id === a.toAccountId) return { ...acc, balance: rb(acc.balance - a.amount) }
+          return acc
+        })
+      }
+
       // Remove imported txs + reservaAuto + auto-provisões + investAuto vinculadas a elas
       transactions = transactions.filter(t =>
         !txIds.has(t.id) &&
+        !etapaAIds.has(t.id) &&
         !(t.reservaAuto && txIds.has(t.parentTxId)) &&
         !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId)) &&
         !(t.origin === 'investAuto' && txIds.has(t.parentTxId)) &&
@@ -1252,11 +1272,18 @@ export function AppProvider({ children }) {
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo?.number === 1) {
-          const etapaATx = d.transactions.find(t =>
-            t.id !== id && t.type === 'transfer' &&
-            t.grupoGerencial === tx.grupoGerencial &&
-            Math.abs(t.amount - tx.amount) < 0.01 && t.date === tx.date
-          )
+          let etapaATx = d.transactions.find(t => t.id === etapaAId(id))
+          if (!etapaATx) {
+            // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso
+            // por descrição+valor (removível no PR de limpeza junto da adoção do reconcile).
+            const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
+            etapaATx = d.transactions.find(t =>
+              t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
+              !String(t.id).startsWith('tx_gerA_') &&
+              (t.description || '') === _d &&
+              Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
+            )
+          }
           if (etapaATx) {
             reverseBalance(etapaATx)
             transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -1365,11 +1392,18 @@ export function AppProvider({ children }) {
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo?.number === 1) {
-          const etapaATx = d.transactions.find(t =>
-            t.id !== id && t.type === 'transfer' &&
-            t.grupoGerencial === tx.grupoGerencial &&
-            Math.abs(t.amount - tx.amount) < 0.01 && t.date === tx.date
-          )
+          let etapaATx = d.transactions.find(t => t.id === etapaAId(id))
+          if (!etapaATx) {
+            // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso
+            // por descrição+valor (removível no PR de limpeza junto da adoção do reconcile).
+            const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
+            etapaATx = d.transactions.find(t =>
+              t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
+              !String(t.id).startsWith('tx_gerA_') &&
+              (t.description || '') === _d &&
+              Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
+            )
+          }
           if (etapaATx) {
             reverseBalance(etapaATx)
             transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -1406,12 +1440,17 @@ export function AppProvider({ children }) {
     update(d => {
       const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
       if (grupo?.number !== 1) return d // só o Grupo G tem transferência imediata
-      const etapaATx = d.transactions.find(t =>
-        t.type === 'transfer' &&
-        t.grupoGerencial === tx.grupoGerencial &&
-        Math.abs(t.amount - tx.amount) < 0.01 &&
-        t.date === tx.date
-      )
+      let etapaATx = d.transactions.find(t => t.id === etapaAId(tx.id))
+      if (!etapaATx) {
+        // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso.
+        const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
+        etapaATx = d.transactions.find(t =>
+          t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
+          !String(t.id).startsWith('tx_gerA_') &&
+          (t.description || '') === _d &&
+          Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
+        )
+      }
       if (!etapaATx) return d
       const accounts = d.accounts.map(a => {
         if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
@@ -2709,16 +2748,26 @@ export function AppProvider({ children }) {
       // retroativa (preservamos o que já foi registrado/pulado e seguimos com as limpezas).
       // Não afeta faturas do ciclo atual/futuro.
       const _ref = new Date()
-      let _cicloStart
+      let _cicloStart, _cicloEnd
       if ((d.settings?.financialMonthMode || 'custom') === 'calendar') {
         _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth(), 1)
+        _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth() + 1, 0)
       } else {
         const _startDay = d.settings?.financialMonthStartDay || 1
-        _cicloStart = _ref.getDate() >= _startDay
-          ? new Date(_ref.getFullYear(), _ref.getMonth(), _startDay)
-          : new Date(_ref.getFullYear(), _ref.getMonth() - 1, _startDay)
+        if (_ref.getDate() >= _startDay) {
+          _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth(), _startDay)
+          _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth() + 1, _startDay - 1)
+        } else {
+          _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth() - 1, _startDay)
+          _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth(), _startDay - 1)
+        }
       }
-      const faturaCicloNoPassado = new Date(`${dueDate}T00:00:00`) < _cicloStart
+      const _dueDateObj = new Date(`${dueDate}T00:00:00`)
+      const faturaCicloNoPassado = _dueDateObj < _cicloStart
+      // Item 8 (D2/Q4): fatura do ciclo ATUAL = vencimento dentro do ciclo financeiro
+      // corrente. Passado/futuro espelhados pela mesma janela. Só o ciclo atual materializa
+      // a etapa A; futuro fica só com o agendamento projetado; passado, nada retroativo.
+      const faturaCicloAtual = _dueDateObj >= _cicloStart && _dueDateObj <= _cicloEnd
 
       const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
         || d.accounts.find(a => a.isMain && a.type !== 'credit')
@@ -2931,7 +2980,82 @@ export function AppProvider({ children }) {
         }
       }
 
-      return { ...d, accounts, schedules, payables, scheduleReservaFuncoes }
+      // 7. Item 8 — etapa A (transferência imediata Conta Principal → Ger. subconta) do
+      //    Grupo G, agora DERIVADA das despesas G da fatura e com id determinístico
+      //    (tx_gerA_<expenseId>). Só materializa para a fatura do CICLO ATUAL (D2): passado
+      //    fica intocado; futuro fica só com o agendamento projetado (gerencial_devolucao).
+      //    Reconcilia create/update + ADOÇÃO transitória de etapa A legada de id aleatório
+      //    (Q1a), por correspondência precisa (descrição+valor+contas) — renomeia o id sem
+      //    mover dinheiro. Remoção de órfãos é feita por id em delete/edição/reversão.
+      let transactions = d.transactions
+      if (faturaCicloAtual && subcontaId) {
+        const gExpenses = expenses.filter(tx => {
+          const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
+          return g && g.number === 1
+        })
+        if (gExpenses.length) {
+          const arr = [...transactions]
+          let principalDelta = 0, subcontaDelta = 0, changed = false
+          for (const e of gExpenses) {
+            const id = etapaAId(e.id)
+            const amount = Number(e.amount) || 0
+            const instNum = Number(e.installmentNum) || 1
+            const aDate = (instNum >= 2 && faturaRef) ? prevMonthScheduleDate(faturaRef, financialStartDay) : e.date
+            const desc = `Reserva Gerencial - ${e.description || ''}`.trim()
+            let idx = arr.findIndex(t => t.id === id)
+            // Adoção transitória do legado (id aleatório) por correspondência precisa.
+            if (idx === -1) {
+              idx = arr.findIndex(t =>
+                t.type === 'transfer' && t.grupoGerencial === e.grupoGerencial &&
+                t.toAccountId === subcontaId && t.accountId === contaPrincipal.id &&
+                !String(t.id).startsWith('tx_gerA_') &&
+                (t.description || '') === desc &&
+                Math.round((Number(t.amount) || 0) * 100) === Math.round(amount * 100)
+              )
+            }
+            if (idx === -1) {
+              // CREATE: debita principal, credita subconta.
+              arr.push({
+                id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
+                amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
+                createdAt: new Date().toISOString(),
+              })
+              principalDelta -= amount
+              subcontaDelta += amount
+              changed = true
+            } else {
+              // UPDATE/ADOÇÃO só quando algo difere (idempotente: re-run = no-op). Saldo
+              // ajusta pelo delta do valor; rename de id é neutro.
+              const cur = arr[idx]
+              const curAmt = Number(cur.amount) || 0
+              const diff = cur.id !== id || curAmt !== amount || cur.date !== aDate ||
+                cur.description !== desc || cur.accountId !== contaPrincipal.id ||
+                cur.toAccountId !== subcontaId || cur.grupoGerencial !== e.grupoGerencial
+              if (diff) {
+                principalDelta += curAmt - amount
+                subcontaDelta += amount - curAmt
+                arr[idx] = {
+                  ...cur, id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
+                  amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
+                }
+                changed = true
+              }
+            }
+          }
+          if (changed) {
+            transactions = arr
+            if (principalDelta !== 0 || subcontaDelta !== 0) {
+              accounts = accounts.map(a => {
+                if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) + principalDelta) }
+                if (a.id === subcontaId) return { ...a, balance: rb((a.balance || 0) + subcontaDelta) }
+                return a
+              })
+            }
+          }
+        }
+      }
+
+      return { ...d, accounts, schedules, payables, scheduleReservaFuncoes, transactions }
   }, [])
 
   const recalcularAgendamentosFatura = useCallback(
@@ -3125,120 +3249,38 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Gerencial Processing ──────────────────────────────────────────────────────
-  const processarLancamentoGerencial = useCallback((lancamento, grupoId, contaDestinoId = null, options = {}) => {
-    // immediate=false: parcela futura (gerada na importação) — cria apenas os agendamentos
-    // (resgate + pagamento); a transferência imediata Conta → Ger. só ocorre na parcela da
-    // fatura corrente (quando ela for de fato importada/lançada no mês dela).
-    const { immediate = true } = options
+  // Item 8: a etapa A (transferência imediata do Grupo G) deixou de ser criada aqui — agora
+  // é derivada pelo motor (reconcileFaturaState). Os antigos parâmetros contaDestinoId/options
+  // (immediate) foram removidos da assinatura; chamadas que ainda os passam posicionalmente são
+  // inofensivas (argumentos extras são ignorados). A conta-origem do gerencial passa a ser a
+  // contaPrincipal do motor (mesma usada por devolução/pagamento), garantindo consistência.
+  const processarLancamentoGerencial = useCallback((lancamento, grupoId) => {
     const grupo = data.gerencialGroups?.find(g => g.id === grupoId)
     if (!grupo) return { needsResgate: false }
     if (grupo.number === 'D') return { needsResgate: false }
 
     if (grupo.number === 1) {
-      // Pre-compute fatura data using current data snapshot (outside update)
+      // Item 8 (Opção Y): a etapa A — transferência imediata Conta Principal → Ger. subconta —
+      // NÃO é mais criada aqui. Ela passa a ser DERIVADA das despesas G da fatura e
+      // materializada pelo motor (reconcileFaturaState), que roda logo após via recalc.
+      // O crédito na subconta também é responsabilidade do motor. Aqui só devolvemos a
+      // fatura_ref para os agendamentos.
       const cardAccount = data.accounts.find(a => a.id === lancamento.accountId)
       const closingDay = cardAccount?.closingDay || 14
-      const txDate = new Date(lancamento.date + 'T00:00:00')
-
-      // Use faturaMonthYear when provided (parcelados 2..N have dueDay dates that shift fatura)
       let faturaRef
       if (lancamento.faturaMonthYear) {
         const [y, m] = lancamento.faturaMonthYear.split('-')
         faturaRef = `${m}/${y}`
       } else {
-        faturaRef = computeFaturaRef(txDate, closingDay)
+        faturaRef = computeFaturaRef(new Date(lancamento.date + 'T00:00:00'), closingDay)
       }
-
-      const txDescription = lancamento.description || ''
-      // Data da transferência ETAPA A (Conta Principal → Ger.):
-      //  • Parcela 1 (ou sem padrão X/N / à vista): data original do lançamento (sem alteração).
-      //  • Parcelas X>=2 (ex.: importação de parcela intermediária "2/3"): dia financeiro do mês
-      //    ANTERIOR ao mês da fatura_ref — mesma regra aplicada em executarProvisoesGerenciais.
-      const financialStartDay = data.settings?.financialMonthStartDay || 1
-      const etapaAInstMatches = [...txDescription.matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
-      const etapaAInstNum = etapaAInstMatches.length ? Number(etapaAInstMatches[etapaAInstMatches.length - 1][1]) : 1
-      const etapaADate = (etapaAInstNum >= 2 && faturaRef)
-        ? prevMonthScheduleDate(faturaRef, financialStartDay)
-        : lancamento.date
-      // Grupo G: única automação imediata é a transferência Conta Principal → Ger. subconta.
-      // Os agendamentos da fatura (devolução/pagamento) são gerados por recalcularAgendamentosFatura.
-      // Parcela futura (immediate=false): nenhuma transferência imediata (a subconta só é
-      // alimentada quando a parcela for de fato lançada no mês dela).
-      const etapaATxId = immediate ? ('tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)) : null
-
-      update(d => {
-        const cartao = d.accounts.find(a => a.id === lancamento.accountId)
-        const apelido = cartao?.apelido || cartao?.name?.slice(0, 6) || 'CC'
-        const subcontaName = `Ger. ${apelido}`
-
-        // Usa a conta explicitamente selecionada pelo usuário; fallback p/ legado/importação
-        const contaPrincipal = contaDestinoId
-          ? d.accounts.find(a => a.id === contaDestinoId)
-          : d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-            d.accounts.find(a => a.isMain && a.type !== 'credit') ||
-            d.accounts.find(a => a.type === 'checking')
-
-        if (!contaPrincipal) return d
-
-        let accounts = [...d.accounts]
-        let subcontaId = d.accounts.find(a => a.name === subcontaName)?.id
-
-        if (!subcontaId) {
-          subcontaId = 'acc_ger_' + Date.now()
-          accounts = [...accounts, {
-            id: subcontaId,
-            name: subcontaName,
-            type: 'checking',
-            balance: immediate ? lancamento.amount : 0,
-            bank: contaPrincipal.bank || '',
-            apelido: `G${apelido}`.slice(0, 8),
-            fluxoCaixaPrincipal: false,
-            isMain: false,
-            contaCorrentePrincipal: false,
-            grupoGerencial: grupoId,
-            accountGroupId: contaPrincipal.accountGroupId || null,
-          }]
-        } else if (immediate) {
-          accounts = accounts.map(a =>
-            a.id === subcontaId
-              ? {
-                  ...a,
-                  balance: rb((a.balance || 0) + lancamento.amount),
-                  accountGroupId: contaPrincipal.accountGroupId || a.accountGroupId || null,
-                  bank: a.bank || contaPrincipal.bank || '',
-                }
-              : a
-          )
-        }
-
-        // ETAPA A: transferência imediata Conta Principal → Ger. subconta (só na parcela corrente)
-        let newTxs = []
-        if (immediate) {
-          accounts = accounts.map(a =>
-            a.id === contaPrincipal.id ? { ...a, balance: rb((a.balance || 0) - lancamento.amount) } : a
-          )
-          newTxs = [{
-            id: etapaATxId,
-            type: 'transfer',
-            accountId: contaPrincipal.id,
-            toAccountId: subcontaId,
-            amount: lancamento.amount,
-            date: etapaADate,
-            description: txDescription ? `Reserva Gerencial - ${txDescription}` : `Provisão ${subcontaName}`,
-            grupoGerencial: grupoId,
-            createdAt: new Date().toISOString(),
-          }]
-        }
-
-        return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
-      })
-      return { needsResgate: false, faturaRef, etapaATxId }
+      return { needsResgate: false, faturaRef, etapaATxId: null }
     }
 
     // Grupos numerados (2,3,…) e Grupo D: sem transferência imediata. Os agendamentos
     // (resgate de reserva e pagamento da fatura) são gerados por recalcularAgendamentosFatura.
     return { needsResgate: false }
-  }, [data.gerencialGroups, data.accounts, data.settings, update])
+  }, [data.gerencialGroups, data.accounts])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
   // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na
