@@ -1272,18 +1272,7 @@ export function AppProvider({ children }) {
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo?.number === 1) {
-          let etapaATx = d.transactions.find(t => t.id === etapaAId(id))
-          if (!etapaATx) {
-            // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso
-            // por descrição+valor (removível no PR de limpeza junto da adoção do reconcile).
-            const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
-            etapaATx = d.transactions.find(t =>
-              t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
-              !String(t.id).startsWith('tx_gerA_') &&
-              (t.description || '') === _d &&
-              Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
-            )
-          }
+          const etapaATx = d.transactions.find(t => t.id === etapaAId(id))
           if (etapaATx) {
             reverseBalance(etapaATx)
             transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -1392,18 +1381,7 @@ export function AppProvider({ children }) {
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo?.number === 1) {
-          let etapaATx = d.transactions.find(t => t.id === etapaAId(id))
-          if (!etapaATx) {
-            // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso
-            // por descrição+valor (removível no PR de limpeza junto da adoção do reconcile).
-            const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
-            etapaATx = d.transactions.find(t =>
-              t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
-              !String(t.id).startsWith('tx_gerA_') &&
-              (t.description || '') === _d &&
-              Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
-            )
-          }
+          const etapaATx = d.transactions.find(t => t.id === etapaAId(id))
           if (etapaATx) {
             reverseBalance(etapaATx)
             transactions = transactions.filter(t => t.id !== etapaATx.id)
@@ -1440,17 +1418,7 @@ export function AppProvider({ children }) {
     update(d => {
       const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
       if (grupo?.number !== 1) return d // só o Grupo G tem transferência imediata
-      let etapaATx = d.transactions.find(t => t.id === etapaAId(tx.id))
-      if (!etapaATx) {
-        // Transição (pré-migração D3): etapa A legada de id aleatório — match preciso.
-        const _d = `Reserva Gerencial - ${tx.description || ''}`.trim()
-        etapaATx = d.transactions.find(t =>
-          t.type === 'transfer' && t.grupoGerencial === tx.grupoGerencial &&
-          !String(t.id).startsWith('tx_gerA_') &&
-          (t.description || '') === _d &&
-          Math.round((Number(t.amount) || 0) * 100) === Math.round((tx.amount || 0) * 100)
-        )
-      }
+      const etapaATx = d.transactions.find(t => t.id === etapaAId(tx.id))
       if (!etapaATx) return d
       const accounts = d.accounts.map(a => {
         if (a.id === etapaATx.accountId) return { ...a, balance: rb(a.balance + etapaATx.amount) }
@@ -2984,9 +2952,8 @@ export function AppProvider({ children }) {
       //    Grupo G, agora DERIVADA das despesas G da fatura e com id determinístico
       //    (tx_gerA_<expenseId>). Só materializa para a fatura do CICLO ATUAL (D2): passado
       //    fica intocado; futuro fica só com o agendamento projetado (gerencial_devolucao).
-      //    Reconcilia create/update + ADOÇÃO transitória de etapa A legada de id aleatório
-      //    (Q1a), por correspondência precisa (descrição+valor+contas) — renomeia o id sem
-      //    mover dinheiro. Remoção de órfãos é feita por id em delete/edição/reversão.
+      //    Reconcilia create/update por id determinístico. Remoção de órfãos é feita por id
+      //    em delete/edição/reversão.
       let transactions = d.transactions
       if (faturaCicloAtual && subcontaId) {
         const gExpenses = expenses.filter(tx => {
@@ -3002,17 +2969,7 @@ export function AppProvider({ children }) {
             const instNum = Number(e.installmentNum) || 1
             const aDate = (instNum >= 2 && faturaRef) ? prevMonthScheduleDate(faturaRef, financialStartDay) : e.date
             const desc = `Reserva Gerencial - ${e.description || ''}`.trim()
-            let idx = arr.findIndex(t => t.id === id)
-            // Adoção transitória do legado (id aleatório) por correspondência precisa.
-            if (idx === -1) {
-              idx = arr.findIndex(t =>
-                t.type === 'transfer' && t.grupoGerencial === e.grupoGerencial &&
-                t.toAccountId === subcontaId && t.accountId === contaPrincipal.id &&
-                !String(t.id).startsWith('tx_gerA_') &&
-                (t.description || '') === desc &&
-                Math.round((Number(t.amount) || 0) * 100) === Math.round(amount * 100)
-              )
-            }
+            const idx = arr.findIndex(t => t.id === id)
             if (idx === -1) {
               // CREATE: debita principal, credita subconta.
               arr.push({
@@ -3024,11 +2981,11 @@ export function AppProvider({ children }) {
               subcontaDelta += amount
               changed = true
             } else {
-              // UPDATE/ADOÇÃO só quando algo difere (idempotente: re-run = no-op). Saldo
-              // ajusta pelo delta do valor; rename de id é neutro.
+              // UPDATE só quando algo difere (idempotente: re-run = no-op). Saldo ajusta
+              // pelo delta do valor.
               const cur = arr[idx]
               const curAmt = Number(cur.amount) || 0
-              const diff = cur.id !== id || curAmt !== amount || cur.date !== aDate ||
+              const diff = curAmt !== amount || cur.date !== aDate ||
                 cur.description !== desc || cur.accountId !== contaPrincipal.id ||
                 cur.toAccountId !== subcontaId || cur.grupoGerencial !== e.grupoGerencial
               if (diff) {
