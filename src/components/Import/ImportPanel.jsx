@@ -1463,8 +1463,31 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setConcError('')
   }
 
+  // Base normalizada de um parcelado (para casar parcelas da mesma série).
+  const concRootOf = (desc) => {
+    const di = detectInstallment(desc || '')
+    return (di ? di.base : (desc || '')).toLowerCase().trim()
+  }
   const setItauField = (id, changes) =>
-    setConcSoItau(prev => prev.map(i => i._id === id ? { ...i, ...changes } : i))
+    setConcSoItau(prev => {
+      const next = prev.map(i => i._id === id ? { ...i, ...changes } : i)
+      // Ao escolher Função de Reserva numa parcela, propaga para as demais parcelas da MESMA
+      // série (mesma base, mesmo grupo) que ainda não têm função definida.
+      if ('_reservaFuncaoId' in changes && changes._reservaFuncaoId) {
+        const alvo = next.find(i => i._id === id)
+        if (alvo && detectInstallment(alvo.description)) {
+          const root = concRootOf(alvo.description)
+          return next.map(i =>
+            i._id !== id && !i._reservaFuncaoId &&
+            i.grupoGerencial === alvo.grupoGerencial &&
+            detectInstallment(i.description) && concRootOf(i.description) === root
+              ? { ...i, _reservaFuncaoId: changes._reservaFuncaoId }
+              : i
+          )
+        }
+      }
+      return next
+    })
   const setSistemaAcao = (id, acao) =>
     setConcSoSistema(prev => prev.map(i => i.id === id ? { ...i, acao } : i))
 
@@ -1490,6 +1513,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       dateCartao: item._dateCartao || item.date || null,
       categoryId: item.categoryId, payee: item.payee,
       grupoGerencial: isExpense ? (item.grupoGerencial || defaultGrupoD) : null,
+      reservaFuncaoId: isExpense ? (item._reservaFuncaoId || null) : null,
       faturaMonthYear: faturaMonthYear || null,
       _fromImport: true,
     })
@@ -1510,10 +1534,28 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
     excluir.forEach(i => deleteTransaction(i.id))
 
+    // Função de reserva por conta-origem (desempate pelo lançamento de maior valor) — mesmo
+    // mecanismo da importação normal: o resgate da fatura adota a função escolhida no recalc.
+    const byOrigem = new Map() // contaOrigem → { funcId, amount }
+    for (const i of importar) {
+      if ((i.type || 'expense') !== 'expense' || !i.grupoGerencial || !i._reservaFuncaoId) continue
+      const grupo = gerencialGroups.find(g => g.id === i.grupoGerencial)
+      if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) continue
+      const origem = grupo.defaultAccountId
+      const func = (reserveFunctions || []).find(f => f.id === i._reservaFuncaoId)
+      if (!func || func.accountId !== origem) continue
+      const amt = Number(i.amount) || 0
+      const prev = byOrigem.get(origem)
+      if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: i._reservaFuncaoId, amount: amt })
+    }
+    const reservaFuncaoByAccount = byOrigem.size
+      ? Object.fromEntries([...byOrigem].map(([origem, v]) => [origem, v.funcId]))
+      : undefined
+
     // Recalcula os agendamentos acumulativos da fatura conciliada (resgate/devolução/pagamento).
     if (faturaMonthYear) {
       const [y, m] = faturaMonthYear.split('-')
-      recalcularAgendamentosFatura(selectedAccount, y, m)
+      recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
     }
 
     // Registra os importados no histórico (permite estornar como uma importação normal).
@@ -1633,10 +1675,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <select
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={item.grupoGerencial}
-                          onChange={e => setItauField(item._id, { grupoGerencial: e.target.value })}
+                          onChange={e => setItauField(item._id, { grupoGerencial: e.target.value, _reservaFuncaoId: null })}
                         >
                           {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
                         </select>
+                        {(() => {
+                          // Grupo numerado com mais de uma função de reserva na conta-origem:
+                          // escolhe de qual função vem o resgate (gravado no agendamento via recalc).
+                          const funcs = reserveFuncsForGroup(item.grupoGerencial)
+                          if (funcs.length <= 1) return null
+                          return (
+                            <select
+                              className="mt-1 block bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                              value={item._reservaFuncaoId || ''}
+                              onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
+                              title="Função de reserva do resgate"
+                            >
+                              <option value="">— Selecionar —</option>
+                              {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                          )
+                        })()}
                       </td>
                       <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
                         {fmt(item.amount)}
