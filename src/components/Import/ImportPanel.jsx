@@ -139,6 +139,45 @@ function computeDupLevel(row, candidates) {
   return null
 }
 
+// Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (valor
+// ±0,50 + descrição), 1:1 guloso. Níveis: certeza (idêntica), provável (≥0,70), possível
+// (≥0,50). Pré-marca a ação em certeza/provável (Itaú→Ignorar, sistema→Manter); possível só
+// recebe badge. Reusa descSimilarity/normText. Devolve cópias anotadas com _crossLevel.
+function crossMatchConciliacao(soItau, soSistema) {
+  const itauOut = soItau.map(i => ({ ...i }))
+  const sysOut = soSistema.map(s => ({ ...s }))
+  const used = new Set()
+  for (const it of itauOut) {
+    let best = null, bestRank = 0, bestSim = -1
+    for (const s of sysOut) {
+      if (used.has(s.id)) continue
+      if (Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) > 0.50) continue
+      const sim = descSimilarity(it.description, s.description)
+      const rank = normText(it.description) === normText(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0
+      if (rank === 0) continue
+      if (rank > bestRank || (rank === bestRank && sim > bestSim)) { best = s; bestRank = rank; bestSim = sim }
+    }
+    if (!best) continue
+    used.add(best.id)
+    const level = bestRank === 3 ? 'certeza' : bestRank === 2 ? 'provavel' : 'possivel'
+    it._crossLevel = level; best._crossLevel = level
+    if (level !== 'possivel') { it.acao = 'ignorar'; best.acao = 'manter' }
+  }
+  return { soItau: itauOut, soSistema: sysOut }
+}
+
+// Badge do nível de cruzamento (reconciliação).
+function CrossBadge({ level }) {
+  const map = {
+    certeza:  { cls: 'bg-red-500/20 text-red-400',       label: '🔴 Já no sistema' },
+    provavel: { cls: 'bg-orange-500/20 text-orange-400', label: '🟠 Provável duplicata' },
+    possivel: { cls: 'bg-yellow-500/20 text-yellow-500', label: '🟡 Possível duplicata' },
+  }
+  const m = map[level]
+  if (!m) return null
+  return <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${m.cls}`}>{m.label}</span>
+}
+
 function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false }) {
   const ref = useRef()
   return (
@@ -1609,9 +1648,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         .filter(t => !usedSys.has(t.id))
         .map(t => ({ ...t, acao: 'manter' }))
 
+      // Conciliação inteligente cruzada: pré-marca duplicatas entre os dois leftovers.
+      const cross = crossMatchConciliacao(soItau, soSistema)
+
       setConcMatched(matched)
-      setConcSoItau(soItau)
-      setConcSoSistema(soSistema)
+      setConcSoItau(cross.soItau)
+      setConcSoSistema(cross.soSistema)
       setConciliarMode(true)
       setRows([])
       setResult(null)
@@ -1897,12 +1939,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
-                          <div className="flex">
+                          <div className="flex items-center gap-1.5">
                             <InstallmentControl
                               installment={item._installment}
                               description={item.description}
                               onChange={inst => setItauField(item._id, { _installment: inst })}
                             />
+                            <CrossBadge level={item._crossLevel} />
                           </div>
                         </div>
                       </td>
@@ -1995,7 +2038,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao === 'excluir' ? 'opacity-40 bg-orange-500/5' : ''}`}
                     >
                       <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
-                      <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate" title={item.description}>{item.description}</td>
+                      <td className="px-3 py-2 max-w-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
+                          <CrossBadge level={item._crossLevel} />
+                        </div>
+                      </td>
                       <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
                         {fmt(item.amount)}
                       </td>
