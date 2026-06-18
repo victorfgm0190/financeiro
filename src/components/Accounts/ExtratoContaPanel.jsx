@@ -308,7 +308,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   )
 }
 
-function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selectMode }) {
+function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selectMode, onEditTx, onDeleteTx, onDeleteGroup }) {
   const [open, setOpen] = useState(false)
   const { netFlow, otherAccountId, txs } = row
   const isIn = netFlow > 0
@@ -355,8 +355,19 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
           {fmt(balance)}
         </td>
-        <td className="px-3 py-2.5 text-center">
-          {open ? <ChevronUp size={12} className="text-indigo-400" /> : <ChevronDown size={12} className="text-indigo-400" />}
+        <td className="px-2 py-2.5">
+          <div className="flex items-center justify-center gap-0.5">
+            {onDeleteGroup && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteGroup(row) }}
+                title="Excluir grupo netizado (todas as transferências)"
+                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+            {open ? <ChevronUp size={12} className="text-indigo-400" /> : <ChevronDown size={12} className="text-indigo-400" />}
+          </div>
         </td>
         <td className="px-1 py-2.5 text-center">
           <ReconcileBtn
@@ -390,7 +401,30 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
             <td className="px-3 py-1.5 text-right text-xs text-orange-600/70 whitespace-nowrap">
               {!isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
-            <td colSpan={3} />
+            <td className="px-3 py-1.5" />
+            <td className="px-2 py-1.5">
+              <div className="flex items-center justify-center gap-0.5">
+                {onEditTx && (
+                  <button
+                    onClick={() => onEditTx(tx)}
+                    title="Editar transferência"
+                    className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                )}
+                {onDeleteTx && (
+                  <button
+                    onClick={() => onDeleteTx(tx)}
+                    title="Excluir transferência"
+                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            </td>
+            <td className="px-1 py-1.5" />
           </tr>
         )
       })}
@@ -429,6 +463,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // row netizado a excluir inteiro
   const [toast, setToast] = useState(null)
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
@@ -446,6 +481,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     if (onDelete) onDelete(tx.id)
     else deleteTransaction(tx.id)
     setConfirmDelete(null)
+  }
+
+  // Exclui todas as transferências de um grupo netizado (mesmo fluxo de deleteTransaction,
+  // que reverte saldo e cascata: reservaAuto, gerenciais, etc.). O netizado é só visual, então
+  // a lista re-agrupa sozinha no próximo render.
+  const handleDeleteGroup = (row) => {
+    for (const tx of (row?.txs || [])) {
+      if (onDelete) onDelete(tx.id)
+      else deleteTransaction(tx.id)
+    }
+    setConfirmDeleteGroup(null)
+    showToast('Grupo netizado excluído.')
   }
 
   const handleDuplicate = (tx) => {
@@ -837,7 +884,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
               {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
-                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} />
+                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} onEditTx={onEdit} onDeleteTx={setConfirmDelete} onDeleteGroup={setConfirmDeleteGroup} />
                 ) : (
                   <SingleRow
                     key={i}
@@ -965,6 +1012,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         title="Excluir Lançamento"
         message="Excluir este lançamento permanentemente? Esta ação não pode ser desfeita."
         confirmLabel="Excluir"
+        danger
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteGroup}
+        onClose={() => setConfirmDeleteGroup(null)}
+        onConfirm={() => handleDeleteGroup(confirmDeleteGroup)}
+        title="Excluir grupo netizado"
+        message={`Excluir as ${confirmDeleteGroup?.txs?.length || 0} transferências deste grupo permanentemente? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir grupo"
         danger
       />
 
