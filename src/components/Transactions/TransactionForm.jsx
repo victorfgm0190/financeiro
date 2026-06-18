@@ -1347,7 +1347,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
           <GerencialSelect
             value={form.grupoGerencial}
-            onChange={v => set('grupoGerencial', v)}
+            onChange={v => setForm(f => ({ ...f, grupoGerencial: v, reservaFuncaoId: '' }))}
             grupos={gerencialGroups}
           />
 

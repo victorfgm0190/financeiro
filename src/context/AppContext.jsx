@@ -20,6 +20,21 @@ const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
 // derivado da despesa que a originou. Fonte única (reconcile, delete, reverse, revert).
 const etapaAId = (expenseId) => `tx_gerA_${expenseId}`
 
+// Um grupo gerencial só comporta função de reserva se for NUMERADO (number numérico ≠ 1),
+// com conta-origem (defaultAccountId) que tenha pelo menos uma função vinculada. Espelha
+// reserveFuncsForGroup do ImportPanel. Grupo G (number 1) e D nunca têm função.
+const grupoTemFuncoes = (grupoId, gerencialGroups, reserveFunctions) => {
+  const g = gerencialGroups?.find(x => x.id === grupoId)
+  if (!g || typeof g.number !== 'number' || g.number === 1 || !g.defaultAccountId) return false
+  return (reserveFunctions || []).some(f => f.accountId === g.defaultAccountId)
+}
+// Guarda de integridade: zera reserva_funcao_id quando o grupo do lançamento não comporta
+// função de reserva (evita função órfã grudada, ex.: despesa do Grupo G com função de outro grupo).
+const sanitizeReservaFuncao = (tx, gerencialGroups, reserveFunctions) =>
+  (tx?.reservaFuncaoId && !grupoTemFuncoes(tx.grupoGerencial, gerencialGroups, reserveFunctions))
+    ? { ...tx, reservaFuncaoId: null }
+    : tx
+
 // Prev vazio para forçar full-sync ao reconectar
 const EMPTY_PREV = {
   accounts: [], transactions: [], schedules: [], categories: [],
@@ -933,7 +948,11 @@ export function AppProvider({ children }) {
     // não disparar o recálculo por lançamento aqui para não quebrar esse vínculo.
     const { _fromImport, ...txClean } = tx
     const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
-    const newTx = { ...txClean, id, amount: Number(txClean.amount), createdAt: new Date().toISOString() }
+    // Guarda: não grava função de reserva quando o grupo do lançamento não comporta função.
+    const newTx = sanitizeReservaFuncao(
+      { ...txClean, id, amount: Number(txClean.amount), createdAt: new Date().toISOString() },
+      dataRef.current.gerencialGroups, dataRef.current.reserveFunctions,
+    )
     update(d => {
       let accounts = [...d.accounts]
       if (tx.type === 'income') {
@@ -1165,7 +1184,7 @@ export function AppProvider({ children }) {
         recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
       }
     }
-    update(d => ({ ...d, transactions: d.transactions.map(t => t.id === id ? { ...t, ...changes } : t) }))
+    update(d => ({ ...d, transactions: d.transactions.map(t => t.id === id ? sanitizeReservaFuncao({ ...t, ...changes }, d.gerencialGroups, d.reserveFunctions) : t) }))
     if (recalcArgs) {
       recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
       if (recalcArgs.faturaChanged) {
