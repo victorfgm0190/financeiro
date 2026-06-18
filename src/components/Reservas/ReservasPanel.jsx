@@ -759,21 +759,19 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
       )}
 
       {origem && (
-        <OrigemModal origem={origem} accounts={accounts} onClose={() => setOrigem(null)} />
+        <OrigemModal origem={origem} onClose={() => setOrigem(null)} />
       )}
     </div>
   )
 }
 
-// Modal "Origem": lança que compõem o valor AUTO (Entradas ou Saídas) de uma função.
-function OrigemModal({ origem, accounts, onClose }) {
+// Modal "Origem": lançamentos que compõem o valor AUTO (Entradas ou Saídas) de uma função.
+function OrigemModal({ origem, onClose }) {
   const { fn, tipo, loading, error, items } = origem
-  const reservaSet = useMemo(() => new Set((accounts || []).filter(a => a.isReserva).map(a => a.id)), [accounts])
-  // Direção de cada lançamento (mesma regra do cálculo AUTO): receita / transfer→reserva = entrada;
-  // despesa / transfer-de-reserva = saída.
-  const isEntrada = (t) => t.type === 'income' || (t.type === 'transfer' && reservaSet.has(t.to_account_id))
-  const isSaida = (t) => t.type === 'expense' || (t.type === 'transfer' && reservaSet.has(t.account_id))
-  const filtered = (items || []).filter(t => (tipo === 'entradas' ? isEntrada(t) : isSaida(t)))
+  // Direção vem do endpoint (classificada pelo account_id da função): só transferências
+  // entrando/saindo da conta da reserva. Despesa de cartão é 'neutro' e não aparece aqui.
+  const alvo = tipo === 'entradas' ? 'entrada' : 'saida'
+  const filtered = (items || []).filter(t => t.direcao === alvo)
   const contaLabel = (t) => t.type === 'transfer'
     ? `${t.conta_nome || '—'} → ${t.conta_destino_nome || '—'}`
     : (t.conta_nome || '—')
@@ -1280,21 +1278,24 @@ export default function ReservasPanel() {
   // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada
   // função (reservaFuncaoId) dentro do período financeiro atual.
   //   • receita vinculada → entrada | despesa vinculada → saída
-  //   • transferência → entrada se cai numa conta de reserva (depósito);
-  //     saída se sai de uma conta de reserva (resgate) — mesma regra do Fluxo Futuro.
-  const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
+  //   • transferência → entrada se ENTRA na conta da função (depósito);
+  //     saída se SAI da conta da função (resgate). Despesa (cartão) não é movimento de reserva.
   const computedMovs = useMemo(() => {
     const m = {}
-    functions.forEach(f => { m[f.id] = { entradas: 0, saidas: 0 } })
+    const reservaAccOf = {} // functionId → conta de reserva da própria função
+    functions.forEach(f => { m[f.id] = { entradas: 0, saidas: 0 }; reservaAccOf[f.id] = f.accountId || null })
     transactions.forEach(tx => {
       const slot = tx.reservaFuncaoId && m[tx.reservaFuncaoId]
       if (!slot) return
       if (tx.date < periodStart || tx.date > periodEnd) return
-      if (tx.type === 'income') slot.entradas += tx.amount
-      else if (tx.type === 'expense') slot.saidas += tx.amount
+      // Entrada: receita NA conta da reserva, ou transferência ENTRANDO nela.
+      // Saída: transferência SAINDO da conta da reserva (resgate). Despesa de cartão é só
+      // provisão/justificativa — NÃO é movimento de reserva, não entra em entradas/saídas.
+      const reservaAccId = reservaAccOf[tx.reservaFuncaoId]
+      if (tx.type === 'income' && tx.accountId === reservaAccId) slot.entradas += tx.amount
       else if (tx.type === 'transfer') {
-        if (accById.get(tx.toAccountId)?.isReserva) slot.entradas += tx.amount
-        else if (accById.get(tx.accountId)?.isReserva) slot.saidas += tx.amount
+        if (tx.toAccountId === reservaAccId) slot.entradas += tx.amount
+        else if (tx.accountId === reservaAccId) slot.saidas += tx.amount
       }
     })
     Object.values(m).forEach(s => {
@@ -1302,7 +1303,7 @@ export default function ReservasPanel() {
       s.saidas = Math.round(s.saidas * 100) / 100
     })
     return m
-  }, [functions, transactions, periodStart, periodEnd, accById])
+  }, [functions, transactions, periodStart, periodEnd])
 
   // Funções com entradas/saídas EFETIVAS: override manual quando definido, senão o
   // valor calculado. Tudo a jusante (saldo, saldo atualizado, fluxo) usa estes valores.
