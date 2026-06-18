@@ -1226,27 +1226,30 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     accounts.find(a => a.isMain && a.type !== 'credit') ||
     accounts.find(a => a.type === 'checking')
 
-  const registerWithGerencial = (schedule, date) => {
-    registerScheduleOccurrence(schedule.id, date)
+  // occurrenceDate = ocorrência a baixar (nextDate); txDate = data dos lançamentos criados.
+  // Registrar a ocorrência em nextDate (e não em txDate) é o que faz o agendamento avançar —
+  // mesmo comportamento do pagamento individual (PayModal usa regDate = nextDate).
+  const registerWithGerencial = (schedule, occurrenceDate, txDate) => {
+    registerScheduleOccurrence(schedule.id, txDate, occurrenceDate)
     if (!schedule.grupoGerencial) return
     const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
     if (!grupo || grupo.number === 'D') return
     if (grupo.number === 1) {
       const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
       if (schedule.accountId && contaReserva) {
-        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id })
+        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id })
       }
     } else {
       const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
       if (contaResgate && contaPrincipal) {
-        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id })
+        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id })
       }
     }
   }
 
   const handleBatchRegister = (date) => {
     const count = selectedRows.length
-    selectedRows.forEach(({ schedule }) => registerWithGerencial(schedule, date))
+    selectedRows.forEach(({ schedule, nextDate }) => registerWithGerencial(schedule, nextDate || date, date))
     cancelSelection()
     setShowBatchRegister(false)
     showToastMsg(`${count} lançamento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''} com sucesso`)

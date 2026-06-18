@@ -1631,7 +1631,10 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
-  const registerScheduleOccurrence = useCallback((scheduleId, date) => {
+  // `date` = data do lançamento criado. `occurrenceDate` = data da OCORRÊNCIA do agendamento
+  // a registrar (default = date). Decouplá-las permite baixar a ocorrência correta (nextDate)
+  // mesmo lançando numa data diferente — usado pelo pagamento em lote.
+  const registerScheduleOccurrence = useCallback((scheduleId, date, occurrenceDate = date) => {
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
       const schedule = d.schedules.find(s => s.id === scheduleId)
@@ -1671,7 +1674,7 @@ export function AppProvider({ children }) {
           ...d, accounts,
           transactions: [...d.transactions, ...detTxs],
           schedules: d.schedules.map(s =>
-            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s
+            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), occurrenceDate], confirmado: false } : s
           ),
         }
       }
@@ -1747,7 +1750,7 @@ export function AppProvider({ children }) {
         ...d, accounts,
         transactions: [...d.transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])],
         schedules: d.schedules.map(s =>
-          s.id === scheduleId ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s
+          s.id === scheduleId ? { ...s, registered: [...(s.registered || []), occurrenceDate], confirmado: false } : s
         ),
       }
     })
