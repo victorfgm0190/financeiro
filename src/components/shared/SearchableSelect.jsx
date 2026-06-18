@@ -34,6 +34,8 @@ export default function SearchableSelect({
   required = false,
   ungroupedLast = false,   // quando true, itens sem grupo vão para o FINAL (ex.: categorias "Sem grupo")
   ungroupedLabel = null,   // rótulo da seção de itens sem grupo (mostrado só se houver grupos)
+  preserveGroupOrder = false, // usa a ordem dos grupos como vêm em `options` (ex.: Grupos de Contas)
+                              // em vez da ordenação por GROUP_ORDER (categorias).
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -65,7 +67,7 @@ export default function SearchableSelect({
         ungrouped.push(opt)
       }
     }
-    const sortedGroupNames = sortGroups(Object.keys(groupedMap))
+    const sortedGroupNames = preserveGroupOrder ? Object.keys(groupedMap) : sortGroups(Object.keys(groupedMap))
 
     const allItems = []
     if (!required) allItems.push({ id: '', label: placeholder })
@@ -75,7 +77,7 @@ export default function SearchableSelect({
     if (ungroupedLast) { pushGrouped(); pushUngrouped() } else { pushUngrouped(); pushGrouped() }
 
     return { allItems, ungrouped, groupedMap, sortedGroupNames }
-  }, [filtered, required, placeholder, ungroupedLast])
+  }, [filtered, required, placeholder, ungroupedLast, preserveGroupOrder])
 
   const idxMap = useMemo(() => {
     const m = {}

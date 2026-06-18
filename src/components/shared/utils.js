@@ -121,6 +121,21 @@ export function groupedAccountOptions(accounts, accountGroups) {
   return result
 }
 
+// Opções de conta para SearchableSelect, AGRUPADAS e ORDENADAS pela ordem dos Grupos de
+// Contas (igual à tela de Contas). Retorna [{ id, label, group }], group = nome do grupo
+// (ou null p/ sem grupo). Use com SearchableSelect preserveGroupOrder + ungroupedLast, já
+// que a ordem é a configurada (não alfabética). Filtra inativas e (no mobile) ocultas.
+export function buildAccountSelectOptions(accounts, accountGroups, { excludeId = null, isMobile = false, labelFn } = {}) {
+  const pool = (accounts || []).filter(a =>
+    a.active !== false && (!isMobile || !a.hideOnMobile) && (!excludeId || a.id !== excludeId))
+  const label = labelFn || (a => a.name)
+  const opts = []
+  for (const { group, accounts: accs } of groupedAccountOptions(pool, accountGroups)) {
+    for (const a of accs) opts.push({ id: a.id, label: label(a), group: group ? group.name : null })
+  }
+  return opts
+}
+
 // ── Cartão de crédito: fatura e status de pagamento ──────────────────────────
 // Convenção da fatura (igual a getBillKey do CreditCard/TransactionsPanel): dia do
 // lançamento <= closingDay → fatura do mês corrente; senão, fatura do mês seguinte.

@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, groupedAccountOptions, accountPriority } from '../shared/utils'
+import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -174,14 +174,6 @@ function buildCatOpts(categories, type) {
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
 }
 
-function buildAccOpts(accounts, _accountGroups, excludeId, isMobile) {
-  // Contas inativas (e, no mobile, as marcadas como "Ocultar no Mobile") não aparecem nos selects.
-  const pool = accounts.filter(a => a.active !== false && (!isMobile || !a.hideOnMobile) && (!excludeId || a.id !== excludeId))
-  return [...pool]
-    .sort((a, b) => accountPriority(a) - accountPriority(b))
-    .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null })
-  )
-}
 
 export default function ScheduleForm({ initial, onClose }) {
   const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
@@ -260,8 +252,8 @@ export default function ScheduleForm({ initial, onClose }) {
 
   // Options for SearchableSelect fields
   const isMobile = useIsMobile()
-  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, null, isMobile), [accounts, accountGroups, isMobile])
-  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId, isMobile), [accounts, accountGroups, form.accountId, isMobile])
+  const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
+  const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
   const categoryOpts = useMemo(() => buildCatOpts(categories, form.transactionType === 'transfer' ? null : form.transactionType), [categories, form.transactionType])
   const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
 
@@ -380,6 +372,8 @@ export default function ScheduleForm({ initial, onClose }) {
             value={form.accountId}
             onChange={id => set('accountId', id)}
             placeholder="Selecione a conta..."
+            preserveGroupOrder
+            ungroupedLast
             required
           />
         </div>
@@ -408,6 +402,8 @@ export default function ScheduleForm({ initial, onClose }) {
               value={form.toAccountId}
               onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '' }))}
               placeholder="Selecione a conta destino..."
+              preserveGroupOrder
+              ungroupedLast
               required
             />
           </div>

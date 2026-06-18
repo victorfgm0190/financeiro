@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, fmtDate, accountPriority } from '../shared/utils'
+import { today, fmt, fmtDate, buildAccountSelectOptions } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment } from '../../lib/installments'
@@ -72,14 +72,6 @@ function buildCatOpts(categories, type) {
   return categories
     .filter(c => !type || c.type === type || c.type === 'both')
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
-}
-
-function buildAccOpts(accounts, _accountGroups, excludeId, isMobile) {
-  // Contas inativas (e, no mobile, as marcadas como "Ocultar no Mobile") não aparecem nos selects.
-  const pool = accounts.filter(a => a.active !== false && (!isMobile || !a.hideOnMobile) && (!excludeId || a.id !== excludeId))
-  return [...pool]
-    .sort((a, b) => accountPriority(a) - accountPriority(b))
-    .map(a => ({ id: a.id, label: a.name, group: accountPriority(a) === 2 ? 'Outras contas' : null }))
 }
 
 export default function TransactionForm({ initial, onClose, onToast }) {
@@ -243,8 +235,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     accounts.find(a => a.type === 'checking')
 
   // Options for SearchableSelect fields
-  const accountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, null, isMobile), [accounts, accountGroups, isMobile])
-  const destAccountOpts = useMemo(() => buildAccOpts(accounts, accountGroups, form.accountId, isMobile), [accounts, accountGroups, form.accountId, isMobile])
+  const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
+  const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
   const categoryOpts = useMemo(() => buildCatOpts(categories, form.type === 'transfer' ? null : form.type), [categories, form.type])
   const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
 
@@ -919,6 +911,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             value={form.accountId}
             onChange={id => setForm(f => ({ ...f, accountId: id, ...(f.type === 'transfer' ? { reservaFuncaoId: '' } : {}) }))}
             placeholder="Selecione a conta..."
+            preserveGroupOrder
+            ungroupedLast
             required
           />
         </div>
@@ -930,6 +924,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               value={form.toAccountId}
               onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '' }))}
               placeholder="Selecione o destino..."
+              preserveGroupOrder
+              ungroupedLast
               required
             />
           </div>

@@ -208,7 +208,7 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups } = useApp()
   // Detalhamento por função do resgate (Etapa B). Quando presente, a transferência é
   // registrada por função (registerScheduleOccurrence) e o valor total não é editável.
   const reservaDetalhe = useMemo(() => {
@@ -360,7 +360,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               <div>
                 <label className="label">Banco de</label>
                 <select className="input" value={payAccountId} onChange={e => setPayAccountId(e.target.value)}>
-                  <AccountOptions accounts={accounts} />
+                  <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
               <div>
@@ -398,7 +398,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               <div>
                 <label className="label">Banco para</label>
                 <select className="input" value={recAccountId} onChange={e => setRecAccountId(e.target.value)}>
-                  <AccountOptions accounts={accounts} />
+                  <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
               <div>
@@ -447,13 +447,13 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               <div>
                 <label className="label">Banco de</label>
                 <select className="input" value={trfFromId} onChange={e => setTrfFromId(e.target.value)} disabled={hasDetalhe}>
-                  <AccountOptions accounts={accounts} />
+                  <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
               <div>
                 <label className="label">Banco para</label>
                 <select className="input" value={trfToId} onChange={e => setTrfToId(e.target.value)} disabled={hasDetalhe}>
-                  <AccountOptions accounts={accounts} />
+                  <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
               <div>
