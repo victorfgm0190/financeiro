@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { fetchReserveFunctionTransactions } from '../../lib/db'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -105,7 +106,7 @@ function useReservas() {
 // ── Inline editable number cell ────────────────────────────────────────────
 // isOverride=false → valor calculado automaticamente (mostra selo "auto"); editar grava
 // um override manual. isOverride=true → valor manual; onReset volta ao cálculo automático.
-function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = false, onReset }) {
+function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = false, onReset, onAuto }) {
   const [editing, setEditing] = useState(false)
   const inputRef = useRef(null)
 
@@ -151,7 +152,9 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = f
             <RotateCcw size={10} />
           </button>
         ))
-        : <span title="Calculado automaticamente a partir dos lançamentos" className="text-[8px] uppercase tracking-wide text-gray-600 shrink-0">auto</span>
+        : (onAuto
+          ? <button onClick={onAuto} title="Ver lançamentos que compõem este valor (AUTO)" className="text-[8px] uppercase tracking-wide text-gray-500 hover:text-blue-400 shrink-0 cursor-pointer">auto</button>
+          : <span title="Calculado automaticamente a partir dos lançamentos" className="text-[8px] uppercase tracking-wide text-gray-600 shrink-0">auto</span>)
       }
     </span>
   )
@@ -399,10 +402,21 @@ function ObsIndicator({ text }) {
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, periodStart, periodEnd, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
   // Grupo (conta + funções) cujo modal de ajustes está aberto.
   const [ajusteGroup, setAjusteGroup] = useState(null)
+  // Modal "Origem" do valor AUTO: { fn, tipo: 'entradas'|'saidas', items, loading, error }.
+  const [origem, setOrigem] = useState(null)
+  const openOrigem = async (fn, tipo) => {
+    setOrigem({ fn, tipo, loading: true, items: [] })
+    try {
+      const { transactions: items } = await fetchReserveFunctionTransactions(fn.id, periodStart, periodEnd)
+      setOrigem({ fn, tipo, loading: false, items: items || [] })
+    } catch {
+      setOrigem({ fn, tipo, loading: false, error: true, items: [] })
+    }
+  }
   // Cor do valor de ajuste: azul (+), laranja (−), cinza (0).
   const ajusteColor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-600'
   const groups = useMemo(() => {
@@ -561,11 +575,11 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                     <div className="flex items-center gap-4 text-xs">
                       <div className="flex items-center gap-1.5 flex-1">
                         <span className="text-gray-500">Entradas:</span>
-                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} textClass="text-blue-600" />
+                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
                       </div>
                       <div className="flex items-center gap-1.5 flex-1">
                         <span className="text-gray-500">Saídas:</span>
-                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
+                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
                       </div>
                       <div className="flex items-center gap-1.5 flex-1">
                         <span className="text-gray-500">Ajuste:</span>
@@ -619,6 +633,10 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                         </span>
                       )}
                     </div>
+                    {/* Período considerado no cálculo AUTO de Entradas/Saídas. */}
+                    <span className="w-full text-xs text-gray-500">
+                      Período: <span className="text-gray-400">{fmtDate(periodStart)} – {fmtDate(periodEnd)}</span>
+                    </span>
                   </>
                 ) : (
                   <span className="text-sm font-semibold text-gray-500 italic">Sem conta vinculada</span>
@@ -660,10 +678,10 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} textClass="text-blue-600" />
+                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} textClass="text-orange-600" />
+                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
                           </td>
                           <td className="px-4 py-2 text-right">
                             <span className="inline-flex items-center justify-end gap-1">
@@ -739,7 +757,63 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
           onClose={() => setAjusteGroup(null)}
         />
       )}
+
+      {origem && (
+        <OrigemModal origem={origem} accounts={accounts} onClose={() => setOrigem(null)} />
+      )}
     </div>
+  )
+}
+
+// Modal "Origem": lança que compõem o valor AUTO (Entradas ou Saídas) de uma função.
+function OrigemModal({ origem, accounts, onClose }) {
+  const { fn, tipo, loading, error, items } = origem
+  const reservaSet = useMemo(() => new Set((accounts || []).filter(a => a.isReserva).map(a => a.id)), [accounts])
+  // Direção de cada lançamento (mesma regra do cálculo AUTO): receita / transfer→reserva = entrada;
+  // despesa / transfer-de-reserva = saída.
+  const isEntrada = (t) => t.type === 'income' || (t.type === 'transfer' && reservaSet.has(t.to_account_id))
+  const isSaida = (t) => t.type === 'expense' || (t.type === 'transfer' && reservaSet.has(t.account_id))
+  const filtered = (items || []).filter(t => (tipo === 'entradas' ? isEntrada(t) : isSaida(t)))
+  const contaLabel = (t) => t.type === 'transfer'
+    ? `${t.conta_nome || '—'} → ${t.conta_destino_nome || '—'}`
+    : (t.conta_nome || '—')
+
+  return (
+    <Modal open onClose={onClose} title={`Origem: ${fn?.name || ''}`} size="lg">
+      <div className="space-y-3">
+        <p className="text-xs text-gray-500">{tipo === 'entradas' ? 'Entradas (+)' : 'Saídas (−)'} do período</p>
+        {loading ? (
+          <p className="text-sm text-gray-500 py-6 text-center">Carregando…</p>
+        ) : error ? (
+          <p className="text-sm text-orange-500 py-6 text-center">Erro ao buscar os lançamentos.</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-gray-500 py-6 text-center">Nenhum lançamento encontrado</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-800 text-left">
+                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
+                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Descrição</th>
+                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Conta</th>
+                  <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(t => (
+                  <tr key={t.id} className="border-b border-gray-800/40">
+                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(t.date)}</td>
+                    <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={t.description}>{t.description || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-400 truncate">{contaLabel(t)}</td>
+                    <td className={`px-3 py-2 text-xs text-right whitespace-nowrap font-medium ${tipo === 'entradas' ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(t.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -1195,8 +1269,13 @@ export default function ReservasPanel() {
   const period = getFinancialPeriod()
   const periodStart = period.start.toISOString().split('T')[0]
   const periodEnd = period.end.toISOString().split('T')[0]
-  // Mês de referência do ajuste (mês do fim do ciclo financeiro atual), formato YYYY-MM.
-  const currentMonthKey = `${period.end.getFullYear()}-${String(period.end.getMonth() + 1).padStart(2, '0')}`
+  // Mês de referência do ajuste = mês-CALENDÁRIO atual (YYYY-MM). É o que o usuário entende
+  // por "o mês corrente" e o que o modal de Ajustes rotula (opções por mês-calendário). Antes
+  // usava o mês do FIM do ciclo financeiro, que para financialMonthStartDay > 1 cai no mês
+  // seguinte — fazendo a tabela ler um mês diferente do que foi salvo (Ajuste sempre 0,00).
+  // Para startDay = 1, o fim do ciclo já é o mês-calendário, então não há mudança.
+  const _now = new Date()
+  const currentMonthKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`
 
   // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada
   // função (reservaFuncaoId) dentro do período financeiro atual.
@@ -1314,6 +1393,8 @@ export default function ReservasPanel() {
           saldosAtualizados={saldosAtualizados}
           computeSaldo={computeSaldo}
           currentMonthKey={currentMonthKey}
+          periodStart={periodStart}
+          periodEnd={periodEnd}
           onAdd={() => { setEditFn(null); setShowForm(true) }}
           onEdit={f => { setEditFn(f); setShowForm(true) }}
           onDelete={f => setConfirmDelete(f)}

@@ -39,6 +39,12 @@ export async function fetchTransactionHistory(description, limit = 5) {
   return apiPost('/api/transaction-history', { description, limit })
 }
 
+// Lançamentos vinculados a uma função de reserva no período (origem do valor AUTO de
+// Entradas/Saídas no Resumo). Retorna { transactions: [...] } com nomes das contas.
+export async function fetchReserveFunctionTransactions(functionId, startDate, endDate) {
+  return apiPost('/api/reserve-function-transactions', { functionId, startDate, endDate })
+}
+
 // Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
 export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId } = {}) {
   return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
