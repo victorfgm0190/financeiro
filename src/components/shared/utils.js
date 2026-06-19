@@ -82,10 +82,32 @@ export function isAplicacaoAporte(tx, aplicSet) {
   return tx.type === 'transfer' && !!tx.categoryId && aplicSet.has(tx.toAccountId)
 }
 
-// Conta como despesa nos relatórios: despesas normais + aportes categorizados.
-export function countsAsReportExpense(tx, aplicSet) {
+// Depósito numa conta de reserva (transferência cuja conta-DESTINO é de reserva) vinculado
+// a uma função marcada como "exibir como despesa" (exibirComoDespesa). Estas devem contar
+// como despesa nos relatórios/dashboard. O resgate (saída da reserva, destino = principal)
+// NÃO casa aqui mesmo tendo reservaFuncaoId — só o depósito (entrada) conta.
+//   reservaDespesaFuncSet: Set de reservaFuncaoId cujas funções têm exibirComoDespesa=true
+//   reservaSet: Set de ids de contas isReserva
+export function isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet) {
+  return tx.type === 'transfer'
+    && !!tx.reservaFuncaoId
+    && !!reservaDespesaFuncSet?.has(tx.reservaFuncaoId)
+    && !!reservaSet?.has(tx.toAccountId)
+}
+
+// Conjunto de reservaFuncaoId cujas funções estão marcadas como "exibir como despesa".
+export function reservaDespesaFuncIds(reserveFunctions) {
+  return new Set((reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.id))
+}
+
+// Conta como despesa nos relatórios: despesas normais + aportes categorizados + depósitos
+// em reserva de funções marcadas como "exibir como despesa" (args opcionais; quando ausentes,
+// mantém o comportamento anterior — só expense + aporte).
+export function countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) {
   if (isReportExcluded(tx)) return false
-  return tx.type === 'expense' || isAplicacaoAporte(tx, aplicSet)
+  return tx.type === 'expense'
+    || isAplicacaoAporte(tx, aplicSet)
+    || isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet)
 }
 
 // 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest

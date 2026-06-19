@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
   ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight, X,
@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, reservaDespesaFuncIds } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
@@ -57,11 +57,19 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences } = useApp()
   const accounts = profileAccounts
   const isMobile = useIsMobile()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
+
+  // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
+  const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
+  const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  const isExpenseTx = useCallback(
+    (t) => t.type === 'expense' || isReservaDepositoDespesa(t, reservaDespesaFuncSet, reservaSet),
+    [reservaDespesaFuncSet, reservaSet]
+  )
 
   const period = getFinancialPeriod()
   const periodStr = {
@@ -72,7 +80,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
   const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && tx.origin !== 'investAuto')
   const income = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const expense = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
 
   // Maps p/ rótulos no drill-down de receitas/despesas do mês.
@@ -86,7 +94,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const prevEnd = subMonths(period.end, 1).toISOString().split('T')[0]
   const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && tx.origin !== 'investAuto')
   const prevIncome = prevTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const prevExpense = prevTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  const prevExpense = prevTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   const prevBalance = prevIncome - prevExpense
 
   const mkDelta = (cur, prev) => ({
@@ -137,10 +145,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, "MMM'/'yy", { locale: ptBR })
       const inc = transactions.filter(tx => tx.type === 'income' && tx.origin !== 'investAuto' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
-      const exp = transactions.filter(tx => tx.type === 'expense' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
+      const exp = transactions.filter(tx => isExpenseTx(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       return { label, income: inc, expense: exp }
     })
-  }, [transactions])
+  }, [transactions, isExpenseTx])
 
   // Upcoming & overdue schedules (next 7 days + overdue)
   const upcomingSchedules = useMemo(() => {
@@ -168,7 +176,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   const topExpenses = useMemo(() => {
     const catTotals = {}
-    periodTxs.filter(t => t.type === 'expense' && t.categoryId).forEach(t => {
+    periodTxs.filter(t => isExpenseTx(t) && t.categoryId).forEach(t => {
       catTotals[t.categoryId] = (catTotals[t.categoryId] || 0) + t.amount
     })
     return Object.entries(catTotals)
@@ -176,7 +184,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       .filter(e => e.cat)
       .sort((a, b) => b.amt - a.amt)
       .slice(0, 5)
-  }, [periodTxs, categories])
+  }, [periodTxs, categories, isExpenseTx])
 
   // ── Saldo Projetado + Final ──────────────────────────────────────────────────
   const saldoProjetado = useMemo(() => {
@@ -305,7 +313,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     const totals = {}
     const txMap = {}
     transactions
-      .filter(tx => tx.type === 'expense' && tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId)
+      .filter(tx => isExpenseTx(tx) && tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId)
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
         ;(txMap[tx.categoryId] = txMap[tx.categoryId] || []).push(tx)
@@ -318,7 +326,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 5)
-  }, [transactions, categories, pieRange])
+  }, [transactions, categories, pieRange, isExpenseTx])
 
   return (
     <div className="space-y-4">
@@ -402,7 +410,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             title: 'Despesas do Mês',
             total: expense,
             color: 'text-orange-600',
-            txs: periodTxs.filter(t => t.type === 'expense'),
+            txs: periodTxs.filter(isExpenseTx),
           })}
         />
         <KpiCard

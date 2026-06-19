@@ -340,6 +340,8 @@ export const reserveFunctionToRow = (f) => ({
   // Ajuste manual por mês { "YYYY-MM": valor }; null quando vazio.
   ajuste_override: f.ajusteOverride && typeof f.ajusteOverride === 'object' && Object.keys(f.ajusteOverride).length > 0
     ? f.ajusteOverride : null,
+  // Flag: movimentações desta função contam como despesa nos relatórios/dashboard.
+  exibir_como_despesa: !!f.exibirComoDespesa,
 })
 
 // Normaliza ajuste_override para o formato { "YYYY-MM": { valor, observacao } }.
@@ -376,6 +378,7 @@ export const rowToReserveFunction = (r) => ({
   saidasOverride: r.saidas_override != null ? Number(r.saidas_override)
     : (Number(r.saidas) ? Number(r.saidas) : null),
   ajusteOverride: normalizeAjusteOverride(r.ajuste_override),
+  exibirComoDespesa: !!r.exibir_como_despesa,
 })
 
 export const categoryToRow = (c) => ({

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -31,11 +31,11 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
-    (countsAsReportExpense(tx, aplicSet) || countsAsReportIncome(tx)) &&
+    (countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaAccSet) || countsAsReportIncome(tx)) &&
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
@@ -71,7 +71,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
       }))
   }
 
-  const expenseTxs = inRange.filter(t => countsAsReportExpense(t, aplicSet))
+  const expenseTxs = inRange.filter(t => countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
   const incomeTxs = inRange.filter(t => t.type === 'income')
   return {
     expenses: buildSection(expenseTxs),
@@ -256,11 +256,13 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings, reserveFunctions } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  // Funções de reserva marcadas como "exibir como despesa" → seus depósitos contam como despesa.
+  const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const [hideReserva, setHideReserva] = useState(false)
   const [hidePatrimonio, setHidePatrimonio] = useState(false)
 
@@ -296,7 +298,7 @@ export default function DemonstrativoFinanceiro() {
     // Default categories: those with transactions in range on default accounts
     const activeCats = [...new Set(
       transactions
-        .filter(tx => (countsAsReportExpense(tx, aplicSet) || countsAsReportIncome(tx)) && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
+        .filter(tx => (countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) || countsAsReportIncome(tx)) && tx.date >= range.start && tx.date <= range.end && accsToUse.includes(tx.accountId) && tx.categoryId)
         .map(tx => tx.categoryId)
     )]
     const catsToUse = activeCats.length > 0 ? activeCats : categories.map(c => c.id)
@@ -325,8 +327,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 

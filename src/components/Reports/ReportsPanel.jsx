@@ -7,7 +7,7 @@ import { subMonths, format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { CreditCard, ArrowLeft, ArrowDownCircle, ArrowUpCircle, FileSpreadsheet, Users, Wallet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome } from '../shared/utils'
+import { fmt, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, reservaDespesaFuncIds } from '../shared/utils'
 import RelatorioFatura from '../CreditCard/RelatorioFatura'
 import DemonstrativoFinanceiro from './DemonstrativoFinanceiro'
 import RelatorioPorFavorecido from './RelatorioPorFavorecido'
@@ -28,8 +28,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function ReportsPanel() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, reserveFunctions } = useApp()
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
+  // Depósitos em reserva de funções "exibir como despesa" contam como despesa nos relatórios.
+  const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const [selectedMonth, setSelectedMonth] = useState(0)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
@@ -49,12 +52,12 @@ export default function ReportsPanel() {
         .filter(tx => countsAsReportIncome(tx) && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       const expense = transactions
-        .filter(tx => countsAsReportExpense(tx, aplicSet) && tx.date >= start && tx.date <= end)
+        .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       months.push({ label, start, end, income, expense, balance: income - expense })
     }
     return months
-  }, [transactions, aplicSet])
+  }, [transactions, aplicSet, reservaDespesaFuncSet, reservaSet])
 
   const currentMonthData = last6Months[5 - selectedMonth] || last6Months[last6Months.length - 1]
 
@@ -62,7 +65,7 @@ export default function ReportsPanel() {
     if (!currentMonthData) return []
     const totals = {}
     transactions
-      .filter(tx => countsAsReportExpense(tx, aplicSet) && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
+      .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
       })
@@ -73,7 +76,7 @@ export default function ReportsPanel() {
       })
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [transactions, categories, currentMonthData, aplicSet])
+  }, [transactions, categories, currentMonthData, aplicSet, reservaDespesaFuncSet, reservaSet])
 
   const totalIncome = last6Months.reduce((s, m) => s + m.income, 0) / 6
   const totalExpense = last6Months.reduce((s, m) => s + m.expense, 0) / 6

@@ -161,6 +161,27 @@ function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = f
 }
 
 // ── Function Form (modal) ───────────────────────────────────────────────────
+// Toggle inline discreto "Despesa" por função: define se as movimentações da função
+// contam como despesa nos relatórios/dashboard. Clique alterna e salva via onToggle.
+function DespesaToggle({ on, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      title={on
+        ? 'Conta como despesa no Dashboard/Relatórios — clique para ignorar'
+        : 'Ignorada nos totais de despesa — clique para contar como despesa'}
+      className={`shrink-0 text-[9px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded transition-colors ${
+        on
+          ? 'bg-orange-500/20 text-orange-500 hover:bg-orange-500/30'
+          : 'bg-gray-700/50 text-gray-500 hover:bg-gray-600/60'
+      }`}
+    >
+      Despesa
+    </button>
+  )
+}
+
 function FunctionForm({ initial, accounts, onSubmit, onClose }) {
   const isMobile = useIsMobile()
   const [form, setForm] = useState({
@@ -170,6 +191,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
     despesaAnual: initial?.despesaAnual ?? 0,
     depositoMensal: initial?.depositoMensal ?? 0,
     mesVencimento: initial?.mesVencimento ?? '',
+    exibirComoDespesa: initial?.exibirComoDespesa ?? false,
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -181,6 +203,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
       despesaAnual: Number(form.despesaAnual) || 0,
       depositoMensal: Number(form.depositoMensal) || 0,
       mesVencimento: form.mesVencimento !== '' ? Number(form.mesVencimento) : null,
+      exibirComoDespesa: !!form.exibirComoDespesa,
     }) }} className="space-y-4">
       <div>
         <label className="label">Nome da Função *</label>
@@ -214,6 +237,21 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
         <p className="text-xs text-gray-600 mt-1">Quando não definido, a despesa anual é dividida em 12 parcelas mensais</p>
+      </div>
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="accent-[#0F6E56]"
+            checked={!!form.exibirComoDespesa}
+            onChange={e => set('exibirComoDespesa', e.target.checked)}
+          />
+          <span className="text-sm text-gray-200">Contar como despesa</span>
+        </label>
+        <p className="text-xs text-gray-600 mt-1">
+          Marcado: as transferências desta função (depósitos e resgates) entram nos totais de
+          despesa do Dashboard e Relatórios. Desmarcado: são ignoradas (ex.: poupança/receita).
+        </p>
       </div>
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
@@ -560,9 +598,10 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                     className={`card py-3 px-3 space-y-2 ${dragId === f.id ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-200 inline-flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-gray-200 inline-flex items-center gap-1.5 min-w-0">
                         <GripVertical size={12} className="text-gray-700 cursor-grab shrink-0" />
-                        {f.name}
+                        <span className="truncate">{f.name}</span>
+                        <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
                       </span>
                       {accLabel && (
                         <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
@@ -674,6 +713,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                             <span className="inline-flex items-center gap-1.5">
                               <GripVertical size={11} className="text-gray-700 cursor-grab shrink-0" />
                               {f.name}
+                              <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
                             </span>
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>

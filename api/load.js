@@ -54,6 +54,37 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS saidas_override NUMERIC`)
     // Ajuste manual por mês: { "YYYY-MM": valor } (positivo ou negativo).
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS ajuste_override JSONB`)
+    // Flag: a função representa uma despesa real (provisão) — suas movimentações podem contar
+    // como despesa nos relatórios/dashboard. Default false. O SEED inicial dos valores roda
+    // SÓ UMA VEZ (quando a coluna é criada); depois respeita o toggle editado pelo usuário.
+    {
+      const exibirCol = await query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'reserve_functions' AND column_name = 'exibir_como_despesa'`
+      )
+      if (exibirCol.length === 0) {
+        await query(`ALTER TABLE reserve_functions ADD COLUMN exibir_como_despesa BOOLEAN NOT NULL DEFAULT false`)
+        await query(
+          `UPDATE reserve_functions SET exibir_como_despesa = true WHERE name = ANY($1)`,
+          [[
+            'IPVA','Seguro Residencial','IPTU','CRC','Reserva do Mês','Seguro Carro',
+            'Licenciamento','Pneus','Óleo','Academia','Brasil Sem Medo','Norton',
+            'Fralda Bebê','Microsoft','Seguro de Vida','Brasil Paralelo','Gás',
+            'Stela Maris','Presentes','Salão GI','Cadeira BB','Aniversário GI e Victor',
+            'Consórcio','Expo Londrina','Ensaio de Natal','Parto Gislaine',
+          ]]
+        )
+        // false é o DEFAULT; explicitar as demais é redundante, mas mantém a intenção clara.
+        await query(
+          `UPDATE reserve_functions SET exibir_como_despesa = false WHERE name = ANY($1)`,
+          [[
+            'Help','Aluguel Papai','13 Salário GI','Férias GI','Outras Rec GI',
+            'Outras Rec Victor','Bolsa GI','Safra Financi','PIS GI','Rico e BB',
+            'Help Itália','Help Lava','Help Not','Help ___','PHARMALOG',
+          ]]
+        )
+      }
+    }
     // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
     // de virarem lançamentos. status: pendente | confirmado | ignorado.
     await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (
