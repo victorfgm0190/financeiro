@@ -49,7 +49,7 @@ export default function ReportsPanel() {
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, 'MMM/yy', { locale: ptBR })
       const income = transactions
-        .filter(tx => countsAsReportIncome(tx) && tx.date >= start && tx.date <= end)
+        .filter(tx => countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)
         .reduce((s, t) => s + t.amount, 0)
       const expense = transactions
         .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)

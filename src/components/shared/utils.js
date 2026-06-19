@@ -70,9 +70,14 @@ export function isReportExcluded(tx) {
   return tx.origin === 'investAuto'
 }
 
-// Conta como receita nos relatórios (exclui lançamentos automáticos ocultos).
-export function countsAsReportIncome(tx) {
-  return tx.type === 'income' && !isReportExcluded(tx)
+// Conta como receita nos relatórios (exclui lançamentos automáticos ocultos). Também exclui
+// as sombras de reserva de funções NÃO-despesa (ex.: o "Resgate Reserva: X" income), para
+// que o par receita+despesa fique neutro quando a reserva é poupança. Args opcionais →
+// sem eles, comportamento anterior (só income não-oculto).
+export function countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet) {
+  if (tx.type !== 'income' || isReportExcluded(tx)) return false
+  if (isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet)) return false
+  return true
 }
 
 // Aporte = transferência para conta de aplicação financeira COM categoria preenchida.
@@ -102,20 +107,21 @@ export function reservaDespesaFuncIds(reserveFunctions) {
   return new Set((reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.id))
 }
 
-// Movimento de reserva (transferência envolvendo conta de reserva, como ORIGEM ou DESTINO)
-// vinculado a uma função que NÃO está marcada como "exibir como despesa" (false/indefinido).
-// Estes — depósitos e resgates de funções não-despesa — NUNCA contam como despesa, mesmo
-// tendo categoria. Usa o próprio set de funções "exibir como despesa": se a função do
-// movimento não está nele, é movimento excluído. (Não afeta lançamentos type='expense'
-// reais, como compras de cartão, ainda que tenham reservaFuncaoId.)
+// Movimento de reserva vinculado a uma função que NÃO está marcada como "exibir como despesa"
+// (false/indefinido) → NUNCA conta como despesa, mesmo tendo categoria. Cobre:
+//   (a) transferências envolvendo conta de reserva (origem OU destino); e
+//   (b) lançamentos-sombra automáticos de reserva (reservaAuto, ex.: "Reserva: X" /
+//       "Resgate Reserva: X"), que têm accountId null mas carregam reservaFuncaoId.
+// O flag exibir_como_despesa tem PRIORIDADE sobre a categoria nesses lançamentos.
+// NUNCA afeta despesas reais (type='expense' && !reservaAuto), como compras de cartão que
+// carreguem reservaFuncaoId — estas continuam contando normalmente.
 export function isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet) {
-  // Só se aplica a transferências vinculadas a uma função de reserva.
-  if (tx.type !== 'transfer' || !tx.reservaFuncaoId) return false
-  // Precisa envolver uma conta de reserva (origem OU destino). Sem reservaSet válido não há
-  // como confirmar que é movimento de reserva → não exclui (não esconde transferência comum).
-  const envolveReserva = reservaSet instanceof Set
+  if (!tx.reservaFuncaoId) return false
+  const ehSombraReserva = tx.reservaAuto === true
+  const ehTransferReserva = tx.type === 'transfer'
+    && reservaSet instanceof Set
     && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId))
-  if (!envolveReserva) return false
+  if (!ehSombraReserva && !ehTransferReserva) return false
   // Exclui quando a função NÃO está marcada como "exibir como despesa". Set ausente/inválido
   // ou vazio = nenhuma função é despesa → ehFuncaoDespesa=false → exclui (não deixa passar).
   const ehFuncaoDespesa = reservaDespesaFuncSet instanceof Set && reservaDespesaFuncSet.has(tx.reservaFuncaoId)

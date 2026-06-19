@@ -407,13 +407,21 @@ const defaultData = {
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true) e de
 // patrimônio (accountId: null, origin: 'patrimonioAuto'). Ambos seguem a mesma mecânica:
 // transferência PARA a conta vinculada = despesa; transferência DA conta = receita.
-function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
+function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions = []) {
   if (tx.type !== 'transfer') return []
   const extraTxs = []
   const toAcc = accounts.find(a => a.id === tx.toAccountId)
   const fromAcc = accounts.find(a => a.id === tx.accountId)
   const now = new Date().toISOString()
   const base = Date.now()
+  // Vincula a sombra de reserva à função: a do lançamento (tx.reservaFuncaoId) ou, quando a
+  // reserva tem função ÚNICA, a sua. Permite que os predicados de despesa respeitem o flag
+  // exibir_como_despesa também nas sombras "Reserva:"/"Resgate Reserva:".
+  const resolveReservaFunc = (acc) => {
+    if (tx.reservaFuncaoId) return tx.reservaFuncaoId
+    const funcs = (reserveFunctions || []).filter(f => f.accountId === acc?.id)
+    return funcs.length === 1 ? funcs[0].id : null
+  }
 
   // ── Patrimônio/Investimento ──────────────────────────────────────────────
   // Ida (Principal → Patrimônio) = despesa; volta (Patrimônio → Principal) = receita.
@@ -472,6 +480,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
       id: 'tx_res_' + base + '_' + Math.random().toString(36).slice(2),
       type: 'expense', accountId: null, amount: Number(tx.amount),
       categoryId: catId,
+      reservaFuncaoId: resolveReservaFunc(toAcc),
       description: `Reserva: ${toAcc.apelido || toAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
       ...(parentTxId ? { parentTxId } : {}),
@@ -482,10 +491,12 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
     const catId = tx.reservaExpenseCategoryId ||
       (fromAcc.reservaType === 'especifica' ? (fromAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
     const baseId = 'tx_rsg_' + base + '_' + Math.random().toString(36).slice(2)
+    const rsgFunc = resolveReservaFunc(fromAcc)
     extraTxs.push({
       id: baseId + '_r',
       type: 'income', accountId: null, amount: Number(tx.amount),
       categoryId: catId,
+      reservaFuncaoId: rsgFunc,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
       ...(parentTxId ? { parentTxId } : {}),
@@ -494,6 +505,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null) {
       id: baseId + '_d',
       type: 'expense', accountId: null, amount: Number(tx.amount),
       categoryId: catId,
+      reservaFuncaoId: rsgFunc,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
       ...(parentTxId ? { parentTxId } : {}),
@@ -892,9 +904,10 @@ export function AppProvider({ children }) {
             })
           }
           const autoTxs = buildReservaAutoTxs(
-            { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: schedule.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
+            { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: schedule.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId, reservaFuncaoId: schedule.reservaFuncaoId },
             accounts,
-            txId
+            txId,
+            prev.reserveFunctions
           )
           const investIncome = buildInvestAutoIncomeTx(newTx, prev.categories, accounts, txId)
           if (investIncome) {
@@ -997,7 +1010,7 @@ export function AppProvider({ children }) {
         })
       }
 
-      const extraTxs = buildReservaAutoTxs(tx, d.accounts, id)
+      const extraTxs = buildReservaAutoTxs(tx, d.accounts, id, d.reserveFunctions)
 
       // Aporte automático: despesa de cartão com categoria vinculada a conta de investimento
       // gera uma receita (crédito) na conta de investimento.
@@ -1759,9 +1772,10 @@ export function AppProvider({ children }) {
         })
       }
       const autoTxs = buildReservaAutoTxs(
-        { type: tx.type, accountId: tx.accountId, toAccountId: tx.toAccountId, amount: tx.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId },
+        { type: tx.type, accountId: tx.accountId, toAccountId: tx.toAccountId, amount: tx.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId, reservaFuncaoId: tx.reservaFuncaoId || schedule.reservaFuncaoId },
         accounts,
-        newTxId
+        newTxId,
+        d.reserveFunctions
       )
       const investIncome = buildInvestAutoIncomeTx(newTx, d.categories, accounts, newTxId)
       if (investIncome) {

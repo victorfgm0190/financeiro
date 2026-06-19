@@ -970,23 +970,22 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
                 📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
               </p>
-              {needsReservaCategorySelect && !reservaFuncaoUnica ? (
-                <>
-                  <SearchableSelect
-                    options={expenseCatOpts}
-                    value={form.reservaExpenseCategoryId}
-                    onChange={id => set('reservaExpenseCategoryId', id)}
-                    placeholder="Sem categoria"
-                    ungroupedLast
-                    ungroupedLabel="Sem grupo"
-                  />
-                  {!form.reservaExpenseCategoryId && (
-                    <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
-                  )}
-                </>
-              ) : (
-                <p className="text-xs text-amber-300">
-                  {isDepositToReserva ? 'Despesa em:' : 'Categoria:'}{' '}
+              {/* Categoria sempre editável (inclusive em reserva especifica/função única):
+                  o padrão da reserva é só uma dica; o usuário pode alterar ou limpar. */}
+              <SearchableSelect
+                options={expenseCatOpts}
+                value={form.reservaExpenseCategoryId}
+                onChange={id => set('reservaExpenseCategoryId', id)}
+                placeholder={reservaLinkedCat ? `${reservaLinkedCat.icon} ${reservaLinkedCat.name} (padrão da reserva)` : '🏦 Reservas Gerais (padrão)'}
+                ungroupedLast
+                ungroupedLabel="Sem grupo"
+              />
+              {needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaExpenseCategoryId && (
+                <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
+              )}
+              {(!needsReservaCategorySelect || reservaFuncaoUnica) && !form.reservaExpenseCategoryId && (
+                <p className="text-xs text-amber-300/70">
+                  Sem seleção, usa {isDepositToReserva ? 'a despesa' : 'a categoria'} padrão:{' '}
                   <span className="font-semibold">
                     {reservaLinkedCat ? `${reservaLinkedCat.icon} ${reservaLinkedCat.name}` : '🏦 Reservas Gerais'}
                   </span>

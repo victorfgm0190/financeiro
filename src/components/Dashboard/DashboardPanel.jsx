@@ -74,6 +74,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     },
     [reservaDespesaFuncSet, reservaSet]
   )
+  // Receita: exclui as sombras de reserva de função não-despesa (ex.: "Resgate Reserva: X"
+  // income), mantendo o par receita+despesa neutro quando a reserva é poupança.
+  const isIncomeTx = useCallback(
+    (t) => t.type === 'income' && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet),
+    [reservaDespesaFuncSet, reservaSet]
+  )
 
   const period = getFinancialPeriod()
   const periodStr = {
@@ -83,7 +89,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
   const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && tx.origin !== 'investAuto')
-  const income = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  const income = periodTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
 
@@ -97,7 +103,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
   const prevEnd = subMonths(period.end, 1).toISOString().split('T')[0]
   const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && tx.origin !== 'investAuto')
-  const prevIncome = prevTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  const prevIncome = prevTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const prevExpense = prevTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   const prevBalance = prevIncome - prevExpense
 
@@ -148,11 +154,11 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       const start = startOfMonth(d).toISOString().split('T')[0]
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, "MMM'/'yy", { locale: ptBR })
-      const inc = transactions.filter(tx => tx.type === 'income' && tx.origin !== 'investAuto' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
+      const inc = transactions.filter(tx => isIncomeTx(tx) && tx.origin !== 'investAuto' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       const exp = transactions.filter(tx => isExpenseTx(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       return { label, income: inc, expense: exp }
     })
-  }, [transactions, isExpenseTx])
+  }, [transactions, isExpenseTx, isIncomeTx])
 
   // Upcoming & overdue schedules (next 7 days + overdue)
   const upcomingSchedules = useMemo(() => {
@@ -398,7 +404,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             title: 'Receitas do Mês',
             total: income,
             color: 'text-blue-600',
-            txs: periodTxs.filter(t => t.type === 'income'),
+            txs: periodTxs.filter(isIncomeTx),
           })}
         />
         <KpiCard
