@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovimentoExcluido, reservaDespesaFuncIds } from '../shared/utils'
+import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import Modal from '../shared/Modal'
@@ -70,6 +70,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     (t) => {
       // Prioridade: movimento de reserva de função não-despesa nunca conta como despesa.
       if (isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)) return false
+      // Perna de despesa do RESGATE de reserva não conta (o resgate é receita de compensação).
+      if (isResgateReservaSombra(t)) return false
       return t.type === 'expense' || isReservaDepositoDespesa(t, reservaDespesaFuncSet, reservaSet)
     },
     [reservaDespesaFuncSet, reservaSet]

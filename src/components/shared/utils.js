@@ -128,13 +128,26 @@ export function isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet
   return !ehFuncaoDespesa
 }
 
+// Sombra de RESGATE de reserva ("Resgate Reserva: X", id tx_rsg_). O resgate gera um par
+// income(_r)+expense(_d): a perna de RECEITA (_r) representa a compensação (entra como receita);
+// a perna de DESPESA (_d) NÃO deve contar como despesa — senão o resgate apareceria como gasto
+// além da despesa real e do depósito. Distingue do DEPÓSITO ("Reserva: X", id tx_res_), que é
+// despesa de provisionamento. Usa id (imutável) e descrição como sinais.
+export function isResgateReservaSombra(tx) {
+  if (tx.reservaAuto !== true) return false
+  return (typeof tx.id === 'string' && tx.id.startsWith('tx_rsg_'))
+    || (typeof tx.description === 'string' && tx.description.startsWith('Resgate Reserva:'))
+}
+
 // Conta como despesa nos relatórios: despesas normais + aportes categorizados + depósitos
 // em reserva de funções marcadas como "exibir como despesa" (args opcionais; quando ausentes,
 // mantém o comportamento anterior — só expense + aporte).
-// PRIORIDADE: movimento de reserva de função NÃO-despesa é sempre excluído primeiro.
+// PRIORIDADE: movimento de reserva de função NÃO-despesa é sempre excluído primeiro; a perna
+// de despesa do RESGATE de reserva também nunca conta (o resgate é receita de compensação).
 export function countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) {
   if (isReportExcluded(tx)) return false
   if (isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet)) return false
+  if (isResgateReservaSombra(tx)) return false
   return tx.type === 'expense'
     || isAplicacaoAporte(tx, aplicSet)
     || isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet)
