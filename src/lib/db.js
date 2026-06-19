@@ -287,6 +287,7 @@ export const scheduleToRow = (s) => ({
   is_provisao: !!s.isProvisao,
   provisao_efetivada: !!s.provisaoEfetivada,
   provisao_efetivada_until: s.provisaoEfetivadaUntil || null,
+  next_occurrence: s.nextOccurrence || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -320,6 +321,7 @@ export const rowToSchedule = (r) => ({
   isProvisao: !!r.is_provisao,
   provisaoEfetivada: !!r.provisao_efetivada,
   provisaoEfetivadaUntil: toDateStr(r.provisao_efetivada_until),
+  nextOccurrence: toDateStr(r.next_occurrence),
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

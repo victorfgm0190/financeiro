@@ -35,6 +35,10 @@ export default async function handler(req, res) {
     // Provisão recorrente (Contínua/Parcelada): data da última ocorrência já efetivada. A
     // próxima ocorrência a efetivar é a primeira após esta data; null = nenhuma efetivada.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS provisao_efetivada_until DATE`)
+    // Data de vencimento atual / próxima ocorrência de referência. Quando preenchida, a
+    // geração de ocorrências futuras parte daqui (re-ancoragem do dia) em vez de start_date.
+    // NULL = comportamento original (calcula desde start_date).
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS next_occurrence DATE`)
     await query(`CREATE TABLE IF NOT EXISTS reserve_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

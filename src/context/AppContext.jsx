@@ -63,7 +63,8 @@ const AppContext = createContext(null)
 function computePendingUpTo(schedule, upToDateStr) {
   const allDone = new Set([...(schedule.registered || []), ...(schedule.skipped || [])])
   const pending = []
-  let current = parseISO(schedule.startDate)
+  // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
+  let current = parseISO(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? (schedule.installments || 1) : 9999
   let count = 0
   while (count < maxInstallments) {
@@ -1939,7 +1940,8 @@ export function AppProvider({ children }) {
     const occurrences = []
     const registered = schedule.registered || []
     const skipped = schedule.skipped || []
-    let current = parseISO(schedule.startDate)
+    // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
+    let current = parseISO(schedule.nextOccurrence || schedule.startDate)
     const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
     let totalOccurrences = 0
     const allDone = [...registered, ...skipped]

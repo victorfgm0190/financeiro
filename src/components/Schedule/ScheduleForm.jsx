@@ -32,6 +32,7 @@ const TIPS = {
   payee: 'Pessoa ou empresa beneficiária do pagamento. Ex: Locadora, Empresa, Fornecedor.',
   frequency: 'Intervalo de repetição entre ocorrências: diário, semanal, mensal, anual etc.',
   startDate: 'Data da primeira ocorrência. As seguintes são calculadas automaticamente conforme a frequência.',
+  nextOccurrence: 'Próxima ocorrência / dia de vencimento atual. Altere para mudar o dia das próximas ocorrências sem perder a Data de Início original. Vazio = calcula desde a Data de Início.',
   occurrence: 'Contínua: repete indefinidamente. Parcelada: encerra após número fixo de vezes.',
   installments: 'Total de vezes que este lançamento se repetirá antes de ser encerrado automaticamente.',
   remindDaysBefore: 'Exibe um alerta no painel X dias antes do vencimento para que você não se esqueça.',
@@ -205,7 +206,7 @@ export default function ScheduleForm({ initial, onClose }) {
   })
   const grpD = gerencialGroups.find(g => g.number === 'D')
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     description: initial?.description || '',
     transactionType: initial?.transactionType || 'expense',
     accountId: initial?.accountId || accounts[0]?.id || '',
@@ -218,6 +219,10 @@ export default function ScheduleForm({ initial, onClose }) {
     costCenter: initial?.costCenter || '',
     frequency: initial?.frequency || '',
     startDate: initial?.startDate || today(),
+    // Data de Vencimento Atual: re-ancora a série. Usa o valor salvo; senão, a próxima
+    // ocorrência futura do agendamento em edição (vazio para um agendamento novo).
+    nextOccurrence: initial?.nextOccurrence
+      || (initial?.id ? (getNextOccurrences(initial, 24).find(d => d >= today()) || '') : ''),
     occurrenceType: initial?.occurrenceType || 'continuous',
     installments: initial?.installments ?? 0,
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
@@ -225,7 +230,7 @@ export default function ScheduleForm({ initial, onClose }) {
     grupoGerencial: initial?.grupoGerencial || null,
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
-  })
+  }))
 
   const [editingOcc, setEditingOcc] = useState(null)
 
@@ -542,6 +547,21 @@ export default function ScheduleForm({ initial, onClose }) {
             required
           />
         </div>
+
+        {/* Data de Vencimento Atual — re-ancora a série (só p/ frequências recorrentes) */}
+        {form.frequency && form.frequency !== 'once' && (
+          <div>
+            <LabelTip tip={TIPS.nextOccurrence}>Data de Vencimento Atual</LabelTip>
+            <DateInput
+              className="input"
+              value={form.nextOccurrence || ''}
+              onChange={e => set('nextOccurrence', e.target.value)}
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Próxima ocorrência. Altere o dia (ex.: 20 → 30) para mudar as próximas; a Data de Início é preservada.
+            </p>
+          </div>
+        )}
 
         {/* Ocorrência — habilitada só com frequência recorrente escolhida */}
         {form.frequency !== 'once' && (() => {
