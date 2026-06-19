@@ -100,11 +100,25 @@ export function reservaDespesaFuncIds(reserveFunctions) {
   return new Set((reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.id))
 }
 
+// Movimento de reserva (transferência envolvendo conta de reserva, como ORIGEM ou DESTINO)
+// vinculado a uma função que NÃO está marcada como "exibir como despesa" (false/indefinido).
+// Estes — depósitos e resgates de funções não-despesa — NUNCA contam como despesa, mesmo
+// tendo categoria. Usa o próprio set de funções "exibir como despesa": se a função do
+// movimento não está nele, é movimento excluído. (Não afeta lançamentos type='expense'
+// reais, como compras de cartão, ainda que tenham reservaFuncaoId.)
+export function isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet) {
+  if (tx.type !== 'transfer' || !tx.reservaFuncaoId) return false
+  if (!reservaSet?.has(tx.accountId) && !reservaSet?.has(tx.toAccountId)) return false
+  return !reservaDespesaFuncSet?.has(tx.reservaFuncaoId)
+}
+
 // Conta como despesa nos relatórios: despesas normais + aportes categorizados + depósitos
 // em reserva de funções marcadas como "exibir como despesa" (args opcionais; quando ausentes,
 // mantém o comportamento anterior — só expense + aporte).
+// PRIORIDADE: movimento de reserva de função NÃO-despesa é sempre excluído primeiro.
 export function countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) {
   if (isReportExcluded(tx)) return false
+  if (isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet)) return false
   return tx.type === 'expense'
     || isAplicacaoAporte(tx, aplicSet)
     || isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet)
