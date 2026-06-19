@@ -324,14 +324,24 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const topCatData = useMemo(() => {
     const totals = {}
     const txMap = {}
+    const inRange = (tx) => tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId
     transactions
-      .filter(tx => isExpenseTx(tx) && tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId)
+      .filter(tx => isExpenseTx(tx) && inRange(tx))
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
         ;(txMap[tx.categoryId] = txMap[tx.categoryId] || []).push(tx)
       })
-    const total = Object.values(totals).reduce((s, v) => s + v, 0)
-    return Object.entries(totals)
+    // Receita de compensação do resgate de reserva (perna _r): ABATE o total da categoria
+    // e aparece no drill-down como receita. Só em categorias que já têm despesa.
+    transactions
+      .filter(tx => isResgateReservaSombra(tx) && tx.type === 'income' && inRange(tx) && tx.categoryId in totals)
+      .forEach(tx => {
+        totals[tx.categoryId] = Math.round((totals[tx.categoryId] - tx.amount) * 100) / 100
+        txMap[tx.categoryId].push(tx)
+      })
+    const entries = Object.entries(totals).filter(([, value]) => value > 0)
+    const total = entries.reduce((s, [, v]) => s + v, 0)
+    return entries
       .map(([id, value]) => {
         const cat = categories.find(c => c.id === id)
         return { id, cat, name: cat ? `${cat.icon} ${cat.name}` : id, value, pct: total > 0 ? (value / total) * 100 : 0, txs: txMap[id] || [] }
@@ -705,15 +715,21 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <div className="space-y-0 max-h-80 overflow-y-auto">
               {[...catModal.txs]
                 .sort((a, b) => b.date.localeCompare(a.date))
-                .map(tx => (
-                  <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-200 truncate">{tx.description || catModal.name}</p>
-                      <p className="text-xs text-gray-500">{fmtDate(tx.date)}{tx.payee ? ` · ${tx.payee}` : ''}</p>
+                .map(tx => {
+                  // Resgate de reserva (perna _r) entra como RECEITA de compensação (+, azul).
+                  const isReceita = tx.type === 'income'
+                  return (
+                    <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-200 truncate">{tx.description || catModal.name}</p>
+                        <p className="text-xs text-gray-500">{fmtDate(tx.date)}{tx.payee ? ` · ${tx.payee}` : ''}</p>
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ml-3 ${isReceita ? 'text-receita' : 'text-orange-600'}`}>
+                        {isReceita ? '+' : '−'}{fmt(tx.amount)}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-orange-600 shrink-0 ml-3">{fmt(tx.amount)}</span>
-                  </div>
-                ))
+                  )
+                })
               }
             </div>
           </div>
