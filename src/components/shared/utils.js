@@ -89,10 +89,12 @@ export function isAplicacaoAporte(tx, aplicSet) {
 //   reservaDespesaFuncSet: Set de reservaFuncaoId cujas funções têm exibirComoDespesa=true
 //   reservaSet: Set de ids de contas isReserva
 export function isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet) {
-  return tx.type === 'transfer'
-    && !!tx.reservaFuncaoId
-    && !!reservaDespesaFuncSet?.has(tx.reservaFuncaoId)
-    && !!reservaSet?.has(tx.toAccountId)
+  if (tx.type !== 'transfer' || !tx.reservaFuncaoId) return false
+  // Só conta como despesa se a função estiver EXPLICITAMENTE marcada (set presente e contém a
+  // função) e o destino for conta de reserva. Sets ausentes → nunca inclui (seguro).
+  const ehFuncaoDespesa = reservaDespesaFuncSet instanceof Set && reservaDespesaFuncSet.has(tx.reservaFuncaoId)
+  const destinoEhReserva = reservaSet instanceof Set && reservaSet.has(tx.toAccountId)
+  return ehFuncaoDespesa && destinoEhReserva
 }
 
 // Conjunto de reservaFuncaoId cujas funções estão marcadas como "exibir como despesa".
@@ -107,9 +109,17 @@ export function reservaDespesaFuncIds(reserveFunctions) {
 // movimento não está nele, é movimento excluído. (Não afeta lançamentos type='expense'
 // reais, como compras de cartão, ainda que tenham reservaFuncaoId.)
 export function isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet) {
+  // Só se aplica a transferências vinculadas a uma função de reserva.
   if (tx.type !== 'transfer' || !tx.reservaFuncaoId) return false
-  if (!reservaSet?.has(tx.accountId) && !reservaSet?.has(tx.toAccountId)) return false
-  return !reservaDespesaFuncSet?.has(tx.reservaFuncaoId)
+  // Precisa envolver uma conta de reserva (origem OU destino). Sem reservaSet válido não há
+  // como confirmar que é movimento de reserva → não exclui (não esconde transferência comum).
+  const envolveReserva = reservaSet instanceof Set
+    && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId))
+  if (!envolveReserva) return false
+  // Exclui quando a função NÃO está marcada como "exibir como despesa". Set ausente/inválido
+  // ou vazio = nenhuma função é despesa → ehFuncaoDespesa=false → exclui (não deixa passar).
+  const ehFuncaoDespesa = reservaDespesaFuncSet instanceof Set && reservaDespesaFuncSet.has(tx.reservaFuncaoId)
+  return !ehFuncaoDespesa
 }
 
 // Conta como despesa nos relatórios: despesas normais + aportes categorizados + depósitos
