@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -137,14 +137,30 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
     !q || i.label.toLowerCase().includes(q) || (i.group || '').toLowerCase().includes(q)
   )
 
-  // Quando há grupos, organiza em seções (ordenadas pt-BR, "Sem grupo" por último).
+  // Quando há grupos, organiza em seções. Se os itens trazem `groupOrder` (ex.: contas pela
+  // ordem dos Grupos de Contas), ordena por essa sequência; senão, alfabético pt-BR.
+  // "Sem grupo" sempre por último.
   const sections = useMemo(() => {
     if (!hasGroups) return [['', visible]]
     const map = {}
+    const orderOf = {}
     const UNG = '​Sem grupo' // sentinela para ordenar por último
-    for (const it of visible) { const g = it.group || UNG; (map[g] ||= []).push(it) }
+    for (const it of visible) {
+      const g = it.group || UNG
+      ;(map[g] ||= []).push(it)
+      if (it.groupOrder != null && orderOf[g] == null) orderOf[g] = it.groupOrder
+    }
+    const hasOrder = Object.keys(orderOf).length > 0
     return Object.keys(map)
-      .sort((a, b) => { if (a === UNG) return 1; if (b === UNG) return -1; return a.localeCompare(b, 'pt-BR') })
+      .sort((a, b) => {
+        if (a === UNG) return 1
+        if (b === UNG) return -1
+        if (hasOrder) {
+          const oa = orderOf[a] ?? Infinity, ob = orderOf[b] ?? Infinity
+          if (oa !== ob) return oa - ob
+        }
+        return a.localeCompare(b, 'pt-BR')
+      })
       .map(g => [g === UNG ? 'Sem grupo' : g, map[g]])
   }, [visible, hasGroups])
 
@@ -256,7 +272,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, settings, reserveFunctions } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -282,9 +298,15 @@ export default function DemonstrativoFinanceiro() {
     categories.map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
   , [categories])
 
+  // Contas agrupadas e ORDENADAS pela ordem dos Grupos de Contas (Configurações), depois
+  // pela ordem interna das contas. `group` = nome do grupo; `groupOrder` = posição do grupo
+  // (faz o MultiSelectPanel respeitar a sequência configurada em vez de ordem alfabética).
   const accItems = useMemo(() =>
-    accountsForView(accounts, isMobile).map(a => ({ id: a.id, label: a.apelido || a.name }))
-  , [accounts, isMobile])
+    groupedAccountOptions(accountsForView(accounts, isMobile), accountGroups)
+      .flatMap(({ group, accounts: accs }, gi) =>
+        accs.map(a => ({ id: a.id, label: a.apelido || a.name, group: group?.name || null, groupOrder: group ? gi : null }))
+      )
+  , [accounts, isMobile, accountGroups])
 
   // ── Default initialisation ────────────────────────────────────────────────
   useEffect(() => {
