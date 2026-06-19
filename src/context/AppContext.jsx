@@ -2921,7 +2921,14 @@ export function AppProvider({ children }) {
       const schedules = []
       for (const s of d.schedules) {
         if (!isManaged(s)) { schedules.push(s); continue }
-        const done = (s.registered || []).includes(s.startDate) || (s.skipped || []).includes(s.startDate)
+        // Agendamentos gerenciados são frequency:'once' — uma ÚNICA ocorrência possível. Logo,
+        // QUALQUER registro/pulo já significa executado, sem exigir match exato com startDate.
+        // (O pagamento de resgate_reserva detalhado grava em `registered` a data editável trfDate,
+        // que pode divergir do startDate; o guard antigo por data exata então marcava done=false,
+        // descartava o agendamento pago e recriava o slot como pendente — resgate fantasma.)
+        // NB: este ramo só roda para isManaged; agendamentos comuns saíram no `continue` acima e
+        // seguem com o guard por data exata em getNextOccurrences.
+        const done = (s.registered || []).length > 0 || (s.skipped || []).length > 0
         if (done) {
           schedules.push(s)
           const sl = slotOf(s)
