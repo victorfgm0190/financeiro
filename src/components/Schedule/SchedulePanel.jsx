@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { prevMonthScheduleDate } from '../../lib/fatura'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -95,7 +96,11 @@ function buildScheduleGroups(schedules, getNextOccurrences) {
       continue
     }
     const primary = pending[0]
-    const futureItems = pending.slice(1).map(m => ({ date: m.next, amount: Number(m.s.amount) || 0 }))
+    // Valor/data EFETIVOS por ocorrência (respeita overrides individuais).
+    const futureItems = pending.slice(1).map(m => {
+      const { date, amount } = occEfetiva(m.s, m.next)
+      return { date, amount }
+    })
     groups.push({ schedule: primary.s, nextDate: primary.next, futureItems })
   }
 
@@ -106,7 +111,10 @@ function buildScheduleGroups(schedules, getNextOccurrences) {
     if (recurring && nextDate) {
       futureItems = getNextOccurrences(s, FUTURE_OCC_COUNT + 1)
         .slice(1)
-        .map(d => ({ date: d, amount: Number(s.amount) || 0 }))
+        .map(d => {
+          const { date, amount } = occEfetiva(s, d)
+          return { date, amount }
+        })
     }
     groups.push({ schedule: s, nextDate, futureItems })
   }
@@ -631,11 +639,38 @@ function ScheduleRow({
   const hasFuture = futureItems.length > 0
   const toggleExpand = () => setExpanded(v => !v)
 
+  // Histórico de pagamentos: ocorrências já registradas (registered) cruzadas com os
+  // lançamentos vinculados ao agendamento (scheduleId), carregados via /api/load no contexto.
+  // Pareamento por data mais próxima (consome cada lançamento uma vez); sem lançamento
+  // vinculado, usa a data prevista e o valor efetivo da ocorrência (override individual).
+  const { profileTransactions } = useApp()
+  const hasHistory = registered.length > 0
+  const canExpand = hasFuture || hasHistory
+  const paymentHistory = useMemo(() => {
+    const reg = schedule.registered || []
+    const linked = profileTransactions.filter(t => t.scheduleId === schedule.id)
+    const used = new Set()
+    return [...reg].sort().map(occ => {
+      const eff = occEfetiva(schedule, occ)
+      let best = null, bestDiff = Infinity
+      linked.forEach((t, idx) => {
+        if (used.has(idx)) return
+        const diff = Math.abs(new Date(t.date + 'T00:00:00') - new Date(eff.date + 'T00:00:00'))
+        if (diff < bestDiff) { bestDiff = diff; best = idx }
+      })
+      if (best != null) used.add(best)
+      const tx = best != null ? linked[best] : null
+      return { prevista: occ, efetiva: tx ? tx.date : null, valor: tx ? Number(tx.amount) : eff.amount }
+    })
+  }, [profileTransactions, schedule])
+
   // Pular a próxima ocorrência pendente:
   //  • único (frequency 'once'): confirma e cancela (deleteSchedule);
   //  • recorrente: avança a data adicionando a ocorrência atual aos "skipped" via
   //    updateSchedule (sem criar lançamento nem registrar ocorrência).
   const isRecorrente = (schedule.frequency || 'once') !== 'once'
+  // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
+  const effAmount = nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
   const handlePular = () => {
     if (!nextDate) return
     if (!isRecorrente) { setShowPularUnico(true); return }
@@ -691,21 +726,21 @@ function ScheduleRow({
           )}
         </td>
 
-        {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras */}
+        {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 max-w-[200px] ${hasFuture ? 'cursor-pointer' : ''}`}
-          onClick={hasFuture ? toggleExpand : undefined}
+          className={`px-3 py-3 max-w-[200px] ${canExpand ? 'cursor-pointer' : ''}`}
+          onClick={canExpand ? toggleExpand : undefined}
         >
           <div className="flex items-center gap-1.5 flex-wrap">
-            {hasFuture && (
+            {canExpand && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggleExpand() }}
-                title={expanded ? 'Recolher' : `Ver ${futureItems.length} ocorrência(s) seguinte(s)`}
+                title={expanded ? 'Recolher' : hasFuture ? `Ver ${futureItems.length} ocorrência(s) seguinte(s) e histórico` : 'Ver histórico de pagamentos'}
                 className="inline-flex items-center gap-0.5 -ml-1 p-0.5 text-gray-500 hover:text-gray-200 transition-colors shrink-0"
               >
                 {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                <span className="text-[10px] font-semibold">{futureItems.length}</span>
+                {hasFuture && <span className="text-[10px] font-semibold">{futureItems.length}</span>}
               </button>
             )}
             <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
@@ -806,7 +841,7 @@ function ScheduleRow({
         {/* Valor */}
         <td className="px-3 py-3 whitespace-nowrap text-right">
           <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-receita' : isDepositoReserva ? 'text-reserva' : isResgateReserva ? 'text-despesa' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-despesa'}`}>
-            {fmt(schedule.amount)}
+            {fmt(effAmount)}
           </span>
         </td>
 
@@ -864,19 +899,50 @@ function ScheduleRow({
 
       {/* Painel inline: ocorrências futuras seguintes (faturas futuras com valor dinâmico,
           ou próximas ocorrências de recorrente com valor fixo). Somente visual. */}
-      {expanded && hasFuture && (
+      {expanded && canExpand && (
         <tr className="bg-gray-900/40 border-b border-gray-800/50">
           <td colSpan={cols} className="px-3 py-2">
-            <div className="pl-6">
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Próximas ocorrências</p>
-              <ul className="space-y-0.5 max-w-md">
-                {futureItems.map((it, i) => (
-                  <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-gray-800/30 last:border-0">
-                    <span className="text-gray-400">{fmtDate(it.date)}</span>
-                    <span className="text-gray-300 font-medium">{fmt(it.amount)}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="pl-6 space-y-3">
+              {hasFuture && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Próximas ocorrências</p>
+                  <ul className="space-y-0.5 max-w-md">
+                    {futureItems.map((it, i) => (
+                      <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-gray-800/30 last:border-0">
+                        <span className="text-gray-400">{fmtDate(it.date)}</span>
+                        <span className="text-gray-300 font-medium">{fmt(it.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {hasHistory && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
+                    Histórico de Pagamentos <span className="text-gray-600">({paymentHistory.length})</span>
+                  </p>
+                  <div className="max-w-lg overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-[10px] uppercase tracking-wide text-gray-600">
+                          <th className="text-left font-medium py-0.5 pr-4">Prevista</th>
+                          <th className="text-left font-medium py-0.5 pr-4">Paga em</th>
+                          <th className="text-right font-medium py-0.5">Valor pago</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paymentHistory.map((h, i) => (
+                          <tr key={i} className="border-b border-gray-800/30 last:border-0">
+                            <td className="text-gray-400 py-0.5 pr-4 whitespace-nowrap">{fmtDate(h.prevista)}</td>
+                            <td className="text-gray-300 py-0.5 pr-4 whitespace-nowrap">{h.efetiva ? fmtDate(h.efetiva) : '—'}</td>
+                            <td className="text-gray-300 font-medium py-0.5 text-right whitespace-nowrap">{fmt(h.valor)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </td>
         </tr>
