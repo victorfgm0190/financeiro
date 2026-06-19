@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions } from '../shared/utils'
+import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -39,7 +39,9 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     tx.date >= from && tx.date <= to &&
     (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
-    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId))) &&
+    // "Ocultar movimentos de reserva": esconde transferências que tocam conta de reserva E
+    // as sombras automáticas (reservaAuto: "Reserva: X" / "Resgate Reserva: X", accountId null).
+    !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId) || tx.reservaAuto === true)) &&
     !(hidePatrimonio && tx.origin === 'patrimonioAuto')
   )
 
@@ -52,12 +54,15 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
       const subcatKey = cat?.id || '__none__'
       const subcatName = cat?.name || 'Sem Categoria'
       const isFlat = !cat?.group // top-level category or uncategorised
+      // Resgate de reserva (perna _r, receita de compensação) entra na categoria de DESPESA
+      // ABATENDO o total (sinal negativo); a despesa real e o depósito somam normalmente.
+      const signed = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
 
       if (!groups[groupKey]) groups[groupKey] = { name: groupName, subcats: {}, total: 0, isFlat }
-      groups[groupKey].total += tx.amount
+      groups[groupKey].total += signed
 
       if (!groups[groupKey].subcats[subcatKey]) groups[groupKey].subcats[subcatKey] = { id: subcatKey, name: subcatName, txs: [], total: 0 }
-      groups[groupKey].subcats[subcatKey].total += tx.amount
+      groups[groupKey].subcats[subcatKey].total += signed
       groups[groupKey].subcats[subcatKey].txs.push(tx)
     })
 
@@ -72,11 +77,15 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   }
 
   const expenseTxs = inRange.filter(t => countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
-  const incomeTxs = inRange.filter(t => t.type === 'income')
+  // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
+  // categoria; saem da seção de RECEITAS para não duplicar.
+  const compensTxs = inRange.filter(t => t.type === 'income' && isResgateReservaSombra(t))
+  const incomeTxs = inRange.filter(t => t.type === 'income' && !isResgateReservaSombra(t))
+  const totalExpense = expenseTxs.reduce((s, t) => s + t.amount, 0) - compensTxs.reduce((s, t) => s + t.amount, 0)
   return {
-    expenses: buildSection(expenseTxs),
+    expenses: buildSection([...expenseTxs, ...compensTxs]),
     income: buildSection(incomeTxs),
-    totalExpense: expenseTxs.reduce((s, t) => s + t.amount, 0),
+    totalExpense,
     totalIncome: incomeTxs.reduce((s, t) => s + t.amount, 0),
   }
 }
@@ -90,7 +99,11 @@ function exportCSV(report, showTx, from, to) {
     groups.forEach(g => {
       g.subcats.forEach(s => {
         if (showTx) {
-          s.txs.forEach(tx => rows.push([tipo, g.name, g.isFlat ? '' : s.name, tx.date, tx.description || '', tx.payee || '', tx.amount.toFixed(2)].map(q).join(sep)))
+          s.txs.forEach(tx => {
+            // Resgate de compensação abate a categoria → valor negativo no CSV (soma = total da subcat).
+            const v = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
+            rows.push([tipo, g.name, g.isFlat ? '' : s.name, tx.date, tx.description || '', tx.payee || '', v.toFixed(2)].map(q).join(sep))
+          })
         } else {
           rows.push([tipo, g.name, g.isFlat ? '' : s.name, '', '', '', s.total.toFixed(2)].map(q).join(sep))
         }
@@ -256,6 +269,8 @@ function SubcatRow({ name, total }) {
 }
 
 function TxRow({ tx, indent }) {
+  // Resgate de reserva (receita de compensação) aparece em azul com sinal +.
+  const isComp = tx.type === 'income' && isResgateReservaSombra(tx)
   return (
     <tr className="border-b border-gray-800/20 hover:bg-gray-800/20 transition-colors">
       <td className="py-1 pr-3 text-xs text-gray-600 whitespace-nowrap" style={{ paddingLeft: indent }}>
@@ -264,7 +279,9 @@ function TxRow({ tx, indent }) {
       <td className="px-2 py-1 text-xs text-gray-500 truncate max-w-0" style={{ maxWidth: 260 }}>
         {tx.description || '—'}{tx.payee ? ` · ${tx.payee}` : ''}
       </td>
-      <td className="px-4 py-1 text-right text-xs text-gray-600">{fmt(tx.amount)}</td>
+      <td className={`px-4 py-1 text-right text-xs ${isComp ? 'text-blue-400' : 'text-gray-600'}`}>
+        {isComp ? '+' : ''}{fmt(tx.amount)}
+      </td>
     </tr>
   )
 }
