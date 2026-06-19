@@ -7,6 +7,13 @@ import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { getEnvelopePeriod } from '../Envelopes/EnvelopesPanel'
 
+// Modos de seleção de contas — mesmo padrão dos Relatórios (FluxoCaixaPorConta).
+const VISOES = [
+  { id: 'conta',      label: 'Por Contas' },
+  { id: 'grupo',      label: 'Por Grupos' },
+  { id: 'principais', label: 'Por Principais' },
+]
+
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
@@ -22,22 +29,35 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function CashFlowPanel({ setActivePage }) {
-  const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getNextOccurrences, envelopes } = useApp()
+  const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getNextOccurrences, envelopes, accountGroups } = useApp()
   const accounts = profileAccounts
   const isMobile = useIsMobile()
   const transactions = profileTransactions
   const schedules = profileSchedules
+  // visao: 'conta' (select atual) | 'grupo' (grupo de contas) | 'principais' (FC Principal)
+  const [visao, setVisao] = useState('conta')
+  const [groupId, setGroupId] = useState('')
   const [filterAccount, setFilterAccount] = useState('fluxo')
   const [horizon, setHorizon] = useState(30)
 
   const fcAccounts = accounts.filter(a => a.type !== 'credit' && a.fluxoCaixaPrincipal)
   const noFcAccounts = fcAccounts.length === 0
 
+  // Grupos de contas disponíveis (mesma ordem/filtro dos Relatórios).
+  const groups = useMemo(
+    () => [...(accountGroups || [])].filter(g => !g.inibido).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [accountGroups],
+  )
+
+  // Resolve a lista de contas conforme o modo. O engine (chart/tabela) só recebe os IDs
+  // resolvidos — a mudança de modo é só na camada de seleção.
   const filteredAccounts = useMemo(() => {
+    if (visao === 'grupo') return accounts.filter(a => a.type !== 'credit' && a.accountGroupId === groupId)
+    if (visao === 'principais') return fcAccounts
     if (filterAccount === 'fluxo') return fcAccounts
     if (filterAccount === 'all') return accounts.filter(a => a.type !== 'credit')
     return accounts.filter(a => a.id === filterAccount)
-  }, [filterAccount, accounts, fcAccounts])
+  }, [visao, groupId, filterAccount, accounts, fcAccounts])
 
   const accountIds = filteredAccounts.map(a => a.id)
   const currentBalance = filteredAccounts.reduce((s, a) => s + (a.balance || 0), 0)
@@ -109,7 +129,7 @@ export default function CashFlowPanel({ setActivePage }) {
     if (accountIds.length === 0) return []
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     const endDateStr = format(addDays(new Date(), horizon), 'yyyy-MM-dd')
-    const selectedAcc = accounts.find(a => a.id === filterAccount)
+    const selectedAcc = visao === 'conta' ? accounts.find(a => a.id === filterAccount) : null
     const shouldNetize = selectedAcc?.contaAplicacao === true
     const events = []
 
@@ -211,16 +231,18 @@ export default function CashFlowPanel({ setActivePage }) {
       balance = Math.round((balance + ev.entrada - ev.saida) * 100) / 100
       return { ...ev, saldo: balance }
     })
-  }, [transactions, schedules, accounts, accountIds, currentBalance, getNextOccurrences, horizon, filterAccount])
+  }, [transactions, schedules, accounts, accountIds, currentBalance, getNextOccurrences, horizon, filterAccount, visao])
 
   const finalBalance = chartData[chartData.length - 1]?.balance ?? currentBalance
   const minBalance = chartData.length > 0 ? Math.min(...chartData.map(d => d.balance)) : currentBalance
-  const activeAccounts = filterAccount === 'fluxo' ? fcAccounts : filteredAccounts
+  const activeAccounts = filteredAccounts
+  // Aviso "sem conta FC" aparece quando o modo resolve para FC Principal e não há nenhuma.
+  const showFcWarning = noFcAccounts && (visao === 'principais' || (visao === 'conta' && filterAccount === 'fluxo'))
 
   return (
     <div className="space-y-4">
       {/* FC accounts chips or warning */}
-      {filterAccount === 'fluxo' && noFcAccounts ? (
+      {showFcWarning ? (
         <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
           <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -278,14 +300,41 @@ export default function CashFlowPanel({ setActivePage }) {
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="text-sm font-semibold text-gray-300">Projeção de Saldo — dia a dia</h2>
-          <div className="flex gap-2 flex-wrap">
-            <select className="input w-auto text-xs py-1.5" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-              <option value="fluxo">FC Principal</option>
-              <option value="all">Todas as Contas</option>
-              {accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile).map(a => (
-                <option key={a.id} value={a.id}>{a.apelido || a.name}</option>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Modo de seleção de contas (Por Contas / Por Grupos / Por Principais) */}
+            <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
+              {VISOES.map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => setVisao(v.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    visao === v.id ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {v.label}
+                </button>
               ))}
-            </select>
+            </div>
+            {visao === 'conta' && (
+              <select className="input w-auto text-xs py-1.5" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
+                <option value="fluxo">FC Principal</option>
+                <option value="all">Todas as Contas</option>
+                {accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile).map(a => (
+                  <option key={a.id} value={a.id}>{a.apelido || a.name}</option>
+                ))}
+              </select>
+            )}
+            {visao === 'grupo' && (
+              <select className="input w-auto text-xs py-1.5" value={groupId} onChange={e => setGroupId(e.target.value)}>
+                <option value="">Selecione o grupo...</option>
+                {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            )}
+            {visao === 'principais' && (
+              <span className="text-xs text-gray-500 px-1 self-center">
+                FC Principal: {filteredAccounts.length} conta{filteredAccounts.length !== 1 ? 's' : ''}
+              </span>
+            )}
             <select className="input w-auto text-xs py-1.5" value={String(horizon)} onChange={e => setHorizon(Number(e.target.value))}>
               <option value="30">30 dias</option>
               <option value="60">60 dias</option>
