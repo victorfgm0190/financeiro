@@ -37,6 +37,18 @@ export function clampDateToFatura(dateStr, faturaYYYYMM, closingDay) {
   return dateStr
 }
 
+// Data de SISTEMA (date) de uma parcela conforme a regra do Finup:
+//   parcela 1/N ou à vista (num <= 1) → mantém a data informada (fallback);
+//   parcela N/Total com N > 1         → dia `financialStartDay` do mês ANTERIOR à fatura
+//                                       da parcela (a provisão é feita no ciclo financeiro
+//                                       anterior ao ciclo da fatura). Ex.: fatura 2026-07 +
+//                                       financialStartDay 15 → 2026-06-15.
+// date_cartao (a data bruta do extrato) NUNCA é alterada por esta função.
+export function installmentSystemDate(faturaYYYYMM, num, fallbackDate, financialStartDay) {
+  if (!num || num <= 1 || !faturaYYYYMM) return fallbackDate
+  return `${addMonthToFatura(faturaYYYYMM, -1)}-${String(financialStartDay || 1).padStart(2, '0')}`
+}
+
 // Detecta duplicata de parcelado: mesma base + mesmo número de parcela + valor ±R$0,50.
 // Não compara fatura — se a parcela já existe no cartão, é duplicata independente do mês.
 export function isDuplicateInstallment(row, existing, accountId) {
@@ -113,7 +125,7 @@ function serieInicioOf(t) {
   return addMonthToFatura(ym, -(num - 1))
 }
 
-export function buildSeries(tx, transactions, account) {
+export function buildSeries(tx, transactions, account, financialStartDay = 1) {
   const total = Number(tx.installmentTotal) || null
   const myNum = Number(tx.installmentNum) || null
   if (!total || !myNum) return null
@@ -143,7 +155,10 @@ export function buildSeries(tx, transactions, account) {
     const anchor = [...siblings].sort((a, b) => Math.abs(a._num - k) - Math.abs(b._num - k))[0]
     if (!anchor) continue
     const futFatura = addMonthToFatura(anchor.faturaMonthYear, k - anchor._num)
-    const futDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
+    // Parcela 1 (se ausente) mantém a data efetiva da fatura; parcelas 2..N vão para o dia
+    // financialStartDay do mês ANTERIOR à fatura da parcela (regra do Finup).
+    const fallbackDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
+    const futDate = installmentSystemDate(futFatura, k, fallbackDate, financialStartDay)
     const description = buildSiblingDescription(anchor.description, anchor._num, k, total)
     // Guarda: se a descrição gerada já existe na conta, não oferece (cobre parcela
     // existente porém não-marcada no formato permissivo).

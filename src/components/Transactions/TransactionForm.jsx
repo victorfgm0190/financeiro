@@ -82,8 +82,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
-    reserveFunctions,
+    reserveFunctions, settings,
   } = useApp()
+
+  // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
+  // (dia financialMonthStartDay do mês anterior à fatura da parcela).
+  const financialStartDay = settings?.financialMonthStartDay || 1
 
   const defaultGrupoId = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
 
@@ -149,8 +153,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const parcelaSeries = useMemo(() => {
     if (!initial?.id || effInstNum == null || effInstTotal == null) return null
     const acc = accounts.find(a => a.id === initial.accountId)
-    return buildSeries({ ...initial, installmentNum: effInstNum, installmentTotal: effInstTotal }, transactions, acc)
-  }, [initial, transactions, accounts, effInstNum, effInstTotal])
+    return buildSeries({ ...initial, installmentNum: effInstNum, installmentTotal: effInstTotal }, transactions, acc, financialStartDay)
+  }, [initial, transactions, accounts, effInstNum, effInstTotal, financialStartDay])
 
   // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
@@ -613,7 +617,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     const faturas = new Set()
     for (const p of missing) {
       const grupo = p.grupoGerencial || defaultGrupoId
-      const date = clampDateToFatura(p.date, p.faturaMonthYear, closingDay)
+      // p.date já segue a regra (parcela >1 → mês anterior à fatura). NÃO clampar essas, senão
+      // a data voltaria para o mês da própria fatura. Parcela 1 mantém o clamp ao período.
+      const date = (p.num || 1) > 1 ? p.date : clampDateToFatura(p.date, p.faturaMonthYear, closingDay)
       if (p.payee && !payees.includes(p.payee)) addPayee(p.payee)
       addTransaction({
         type: 'expense', accountId: initial.accountId, accountType: 'credit',

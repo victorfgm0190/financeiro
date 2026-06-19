@@ -12,6 +12,7 @@ import {
 } from '../lib/db'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
+import { installmentSystemDate } from '../lib/parcelas'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 
 const rb = v => Math.round(v * 100) / 100
@@ -3304,6 +3305,7 @@ export function AppProvider({ children }) {
 
     const origDay = parseInt((date || '').split('-')[2] || '1', 10)
     const baseDesc = (description || '').replace(/\s*\(?\d+\s*\/\s*\d+\)?\s*$/, '').trim()
+    const financialStartDay = dataRef.current.settings?.financialMonthStartDay || 1
     const faturasAfetadas = new Set()
     for (let i = startFromInstallment; i <= installments; i++) {
       const fd = new Date(baseYear, baseMonth0 + (i - 1), 1)
@@ -3311,7 +3313,11 @@ export function AppProvider({ children }) {
       const fm0 = fd.getMonth()
       const futureFatura = `${fy}-${String(fm0 + 1).padStart(2, '0')}`
       const maxDay = new Date(fy, fm0 + 1, 0).getDate()
-      const futureDate = `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`
+      // Parcelas 2..N (i sempre > 1 aqui) → dia financialMonthStartDay do mês ANTERIOR à fatura
+      // da parcela (regra do Finup). date_cartao não se aplica (parcela projetada).
+      const futureDate = installmentSystemDate(
+        futureFatura, i, `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`, financialStartDay
+      )
       addTransaction({
         type: 'expense', accountId, accountType: 'credit', amount, date: futureDate,
         description: `${baseDesc} (${i}/${installments})`.trim(),

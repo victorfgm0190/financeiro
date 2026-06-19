@@ -9,7 +9,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment, installmentKey } from '../../lib/installments'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -505,17 +505,8 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
   return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
 }
 
-// Data de SISTEMA (date) de uma parcela conforme a regra do Finup:
-//   parcela 1/N ou à vista (num <= 1) → mantém a data informada (fallback = date_cartao);
-//   parcela N/Total com N > 1         → dia `financialStartDay` do mês ANTERIOR à fatura
-//                                       da parcela (a provisão é feita no ciclo financeiro
-//                                       anterior ao ciclo da fatura). Ex.: fatura 07/2026 +
-//                                       financialStartDay 15 → 2026-06-15.
-// date_cartao (a data bruta do extrato) NUNCA é alterada por esta função.
-function installmentSystemDate(faturaYYYYMM, num, fallbackDate, financialStartDay) {
-  if (!num || num <= 1 || !faturaYYYYMM) return fallbackDate
-  return `${addMonthToFatura(faturaYYYYMM, -1)}-${String(financialStartDay || 1).padStart(2, '0')}`
-}
+// installmentSystemDate: regra de date (sistema) das parcelas — agora compartilhada em
+// lib/parcelas.js (reutilizada também por buildSeries e criarParcelasGerencial).
 
 // Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
 // seguem ancoradas à fatura da linha base.
