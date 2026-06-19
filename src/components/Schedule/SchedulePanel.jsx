@@ -1889,9 +1889,14 @@ export default function SchedulePanel() {
       if (desc && !(s.description || '').toLowerCase().includes(desc)) return false
       if (payee && !(s.payee || '').toLowerCase().includes(payee)) return false
       if (fltCat && s.categoryId !== fltCat) return false
-      const amt = Number(s.amount) || 0
-      if (min !== null && amt < min) return false
-      if (max !== null && amt > max) return false
+      if (min !== null || max !== null) {
+        // Passa se o valor BASE OU o valor EFETIVO da próxima ocorrência (override) cair no range.
+        const baseAmt = Number(s.amount) || 0
+        const nextDate = getNextOccurrences(s, 1)[0] || null
+        const effAmt = nextDate ? Number(occEfetiva(s, nextDate).amount) : baseAmt
+        const inRange = (a) => (min === null || a >= min) && (max === null || a <= max)
+        if (!inRange(baseAmt) && !inRange(effAmt)) return false
+      }
       if (fltFrom || fltTo) {
         const d = getNextOccurrences(s, 1)[0] || s.startDate || ''
         if (fltFrom && d < fltFrom) return false

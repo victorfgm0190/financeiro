@@ -2,6 +2,7 @@ import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -278,6 +279,13 @@ export default function ScheduleForm({ initial, onClose }) {
   }
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
 
+  // Valor efetivo da próxima ocorrência do agendamento já salvo (respeita override individual).
+  // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
+  // próxima ocorrência tem valor diferente.
+  const nextOccDate = initial?.id ? (getNextOccurrences(initial, 1)[0] || null) : null
+  const nextOccAmount = nextOccDate ? Number(occEfetiva(initial, nextOccDate).amount) : null
+  const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(initial?.amount) || 0)
+
   const handleSaveOccurrence = (changes) => {
     setForm(f => {
       const newSkipped = changes.skip
@@ -396,6 +404,9 @@ export default function ScheduleForm({ initial, onClose }) {
             placeholder="0,00"
             required
           />
+          {hasNextDiff && (
+            <p className="text-xs text-gray-400 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
+          )}
         </div>
 
         {/* Conta Destino (apenas para transferências) */}
