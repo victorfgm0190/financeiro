@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
+  ListChecks, PencilLine, Check, X,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
@@ -94,6 +95,17 @@ export default function CreditCardPanel() {
     setReconciling(true)
     try {
       const r = await reconciliarGerencial(selectedCard.id)
+      // Auditoria: ao contrário de apenas marcar reconciled=true, este botão recalcula
+      // (cria/atualiza/remove) os agendamentos gerenciais da(s) fatura(s) do cartão via
+      // reconcileFaturaState e corrige os saldos das contas Ger. Detalhe completo no resumo.
+      console.log('[Reconciliar Gerenciais] resumo:', {
+        cartao: selectedCard.apelido || selectedCard.name,
+        agendasCriadas: r.agendasCriadas,
+        agendasAtualizadas: r.agendasAtualizadas,
+        agendasRemovidas: r.agendasRemovidas,
+        saldosCorrigidos: r.saldosCorrigidos,
+        detalhes: r.detalhes,
+      })
       const totalAgendas = r.agendasCriadas + r.agendasAtualizadas + r.agendasRemovidas
       if (totalAgendas === 0 && r.saldosCorrigidos === 0) {
         setToast('✓ Tudo sincronizado')
@@ -135,6 +147,7 @@ export default function CreditCardPanel() {
 
   // Keep same month when switching cards (per spec)
   const handleCardChange = (cardId) => {
+    setSelectMode(false); setSelectedIds(new Set())
     setSelectedCardId(cardId)
     if (!billKey) {
       const card = accounts.find(a => a.id === cardId)
@@ -216,6 +229,41 @@ export default function CreditCardPanel() {
     () => billTxs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
     [billTxs]
   )
+
+  // ── Seleção múltipla (modo "Selecionar") ──
+  // Espelha o padrão do Extrato de Conta: checkbox por linha + barra de ações flutuante
+  // para "Alterar Selecionados" (BulkEditModal → altera a data de sistema em lote via API)
+  // e conciliar/desconciliar em lote. Reaproveita setReconciled e bulkUpdateTransactions.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const exitSelect = () => { setSelectMode(false); setSelectedIds(new Set()) }
+  const toggleSelectMode = () => selectMode ? exitSelect() : setSelectMode(true)
+
+  const selectableIds = useMemo(() => displayBillTxs.map(tx => tx.id), [displayBillTxs])
+  const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
+  const toggleSelectAllVisible = () => setSelectedIds(prev => {
+    if (allVisibleSelected) {
+      const next = new Set(prev)
+      selectableIds.forEach(id => next.delete(id))
+      return next
+    }
+    return new Set([...prev, ...selectableIds])
+  })
+  const selectedTxs = useMemo(
+    () => transactions.filter(tx => selectedIds.has(tx.id)),
+    [transactions, selectedIds]
+  )
+  const handleBulkReconcile = (value) => {
+    if (selectedIds.size === 0) return
+    setReconciled([...selectedIds], value)
+    const n = selectedIds.size
+    setToast(`${n} ${n !== 1 ? 'lançamentos' : 'lançamento'} ${value ? (n !== 1 ? 'conciliados' : 'conciliado') : (n !== 1 ? 'desconciliados' : 'desconciliado')}`)
+  }
 
   // FAB mobile: novo lançamento no cartão/fatura selecionados (inativo nas
   // subtelas de extrato/relatório, onde o modal não está montado).
@@ -307,7 +355,7 @@ export default function CreditCardPanel() {
         {/* Navegador de fatura */}
         <div className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-lg px-1 py-1 shrink-0">
           <button
-            onClick={() => setBillKey(k => offsetBillKey(k, -1))}
+            onClick={() => { exitSelect(); setBillKey(k => offsetBillKey(k, -1)) }}
             className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
           >
             <ChevronLeft size={14} />
@@ -316,7 +364,7 @@ export default function CreditCardPanel() {
             {getBillLabel(billKey)}
           </span>
           <button
-            onClick={() => setBillKey(k => offsetBillKey(k, +1))}
+            onClick={() => { exitSelect(); setBillKey(k => offsetBillKey(k, +1)) }}
             className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
           >
             <ChevronRight size={14} />
@@ -432,6 +480,15 @@ export default function CreditCardPanel() {
             )}
             {billTxs.length > 0 && (
               <button
+                onClick={toggleSelectMode}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
+                title={selectMode ? 'Sair do modo de seleção' : 'Selecionar lançamentos para alterar ou conciliar'}
+              >
+                <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
+              </button>
+            )}
+            {billTxs.length > 0 && (
+              <button
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
                 title="Reconciliar transações da fatura"
@@ -480,18 +537,28 @@ export default function CreditCardPanel() {
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.amount}
                   dimmed={!tx.reconciled}
-                  onClick={() => setEditTx(tx)}
+                  onClick={selectMode ? () => toggleSelect(tx.id) : () => setEditTx(tx)}
                   leading={
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                      className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
-                      title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
-                    >
-                      {tx.reconciled
-                        ? <CheckCircle2 size={16} className="text-emerald-500" />
-                        : <Circle size={16} className="text-gray-600" />}
-                    </button>
+                    selectMode ? (
+                      <input
+                        type="checkbox"
+                        className="accent-[#0F6E56] shrink-0"
+                        checked={selectedIds.has(tx.id)}
+                        onChange={() => toggleSelect(tx.id)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
+                        className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
+                        title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                      >
+                        {tx.reconciled
+                          ? <CheckCircle2 size={16} className="text-emerald-500" />
+                          : <Circle size={16} className="text-gray-600" />}
+                      </button>
+                    )
                   }
                 />
               ))}
@@ -502,6 +569,17 @@ export default function CreditCardPanel() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
+                    {selectMode && (
+                      <th className="px-3 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          className="accent-[#0F6E56]"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAllVisible}
+                          title="Selecionar todos os visíveis"
+                        />
+                      </th>
+                    )}
                     <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Data</th>
                     <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
@@ -515,6 +593,7 @@ export default function CreditCardPanel() {
                   {/* Pagamentos da fatura (credit_payment) — linhas destacadas no topo */}
                   {billPayments.map(p => (
                     <tr key={p.id} className="border-b border-gray-800/50 bg-green-900/30">
+                      {selectMode && <td className="px-3 py-3" />}
                       <td className="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">{fmtDate(p.date)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -532,19 +611,39 @@ export default function CreditCardPanel() {
                   ))}
                   {displayBillTxs.length === 0 && (
                     <tr>
-                      <td colSpan={hasGer ? 7 : 6} className="text-center py-8 text-gray-500 text-xs">
+                      <td colSpan={(hasGer ? 7 : 6) + (selectMode ? 1 : 0)} className="text-center py-8 text-gray-500 text-xs">
                         Nenhum lançamento corresponde aos filtros
                       </td>
                     </tr>
                   )}
                   {displayBillTxs.map(tx => {
                     const cat = categories.find(c => c.id === tx.categoryId)
+                    const isSelected = selectedIds.has(tx.id)
                     return (
-                      <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}>
+                      <tr
+                        key={tx.id}
+                        onClick={selectMode ? () => toggleSelect(tx.id) : undefined}
+                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'} ${tx.reconciled ? '' : 'opacity-60'}`}
+                      >
+                        {selectMode && (
+                          <td className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              className="accent-[#0F6E56]"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(tx.id)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                          {fmtDate(tx.date)}
-                          {tx.dateCartao && tx.dateCartao !== tx.date && (
-                            <span className="block text-[10px] text-gray-600">Banco: {tx.dateCartao.split('-').reverse().slice(0, 2).join('/')}</span>
+                          {tx.dateCartao && tx.dateCartao !== tx.date ? (
+                            <>
+                              <span className="block">Sistema: {fmtDate(tx.date)}</span>
+                              <span className="block text-[10px] text-gray-600">Cartão: {fmtDate(tx.dateCartao)}</span>
+                            </>
+                          ) : (
+                            fmtDate(tx.date)
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -571,14 +670,14 @@ export default function CreditCardPanel() {
                         <td className="px-4 py-3">
                           <div className="flex gap-1 justify-end">
                             <button
-                              onClick={() => setEditTx(tx)}
+                              onClick={(e) => { e.stopPropagation(); setEditTx(tx) }}
                               title="Editar"
                               className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
                             >
                               <Edit2 size={11} />
                             </button>
                             <button
-                              onClick={() => setConfirmDelete(tx)}
+                              onClick={(e) => { e.stopPropagation(); setConfirmDelete(tx) }}
                               title="Excluir"
                               className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
                             >
@@ -589,7 +688,7 @@ export default function CreditCardPanel() {
                         <td className="px-2 py-3 text-center">
                           <button
                             type="button"
-                            onClick={() => setReconciled([tx.id], !tx.reconciled)}
+                            onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
                             title={tx.reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
                             className="p-1 rounded hover:bg-gray-700/50 transition-colors"
                           >
@@ -627,8 +726,54 @@ export default function CreditCardPanel() {
         <BulkEditModal
           txs={bulkEditTxs}
           onClose={() => setBulkEditTxs(null)}
-          onApplied={(n) => setToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`)}
+          onApplied={(n) => { exitSelect(); setToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`) }}
         />
+      )}
+
+      {/* Espaçador p/ a barra de ações fixa não cobrir o último lançamento (mais alto no
+          mobile por causa da navegação inferior). */}
+      {selectMode && <div className="h-36 md:h-24" />}
+
+      {/* ── Barra de ações (modo Selecionar) — acima do BottomNav no mobile ── */}
+      {selectMode && (
+        <div className="fixed bottom-16 md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
+          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-gray-700 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-gray-300 font-medium">
+              {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <button
+                onClick={() => setBulkEditTxs(selectedTxs)}
+                disabled={selectedIds.size === 0}
+                className="btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <PencilLine size={12} /> Alterar Selecionados
+              </button>
+              <button
+                onClick={() => handleBulkReconcile(true)}
+                disabled={selectedIds.size === 0}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Conciliar lançamentos selecionados"
+              >
+                <Check size={12} /> Conciliar
+              </button>
+              <button
+                onClick={() => handleBulkReconcile(false)}
+                disabled={selectedIds.size === 0}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Desconciliar lançamentos selecionados"
+              >
+                <Circle size={12} /> Desconciliar
+              </button>
+              <button
+                onClick={exitSelect}
+                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+              >
+                <X size={12} /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Modal open={showNewTx} onClose={() => setShowNewTx(false)} title="Novo Lançamento" size="lg">

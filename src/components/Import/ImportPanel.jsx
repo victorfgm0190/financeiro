@@ -505,6 +505,18 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
   return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
 }
 
+// Data de SISTEMA (date) de uma parcela conforme a regra do Finup:
+//   parcela 1/N ou à vista (num <= 1) → mantém a data informada (fallback = date_cartao);
+//   parcela N/Total com N > 1         → dia `financialStartDay` do mês ANTERIOR à fatura
+//                                       da parcela (a provisão é feita no ciclo financeiro
+//                                       anterior ao ciclo da fatura). Ex.: fatura 07/2026 +
+//                                       financialStartDay 15 → 2026-06-15.
+// date_cartao (a data bruta do extrato) NUNCA é alterada por esta função.
+function installmentSystemDate(faturaYYYYMM, num, fallbackDate, financialStartDay) {
+  if (!num || num <= 1 || !faturaYYYYMM) return fallbackDate
+  return `${addMonthToFatura(faturaYYYYMM, -1)}-${String(financialStartDay || 1).padStart(2, '0')}`
+}
+
 // Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
 // seguem ancoradas à fatura da linha base.
 //
@@ -515,7 +527,7 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
 //
 // Dindin (demais): comportamento anterior — fatura_ref pela data original (dia vs
 // fechamento) e date no mês de referência mantendo o dia original.
-function applyReferenceFatura(rows, reference, closingDay, dueDay) {
+function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStartDay = 1) {
   if (!reference) return rows
   const [fy, fm] = reference.split('-').map(Number)
   const daysInMonth = new Date(fy, fm, 0).getDate()
@@ -524,17 +536,21 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay) {
     const origDay = row._origDay ?? parseInt((row.date || '').split('-')[2] || '1', 10)
     const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
     const dateCartao = row._dateCartao || row.date
+    const num = row._installment?.num || 1
     if (row._csvItau) {
+      const baseDate = clampDateToFatura(dateCartao, reference, closingDay)
       return {
         ...row,
         faturaMonthYear: reference,
-        date: clampDateToFatura(dateCartao, reference, closingDay),
+        // Parcela 1/à vista mantém a data efetiva; parcela >1 vai p/ o mês anterior à fatura.
+        date: installmentSystemDate(reference, num, baseDate, financialStartDay),
       }
     }
+    const fatura = faturaRefFromReference(dateCartao, reference, closingDay)
     return {
       ...row,
-      faturaMonthYear: faturaRefFromReference(dateCartao, reference, closingDay),
-      date: `${reference}-${clampedDay}`,
+      faturaMonthYear: fatura,
+      date: installmentSystemDate(fatura, num, `${reference}-${clampedDay}`, financialStartDay),
     }
   })
   return step1.map(row => {
@@ -542,7 +558,8 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay) {
     const parent = step1.find(r => r._id === row._seriesId)
     if (!parent) return row
     const faturaI = addMonthToFatura(parent.faturaMonthYear, row._installmentNum - 1)
-    return { ...row, faturaMonthYear: faturaI, date: faturaToDate(faturaI, dueDay) || row.date }
+    // Parcelas geradas (siblings) são sempre num > 1 → data no mês anterior à fatura da parcela.
+    return { ...row, faturaMonthYear: faturaI, date: installmentSystemDate(faturaI, row._installmentNum, faturaToDate(faturaI, dueDay) || row.date, financialStartDay) }
   })
 }
 
@@ -772,8 +789,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
-    reserveFunctions,
+    reserveFunctions, settings,
   } = useApp()
+
+  // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
+  // (provisão no dia financialMonthStartDay do mês anterior à fatura da parcela).
+  const financialStartDay = settings?.financialMonthStartDay || 1
 
   // Funções de reserva vinculadas à conta-origem (resgate) de um grupo gerencial numerado.
   // Vazio para Grupo G (number===1), D, ou grupos sem conta-origem definida.
@@ -953,7 +974,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       let alignedRows = detected ? alignInstallmentsToFatura(sortedRows, detected, resolvedDueDay) : sortedRows
       // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
-      if (detected) alignedRows = applyReferenceFatura(alignedRows, detected, resolvedClosingDay, resolvedDueDay)
+      if (detected) alignedRows = applyReferenceFatura(alignedRows, detected, resolvedClosingDay, resolvedDueDay, financialStartDay)
       setRows(alignedRows)
       setCardInfo({ cardName, faturaStr })
       setMatchQueue(pendingMatches)
@@ -982,7 +1003,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
       const detected = detectMainFatura(rebased)
       if (detected) setFaturaMonthYear(detected)
-      return detected ? applyReferenceFatura(rebased, detected, cl, dd) : rebased
+      return detected ? applyReferenceFatura(rebased, detected, cl, dd, financialStartDay) : rebased
     })
   }
 
@@ -995,7 +1016,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const acc = accounts.find(a => a.id === selectedAccount)
     const cl = acc?.closingDay || 14
     const dd = acc?.dueDay || null
-    setRows(prev => applyReferenceFatura(prev, newFatura, cl, dd))
+    setRows(prev => applyReferenceFatura(prev, newFatura, cl, dd, financialStartDay))
   }
 
   // Carrega uma importação do histórico para reedição
@@ -1117,7 +1138,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         if (principalKeys.has(key) || seen.has(key)) continue
         seen.add(key)
         const futFatura = addMonthToFatura(row.faturaMonthYear, k - inst.num)
-        const futDate = faturaToDate(futFatura, dueDay) || `${futFatura}-01`
+        // Parcela futura (k > 1): data de sistema = dia financialStartDay do mês anterior à fatura.
+        const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         const futNumStr = String(k).padStart(numWidth, '0')
         const futDesc = inst.matchStr
           ? row.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
@@ -1139,7 +1161,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return out
     // editingImport mantido nas deps: o React Compiler exige o array idêntico (preserve-
     // manual-memoization); o corpo não o usa mais, daí o aviso benigno de dep desnecessária.
-  }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD])
+  }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD, financialStartDay])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
@@ -1256,7 +1278,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       futureParcelas.forEach(fp => {
         if (fp._exists) return
         if (isDuplicateInstallment({ description: fp.description, amount: fp.amount }, transactions, selectedAccount)) return
-        const fpDate = clampDateToFatura(fp.date, fp.faturaMonthYear, editClosingDay)
+        // fp.date já é a data de sistema correta (parcela >1 → mês anterior à fatura). NÃO
+        // clampar ao período da própria fatura — isso jogaria a data de volta p/ o mês da fatura.
+        const fpDate = fp.date
         addFaturaAfetada(fp.faturaMonthYear, fpDate)
         if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
         const fId = addTransaction({
@@ -1308,7 +1332,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // (e editável na tabela de revisão), com clamp ao período válido da fatura — datas
     // fora do intervalo caem no dia de fechamento do mês da fatura. A fatura_ref vive
     // separada em row.faturaMonthYear; date_cartao nunca é alterada.
-    const computeSaveDate = (row) => clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+    // Exceção: parcela N/Total com N > 1 já tem date no mês ANTERIOR à fatura (regra do
+    // Finup) — não clampar, senão a data voltaria p/ o mês da própria fatura.
+    const computeSaveDate = (row) =>
+      (row._installment?.num || 1) > 1
+        ? row.date
+        : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
 
     const txIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
@@ -1391,9 +1420,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     futureParcelas.forEach(fp => {
       if (fp._exists) return
       if (isDuplicateInstallment({ description: fp.description, amount: fp.amount }, transactions, selectedAccount)) return
-      // Parcela futura recebe data avançada (dia de vencimento do mês futuro) — clampa ao
-      // período válido da própria fatura. date_cartao permanece null (projeção).
-      const fpDate = clampDateToFatura(fp.date, fp.faturaMonthYear, importClosingDay)
+      // fp.date já é a data de sistema correta (parcela >1 → dia financialMonthStartDay do mês
+      // anterior à fatura). NÃO clampar ao período da própria fatura. date_cartao fica null (projeção).
+      const fpDate = fp.date
       addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
       const fId = addTransaction({
@@ -2402,7 +2431,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         onChange={e => toggleAll(e.target.checked)} />
                     </th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Sistema</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Banco</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Cartão</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
