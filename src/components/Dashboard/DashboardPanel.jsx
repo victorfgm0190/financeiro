@@ -57,7 +57,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences, getSaldoPrincipalBreakdown } = useApp()
   const accounts = profileAccounts
   const isMobile = useIsMobile()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
@@ -281,6 +281,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       futureDelta,
     }
   }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
+
+  // Valor "Projetado" do card = o MESMO calculado pelo modal "Como chegamos aqui"
+  // (getSaldoPrincipalBreakdown().projetado.total), que já desconta os envelopes restantes.
+  const projetadoModal = useMemo(() => getSaldoPrincipalBreakdown()?.projetado?.total ?? null, [getSaldoPrincipalBreakdown])
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -516,8 +520,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <div className="shrink-0 text-right space-y-1.5">
               <div>
                 <p className="text-xs text-gray-500 mb-0.5">Projetado</p>
-                <p className={`text-xl font-bold ${saldoProjetado.projetado >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {fmt(saldoProjetado.projetado)}
+                <p className={`text-xl font-bold ${projetadoModal >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                  {fmt(projetadoModal)}
                 </p>
               </div>
               {Math.abs(saldoProjetado.final - saldoProjetado.projetado) >= 0.005 && (
