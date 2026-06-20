@@ -296,6 +296,13 @@ export default function EnvelopesPanel() {
     const s = format(new Date(comp.year, comp.month0, 1), "MMMM 'de' yyyy", { locale: ptBR })
     return s.charAt(0).toUpperCase() + s.slice(1)
   }, [comp])
+  // Intervalo do mês financeiro da competência (mesmo critério de competenciaKeyOf):
+  // de startDay do mês até (startDay − 1) do mês seguinte.
+  const compRange = useMemo(() => {
+    const start = new Date(comp.year, comp.month0, startDay)
+    const end = new Date(comp.year, comp.month0 + 1, startDay - 1)
+    return `${format(start, 'dd/MM/yyyy')} – ${format(end, 'dd/MM/yyyy')}`
+  }, [comp, startDay])
   const shiftComp = (delta) => setMonthOffset(o => o + delta)
 
   const envelopeData = useMemo(() => {
@@ -357,6 +364,7 @@ export default function EnvelopesPanel() {
           <div className="text-center">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Competência</p>
             <p className="text-sm font-semibold text-gray-200">{compLabel}</p>
+            <p className="text-xs text-gray-400">{compRange}</p>
           </div>
           <button onClick={() => shiftComp(1)} className="p-1.5 rounded-md hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors" title="Próxima competência">
             <ChevronRight size={18} />
