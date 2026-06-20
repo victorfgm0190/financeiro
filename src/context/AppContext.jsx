@@ -1032,6 +1032,15 @@ export function AppProvider({ children }) {
     )
     update(d => {
       let accounts = [...d.accounts]
+
+      // Empréstimos — espelho (CASO A/B/C). CASO C = despesa direto numa conta-espelho:
+      // BLOQUEIA o lançamento original (não salva, não mexe no saldo dele); existem apenas
+      // os dois espelhos (transferência p/ Dinger + despesa no Dinger).
+      const espelhoTxs = buildEspelhoTxs({ ...tx, amount: Number(tx.amount) }, id, d.categories, d.accounts)
+      const isCasoC = espelhoTxs.length > 0 && espelhoTxs[0].type === 'transfer'
+
+      // Saldo do lançamento ORIGINAL (pulado por completo no CASO C).
+      if (!isCasoC) {
       if (tx.type === 'income') {
         if (tx.accountType === 'credit') {
           // Estorno em cartão → abate a dívida da fatura (consistente com o totalizador
@@ -1071,18 +1080,19 @@ export function AppProvider({ children }) {
           return a
         })
       }
+      } // fim do saldo do lançamento original (pulado no CASO C)
 
-      const extraTxs = buildReservaAutoTxs(tx, d.accounts, id, d.reserveFunctions)
+      // Auto-txs do original (reserva/aporte) só quando ele NÃO é bloqueado (CASO C não salva).
+      const extraTxs = isCasoC ? [] : buildReservaAutoTxs(tx, d.accounts, id, d.reserveFunctions)
 
       // Aporte automático: despesa de cartão com categoria vinculada a conta de investimento
       // gera uma receita (crédito) na conta de investimento.
-      const investIncome = buildInvestAutoIncomeTx({ ...tx, amount: Number(tx.amount) }, d.categories, d.accounts, id)
+      const investIncome = isCasoC ? null : buildInvestAutoIncomeTx({ ...tx, amount: Number(tx.amount) }, d.categories, d.accounts, id)
       if (investIncome) {
         accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
       }
 
-      // Empréstimos — lançamentos espelho (CASO A/B/C). Atualizam saldo das contas reais.
-      const espelhoTxs = buildEspelhoTxs({ ...tx, amount: Number(tx.amount) }, id, d.categories, d.accounts)
+      // Saldo das contas reais dos lançamentos espelho (CASO A/B/C).
       for (const et of espelhoTxs) {
         accounts = accounts.map(a => {
           if (et.type === 'income' && a.id === et.accountId) return { ...a, balance: rb(a.balance + et.amount) }
@@ -1098,7 +1108,8 @@ export function AppProvider({ children }) {
       return {
         ...d,
         accounts,
-        transactions: [...d.transactions, newTx, ...extraTxs, ...(investIncome ? [investIncome] : []), ...espelhoTxs],
+        // CASO C: não salva o lançamento original — só os espelhos.
+        transactions: [...d.transactions, ...(isCasoC ? [] : [newTx]), ...extraTxs, ...(investIncome ? [investIncome] : []), ...espelhoTxs],
       }
     })
     // TAREFA 1: despesa de cartão (não vinda de importação) gera/atualiza a conta a
