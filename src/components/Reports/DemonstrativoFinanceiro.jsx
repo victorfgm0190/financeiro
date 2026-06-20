@@ -31,7 +31,7 @@ function getRange(startDay, months) {
   }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
   const inRange = transactions.filter(tx =>
@@ -79,8 +79,18 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // Sombra de reserva de função com exibir_como_despesa = FALSE (ou sem função vinculada) → vai
   // para o bloco "Reservas" separado, NÃO entra em Despesas/Receitas. Sombras de funções com
   // exibir_como_despesa = TRUE permanecem na categoria de despesa (comportamento atual).
-  // (reservaDespesaFuncSet.has(null) === false → sombras sem função também vão para Reservas.)
-  const isReservaGerSombra = (tx) => tx.reservaAuto === true && !reservaDespesaFuncSet.has(tx.reservaFuncaoId)
+  // Sombras legadas com reservaFuncaoId = null são reconhecidas pelo category_id da função
+  // (reservaDespesaCategorySet), evitando que depósitos de funções "despesa" caiam em Reservas.
+  const reservaDespesaCategorySet = new Set(
+    (reserveFunctions || [])
+      .filter(f => f.exibirComoDespesa)
+      .map(f => f.categoryId)
+      .filter(Boolean)
+  )
+  const isReservaGerSombra = (tx) =>
+    tx.reservaAuto === true &&
+    !reservaDespesaFuncSet.has(tx.reservaFuncaoId) &&
+    !reservaDespesaCategorySet.has(tx.categoryId)
 
   const expenseTxs = inRange.filter(t => !isReservaGerSombra(t) && countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
@@ -396,8 +406,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
