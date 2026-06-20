@@ -75,7 +75,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // no card "Reservas", não em Receitas/Despesas. Funções com exibir_como_despesa = TRUE seguem
   // dentro das despesas (reconhecidas por reservaFuncaoId ou pelo category_id da função).
   const isReservaGerSombra = useCallback(
-    (t) => t.reservaAuto === true && !reservaDespesaFuncSet.has(t.reservaFuncaoId) && !reservaDespesaCategorySet.has(t.categoryId),
+    (t) => t.reservaAuto === true && !reservaDespesaFuncSet.has(t.reservaFuncaoId) && !(t.reservaFuncaoId == null && reservaDespesaCategorySet.has(t.categoryId)),
     [reservaDespesaFuncSet, reservaDespesaCategorySet]
   )
   const isExpenseTx = useCallback(

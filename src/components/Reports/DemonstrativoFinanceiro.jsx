@@ -90,7 +90,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   const isReservaGerSombra = (tx) =>
     tx.reservaAuto === true &&
     !reservaDespesaFuncSet.has(tx.reservaFuncaoId) &&
-    !reservaDespesaCategorySet.has(tx.categoryId)
+    !(tx.reservaFuncaoId == null && reservaDespesaCategorySet.has(tx.categoryId))
 
   const expenseTxs = inRange.filter(t => !isReservaGerSombra(t) && countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
