@@ -108,6 +108,8 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     totalReservasUtilizadas,
     liquidoReservas: totalReservasUtilizadas - totalReservasFeitas,
     hasReservas: reservasFeitas.length > 0 || reservasUtilizadas.length > 0,
+    reservasFeitasTxs: [...reservasFeitas].sort((a, b) => b.date.localeCompare(a.date)),
+    reservasUtilizadasTxs: [...reservasUtilizadas].sort((a, b) => b.date.localeCompare(a.date)),
   }
 }
 
@@ -521,11 +523,11 @@ export default function DemonstrativoFinanceiro() {
                 </tr>
               </thead>
               <tbody>
-                {/* ── DESPESAS ─────────────────────────────────────────── */}
-                {report.expenses.length > 0 && (
+                {/* ── RECEITAS ─────────────────────────────────────────── */}
+                {report.income.length > 0 && (
                   <>
-                    <SectionHeader label="Despesas" total={report.totalExpense} isExpense={true} />
-                    {report.expenses.map((group, gi) => (
+                    <SectionHeader label="Receitas" total={report.totalIncome} isExpense={false} />
+                    {report.income.map((group, gi) => (
                       <Fragment key={gi}>
                         <GroupRow name={group.name} total={group.total} />
                         {group.subcats.map((sub, si) => (
@@ -541,11 +543,11 @@ export default function DemonstrativoFinanceiro() {
                   </>
                 )}
 
-                {/* ── RECEITAS ─────────────────────────────────────────── */}
-                {report.income.length > 0 && (
+                {/* ── DESPESAS ─────────────────────────────────────────── */}
+                {report.expenses.length > 0 && (
                   <>
-                    <SectionHeader label="Receitas" total={report.totalIncome} isExpense={false} />
-                    {report.income.map((group, gi) => (
+                    <SectionHeader label="Despesas" total={report.totalExpense} isExpense={true} />
+                    {report.expenses.map((group, gi) => (
                       <Fragment key={gi}>
                         <GroupRow name={group.name} total={group.total} />
                         {group.subcats.map((sub, si) => (
@@ -584,10 +586,16 @@ export default function DemonstrativoFinanceiro() {
                       <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Feitas</td>
                       <td className="px-4 py-2 text-right text-sm font-semibold text-orange-500">{fmt(-report.totalReservasFeitas)}</td>
                     </tr>
+                    {applied.showTx && report.reservasFeitasTxs.map(tx => (
+                      <TxRow key={tx.id} tx={tx} indent={48} />
+                    ))}
                     <tr className="border-b border-gray-800/40">
                       <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Utilizadas</td>
                       <td className="px-4 py-2 text-right text-sm font-semibold text-blue-400">+{fmt(report.totalReservasUtilizadas)}</td>
                     </tr>
+                    {applied.showTx && report.reservasUtilizadasTxs.map(tx => (
+                      <TxRow key={tx.id} tx={tx} indent={48} />
+                    ))}
                     <tr className="border-b border-gray-800/40">
                       <td className="pl-6 pr-3 py-2 text-sm font-semibold text-gray-200" colSpan={2}>Líquido de Reservas</td>
                       <td className={`px-4 py-2 text-right text-sm font-semibold ${report.liquidoReservas >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
