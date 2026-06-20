@@ -344,6 +344,8 @@ export const reserveFunctionToRow = (f) => ({
     ? f.ajusteOverride : null,
   // Flag: movimentações desta função contam como despesa nos relatórios/dashboard.
   exibir_como_despesa: !!f.exibirComoDespesa,
+  // Categoria da despesa vinculada à função; sombras de reserva herdam dela.
+  category_id: f.categoryId || null,
 })
 
 // Normaliza ajuste_override para o formato { "YYYY-MM": { valor, observacao } }.
@@ -381,6 +383,7 @@ export const rowToReserveFunction = (r) => ({
     : (Number(r.saidas) ? Number(r.saidas) : null),
   ajusteOverride: normalizeAjusteOverride(r.ajuste_override),
   exibirComoDespesa: !!r.exibir_como_despesa,
+  categoryId: r.category_id || null,
 })
 
 export const categoryToRow = (c) => ({

@@ -669,3 +669,7 @@ CREATE TABLE IF NOT EXISTS reserve_functions (
   ordem INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+-- Categoria da despesa vinculada à função (opcional). As sombras automáticas de reserva
+-- ("Reserva: X" / "Resgate Reserva: X") herdam esta categoria. category_id é sempre TEXT
+-- no schema (sem FK rígida); a tabela de categorias é `categorias`.
+ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS category_id TEXT;

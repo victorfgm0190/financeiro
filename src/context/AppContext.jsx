@@ -474,13 +474,16 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
   }
 
   if (toAcc?.isReserva) {
+    const funcId = resolveReservaFunc(toAcc)
+    const reserveFunc = (reserveFunctions || []).find(f => f.id === funcId)
     const catId = tx.reservaExpenseCategoryId ||
+      reserveFunc?.categoryId ||
       (toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
     extraTxs.push({
       id: 'tx_res_' + base + '_' + Math.random().toString(36).slice(2),
       type: 'expense', accountId: null, amount: Number(tx.amount),
       categoryId: catId,
-      reservaFuncaoId: resolveReservaFunc(toAcc),
+      reservaFuncaoId: funcId,
       description: `Reserva: ${toAcc.apelido || toAcc.name}`,
       date: tx.date, createdAt: now, reservaAuto: true,
       ...(parentTxId ? { parentTxId } : {}),
@@ -488,10 +491,12 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
   }
 
   if (fromAcc?.isReserva) {
+    const rsgFunc = resolveReservaFunc(fromAcc)
+    const reserveFunc = (reserveFunctions || []).find(f => f.id === rsgFunc)
     const catId = tx.reservaExpenseCategoryId ||
+      reserveFunc?.categoryId ||
       (fromAcc.reservaType === 'especifica' ? (fromAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
     const baseId = 'tx_rsg_' + base + '_' + Math.random().toString(36).slice(2)
-    const rsgFunc = resolveReservaFunc(fromAcc)
     extraTxs.push({
       id: baseId + '_r',
       type: 'income', accountId: null, amount: Number(tx.amount),
@@ -2317,6 +2322,7 @@ export function AppProvider({ children }) {
         saldoInicial: Number(fn.saldoInicial) || 0, entradas: 0, saidas: 0,
         despesaAnual: Number(fn.despesaAnual) || 0, depositoMensal: Number(fn.depositoMensal) || 0,
         mesVencimento: fn.mesVencimento ?? null, ordem: maxOrdem + 1,
+        categoryId: fn.categoryId || null,
       }
       return { ...d, reserveFunctions: [...(d.reserveFunctions || []), novo] }
     })

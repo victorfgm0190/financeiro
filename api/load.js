@@ -58,6 +58,9 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS saidas_override NUMERIC`)
     // Ajuste manual por mês: { "YYYY-MM": valor } (positivo ou negativo).
     await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS ajuste_override JSONB`)
+    // Categoria da despesa vinculada à função (opcional): as sombras de reserva herdam
+    // essa categoria. category_id é sempre TEXT (sem FK), como nas demais tabelas.
+    await query(`ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS category_id TEXT`)
     // Flag: a função representa uma despesa real (provisão) — suas movimentações podem contar
     // como despesa nos relatórios/dashboard. Default false. O SEED inicial dos valores roda
     // SÓ UMA VEZ (quando a coluna é criada); depois respeita o toggle editado pelo usuário.

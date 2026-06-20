@@ -182,7 +182,7 @@ function DespesaToggle({ on, onToggle }) {
   )
 }
 
-function FunctionForm({ initial, accounts, onSubmit, onClose }) {
+function FunctionForm({ initial, accounts, categories = [], onSubmit, onClose }) {
   const isMobile = useIsMobile()
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -191,9 +191,15 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
     despesaAnual: initial?.despesaAnual ?? 0,
     depositoMensal: initial?.depositoMensal ?? 0,
     mesVencimento: initial?.mesVencimento ?? '',
+    categoryId: initial?.categoryId || '',
     exibirComoDespesa: initial?.exibirComoDespesa ?? false,
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Categorias de despesa (inclui 'both'), ordenadas por nome — mesma base do TransactionForm.
+  const categoryOpts = [...categories]
+    .filter(c => c.type === 'expense' || c.type === 'both')
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'))
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit({
@@ -203,6 +209,7 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
       despesaAnual: Number(form.despesaAnual) || 0,
       depositoMensal: Number(form.depositoMensal) || 0,
       mesVencimento: form.mesVencimento !== '' ? Number(form.mesVencimento) : null,
+      categoryId: form.categoryId || null,
       exibirComoDespesa: !!form.exibirComoDespesa,
     }) }} className="space-y-4">
       <div>
@@ -237,6 +244,14 @@ function FunctionForm({ initial, accounts, onSubmit, onClose }) {
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
         <p className="text-xs text-gray-600 mt-1">Quando não definido, a despesa anual é dividida em 12 parcelas mensais</p>
+      </div>
+      <div>
+        <label className="label">Categoria da Despesa</label>
+        <select className="input" value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
+          <option value="">Sem categoria vinculada</option>
+          {categoryOpts.map(c => <option key={c.id} value={c.id}>{`${c.icon || ''} ${c.name}`.trim()}</option>)}
+        </select>
+        <p className="text-xs text-gray-600 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo</p>
       </div>
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
@@ -1467,6 +1482,7 @@ export default function ReservasPanel() {
         <FunctionForm
           initial={editFn}
           accounts={nonCreditAccounts}
+          categories={categories}
           onSubmit={data => {
             if (editFn) updateFunction(editFn.id, data)
             else addFunction(data)
