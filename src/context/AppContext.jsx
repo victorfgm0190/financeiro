@@ -747,6 +747,7 @@ export function AppProvider({ children }) {
   const profileTransactions = useMemo(() => {
     if (!activeProfileId) return data.transactions
     return data.transactions.filter(t =>
+      t.reservaAuto === true ||
       profileAccountIds.has(t.accountId) || profileAccountIds.has(t.toAccountId)
     )
   }, [data.transactions, profileAccountIds, activeProfileId])
