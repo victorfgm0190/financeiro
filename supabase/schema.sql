@@ -673,3 +673,11 @@ CREATE TABLE IF NOT EXISTS reserve_functions (
 -- ("Reserva: X" / "Resgate Reserva: X") herdam esta categoria. category_id é sempre TEXT
 -- no schema (sem FK rígida); a tabela de categorias é `categorias`.
 ALTER TABLE reserve_functions ADD COLUMN IF NOT EXISTS category_id TEXT;
+
+-- ─── Empréstimos: conta espelho ───────────────────────────────────────────────
+-- Categoria que gera lançamento espelho (empréstimos) e a conta vinculada. O id de
+-- contas é TEXT neste schema (sem FK rígida — convenção das demais colunas *_id).
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT false;
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS conta_espelho_id TEXT;
+-- Marca lançamentos gerados automaticamente pelo espelho (proteção contra loop).
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT false;

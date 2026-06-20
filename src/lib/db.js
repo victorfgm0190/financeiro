@@ -202,6 +202,7 @@ export const txToRow = (tx) => ({
   schedule_id: tx.scheduleId || null,
   reconciled: !!tx.reconciled,
   reserva_auto: !!tx.reservaAuto,
+  is_espelho: !!tx.isEspelho,
   origin: tx.origin || 'manual',
   gerencial_schedule_id: tx.gerencialScheduleId || null,
   fatura_month_year: tx.faturaMonthYear || null,
@@ -244,6 +245,7 @@ export const rowToTx = (r) => ({
   scheduleId: r.schedule_id || null,
   reconciled: !!r.reconciled,
   reservaAuto: !!r.reserva_auto,
+  isEspelho: !!r.is_espelho,
   origin: r.origin || 'manual',
   gerencialScheduleId: r.gerencial_schedule_id || null,
   faturaMonthYear: r.fatura_month_year || null,
@@ -394,6 +396,8 @@ export const categoryToRow = (c) => ({
   icon: c.icon || null,
   category_group: c.group || null,
   investment_account_id: c.investmentAccountId || null,
+  gera_espelho: !!c.geraEspelho,
+  conta_espelho_id: c.contaEspelhoId || null,
 })
 
 export const rowToCategory = (r) => ({
@@ -404,6 +408,8 @@ export const rowToCategory = (r) => ({
   icon: r.icon || '',
   group: r.category_group || null,
   investmentAccountId: r.investment_account_id || null,
+  geraEspelho: !!r.gera_espelho,
+  contaEspelhoId: r.conta_espelho_id || null,
 })
 
 export const budgetToRow = (b) => ({

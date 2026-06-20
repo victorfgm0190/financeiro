@@ -19,6 +19,8 @@ export default async function handler(req, res) {
     // Transferências entre perfis CPF/CNPJ: categoria na visão de cada perfil.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)
+    // Empréstimos: marca lançamentos gerados pelo espelho (proteção contra loop).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)
@@ -138,6 +140,9 @@ export default async function handler(req, res) {
     // Mantém is_reserva sincronizado com vinculo_tipo (compat. com código legado).
     await query(`UPDATE contas SET is_reserva = (vinculo_tipo = 'reserva') WHERE vinculo_tipo IS NOT NULL`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT`)
+    // Empréstimos: categoria gera lançamento espelho e a conta vinculada (TEXT, sem FK).
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT false`)
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS conta_espelho_id TEXT`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]'`)

@@ -338,6 +338,27 @@ export default function SettingsPanel() {
             ))}
           </select>
         )}
+        <button
+          type="button"
+          onClick={() => updateCategory(cat.id, { geraEspelho: !cat.geraEspelho })}
+          title="Gera lançamento espelho (Empréstimos)"
+          className={`shrink-0 text-[9px] uppercase tracking-wide font-bold px-1.5 py-1 rounded transition-colors ${
+            cat.geraEspelho ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 'bg-gray-700/50 text-gray-500 hover:bg-gray-600/60'
+          }`}
+        >
+          Espelho
+        </button>
+        {cat.geraEspelho && (
+          <select
+            className="input w-auto text-xs py-1 max-w-[150px]"
+            title="Conta vinculada (Empréstimos) — o lançamento espelho é criado nesta conta"
+            value={cat.contaEspelhoId || ''}
+            onChange={e => updateCategory(cat.id, { contaEspelhoId: e.target.value || null })}
+          >
+            <option value="">Conta vinculada…</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
+          </select>
+        )}
         <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
           <Trash2 size={12} />
         </button>

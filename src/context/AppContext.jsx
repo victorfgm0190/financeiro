@@ -520,6 +520,62 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
   return extraTxs
 }
 
+// Empréstimos — Conta Espelho. Dado um lançamento (income/expense), gera os lançamentos
+// espelho conforme a categoria (gera_espelho + conta_espelho_id) ou a conta (despesa numa
+// conta-espelho). Todos os gerados carregam isEspelho=true (proteção contra loop) e são
+// injetados direto no estado — nunca passam por addTransaction de novo.
+function buildEspelhoTxs(tx, parentId, categories, accounts) {
+  if (tx.isEspelho) return [] // proteção contra loop
+  if (tx.type !== 'expense' && tx.type !== 'income') return []
+  const amount = Number(tx.amount)
+  if (!amount) return []
+  const now = new Date().toISOString()
+  const base = Date.now()
+  const mk = (suffix, obj) => ({
+    id: 'tx_esp_' + base + '_' + Math.random().toString(36).slice(2) + suffix,
+    amount, date: tx.date, isEspelho: true, origin: 'espelho',
+    parentTxId: parentId, createdAt: now, ...obj,
+  })
+
+  // Contas que são "conta-espelho" de alguma categoria com gera_espelho.
+  const espelhoAccountIds = new Set(
+    (categories || []).filter(c => c.geraEspelho && c.contaEspelhoId).map(c => c.contaEspelhoId)
+  )
+
+  // CASO C: despesa diretamente numa conta-espelho → transfere para "Dinheiro Ger" e gera
+  // a despesa real lá. NÃO aplica o espelho por categoria neste caso.
+  if (tx.type === 'expense' && espelhoAccountIds.has(tx.accountId)) {
+    const dinger = (accounts || []).find(a => a.name === 'Dinheiro Ger' || a.apelido === 'dinger')
+    if (!dinger) return []
+    return [
+      mk('_trf', {
+        type: 'transfer', accountId: tx.accountId, toAccountId: dinger.id,
+        description: tx.description || '(espelho)', categoryId: null,
+      }),
+      mk('_desp', {
+        type: 'expense', accountId: dinger.id, toAccountId: null,
+        description: tx.description || '(espelho)', categoryId: tx.categoryId || null,
+      }),
+    ]
+  }
+
+  // CASO A/B: categoria com gera_espelho + conta vinculada.
+  const cat = (categories || []).find(c => c.id === tx.categoryId)
+  if (!cat || !cat.geraEspelho || !cat.contaEspelhoId) return []
+  if (tx.type === 'expense') {
+    // CASO A: despesa → receita na conta-espelho (empréstimo concedido).
+    return [mk('_r', {
+      type: 'income', accountId: cat.contaEspelhoId, toAccountId: null,
+      description: 'Empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
+    })]
+  }
+  // CASO B: receita → despesa na conta-espelho (recebimento do empréstimo).
+  return [mk('_d', {
+    type: 'expense', accountId: cat.contaEspelhoId, toAccountId: null,
+    description: 'Recebimento empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
+  })]
+}
+
 // Gera a receita/aporte automático numa conta de investimento quando uma despesa
 // (de qualquer tipo de conta) tem categoria vinculada a uma conta de investimento
 // (categoria com investmentAccountId). Retorna o lançamento de entrada (origin: 'investAuto') ou null.
@@ -1025,10 +1081,24 @@ export function AppProvider({ children }) {
         accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
       }
 
+      // Empréstimos — lançamentos espelho (CASO A/B/C). Atualizam saldo das contas reais.
+      const espelhoTxs = buildEspelhoTxs({ ...tx, amount: Number(tx.amount) }, id, d.categories, d.accounts)
+      for (const et of espelhoTxs) {
+        accounts = accounts.map(a => {
+          if (et.type === 'income' && a.id === et.accountId) return { ...a, balance: rb(a.balance + et.amount) }
+          if (et.type === 'expense' && a.id === et.accountId) return { ...a, balance: rb(a.balance - et.amount) }
+          if (et.type === 'transfer') {
+            if (a.id === et.accountId) return { ...a, balance: rb(a.balance - et.amount) }
+            if (a.id === et.toAccountId) return { ...a, balance: rb(a.balance + et.amount) }
+          }
+          return a
+        })
+      }
+
       return {
         ...d,
         accounts,
-        transactions: [...d.transactions, newTx, ...extraTxs, ...(investIncome ? [investIncome] : [])],
+        transactions: [...d.transactions, newTx, ...extraTxs, ...(investIncome ? [investIncome] : []), ...espelhoTxs],
       }
     })
     // TAREFA 1: despesa de cartão (não vinda de importação) gera/atualiza a conta a
