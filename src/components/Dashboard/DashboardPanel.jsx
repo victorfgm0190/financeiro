@@ -143,6 +143,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Valor "Projetado" reutilizado do modal "Como chegamos aqui"
   // (getSaldoPrincipalBreakdown().projetado.total), que já desconta os envelopes restantes.
   const projetadoModal = useMemo(() => getSaldoPrincipalBreakdown()?.projetado?.total ?? null, [getSaldoPrincipalBreakdown])
+  // Valor "Final Ciclo" reutilizado do mesmo modal (getSaldoPrincipalBreakdown().finalCiclo.total).
+  const finalCicloModal = useMemo(() => getSaldoPrincipalBreakdown()?.finalCiclo?.total ?? null, [getSaldoPrincipalBreakdown])
 
   // Saldos do ciclo promovidos no hero (Final Ciclo · Projetado · Atual Cal. · Final Cal.).
   // Oculta cada saldo igual ao anterior mostrado; o primeiro sempre aparece (seed null) para
@@ -157,7 +159,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       if (last != null && Math.abs(val - last) < 0.005) return
       rows.push({ label, val }); last = val
     }
-    push('Final Ciclo', s.saldoFinalCiclo)
+    push('Final Ciclo', finalCicloModal)
     push('Projetado', projetadoModal)
     if (s.mode === 'custom') {
       push('Atual Cal.', s.saldoAtualCalendario)
