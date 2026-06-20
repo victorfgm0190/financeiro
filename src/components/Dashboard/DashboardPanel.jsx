@@ -66,11 +66,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
-  // Sombra de reserva de função SEM categoria real (cat_res_ger ou sem categoria) → entra no
-  // card "Reservas", não em Receitas/Despesas.
+  // Sombra de reserva de função com exibir_como_despesa = FALSE (ou sem função vinculada) → entra
+  // no card "Reservas", não em Receitas/Despesas. Funções com exibir_como_despesa = TRUE seguem
+  // dentro das despesas (reservaDespesaFuncSet.has(null) === false → sem função vai para Reservas).
   const isReservaGerSombra = useCallback(
-    (t) => t.reservaAuto === true && (!t.categoryId || t.categoryId === 'cat_res_ger'),
-    []
+    (t) => t.reservaAuto === true && !reservaDespesaFuncSet.has(t.reservaFuncaoId),
+    [reservaDespesaFuncSet]
   )
   const isExpenseTx = useCallback(
     (t) => {

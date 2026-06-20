@@ -76,10 +76,11 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
       }))
   }
 
-  // Sombra de reserva de função SEM categoria real (cat_res_ger ou sem categoria) → vai para o
-  // bloco "Reservas" separado, NÃO entra em Despesas/Receitas. Sombras com categoria real
-  // (ex.: cat_mor_gas) permanecem na categoria de despesa (comportamento atual).
-  const isReservaGerSombra = (tx) => tx.reservaAuto === true && (!tx.categoryId || tx.categoryId === 'cat_res_ger')
+  // Sombra de reserva de função com exibir_como_despesa = FALSE (ou sem função vinculada) → vai
+  // para o bloco "Reservas" separado, NÃO entra em Despesas/Receitas. Sombras de funções com
+  // exibir_como_despesa = TRUE permanecem na categoria de despesa (comportamento atual).
+  // (reservaDespesaFuncSet.has(null) === false → sombras sem função também vão para Reservas.)
+  const isReservaGerSombra = (tx) => tx.reservaAuto === true && !reservaDespesaFuncSet.has(tx.reservaFuncaoId)
 
   const expenseTxs = inRange.filter(t => !isReservaGerSombra(t) && countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
