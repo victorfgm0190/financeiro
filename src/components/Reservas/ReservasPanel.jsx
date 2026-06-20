@@ -455,8 +455,10 @@ function ObsIndicator({ text }) {
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, periodStart, periodEnd, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, accounts, categories = [], accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, periodStart, periodEnd, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
+  // Nome da categoria vinculada à função (quando categoryId preenchido).
+  const catNameOf = (id) => categories.find(c => c.id === id)?.name
   // Grupo (conta + funções) cujo modal de ajustes está aberto.
   const [ajusteGroup, setAjusteGroup] = useState(null)
   // Modal "Origem" do valor AUTO: { fn, tipo: 'entradas'|'saidas', items, loading, error }.
@@ -617,6 +619,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                         <GripVertical size={12} className="text-gray-700 cursor-grab shrink-0" />
                         <span className="truncate">{f.name}</span>
                         <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
+                        {catNameOf(f.categoryId) && <span className="text-xs text-gray-400 truncate">{catNameOf(f.categoryId)}</span>}
                       </span>
                       {accLabel && (
                         <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
@@ -729,6 +732,7 @@ function ResumoTab({ functions, accounts, accountBalances, periods, saldosAtuali
                               <GripVertical size={11} className="text-gray-700 cursor-grab shrink-0" />
                               {f.name}
                               <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
+                              {catNameOf(f.categoryId) && <span className="text-xs text-gray-400">{catNameOf(f.categoryId)}</span>}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
@@ -1444,6 +1448,7 @@ export default function ReservasPanel() {
         <ResumoTab
           functions={effectiveFunctions}
           accounts={nonCreditAccounts}
+          categories={categories}
           accountBalances={accountBalances}
           periods={periods}
           saldosAtualizados={saldosAtualizados}
