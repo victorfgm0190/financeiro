@@ -37,7 +37,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   const inRange = transactions.filter(tx =>
     (countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaAccSet) || countsAsReportIncome(tx, reservaDespesaFuncSet, reservaAccSet)) &&
     tx.date >= from && tx.date <= to &&
-    (accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
+    (tx.reservaAuto === true || accountIds.length === 0 || accountIds.includes(tx.accountId)) &&
     (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
     // "Ocultar movimentos de reserva": esconde transferências que tocam conta de reserva E
     // as sombras automáticas (reservaAuto: "Reserva: X" / "Resgate Reserva: X", accountId null).
