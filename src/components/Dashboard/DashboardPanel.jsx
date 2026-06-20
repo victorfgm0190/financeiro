@@ -66,21 +66,29 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  // Sombra de reserva de função SEM categoria real (cat_res_ger ou sem categoria) → entra no
+  // card "Reservas", não em Receitas/Despesas.
+  const isReservaGerSombra = useCallback(
+    (t) => t.reservaAuto === true && (!t.categoryId || t.categoryId === 'cat_res_ger'),
+    []
+  )
   const isExpenseTx = useCallback(
     (t) => {
+      // Movimento de reserva sem categoria → card Reservas, fora das despesas.
+      if (isReservaGerSombra(t)) return false
       // Prioridade: movimento de reserva de função não-despesa nunca conta como despesa.
       if (isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)) return false
       // Perna de despesa do RESGATE de reserva não conta (o resgate é receita de compensação).
       if (isResgateReservaSombra(t)) return false
       return t.type === 'expense' || isReservaDepositoDespesa(t, reservaDespesaFuncSet, reservaSet)
     },
-    [reservaDespesaFuncSet, reservaSet]
+    [reservaDespesaFuncSet, reservaSet, isReservaGerSombra]
   )
   // Receita: exclui as sombras de reserva de função não-despesa (ex.: "Resgate Reserva: X"
   // income), mantendo o par receita+despesa neutro quando a reserva é poupança.
   const isIncomeTx = useCallback(
-    (t) => t.type === 'income' && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet),
-    [reservaDespesaFuncSet, reservaSet]
+    (t) => t.type === 'income' && !isReservaGerSombra(t) && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet),
+    [reservaDespesaFuncSet, reservaSet, isReservaGerSombra]
   )
 
   const period = getFinancialPeriod()
@@ -93,6 +101,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && tx.origin !== 'investAuto')
   const income = periodTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
+  // Reservas do período (funções sem categoria): líquido = utilizadas (resgate _r) − feitas (depósito).
+  const reservasFeitas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'expense' && !isResgateReservaSombra(t))
+  const reservasUtilizadas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'income' && isResgateReservaSombra(t))
+  const reservaLiquido = reservasUtilizadas.reduce((s, t) => s + t.amount, 0) - reservasFeitas.reduce((s, t) => s + t.amount, 0)
   const balance = income - expense
 
   // Maps p/ rótulos no drill-down de receitas/despesas do mês.
@@ -434,6 +446,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             color: 'text-orange-600',
             txs: periodTxs.filter(isExpenseTx),
           })}
+        />
+        <KpiCard
+          icon={PiggyBank}
+          iconColor={reservaLiquido >= 0 ? 'text-blue-600' : 'text-orange-600'}
+          label="Reservas"
+          value={reservaLiquido}
+          valueColor={reservaLiquido >= 0 ? 'text-blue-600' : 'text-orange-600'}
         />
         <KpiCard
           icon={Wallet}

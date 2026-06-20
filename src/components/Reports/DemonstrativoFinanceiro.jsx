@@ -76,17 +76,38 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
       }))
   }
 
-  const expenseTxs = inRange.filter(t => countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
+  // Sombra de reserva de função SEM categoria real (cat_res_ger ou sem categoria) → vai para o
+  // bloco "Reservas" separado, NÃO entra em Despesas/Receitas. Sombras com categoria real
+  // (ex.: cat_mor_gas) permanecem na categoria de despesa (comportamento atual).
+  const isReservaGerSombra = (tx) => tx.reservaAuto === true && (!tx.categoryId || tx.categoryId === 'cat_res_ger')
+
+  const expenseTxs = inRange.filter(t => !isReservaGerSombra(t) && countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
   // categoria; saem da seção de RECEITAS para não duplicar.
-  const compensTxs = inRange.filter(t => t.type === 'income' && isResgateReservaSombra(t))
-  const incomeTxs = inRange.filter(t => t.type === 'income' && !isResgateReservaSombra(t))
+  const compensTxs = inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && isResgateReservaSombra(t))
+  const incomeTxs = inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && !isResgateReservaSombra(t))
   const totalExpense = expenseTxs.reduce((s, t) => s + t.amount, 0) - compensTxs.reduce((s, t) => s + t.amount, 0)
+
+  // Bloco Reservas: movimentos de funções de reserva sem categoria vinculada. Independe do
+  // filtro de Categorias (sombras não têm categoria real para selecionar). Oculto quando o
+  // toggle de reserva está ligado (reservaSet truthy → lista vazia → bloco não renderiza).
+  const reservaGerTxs = reservaSet ? [] : transactions.filter(tx =>
+    tx.date >= from && tx.date <= to && isReservaGerSombra(tx)
+  )
+  const reservasFeitas = reservaGerTxs.filter(t => t.type === 'expense' && !isResgateReservaSombra(t)) // depósito tx_res_*
+  const reservasUtilizadas = reservaGerTxs.filter(t => t.type === 'income' && isResgateReservaSombra(t)) // resgate perna receita _r
+  const totalReservasFeitas = reservasFeitas.reduce((s, t) => s + t.amount, 0)
+  const totalReservasUtilizadas = reservasUtilizadas.reduce((s, t) => s + t.amount, 0)
+
   return {
     expenses: buildSection([...expenseTxs, ...compensTxs]),
     income: buildSection(incomeTxs),
     totalExpense,
     totalIncome: incomeTxs.reduce((s, t) => s + t.amount, 0),
+    totalReservasFeitas,
+    totalReservasUtilizadas,
+    liquidoReservas: totalReservasUtilizadas - totalReservasFeitas,
+    hasReservas: reservasFeitas.length > 0 || reservasUtilizadas.length > 0,
   }
 }
 
@@ -114,6 +135,12 @@ function exportCSV(report, showTx, from, to) {
   addSection(report.expenses, 'Despesa')
   addSection(report.income, 'Receita')
   rows.push(['RESULTADO', '', '', '', '', '', (report.totalIncome - report.totalExpense).toFixed(2)].map(q).join(sep))
+  if (report.hasReservas) {
+    rows.push(['Reservas', 'Reservas Feitas', '', '', '', '', (-report.totalReservasFeitas).toFixed(2)].map(q).join(sep))
+    rows.push(['Reservas', 'Reservas Utilizadas', '', '', '', '', report.totalReservasUtilizadas.toFixed(2)].map(q).join(sep))
+    rows.push(['Reservas', 'Líquido de Reservas', '', '', '', '', report.liquidoReservas.toFixed(2)].map(q).join(sep))
+    rows.push(['LÍQUIDO GERAL', '', '', '', '', '', ((report.totalIncome - report.totalExpense) + report.liquidoReservas).toFixed(2)].map(q).join(sep))
+  }
 
   const csv = '﻿' + rows.join('\r\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -549,7 +576,41 @@ export default function DemonstrativoFinanceiro() {
                   )
                 })()}
 
-                {report.expenses.length === 0 && report.income.length === 0 && (
+                {/* ── RESERVAS ─────────────────────────────────────────── */}
+                {report.hasReservas && (
+                  <>
+                    <SectionHeader label="Reservas" total={report.liquidoReservas} isExpense={report.liquidoReservas < 0} />
+                    <tr className="border-b border-gray-800/40">
+                      <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Feitas</td>
+                      <td className="px-4 py-2 text-right text-sm font-semibold text-orange-500">{fmt(-report.totalReservasFeitas)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/40">
+                      <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Utilizadas</td>
+                      <td className="px-4 py-2 text-right text-sm font-semibold text-blue-400">+{fmt(report.totalReservasUtilizadas)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-800/40">
+                      <td className="pl-6 pr-3 py-2 text-sm font-semibold text-gray-200" colSpan={2}>Líquido de Reservas</td>
+                      <td className={`px-4 py-2 text-right text-sm font-semibold ${report.liquidoReservas >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
+                        {report.liquidoReservas >= 0 ? '+' : ''}{fmt(report.liquidoReservas)}
+                      </td>
+                    </tr>
+                    {(() => {
+                      const liquidoGeral = (report.totalIncome - report.totalExpense) + report.liquidoReservas
+                      return (
+                        <tr className="border-t-2 border-gray-600 bg-gray-800/40">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-100" colSpan={2}>
+                            LÍQUIDO GERAL  <span className="text-xs font-normal text-gray-500 ml-2">Resultado + Reservas</span>
+                          </td>
+                          <td className={`px-4 py-3 text-right text-lg font-extrabold ${liquidoGeral >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
+                            {liquidoGeral >= 0 ? '+' : ''}{fmt(liquidoGeral)}
+                          </td>
+                        </tr>
+                      )
+                    })()}
+                  </>
+                )}
+
+                {report.expenses.length === 0 && report.income.length === 0 && !report.hasReservas && (
                   <tr>
                     <td colSpan={3} className="text-center py-12 text-gray-500 text-sm">
                       Nenhum lançamento encontrado no período com os filtros aplicados.
