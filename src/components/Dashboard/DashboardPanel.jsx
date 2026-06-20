@@ -140,6 +140,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     ? saldosPrincipais.saldoAtual
     : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
 
+  // Valor "Projetado" reutilizado do modal "Como chegamos aqui"
+  // (getSaldoPrincipalBreakdown().projetado.total), que já desconta os envelopes restantes.
+  const projetadoModal = useMemo(() => getSaldoPrincipalBreakdown()?.projetado?.total ?? null, [getSaldoPrincipalBreakdown])
+
   // Saldos do ciclo promovidos no hero (Final Ciclo · Projetado · Atual Cal. · Final Cal.).
   // Oculta cada saldo igual ao anterior mostrado; o primeiro sempre aparece (seed null) para
   // o widget nunca ficar vazio. Calendário só no modo custom.
@@ -154,7 +158,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       rows.push({ label, val }); last = val
     }
     push('Final Ciclo', s.saldoFinalCiclo)
-    push('Projetado', s.saldoProjetado)
+    push('Projetado', projetadoModal)
     if (s.mode === 'custom') {
       push('Atual Cal.', s.saldoAtualCalendario)
       push('Final Cal.', s.saldoFinalCalendario)
@@ -281,10 +285,6 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       futureDelta,
     }
   }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
-
-  // Valor "Projetado" do card = o MESMO calculado pelo modal "Como chegamos aqui"
-  // (getSaldoPrincipalBreakdown().projetado.total), que já desconta os envelopes restantes.
-  const projetadoModal = useMemo(() => getSaldoPrincipalBreakdown()?.projetado?.total ?? null, [getSaldoPrincipalBreakdown])
 
   const today = new Date().toISOString().split('T')[0]
 
