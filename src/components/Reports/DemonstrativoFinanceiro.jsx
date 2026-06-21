@@ -127,6 +127,8 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
 function exportCSV(report, showTx, from, to) {
   const sep = ';'
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
+  // Valor no padrão pt-BR: vírgula decimal + ponto de milhar (ex.: 16000 → "16.000,00").
+  const num = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const rows = [['Seção', 'Grupo', 'Subcategoria', 'Data', 'Descrição', 'Favorecido', 'Valor'].map(q).join(sep)]
 
   const addSection = (groups, tipo) => {
@@ -136,10 +138,10 @@ function exportCSV(report, showTx, from, to) {
           s.txs.forEach(tx => {
             // Resgate de compensação abate a categoria → valor negativo no CSV (soma = total da subcat).
             const v = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
-            rows.push([tipo, g.name, g.isFlat ? '' : s.name, tx.date, tx.description || '', tx.payee || '', v.toFixed(2)].map(q).join(sep))
+            rows.push([tipo, g.name, g.isFlat ? '' : s.name, tx.date, tx.description || '', tx.payee || '', num(v)].map(q).join(sep))
           })
         } else {
-          rows.push([tipo, g.name, g.isFlat ? '' : s.name, '', '', '', s.total.toFixed(2)].map(q).join(sep))
+          rows.push([tipo, g.name, g.isFlat ? '' : s.name, '', '', '', num(s.total)].map(q).join(sep))
         }
       })
     })
@@ -147,12 +149,12 @@ function exportCSV(report, showTx, from, to) {
 
   addSection(report.expenses, 'Despesa')
   addSection(report.income, 'Receita')
-  rows.push(['RESULTADO', '', '', '', '', '', (report.totalIncome - report.totalExpense).toFixed(2)].map(q).join(sep))
+  rows.push(['RESULTADO', '', '', '', '', '', num(report.totalIncome - report.totalExpense)].map(q).join(sep))
   if (report.hasReservas) {
-    rows.push(['Reservas', 'Reservas Feitas', '', '', '', '', (-report.totalReservasFeitas).toFixed(2)].map(q).join(sep))
-    rows.push(['Reservas', 'Reservas Utilizadas', '', '', '', '', report.totalReservasUtilizadas.toFixed(2)].map(q).join(sep))
-    rows.push(['Reservas', 'Líquido de Reservas', '', '', '', '', report.liquidoReservas.toFixed(2)].map(q).join(sep))
-    rows.push(['LÍQUIDO GERAL', '', '', '', '', '', ((report.totalIncome - report.totalExpense) + report.liquidoReservas).toFixed(2)].map(q).join(sep))
+    rows.push(['Reservas', 'Reservas Feitas', '', '', '', '', num(-report.totalReservasFeitas)].map(q).join(sep))
+    rows.push(['Reservas', 'Reservas Utilizadas', '', '', '', '', num(report.totalReservasUtilizadas)].map(q).join(sep))
+    rows.push(['Reservas', 'Líquido de Reservas', '', '', '', '', num(report.liquidoReservas)].map(q).join(sep))
+    rows.push(['LÍQUIDO GERAL', '', '', '', '', '', num((report.totalIncome - report.totalExpense) + report.liquidoReservas)].map(q).join(sep))
   }
 
   const csv = '﻿' + rows.join('\r\n')
