@@ -476,8 +476,11 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
   if (toAcc?.isReserva) {
     const funcId = resolveReservaFunc(toAcc)
     const reserveFunc = (reserveFunctions || []).find(f => f.id === funcId)
-    const catId = tx.reservaExpenseCategoryId ||
-      reserveFunc?.categoryId ||
+    // Categoria da sombra de DEPÓSITO: a categoria da função de reserva tem PRIORIDADE sobre
+    // o reservaExpenseCategoryId do lançamento (garante que o depósito apareça na categoria
+    // vinculada à função quando ela existe). Resgates não são alterados.
+    const catId = reserveFunc?.categoryId ||
+      tx.reservaExpenseCategoryId ||
       (toAcc.reservaType === 'especifica' ? (toAcc.reservaCategoryId || 'cat_res_ger') : 'cat_res_ger')
     extraTxs.push({
       id: 'tx_res_' + base + '_' + Math.random().toString(36).slice(2),
