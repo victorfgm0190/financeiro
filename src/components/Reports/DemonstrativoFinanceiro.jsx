@@ -131,30 +131,35 @@ function exportCSV(report, showTx, from, to) {
   const num = v => (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const rows = [['Seção', 'Grupo', 'Subcategoria', 'Data', 'Descrição', 'Favorecido', 'Valor'].map(q).join(sep)]
 
-  const addSection = (groups, tipo) => {
+  // Espelha a tela: linha de SEÇÃO (com total), depois GRUPO (com total), SUBCATEGORIA
+  // (apenas quando o grupo tem subcategorias, igual à tela) e, quando "Exibir lançamentos"
+  // está ativo, os lançamentos individuais — tudo na ordem em que está no `report`.
+  const addSection = (label, groups, total) => {
+    if (groups.length === 0) return
+    rows.push([label, '', '', '', '', '', num(total)].map(q).join(sep))
     groups.forEach(g => {
+      rows.push(['', g.name, '', '', '', '', num(g.total)].map(q).join(sep))
       g.subcats.forEach(s => {
+        if (!g.isFlat) rows.push(['', g.name, s.name, '', '', '', num(s.total)].map(q).join(sep))
         if (showTx) {
           s.txs.forEach(tx => {
-            // Resgate de compensação abate a categoria → valor negativo no CSV (soma = total da subcat).
+            // Resgate de compensação abate a categoria → valor negativo no CSV.
             const v = (tx.type === 'income' && isResgateReservaSombra(tx)) ? -tx.amount : tx.amount
-            rows.push([tipo, g.name, g.isFlat ? '' : s.name, tx.date, tx.description || '', tx.payee || '', num(v)].map(q).join(sep))
+            rows.push(['', g.name, g.isFlat ? '' : s.name, fmtDate(tx.date), tx.description || '', tx.payee || '', num(v)].map(q).join(sep))
           })
-        } else {
-          rows.push([tipo, g.name, g.isFlat ? '' : s.name, '', '', '', num(s.total)].map(q).join(sep))
         }
       })
     })
   }
 
-  // Mesma ordem da tela: Receitas primeiro, depois Despesas (grupos/lançamentos na ordem do report).
-  addSection(report.income, 'Receita')
-  addSection(report.expenses, 'Despesa')
+  // Mesma ordem da tela: Receitas → Despesas → totais.
+  addSection('RECEITAS', report.income, report.totalIncome)
+  addSection('DESPESAS', report.expenses, report.totalExpense)
   rows.push(['RESULTADO', '', '', '', '', '', num(report.totalIncome - report.totalExpense)].map(q).join(sep))
   if (report.hasReservas) {
-    rows.push(['Reservas', 'Reservas Feitas', '', '', '', '', num(-report.totalReservasFeitas)].map(q).join(sep))
-    rows.push(['Reservas', 'Reservas Utilizadas', '', '', '', '', num(report.totalReservasUtilizadas)].map(q).join(sep))
-    rows.push(['Reservas', 'Líquido de Reservas', '', '', '', '', num(report.liquidoReservas)].map(q).join(sep))
+    rows.push(['Reservas Feitas', '', '', '', '', '', num(-report.totalReservasFeitas)].map(q).join(sep))
+    rows.push(['Reservas Utilizadas', '', '', '', '', '', num(report.totalReservasUtilizadas)].map(q).join(sep))
+    rows.push(['Líquido de Reservas', '', '', '', '', '', num(report.liquidoReservas)].map(q).join(sep))
     rows.push(['LÍQUIDO GERAL', '', '', '', '', '', num((report.totalIncome - report.totalExpense) + report.liquidoReservas)].map(q).join(sep))
   }
 
