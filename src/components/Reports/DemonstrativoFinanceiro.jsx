@@ -147,8 +147,9 @@ function exportCSV(report, showTx, from, to) {
     })
   }
 
-  addSection(report.expenses, 'Despesa')
+  // Mesma ordem da tela: Receitas primeiro, depois Despesas (grupos/lançamentos na ordem do report).
   addSection(report.income, 'Receita')
+  addSection(report.expenses, 'Despesa')
   rows.push(['RESULTADO', '', '', '', '', '', num(report.totalIncome - report.totalExpense)].map(q).join(sep))
   if (report.hasReservas) {
     rows.push(['Reservas', 'Reservas Feitas', '', '', '', '', num(-report.totalReservasFeitas)].map(q).join(sep))
