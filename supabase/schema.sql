@@ -681,3 +681,6 @@ ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT fal
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS conta_espelho_id TEXT;
 -- Marca lançamentos gerados automaticamente pelo espelho (proteção contra loop).
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT false;
+-- Id do lançamento original que gerou este espelho (CASOS A/B). Null nos originais e no
+-- CASO C (onde o original não é salvo). Usado para deletar/estornar os espelhos em cascata.
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS espelho_origem_id TEXT;

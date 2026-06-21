@@ -567,12 +567,14 @@ function buildEspelhoTxs(tx, parentId, categories, accounts) {
     return [mk('_r', {
       type: 'income', accountId: cat.contaEspelhoId, toAccountId: null,
       description: 'Empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
+      espelhoOrigemId: parentId, // vínculo p/ cascata (CASO A — original é salvo)
     })]
   }
   // CASO B: receita → despesa na conta-espelho (recebimento do empréstimo).
   return [mk('_d', {
     type: 'expense', accountId: cat.contaEspelhoId, toAccountId: null,
     description: 'Recebimento empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
+    espelhoOrigemId: parentId, // vínculo p/ cascata (CASO B — original é salvo)
   })]
 }
 
@@ -1410,6 +1412,15 @@ export function AppProvider({ children }) {
       const childIds = new Set(children.map(c => c.id))
       transactions = transactions.filter(t => !childIds.has(t.id))
 
+      // Empréstimos: cascata dos lançamentos espelho (espelhoOrigemId === id). Só lançamentos
+      // ORIGINAIS disparam a cascata — deletar/estornar um espelho diretamente não remove outros.
+      if (!tx.isEspelho) {
+        const espelhos = transactions.filter(t => t.espelhoOrigemId === id)
+        for (const e of espelhos) reverseBalance(e)
+        const espIds = new Set(espelhos.map(e => e.id))
+        transactions = transactions.filter(t => !espIds.has(t.id))
+      }
+
       return { ...d, accounts, transactions, rateios: (d.rateios || []).filter(r => r.lancamentoId !== id && !childIds.has(r.lancamentoId)) }
     })
 
@@ -1518,6 +1529,15 @@ export function AppProvider({ children }) {
       for (const c of children) reverseBalance(c)
       const childIds = new Set(children.map(c => c.id))
       transactions = transactions.filter(t => !childIds.has(t.id))
+
+      // Empréstimos: cascata dos lançamentos espelho (espelhoOrigemId === id). Só lançamentos
+      // ORIGINAIS disparam a cascata — deletar/estornar um espelho diretamente não remove outros.
+      if (!tx.isEspelho) {
+        const espelhos = transactions.filter(t => t.espelhoOrigemId === id)
+        for (const e of espelhos) reverseBalance(e)
+        const espIds = new Set(espelhos.map(e => e.id))
+        transactions = transactions.filter(t => !espIds.has(t.id))
+      }
 
       return { ...d, accounts, transactions, schedules }
     })

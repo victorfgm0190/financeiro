@@ -21,6 +21,8 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)
     // Empréstimos: marca lançamentos gerados pelo espelho (proteção contra loop).
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT false`)
+    // Empréstimos: id do lançamento original que gerou o espelho (cascata de deleção/estorno).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS espelho_origem_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)
