@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
-  ListChecks, PencilLine, Check, X,
+  ListChecks, PencilLine, Check, X, ArrowUpCircle, AlertTriangle,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
@@ -76,6 +76,21 @@ function GerBadge({ grupoId, gerencialGroups }) {
 }
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
+
+// Indicador informativo da diferença entre o pago e o total da fatura (diferenca = pago − fatura).
+// Sempre par cor+ícone (sem verde/vermelho). Tolerância de 1 centavo evita "pago a mais R$0,00".
+function DiferencaPagamento({ diferenca, compact = false, className = '' }) {
+  let label, color, Icon
+  if (diferenca > 0.01) { label = `Pago a mais ${fmt(diferenca)}`; color = 'text-blue-400'; Icon = ArrowUpCircle }
+  else if (diferenca < -0.01) { label = `Falta pagar ${fmt(-diferenca)}`; color = 'text-amber-500'; Icon = AlertTriangle }
+  else { label = 'Quitada totalmente'; color = 'text-gray-400'; Icon = CheckCircle2 }
+  return (
+    <span className={`inline-flex items-center gap-1 font-medium ${compact ? 'text-[11px]' : 'text-xs'} ${color} ${className}`}>
+      <Icon size={compact ? 11 : 13} className="shrink-0" />
+      {label}
+    </span>
+  )
+}
 
 export default function CreditCardPanel() {
   const {
@@ -213,6 +228,9 @@ export default function CreditCardPanel() {
     [billPayments, scheduledPaidTotal]
   )
   const { saldoRestante, isFaturaPaga, isFaturaParcial } = classifyFatura(billTotal, totalPago)
+  // Diferença pago − fatura. NUNCA armazenada: recalculada no render a partir de totalPago e
+  // billTotal (ambos reativos a `transactions`), então reage a reimportações que mudem o billTotal.
+  const diferencaPagamento = Math.round((totalPago - billTotal) * 100) / 100
 
   // Filtros em tempo real — afetam só as linhas exibidas; o Total da Fatura segue
   // calculado sobre a fatura completa (billTotal).
@@ -388,6 +406,12 @@ export default function CreditCardPanel() {
         </div>
       </div>
 
+      {/* Diferença de pagamento — compacta no header (mobile; rola junto com o cabeçalho) */}
+      <div className="md:hidden flex items-center justify-between gap-2 bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-1.5">
+        <span className="text-[11px] uppercase tracking-wide text-gray-500">Diferença</span>
+        <DiferencaPagamento diferenca={diferencaPagamento} compact />
+      </div>
+
       {/* ── KPIs + botões de ação ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
         <div className="card">
@@ -427,6 +451,7 @@ export default function CreditCardPanel() {
           <p className="text-xs text-gray-500 mt-1">
             de {fmt(billTotal)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
+          <DiferencaPagamento diferenca={diferencaPagamento} className="mt-1.5" />
         </div>
         <div className="flex flex-col gap-2">
           <button
@@ -468,6 +493,14 @@ export default function CreditCardPanel() {
 
       {/* ── Tabela de lançamentos da fatura ── */}
       <div className="card p-0 overflow-hidden">
+        {/* Linha de resumo no topo do extrato da fatura */}
+        <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-xs text-gray-500">
+            Fatura <span className="text-gray-300 font-medium">{fmt(billTotal)}</span>
+            {' · '}Pago <span className="text-gray-300 font-medium">{fmt(totalPago)}</span>
+          </span>
+          <DiferencaPagamento diferenca={diferencaPagamento} />
+        </div>
         <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-300">{getBillLabel(billKey)}</h3>
           <div className="flex items-center gap-3">
