@@ -34,7 +34,7 @@ function AppContent() {
   const [showSearch, setShowSearch] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
-  const { accounts, profileAccounts, activeProfileId, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos, getFluxoCaixaPrincipal, data } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data } = useApp()
   const { fabAction } = useFab()
 
   // FAB central (BottomNav mobile): usa a ação contextual registrada pela tela
@@ -47,43 +47,21 @@ function AppContent() {
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
 
-  // Saldos principais (sidebar/header): os 5 saldos do ciclo agregados sobre o pool de
-  // contas (mesmos definidos em getAccountSaldos). Exclui lançamentos fora do ciclo;
-  // contas sem saldo de ciclo (ativo/passivo) entram pelo balance armazenado.
+  // Saldos principais (sidebar/header/hero do Dashboard): os 5 saldos do ciclo derivados da
+  // MESMA fonte de verdade do card "Saldo Principal" (getSaldoPrincipalBreakdown). Assim o
+  // header exibe exatamente os mesmos valores que o card — sem engine paralela/legada.
   const saldosPrincipais = useMemo(() => {
-    const pool = activeProfileId
-      ? profileAccounts.filter(a => a.type !== 'credit')
-      : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
-    const agg = { saldoAtual: 0, saldoFinalCiclo: 0, saldoProjetado: 0, saldoAtualCalendario: 0, saldoFinalCalendario: 0 }
-    let isCustom = (data.settings?.financialMonthMode || 'custom') === 'custom'
-    for (const a of pool) {
-      const s = getAccountSaldos(a)
-      if (s.applicable) {
-        isCustom = s.mode === 'custom'
-        agg.saldoAtual += s.saldoAtual
-        agg.saldoFinalCiclo += s.saldoFinalCiclo
-        agg.saldoProjetado += s.saldoProjetado
-        agg.saldoAtualCalendario += (s.saldoAtualCalendario ?? s.saldoAtual)
-        agg.saldoFinalCalendario += (s.saldoFinalCalendario ?? s.saldoFinalCiclo)
-      } else {
-        const b = a.balance || 0
-        agg.saldoAtual += b; agg.saldoFinalCiclo += b; agg.saldoProjetado += b
-        agg.saldoAtualCalendario += b; agg.saldoFinalCalendario += b
-      }
-    }
-    const round = v => Math.round(v * 100) / 100
-    // FINAL CICLO e PROJETADO usam a MESMA engine do relatório Fluxo de Caixa por Conta
-    // (ancorada no saldo real das contas), garantindo valores idênticos aos do relatório.
-    const fc = getFluxoCaixaPrincipal()
+    const b = getSaldoPrincipalBreakdown()
+    const isCustom = b.mode === 'custom'
     return {
-      saldoAtual: round(agg.saldoAtual),
-      saldoFinalCiclo: round(fc.saldoFinalCiclo),
-      saldoProjetado: round(fc.saldoProjetado),
-      saldoAtualCalendario: isCustom ? round(agg.saldoAtualCalendario) : null,
-      saldoFinalCalendario: isCustom ? round(agg.saldoFinalCalendario) : null,
+      saldoAtual: b.saldoAtual.total,
+      saldoFinalCiclo: b.finalCiclo.total,
+      saldoProjetado: b.projetado.total,
+      saldoAtualCalendario: isCustom ? (b.atualCalendario?.total ?? null) : null,
+      saldoFinalCalendario: isCustom ? (b.finalCalendario?.total ?? null) : null,
       mode: isCustom ? 'custom' : 'calendar',
     }
-  }, [activeProfileId, profileAccounts, accounts, getAccountSaldos, getFluxoCaixaPrincipal, data.settings])
+  }, [getSaldoPrincipalBreakdown])
   const saldoPrincipal = saldosPrincipais.saldoAtual
 
   const alertCount = useMemo(() => {
