@@ -208,9 +208,12 @@ export default function CreditCardPanel() {
     if (!selectedCard || !billKey) return []
     return transactions
       .filter(tx =>
-        tx.type === 'credit_payment' &&
-        tx.accountId === selectedCard.id &&
-        ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey)
+        // credit_payment do cartão (casado por fatura_ref ou mês da data)
+        (tx.type === 'credit_payment' &&
+          tx.accountId === selectedCard.id &&
+          ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey))
+        // pagamento REAL via transferência vinculada (destino = cartão + fatura_month_year)
+        || (tx.type === 'transfer' && tx.toAccountId === selectedCard.id && tx.faturaMonthYear === billKey)
       )
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [transactions, selectedCard, billKey])
@@ -223,9 +226,16 @@ export default function CreditCardPanel() {
       .reduce((sum, s) => sum + (s.registered?.length || 0) * (Number(s.amount) || 0), 0)
   }, [schedules, selectedCard, billKey])
 
+  // Pagamentos REAIS (credit_payment + transferências vinculadas) da fatura.
+  const totalPagoReal = useMemo(
+    () => Math.round(billPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0) * 100) / 100,
+    [billPayments]
+  )
+  // Prevalência: havendo pagamento real, ele PREVALECE sobre o valor abstrato do agendamento
+  // pagamento_fatura (anti-duplicidade). Sem pagamento real, mantém o abstrato (faturas históricas).
   const totalPago = useMemo(
-    () => Math.round((billPayments.reduce((s, t) => s + (Number(t.amount) || 0), 0) + scheduledPaidTotal) * 100) / 100,
-    [billPayments, scheduledPaidTotal]
+    () => totalPagoReal > 0 ? totalPagoReal : Math.round(scheduledPaidTotal * 100) / 100,
+    [totalPagoReal, scheduledPaidTotal]
   )
   const { saldoRestante, isFaturaPaga, isFaturaParcial } = classifyFatura(billTotal, totalPago)
   // Diferença pago − fatura. NUNCA armazenada: recalculada no render a partir de totalPago e
@@ -301,6 +311,7 @@ export default function CreditCardPanel() {
       date: payDate,
       description: `Pagamento fatura ${selectedCard.name}`,
       categoryId: '',
+      faturaMonthYear: billKey, // vincula o pagamento à fatura aberta
     })
     setShowPayModal(false)
     setPayAmount('')

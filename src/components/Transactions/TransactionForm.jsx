@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, fmtDate, buildAccountSelectOptions } from '../shared/utils'
+import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment } from '../../lib/installments'
@@ -204,6 +204,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   )
 
   const transferToAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
+  // Faturas do cartão destino, para vincular um pagamento por transferência a uma fatura.
+  const faturaCardOpts = useMemo(() => {
+    if (form.type !== 'transfer' || transferToAcc?.type !== 'credit') return []
+    const cur = creditBillKey(today(), transferToAcc)
+    if (!cur) return []
+    const off = (key, delta) => { const [y, m] = key.split('-').map(Number); const d = new Date(y, m - 1 + delta, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+    const out = []
+    for (let i = 6; i >= -2; i--) {
+      const k = off(cur, -i)
+      out.push({ key: k, billTotal: creditBillStatus(transferToAcc, transactions, schedules, k).billTotal })
+    }
+    return out
+  }, [form.type, transferToAcc, transactions, schedules])
+  // Preview ao vivo do vínculo de pagamento (pago a mais / falta pagar), tolerância 1¢.
+  const faturaPreview = useMemo(() => {
+    if (form.type !== 'transfer' || transferToAcc?.type !== 'credit' || !form.faturaMonthYear) return null
+    const billTotal = creditBillStatus(transferToAcc, transactions, schedules, form.faturaMonthYear).billTotal
+    const pagando = Number(form.amount) || 0
+    return { billTotal, pagando, dif: Math.round((pagando - billTotal) * 100) / 100 }
+  }, [form.type, transferToAcc, transactions, schedules, form.faturaMonthYear, form.amount])
   const transferFromAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
   const isDepositToReserva = !!transferToAcc?.isReserva
   const isWithdrawFromReserva = !!transferFromAcc?.isReserva
@@ -327,7 +347,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       amount: installmentAmount,
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : null,
-      faturaMonthYear: (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear : null,
+      faturaMonthYear:
+        (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear
+        : (form.type === 'transfer' && transferToAcc?.type === 'credit' && form.faturaMonthYear) ? form.faturaMonthYear
+        : null,
       dateCartao: form.dateCartao || null,
       installmentNum,
       installmentTotal,
@@ -928,7 +951,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
-              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '' }))}
+              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '', categoryId: '', reservaFuncaoId: '', faturaMonthYear: '' }))}
               placeholder="Selecione o destino..."
               preserveGroupOrder
               ungroupedLast
@@ -949,6 +972,29 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             <label className="label">Valor (R$) *</label>
             <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
           </div>
+          {transferToAcc?.type === 'credit' && (
+            <div>
+              <label className="label">Fatura de referência</label>
+              <select className="input" value={form.faturaMonthYear} onChange={e => set('faturaMonthYear', e.target.value)}>
+                <option value="">Sem vínculo (transferência comum)</option>
+                {faturaCardOpts.map(o => {
+                  const [y, m] = o.key.split('-')
+                  return <option key={o.key} value={o.key}>{`${m}/${y} — ${fmt(o.billTotal)}`}</option>
+                })}
+              </select>
+              {faturaPreview && (() => {
+                const { billTotal, pagando, dif } = faturaPreview
+                const txt = dif > 0.01 ? `pago a mais ${fmt(dif)}` : dif < -0.01 ? `falta pagar ${fmt(-dif)}` : 'quitada totalmente'
+                const color = dif > 0.01 ? 'text-blue-400' : dif < -0.01 ? 'text-amber-500' : 'text-gray-400'
+                return (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Fatura {fmt(billTotal)} · pagando {fmt(pagando)} → <span className={`font-medium ${color}`}>{txt}</span>
+                  </p>
+                )
+              })()}
+              <p className="text-xs text-gray-600 mt-1">Vincular abate a dívida da fatura e conta como pagamento real.</p>
+            </div>
+          )}
           {(() => {
             const toAcc = accounts.find(a => a.id === form.toAccountId)
             const toGroup = (accountGroups || []).find(g => g.id === toAcc?.accountGroupId)

@@ -233,12 +233,17 @@ export function classifyFatura(billTotal, totalPago) {
 // fatura + agendamentos 'pagamento_fatura' já registrados.
 export function creditBillStatus(card, transactions, schedules, billKey) {
   if (!card || !billKey) return { billKey: '', billTotal: 0, totalPago: 0, isFaturaPaga: false, isFaturaParcial: false, saldoRestante: 0 }
-  let despesas = 0, estornos = 0, pago = 0
+  let despesas = 0, estornos = 0, pagoReal = 0
   for (const tx of (transactions || [])) {
+    // Pagamento REAL via transferência vinculada à fatura (destino = cartão + faturaMonthYear).
+    if (tx.type === 'transfer' && tx.toAccountId === card.id && tx.faturaMonthYear === billKey) {
+      pagoReal += Number(tx.amount) || 0
+      continue
+    }
     if (tx.accountId !== card.id) continue
     if (tx.type === 'credit_payment') {
       if ((tx.faturaMonthYear && tx.faturaMonthYear === billKey) || (tx.date || '').slice(0, 7) === billKey) {
-        pago += Number(tx.amount) || 0
+        pagoReal += Number(tx.amount) || 0
       }
       continue
     }
@@ -246,9 +251,14 @@ export function creditBillStatus(card, transactions, schedules, billKey) {
     if (tx.type === 'expense') despesas += tx.amount
     else if (tx.type === 'income') estornos += Number(tx.amount) || 0
   }
-  for (const s of (schedules || [])) {
-    if (s.tipo === 'pagamento_fatura' && s.cardId === card.id && s.faturaMesAno === billKey) {
-      pago += (s.registered?.length || 0) * (Number(s.amount) || 0)
+  // Prevalência anti-duplicidade: havendo pagamento real (credit_payment ou transferência
+  // vinculada), ignora o valor ABSTRATO do agendamento pagamento_fatura desta fatura.
+  let pago = pagoReal
+  if (pagoReal === 0) {
+    for (const s of (schedules || [])) {
+      if (s.tipo === 'pagamento_fatura' && s.cardId === card.id && s.faturaMesAno === billKey) {
+        pago += (s.registered?.length || 0) * (Number(s.amount) || 0)
+      }
     }
   }
   const billTotal = despesas - estornos

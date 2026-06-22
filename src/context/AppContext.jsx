@@ -407,6 +407,27 @@ const defaultData = {
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true) e de
 // patrimônio (accountId: null, origin: 'patrimonioAuto'). Ambos seguem a mesma mecânica:
 // transferência PARA a conta vinculada = despesa; transferência DA conta = receita.
+// Efeito de uma transferência nos saldos. Pagamento de fatura VINCULADO (destino = cartão
+// type 'credit' + faturaMonthYear preenchido) abate creditDebt/creditMonthBill como um
+// credit_payment, em vez de creditar o balance do cartão. dir=1 aplica, dir=-1 reverte.
+function applyTransferEffect(accounts, tx, dir = 1) {
+  const amt = Number(tx.amount) || 0
+  const toAcc = accounts.find(a => a.id === tx.toAccountId)
+  const isFaturaPay = toAcc?.type === 'credit' && !!tx.faturaMonthYear
+  return accounts.map(a => {
+    if (a.id === tx.accountId) return { ...a, balance: rb(a.balance - dir * amt) }
+    if (a.id === tx.toAccountId) {
+      if (isFaturaPay) return {
+        ...a,
+        creditDebt: Math.max(0, (a.creditDebt || 0) - dir * amt),
+        creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - dir * amt),
+      }
+      return { ...a, balance: rb(a.balance + dir * amt) }
+    }
+    return a
+  })
+}
+
 function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions = []) {
   if (tx.type !== 'transfer') return []
   const extraTxs = []
@@ -1069,11 +1090,9 @@ export function AppProvider({ children }) {
           accounts = accounts.map(a => a.id === tx.accountId ? { ...a, balance: rb(a.balance - Number(tx.amount)) } : a)
         }
       } else if (tx.type === 'transfer') {
-        accounts = accounts.map(a => {
-          if (a.id === tx.accountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
-          if (a.id === tx.toAccountId) return { ...a, balance: rb(a.balance + Number(tx.amount)) }
-          return a
-        })
+        // Pagamento de fatura vinculado abate a dívida do cartão (uma única vez); demais
+        // transferências mantêm o comportamento normal (debita origem, credita destino).
+        accounts = applyTransferEffect(accounts, tx, 1)
       } else if (tx.type === 'credit_payment') {
         accounts = accounts.map(a => {
           if (a.id === tx.fromAccountId) return { ...a, balance: rb(a.balance - Number(tx.amount)) }
@@ -1291,7 +1310,21 @@ export function AppProvider({ children }) {
         recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
       }
     }
-    update(d => ({ ...d, transactions: d.transactions.map(t => t.id === id ? sanitizeReservaFuncao({ ...t, ...changes }, d.gerencialGroups, d.reserveFunctions) : t) }))
+    update(d => {
+      const oldTx = d.transactions.find(t => t.id === id)
+      if (!oldTx) return d
+      const newTx = sanitizeReservaFuncao({ ...oldTx, ...changes }, d.gerencialGroups, d.reserveFunctions)
+      let accounts = d.accounts
+      // Editar uma transferência VINCULADA a fatura (antes ou depois) reverte o efeito antigo e
+      // aplica o novo no saldo/dívida — mantém o abatimento correto após mudar valor/fatura/destino.
+      const isLinked = (t) => t.type === 'transfer' && !!t.faturaMonthYear &&
+        d.accounts.find(a => a.id === t.toAccountId)?.type === 'credit'
+      if (isLinked(oldTx) || isLinked(newTx)) {
+        if (oldTx.type === 'transfer') accounts = applyTransferEffect(accounts, oldTx, -1)
+        if (newTx.type === 'transfer') accounts = applyTransferEffect(accounts, newTx, 1)
+      }
+      return { ...d, accounts, transactions: d.transactions.map(t => t.id === id ? newTx : t) }
+    })
     if (recalcArgs) {
       recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
       if (recalcArgs.faturaChanged) {
@@ -1383,11 +1416,7 @@ export function AppProvider({ children }) {
             accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance + t.amount) } : a)
           }
         } else if (t.type === 'transfer') {
-          accounts = accounts.map(a => {
-            if (a.id === t.accountId) return { ...a, balance: rb(a.balance + t.amount) }
-            if (a.id === t.toAccountId) return { ...a, balance: rb(a.balance - t.amount) }
-            return a
-          })
+          accounts = applyTransferEffect(accounts, t, -1)
         }
       }
 
@@ -1491,11 +1520,7 @@ export function AppProvider({ children }) {
             accounts = accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance + t.amount) } : a)
           }
         } else if (t.type === 'transfer') {
-          accounts = accounts.map(a => {
-            if (a.id === t.accountId) return { ...a, balance: rb(a.balance + t.amount) }
-            if (a.id === t.toAccountId) return { ...a, balance: rb(a.balance - t.amount) }
-            return a
-          })
+          accounts = applyTransferEffect(accounts, t, -1)
         }
       }
 
