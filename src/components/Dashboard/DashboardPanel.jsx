@@ -146,26 +146,21 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Valor "Final Ciclo" reutilizado do mesmo modal (getSaldoPrincipalBreakdown().finalCiclo.total).
   const finalCicloModal = useMemo(() => getSaldoPrincipalBreakdown()?.finalCiclo?.total ?? null, [getSaldoPrincipalBreakdown])
 
-  // Saldos do ciclo promovidos no hero (Final Ciclo · Projetado · Atual Cal. · Final Cal.).
-  // Oculta cada saldo igual ao anterior mostrado; o primeiro sempre aparece (seed null) para
-  // o widget nunca ficar vazio. Calendário só no modo custom.
-  const saldoSecRows = (() => {
+  // Saldos do ciclo exibidos no card abaixo do Principal (Final Ciclo · Projetado · Atual Cal.
+  // · Final Cal.). Atual Cal./Final Cal. sempre visíveis no modo custom — mesmo quando coincidem
+  // com os valores do ciclo (sem ocultar duplicados).
+  const cicloRows = (() => {
     const s = saldosPrincipais
     if (!s) return []
-    const rows = []
-    let last = null
-    const push = (label, val) => {
-      if (val == null) return
-      if (last != null && Math.abs(val - last) < 0.005) return
-      rows.push({ label, val }); last = val
-    }
-    push('Final Ciclo', finalCicloModal)
-    push('Projetado', projetadoModal)
+    const rows = [
+      { label: 'Final Ciclo', val: finalCicloModal },
+      { label: 'Projetado', val: projetadoModal },
+    ]
     if (s.mode === 'custom') {
-      push('Atual Cal.', s.saldoAtualCalendario)
-      push('Final Cal.', s.saldoFinalCalendario)
+      rows.push({ label: 'Atual Cal.', val: s.saldoAtualCalendario })
+      rows.push({ label: 'Final Cal.', val: s.saldoFinalCalendario })
     }
-    return rows
+    return rows.filter(r => r.val != null)
   })()
 
   // Budget progress (expense as % of income)
@@ -407,21 +402,24 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           </div>
           <ChevronRight size={16} className="text-gray-600 group-hover:text-emerald-600 transition-colors shrink-0" />
         </div>
-        {saldoSecRows.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2.5">
-            {saldoSecRows.map((r, i) => (
+        {/* Principal em destaque */}
+        <p className="text-[11px] uppercase tracking-wide text-gray-500 mt-3">Principal</p>
+        <p className={`text-3xl font-extrabold tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
+          {fmt(saldoPrincipal)}
+        </p>
+
+        {/* Valores do ciclo (Final Ciclo · Projetado · Atual Cal. · Final Cal.) */}
+        {cicloRows.length > 0 && (
+          <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2.5">
+            {cicloRows.map(r => (
               <div key={r.label}>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500">{r.label}</p>
-                <p className={`font-extrabold tracking-tight ${i === 0 ? 'text-2xl' : 'text-xl'} ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                <p className={`text-xl font-extrabold tracking-tight ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
                   {fmt(r.val)}
                 </p>
               </div>
             ))}
           </div>
-        ) : (
-          <p className={`text-3xl font-extrabold mt-3 tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(saldoPrincipal)}
-          </p>
         )}
       </button>
 

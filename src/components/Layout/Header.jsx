@@ -1,7 +1,7 @@
+import { useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { User, Building2, Search } from 'lucide-react'
-import { fmt } from '../shared/utils'
+import { User, Building2, Search, ChevronDown } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 
 const PAGE_TITLES = {
@@ -19,29 +19,12 @@ const PAGE_TITLES = {
   settings: 'Configurações',
 }
 
-export default function Header({ page, financialPeriod, saldoPrincipal, saldosPrincipais, onShowPosicao, onOpenSearch }) {
+export default function Header({ page, financialPeriod, onOpenSearch }) {
   const today = new Date()
   const { profiles, activeProfileId, setActiveProfileId } = useApp()
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
-  // Linha secundária do saldo (igual à sidebar): saldos do ciclo em formato compacto.
-  // Oculta cada saldo igual ao anterior mostrado; calendário só no modo custom.
-  const saldoSecRows = (() => {
-    const s = saldosPrincipais
-    if (!s) return []
-    const rows = []
-    let last = s.saldoAtual
-    const push = (label, val) => {
-      if (val == null || Math.abs(val - last) < 0.005) return
-      rows.push({ label, val }); last = val
-    }
-    push('Final Ciclo', s.saldoFinalCiclo)
-    push('Projetado', s.saldoProjetado)
-    if (s.mode === 'custom') {
-      push('Atual Cal.', s.saldoAtualCalendario)
-      push('Final Cal.', s.saldoFinalCalendario)
-    }
-    return rows
-  })()
+  const activeProfile = profiles.find(p => p.id === activeProfileId) || null
 
   return (
     <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 py-2.5 flex items-center gap-3 sticky top-0 z-10">
@@ -55,9 +38,9 @@ export default function Header({ page, financialPeriod, saldoPrincipal, saldosPr
         )}
       </div>
 
-      {/* Profile filter chips — shown only if profiles exist */}
+      {/* Profile filter chips — desktop only (seletor de perfil do desktop) */}
       {profiles.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-1 overflow-x-auto scrollbar-none px-1 min-w-0">
+        <div className="hidden md:flex items-center gap-1.5 flex-1 overflow-x-auto scrollbar-none px-1 min-w-0">
           {/* "Tudo" chip */}
           <button
             onClick={() => setActiveProfileId(null)}
@@ -93,11 +76,11 @@ export default function Header({ page, financialPeriod, saldoPrincipal, saldosPr
         </div>
       )}
 
-      {/* Spacer when no profiles */}
-      {profiles.length === 0 && <div className="flex-1" />}
+      {/* Spacer — empurra o cluster da direita (sempre no mobile; no desktop só quando não há chips) */}
+      <div className={`flex-1 ${profiles.length > 0 ? 'md:hidden' : ''}`} />
 
-      {/* Right: busca global + mobile balance / desktop date */}
-      <div className="flex items-center gap-4 shrink-0">
+      {/* Right: busca global + seletor de perfil (mobile) + data (desktop) */}
+      <div className="flex items-center gap-3 shrink-0">
         <button
           onClick={onOpenSearch}
           title="Busca global (lançamentos e agendamentos)"
@@ -106,21 +89,63 @@ export default function Header({ page, financialPeriod, saldoPrincipal, saldosPr
         >
           <Search size={18} />
         </button>
-        <button onClick={onShowPosicao} className="md:hidden text-right">
-          <p className="text-xs text-gray-600 leading-none">Principal</p>
-          <p className={`text-sm font-bold mt-0.5 leading-none ${(saldoPrincipal ?? 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(saldoPrincipal ?? 0)}
-          </p>
-          {saldoSecRows.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-x-1.5 gap-y-0.5 mt-0.5 text-[10px] leading-tight text-gray-500 max-w-[180px]">
-              {saldoSecRows.map(r => (
-                <span key={r.label}>
-                  <span className="text-gray-600">{r.label}</span> {fmt(r.val)}
-                </span>
-              ))}
-            </div>
-          )}
-        </button>
+
+        {/* Seletor de perfil — mobile only (substitui o antigo bloco de saldos) */}
+        {profiles.length > 0 && (
+          <div className="relative md:hidden">
+            <button
+              onClick={() => setProfileMenuOpen(o => !o)}
+              aria-label="Trocar perfil"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-700 bg-gray-800/60 text-gray-200 max-w-[160px]"
+              style={activeProfile ? { borderColor: activeProfile.color } : {}}
+            >
+              {activeProfile
+                ? (() => {
+                    const Icon = activeProfile.type === 'pf' ? User : Building2
+                    return <Icon size={13} className="shrink-0" style={{ color: activeProfile.color }} />
+                  })()
+                : <User size={13} className="shrink-0 text-gray-400" />}
+              <span className="truncate">{activeProfile ? activeProfile.name : 'Tudo'}</span>
+              <ChevronDown size={13} className="shrink-0 text-gray-500" />
+            </button>
+
+            {profileMenuOpen && (
+              <>
+                {/* Backdrop para fechar ao clicar fora */}
+                <div className="fixed inset-0 z-20" onClick={() => setProfileMenuOpen(false)} />
+                <div className="absolute right-0 mt-1.5 z-30 w-52 rounded-lg border border-gray-700 bg-gray-900 shadow-xl py-1">
+                  <button
+                    onClick={() => { setActiveProfileId(null); setProfileMenuOpen(false) }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
+                      activeProfileId === null ? 'text-white font-semibold' : 'text-gray-300'
+                    }`}
+                  >
+                    <User size={13} className="shrink-0 text-gray-400" />
+                    <span className="truncate">Tudo</span>
+                  </button>
+                  {profiles.map(p => {
+                    const isActive = activeProfileId === p.id
+                    const Icon = p.type === 'pf' ? User : Building2
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => { setActiveProfileId(p.id); setProfileMenuOpen(false) }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
+                          isActive ? 'text-white font-semibold' : 'text-gray-300'
+                        }`}
+                      >
+                        <Icon size={13} className="shrink-0" style={{ color: p.color }} />
+                        <span className="truncate flex-1">{p.name}</span>
+                        <span className="text-[10px] text-gray-600 shrink-0">{p.type === 'pf' ? 'CPF' : 'CNPJ'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="text-right hidden md:block">
           <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
         </div>
