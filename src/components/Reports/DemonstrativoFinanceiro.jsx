@@ -45,10 +45,28 @@ function saveFilters(f) {
   try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)) } catch { /* ignora quota/serialização */ }
 }
 
-function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions) {
+function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions, activeProfile, profileAccountIds) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
-  const inRange = transactions.filter(tx =>
+  // ── Precedência de perfil (antes do filtro de contas) ───────────────────────
+  // Com um perfil ativo (≠ "Todos"), descarta lançamentos cujas contas não pertencem ao perfil
+  // ANTES do filtro de contas (selectedAccounts) — daí a precedência: contas de outro perfil que
+  // estejam em selectedAccounts não trazem nada de volta. As sombras reserva_auto (account_id
+  // null) são atribuídas ao perfil pela conta da sua FUNÇÃO de reserva; sem função resolvível
+  // mantêm-se (não há vínculo de perfil para excluí-las). Não altera o bypass do filtro de CONTAS
+  // das sombras (preservado em `inRange`). "Todos" (sem perfil) mantém o comportamento atual.
+  const funcAccById = new Map((reserveFunctions || []).map(f => [f.id, f.accountId]))
+  const txs = (activeProfile && profileAccountIds)
+    ? transactions.filter(tx => {
+        if (tx.reservaAuto === true) {
+          const fAcc = funcAccById.get(tx.reservaFuncaoId)
+          return fAcc == null || profileAccountIds.has(fAcc)
+        }
+        return profileAccountIds.has(tx.accountId) || profileAccountIds.has(tx.toAccountId)
+      })
+    : transactions
+
+  const inRange = txs.filter(tx =>
     (countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaAccSet) || countsAsReportIncome(tx, reservaDespesaFuncSet, reservaAccSet)) &&
     tx.date >= from && tx.date <= to &&
     // Filtro de contas: uma TRANSFERÊNCIA entra quando a conta de origem (accountId) OU a de
@@ -121,7 +139,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // Bloco Reservas: movimentos de funções de reserva sem categoria vinculada. Independe do
   // filtro de Categorias (sombras não têm categoria real para selecionar). Oculto quando o
   // toggle de reserva está ligado (reservaSet truthy → lista vazia → bloco não renderiza).
-  const reservaGerTxs = reservaSet ? [] : transactions.filter(tx =>
+  const reservaGerTxs = reservaSet ? [] : txs.filter(tx =>
     tx.date >= from && tx.date <= to && isReservaGerSombra(tx)
   )
   const reservasFeitas = reservaGerTxs.filter(t => t.type === 'expense' && !isResgateReservaSombra(t)) // depósito tx_res_*
@@ -453,11 +471,17 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
+  // Contas do perfil ativo (profileAccounts já vem filtrado por perfil no contexto). Usado para
+  // a precedência de perfil sobre o filtro de contas no buildReport. null quando "Todos".
+  const profileAccountIds = useMemo(
+    () => activeProfile ? new Set(accounts.map(a => a.id)) : null,
+    [activeProfile, accounts],
+  )
   // Funções de reserva marcadas como "exibir como despesa" → seus depósitos contam como despesa.
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
 
@@ -568,8 +592,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions])
+    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions, activeProfile, profileAccountIds)
+  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions, activeProfile, profileAccountIds])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
