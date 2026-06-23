@@ -52,15 +52,17 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // Com um perfil ativo (≠ "Todos"), descarta lançamentos cujas contas não pertencem ao perfil
   // ANTES do filtro de contas (selectedAccounts) — daí a precedência: contas de outro perfil que
   // estejam em selectedAccounts não trazem nada de volta. As sombras reserva_auto (account_id
-  // null) são atribuídas ao perfil pela conta da sua FUNÇÃO de reserva; sem função resolvível
-  // mantêm-se (não há vínculo de perfil para excluí-las). Não altera o bypass do filtro de CONTAS
-  // das sombras (preservado em `inRange`). "Todos" (sem perfil) mantém o comportamento atual.
+  // null) são atribuídas ao perfil pela conta da sua FUNÇÃO de reserva: mantêm-se SÓ quando essa
+  // conta pertence ao perfil ativo. Sem função resolvível (reservaFuncaoId nulo/órfão ou função
+  // sem conta) não há vínculo que prove o perfil → descarta, evitando que sombras de outro perfil
+  // (ex.: funções do CPF) vazem para o Demonstrativo. Não altera o bypass do filtro de CONTAS das
+  // sombras (preservado em `inRange`). "Todos" (sem perfil) mantém o comportamento atual.
   const funcAccById = new Map((reserveFunctions || []).map(f => [f.id, f.accountId]))
   const txs = (activeProfile && profileAccountIds)
     ? transactions.filter(tx => {
         if (tx.reservaAuto === true) {
           const fAcc = funcAccById.get(tx.reservaFuncaoId)
-          return fAcc == null || profileAccountIds.has(fAcc)
+          return fAcc != null && profileAccountIds.has(fAcc)
         }
         return profileAccountIds.has(tx.accountId) || profileAccountIds.has(tx.toAccountId)
       })
