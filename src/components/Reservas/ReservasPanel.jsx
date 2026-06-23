@@ -522,16 +522,17 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
 
   return (
     <div className="space-y-4">
-      {/* KPI + actions */}
+      {/* KPI + actions — no mobile os botões ocupam uma linha própria (w-full) em vez de
+          depender de ml-auto, que empurrava "Total reservado:" para fora da borda esquerda. */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">Total reservado:</span>
+        <div className="flex items-center gap-2 min-w-0 shrink-0">
+          <span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">Total reservado:</span>
           <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(grandTotal)}</span>
         </div>
         {lastPeriod && (
           <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {lastPeriod.closedAt}</span>
         )}
-        <div className="flex gap-2 ml-auto flex-wrap">
+        <div className="flex gap-2 w-full sm:w-auto sm:ml-auto flex-wrap justify-end">
           {functions.length > 0 && (
             <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
@@ -586,20 +587,23 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
 
               {/* Saldo Real input on mobile (for linked accounts) */}
               {accountId && (
-                <div className="card py-2 px-3 flex items-center gap-2">
+                <div className="card py-2 px-3 flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-gray-500 shrink-0">Saldo real da conta:</span>
-                  <input
-                    className="input flex-1 text-xs py-1 text-right"
-                    type="number"
-                    step="0.01"
-                    value={saldoReal ?? ''}
-                    onChange={e => onSetAccountBalance(accountId, e.target.value)}
-                  />
-                  {diff !== null && diff !== 0 && (
-                    <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                      {diff > 0 ? '+' : ''}{fmt(diff)}
-                    </span>
-                  )}
+                  {/* input + diferença ficam juntos: em telas estreitas quebram como bloco abaixo do label */}
+                  <div className="flex items-center gap-2 flex-1 min-w-[8rem]">
+                    <input
+                      className="input flex-1 min-w-0 text-xs py-1 text-right"
+                      type="number"
+                      step="0.01"
+                      value={saldoReal ?? ''}
+                      onChange={e => onSetAccountBalance(accountId, e.target.value)}
+                    />
+                    {diff !== null && diff !== 0 && (
+                      <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -620,7 +624,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                         <GripVertical size={12} className="text-gray-700 cursor-grab shrink-0" />
                         <span className="truncate">{f.name}</span>
                         <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
-                        {catNameOf(f.categoryId) && <span className="text-xs text-gray-400 truncate">{catNameOf(f.categoryId)}</span>}
+                        {/* Categoria só aparece quando difere do nome da função (evita "IPVA … IPVA" duplicado) */}
+                        {catNameOf(f.categoryId) && catNameOf(f.categoryId) !== f.name && <span className="text-xs text-gray-400 truncate">{catNameOf(f.categoryId)}</span>}
                       </span>
                       {accLabel && (
                         <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
@@ -630,34 +635,41 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                       {fmt(atualizado)}
                     </div>
                     <div className="h-px bg-gray-800" />
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-gray-500">Entradas:</span>
-                        <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
+                    {/* Duas linhas no mobile: (1) Entradas + Saídas  (2) Ajuste à esq., botões à dir.
+                        Garante que os botões editar/excluir nunca saiam da tela e que os selos
+                        AUTO/MANUAL não sejam truncados. */}
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-4 text-xs">
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-gray-500 shrink-0">Entradas:</span>
+                          <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-gray-500 shrink-0">Saídas:</span>
+                          <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-gray-500">Saídas:</span>
-                        <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-gray-500">Ajuste:</span>
-                        <button
-                          onClick={() => setAjusteGroup({ account, fns })}
-                          className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
-                          title="Editar ajuste do mês"
-                        >
-                          {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
-                          {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
-                        </button>
-                        {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
-                          <Edit2 size={12} />
-                        </button>
-                        <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
-                          <Trash2 size={12} />
-                        </button>
+                      <div className="flex items-center justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-gray-500 shrink-0">Ajuste:</span>
+                          <button
+                            onClick={() => setAjusteGroup({ account, fns })}
+                            className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
+                            title="Editar ajuste do mês"
+                          >
+                            {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                            {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500 shrink-0">manual</span>}
+                          </button>
+                          {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
+                            <Edit2 size={12} />
+                          </button>
+                          <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
