@@ -31,6 +31,20 @@ function getRange(startDay, months) {
   }
 }
 
+// ─── Persistência dos filtros (localStorage) ─────────────────────────────────
+// Guarda apenas valores de filtro — nunca estado de UI puro (abertura de dropdown).
+// Datas permanecem como string (mesmo formato 'YYYY-MM-DD' que o componente já usa).
+const FILTERS_KEY = 'finup_demonstrativo_filters'
+function loadFilters() {
+  try {
+    const s = localStorage.getItem(FILTERS_KEY)
+    return s ? JSON.parse(s) : null
+  } catch { return null }
+}
+function saveFilters(f) {
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)) } catch { /* ignora quota/serialização */ }
+}
+
 function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
@@ -446,16 +460,19 @@ export default function DemonstrativoFinanceiro() {
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   // Funções de reserva marcadas como "exibir como despesa" → seus depósitos contam como despesa.
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
-  const [hideReserva, setHideReserva] = useState(false)
-  const [hidePatrimonio, setHidePatrimonio] = useState(false)
+
+  // Filtros salvos no localStorage, lidos uma única vez na montagem (null se não houver).
+  const initialFilters = useMemo(() => loadFilters(), [])
+  const [hideReserva, setHideReserva] = useState(() => initialFilters?.hideReserveMovements ?? false)
+  const [hidePatrimonio, setHidePatrimonio] = useState(() => initialFilters?.hidePatrimonyMovements ?? false)
 
   // ── Filter draft state ────────────────────────────────────────────────────
-  const [months, setMonths] = useState(1)
-  const [fromDraft, setFromDraft] = useState('')
-  const [toDraft, setToDraft] = useState('')
-  const [showTxDraft, setShowTxDraft] = useState(false)
-  const [selectedCatsDraft, setSelectedCatsDraft] = useState([])
-  const [selectedAccsDraft, setSelectedAccsDraft] = useState([])
+  const [months, setMonths] = useState(() => initialFilters?.periodoType ?? 1)
+  const [fromDraft, setFromDraft] = useState(() => initialFilters?.startDate ?? '')
+  const [toDraft, setToDraft] = useState(() => initialFilters?.endDate ?? '')
+  const [showTxDraft, setShowTxDraft] = useState(() => initialFilters?.showTransactions ?? false)
+  const [selectedCatsDraft, setSelectedCatsDraft] = useState(() => Array.isArray(initialFilters?.selectedCategories) ? initialFilters.selectedCategories : [])
+  const [selectedAccsDraft, setSelectedAccsDraft] = useState(() => Array.isArray(initialFilters?.selectedAccounts) ? initialFilters.selectedAccounts : [])
 
   // ── Applied filters (report computed from these) ──────────────────────────
   const [applied, setApplied] = useState(null)
@@ -475,9 +492,13 @@ export default function DemonstrativoFinanceiro() {
       )
   , [accounts, isMobile, accountGroups])
 
-  // ── Default initialisation ────────────────────────────────────────────────
+  // ── Default initialisation / restauração dos filtros salvos ────────────────
+  // Sem filtros salvos: calcula os defaults atuais (período mensal, contas do fluxo
+  // principal/cartões, categorias com lançamentos no período). Com filtros salvos: restaura-os
+  // (os drafts já vêm inicializados do localStorage) e os aplica, usando os defaults apenas como
+  // fallback de campos ausentes. Nenhuma regra de buildReport é alterada.
   useEffect(() => {
-    const range = getRange(startDay, 1)
+    const range = getRange(startDay, initialFilters?.periodoType ?? 1)
     // Default accounts: fluxoCaixaPrincipal or credit cards
     const defaultAccs = accounts
       .filter(a => a.fluxoCaixaPrincipal || a.type === 'credit')
@@ -492,11 +513,25 @@ export default function DemonstrativoFinanceiro() {
     )]
     const catsToUse = activeCats.length > 0 ? activeCats : categories.map(c => c.id)
 
-    setFromDraft(range.start)
-    setToDraft(range.end)
-    setSelectedAccsDraft(accsToUse)
-    setSelectedCatsDraft(catsToUse)
-    setApplied({ from: range.start, to: range.end, cats: catsToUse, accs: accsToUse, showTx: false })
+    if (initialFilters) {
+      // Restauração: respeita seleção vazia salva (arrays presentes); default só quando ausente.
+      const from = initialFilters.startDate || range.start
+      const to = initialFilters.endDate || range.end
+      const accs = Array.isArray(initialFilters.selectedAccounts) ? initialFilters.selectedAccounts : accsToUse
+      const cats = Array.isArray(initialFilters.selectedCategories) ? initialFilters.selectedCategories : catsToUse
+      const showTx = initialFilters.showTransactions ?? false
+      setFromDraft(from)
+      setToDraft(to)
+      setSelectedAccsDraft(accs)
+      setSelectedCatsDraft(cats)
+      setApplied({ from, to, cats, accs, showTx })
+    } else {
+      setFromDraft(range.start)
+      setToDraft(range.end)
+      setSelectedAccsDraft(accsToUse)
+      setSelectedCatsDraft(catsToUse)
+      setApplied({ from: range.start, to: range.end, cats: catsToUse, accs: accsToUse, showTx: false })
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -512,6 +547,23 @@ export default function DemonstrativoFinanceiro() {
   const handleAtualizar = () => {
     setApplied({ from: fromDraft, to: toDraft, cats: selectedCatsDraft, accs: selectedAccsDraft, showTx: showTxDraft })
   }
+
+  // ── Persistência: salva os filtros a cada mudança ──────────────────────────
+  // Guard `applied` evita gravar o estado transitório vazio do primeiro render (antes da
+  // inicialização dos defaults). Não persiste estado de UI (abertura de dropdowns).
+  useEffect(() => {
+    if (!applied) return
+    saveFilters({
+      periodoType: months,
+      startDate: fromDraft,
+      endDate: toDraft,
+      selectedCategories: selectedCatsDraft,
+      selectedAccounts: selectedAccsDraft,
+      hideReserveMovements: hideReserva,
+      hidePatrimonyMovements: hidePatrimonio,
+      showTransactions: showTxDraft,
+    })
+  }, [applied, months, fromDraft, toDraft, selectedCatsDraft, selectedAccsDraft, hideReserva, hidePatrimonio, showTxDraft])
 
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
