@@ -316,19 +316,20 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
 
   return (
     <div className="space-y-4">
-      {/* Resumo do topo */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card py-3 text-center">
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total Reservado</p>
-          <p className={`text-xl font-bold ${totalSaldo >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>{fmt(totalSaldo)}</p>
+      {/* Resumo do topo — valor com fonte responsiva (clamp) p/ nunca cortar no mobile.
+          grid-cols-3 garante 3 cards de largura igual; min-w-0 evita que o número estoure a célula. */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
+          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Total Reservado</p>
+          <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] ${totalSaldo >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>{fmt(totalSaldo)}</p>
         </div>
-        <div className="card py-3 text-center">
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Depósitos no Mês</p>
-          <p className="text-xl font-bold text-receita">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
+        <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
+          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Depósitos no Mês</p>
+          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-receita">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
         </div>
-        <div className="card py-3 text-center">
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resgates no Mês</p>
-          <p className="text-xl font-bold text-orange-400">{totalSaidas > 0 ? fmt(totalSaidas) : <span className="text-gray-700">—</span>}</p>
+        <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
+          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Resgates no Mês</p>
+          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-orange-400">{totalSaidas > 0 ? fmt(totalSaidas) : <span className="text-gray-700">—</span>}</p>
         </div>
       </div>
 
@@ -336,10 +337,10 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
       <div className="space-y-3">
         {reservaData.map(({ acc, cat, entradas, saidas }) => (
           <div key={acc.id} className="card">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-2 sm:gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="text-sm font-semibold text-gray-200">{acc.apelido || acc.name}</span>
+                  <span className="text-sm font-semibold text-gray-200 break-words min-w-0">{acc.apelido || acc.name}</span>
                   {acc.reservaType === 'especifica' ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 shrink-0">
                       {cat ? `${cat.icon} ${cat.name}` : 'Específica'}
@@ -350,23 +351,23 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                     </span>
                   )}
                 </div>
-                <div className="flex gap-4 flex-wrap text-xs">
+                <div className="flex gap-x-4 gap-y-1 flex-wrap text-xs">
                   {entradas > 0
-                    ? <span className="flex items-center gap-1 text-receita"><ArrowDownCircle size={11} /> +{fmt(entradas)}</span>
+                    ? <span className="flex items-center gap-1 text-receita whitespace-nowrap"><ArrowDownCircle size={11} className="shrink-0" /> +{fmt(entradas)}</span>
                     : <span className="text-gray-700">Sem depósitos no mês</span>
                   }
                   {saidas > 0 && (
-                    <span className="flex items-center gap-1 text-orange-400"><ArrowUpCircle size={11} /> −{fmt(saidas)}</span>
+                    <span className="flex items-center gap-1 text-orange-400 whitespace-nowrap"><ArrowUpCircle size={11} className="shrink-0" /> −{fmt(saidas)}</span>
                   )}
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <p className={`text-xl font-bold ${(acc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
+              <div className="flex flex-col items-end text-right shrink-0">
+                <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.85rem,4vw,1.25rem)] ${(acc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
                   {fmt(acc.balance || 0)}
                 </p>
                 <button
                   onClick={() => setExtratoAcc(acc)}
-                  className="text-xs text-gray-600 hover:text-indigo-400 transition-colors mt-0.5"
+                  className="text-xs text-gray-600 hover:text-indigo-400 transition-colors mt-0.5 whitespace-nowrap"
                 >
                   Ver Extrato →
                 </button>
