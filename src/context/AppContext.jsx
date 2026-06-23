@@ -1839,9 +1839,20 @@ export function AppProvider({ children }) {
           if (a.id === schedule.toAccountId) return { ...a, balance: rb(a.balance + totalLines) }
           return a
         })
+        // Sombras de reserva (reservaAuto) por linha — MESMA lógica do resgate manual
+        // (buildReservaAutoTxs gera o par _r/_d "Resgate Reserva:"). Sem isso, os resgates de
+        // fatura com detalhamento não apareciam no Demonstrativo. Cada sombra é vinculada à sua
+        // transferência física via parentTxId (cascade de estorno/deleção). A transferência
+        // física (reservaAuto ausente/false) permanece INALTERADA.
+        const detAutoTxs = detTxs.flatMap(t => buildReservaAutoTxs(
+          { type: 'transfer', accountId: t.accountId, toAccountId: t.toAccountId, amount: t.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId, reservaFuncaoId: t.reservaFuncaoId },
+          accounts,
+          t.id,
+          d.reserveFunctions,
+        ))
         return {
           ...d, accounts,
-          transactions: [...d.transactions, ...detTxs],
+          transactions: [...d.transactions, ...detTxs, ...detAutoTxs],
           schedules: d.schedules.map(s =>
             s.id === scheduleId ? { ...s, registered: [...(s.registered || []), occurrenceDate], confirmado: false } : s
           ),
