@@ -17,6 +17,7 @@ import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from '../Transactions/TransactionForm'
+import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
 import DateInput from '../shared/DateInput'
@@ -154,6 +155,16 @@ export default function CreditCardPanel() {
   const [showNewTx, setShowNewTx] = useState(false)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+
+  // Duplicar lançamento de cartão: abre o form em modo NOVO (sem id) com os dados originais e a
+  // data escolhida. Mantém o account_id do cartão e o grupo gerencial; descarta vínculos de
+  // automação/série e fatura/dateCartao (recalculadas pela nova data). NÃO salva sozinho.
+  // Parcelados: duplica só a parcela clicada (num/total/parentTxId descartados).
+  const handleDuplicate = (tx, newDate) => {
+    // eslint-disable-next-line no-unused-vars
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    setEditTx({ ...rest, date: newDate || tx.date })
+  }
 
   const selectedCard = useMemo(
     () => accounts.find(a => a.id === selectedCardId) || creditCards[0] || null,
@@ -720,6 +731,11 @@ export default function CreditCardPanel() {
                             >
                               <Edit2 size={11} />
                             </button>
+                            <DuplicateButton
+                              onConfirm={(date) => handleDuplicate(tx, date)}
+                              iconSize={11}
+                              className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                            />
                             <button
                               onClick={(e) => { e.stopPropagation(); setConfirmDelete(tx) }}
                               title="Excluir"
@@ -827,7 +843,7 @@ export default function CreditCardPanel() {
         />
       </Modal>
 
-      <Modal open={!!editTx} onClose={() => setEditTx(null)} title="Editar Lançamento" size="lg">
+      <Modal open={!!editTx} onClose={() => setEditTx(null)} title={editTx?.id ? 'Editar Lançamento' : 'Duplicar Lançamento'} size="lg">
         <TransactionForm
           initial={editTx}
           onClose={() => setEditTx(null)}

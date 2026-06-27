@@ -14,6 +14,7 @@ import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
+import DuplicateButton from '../shared/DuplicateButton'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -112,6 +113,16 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   const [toast, setToast] = useState(null)
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+
+  // Duplicar: abre o form em modo NOVO (sem id) com os dados originais e a data escolhida.
+  // Mantém account_id do cartão e grupo gerencial; descarta vínculos de automação/série e a
+  // fatura/dateCartao. NÃO salva sozinho. Parcelados: só a parcela clicada.
+  const handleDuplicate = (tx, newDate) => {
+    // eslint-disable-next-line no-unused-vars
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    setEditTx({ ...rest, date: newDate || tx.date })
+    setShowEdit(true)
+  }
 
   const handleReverse = (tx) => {
     reverseTransaction(tx.id)
@@ -273,6 +284,11 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                           >
                             <Edit2 size={11} />
                           </button>
+                          <DuplicateButton
+                            onConfirm={(date) => handleDuplicate(tx, date)}
+                            iconSize={11}
+                            className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                          />
                           <button
                             onClick={() => setConfirmDelete(tx)}
                             className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
@@ -332,7 +348,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         />
       )}
 
-      <Modal open={showEdit} onClose={() => { setShowEdit(false); setEditTx(null) }} title="Editar Lançamento">
+      <Modal open={showEdit} onClose={() => { setShowEdit(false); setEditTx(null) }} title={editTx?.id ? 'Editar Lançamento' : 'Duplicar Lançamento'}>
         <TransactionForm initial={editTx} onClose={() => { setShowEdit(false); setEditTx(null) }} />
       </Modal>
       <ConfirmDialog

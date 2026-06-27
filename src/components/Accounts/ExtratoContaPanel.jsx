@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, X, Undo2, Edit2, Copy, Plus, Trash2, Check, Circle, CheckSquare, Zap,
+  ChevronLeft, ChevronRight, X, Undo2, Edit2, Plus, Trash2, Check, Circle, CheckSquare, Zap,
   ListChecks, PencilLine,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -13,6 +13,7 @@ import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
+import DuplicateButton from '../shared/DuplicateButton'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -270,13 +271,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
             </button>
           )}
           {onDuplicate && !tx.reservaAuto && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDuplicate(tx) }}
-              title="Duplicar lançamento (+30 dias)"
-              className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
-            >
-              <Copy size={14} />
-            </button>
+            <DuplicateButton onConfirm={(date) => onDuplicate(tx, date)} iconSize={14} />
           )}
           {onReverse && !tx.reservaAuto && (
             <button
@@ -495,14 +490,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     showToast('Grupo netizado excluído.')
   }
 
-  const handleDuplicate = (tx) => {
+  // Duplicar: abre o form em modo NOVO (sem id) pré-preenchido com os dados do lançamento e a
+  // data escolhida no popover. NÃO salva automaticamente — o usuário revisa e confirma.
+  // Mantém grupo gerencial (classificação do usuário) e descarta vínculos de automação/série e
+  // a fatura/dateCartao (recalculadas pela nova data). Parcelados: duplica apenas a parcela
+  // clicada — num/total/parentTxId são descartados para não recriar a série.
+  const handleDuplicate = (tx, newDate) => {
     if (!onEdit) return
-    const d = new Date(tx.date + 'T00:00:00')
-    d.setDate(d.getDate() + 30)
-    const newDate = d.toISOString().split('T')[0]
     // eslint-disable-next-line no-unused-vars
-    const { id, createdAt, scheduleId, origin, grupoGerencial, gerencialScheduleId, reservaAuto, ...rest } = tx
-    onEdit({ ...rest, date: newDate })
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    onEdit({ ...rest, date: newDate || tx.date })
   }
 
   const todayStr = now.toISOString().split('T')[0]
