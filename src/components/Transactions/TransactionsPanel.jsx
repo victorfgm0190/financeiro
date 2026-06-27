@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView } from '../shared/utils'
+import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -15,6 +15,7 @@ import LancamentoFiltros from '../shared/LancamentoFiltros'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import DuplicateButton from '../shared/DuplicateButton'
+import ReconciledTotals from '../shared/ReconciledTotals'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -151,6 +152,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
     () => txs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
     [txs]
   )
+  const reconciledTotals = useMemo(() => computeReconciledTotals(displayTxs), [displayTxs])
 
   return (
     <div className="space-y-4">
@@ -216,6 +218,17 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           </div>
         ) : (
           <>
+            {/* Totalizador Conciliados/Pendentes (lançamentos visíveis) */}
+            {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
+              <div className="border-b border-gray-800 bg-surface/40 px-4 py-2.5 flex items-center text-xs">
+                <ReconciledTotals
+                  conciliado={reconciledTotals.conciliado}
+                  pendente={reconciledTotals.pendente}
+                  className="ml-auto"
+                />
+              </div>
+            )}
+
             {/* Mobile: cards estilo app bancário */}
             <div className="md:hidden">
               {displayTxs.length === 0 ? (

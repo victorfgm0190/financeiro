@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
-import { fmt } from './utils'
+import { fmt, computeReconciledTotals } from './utils'
+import ReconciledTotals from './ReconciledTotals'
 
 const round2 = n => Math.round(n * 100) / 100
 
@@ -27,7 +28,7 @@ function tokenColor(g) {
 //   • Pagamentos de fatura (type 'credit_payment') são ignorados.
 // Mostra só os grupos com pelo menos um lançamento. Retorna null quando não há
 // despesas nem estornos.
-export default function GerencialTotalizer({ txs, gerencialGroups }) {
+export default function GerencialTotalizer({ txs, gerencialGroups, showReconciled = false }) {
   const totals = new Map()
   let estornos = 0
   for (const tx of txs || []) {
@@ -47,7 +48,11 @@ export default function GerencialTotalizer({ txs, gerencialGroups }) {
     .filter(Boolean)
     .sort((a, b) => sortKey(a.g) - sortKey(b.g))
 
-  if (items.length === 0 && estornos === 0) return null
+  // Conciliados/Pendentes (lado direito): soma dos visíveis por status de conciliação.
+  const { conciliado, pendente } = showReconciled ? computeReconciledTotals(txs) : { conciliado: 0, pendente: 0 }
+  const hasRecon = showReconciled && (conciliado > 0 || pendente > 0)
+
+  if (items.length === 0 && estornos === 0 && !hasRecon) return null
 
   return (
     <div className="px-4 py-2.5 border-b border-gray-800 bg-surface/40 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-xs">
@@ -61,6 +66,7 @@ export default function GerencialTotalizer({ txs, gerencialGroups }) {
           </span>
         </Fragment>
       ))}
+      {hasRecon && <ReconciledTotals conciliado={conciliado} pendente={pendente} className="ml-auto" />}
       {estornos > 0 && (
         <>
           {/* Quebra para linha própria, abaixo dos grupos gerenciais */}

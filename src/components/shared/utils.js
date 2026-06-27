@@ -2,6 +2,17 @@ export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
 }
 
+// Soma os valores (absolutos) dos lançamentos, separados por status de conciliação.
+export function computeReconciledTotals(txs) {
+  let conciliado = 0, pendente = 0
+  for (const tx of txs || []) {
+    const v = Math.abs(Number(tx.amount) || 0)
+    if (tx.reconciled) conciliado = Math.round((conciliado + v) * 100) / 100
+    else pendente = Math.round((pendente + v) * 100) / 100
+  }
+  return { conciliado, pendente }
+}
+
 export function fmtDate(dateStr) {
   if (!dateStr) return ''
   const [y, m, d] = dateStr.split('-')

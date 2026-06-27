@@ -14,6 +14,7 @@ import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import DuplicateButton from '../shared/DuplicateButton'
+import ReconciledTotals from '../shared/ReconciledTotals'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -630,6 +631,21 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     () => displayRows.filter(r => r.kind === 'single').map(r => r.tx.id),
     [displayRows]
   )
+
+  // Conciliados/Pendentes dos lançamentos VISÍVEIS (após filtros de período/texto/valor).
+  // Por LINHA (mesmo valor exibido: delta do lançamento / netFlow do grupo netizado), usando o
+  // status de conciliação da linha — evita contar as duas pernas de uma transferência netizada.
+  const reconciledTotals = useMemo(() => {
+    let conciliado = 0, pendente = 0
+    for (const row of displayRows) {
+      const d = row.kind === 'single' ? txDelta(row.tx, account.id) : row.netFlow
+      const v = Math.abs(Math.round(d * 100) / 100)
+      const isRec = row.kind === 'netted' ? row.txs.every(t => t.reconciled) : !!row.tx.reconciled
+      if (isRec) conciliado = Math.round((conciliado + v) * 100) / 100
+      else pendente = Math.round((pendente + v) * 100) / 100
+    }
+    return { conciliado, pendente }
+  }, [displayRows, account.id])
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
   const toggleSelectAllVisible = () => setSelectedIds(prev => {
     if (allVisibleSelected) {
@@ -854,6 +870,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             }
           />
         </div>
+
+        {/* Totalizador Conciliados/Pendentes (lançamentos visíveis) */}
+        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
+          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex items-center text-xs">
+            <ReconciledTotals
+              conciliado={reconciledTotals.conciliado}
+              pendente={reconciledTotals.pendente}
+              className="ml-auto"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Table body (desktop) ── */}

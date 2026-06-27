@@ -568,7 +568,7 @@ export default function CreditCardPanel() {
           </div>
         ) : (
           <>
-            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} />
+            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} showReconciled />
 
             {/* Mobile: cards estilo app bancário */}
             <div className="md:hidden">
