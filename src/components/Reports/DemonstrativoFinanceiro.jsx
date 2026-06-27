@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
-import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react'
+import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -45,6 +45,31 @@ function saveFilters(f) {
   try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)) } catch { /* ignora quota/serialização */ }
 }
 
+// Expande transferências ENTRE PERFIS (CPF↔CNPJ) em DUAS pernas income/expense, cada uma com a
+// categoria do seu lado: lado PJ → categoria_cnpj_id, lado PF → categoria_cpf_id. A perna da conta
+// de ORIGEM vira despesa (saiu dinheiro); a da conta de DESTINO vira receita. Usado quando o toggle
+// "Incluir transferências entre perfis" está ligado (efetivo só no modo "Todos", sem perfil ativo).
+// As pernas levam a flag _interProfile para passarem pelos filtros de conta/categoria do relatório.
+function expandInterProfileTransfers(transactions, accounts, profiles) {
+  const accById = new Map(accounts.map(a => [a.id, a]))
+  const ptype = new Map((profiles || []).map(p => [p.id, p.type]))
+  const catFor = (pid, tx) => ((ptype.get(pid) === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || '')
+  const out = []
+  for (const tx of transactions) {
+    if (tx.type === 'transfer') {
+      const fromP = accById.get(tx.accountId)?.profileId || null
+      const toP = accById.get(tx.toAccountId)?.profileId || null
+      if (fromP && toP && fromP !== toP) {
+        out.push({ ...tx, id: `${tx.id}:ipout`, type: 'expense', categoryId: catFor(fromP, tx), _interProfile: true })
+        out.push({ ...tx, id: `${tx.id}:ipin`, type: 'income', categoryId: catFor(toP, tx), accountId: tx.toAccountId, _interProfile: true })
+        continue
+      }
+    }
+    out.push(tx)
+  }
+  return out
+}
+
 function buildReport(transactions, categories, from, to, accountIds, categoryIds, aplicSet, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reservaAccSet, reserveFunctions, activeProfile, profileAccountIds) {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c]))
 
@@ -74,10 +99,12 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     // Filtro de contas: uma TRANSFERÊNCIA entra quando a conta de origem (accountId) OU a de
     // destino (toAccountId) está selecionada. Sem o destino, resgates de reserva (origem = conta
     // de reserva não selecionada → destino = conta selecionada) sumiam do Demonstrativo.
-    (tx.reservaAuto === true || accountIds.length === 0 ||
+    // Pernas de transferência entre perfis (_interProfile, via toggle) ignoram os filtros de
+    // conta e categoria — são uma visão deliberada das duas pernas com suas categorias CPF/CNPJ.
+    (tx._interProfile || tx.reservaAuto === true || accountIds.length === 0 ||
       accountIds.includes(tx.accountId) ||
       (tx.type === 'transfer' && accountIds.includes(tx.toAccountId))) &&
-    (categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
+    (tx._interProfile || categoryIds.length === 0 || categoryIds.includes(tx.categoryId)) &&
     // "Ocultar movimentos de reserva": esconde transferências que tocam conta de reserva E
     // as sombras automáticas (reservaAuto: "Reserva: X" / "Resgate Reserva: X", accountId null).
     !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId) || tx.reservaAuto === true)) &&
@@ -473,7 +500,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -491,6 +518,18 @@ export default function DemonstrativoFinanceiro() {
   const initialFilters = useMemo(() => loadFilters(), [])
   const [hideReserva, setHideReserva] = useState(() => initialFilters?.hideReserveMovements ?? false)
   const [hidePatrimonio, setHidePatrimonio] = useState(() => initialFilters?.hidePatrimonyMovements ?? false)
+  // Incluir as duas pernas das transferências entre perfis (CPF↔CNPJ) no modo "Todos". Não persiste.
+  const [includeInterProfile, setIncludeInterProfile] = useState(false)
+
+  // Transações de entrada do relatório: no modo "Todos" com o toggle ligado, expande as
+  // transferências entre perfis em receita/despesa por categoria CPF/CNPJ. Com perfil ativo o
+  // contexto já converte a perna do perfil (comportamento inalterado) → não expande.
+  const reportTransactions = useMemo(
+    () => (includeInterProfile && !activeProfile)
+      ? expandInterProfileTransfers(transactions, accounts, profiles)
+      : transactions,
+    [includeInterProfile, activeProfile, transactions, accounts, profiles],
+  )
 
   // ── Filter draft state ────────────────────────────────────────────────────
   const [months, setMonths] = useState(() => initialFilters?.periodoType ?? 1)
@@ -594,8 +633,8 @@ export default function DemonstrativoFinanceiro() {
   // ── Report data ───────────────────────────────────────────────────────────
   const report = useMemo(() => {
     if (!applied) return null
-    return buildReport(transactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions, activeProfile, profileAccountIds)
-  }, [applied, transactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions, activeProfile, profileAccountIds])
+    return buildReport(reportTransactions, categories, applied.from, applied.to, applied.accs, applied.cats, aplicSet, hideReserva ? reservaSet : null, hidePatrimonio, reservaDespesaFuncSet, reservaSet, reserveFunctions, activeProfile, profileAccountIds)
+  }, [applied, reportTransactions, categories, aplicSet, hideReserva, reservaSet, hidePatrimonio, reservaDespesaFuncSet, reserveFunctions, activeProfile, profileAccountIds])
 
   const isDirty = applied && (fromDraft !== applied.from || toDraft !== applied.to || showTxDraft !== applied.showTx || JSON.stringify([...selectedCatsDraft].sort()) !== JSON.stringify([...applied.cats].sort()) || JSON.stringify([...selectedAccsDraft].sort()) !== JSON.stringify([...applied.accs].sort()))
 
@@ -609,6 +648,16 @@ export default function DemonstrativoFinanceiro() {
             Demonstrativo Financeiro
           </h3>
           <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <div
+                onClick={() => setIncludeInterProfile(v => !v)}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${includeInterProfile ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${includeInterProfile ? 'left-4' : 'left-0.5'}`} />
+              </div>
+              <ArrowLeftRight size={13} className="text-gray-400" />
+              Incluir transferências entre perfis (CPF/CNPJ)
+            </label>
             <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
               <div
                 onClick={() => setHideReserva(v => !v)}
