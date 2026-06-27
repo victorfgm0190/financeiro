@@ -524,6 +524,32 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     // Rateio: salva os rateios para o lançamento recém-criado.
     if (form.type !== 'transfer' && rateioRows.length > 0 && txId) saveRateiosFor(txId, rateioRows)
 
+    // Parcelado manual em cartão: cria as parcelas FUTURAS (2..N) como lançamentos reais, cada
+    // uma na sua fatura. Roda para QUALQUER grupo gerencial (inclui Grupo D / despesa normal) —
+    // não depende do bloco gerencial abaixo. Herda categoria, favorecido, centro de custo,
+    // observações, grupo, função de reserva e o rateio da parcela base. A installment_key
+    // (calculada em txToRow) + o índice único no banco evitam duplicatas;
+    // recalcularAgendamentosFatura roda por fatura dentro de criarParcelasGerencial.
+    if (isParcelado && txId) {
+      const parcelaIds = criarParcelasGerencial(txId, {
+        accountId: form.accountId,
+        amount: installmentAmount,
+        date: form.date,
+        grupoGerencialId: txData.grupoGerencial,
+        installments: form.installments,
+        description: form.description,
+        categoryId: txData.categoryId || null,
+        payee: form.payee || null,
+        costCenter: form.costCenter || null,
+        notes: form.notes || null,
+        reservaFuncaoId: txData.reservaFuncaoId || null,
+        baseFaturaMonthYear: txData.faturaMonthYear || null,
+      })
+      if (rateioRows.length > 0 && parcelaIds?.length) {
+        for (const pid of parcelaIds) saveRateiosFor(pid, rateioRows)
+      }
+    }
+
     // Painel "Repetir este lançamento" (somente em NOVO): cria um agendamento com os
     // mesmos dados, usando a data do lançamento como início. A ocorrência da data de
     // início é marcada como já registrada (corresponde a este próprio lançamento), e
@@ -582,19 +608,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       if (resultado.scheduleDate) {
         onToast?.(`Agendamento de resgate criado para ${fmtDate(resultado.scheduleDate)}.`)
       }
-      if (isParcelado) {
-        criarParcelasGerencial(txId, {
-          accountId: form.accountId,
-          amount: installmentAmount,
-          date: form.date,
-          grupoGerencialId: form.grupoGerencial,
-          installments: form.installments,
-          description: form.description,
-          // Cada parcela futura herda a função de reserva da parcela base; o resgate_reserva
-          // de cada fatura afetada é (re)gerado por recalcularAgendamentosFatura.
-          reservaFuncaoId: txData.reservaFuncaoId || null,
-        })
-      }
+      // (As parcelas futuras 2..N já foram criadas logo após addTransaction, independentemente
+      // do grupo gerencial — ver criarParcelasGerencial acima.)
 
       // Recálculo EXPLÍCITO da fatura da parcela base (Grupo G ou numerado). Roda DEPOIS de
       // processarLancamentoGerencial — que já garantiu a subconta "Ger. {apelido}" — então o

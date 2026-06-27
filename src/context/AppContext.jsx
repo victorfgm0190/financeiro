@@ -13,10 +13,17 @@ import {
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate } from '../lib/parcelas'
+import { installmentKey } from '../lib/installments'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
+// Despesa parcelada (parte de uma série) — distinta de uma compra à vista. Usa a coluna
+// installment_num (parcelas manuais novas têm a MESMA descrição, sem marcador "N/N") e mantém
+// o marcador "N/N" na descrição como fonte (parcelas importadas/legadas). Superconjunto estrito
+// do antigo teste por descrição: não muda a classificação de nenhum dado existente.
+const isParcelada = (tx) =>
+  Number(tx?.installmentNum) > 1 || INSTALL_RE.test(tx?.description || '')
 // Item 8: id determinístico da transferência imediata do Grupo G ("etapa A"),
 // derivado da despesa que a originou. Fonte única (reconcile, delete, reverse, revert).
 const etapaAId = (expenseId) => `tx_gerA_${expenseId}`
@@ -3448,20 +3455,26 @@ export function AppProvider({ children }) {
   const criarParcelasGerencial = useCallback((rootTxId, {
     accountId, amount, date, grupoGerencialId, installments, description = '',
     startFromInstallment = 2,   // default 2 (TransactionForm); import X>1 passa X+1
-    baseFaturaMonthYear = null, // fatura da parcela importada (formato "YYYY-MM")
-    baseInstallmentNum = 1,     // número da parcela importada (1 = normal)
+    baseFaturaMonthYear = null, // fatura da parcela base (formato "YYYY-MM")
+    baseInstallmentNum = 1,     // número da parcela base (1 = normal)
     reservaFuncaoId = null,     // função de reserva herdada da parcela base (grupo numerado)
+    categoryId = null,          // categoria herdada da parcela base
+    payee = null,               // favorecido herdado da parcela base
+    costCenter = null,          // centro de custo herdado da parcela base
+    notes = null,               // observações herdadas da parcela base
   }) => {
-    if (!installments || installments <= 1) return
-    if (startFromInstallment > installments) return
+    if (!installments || installments <= 1) return []
+    if (startFromInstallment > installments) return []
     const cardAccount = dataRef.current.accounts.find(a => a.id === accountId)
-    if (!cardAccount) return
+    if (!cardAccount) return []
     const closingDay = cardAccount.closingDay || 14
 
-    // Determina baseYear/baseMonth0 = mês da fatura da parcela 1
+    // Determina baseYear/baseMonth0 = mês da fatura da parcela 1.
+    // Com baseFaturaMonthYear: regride (baseInstallmentNum-1) meses até a fatura da parcela 1
+    // (honra a fatura explícita da base, ex.: "Fatura de referência" escolhida no formulário).
+    // Sem ela: calcula pela data + dia de fechamento do cartão.
     let baseYear, baseMonth0
-    if (baseFaturaMonthYear && baseInstallmentNum > 1) {
-      // Import de parcela X>1: regride (X-1) meses para chegar na fatura da parcela 1
+    if (baseFaturaMonthYear) {
       const [fyRaw, fmRaw] = baseFaturaMonthYear.split('-').map(Number)
       const d1 = new Date(fyRaw, fmRaw - 1 - (baseInstallmentNum - 1), 1)
       baseYear = d1.getFullYear()
@@ -3474,8 +3487,23 @@ export function AppProvider({ children }) {
     }
 
     const origDay = parseInt((date || '').split('-')[2] || '1', 10)
-    const baseDesc = (description || '').replace(/\s*\(?\d+\s*\/\s*\d+\)?\s*$/, '').trim()
+    // Mesma descrição da parcela base para TODAS as parcelas (o número da parcela vive nas
+    // colunas installment_num/installment_total). Mantém a base da installment_key consistente
+    // e permite que buildSeries agrupe as irmãs corretamente.
+    const baseDesc = (description || '').trim()
     const financialStartDay = dataRef.current.settings?.financialMonthStartDay || 1
+    // Índice das installment_keys já existentes no cartão — evita inserir parcela duplicada
+    // (o índice único uq_lancamentos_installment é a guarda final no banco).
+    const existingKeys = new Set(
+      dataRef.current.transactions
+        .map(t => installmentKey({
+          accountId: t.accountId, description: t.description,
+          installmentNum: t.installmentNum, installmentTotal: t.installmentTotal,
+          amount: t.amount, faturaMonthYear: t.faturaMonthYear, date: t.date,
+        }))
+        .filter(Boolean)
+    )
+    const createdIds = []
     const faturasAfetadas = new Set()
     for (let i = startFromInstallment; i <= installments; i++) {
       const fd = new Date(baseYear, baseMonth0 + (i - 1), 1)
@@ -3488,21 +3516,32 @@ export function AppProvider({ children }) {
       const futureDate = installmentSystemDate(
         futureFatura, i, `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`, financialStartDay
       )
-      addTransaction({
+      // Pula se a parcela já existe (mesma installment_key).
+      const key = installmentKey({
+        accountId, description: baseDesc, installmentNum: i, installmentTotal: installments,
+        amount, faturaMonthYear: futureFatura, date: futureDate,
+      })
+      if (key && existingKeys.has(key)) continue
+      if (key) existingKeys.add(key)
+      const id = addTransaction({
         type: 'expense', accountId, accountType: 'credit', amount, date: futureDate,
-        description: `${baseDesc} (${i}/${installments})`.trim(),
+        description: baseDesc,
+        categoryId: categoryId || null, payee: payee || null,
+        costCenter: costCenter || null, notes: notes || null,
         grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
         reservaFuncaoId: reservaFuncaoId || null,
         installmentNum: i, installmentTotal: installments,
         origin: 'parcela', parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
+      if (id) createdIds.push(id)
       faturasAfetadas.add(futureFatura)
     }
     for (const f of faturasAfetadas) {
       const [y, m] = f.split('-')
       recalcularAgendamentosFatura(accountId, y, m)
     }
+    return createdIds
   }, [addTransaction, recalcularAgendamentosFatura])
 
   // ── Ajusta parcelas 2..N quando o grupo gerencial muda em uma edição ──────────
@@ -3730,10 +3769,13 @@ export function AppProvider({ children }) {
       .filter(tx => {
         if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
         if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
-        if (!INSTALL_RE.test(tx.description || '')) return false
+        if (!isParcelada(tx)) return false
+        // Provisão já existente da parcela: transferência executada (parentTxId) OU a etapa A
+        // derivada (id determinístico). NÃO casa por descrição — parcelas irmãs compartilham a
+        // mesma descrição (o número vive em installment_num), o que geraria falso positivo.
         const jaProvisionada = data.transactions.some(t =>
           t.type === 'transfer' && t.grupoGerencial === g1.id &&
-          (t.parentTxId === tx.id || t.description === `Reserva Gerencial - ${tx.description}`)
+          (t.parentTxId === tx.id || t.id === etapaAId(tx.id))
         )
         return !jaProvisionada
       })
@@ -3745,6 +3787,8 @@ export function AppProvider({ children }) {
         return {
           id: tx.id,
           description: tx.description,
+          installmentNum: tx.installmentNum ?? null,
+          installmentTotal: tx.installmentTotal ?? null,
           faturaMonthYear: tx.faturaMonthYear,
           amount: tx.amount,
           date: tx.date,
@@ -3782,9 +3826,10 @@ export function AppProvider({ children }) {
       const newTxs = []
       for (const parcela of d.transactions) {
         if (!ids.has(parcela.id) || parcela.grupoGerencial !== g1.id) continue
+        // (ver getProvisoesPendentes) casa por parentTxId / id determinístico, nunca por descrição.
         const jaProvisionada = d.transactions.some(t =>
           t.type === 'transfer' && t.grupoGerencial === g1.id &&
-          (t.parentTxId === parcela.id || t.description === `Reserva Gerencial - ${parcela.description}`)
+          (t.parentTxId === parcela.id || t.id === etapaAId(parcela.id))
         )
         if (jaProvisionada) continue
 
@@ -3792,10 +3837,14 @@ export function AppProvider({ children }) {
         //  • Parcela 1 (ou sem padrão X/N): data original do lançamento (comportamento atual).
         //  • Parcelas 2..N: dia financeiro do mês ANTERIOR ao mês da fatura_ref da parcela
         //    (provisão no início do ciclo anterior ao da fatura).
-        // Número da parcela = último "X/N" da descrição (sufixo "(i/N)" gerado em criarParcelasGerencial);
-        // pegar a última ocorrência evita confundir com uma data "5/6" no início da descrição.
-        const instMatches = [...(parcela.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
-        const instNum = instMatches.length ? Number(instMatches[instMatches.length - 1][1]) : 1
+        // Número da parcela: usa a coluna installment_num quando disponível; cai para o último
+        // "X/N" da descrição (parcelas legadas com sufixo "(i/N)"), pegando a última ocorrência
+        // para não confundir com uma data "5/6" no início da descrição.
+        let instNum = Number(parcela.installmentNum) || null
+        if (!instNum) {
+          const instMatches = [...(parcela.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
+          instNum = instMatches.length ? Number(instMatches[instMatches.length - 1][1]) : 1
+        }
         let transferDate = parcela.date
         if (instNum >= 2 && parcela.faturaMonthYear) {
           const [fy, fm] = parcela.faturaMonthYear.split('-')
@@ -3879,7 +3928,7 @@ export function AppProvider({ children }) {
           byFatura.set(key, { cardId: expense.accountId, faturaRef, cardAcc, avista: 0, parcelado: 0 })
         }
         const entry = byFatura.get(key)
-        if (INSTALL_RE.test(expense.description || '')) {
+        if (isParcelada(expense)) {
           entry.parcelado = rb(entry.parcelado + expense.amount)
         } else {
           entry.avista = rb(entry.avista + expense.amount)
@@ -3915,7 +3964,7 @@ export function AppProvider({ children }) {
         // 1. Apaga transferências imediatas erradas de parcelados
         const parceladoTxs = grupoGExpenses.filter(tx => {
           if (tx.accountId !== cardId) return false
-          if (!INSTALL_RE.test(tx.description || '')) return false
+          if (!isParcelada(tx)) return false
           const cl = d.accounts.find(a => a.id === tx.accountId)?.closingDay || 14
           let fRef
           if (tx.faturaMonthYear) {

@@ -1540,8 +1540,13 @@ function faturaLabel(ym) {
 //  • parcela 1 (ou sem padrão X/N): data original do gasto
 //  • parcelas 2..N: dia financeiro do mês ANTERIOR ao da fatura (prevMonthScheduleDate)
 function dataLancamentoProvisao(p, financialMonthStartDay) {
-  const matches = [...(p.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
-  const instNum = matches.length ? Number(matches[matches.length - 1][1]) : 1
+  // Número da parcela: coluna installment_num quando disponível; cai para o "X/N" da descrição
+  // (parcelas legadas com sufixo "(i/N)" e sem installment_num gravado).
+  let instNum = Number(p.installmentNum) || null
+  if (!instNum) {
+    const matches = [...(p.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
+    instNum = matches.length ? Number(matches[matches.length - 1][1]) : 1
+  }
   if (instNum >= 2 && p.faturaMonthYear) {
     const [fy, fm] = p.faturaMonthYear.split('-')
     return prevMonthScheduleDate(`${fm}/${fy}`, financialMonthStartDay)
