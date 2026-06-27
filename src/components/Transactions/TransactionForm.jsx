@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
@@ -165,6 +165,27 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Favorecido → Descrição: a descrição acompanha o favorecido enquanto o usuário não a editar
+  // manualmente. Inicia "já editada" quando o lançamento existente tem uma descrição própria
+  // (diferente do favorecido) — assim a edição de favorecido não sobrescreve uma descrição
+  // independente. Form novo (ambos vazios) inicia false (a descrição segue o favorecido).
+  const descEditedRef = useRef(
+    (initial?.description || '') !== '' && (initial?.description || '') !== (initial?.payee || '')
+  )
+  const onPayeeChange = (v) => {
+    setForm(f => {
+      const next = { ...f, payee: v }
+      if (!descEditedRef.current) next.description = v // descrição segue o favorecido
+      return next
+    })
+  }
+  const onDescriptionChange = (v) => {
+    // Digitar algo diferente do favorecido atual marca a descrição como editada manualmente
+    // (a partir daí ela deixa de acompanhar o favorecido).
+    if (v !== form.payee) descEditedRef.current = true
+    set('description', v)
+  }
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
@@ -1174,7 +1195,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             <label className="label">Favorecido</label>
             <FavorecidoAutocomplete
               value={form.payee}
-              onChange={v => set('payee', v)}
+              onChange={onPayeeChange}
               suggestions={sortedPayees}
             />
           </div>
@@ -1191,7 +1212,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
       <div>
         <label className="label">Descrição</label>
-        <input className="input" value={form.description} onChange={e => set('description', e.target.value)} placeholder="Descrição do lançamento" />
+        <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Descrição do lançamento" />
       </div>
 
       {/* Item 6: card "Parcela N de M" editável (override manual) + irmãs + geração das faltantes. */}
