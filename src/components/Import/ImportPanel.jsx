@@ -209,6 +209,20 @@ function descSimilarity(a, b) {
   return union ? inter / union : 0
 }
 
+// Remove o sufixo de PARCELA do final da descrição (1–2 dígitos / 1–2 dígitos, com ou sem
+// espaços antes). Cobre o lado do sistema ("CLINICA HIGA-CT LT01/03", "CEU INFANTIL-CT   01/06")
+// e o do Itaú já convertido ("Clinica Higa-ct Lt 1/3"). Sem o padrão no final, não altera nada
+// (lançamentos sem parcela ficam intactos).
+function stripParcelaSuffix(s) {
+  return String(s || '').replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
+}
+// Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela e aplica a
+// normalização de texto existente (sem acento, maiúsculas, espaços colapsados). Assim o lançamento
+// do sistema (parcela colada "01/03") casa com o do Itaú ("1/3").
+function normalizeDescForMatch(desc) {
+  return normText(stripParcelaSuffix(desc))
+}
+
 // Nível de duplicata, testado em ordem (primeiro match vence). Candidatos = lançamentos da
 // MESMA fatura do cartão. Retorna 'certeza' | 'provavel' | 'possivel' | null.
 //   certeza : date_cartao igual + valor ±0,50 + descrição idêntica
@@ -239,8 +253,9 @@ function crossMatchConciliacao(soItau, soSistema) {
     for (const s of sysOut) {
       if (used.has(s.id)) continue
       if (Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) > 0.50) continue
-      const sim = descSimilarity(it.description, s.description)
-      const rank = normText(it.description) === normText(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0
+      // Compara as descrições SEM o sufixo de parcela (sistema "01/03" vs Itaú "1/3").
+      const sim = descSimilarity(stripParcelaSuffix(it.description), stripParcelaSuffix(s.description))
+      const rank = normalizeDescForMatch(it.description) === normalizeDescForMatch(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0
       if (rank === 0) continue
       if (rank > bestRank || (rank === bestRank && sim > bestSim)) { best = s; bestRank = rank; bestSim = sim }
     }
@@ -1672,8 +1687,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }, [resolvedRows])
 
   // ── Conciliação de Fatura ──────────────────────────────────────────────────
-  // Normaliza descrição p/ comparação (trim, lower, colapsa espaços).
-  const normDesc = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
   // Lançamentos da fatura já existentes no sistema (despesas + estornos do cartão/mês).
   const faturaItensSistema = (cardId, mesAno) => {
@@ -1749,7 +1762,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Lançamentos do sistema para esta fatura.
       const sysItens = faturaItensSistema(selectedAccount, faturaMonthYear)
 
-      // Match guloso 1:1 por descrição (normalizada) + valor (tolerância R$ 0,50) + tipo.
+      // Match guloso 1:1 por descrição (normalizada, sem o sufixo de parcela) + valor
+      // (tolerância R$ 0,50) + tipo. O valor e a data permanecem como critérios — só a
+      // comparação de descrição é melhorada (sistema "01/03" casa com Itaú "1/3").
       const usedSys = new Set()
       const matched = []
       const soItau = []
@@ -1758,7 +1773,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           !usedSys.has(t.id) &&
           t.type === c.type &&
           Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) <= 0.50 &&
-          normDesc(t.description) === normDesc(c.description)
+          normalizeDescForMatch(t.description) === normalizeDescForMatch(c.description)
         )
         if (sys) { usedSys.add(sys.id); matched.push({ csv: c, sys }) }
         else soItau.push(c)
