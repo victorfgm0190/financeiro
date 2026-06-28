@@ -14,6 +14,7 @@ import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
+import ImportPreviewModal from './ImportPreviewModal'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -879,6 +880,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
     addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
+    schedules,
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
@@ -912,6 +914,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showBatchFill, setShowBatchFill] = useState(false)
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
+  const [showImportPreview, setShowImportPreview] = useState(false)
 
   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
   const [conciliarMode, setConciliarMode] = useState(false)
@@ -1612,6 +1615,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setResult(totalProcessed)
     setRows([])
     setCollisionSkip(new Set())
+  }
+
+  // Clique em "Confirmar Importação": valida a função obrigatória (mesmo guard do handleImport)
+  // e, se passar, abre o modal de preview. A confirmação real (handleImport) só roda no modal.
+  const handleConfirmImport = () => {
+    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
+    const pendentesFunc = toImport.filter(r =>
+      reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
+    if (pendentesFunc.length > 0) {
+      document.getElementById(`ccrow-${pendentesFunc[0]._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    setShowImportPreview(true)
   }
 
   const resolveMatch = (linked, catId, payee) => {
@@ -2539,7 +2555,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <button
                 className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
                 disabled={(toImportCount === 0 && collisionsToApplyCount === 0) || !selectedAccount}
-                onClick={handleImport}
+                onClick={handleConfirmImport}
               >
                 <Save size={12} /> {editingImport
                   ? `Salvar (${toImportCount})`
@@ -2887,6 +2903,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       />
 
       {corrigirToast && <Toast message={corrigirToast} onClose={() => setCorrigirToast(null)} />}
+
+      <ImportPreviewModal
+        open={showImportPreview}
+        onCancel={() => setShowImportPreview(false)}
+        onConfirm={() => { setShowImportPreview(false); handleImport() }}
+        resolvedRows={resolvedRows}
+        gerencialGroups={gerencialGroups}
+        schedules={schedules}
+        accounts={accounts}
+        card={selectedAcc}
+        faturaMesAno={faturaMonthYear}
+        reserveFunctions={reserveFunctions}
+      />
     </div>
   )
 }
