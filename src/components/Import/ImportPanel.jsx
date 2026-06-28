@@ -878,7 +878,7 @@ function InstallmentControl({ installment, description, onChange }) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, classifyGerencialByRules,
+    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     schedules,
     cardImports, addCardImport, updateCardImport, revertCardImport,
@@ -1428,6 +1428,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : undefined
         recalcularAgendamentosFatura(editingImport.accountId, y, m, reservaFuncaoByAccount)
       }
+      // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura
+      // só ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a reedição.
+      reconciliarGerencial(editingImport.accountId)
       setEditingImport(null)
       setResult(toImport.length)
       setRows([])
@@ -1608,6 +1611,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         : undefined
       recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
     }
+    // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
+    // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a importação.
+    reconciliarGerencial(selectedAccount)
 
     const totalProcessed = toImport.length + collisionsToApply.length
     const pending = []
@@ -2006,6 +2012,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const [y, m] = fmy.split('-')
       recalcularAgendamentosFatura(selectedAccount, y, m, mapFor(fmy))
     }
+    // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
+    // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a conciliação.
+    reconciliarGerencial(selectedAccount)
 
     // Registra os importados no histórico (permite estornar como uma importação normal).
     if (txIds.length > 0) {
