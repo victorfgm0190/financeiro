@@ -3216,26 +3216,18 @@ export function AppProvider({ children }) {
 
       // 7. Item 8 — etapa A (transferência imediata Conta Principal → Ger. subconta) do
       //    Grupo G, DERIVADA das despesas G da fatura e com id determinístico (tx_gerA_<expenseId>).
-      //    Regra de negócio:
-      //      • À vista / parcela 1 (installment_num <= 1): materializa na DATA DA COMPRA tanto na
-      //        fatura do ciclo ATUAL quanto em FATURAS FUTURAS (provisão imediata).
-      //      • Parcelas 2..N (installment_num > 1): só no ciclo atual — as futuras ficam para o
-      //        Executar Gerenciais (provisão no início do ciclo anterior à fatura).
-      //    Passado fica intocado (nada retroativo). Reconcilia create/update por id determinístico;
-      //    remoção de órfãos é feita por id em delete/edição/reversão.
+      //    Regra de negócio: etapa A SÓ para a fatura do ciclo financeiro ATUAL — qualquer tipo
+      //    (à vista, parcela 1 ou parcela 2..N). Faturas futuras NÃO recebem etapa A antecipada;
+      //    a provisão ocorre quando a fatura entra no ciclo corrente (ou via "Executar Gerenciais"
+      //    para parcelas). Passado fica intocado (nada retroativo). Reconcilia create/update por id
+      //    determinístico; remoção de órfãos é feita por id em delete/edição/reversão.
+      //    (Antes, à vista/parcela 1 de fatura futura gerava etapa A adiantada, debitando a Principal
+      //    meses antes do fechamento da fatura — descontinuado.)
       let transactions = d.transactions
-      if (subcontaId && !faturaCicloNoPassado) {
+      if (subcontaId && faturaCicloAtual) {
         const gExpenses = expenses.filter(tx => {
           const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
-          if (!g || g.number !== 1) return false
-          // Parcela 2..N de uma série NÃO recebe etapa A imediata em faturas futuras (vai para o
-          // Executar Gerenciais). Identificada por QUALQUER um: installment_num > 1 (explícito),
-          // parent_tx_id preenchido (filha de criarParcelasGerencial) OU origin 'parcela'. Cobre
-          // parcelas importadas via conciliação que têm installment_num = null mas parent_tx_id/
-          // origin definidos. À vista / parcela 1 (nenhum desses) recebe etapa A sempre (atual +
-          // futuro); parcela 2..N só no ciclo atual.
-          const ehParcela2aN = Number(tx.installmentNum) > 1 || tx.parentTxId != null || tx.origin === 'parcela'
-          return !ehParcela2aN || faturaCicloAtual
+          return g && g.number === 1
         })
         if (gExpenses.length) {
           const arr = [...transactions]
