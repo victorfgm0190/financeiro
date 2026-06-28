@@ -2328,6 +2328,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           gerencialGroups={gerencialGroups}
           schedules={schedules}
           accounts={accounts}
+          transactions={transactions}
           card={selectedAcc}
           faturaMesAno={faturaMonthYear}
           reserveFunctions={reserveFunctions}
@@ -2943,6 +2944,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         gerencialGroups={gerencialGroups}
         schedules={schedules}
         accounts={accounts}
+        transactions={transactions}
         card={selectedAcc}
         faturaMesAno={faturaMonthYear}
         reserveFunctions={reserveFunctions}

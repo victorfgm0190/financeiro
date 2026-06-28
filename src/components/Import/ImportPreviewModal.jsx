@@ -10,7 +10,7 @@ const round2 = (n) => Math.round(n * 100) / 100
 // O botão de destaque é "Revisar" (volta sem confirmar); "Confirmar mesmo assim" é discreto.
 export default function ImportPreviewModal({
   open, onConfirm, onCancel,
-  resolvedRows, gerencialGroups, schedules, accounts, card, faturaMesAno, reserveFunctions,
+  resolvedRows, gerencialGroups, schedules, accounts, transactions, card, faturaMesAno, reserveFunctions,
   mode = 'import', // 'import' | 'conciliar' — muda o título e o sufixo "não duplica" no status
 }) {
   if (!open || !card) return null
@@ -29,8 +29,21 @@ export default function ImportPreviewModal({
   const itemsG = grupoG ? toImport.filter(r => r.grupoGerencial === grupoG.id) : []
   const totalFaturaG = round2(itemsG.reduce((s, r) => s + (Number(r.amount) || 0), 0))
   const gerName = `Ger. ${apelido}`
-  const gerAccount = accounts.find(a => a.name === gerName || (grupoG && a.grupoGerencial === grupoG.id))
-  const jaNaGer = round2(gerAccount?.balance || 0)
+  // "Já na conta Ger." DESTA fatura = soma das etapas A (tx_gerA_<expenseId>) já criadas para
+  // as despesas G desta fatura específica. NÃO usar account.balance: ele mistura entradas/saídas
+  // de outros períodos. A etapa A não tem faturaMonthYear, então escopamos pela despesa de origem
+  // (que tem), buscando a etapa A determinística tx_gerA_<id> em transactions.
+  const txIndex = new Map((transactions || []).map(t => [t.id, t]))
+  const jaNaGer = round2((transactions || [])
+    .filter(t =>
+      t.type === 'expense' && t.accountType === 'credit' &&
+      t.accountId === card.id &&
+      grupoG && t.grupoGerencial === grupoG.id &&
+      t.faturaMonthYear === faturaMesAno)
+    .reduce((s, e) => {
+      const a = txIndex.get(`tx_gerA_${e.id}`)
+      return a ? round2(s + (Number(a.amount) || 0)) : s
+    }, 0))
   const aTransferir = round2(Math.max(0, totalFaturaG - jaNaGer))
   const saldoEsperado = round2(jaNaGer + aTransferir)
   const grupoGOk = Math.abs(saldoEsperado - totalFaturaG) < 0.01
