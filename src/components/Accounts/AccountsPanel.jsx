@@ -222,10 +222,8 @@ function GroupManager({ groups }) {
   )
 }
 
-const rb = v => Math.round(v * 100) / 100
-
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue, isNextDue = false, nextDueDays = null }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getNextOccurrences, getFinancialPeriod, getAccountSaldos } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const isCredit = account.type === 'credit'
   const highlightCard = isCredit && isNextDue
@@ -263,11 +261,12 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const isInactive = account.active === false
   const [confirmInactivate, setConfirmInactivate] = useState(false)
 
-  // Contas principais (isMain, não-cartão/ativo/passivo): exibem os 5 saldos do ciclo.
-  const isMainChecking = account.isMain && !['credit', 'asset', 'liability'].includes(account.type)
+  // TODA conta corrente/poupança (não cartão/ativo/passivo) exibe os saldos do ciclo (Saldo Atual,
+  // Final Ciclo, Projetado, ...), reusando a MESMA engine do card principal (getAccountSaldos).
+  const isChecking = !['credit', 'asset', 'liability'].includes(account.type)
   const saldos = useMemo(
-    () => isMainChecking ? getAccountSaldos(account) : null,
-    [isMainChecking, account, getAccountSaldos]
+    () => isChecking ? getAccountSaldos(account) : null,
+    [isChecking, account, getAccountSaldos]
   )
   // Linhas de saldo a exibir: oculta cada saldo igual ao anterior mostrado; oculta
   // os saldos de calendário no modo 'calendar'.
@@ -289,71 +288,6 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     }
     return rows
   }, [saldos])
-
-  const { projetado, finalBal } = useMemo(() => {
-    if (['credit', 'asset', 'liability'].includes(account.type)) return { projetado: null, finalBal: null }
-    const period = getFinancialPeriod()
-    const endStr = period.end.toISOString().split('T')[0]
-    const todayStr = new Date().toISOString().split('T')[0]
-    const principal = account.balance || 0
-
-    let scheduleDelta = 0
-    for (const s of schedules) {
-      const fromAcc = s.accountId === account.id
-      const toAcc = s.toAccountId === account.id
-      if (!fromAcc && !toAcc) continue
-      const nexts = getNextOccurrences(s, 35).filter(d => d > todayStr && d <= endStr)
-      for (const _d of nexts) {
-        if (s.transactionType === 'income' && fromAcc) scheduleDelta += s.amount
-        else if (s.transactionType === 'expense' && fromAcc) scheduleDelta -= s.amount
-        else if (s.transactionType === 'transfer') {
-          if (fromAcc && !toAcc) scheduleDelta -= s.amount
-          else if (!fromAcc && toAcc) scheduleDelta += s.amount
-        }
-      }
-    }
-
-    let futureDelta = 0
-    for (const tx of transactions) {
-      if (tx.date <= todayStr || tx.date > endStr) continue
-      if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
-      if (tx.type === 'income' && tx.accountId === account.id) futureDelta += tx.amount
-      else if (tx.type === 'expense' && tx.accountId === account.id) futureDelta -= tx.amount
-      else if (tx.type === 'transfer' || tx.type === 'credit_payment') {
-        if (tx.toAccountId === account.id) futureDelta += tx.amount
-        else if (tx.accountId === account.id) futureDelta -= tx.amount
-      }
-    }
-
-    return {
-      projetado: rb(principal + scheduleDelta),
-      finalBal: rb(principal + scheduleDelta + futureDelta),
-    }
-  }, [account.id, account.type, account.balance, schedules, transactions, getNextOccurrences, getFinancialPeriod])
-
-  // "Saldo com Futuros": Saldo Atual (account.balance, lançamentos date <= hoje) + TODOS os
-  // lançamentos com data FUTURA (date > hoje) que tocam a conta — sem limite de ciclo. Espelha o
-  // mesmo critério/efeito de recalcularSaldo (income/expense/transfer/credit_payment + data local).
-  // Só para contas correntes/poupança (não cartão/ativo/passivo). Retorna null quando não há
-  // futuros (a linha extra não aparece). Display-only: NÃO altera account.balance nem o contexto.
-  const saldoComFuturos = useMemo(() => {
-    if (['credit', 'asset', 'liability'].includes(account.type)) return null
-    const n = new Date()
-    const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
-    let futureDelta = 0
-    for (const tx of transactions) {
-      if (!tx.date || tx.date <= todayStr) continue // só lançamentos futuros (date > hoje)
-      if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
-      if (tx.type === 'income' && tx.accountId === account.id) futureDelta += tx.amount
-      else if (tx.type === 'expense' && tx.accountId === account.id && tx.accountType !== 'credit') futureDelta -= tx.amount
-      else if (tx.type === 'transfer') {
-        if (tx.accountId === account.id) futureDelta -= tx.amount
-        else if (tx.toAccountId === account.id) futureDelta += tx.amount
-      } else if (tx.type === 'credit_payment' && tx.fromAccountId === account.id) futureDelta -= tx.amount
-    }
-    if (Math.abs(futureDelta) < 0.005) return null
-    return rb((account.balance || 0) + futureDelta)
-  }, [account.id, account.type, account.balance, transactions])
 
   return (
     <>
@@ -488,7 +422,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         )
       ) : (
         <div>
-          {isMainChecking && saldoRows ? (
+          {saldoRows ? (
             <>
               <p className="text-xs opacity-70 mb-0.5">Saldo Atual</p>
               <p className="text-xl font-bold">{fmt(saldoRows[0].val)}</p>
@@ -500,15 +434,6 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             <>
               <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
               <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
-              {saldoComFuturos != null && (
-                <p className="text-xs text-sky-300/70 mt-0.5">Com futuros: {fmt(saldoComFuturos)}</p>
-              )}
-              {projetado != null && Math.abs(projetado - (account.balance || 0)) >= 0.005 && (
-                <p className="text-xs text-sky-300/70 mt-0.5">Projetado: {fmt(projetado)}</p>
-              )}
-              {finalBal != null && Math.abs(finalBal - (projetado ?? (account.balance || 0))) >= 0.005 && (
-                <p className="text-xs text-purple-300/60 mt-0.5">Final: {fmt(finalBal)}</p>
-              )}
             </>
           )}
           {account.acquisitionValue != null && (
