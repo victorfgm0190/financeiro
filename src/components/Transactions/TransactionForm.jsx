@@ -356,6 +356,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     // função de reserva (a função substitui a necessidade da categoria).
     if (form.type === 'transfer' && needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaFuncaoId && !form.reservaExpenseCategoryId) return
 
+    // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória — sem
+    // ela o resgate da fatura não fica atribuído a nenhuma função (some do Fluxo Futuro/Resumo).
+    if (reservaFuncaoMode && reservaGroupFuncs.length > 1 && !form.reservaFuncaoId) {
+      alert('Selecione a função de reserva para este grupo.')
+      return
+    }
+
     const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1
     const installmentAmount = isParcelado
       ? Math.round(Number(form.amount) / form.installments * 100) / 100

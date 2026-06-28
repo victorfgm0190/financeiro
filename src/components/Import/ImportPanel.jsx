@@ -1318,6 +1318,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const handleImport = () => {
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
 
+    // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória. Não
+    // bloqueia com alert — destaca as linhas pendentes (borda laranja no select) e rola até a 1ª.
+    const pendentesFunc = toImport.filter(r =>
+      reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
+    if (pendentesFunc.length > 0) {
+      document.getElementById(`ccrow-${pendentesFunc[0]._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
     // Modo reedição: atualiza campos editáveis das transações existentes e recalcula
     // os agendamentos de cada fatura afetada, passando o mapa de funções de reserva por
     // conta-origem (mesma montagem da importação nova) — sem isso o schedule_reserva_funcoes
@@ -1873,6 +1882,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const importar = concSoItau.filter(i => i.acao === 'importar')
     const excluir = concSoSistema.filter(i => i.acao === 'excluir')
 
+    // Grupo numerado multi-função (Reservas Anuais): função obrigatória nos itens a importar.
+    // Destaca as linhas pendentes (borda laranja no select) e rola até a 1ª, sem confirmar.
+    const pendentesFunc = importar.filter(i =>
+      (i.type || 'expense') === 'expense' &&
+      reserveFuncsForGroup(i.grupoGerencial).length > 1 && !i._reservaFuncaoId)
+    if (pendentesFunc.length > 0) {
+      document.getElementById(`concrow-${pendentesFunc[0]._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
     const txIds = []
     importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
     excluir.forEach(i => deleteTransaction(i.id))
@@ -2065,6 +2084,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   {concSoItau.map(item => (
                     <tr
                       key={item._id}
+                      id={`concrow-${item._id}`}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(item.description) }}
                       title="Ver histórico do fornecedor"
                       className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
@@ -2105,16 +2125,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           // escolhe de qual função vem o resgate (gravado no agendamento via recalc).
                           const funcs = reserveFuncsForGroup(item.grupoGerencial)
                           if (funcs.length <= 1) return null
+                          const pendente = item.acao === 'importar' && !item._reservaFuncaoId
                           return (
-                            <select
-                              className="mt-1 block bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24"
-                              value={item._reservaFuncaoId || ''}
-                              onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
-                              title="Função de reserva do resgate"
-                            >
-                              <option value="">— Selecionar —</option>
-                              {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
+                            <>
+                              <select
+                                className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
+                                value={item._reservaFuncaoId || ''}
+                                onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
+                                title="Função de reserva do resgate"
+                              >
+                                <option value="">— Selecionar —</option>
+                                {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                              </select>
+                              {pendente && <p className="text-[10px] text-orange-500 mt-0.5">Selecione a função</p>}
+                            </>
                           )
                         })()}
                       </td>
@@ -2549,6 +2573,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   {resolvedRows.map(row => (
                     <tr
                       key={row._id}
+                      id={`ccrow-${row._id}`}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
                       title="Ver histórico do fornecedor"
                       className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${!row.selected ? 'opacity-40' : ''} ${row._dupLevel === 'certeza' ? 'bg-red-500/5' : row._dupLevel ? 'bg-amber-500/5' : ''} ${row._collisionTx ? 'bg-amber-500/5' : ''}`}
@@ -2627,16 +2652,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           // permite escolher de qual função virá o resgate (gravado no agendamento).
                           const funcs = reserveFuncsForGroup(row.grupoGerencial)
                           if (funcs.length <= 1) return null
+                          const pendente = !row._reservaFuncaoId
                           return (
-                            <select
-                              className="mt-1 block bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24"
-                              value={row._reservaFuncaoId || ''}
-                              onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null })}
-                              title="Função de reserva do resgate"
-                            >
-                              <option value="">— Selecionar —</option>
-                              {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
+                            <>
+                              <select
+                                className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
+                                value={row._reservaFuncaoId || ''}
+                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null })}
+                                title="Função de reserva do resgate"
+                              >
+                                <option value="">— Selecionar —</option>
+                                {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                              </select>
+                              {pendente && <p className="text-[10px] text-orange-500 mt-0.5">Selecione a função</p>}
+                            </>
                           )
                         })()}
                       </td>
