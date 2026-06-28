@@ -92,6 +92,93 @@ function parseItauCSV(text, categories = []) {
   return { rows: parsed, cardName: '', faturaStr: '' }
 }
 
+// Valor do XLS do Itaú: já costuma vir como número. Aceita também string (formato pt-BR),
+// preservando o sinal. Retorna null quando não é um número válido.
+function parseXlsValor(v) {
+  if (typeof v === 'number') return isNaN(v) ? null : v
+  if (v == null) return null
+  const s = String(v).trim()
+  if (!s) return null
+  const neg = /-/.test(s)
+  const cleaned = s.replace(/[R$\s]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.').replace(/-/g, '')
+  const n = parseFloat(cleaned)
+  if (isNaN(n)) return null
+  return neg ? -n : n
+}
+
+// Converte a coluna "Parcelamento" (ex.: "Parcela 1 de 5") em sufixo "N/Total" na descrição,
+// para que o detector de parcelas (detectInstallment) reconheça o lançamento como parcelado —
+// mesmo caminho do CSV, cuja parcela já vem embutida na descrição.
+function mergeParcelaXls(desc, parc) {
+  if (!parc) return desc
+  const m = String(parc).match(/(\d{1,2})\s*de\s*(\d{1,2})/i)
+  if (!m) return desc
+  const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
+  if (!(total >= 2 && num >= 1 && num <= total)) return desc
+  if (detectInstallment(desc)) return desc // já tem padrão N/Total — não duplica
+  return `${desc} ${num}/${total}`.trim()
+}
+
+// Parser do XLS/XLSX exportado pelo internet banking do Itaú (fatura de cartão). Recebe a matriz
+// de células (parseFile, header:1, cellDates:true) e devolve o MESMO formato de parseItauCSV,
+// para o fluxo de conciliação seguir sem alteração.
+// Estrutura: linha de cabeçalho com "Data" (col 1); Lançamento (col 2), Parcelamento (col 3),
+// Valor (col 4) — colunas localizadas RELATIVAS à célula "Data" para tolerar deslocamentos.
+function parseItauXLS(aoa, categories = []) {
+  if (!Array.isArray(aoa) || aoa.length === 0) return { rows: [], cardName: '', faturaStr: '' }
+  const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+
+  // Localiza a linha de cabeçalho: contém "Data" e "Valor". Guarda a coluna de "Data".
+  let headerIdx = -1, dataCol = -1
+  for (let i = 0; i < Math.min(aoa.length, 40); i++) {
+    const row = aoa[i] || []
+    const di = row.findIndex(c => norm(c) === 'data')
+    if (di !== -1 && row.some(c => norm(c) === 'valor')) { headerIdx = i; dataCol = di; break }
+  }
+  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '' }
+
+  const descCol = dataCol + 1, parcCol = dataCol + 2, valorCol = dataCol + 3
+  const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
+  const parsed = []
+  let idCtr = 0
+
+  for (let i = headerIdx + 1; i < aoa.length; i++) {
+    const row = aoa[i] || []
+    const date = normalizeDate(row[dataCol])
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+
+    const desc = String(row[descCol] ?? '').trim()
+    if (!desc) continue
+
+    const rawVal = parseXlsValor(row[valorCol])
+    if (rawVal == null || rawVal === 0) continue
+
+    const description = mergeParcelaXls(desc, row[parcCol])
+
+    if (rawVal < 0) {
+      // Pagamento de fatura (negativo) → ignorar; demais negativos = estorno → RECEITA (abs),
+      // pré-classificado na categoria de estorno (mesmas regras do CSV).
+      if (desc.toLowerCase().includes('pagamento efetuado')) continue
+      parsed.push({
+        _id: idCtr++,
+        date, description, movimentacao: '', amount: Math.abs(rawVal),
+        isDeposit: true, type: 'income', selected: true, _isDuplicate: false,
+        categoryId: estornoCategoryId, payee: '', grupoGerencial: '',
+      })
+      continue
+    }
+
+    parsed.push({
+      _id: idCtr++,
+      date, description, movimentacao: '', amount: rawVal,
+      isDeposit: false, type: 'expense', selected: true, _isDuplicate: false,
+      categoryId: '', payee: '', grupoGerencial: '',
+    })
+  }
+
+  return { rows: parsed, cardName: '', faturaStr: '' }
+}
+
 function isDuplicate(row, existing) {
   return existing.some(t =>
     t.date === row.date &&
@@ -1610,15 +1697,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
     try {
       setFilename(file.name)
-      const text = await readFileAsText(file)
-      if (!isItauCSV(text)) {
-        setConcError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).')
-        return
-      }
-      const { rows: csvRows } = parseItauCSV(text, categories)
-      if (csvRows.length === 0) {
-        setConcError('Nenhum lançamento encontrado no CSV.')
-        return
+      // Detecta o formato pelo tipo de arquivo: XLS/XLSX (internet banking) ou CSV do Itaú.
+      const isXls = /\.xlsx?$/i.test(file.name)
+      let csvRows
+      if (isXls) {
+        const aoa = await parseFile(file)
+        csvRows = parseItauXLS(aoa, categories).rows
+        if (csvRows.length === 0) {
+          setConcError('Nenhum lançamento encontrado no XLS/XLSX. Verifique se é a fatura exportada pelo internet banking do Itaú.')
+          return
+        }
+      } else {
+        const text = await readFileAsText(file)
+        if (!isItauCSV(text)) {
+          setConcError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).')
+          return
+        }
+        csvRows = parseItauCSV(text, categories).rows
+        if (csvRows.length === 0) {
+          setConcError('Nenhum lançamento encontrado no CSV.')
+          return
+        }
       }
 
       // Classifica cada item do CSV (categoria/gerencial/favorecido) p/ o caso de importação.
@@ -2299,7 +2398,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             <input
               ref={concFileRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xls,.xlsx"
               className="hidden"
               onChange={e => { if (e.target.files[0]) { startConciliacao(e.target.files[0]); e.target.value = '' } }}
             />
@@ -2307,12 +2406,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               className="btn-secondary flex items-center gap-1.5 text-xs py-1.5"
               disabled={!selectedAccount || !faturaMonthYear}
               onClick={() => concFileRef.current?.click()}
-              title={!selectedAccount || !faturaMonthYear ? 'Selecione o cartão e o mês de referência' : 'Conciliar fatura com CSV do Itaú'}
+              title={!selectedAccount || !faturaMonthYear ? 'Selecione o cartão e o mês de referência' : 'Conciliar fatura com CSV ou XLS/XLSX do Itaú'}
             >
               <ArrowLeftRight size={12} /> Conciliar Fatura
             </button>
             <span className="text-xs text-gray-600">
-              Compara o CSV do Itaú com os lançamentos já existentes na fatura selecionada.
+              Compara o CSV ou XLS/XLSX do Itaú com os lançamentos já existentes na fatura selecionada.
             </span>
           </div>
 
