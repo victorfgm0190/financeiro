@@ -3210,9 +3210,14 @@ export function AppProvider({ children }) {
         const gExpenses = expenses.filter(tx => {
           const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
           if (!g || g.number !== 1) return false
-          // À vista / parcela 1: sempre (atual + futuro). Parcelas 2..N: só no ciclo atual.
-          const instNum = Number(tx.installmentNum) || 1
-          return instNum <= 1 || faturaCicloAtual
+          // Parcela 2..N de uma série NÃO recebe etapa A imediata em faturas futuras (vai para o
+          // Executar Gerenciais). Identificada por QUALQUER um: installment_num > 1 (explícito),
+          // parent_tx_id preenchido (filha de criarParcelasGerencial) OU origin 'parcela'. Cobre
+          // parcelas importadas via conciliação que têm installment_num = null mas parent_tx_id/
+          // origin definidos. À vista / parcela 1 (nenhum desses) recebe etapa A sempre (atual +
+          // futuro); parcela 2..N só no ciclo atual.
+          const ehParcela2aN = Number(tx.installmentNum) > 1 || tx.parentTxId != null || tx.origin === 'parcela'
+          return !ehParcela2aN || faturaCicloAtual
         })
         if (gExpenses.length) {
           const arr = [...transactions]
