@@ -18,12 +18,16 @@ import ReconciledTotals from '../shared/ReconciledTotals'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-// Computes the account balance just before `fromDate` by reversing
-// all transactions from that date onward.
+// Computes the account balance just before `fromDate` by reversing transactions in
+// [fromDate, hoje]. Lançamentos com data FUTURA (date > hoje) NÃO são revertidos: eles não
+// entram em account.balance (que só soma date <= hoje, igual ao recalcularSaldo), então revertê-los
+// subtrairia indevidamente do saldo inicial. `hoje` em data local YYYY-MM-DD (mesmo critério).
 function balanceAt(account, allTransactions, fromDate) {
+  const n = new Date()
+  const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
   let b = account.balance || 0
   allTransactions.forEach(tx => {
-    if (tx.date < fromDate) return
+    if (tx.date < fromDate || tx.date > today) return
     if (tx.accountId === account.id) {
       if (tx.type === 'income') b -= tx.amount
       if (tx.type === 'expense') b += tx.amount
