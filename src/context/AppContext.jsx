@@ -3197,16 +3197,22 @@ export function AppProvider({ children }) {
       }
 
       // 7. Item 8 — etapa A (transferência imediata Conta Principal → Ger. subconta) do
-      //    Grupo G, agora DERIVADA das despesas G da fatura e com id determinístico
-      //    (tx_gerA_<expenseId>). Só materializa para a fatura do CICLO ATUAL (D2): passado
-      //    fica intocado; futuro fica só com o agendamento projetado (gerencial_devolucao).
-      //    Reconcilia create/update por id determinístico. Remoção de órfãos é feita por id
-      //    em delete/edição/reversão.
+      //    Grupo G, DERIVADA das despesas G da fatura e com id determinístico (tx_gerA_<expenseId>).
+      //    Regra de negócio:
+      //      • À vista / parcela 1 (installment_num <= 1): materializa na DATA DA COMPRA tanto na
+      //        fatura do ciclo ATUAL quanto em FATURAS FUTURAS (provisão imediata).
+      //      • Parcelas 2..N (installment_num > 1): só no ciclo atual — as futuras ficam para o
+      //        Executar Gerenciais (provisão no início do ciclo anterior à fatura).
+      //    Passado fica intocado (nada retroativo). Reconcilia create/update por id determinístico;
+      //    remoção de órfãos é feita por id em delete/edição/reversão.
       let transactions = d.transactions
-      if (faturaCicloAtual && subcontaId) {
+      if (subcontaId && !faturaCicloNoPassado) {
         const gExpenses = expenses.filter(tx => {
           const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
-          return g && g.number === 1
+          if (!g || g.number !== 1) return false
+          // À vista / parcela 1: sempre (atual + futuro). Parcelas 2..N: só no ciclo atual.
+          const instNum = Number(tx.installmentNum) || 1
+          return instNum <= 1 || faturaCicloAtual
         })
         if (gExpenses.length) {
           const arr = [...transactions]
