@@ -622,6 +622,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         funcaoId: form.reservaFuncaoId || null,
         funcaoNome: func?.name || '',
         amount: Number(form.amount),
+        sourceTxId: txId, // Chain ID: liga o agendamento de resgate ao lançamento recém-salvo.
       })
       setResgateDate(form.date || today())
       setStep('resgate')
@@ -768,6 +769,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         startDate: resgateDate,
         reservaFuncaoId: resgateInfo.funcaoId || null,
         tipo: 'resgate_reserva',
+        sourceTxId: resgateInfo.sourceTxId || null, // Chain ID → lançamento de origem.
         autoRegister: false,
         overrides: {},
       })

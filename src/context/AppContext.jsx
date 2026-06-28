@@ -1741,6 +1741,13 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
   }, [update])
 
+  // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.
+  // Usado pelos painéis de exclusão para avisar que o resgate vinculado também será removido.
+  const findLinkedResgate = useCallback((txId) => {
+    if (!txId) return null
+    return data.schedules.find(s => s.sourceTxId === txId && s.tipo === 'resgate_reserva') || null
+  }, [data.schedules])
+
   // Efetiva uma Provisão de Despesa com o valor/data reais informados.
   //
   // • Provisão "Uma vez" (frequency === 'once'): grava valor/data no próprio registro e o marca
@@ -3003,15 +3010,24 @@ export function AppProvider({ children }) {
       // Detalhamento por função: contaOrigemId → Map(reservaFuncaoId → soma). Lançamentos
       // sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
       const numberedByAccountByFunc = new Map()
+      // Chain ID: IDs dos lançamentos que compõem cada slot (recomputado a cada recálculo,
+      // pois o motor recria os slots pendentes do zero). Persistidos em overrides._sourceTxIds.
+      const sourceTxIdsG = []                // slot gerencial_devolucao (grupo G)
+      const sourceTxIdsByOrigem = new Map()  // contaOrigemId → IDs (slots resgate_reserva)
+      const sourceTxIdsAll = []              // slot pagamento_fatura (todos os gastos da fatura)
       for (const tx of expenses) {
         const amt = Number(tx.amount) || 0
         totalGeral = rb(totalGeral + amt)
+        sourceTxIdsAll.push(tx.id)
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo && grupo.number === 1) {
           totalG = rb(totalG + amt)
+          sourceTxIdsG.push(tx.id)
         } else if (grupo && typeof grupo.number === 'number' && grupo.number !== 1 && grupo.defaultAccountId) {
           const origem = grupo.defaultAccountId
           numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
+          if (!sourceTxIdsByOrigem.has(origem)) sourceTxIdsByOrigem.set(origem, [])
+          sourceTxIdsByOrigem.get(origem).push(tx.id)
           if (tx.reservaFuncaoId) {
             if (!numberedByAccountByFunc.has(origem)) numberedByAccountByFunc.set(origem, new Map())
             const fm = numberedByAccountByFunc.get(origem)
@@ -3073,7 +3089,7 @@ export function AppProvider({ children }) {
           transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
           startDate: devolDate, amount: totalG,
           description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
-          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId } },
+          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
         })
       }
       for (const [origem, soma] of numberedByAccount) {
@@ -3089,7 +3105,7 @@ export function AppProvider({ children }) {
           startDate: dueDate, amount: soma,
           description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
           reservaFuncaoId,
-          overrides: { _gerencial: meta },
+          overrides: { _gerencial: meta, _sourceTxIds: sourceTxIdsByOrigem.get(origem) || [] },
         })
       }
       if (totalPagamento > 0) {
@@ -3100,7 +3116,7 @@ export function AppProvider({ children }) {
           transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
           startDate: dueDate, amount: totalPagamento,
           description: `Pagamento Fatura ${apelido} ${faturaRef}`,
-          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta },
+          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
         })
       }
 
@@ -4201,7 +4217,7 @@ export function AppProvider({ children }) {
       addCategory, updateCategory, deleteCategory,
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
-      addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado,
+      addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
       efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,

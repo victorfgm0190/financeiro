@@ -103,7 +103,7 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, reverseTransaction, setReconciled } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled } = useApp()
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [bulkEditTxs, setBulkEditTxs] = useState(null)
@@ -367,9 +367,24 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
       <ConfirmDialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
-        onConfirm={() => deleteTransaction(confirmDelete.id)}
+        onConfirm={() => {
+          const r = confirmDelete && findLinkedResgate(confirmDelete.id)
+          deleteTransaction(confirmDelete.id)
+          if (r) deleteSchedule(r.id)
+        }}
         title="Excluir Lançamento"
-        message={`Excluir "${confirmDelete?.description}"?`}
+        message={(() => {
+          const r = confirmDelete && findLinkedResgate(confirmDelete.id)
+          if (!r) return `Excluir "${confirmDelete?.description}"?`
+          return (
+            <>
+              ⚠️ Este lançamento possui um agendamento de resgate vinculado:<br /><br />
+              <span className="text-gray-100 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
+              Ambos serão excluídos. Deseja continuar?
+            </>
+          )
+        })()}
+        confirmLabel={confirmDelete && findLinkedResgate(confirmDelete.id) ? 'Excluir ambos' : undefined}
         danger
       />
       <ConfirmDialog

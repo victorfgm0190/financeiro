@@ -433,7 +433,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, reverseTransaction, deleteTransaction, setReconciled } = useApp()
+  const { transactions, accounts, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -478,8 +478,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   }
 
   const handleDelete = (tx) => {
+    const r = findLinkedResgate(tx.id)
     if (onDelete) onDelete(tx.id)
     else deleteTransaction(tx.id)
+    if (r) deleteSchedule(r.id)
     setConfirmDelete(null)
   }
 
@@ -1038,8 +1040,18 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         onClose={() => setConfirmDelete(null)}
         onConfirm={() => handleDelete(confirmDelete)}
         title="Excluir Lançamento"
-        message="Excluir este lançamento permanentemente? Esta ação não pode ser desfeita."
-        confirmLabel="Excluir"
+        message={(() => {
+          const r = confirmDelete && findLinkedResgate(confirmDelete.id)
+          if (!r) return 'Excluir este lançamento permanentemente? Esta ação não pode ser desfeita.'
+          return (
+            <>
+              ⚠️ Este lançamento possui um agendamento de resgate vinculado:<br /><br />
+              <span className="text-gray-100 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
+              Ambos serão excluídos. Deseja continuar?
+            </>
+          )
+        })()}
+        confirmLabel={confirmDelete && findLinkedResgate(confirmDelete.id) ? 'Excluir ambos' : 'Excluir'}
         danger
       />
 

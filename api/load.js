@@ -45,6 +45,9 @@ export default async function handler(req, res) {
     // geração de ocorrências futuras parte daqui (re-ancoragem do dia) em vez de start_date.
     // NULL = comportamento original (calcula desde start_date).
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS next_occurrence DATE`)
+    // Chain ID: lançamento que originou o agendamento (resgate avulso "Será pago com reserva").
+    // 1:1 — agregados de fatura (fsch_*) usam overrides._sourceTxIds (N:1) em vez desta coluna.
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS source_tx_id TEXT`)
     await query(`CREATE TABLE IF NOT EXISTS reserve_functions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
