@@ -209,6 +209,7 @@ export const txToRow = (tx) => ({
   fatura_month_year: tx.faturaMonthYear || null,
   parent_tx_id: tx.parentTxId || null,
   reserva_funcao_id: tx.reservaFuncaoId || null,
+  reserva_conta_id: tx.reservaContaId || null,
   installment_num: tx.installmentNum ?? null,
   installment_total: tx.installmentTotal ?? null,
   // Chave única da parcela (mesma fórmula do backfill) — protege contra importação
@@ -253,6 +254,7 @@ export const rowToTx = (r) => ({
   faturaMonthYear: r.fatura_month_year || null,
   parentTxId: r.parent_tx_id || null,
   reservaFuncaoId: r.reserva_funcao_id || null,
+  reservaContaId: r.reserva_conta_id || null,
   installmentNum: r.installment_num ?? null,
   installmentTotal: r.installment_total ?? null,
   categoriaCnpjId: r.categoria_cnpj_id || null,

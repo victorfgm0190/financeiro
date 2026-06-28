@@ -133,7 +133,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   })
 
   const [step, setStep] = useState('form')
-  const [resgateInfo] = useState(null)
+  const [resgateInfo, setResgateInfo] = useState(null)
+  const [resgateDate, setResgateDate] = useState(() => today())
   const [scheduleMatch, setScheduleMatch] = useState(null)
   const [debtCtx, setDebtCtx] = useState(null)
   // Item 2: "N/Total" detectado na descrição sem "Parcelado" marcado → guarda a parcela
@@ -217,6 +218,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
   const isMobile = useIsMobile()
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva && a.active !== false && (!isMobile || !a.hideOnMobile)), [accounts, isMobile])
+  // Funções da conta de reserva escolhida em "Será pago com reserva" (despesa de conta corrente).
+  const reservaContaFuncs = useMemo(
+    () => form.reservaAccountId ? (reserveFunctions || []).filter(f => f.accountId === form.reservaAccountId) : [],
+    [form.reservaAccountId, reserveFunctions]
+  )
   const matchingSpecificReserva = useMemo(
     () => form.type === 'expense' && form.categoryId
       ? reservaAccounts.find(a => a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId)
@@ -376,13 +382,19 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       installmentNum,
       installmentTotal,
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
-      // Despesa de cartão em grupo numerado com "Pago com reserva?" ativo: função escolhida no
-      // select (modo função). Em edição, preserva o valor existente (ex.: cartão importado).
+      // Despesa com "Pago com reserva?" ativo (cartão grupo numerado OU conta corrente): função
+      // escolhida no select. Em edição, preserva o valor existente (ex.: cartão importado).
       reservaFuncaoId: form.type === 'transfer'
         ? (showReservaFuncao ? (form.reservaFuncaoId || null) : (reservaFuncaoUnica?.id || null))
         : (initial?.id
             ? (form.reservaFuncaoId || null)
-            : ((reservaFuncaoMode && form.useReserva) ? (form.reservaFuncaoId || null) : null)),
+            : (form.useReserva ? (form.reservaFuncaoId || null) : null)),
+      // "Será pago com reserva" em despesa de conta corrente: guarda a conta de reserva escolhida
+      // (par de reservaFuncaoId). Não cria transferência aqui — só registra o vínculo. Em edição
+      // preserva o valor existente (o formulário de edição não reexibe a seção de reserva).
+      reservaContaId: initial?.id
+        ? (initial.reservaContaId || null)
+        : ((form.type === 'expense' && form.useReserva && !reservaFuncaoMode) ? (form.reservaAccountId || null) : null),
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
@@ -599,17 +611,21 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       markScheduleRegistered(schId, form.date)
     }
 
+    // "Será pago com reserva" (despesa de conta corrente): a despesa já foi salva com o vínculo
+    // (reservaContaId/reservaFuncaoId), SEM mexer na reserva. Abre o modal perguntando se deseja
+    // agendar o resgate (resgate_reserva uma vez) — o usuário escolhe a data ou dispensa.
     if (form.type === 'expense' && form.useReserva && form.reservaAccountId && !reservaFuncaoMode) {
       const reservaAcc = accounts.find(a => a.id === form.reservaAccountId)
-      addTransaction({
-        type: 'transfer',
-        accountId: form.reservaAccountId,
-        toAccountId: form.accountId,
+      const func = reserveFunctions.find(f => f.id === form.reservaFuncaoId)
+      setResgateInfo({
+        contaResgate: reservaAcc,
+        funcaoId: form.reservaFuncaoId || null,
+        funcaoNome: func?.name || '',
         amount: Number(form.amount),
-        date: form.date,
-        description: `Resgate ${reservaAcc?.apelido || reservaAcc?.name || 'reserva'}: ${form.description || ''}`.trim().replace(/:$/, ''),
-        reservaExpenseCategoryId: form.categoryId || null,
       })
+      setResgateDate(form.date || today())
+      setStep('resgate')
+      return
     }
 
     if (showGerencial && form.grupoGerencial) {
@@ -736,17 +752,26 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     onToast?.('Marcado como à vista.')
   }
 
+  // Cria o agendamento de RESGATE da reserva (resgate_reserva, uma vez): transferência da conta de
+  // reserva → conta principal, na data escolhida, vinculada à função. Entra no Fluxo Futuro de
+  // Reservas como saída futura da função (transfer com reservaFuncaoId, origem = conta de reserva).
   const handleResgate = () => {
-    if (resgateInfo?.contaResgate && contaPrincipal) {
-      addTransaction({
-        type: 'transfer',
-        accountId: resgateInfo.contaResgate.id,
-        toAccountId: contaPrincipal.id,
+    if (resgateInfo?.contaResgate && contaPrincipal && resgateDate) {
+      addSchedule({
+        description: `Resgate Reserva - ${resgateInfo.funcaoNome || resgateInfo.contaResgate.apelido || resgateInfo.contaResgate.name}`,
+        transactionType: 'transfer',
+        accountId: resgateInfo.contaResgate.id,   // origem = conta de reserva
+        toAccountId: contaPrincipal.id,           // destino = conta principal
         amount: resgateInfo.amount,
-        date: resgateInfo.date,
-        description: `Resgate ${resgateInfo.grupo.name}`,
-        grupoGerencial: resgateInfo.grupo.id,
+        frequency: 'once',
+        occurrenceType: 'continuous',
+        startDate: resgateDate,
+        reservaFuncaoId: resgateInfo.funcaoId || null,
+        tipo: 'resgate_reserva',
+        autoRegister: false,
+        overrides: {},
       })
+      onToast?.(`Agendamento de resgate criado para ${fmtDate(resgateDate)}.`)
     }
     onClose()
   }
@@ -902,32 +927,36 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  if (step === 'resgate') {
+  if (step === 'resgate' && resgateInfo) {
     return (
       <div className="space-y-5 py-2">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-blue-500/15 flex items-center justify-center mx-auto">
-            <ArrowLeftRight size={22} className="text-blue-400" />
+          <div className="w-12 h-12 rounded-full bg-indigo-500/15 flex items-center justify-center mx-auto">
+            <PiggyBank size={22} className="text-indigo-400" />
           </div>
-          <h3 className="font-semibold text-gray-100">Fazer resgate?</h3>
+          <h3 className="font-semibold text-gray-100">Criar agendamento de resgate?</h3>
           <p className="text-sm text-gray-400 leading-relaxed">
-            Deseja resgatar{' '}
-            <span className="text-white font-semibold">{fmt(resgateInfo.amount)}</span> da conta{' '}
-            <span className="text-white font-semibold">{resgateInfo.contaResgate.name}</span>
-            {contaPrincipal ? (
-              <> para <span className="text-white font-semibold">{contaPrincipal.name}</span></>
-            ) : null}
-            ?
+            Deseja agendar o resgate de{' '}
+            <span className="text-white font-semibold">{fmt(resgateInfo.amount)}</span> da reserva{' '}
+            <span className="text-white font-semibold">{resgateInfo.contaResgate.apelido || resgateInfo.contaResgate.name}</span>
+            {contaPrincipal ? (<> → <span className="text-white font-semibold">{contaPrincipal.apelido || contaPrincipal.name}</span></>) : null}?
           </p>
-          {resgateInfo.grupo && (
-            <p className="text-xs text-gray-600">
-              Grupo {resgateInfo.grupo.alias} · {resgateInfo.grupo.name}
-            </p>
+          {resgateInfo.funcaoNome && (
+            <p className="text-xs text-indigo-400">Função: {resgateInfo.funcaoNome}</p>
           )}
         </div>
+        <div>
+          <label className="label">Data do resgate</label>
+          <input
+            type="date"
+            className="input"
+            value={resgateDate}
+            onChange={e => setResgateDate(e.target.value)}
+          />
+        </div>
         <div className="flex gap-3 pt-2">
-          <button className="btn-secondary flex-1" onClick={onClose}>Não agora</button>
-          <button className="btn-primary flex-1" onClick={handleResgate}>Sim, resgatar</button>
+          <button className="btn-secondary flex-1" onClick={onClose}>Agora não</button>
+          <button className="btn-primary flex-1" disabled={!resgateDate} onClick={handleResgate}>Criar Agendamento</button>
         </div>
       </div>
     )
@@ -1314,7 +1343,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
             <PiggyBank size={14} className="text-indigo-400 shrink-0" />
-            <span className="text-sm text-indigo-300 select-none">Pago com reserva?</span>
+            <span className="text-sm text-indigo-300 select-none">Será pago com reserva</span>
             {matchingSpecificReserva && !form.useReserva && !reservaFuncaoMode && (
               <span className="text-xs text-indigo-500 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
             )}
@@ -1346,10 +1375,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               </div>
             ) : (
               <div className="space-y-2">
+                <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva</label>
                 <select
                   className="input"
                   value={form.reservaAccountId}
-                  onChange={e => set('reservaAccountId', e.target.value)}
+                  onChange={e => setForm(f => ({ ...f, reservaAccountId: e.target.value, reservaFuncaoId: '' }))}
                 >
                   <option value="">Selecione a reserva...</option>
                   {reservaAccounts.map(a => (
@@ -1358,9 +1388,23 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     </option>
                   ))}
                 </select>
+                {form.reservaAccountId && reservaContaFuncs.length > 0 && (
+                  <>
+                    <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                    <select
+                      className="input"
+                      value={form.reservaFuncaoId}
+                      onChange={e => set('reservaFuncaoId', e.target.value)}
+                    >
+                      <option value="">Selecione a função...</option>
+                      {reservaContaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  </>
+                )}
                 {form.reservaAccountId && (
                   <p className="text-xs text-indigo-400 leading-relaxed">
-                    Será criada uma transferência automática da reserva para a conta da despesa.
+                    A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o
+                    resgate desta reserva para a conta principal.
                   </p>
                 )}
               </div>

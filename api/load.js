@@ -9,6 +9,8 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS date_cartao DATE`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS parent_tx_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
+    // Conta de reserva vinculada ao lançamento ("Será pago com reserva") — par de reserva_funcao_id.
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS reserva_conta_id TEXT`)
     // Parcela N de M: número e total da série, preenchidos na criação (import e manual).
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_num INTEGER`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_total INTEGER`)
