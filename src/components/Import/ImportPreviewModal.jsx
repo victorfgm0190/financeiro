@@ -11,10 +11,14 @@ const round2 = (n) => Math.round(n * 100) / 100
 export default function ImportPreviewModal({
   open, onConfirm, onCancel,
   resolvedRows, gerencialGroups, schedules, accounts, card, faturaMesAno, reserveFunctions,
+  mode = 'import', // 'import' | 'conciliar' — muda o título e o sufixo "não duplica" no status
 }) {
   if (!open || !card) return null
 
+  const isConciliar = mode === 'conciliar'
   const apelido = card.apelido || card.name || 'Cartão'
+  // Em conciliação, os itens recebidos são os "Só no Itaú" (ausentes no sistema) → já não duplicam.
+  const naoDuplica = isConciliar ? ' — não duplica' : ''
   // Itens que serão de fato importados (mesma base do toImport do handleImport).
   const toImport = (resolvedRows || []).filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
 
@@ -51,9 +55,9 @@ export default function ImportPreviewModal({
       )
       let status
       if (resgate && ((resgate.registered || []).length > 0 || (resgate.skipped || []).length > 0)) {
-        status = { icon: '✅', label: 'Já pago/executado', cls: 'text-reserva' }
+        status = { icon: '✅', label: `Já pago/executado${naoDuplica}`, cls: 'text-reserva' }
       } else if (resgate) {
-        status = { icon: '📅', label: `Agendado ${fmtDate(resgate.startDate)}`, cls: 'text-blue-400' }
+        status = { icon: '📅', label: `Agendado ${fmtDate(resgate.startDate)}${naoDuplica}`, cls: 'text-blue-400' }
       } else {
         status = { icon: '⏳', label: 'Será criado agendamento', cls: 'text-orange-500' }
       }
@@ -70,7 +74,7 @@ export default function ImportPreviewModal({
   const hasContent = itemsG.length > 0 || numberedSections.length > 0
 
   return (
-    <Modal open={open} onClose={onCancel} title={`Resumo da Importação — ${apelido} ${faturaMesAno || ''}`} size="lg">
+    <Modal open={open} onClose={onCancel} title={`${isConciliar ? 'Resumo da Conciliação' : 'Resumo da Importação'} — ${apelido} ${faturaMesAno || ''}`} size="lg">
       <div className="space-y-5">
         {!hasContent && (
           <p className="text-sm text-gray-400">
@@ -85,12 +89,12 @@ export default function ImportPreviewModal({
               💳 Gerencial — {apelido}
             </div>
             <div className="text-sm text-gray-300 space-y-1">
-              <div className="flex justify-between"><span>Fatura grupo G:</span><span className="font-semibold">{fmt(totalFaturaG)}</span></div>
+              <div className="flex justify-between"><span>{isConciliar ? `Fatura grupo G (${itemsG.length} ${itemsG.length === 1 ? 'novo' : 'novos'})` : 'Fatura grupo G'}:</span><span className="font-semibold">{fmt(totalFaturaG)}</span></div>
               <div className="flex justify-between text-gray-400"><span>✅ Já na conta {gerName}:</span><span>{fmt(jaNaGer)}</span></div>
-              <div className="flex justify-between text-gray-400"><span>⏳ Será transferido agora:</span><span>{fmt(aTransferir)}</span></div>
+              <div className="flex justify-between text-gray-400"><span>⏳ {isConciliar ? 'Novos a transferir' : 'Será transferido agora'}:</span><span>{fmt(aTransferir)}</span></div>
               <div className="border-t border-gray-700 my-1" />
               <div className="flex justify-between items-center">
-                <span>Saldo esperado:</span>
+                <span>{isConciliar ? 'Total esperado' : 'Saldo esperado'}:</span>
                 <span className="font-semibold flex items-center gap-1.5">
                   {fmt(saldoEsperado)}
                   {grupoGOk

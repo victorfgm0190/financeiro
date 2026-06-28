@@ -915,6 +915,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
   const [showImportPreview, setShowImportPreview] = useState(false)
+  const [showConciliarPreview, setShowConciliarPreview] = useState(false)
 
   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
   const [conciliarMode, setConciliarMode] = useState(false)
@@ -2015,6 +2016,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     exitConciliacao()
   }
 
+  // Clique em "Confirmar Conciliação": valida a função obrigatória (mesmo guard do
+  // confirmarConciliacao) e, se passar, abre o modal de preview. A confirmação real roda no modal.
+  const handleConfirmConciliacao = () => {
+    const importar = concSoItau.filter(i => i.acao === 'importar')
+    const pendentesFunc = importar.filter(i =>
+      (i.type || 'expense') === 'expense' &&
+      reserveFuncsForGroup(i.grupoGerencial).length > 1 && !i._reservaFuncaoId)
+    if (pendentesFunc.length > 0) {
+      document.getElementById(`concrow-${pendentesFunc[0]._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    setShowConciliarPreview(true)
+  }
+
   // ── Render: Modo Conciliação ───────────────────────────────────────────────
   if (conciliarMode) {
     const importarCount = concSoItau.filter(i => i.acao === 'importar').length
@@ -2068,7 +2083,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <button
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
             disabled={importarCount === 0 && excluirCount === 0}
-            onClick={confirmarConciliacao}
+            onClick={handleConfirmConciliacao}
           >
             <Check size={12} /> Confirmar Conciliação
           </button>
@@ -2301,6 +2316,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         <TransactionHistoryModal state={historyModal} onClose={() => setHistoryModal(null)} />
 
         {concToast && <Toast message={concToast} onClose={() => setConcToast(null)} />}
+
+        <ImportPreviewModal
+          open={showConciliarPreview}
+          mode="conciliar"
+          onCancel={() => setShowConciliarPreview(false)}
+          onConfirm={() => { setShowConciliarPreview(false); confirmarConciliacao() }}
+          resolvedRows={concSoItau
+            .filter(i => i.acao === 'importar')
+            .map(i => ({ ...i, selected: true, _isDuplicate: false }))}
+          gerencialGroups={gerencialGroups}
+          schedules={schedules}
+          accounts={accounts}
+          card={selectedAcc}
+          faturaMesAno={faturaMonthYear}
+          reserveFunctions={reserveFunctions}
+        />
       </div>
     )
   }
