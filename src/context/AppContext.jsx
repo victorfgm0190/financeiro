@@ -3755,12 +3755,9 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
-  // ── Provisões gerenciais pendentes (parcelas do Grupo G ainda não EXECUTADAS) ──────────────
-  // Parcela elegível: despesa de cartão no Grupo G, parcelada, com faturaMonthYear — de QUALQUER
-  // fatura (passada OU futura, sem filtro por data) — que ainda não foi provisionada MANUALMENTE.
-  // "Executada" = transferência manual (tx_ger_, com parentTxId) criada por executarProvisoesGerenciais;
-  // a etapa A automática (derivada da reconciliação da fatura do ciclo atual) NÃO conta como execução
-  // manual — senão o seletor "pularia" os meses cujas faturas já passaram pelo ciclo atual.
+  // ── Provisões gerenciais pendentes (parcelas futuras do Grupo G ainda não provisionadas) ──
+  // Parcela elegível: despesa de cartão no Grupo G, com padrão X/N, faturaMonthYear <= mês atual,
+  // e sem a transferência imediata correspondente (Conta → Ger.) já registrada.
   const getProvisoesPendentes = useCallback(() => {
     const g1 = data.gerencialGroups?.find(g => g.number === 1)
     if (!g1) return []
@@ -3773,14 +3770,14 @@ export function AppProvider({ children }) {
         if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
         if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) return false
         if (!isParcelada(tx)) return false
-        // Já EXECUTADA manualmente: existe a transferência tx_ger_ (parentTxId desta parcela).
-        // Casa por parentTxId (único por parcela), nunca por descrição (irmãs compartilham a mesma).
-        // A etapa A automática (id determinístico, sem parentTxId) é IGNORADA aqui de propósito —
-        // ela não é uma execução manual, então a parcela continua listada (seletor não pula meses).
-        const jaExecutada = data.transactions.some(t =>
-          t.type === 'transfer' && t.grupoGerencial === g1.id && t.parentTxId === tx.id
+        // Provisão já existente da parcela: transferência executada (parentTxId) OU a etapa A
+        // derivada (id determinístico). NÃO casa por descrição — parcelas irmãs compartilham a
+        // mesma descrição (o número vive em installment_num), o que geraria falso positivo.
+        const jaProvisionada = data.transactions.some(t =>
+          t.type === 'transfer' && t.grupoGerencial === g1.id &&
+          (t.parentTxId === tx.id || t.id === etapaAId(tx.id))
         )
-        return !jaExecutada
+        return !jaProvisionada
       })
       .sort((a, b) => (a.faturaMonthYear || '').localeCompare(b.faturaMonthYear || '') || (a.date || '').localeCompare(b.date || ''))
       .map(tx => {
@@ -3826,22 +3823,15 @@ export function AppProvider({ children }) {
       const financialStartDay = d.settings?.financialMonthStartDay || 1
 
       let accounts = [...d.accounts]
-      let transactions = [...d.transactions]
-      let changed = false
+      const newTxs = []
       for (const parcela of d.transactions) {
         if (!ids.has(parcela.id) || parcela.grupoGerencial !== g1.id) continue
-        // Já EXECUTADA manualmente (transferência com parentTxId desta parcela) → nada a fazer.
-        if (transactions.some(t => t.type === 'transfer' && t.grupoGerencial === g1.id && t.parentTxId === parcela.id)) continue
-        // Já provisionada pela etapa A AUTOMÁTICA (id determinístico, sem parentTxId): o dinheiro
-        // já foi movido (Conta → Ger.). "Adota" a transferência existente marcando parentTxId — sai
-        // da lista de pendentes — SEM criar duplicata nem mexer no saldo (evita provisão dobrada).
-        const etapaATx = transactions.find(t => t.id === etapaAId(parcela.id) && t.type === 'transfer')
-        if (etapaATx) {
-          // Só marca parentTxId (mantém id/origin da etapa A) — basta para sair dos pendentes.
-          transactions = transactions.map(t => t.id === etapaATx.id ? { ...t, parentTxId: parcela.id } : t)
-          changed = true
-          continue
-        }
+        // (ver getProvisoesPendentes) casa por parentTxId / id determinístico, nunca por descrição.
+        const jaProvisionada = d.transactions.some(t =>
+          t.type === 'transfer' && t.grupoGerencial === g1.id &&
+          (t.parentTxId === parcela.id || t.id === etapaAId(parcela.id))
+        )
+        if (jaProvisionada) continue
 
         // Data da transferência gerencial (Conta Principal → Ger.):
         //  • Parcela 1 (ou sem padrão X/N): data original do lançamento (comportamento atual).
@@ -3879,7 +3869,7 @@ export function AppProvider({ children }) {
           if (a.id === subconta.id) return { ...a, balance: rb((a.balance || 0) + parcela.amount) }
           return a
         })
-        transactions = [...transactions, {
+        newTxs.push({
           id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
           type: 'transfer',
           accountId: contaPrincipal.id,
@@ -3891,11 +3881,10 @@ export function AppProvider({ children }) {
           origin: 'auto-provisao',
           parentTxId: parcela.id,
           createdAt: new Date().toISOString(),
-        }]
-        changed = true
+        })
       }
-      if (!changed) return d
-      return { ...d, accounts, transactions }
+      if (newTxs.length === 0) return d
+      return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
     })
     // Reconcilia os saldos das contas Ger. (recálculo absoluto = Σ transferências) e os
     // agendamentos geridos dos cartões afetados — garante o valor correto imediatamente,
