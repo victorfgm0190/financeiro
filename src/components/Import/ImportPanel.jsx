@@ -1438,12 +1438,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // (e editável na tabela de revisão), com clamp ao período válido da fatura — datas
     // fora do intervalo caem no dia de fechamento do mês da fatura. A fatura_ref vive
     // separada em row.faturaMonthYear; date_cartao nunca é alterada.
-    // Exceção: parcela N/Total com N > 1 já tem date no mês ANTERIOR à fatura (regra do
-    // Finup) — não clampar, senão a data voltaria p/ o mês da própria fatura.
-    const computeSaveDate = (row) =>
-      (row._installment?.num || 1) > 1
-        ? row.date
-        : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+    // Regras de date (sistema):
+    //   • Parcela N/Total com N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup) —
+    //     não clampar, senão a data voltaria p/ o mês da própria fatura.
+    //   • Parcela 1: clamp ao período da fatura (datas fora caem no dia de fechamento).
+    //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
+    const computeSaveDate = (row) => {
+      const num = row._installment?.num || 0
+      if (num > 1) return row.date
+      if (num === 1) return clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+      return row._dateCartao || row.date
+    }
 
     const txIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
@@ -1871,7 +1876,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Importa um item "Só no Itaú" como lançamento da fatura (mesmo fluxo da importação normal).
   const importConcItem = (item) => {
     const closingDay = selectedAcc?.closingDay || 14
-    const saveDate = clampDateToFatura(item.date, faturaMonthYear, closingDay)
+    // À vista (sem _installment) mantém a data original do cartão; parcelado clampa à fatura.
+    const isParcelado = (item._installment?.num || 0) > 0
+    const saveDate = isParcelado
+      ? clampDateToFatura(item.date, faturaMonthYear, closingDay)
+      : (item._dateCartao || item.date)
     const isExpense = (item.type || 'expense') === 'expense'
     if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
     const txId = addTransaction({
