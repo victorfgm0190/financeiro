@@ -435,6 +435,49 @@ function applyTransferEffect(accounts, tx, dir = 1) {
   })
 }
 
+// Aplica (dir=+1) ou reverte (dir=-1) o efeito de UM lançamento nos saldos das contas. Espelha
+// exatamente o saldo de addTransaction (dir=+1) e o reverseBalance de deleteTransaction (dir=-1).
+// Fonte única para que EDITAR reaproveite a mesma matemática: reverter o antigo + aplicar o novo.
+function applyBalanceEffect(accounts, t, dir = 1) {
+  const amt = Number(t.amount) || 0
+  if (t.type === 'income') {
+    if (t.accountType === 'credit') {
+      // Estorno em cartão abate a dívida da fatura.
+      return accounts.map(a => a.id === t.accountId ? {
+        ...a,
+        creditDebt: Math.max(0, (a.creditDebt || 0) - dir * amt),
+        creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - dir * amt),
+      } : a)
+    }
+    return accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance + dir * amt) } : a)
+  }
+  if (t.type === 'expense') {
+    if (t.accountType === 'credit') {
+      return accounts.map(a => a.id === t.accountId ? {
+        ...a,
+        creditDebt: Math.max(0, (a.creditDebt || 0) + dir * amt),
+        creditMonthBill: Math.max(0, (a.creditMonthBill || 0) + dir * amt),
+      } : a)
+    }
+    return accounts.map(a => a.id === t.accountId ? { ...a, balance: rb(a.balance - dir * amt) } : a)
+  }
+  if (t.type === 'transfer') {
+    return applyTransferEffect(accounts, t, dir)
+  }
+  if (t.type === 'credit_payment') {
+    return accounts.map(a => {
+      if (a.id === t.fromAccountId) return { ...a, balance: rb(a.balance - dir * amt) }
+      if (a.id === t.accountId) return {
+        ...a,
+        creditDebt: Math.max(0, (a.creditDebt || 0) - dir * amt),
+        creditMonthBill: Math.max(0, (a.creditMonthBill || 0) - dir * amt),
+      }
+      return a
+    })
+  }
+  return accounts
+}
+
 function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions = []) {
   if (tx.type !== 'transfer') return []
   const extraTxs = []
@@ -1321,15 +1364,12 @@ export function AppProvider({ children }) {
       const oldTx = d.transactions.find(t => t.id === id)
       if (!oldTx) return d
       const newTx = sanitizeReservaFuncao({ ...oldTx, ...changes }, d.gerencialGroups, d.reserveFunctions)
-      let accounts = d.accounts
-      // Editar uma transferência VINCULADA a fatura (antes ou depois) reverte o efeito antigo e
-      // aplica o novo no saldo/dívida — mantém o abatimento correto após mudar valor/fatura/destino.
-      const isLinked = (t) => t.type === 'transfer' && !!t.faturaMonthYear &&
-        d.accounts.find(a => a.id === t.toAccountId)?.type === 'credit'
-      if (isLinked(oldTx) || isLinked(newTx)) {
-        if (oldTx.type === 'transfer') accounts = applyTransferEffect(accounts, oldTx, -1)
-        if (newTx.type === 'transfer') accounts = applyTransferEffect(accounts, newTx, 1)
-      }
+      // Atualiza os saldos das contas igual a adicionar/excluir: reverte o efeito do lançamento
+      // ANTIGO e aplica o do NOVO. Cobre mudança de valor, conta, tipo, destino e fatura vinculada
+      // (saldo das contas comuns, dívida do cartão e abatimento de pagamento de fatura). Quando os
+      // campos de saldo não mudam (ex.: só descrição/categoria/reconciliado), o efeito é nulo.
+      let accounts = applyBalanceEffect(d.accounts, oldTx, -1)
+      accounts = applyBalanceEffect(accounts, newTx, 1)
       return { ...d, accounts, transactions: d.transactions.map(t => t.id === id ? newTx : t) }
     })
     if (recalcArgs) {
