@@ -1954,7 +1954,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Parcelas futuras dos itens parcelados (mesma lógica do fluxo de importação normal):
     // cria as ausentes em faturas futuras, herdando categoria/grupo/favorecido/função.
     const dueDay = selectedAcc?.dueDay || null
-    const closingDay = selectedAcc?.closingDay || 14
     const futurasFaturas = new Set()
     const seenFut = new Set()
     for (const item of importar) {
@@ -1973,7 +1972,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : `${item.description} ${futNumStr}/${inst.total}`
         if (findExistingParcela(inst, k, item.amount, selectedAccount, transactions)) continue
         if (isDuplicateInstallment({ description: futDesc, amount: item.amount }, transactions, selectedAccount)) continue
-        const futDate = clampDateToFatura(faturaToDate(futFatura, dueDay) || `${futFatura}-01`, futFatura, closingDay)
+        // Parcela futura (k > 1): data de sistema = dia financialStartDay do mês ANTERIOR à fatura
+        // (regra do Finup) — idêntico ao fluxo de importação normal (não clampar ao mês da fatura).
+        const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
         const fId = addTransaction({
           type: 'expense', accountId: selectedAccount, accountType: 'credit',
