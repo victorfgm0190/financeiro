@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
+import { installmentSystemDate } from '../../lib/parcelas'
 
 const round2 = (n) => Math.round(n * 100) / 100
 
@@ -11,9 +13,23 @@ const round2 = (n) => Math.round(n * 100) / 100
 export default function ImportPreviewModal({
   open, onConfirm, onCancel,
   resolvedRows, gerencialGroups, schedules, accounts, transactions, card, faturaMesAno, reserveFunctions,
+  financialMonthStartDay = 1,
   mode = 'import', // 'import' | 'conciliar' — muda o título e o sufixo "não duplica" no status
 }) {
+  // Toggle local (não persiste): mostra a data em que a transferência gerencial (etapa A)
+  // será criada, ao lado de cada item do Grupo G.
+  const [showDates, setShowDates] = useState(false)
   if (!open || !card) return null
+
+  // Data da etapa A (tx_gerA), mesma regra do sistema:
+  //  • à vista / parcela 1 (num <= 1) → date_cartao (dia real da compra);
+  //  • parcela 2..N → dia financialMonthStartDay do mês ANTERIOR à fatura da parcela.
+  const gerItemDate = (item) => {
+    const num = item?._installment?.num ?? item?.num ?? item?.installmentNum ?? 1
+    const dateCartao = item?._dateCartao || item?.date || null
+    const fatura = item?.faturaMonthYear || faturaMesAno || null
+    return installmentSystemDate(fatura, num, dateCartao, financialMonthStartDay)
+  }
 
   const isConciliar = mode === 'conciliar'
   const apelido = card.apelido || card.name || 'Cartão'
@@ -98,8 +114,19 @@ export default function ImportPreviewModal({
         {/* Seção 1 — Grupo G */}
         {itemsG.length > 0 && (
           <div className="rounded-lg border border-gray-700 bg-gray-800/40 p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-reserva">
-              💳 Gerencial — {apelido}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-reserva">
+                💳 Gerencial — {apelido}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDates(v => !v)}
+                aria-pressed={showDates}
+                title="Mostrar a data em que a transferência gerencial será criada"
+                className={`text-xs px-2 py-1 rounded-md border transition-colors ${showDates ? 'border-blue-500 text-blue-300 bg-blue-500/10' : 'border-gray-600 text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}
+              >
+                📅 Datas
+              </button>
             </div>
             <div className="text-sm text-gray-300 space-y-1">
               <div className="flex justify-between"><span>{isConciliar ? `Fatura grupo G (${itemsG.length} ${itemsG.length === 1 ? 'novo' : 'novos'})` : 'Fatura grupo G'}:</span><span className="font-semibold">{fmt(totalFaturaG)}</span></div>
@@ -116,6 +143,21 @@ export default function ImportPreviewModal({
                 </span>
               </div>
             </div>
+            {/* Itens do Grupo G — descrição + valor; a data (etapa A) aparece com o toggle "Datas". */}
+            <ul className="text-sm border-t border-gray-700 pt-2 divide-y divide-gray-800/60">
+              {itemsG.map((item, i) => {
+                const d = showDates ? gerItemDate(item) : null
+                return (
+                  <li key={item._id ?? i} className="flex items-center gap-3 py-1">
+                    <span className="flex-1 truncate text-gray-300">{item.description || '—'}</span>
+                    <span className="text-right text-gray-200 font-medium whitespace-nowrap">{fmt(Number(item.amount) || 0)}</span>
+                    {showDates && (
+                      <span className="text-right text-xs text-slate-400 whitespace-nowrap w-24 tabular-nums">{d ? fmtDate(d) : '—'}</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
           </div>
         )}
 

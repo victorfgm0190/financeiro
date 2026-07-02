@@ -2351,6 +2351,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           card={selectedAcc}
           faturaMesAno={faturaMonthYear}
           reserveFunctions={reserveFunctions}
+          financialMonthStartDay={financialStartDay}
         />
       </div>
     )
@@ -2967,6 +2968,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         card={selectedAcc}
         faturaMesAno={faturaMonthYear}
         reserveFunctions={reserveFunctions}
+        financialMonthStartDay={financialStartDay}
       />
     </div>
   )
