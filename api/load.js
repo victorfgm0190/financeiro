@@ -36,6 +36,19 @@ export default async function handler(req, res) {
     // no próprio id (prefixo 'tx_gerA_' = 8 chars). Só preenche quando ainda está nulo.
     await query(`UPDATE lancamentos SET source_expense_id = SUBSTRING(id FROM 9)
                  WHERE id LIKE 'tx_gerA_%' AND source_expense_id IS NULL`)
+    // Backfill card_id/fatura_ref dos tx_gerA_* legados a partir da despesa origem. card_id =
+    // account_id da despesa; fatura_ref = MM/YYYY derivado de fatura_month_year (a despesa NÃO
+    // tem fatura_ref própria — é coluna nova, só gravada em tx_gerA_*/pagamentos). Idêntico ao
+    // valor que o motor grava. Guardado por NULL → no-op depois de preenchido.
+    await query(`UPDATE lancamentos l_ger
+      SET card_id = l_orig.account_id,
+          fatura_ref = SUBSTRING(l_orig.fatura_month_year FROM 6 FOR 2) || '/' || SUBSTRING(l_orig.fatura_month_year FROM 1 FOR 4)
+      FROM lancamentos l_orig
+      WHERE l_orig.id = SUBSTRING(l_ger.id FROM 9)
+        AND l_ger.id LIKE 'tx_gerA_%'
+        AND l_orig.account_id IS NOT NULL
+        AND l_orig.fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'
+        AND (l_ger.card_id IS NULL OR l_ger.fatura_ref IS NULL)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)

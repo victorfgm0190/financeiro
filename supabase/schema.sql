@@ -694,3 +694,14 @@ ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_schedule_id TEXT;
 -- Backfill idempotente: tx_gerA_<expenseId> embute o id da despesa origem no próprio id.
 UPDATE lancamentos SET source_expense_id = SUBSTRING(id FROM 9)
   WHERE id LIKE 'tx_gerA_%' AND source_expense_id IS NULL;
+-- Backfill card_id/fatura_ref dos tx_gerA_* legados via despesa origem. A despesa não tem
+-- fatura_ref própria; fatura_ref = MM/YYYY derivado de fatura_month_year (idêntico ao motor).
+UPDATE lancamentos l_ger
+  SET card_id = l_orig.account_id,
+      fatura_ref = SUBSTRING(l_orig.fatura_month_year FROM 6 FOR 2) || '/' || SUBSTRING(l_orig.fatura_month_year FROM 1 FOR 4)
+  FROM lancamentos l_orig
+  WHERE l_orig.id = SUBSTRING(l_ger.id FROM 9)
+    AND l_ger.id LIKE 'tx_gerA_%'
+    AND l_orig.account_id IS NOT NULL
+    AND l_orig.fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'
+    AND (l_ger.card_id IS NULL OR l_ger.fatura_ref IS NULL);
