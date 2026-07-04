@@ -1554,8 +1554,37 @@ function dataLancamentoProvisao(p, financialMonthStartDay) {
   return p.date
 }
 
-function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay = 1, onConfirm, onClose }) {
-  const [selected, setSelected] = useState(() => new Set(provisoes.map(p => p.id)))
+// Fatura no ciclo financeiro ATUAL — espelha faturaCicloAtual do motor (reconcileFaturaState):
+// a data de vencimento da fatura (ano-mês da fatura + dueDay do cartão) cai na janela do ciclo
+// corrente [cicloStart, cicloEnd], calculada por financialMonthMode/financialMonthStartDay.
+function faturaNoCicloAtual(p, accounts, financialMonthStartDay, financialMonthMode) {
+  if (!p.faturaMonthYear) return false
+  const startDay = financialMonthStartDay || 1
+  const ref = new Date()
+  let cicloStart, cicloEnd
+  if ((financialMonthMode || 'custom') === 'calendar') {
+    cicloStart = new Date(ref.getFullYear(), ref.getMonth(), 1)
+    cicloEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, 0)
+  } else if (ref.getDate() >= startDay) {
+    cicloStart = new Date(ref.getFullYear(), ref.getMonth(), startDay)
+    cicloEnd = new Date(ref.getFullYear(), ref.getMonth() + 1, startDay - 1)
+  } else {
+    cicloStart = new Date(ref.getFullYear(), ref.getMonth() - 1, startDay)
+    cicloEnd = new Date(ref.getFullYear(), ref.getMonth(), startDay - 1)
+  }
+  const [fy, fm] = p.faturaMonthYear.split('-')
+  const card = accounts.find(a => a.id === p.cardId)
+  const dueDay = String(card?.dueDay || 10).padStart(2, '0')
+  const dueDateObj = new Date(`${fy}-${fm}-${dueDay}T00:00:00`)
+  return dueDateObj >= cicloStart && dueDateObj <= cicloEnd
+}
+
+function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay = 1, financialMonthMode = 'custom', onConfirm, onClose }) {
+  // Pré-seleção inicial: apenas provisões da fatura do ciclo atual. Passadas/futuras iniciam
+  // desmarcadas (o usuário pode marcar manualmente). Filtros de fatura/cartão são independentes.
+  const [selected, setSelected] = useState(
+    () => new Set(provisoes.filter(p => faturaNoCicloAtual(p, accounts, financialMonthStartDay, financialMonthMode)).map(p => p.id))
+  )
   const [faturaFiltro, setFaturaFiltro] = useState('')
   const [cartaoFiltro, setCartaoFiltro] = useState('')
   const toggle = (id) => setSelected(prev => {
@@ -2160,6 +2189,7 @@ export default function SchedulePanel() {
           provisoes={provisoesPendentes}
           accounts={accounts}
           financialMonthStartDay={settings?.financialMonthStartDay || 1}
+          financialMonthMode={settings?.financialMonthMode || 'custom'}
           onClose={() => setShowExecutarGer(false)}
           onConfirm={(ids) => { executarProvisoesGerenciais(ids); setShowExecutarGer(false) }}
         />
