@@ -92,8 +92,16 @@ export default function ImportPreviewModal({
       }
       const contaReserva = accounts.find(a => a.id === g.defaultAccountId)
       const contaNome = contaReserva?.apelido || contaReserva?.name || g.name
+      // Quando a conta-origem do grupo tem uma ÚNICA função de reserva (ex.: PharmaLog →
+      // PHARMALOG), os itens não recebem _reservaFuncaoId na classificação (o select só é
+      // exigido com 2+ funções). Nesse caso o bucket "sem função" é, sem ambiguidade, essa
+      // função única — exibimos o nome dela em vez de "— sem função —".
+      const funcsDoGrupo = (reserveFunctions || []).filter(f => f.accountId === g.defaultAccountId)
+      const funcUnica = funcsDoGrupo.length === 1 ? funcsDoGrupo[0] : null
       const rows = [...porFuncao.entries()].map(([fid, valor]) => ({
-        nome: fid === '__sem__' ? '— sem função —' : (reserveFunctions.find(f => f.id === fid)?.name || 'Função'),
+        nome: fid === '__sem__'
+          ? (funcUnica ? funcUnica.name : '— sem função —')
+          : (reserveFunctions.find(f => f.id === fid)?.name || 'Função'),
         valor,
       }))
       return { g, contaNome, rows, status }
