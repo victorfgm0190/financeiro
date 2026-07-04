@@ -1865,6 +1865,12 @@ export function AppProvider({ children }) {
       const schedule = d.schedules.find(s => s.id === scheduleId)
       if (!schedule) return d
 
+      // Rastreabilidade: para os agendamentos gerenciais (gerencial_devolucao / resgate_reserva /
+      // pagamento_fatura), copia cartão, fatura e o próprio agendamento para o lançamento gerado.
+      const gerTrace = ['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'].includes(schedule.tipo)
+        ? { cardId: schedule.cardId || null, faturaRef: schedule.faturaRef || null, sourceScheduleId: scheduleId }
+        : {}
+
       // Resgate com detalhamento por função (Etapa B): gera UMA transferência por linha
       // de schedule_reserva_funcoes (valor + função própria), em vez da transferência única.
       const detalhe = (d.scheduleReservaFuncoes || []).filter(srf => srf.scheduleId === scheduleId)
@@ -1887,6 +1893,7 @@ export function AppProvider({ children }) {
           scheduleId,
           reservaFuncaoId: srf.reservaFuncaoId,
           origin: 'agendamento',
+          ...gerTrace,
           createdAt: nowIso,
         }))
         const totalLines = rb(detTxs.reduce((s, t) => s + Number(t.amount), 0))
@@ -1929,6 +1936,7 @@ export function AppProvider({ children }) {
         scheduleId,
         reservaFuncaoId: schedule.reservaFuncaoId || null,
         origin: 'agendamento',
+        ...gerTrace,
       }
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
       let accounts = [...d.accounts]
@@ -3252,6 +3260,7 @@ export function AppProvider({ children }) {
               arr.push({
                 id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
                 amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
+                cardId, faturaRef, sourceExpenseId: e.id,
                 createdAt: new Date().toISOString(),
               })
               principalDelta -= amount
@@ -3264,13 +3273,15 @@ export function AppProvider({ children }) {
               const curAmt = Number(cur.amount) || 0
               const diff = curAmt !== amount || cur.date !== aDate ||
                 cur.description !== desc || cur.accountId !== contaPrincipal.id ||
-                cur.toAccountId !== subcontaId || cur.grupoGerencial !== e.grupoGerencial
+                cur.toAccountId !== subcontaId || cur.grupoGerencial !== e.grupoGerencial ||
+                cur.cardId !== cardId || cur.faturaRef !== faturaRef || cur.sourceExpenseId !== e.id
               if (diff) {
                 principalDelta += curAmt - amount
                 subcontaDelta += amount - curAmt
                 arr[idx] = {
                   ...cur, id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
                   amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
+                  cardId, faturaRef, sourceExpenseId: e.id,
                 }
                 changed = true
               }

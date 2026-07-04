@@ -76,6 +76,28 @@ function GerBadge({ grupoId, gerencialGroups }) {
   return <span className={cls}>{grupo.alias}</span>
 }
 
+// Badge cinza pequeno com o id do lançamento — clique copia o id para a área de transferência.
+function CopyIdBadge({ id }) {
+  const [copied, setCopied] = useState(false)
+  if (!id) return null
+  const copy = (e) => {
+    e.stopPropagation()
+    navigator.clipboard?.writeText(id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1200)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Clique para copiar o ID"
+      className="mt-0.5 inline-block font-mono text-[9px] text-gray-500 hover:text-gray-300 bg-gray-800/60 hover:bg-gray-700/60 px-1 py-0.5 rounded transition-colors"
+    >
+      {copied ? 'copiado!' : id}
+    </button>
+  )
+}
+
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 // Indicador informativo da diferença entre o pago e o total da fatura (diferenca = pago − fatura).
@@ -704,6 +726,7 @@ export default function CreditCardPanel() {
                         <td className="px-4 py-3">
                           <p className="text-gray-200 text-sm">{tx.description}</p>
                           {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                          <CopyIdBadge id={tx.id} />
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
                           {cat && (

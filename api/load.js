@@ -25,6 +25,17 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT false`)
     // Empréstimos: id do lançamento original que gerou o espelho (cascata de deleção/estorno).
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS espelho_origem_id TEXT`)
+    // Rastreabilidade das transferências gerenciais. card_id/fatura_ref identificam o cartão
+    // e a fatura de origem; source_expense_id aponta a despesa que originou a etapa A
+    // (tx_gerA_*); source_schedule_id aponta o agendamento gerencial que gerou o pagamento.
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_ref TEXT`)
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_expense_id TEXT`)
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_schedule_id TEXT`)
+    // Backfill idempotente: os tx_gerA_<expenseId> existentes embutem o id da despesa origem
+    // no próprio id (prefixo 'tx_gerA_' = 8 chars). Só preenche quando ainda está nulo.
+    await query(`UPDATE lancamentos SET source_expense_id = SUBSTRING(id FROM 9)
+                 WHERE id LIKE 'tx_gerA_%' AND source_expense_id IS NULL`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)

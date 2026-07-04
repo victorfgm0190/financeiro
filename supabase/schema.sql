@@ -684,3 +684,13 @@ ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS is_espelho BOOLEAN DEFAULT fals
 -- Id do lançamento original que gerou este espelho (CASOS A/B). Null nos originais e no
 -- CASO C (onde o original não é salvo). Usado para deletar/estornar os espelhos em cascata.
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS espelho_origem_id TEXT;
+-- Rastreabilidade das transferências gerenciais. card_id/fatura_ref: cartão e fatura de origem;
+-- source_expense_id: despesa que originou a etapa A (tx_gerA_*); source_schedule_id: agendamento
+-- gerencial (gerencial_devolucao/resgate_reserva/pagamento_fatura) que gerou o pagamento.
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS card_id TEXT;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_ref TEXT;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_expense_id TEXT;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_schedule_id TEXT;
+-- Backfill idempotente: tx_gerA_<expenseId> embute o id da despesa origem no próprio id.
+UPDATE lancamentos SET source_expense_id = SUBSTRING(id FROM 9)
+  WHERE id LIKE 'tx_gerA_%' AND source_expense_id IS NULL;

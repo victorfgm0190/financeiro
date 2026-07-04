@@ -246,6 +246,25 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           }
           <span className="text-xs text-gray-200 truncate">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
           {badge && <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
+          {tx.id?.startsWith('tx_gerA_') && (tx.faturaRef || tx.sourceExpenseId) && (
+            <span className="flex items-center gap-1 shrink-0">
+              {tx.faturaRef && (
+                <span className="text-[10px] px-1 py-0.5 rounded bg-gray-800/60 text-gray-500 font-medium">
+                  Fatura {tx.faturaRef}
+                </span>
+              )}
+              {tx.sourceExpenseId && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(tx.sourceExpenseId) }}
+                  title={`Despesa origem: ${tx.sourceExpenseId} (clique para copiar)`}
+                  className="font-mono text-[9px] px-1 py-0.5 rounded bg-gray-800/60 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  orig: {tx.sourceExpenseId}
+                </button>
+              )}
+            </span>
+          )}
         </div>
       </td>
       <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
