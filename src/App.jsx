@@ -26,6 +26,8 @@ import SettingsPanel from './components/Settings/SettingsPanel'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
+import Login from './pages/Login'
+import { getToken } from './lib/api'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -133,12 +135,23 @@ function AppContent() {
   )
 }
 
+// Gate de autenticação (equivalente a um PrivateRoute neste SPA sem router): sem token no
+// localStorage renderiza o Login; com token, monta o app normalmente (o AppProvider só então
+// dispara o carregamento de dados, já com o header Authorization).
+function PrivateRoute({ children }) {
+  const [token, setToken] = useState(() => getToken())
+  if (!token) return <Login onSuccess={() => setToken(getToken())} />
+  return children
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <FabProvider>
-        <AppContent />
-      </FabProvider>
-    </AppProvider>
+    <PrivateRoute>
+      <AppProvider>
+        <FabProvider>
+          <AppContent />
+        </FabProvider>
+      </AppProvider>
+    </PrivateRoute>
   )
 }

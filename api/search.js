@@ -1,4 +1,5 @@
 import { query, parseBody } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 // Busca Global combinada: lançamentos (lancamentos) + agendamentos (agendamentos).
 // Filtros: value (tolerância ±0,01), text (descrição/favorecido ILIKE), from/to (período),
@@ -8,6 +9,7 @@ const LIMIT = 50
 const TOL = 0.01
 
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
     const { value, text, from, to, profileId } = await parseBody(req)

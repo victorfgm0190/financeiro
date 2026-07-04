@@ -1,6 +1,8 @@
 import { query } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   try {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS gerencial_schedule_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_month_year TEXT`)

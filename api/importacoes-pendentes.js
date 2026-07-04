@@ -1,4 +1,5 @@
 import { query, upsertRows, parseBody } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 // Garante a tabela de staging (idempotente) — não depende da ordem de /api/load.
 async function ensureTable() {
@@ -22,6 +23,7 @@ async function ensureTable() {
 }
 
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   try {
     await ensureTable()
 

@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { User, Building2, Search, ChevronDown } from 'lucide-react'
+import { User, Building2, Search, ChevronDown, LogOut } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { clearTokenAndRedirect } from '../../lib/api'
 
 const PAGE_TITLES = {
   dashboard: 'Painel Geral',
@@ -149,6 +150,15 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
         <div className="text-right hidden md:block">
           <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
         </div>
+
+        <button
+          onClick={clearTokenAndRedirect}
+          title="Sair"
+          aria-label="Sair"
+          className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+        >
+          <LogOut size={18} />
+        </button>
       </div>
     </header>
   )

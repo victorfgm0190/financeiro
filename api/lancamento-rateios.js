@@ -1,4 +1,5 @@
 import { query, parseBody } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 async function ensureTable() {
   await query(`CREATE TABLE IF NOT EXISTS lancamento_rateios (
@@ -13,6 +14,7 @@ async function ensureTable() {
 }
 
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   try {
     await ensureTable()
 

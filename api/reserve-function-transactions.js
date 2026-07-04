@@ -1,10 +1,12 @@
 import { query, parseBody } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 // Lançamentos vinculados a uma função de reserva (reserva_funcao_id) num período.
 // Recebe { functionId, startDate, endDate }. JOIN em contas para resolver os nomes das
 // contas (origem e destino) — usado pelo modal "Origem" do Resumo de Reservas.
 
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
     const { functionId, startDate, endDate } = await parseBody(req)

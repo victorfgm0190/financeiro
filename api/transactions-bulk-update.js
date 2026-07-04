@@ -1,8 +1,10 @@
 import { query, parseBody } from './_db.js'
+import { requireAuth } from './_auth.js'
 
 // Atualização em lote de lançamentos: altera date e/ou category_id de vários
 // registros (id = ANY) numa única operação. Campos ausentes não são tocados.
 export default async function handler(req, res) {
+  if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
     const { ids, date, categoryId } = await parseBody(req)

@@ -1,9 +1,16 @@
 import { installmentKey } from './installments.js'
+import { authHeaders, clearTokenAndRedirect } from './api.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
+// 401 → sessão inválida/expirada: limpa o token e volta ao login (uma vez).
+function onUnauthorized() {
+  clearTokenAndRedirect()
+}
+
 async function apiGet(path) {
-  const res = await fetch(path)
+  const res = await fetch(path, { headers: { ...authHeaders() } })
+  if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
     const err = new Error(`GET ${path} → ${res.status}`)
     err.status = res.status
@@ -15,9 +22,10 @@ async function apiGet(path) {
 async function apiPost(path, body) {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   })
+  if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
     const err = new Error(`POST ${path} → ${res.status}`)
     err.status = res.status
