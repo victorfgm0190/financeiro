@@ -530,6 +530,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const todayStr = now.toISOString().split('T')[0]
   const isAplicacao = !!account.contaAplicacao
+  // Conta gerencial = subconta "Ger. …" (marcada com grupoGerencial pelo motor). Só nelas
+  // exibimos os totalizadores por fatura (as transferências tx_gerA_* carregam fatura_ref).
+  const isGerencial = !!account.grupoGerencial
 
   const filteredTxs = useMemo(() =>
     transactions.filter(tx => tx.date >= from && tx.date <= to),
@@ -671,6 +674,33 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     }
     return { conciliado, pendente }
   }, [displayRows, account.id])
+
+  // Totalizadores por fatura_ref (só em conta gerencial): soma das ENTRADAS dos lançamentos
+  // visíveis agrupadas por fatura_ref, ordenadas cronologicamente (MM/YYYY). Vazio quando não
+  // há lançamentos com fatura_ref — nesse caso nenhum badge é exibido.
+  const faturaTotals = useMemo(() => {
+    if (!isGerencial) return []
+    const map = new Map()
+    const add = (tx) => {
+      const ref = tx.faturaRef
+      if (!ref) return
+      const d = txDelta(tx, account.id)
+      if (d <= 0) return // mesmo critério das entradas
+      map.set(ref, Math.round(((map.get(ref) || 0) + d) * 100) / 100)
+    }
+    for (const row of displayRows) {
+      if (row.kind === 'single') add(row.tx)
+      else row.txs.forEach(add)
+    }
+    return [...map.entries()]
+      .sort((a, b) => {
+        const [ma, ya] = a[0].split('/')
+        const [mb, yb] = b[0].split('/')
+        return (Number(ya) - Number(yb)) || (Number(ma) - Number(mb))
+      })
+      .map(([ref, valor]) => ({ ref, valor }))
+  }, [displayRows, account.id, isGerencial])
+
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
   const toggleSelectAllVisible = () => setSelectedIds(prev => {
     if (allVisibleSelected) {
@@ -896,9 +926,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           />
         </div>
 
-        {/* Totalizador Conciliados/Pendentes (lançamentos visíveis) */}
-        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
-          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex items-center text-xs">
+        {/* Totalizadores por fatura (conta gerencial) + Conciliados/Pendentes (lançamentos visíveis) */}
+        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals.length > 0) && (
+          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+            {faturaTotals.map(f => (
+              <span key={f.ref} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded bg-gray-800/60 px-2 py-0.5">
+                <span className="text-gray-500">Fatura {f.ref}:</span>
+                <span className="font-semibold text-gray-300">{fmt(f.valor)}</span>
+              </span>
+            ))}
             <ReconciledTotals
               conciliado={reconciledTotals.conciliado}
               pendente={reconciledTotals.pendente}
