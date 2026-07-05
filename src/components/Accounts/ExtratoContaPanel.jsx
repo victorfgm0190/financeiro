@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
+import { computeScheduleDate } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -452,7 +453,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
+  const { transactions, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -675,31 +676,47 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     return { conciliado, pendente }
   }, [displayRows, account.id])
 
-  // Totalizadores por fatura_ref (só em conta gerencial): soma das ENTRADAS dos lançamentos
-  // visíveis agrupadas por fatura_ref, ordenadas cronologicamente (MM/YYYY). Vazio quando não
-  // há lançamentos com fatura_ref — nesse caso nenhum badge é exibido.
+  // Totalizadores por fatura_ref (só em conta gerencial). Itera sobre TODAS as transações da
+  // conta com faturaRef preenchido — independente do mês exibido, para não perder os tx_gerA_*
+  // provisionados no "mês anterior" (date fora do período visível). Por fatura separa:
+  //   • débitos (entradas, txDelta > 0) em "mês ant." vs "este mês" pela fronteira do ciclo
+  //     financeiro da fatura = computeScheduleDate(faturaRef, financialMonthStartDay);
+  //   • resgates (saídas, txDelta < 0) com sourceScheduleId — devoluções gerenciais.
+  // Líquido = débitos − resgates. Ordenado cronologicamente (YYYY, depois MM). Faturas sem
+  // débitos e com líquido zero são omitidas.
   const faturaTotals = useMemo(() => {
     if (!isGerencial) return []
+    const r2 = (x) => Math.round(x * 100) / 100
+    const startDay = settings?.financialMonthStartDay || 1
     const map = new Map()
-    const add = (tx) => {
+    const get = (ref) => {
+      let e = map.get(ref)
+      if (!e) { e = { ref, debMesAnt: 0, debEsteMes: 0, resgates: 0 }; map.set(ref, e) }
+      return e
+    }
+    for (const tx of transactions) {
       const ref = tx.faturaRef
-      if (!ref) return
+      if (!ref) continue
+      if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
       const d = txDelta(tx, account.id)
-      if (d <= 0) return // mesmo critério das entradas
-      map.set(ref, Math.round(((map.get(ref) || 0) + d) * 100) / 100)
+      const e = get(ref)
+      if (d > 0) {
+        const cicloStart = computeScheduleDate(ref, startDay)
+        if (tx.date < cicloStart) e.debMesAnt = r2(e.debMesAnt + d)
+        else e.debEsteMes = r2(e.debEsteMes + d)
+      } else if (d < 0 && tx.sourceScheduleId) {
+        e.resgates = r2(e.resgates + (-d))
+      }
     }
-    for (const row of displayRows) {
-      if (row.kind === 'single') add(row.tx)
-      else row.txs.forEach(add)
-    }
-    return [...map.entries()]
+    return [...map.values()]
+      .map(e => ({ ...e, liquido: r2(e.debMesAnt + e.debEsteMes - e.resgates) }))
+      .filter(e => !(e.liquido === 0 && e.debMesAnt === 0 && e.debEsteMes === 0))
       .sort((a, b) => {
-        const [ma, ya] = a[0].split('/')
-        const [mb, yb] = b[0].split('/')
+        const [ma, ya] = a.ref.split('/')
+        const [mb, yb] = b.ref.split('/')
         return (Number(ya) - Number(yb)) || (Number(ma) - Number(mb))
       })
-      .map(([ref, valor]) => ({ ref, valor }))
-  }, [displayRows, account.id, isGerencial])
+  }, [transactions, account.id, isGerencial, settings])
 
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
   const toggleSelectAllVisible = () => setSelectedIds(prev => {
@@ -930,9 +947,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals.length > 0) && (
           <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
             {faturaTotals.map(f => (
-              <span key={f.ref} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded bg-gray-800/60 px-2 py-0.5">
+              <span key={f.ref} className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-nowrap rounded bg-gray-800/60 px-2 py-0.5">
                 <span className="text-gray-500">Fatura {f.ref}:</span>
-                <span className="font-semibold text-gray-300">{fmt(f.valor)}</span>
+                {f.debMesAnt > 0 && (
+                  <span className="text-blue-600">Mês ant. <span className="font-semibold">{fmt(f.debMesAnt)}</span></span>
+                )}
+                <span className="text-blue-600">Este mês <span className="font-semibold">{fmt(f.debEsteMes)}</span></span>
+                {f.resgates > 0 && (
+                  <span className="text-orange-600">Resgate <span className="font-semibold">-{fmt(f.resgates)}</span></span>
+                )}
+                <span className={`font-semibold ${f.liquido >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>= Líquido {fmt(f.liquido)}</span>
               </span>
             ))}
             <ReconciledTotals
