@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import { computeScheduleDate } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
@@ -484,6 +485,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null) // row netizado a excluir inteiro
+  const [showBulkDelete, setShowBulkDelete] = useState(false) // modal de exclusão em lote (modo Selecionar)
   const [toast, setToast] = useState(null)
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
@@ -753,6 +755,37 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     setReconciled([...selectedIds], value)
     const n = selectedIds.size
     showToast(`${n} ${n !== 1 ? 'lançamentos' : 'lançamento'} ${value ? (n !== 1 ? 'conciliados' : 'conciliado') : (n !== 1 ? 'desconciliados' : 'desconciliado')}`)
+  }
+
+  // Resumo dos selecionados por natureza, para o modal de exclusão em lote. Gerencial tem
+  // precedência (id tx_gerA_* ou descrição "…Gerencial…"), depois transfer/expense/income.
+  const bulkDeleteSummary = useMemo(() => {
+    const s = { gerencial: 0, transfer: 0, expense: 0, income: 0, outros: 0 }
+    for (const tx of selectedTxs) {
+      if (tx.id?.startsWith('tx_gerA_') || /gerencial/i.test(tx.description || '')) s.gerencial++
+      else if (tx.type === 'transfer') s.transfer++
+      else if (tx.type === 'expense') s.expense++
+      else if (tx.type === 'income') s.income++
+      else s.outros++
+    }
+    return s
+  }, [selectedTxs])
+
+  // Exclui todos os selecionados em sequência (mesmo fluxo do delete individual: reverte saldo,
+  // cascata gerencial/filhos no AppContext e remove o resgate vinculado). Limpa seleção ao fim.
+  const handleBulkDelete = () => {
+    const txs = selectedTxs
+    if (txs.length === 0) return
+    for (const tx of txs) {
+      const r = findLinkedResgate(tx.id)
+      if (onDelete) onDelete(tx.id)
+      else deleteTransaction(tx.id)
+      if (r) deleteSchedule(r.id)
+    }
+    const n = txs.length
+    setShowBulkDelete(false)
+    exitSelect()
+    showToast(`${n} ${n !== 1 ? 'lançamentos excluídos' : 'lançamento excluído'}`)
   }
 
   const totals = useMemo(() => {
@@ -1159,6 +1192,39 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         danger
       />
 
+      <Modal open={showBulkDelete} onClose={() => setShowBulkDelete(false)} title="Excluir lançamentos" size="sm">
+        <p className="text-gray-300 text-sm mb-4">
+          Deseja realmente excluir {selectedIds.size} lançamento{selectedIds.size !== 1 ? 's' : ''}?
+        </p>
+        <div className="space-y-1.5 mb-6 text-sm">
+          {bulkDeleteSummary.gerencial > 0 && (
+            <div className="flex justify-between text-gray-300"><span>Transferências gerenciais</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.gerencial}</span></div>
+          )}
+          {bulkDeleteSummary.transfer > 0 && (
+            <div className="flex justify-between text-gray-300"><span>Transferências</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.transfer}</span></div>
+          )}
+          {bulkDeleteSummary.expense > 0 && (
+            <div className="flex justify-between text-gray-300"><span>Despesas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.expense}</span></div>
+          )}
+          {bulkDeleteSummary.income > 0 && (
+            <div className="flex justify-between text-gray-300"><span>Receitas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.income}</span></div>
+          )}
+          {bulkDeleteSummary.outros > 0 && (
+            <div className="flex justify-between text-gray-300"><span>Outros</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.outros}</span></div>
+          )}
+        </div>
+        <p className="text-orange-600/90 text-xs mb-6">Esta ação não pode ser desfeita.</p>
+        <div className="flex gap-3 justify-end">
+          <button className="btn-secondary" onClick={() => setShowBulkDelete(false)}>Cancelar</button>
+          <button
+            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            onClick={handleBulkDelete}
+          >
+            Excluir tudo
+          </button>
+        </div>
+      </Modal>
+
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       {showReconciliar && (
@@ -1213,6 +1279,14 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 title="Desconciliar lançamentos selecionados"
               >
                 <Circle size={12} /> Desconciliar
+              </button>
+              <button
+                onClick={() => setShowBulkDelete(true)}
+                disabled={selectedIds.size === 0}
+                className="bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Excluir lançamentos selecionados"
+              >
+                <Trash2 size={12} /> Excluir
               </button>
               <button
                 onClick={exitSelect}
