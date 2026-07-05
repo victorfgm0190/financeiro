@@ -682,12 +682,26 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   //   • débitos (entradas, txDelta > 0) em "mês ant." vs "este mês" pela fronteira do ciclo
   //     financeiro da fatura = computeScheduleDate(faturaRef, financialMonthStartDay);
   //   • resgates (saídas, txDelta < 0) com sourceScheduleId — devoluções gerenciais.
+  // Faturas de ciclos FUTUROS são excluídas (à-vista/parcela-1 já materializam etapa A em
+  // faturas de meses seguintes; não devem aparecer aqui). O limite é a fatura do ciclo
+  // financeiro atual (mesma janela de reconcileFaturaState: calendário vs. custom startDay).
   // Líquido = débitos − resgates. Ordenado cronologicamente (YYYY, depois MM). Faturas sem
   // débitos e com líquido zero são omitidas.
   const faturaTotals = useMemo(() => {
     if (!isGerencial) return []
     const r2 = (x) => Math.round(x * 100) / 100
     const startDay = settings?.financialMonthStartDay || 1
+    // Mês do ciclo financeiro atual → fatura-limite. No modo custom, antes do startDay o ciclo
+    // ainda é o do mês anterior. cutoff = cicloStart dessa fatura (mesma unidade que os cicloStart
+    // por fatura), então a comparação de datas reduz-se a "mês da fatura ≤ mês do ciclo atual".
+    const nowRef = new Date()
+    const curCycle = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
+      ? new Date(nowRef.getFullYear(), nowRef.getMonth() - 1, 1)
+      : new Date(nowRef.getFullYear(), nowRef.getMonth(), 1)
+    const cutoff = computeScheduleDate(
+      `${String(curCycle.getMonth() + 1).padStart(2, '0')}/${curCycle.getFullYear()}`,
+      startDay,
+    )
     const map = new Map()
     const get = (ref) => {
       let e = map.get(ref)
@@ -698,10 +712,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       const ref = tx.faturaRef
       if (!ref) continue
       if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
+      const cicloStart = computeScheduleDate(ref, startDay)
+      if (cicloStart > cutoff) continue // fatura de ciclo futuro — não exibe
       const d = txDelta(tx, account.id)
       const e = get(ref)
       if (d > 0) {
-        const cicloStart = computeScheduleDate(ref, startDay)
         if (tx.date < cicloStart) e.debMesAnt = r2(e.debMesAnt + d)
         else e.debEsteMes = r2(e.debEsteMes + d)
       } else if (d < 0 && tx.sourceScheduleId) {
