@@ -1344,6 +1344,167 @@ export function AppProvider({ children }) {
     }
   }, [update])
 
+  // ── Reconcile de estado esperado gerencial por lançamento de cartão ───────────
+  // Garante, para o GRUPO ATUAL do lançamento, o estado gerencial esperado — sempre que se salva,
+  // mudando o grupo ou não. Complementa o motor reconcileFaturaState (que só materializa a etapa A /
+  // resgates para faturas do ciclo financeiro ATUAL/futuro): aqui o estado é garantido também para
+  // faturas de ciclo já encerrado, de forma SÍNCRONA e idempotente, reutilizando os MESMOS ids
+  // determinísticos do motor (tx_gerA_<id> e fsch_<card>_<AAAAMM>_resgate_reserva_<origem>) — assim o
+  // reconcile do ciclo atual reencontra e não duplica. Regras:
+  //   Grupo G (number 1, à vista/parcela 1): garante a etapa A (Principal → Ger.) — cria/ajusta/no-op.
+  //   Grupo numerado (>1): garante o resgate_reserva da fatura+origem — cria se faltar e NÃO pago.
+  //   Grupo D / sem grupo: remove a etapa A do lançamento.
+  //   Sempre: remove resgates PENDENTES desta fatura cuja origem ficou sem gastos numerados (grupo
+  //   antigo esvaziado), preservando os já pagos/registrados. Agendamentos (schedules) são pendências
+  //   e não afetam saldo; só a etapa A (transferência real) ajusta saldos.
+  const ensureGerencialState = useCallback((lancId) => {
+    update(d => {
+      const lanc = d.transactions.find(t => t.id === lancId)
+      if (!lanc || lanc.type !== 'expense' || lanc.accountType !== 'credit') return d
+      const card = d.accounts.find(a => a.id === lanc.accountId)
+      if (!card) return d
+      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+        || d.accounts.find(a => a.isMain && a.type !== 'credit')
+        || d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+
+      const faturaMesAno = faturaMesAnoOf(card, lanc.date, lanc.faturaMonthYear) // YYYY-MM
+      if (!faturaMesAno) return d
+      const [yyyy, mm] = faturaMesAno.split('-')
+      const faturaRef = `${mm}/${yyyy}`
+      const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
+
+      const grupo = d.gerencialGroups?.find(g => g.id === lanc.grupoGerencial)
+      const isG = grupo?.number === 1
+      const isNumbered = typeof grupo?.number === 'number' && grupo.number !== 1
+      const ehParcela2aN = Number(lanc.installmentNum) > 1 || lanc.parentTxId != null || lanc.origin === 'parcela'
+
+      let accounts = d.accounts
+      let transactions = d.transactions
+      let schedules = d.schedules
+
+      // ── 1. Etapa A (Grupo G) ────────────────────────────────────────────
+      const etId = etapaAId(lancId)
+      const existingEt = transactions.find(t => t.id === etId)
+      if (isG) {
+        // Grupo G. Parcela 2..N não tem etapa A imediata em ciclo passado (provisão fica p/ o
+        // Executar Gerenciais) e no ciclo atual é gerida pelo motor — por isso, para parcela 2..N,
+        // NÃO criamos nem removemos aqui (deixamos como está). À vista / parcela 1: garante a etapa A.
+        if (ehParcela2aN) {
+          // nada a fazer para parcela 2..N
+        } else {
+        const amount = Number(lanc.amount) || 0
+        const subcontaName = `Ger. ${apelido}`
+        let subconta = accounts.find(a => a.name === subcontaName)
+        if (!subconta) {
+          subconta = {
+            id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+            name: subcontaName, type: 'checking', balance: 0,
+            bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
+            fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+            grupoGerencial: grupo.id, accountGroupId: contaPrincipal.accountGroupId || null,
+          }
+          accounts = [...accounts, subconta]
+        }
+        const etFields = {
+          id: etId, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subconta.id,
+          amount, date: lanc.date, description: `Reserva Gerencial - ${lanc.description || ''}`.trim(),
+          grupoGerencial: grupo.id, cardId: lanc.accountId, faturaRef, sourceExpenseId: lancId,
+        }
+        if (!existingEt) {
+          transactions = [...transactions, { ...etFields, createdAt: new Date().toISOString() }]
+          accounts = accounts.map(a => {
+            if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - amount) }
+            if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + amount) }
+            return a
+          })
+        } else if (Math.abs((Number(existingEt.amount) || 0) - amount) > 0.005) {
+          const delta = amount - (Number(existingEt.amount) || 0)
+          transactions = transactions.map(t => t.id === etId ? { ...t, ...etFields } : t)
+          accounts = accounts.map(a => {
+            if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - delta) }
+            if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + delta) }
+            return a
+          })
+        }
+        // valor igual → idempotente, nada a fazer
+        }
+      } else if (existingEt) {
+        // Não é Grupo G (numerado / D / sem grupo) → remove a etapa A órfã e reverte o saldo.
+        accounts = accounts.map(a => {
+          if (a.id === existingEt.accountId)   return { ...a, balance: rb((a.balance || 0) + existingEt.amount) }
+          if (a.id === existingEt.toAccountId) return { ...a, balance: rb((a.balance || 0) - existingEt.amount) }
+          return a
+        })
+        transactions = transactions.filter(t => t.id !== etId)
+      }
+
+      // ── 2. resgate_reserva (grupos numerados) ───────────────────────────
+      // Soma dos gastos numerados por conta-origem (defaultAccountId) nesta fatura — usada para
+      // criar o resgate faltante da origem do lançamento e detectar origens esvaziadas.
+      const origemById = new Map(
+        (d.gerencialGroups || [])
+          .filter(g => typeof g.number === 'number' && g.number !== 1 && g.defaultAccountId)
+          .map(g => [g.id, g.defaultAccountId])
+      )
+      const isAutomacao = (t) => t.reservaAuto || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto'
+      const somaPorOrigem = new Map()
+      for (const t of d.transactions) {
+        if (t.type !== 'expense' || t.accountType !== 'credit' || t.accountId !== card.id || isAutomacao(t)) continue
+        if (faturaMesAnoOf(card, t.date, t.faturaMonthYear) !== faturaMesAno) continue
+        const origem = origemById.get(t.grupoGerencial)
+        if (!origem) continue
+        somaPorOrigem.set(origem, rb((somaPorOrigem.get(origem) || 0) + (Number(t.amount) || 0)))
+      }
+      const isPago = (s) => (s.registered || []).length > 0 || (s.skipped || []).length > 0 || s.confirmado === true
+
+      if (isNumbered && grupo.defaultAccountId) {
+        const origem = grupo.defaultAccountId
+        const soma = somaPorOrigem.get(origem) || 0
+        const schedId = `fsch_${card.id}_${yyyy}${mm}_resgate_reserva_${origem}`
+        const existing = schedules.find(s =>
+          s.id === schedId ||
+          (s.tipo === 'resgate_reserva' && s.cardId === card.id && s.faturaMesAno === faturaMesAno && s.accountId === origem)
+        )
+        // "já pago": schedule presente (qualquer estado) OU resgate já executado (transferência
+        // com sourceScheduleId apontando p/ este slot, caso o schedule tenha sido removido).
+        const jaPago = transactions.some(t => t.type === 'transfer' && t.sourceScheduleId === schedId)
+        if (!existing && !jaPago && soma > 0) {
+          const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
+          schedules = [...schedules, {
+            id: schedId, tipo: 'resgate_reserva',
+            transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+            startDate: dueDate, amount: soma,
+            description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+            reservaFuncaoId: lanc.reservaFuncaoId || null,
+            frequency: 'once', occurrenceType: 'installment', installments: 1, autoRegister: false,
+            registered: [], skipped: [], cardId: card.id, faturaMesAno, faturaRef,
+            overrides: { _gerencial: { faturaRef, cardId: card.id, checkingAccountId: contaPrincipal.id } },
+          }]
+        }
+      }
+
+      // Remove resgates PENDENTES desta fatura cuja origem ficou sem gastos numerados (ex.: grupo
+      // reclassificado p/ D / outro). Preserva os já pagos/registrados (histórico).
+      const removedResgateIds = []
+      schedules = schedules.filter(s => {
+        if (s.tipo !== 'resgate_reserva' || s.cardId !== card.id || s.faturaMesAno !== faturaMesAno) return true
+        if (isPago(s)) return true
+        if ((somaPorOrigem.get(s.accountId) || 0) > 0) return true
+        removedResgateIds.push(s.id)
+        return false
+      })
+      let scheduleReservaFuncoes = d.scheduleReservaFuncoes
+      if (removedResgateIds.length) {
+        const removed = new Set(removedResgateIds)
+        scheduleReservaFuncoes = (d.scheduleReservaFuncoes || []).filter(srf => !removed.has(srf.scheduleId))
+      }
+
+      if (accounts === d.accounts && transactions === d.transactions && schedules === d.schedules) return d
+      return { ...d, accounts, transactions, schedules, scheduleReservaFuncoes }
+    })
+  }, [update])
+
   const updateTransaction = useCallback((id, changes) => {
     // TAREFA 2: se uma despesa de cartão muda de valor ou de fatura, recalcula a(s)
     // conta(s) a pagar afetada(s). Lê o tx antigo do dataRef (síncrono) antes do update.
@@ -1372,81 +1533,7 @@ export function AppProvider({ children }) {
       // campos de saldo não mudam (ex.: só descrição/categoria/reconciliado), o efeito é nulo.
       let accounts = applyBalanceEffect(d.accounts, oldTx, -1)
       accounts = applyBalanceEffect(accounts, newTx, 1)
-      let transactions = d.transactions.map(t => t.id === id ? newTx : t)
-
-      // Mudança de grupo gerencial de uma despesa de cartão: mantém a etapa A (transferência
-      // imediata Conta Principal → Ger. subconta, id tx_gerA_<id>) em sincronia — de forma
-      // SÍNCRONA aqui, não delegada ao motor. Motivo: reconcileFaturaState só materializa a
-      // etapa A para faturas do ciclo financeiro ATUAL/futuro (guarda faturaCicloNoPassado);
-      // ao editar um lançamento de uma fatura de ciclo já encerrado (caso comum ao reclassificar
-      // faturas importadas), a criação/remoção delegada não acontecia. Os agendamentos geridos
-      // (resgate_reserva / gerencial_devolucao / pagamento_fatura) continuam pelo gatilho
-      // reconciliarGerencial logo abaixo.
-      if (oldTx.type === 'expense' && oldTx.accountType === 'credit') {
-        const oldGrupo = d.gerencialGroups?.find(g => g.id === oldTx.grupoGerencial)
-        const newGrupo = d.gerencialGroups?.find(g => g.id === newTx.grupoGerencial)
-        const wasG = oldGrupo?.number === 1
-        const isG = newGrupo?.number === 1
-        if (wasG && !isG) {
-          // SAI do Grupo G → remove a etapa A órfã por id e desfaz seu efeito no saldo
-          // (mesmo padrão de deleteTransaction / reverseGerencialCascadeOnly).
-          const etapaATx = transactions.find(t => t.id === etapaAId(id))
-          if (etapaATx) {
-            accounts = accounts.map(a => {
-              if (a.id === etapaATx.accountId)   return { ...a, balance: rb(a.balance + etapaATx.amount) }
-              if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
-              return a
-            })
-            transactions = transactions.filter(t => t.id !== etapaATx.id)
-          }
-        } else if (!wasG && isG) {
-          // ENTRA no Grupo G → cria a etapa A imediata (à vista / parcela 1), simétrica à remoção.
-          // Parcela 2..N não tem etapa A imediata (provisão fica p/ o Executar Gerenciais). Idempotente:
-          // usa o id determinístico tx_gerA_<id> e o mesmo formato do motor (reconcileFaturaState §7),
-          // então o reconcile seguinte reencontra a etapa A e não a duplica nem reaplica saldo.
-          const ehParcela2aN = Number(newTx.installmentNum) > 1 || newTx.parentTxId != null || newTx.origin === 'parcela'
-          const jaExiste = transactions.some(t => t.id === etapaAId(id))
-          const card = d.accounts.find(a => a.id === newTx.accountId)
-          const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-            || d.accounts.find(a => a.isMain && a.type !== 'credit')
-            || d.accounts.find(a => a.type === 'checking')
-          if (!ehParcela2aN && !jaExiste && card && contaPrincipal) {
-            const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
-            const subcontaName = `Ger. ${apelido}`
-            let subconta = accounts.find(a => a.name === subcontaName)
-            if (!subconta) {
-              subconta = {
-                id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-                name: subcontaName, type: 'checking', balance: 0,
-                bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
-                fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
-                grupoGerencial: newGrupo.id, accountGroupId: contaPrincipal.accountGroupId || null,
-              }
-              accounts = [...accounts, subconta]
-            }
-            const amount = Number(newTx.amount) || 0
-            const faturaRef = newTx.faturaMonthYear
-              ? (() => { const [y, m] = newTx.faturaMonthYear.split('-'); return `${m}/${y}` })()
-              : computeFaturaRef(new Date(newTx.date + 'T00:00:00'), card.closingDay || 14)
-            transactions = [...transactions, {
-              id: etapaAId(id), type: 'transfer',
-              accountId: contaPrincipal.id, toAccountId: subconta.id,
-              amount, date: newTx.date,
-              description: `Reserva Gerencial - ${newTx.description || ''}`.trim(),
-              grupoGerencial: newGrupo.id, cardId: newTx.accountId,
-              faturaRef, sourceExpenseId: id,
-              createdAt: new Date().toISOString(),
-            }]
-            accounts = accounts.map(a => {
-              if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - amount) }
-              if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + amount) }
-              return a
-            })
-          }
-        }
-      }
-
-      return { ...d, accounts, transactions }
+      return { ...d, accounts, transactions: d.transactions.map(t => t.id === id ? newTx : t) }
     })
     if (recalcArgs) {
       recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
@@ -1466,7 +1553,12 @@ export function AppProvider({ children }) {
       }
       reconcileGerencialRef.current?.(recalcArgs.cartaoId, [...faturasAfetadas])
     }
-  }, [update])
+    // Reconcile de estado esperado gerencial deste lançamento — SEMPRE, mudou o grupo ou não.
+    // Complementa o motor (que só materializa faturas do ciclo atual/futuro) e é idempotente.
+    if (old && old.type === 'expense' && old.accountType === 'credit') {
+      ensureGerencialState(id)
+    }
+  }, [update, ensureGerencialState])
 
   // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
   const setReconciled = useCallback((ids, value) => {
