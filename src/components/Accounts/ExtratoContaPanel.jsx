@@ -226,7 +226,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
       onClick={() => selectMode ? onToggleSelect(tx.id) : (onEdit && onEdit(tx))}
     >
       {selectMode && (
-        <td className="px-2 py-2.5 text-center">
+        <td className="px-2 py-1.5 text-center">
           <input
             type="checkbox"
             checked={!!selected}
@@ -236,8 +236,8 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           />
         </td>
       )}
-      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
-      <td className="px-3 py-2.5 min-w-0">
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
+      <td className="px-3 py-1.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           {isTransfer
             ? <ArrowLeftRight size={12} className="text-gray-500 shrink-0" />
@@ -268,23 +268,23 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           )}
         </div>
       </td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">
         {deId ? <AccountName id={deId} accounts={accounts} /> : deLabel}
       </td>
-      <td className="px-3 py-2.5 text-xs text-gray-400 truncate">
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">
         {paraId ? <AccountName id={paraId} accounts={accounts} /> : paraLabel}
       </td>
-      <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
+      <td className="px-3 py-1.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
         {isIn ? fmt(Math.abs(delta)) : ''}
       </td>
-      <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
+      <td className="px-3 py-1.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
         {!isIn ? fmt(Math.abs(delta)) : ''}
       </td>
-      <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
+      <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
         {fmt(balance)}
       </td>
-      <td className="px-2 py-2.5">
+      <td className="px-2 py-1.5">
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           {onEdit && (
             <button
@@ -318,7 +318,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           )}
         </div>
       </td>
-      <td className="px-1 py-2.5 text-center">
+      <td className="px-1 py-1.5 text-center">
         <ReconcileBtn
           reconciled={!!tx.reconciled}
           onClick={(e) => { e.stopPropagation(); onToggleReconcile([tx.id], !tx.reconciled) }}
@@ -344,9 +344,9 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
-        {selectMode && <td className="px-2 py-2.5" title="Transferências não são alteráveis em lote" />}
-        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
-        <td className="px-3 py-2.5 min-w-0">
+        {selectMode && <td className="px-2 py-1.5" title="Transferências não são alteráveis em lote" />}
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
+        <td className="px-3 py-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
             <ArrowLeftRight size={12} className="text-indigo-400 shrink-0" />
             <span className="text-xs text-gray-200 truncate">Transf. líquida</span>
@@ -364,18 +364,18 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
           </div>
         </td>
         <td />
-        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{isIn ? otherName : thisName}</td>
-        <td className="px-3 py-2.5 text-xs text-gray-400 truncate">{isIn ? thisName : otherName}</td>
-        <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? otherName : thisName}</td>
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? thisName : otherName}</td>
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
           {isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
-        <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
           {!isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
-        <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
+        <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
           {fmt(balance)}
         </td>
-        <td className="px-2 py-2.5">
+        <td className="px-2 py-1.5">
           <div className="flex items-center justify-center gap-0.5">
             {onDeleteGroup && (
               <button
@@ -389,7 +389,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
             {open ? <ChevronUp size={12} className="text-indigo-400" /> : <ChevronDown size={12} className="text-indigo-400" />}
           </div>
         </td>
-        <td className="px-1 py-2.5 text-center">
+        <td className="px-1 py-1.5 text-center">
           <ReconcileBtn
             reconciled={allReconciled}
             onClick={(e) => { e.stopPropagation(); onToggleReconcile(txs.map(t => t.id), !allReconciled) }}
@@ -909,19 +909,19 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </div>
           </div>
 
-          {/* KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="card">
-              <p className="text-xs text-gray-400 uppercase mb-1">Saldo Atual</p>
-              <p className={`text-lg font-bold ${(account.balance || 0) >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(account.balance || 0)}</p>
+          {/* KPIs (compactos) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Saldo Atual</p>
+              <p className={`text-xl font-bold ${(account.balance || 0) >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(account.balance || 0)}</p>
             </div>
-            <div className="card">
-              <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={13} /><p className="text-xs text-gray-400 uppercase">Entradas</p></div>
-              <p className="text-lg font-bold text-blue-600">{fmt(totals.entrada)}</p>
+            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
+              <div className="flex items-center gap-1.5 text-blue-600"><ArrowDownCircle size={12} /><p className="text-[10px] text-gray-400 uppercase tracking-wide">Entradas</p></div>
+              <p className="text-xl font-bold text-blue-600">{fmt(totals.entrada)}</p>
             </div>
-            <div className="card">
-              <div className="flex items-center gap-2 mb-1 text-orange-600"><ArrowUpCircle size={13} /><p className="text-xs text-gray-400 uppercase">Saídas</p></div>
-              <p className="text-lg font-bold text-orange-600">{fmt(totals.saida)}</p>
+            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
+              <div className="flex items-center gap-1.5 text-orange-600"><ArrowUpCircle size={12} /><p className="text-[10px] text-gray-400 uppercase tracking-wide">Saídas</p></div>
+              <p className="text-xl font-bold text-orange-600">{fmt(totals.saida)}</p>
             </div>
           </div>
         </div>
@@ -933,7 +933,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             <thead>
               <tr className="border-b border-gray-800">
                 {selectMode && (
-                  <th className="px-2 py-1.5 text-center">
+                  <th className="px-2 py-1 text-center">
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
@@ -943,33 +943,33 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     />
                   </th>
                 )}
-                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
-                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
-                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
-                <th className="text-right px-3 py-1.5 text-xs text-blue-600 font-medium whitespace-nowrap">
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium">Histórico</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
+                <th className="text-right px-3 py-1 text-xs text-blue-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
                 </th>
-                <th className="text-right px-3 py-1.5 text-xs text-orange-600 font-medium whitespace-nowrap">
+                <th className="text-right px-3 py-1 text-xs text-orange-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={10} /> Saída</span>
                 </th>
-                <th className="text-right px-3 py-1.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
+                <th className="text-right px-3 py-1 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
                 <th className="w-8" />
-                <th className="text-center px-1 py-1.5 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
+                <th className="text-center px-1 py-1 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
               </tr>
             </thead>
           </table>
         </div>
 
         {/* Filtros — DESKTOP: em tabela com o MESMO colGroup do header → cada input exatamente
-            sob sua coluna. Espaçamento vertical mínimo (py-1.5) coladinho ao cabeçalho. */}
+            sob sua coluna. Espaçamento vertical mínimo (py-1) coladinho ao cabeçalho. */}
         <div className="hidden md:block border-x border-gray-800 bg-surface/60">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
               <tr className="border-b border-gray-800">
-                {selectMode && <td className="px-2 py-1.5" />}
+                {selectMode && <td className="px-2 py-1" />}
                 {[
                   { key: 'data', ph: 'DD/MM/AAAA' },
                   { key: 'historico', ph: 'Histórico' },
@@ -977,7 +977,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   { key: 'de', ph: 'Conta De' },
                   { key: 'para', ph: 'Conta Para' },
                 ].map(c => (
-                  <td key={c.key} className="px-2 py-1.5">
+                  <td key={c.key} className="px-2 py-1">
                     <input
                       type="text"
                       value={filtros[c.key] || ''}
@@ -987,13 +987,13 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     />
                   </td>
                 ))}
-                <td className="px-1 py-1.5">
+                <td className="px-1 py-1">
                   <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-blue-500" />
                 </td>
-                <td className="px-1 py-1.5">
+                <td className="px-1 py-1">
                   <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-orange-500" />
                 </td>
-                <td colSpan={3} className="px-2 py-1.5">
+                <td colSpan={3} className="px-2 py-1">
                   <div className="flex items-center justify-end gap-2">
                     <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
                       {[
@@ -1071,7 +1071,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Totalizador gerencial (fatura anterior + atual) + Conciliados/Pendentes (lançamentos visíveis) */}
         {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals) && (
-          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs">
+          <div className="border-x border-gray-800 bg-surface/40 px-4 py-1.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-4 gap-y-2 text-xs">
             {faturaTotals && (
               <div className="rounded bg-gray-800/60 px-3 py-1.5">
                 {/* Faturas lado a lado (horizontal); empilha no mobile via flex-wrap. Separador
@@ -1138,12 +1138,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
-              {/* Starting balance row */}
-              <tr className="border-b border-gray-800/50 bg-gray-800/20">
-                {selectMode && <td className="px-2 py-2" />}
-                <td className="px-3 py-2 text-xs text-gray-600">{fmtDate(from)}</td>
-                <td className="px-3 py-2 text-xs text-gray-500 italic" colSpan={6}>Saldo inicial do período</td>
-                <td className={`px-3 py-2 text-right text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
+              {/* Starting balance row (compacto) */}
+              <tr className="border-b border-gray-800/50">
+                {selectMode && <td className="px-2 py-0.5" />}
+                <td className="px-3 py-0.5 text-[11px] text-gray-600">{fmtDate(from)}</td>
+                <td className="px-3 py-0.5 text-[11px] text-gray-500" colSpan={6}>Saldo inicial do período</td>
+                <td className={`px-3 py-0.5 text-right text-[11px] font-semibold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
                   {fmt(startBalance)}
                 </td>
                 <td colSpan={2} />
