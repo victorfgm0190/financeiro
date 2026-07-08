@@ -1019,42 +1019,53 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals) && (
           <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs">
             {faturaTotals && (
-              <div className="rounded bg-gray-800/60 px-3 py-1.5 space-y-1 min-w-[210px]">
-                {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
-                  <div key={f.ref} className="space-y-1">
-                    {i > 0 && <div className="border-t border-gray-700/60 my-1" />}
-                    <div className="text-gray-400 font-medium">Fatura {f.ref}</div>
-                    {f.mesAnt > 0 && (
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-gray-500">Mês anterior</span>
-                        <span className="font-semibold text-blue-600">{fmt(f.mesAnt)}</span>
+              <div className="rounded bg-gray-800/60 px-3 py-1.5">
+                {/* Faturas lado a lado (horizontal); empilha no mobile via flex-wrap. Separador
+                    vertical entre as colunas no desktop (border-l), com alturas iguais (items-stretch). */}
+                <div className="flex flex-wrap items-stretch gap-y-2">
+                  {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => {
+                    const isAtual = f === faturaTotals.atual
+                    return (
+                      <div
+                        key={f.ref}
+                        className={`space-y-1 flex-1 min-w-[160px] ${i > 0 ? 'sm:border-l sm:border-gray-700/60 sm:pl-4 sm:ml-4' : ''}`}
+                      >
+                        <div className="text-gray-400 font-medium">Fatura {f.ref}</div>
+                        {f.mesAnt > 0 && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Mês anterior</span>
+                            <span className="font-semibold text-blue-600">{fmt(f.mesAnt)}</span>
+                          </div>
+                        )}
+                        {f.esteMes > 0 && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Este mês</span>
+                            <span className="font-semibold text-blue-600">{fmt(f.esteMes)}</span>
+                          </div>
+                        )}
+                        {f.resgate > 0 && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Resgate</span>
+                            <span className="font-semibold text-orange-600">{fmt(f.resgate)}</span>
+                          </div>
+                        )}
+                        {f.entradas > 0 && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Líquido</span>
+                            <span className={`font-semibold ${
+                              f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                            }`}>{fmt(f.liquido)}</span>
+                          </div>
+                        )}
+                        {isAtual && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Total</span>
+                            <span className={`font-semibold ${faturaTotals.total < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(faturaTotals.total)}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {f.esteMes > 0 && (
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-gray-500">Este mês</span>
-                        <span className="font-semibold text-blue-600">{fmt(f.esteMes)}</span>
-                      </div>
-                    )}
-                    {f.resgate > 0 && (
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-gray-500">Resgate</span>
-                        <span className="font-semibold text-orange-600">{fmt(f.resgate)}</span>
-                      </div>
-                    )}
-                    {f.entradas > 0 && (
-                      <div className="flex items-center justify-between gap-6">
-                        <span className="text-gray-500">Líquido</span>
-                        <span className={`font-semibold ${
-                          f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
-                        }`}>{fmt(f.liquido)}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="flex items-center justify-between gap-6">
-                  <span className="text-gray-500">Total</span>
-                  <span className={`font-semibold ${faturaTotals.total < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(faturaTotals.total)}</span>
+                    )
+                  })}
                 </div>
               </div>
             )}
