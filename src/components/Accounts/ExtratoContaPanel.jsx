@@ -858,13 +858,23 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 <ChevronLeft size={16} /> Voltar
               </button>
             )}
-            <h2 className="text-sm font-semibold text-gray-200 truncate flex-1">
+            <h2 className="text-sm font-semibold text-gray-200 truncate min-w-0 shrink">
               {account.apelido || account.name}
               {isAplicacao && (
                 <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
               )}
             </h2>
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Seletor de mês — entre o nome da conta e os botões (destaque sutil) */}
+            <div className="flex items-center gap-0.5 shrink-0 rounded-md border border-gray-700 bg-gray-800/60 px-0.5 py-0.5">
+              <button onClick={prevMonth} aria-label="Mês anterior" className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
+                <ChevronLeft size={14} />
+              </button>
+              <span className="text-xs font-medium text-gray-200 min-w-[74px] text-center">{monthLabel}</span>
+              <button onClick={nextMonth} aria-label="Próximo mês" className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-auto">
               <button
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
@@ -899,23 +909,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </div>
           </div>
 
-          {/* Month navigator */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={prevMonth}
-              className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <span className="text-sm font-medium text-gray-200 min-w-[90px] text-center">{monthLabel}</span>
-            <button
-              onClick={nextMonth}
-              className="p-1.5 rounded hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="card">
@@ -940,7 +933,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             <thead>
               <tr className="border-b border-gray-800">
                 {selectMode && (
-                  <th className="px-2 py-2.5 text-center">
+                  <th className="px-2 py-1.5 text-center">
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
@@ -950,46 +943,107 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     />
                   </th>
                 )}
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
-                <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium whitespace-nowrap">
+                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium">Histórico</th>
+                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
+                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
+                <th className="text-left px-3 py-1.5 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
+                <th className="text-right px-3 py-1.5 text-xs text-blue-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
                 </th>
-                <th className="text-right px-3 py-2.5 text-xs text-orange-600 font-medium whitespace-nowrap">
+                <th className="text-right px-3 py-1.5 text-xs text-orange-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={10} /> Saída</span>
                 </th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
+                <th className="text-right px-3 py-1.5 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
                 <th className="w-8" />
-                <th className="text-center px-1 py-2.5 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
+                <th className="text-center px-1 py-1.5 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
               </tr>
             </thead>
           </table>
         </div>
 
-        {/* Filtros em tempo real (abaixo do header da tabela) */}
-        <div className="border-x border-gray-800 bg-surface">
+        {/* Filtros — DESKTOP: em tabela com o MESMO colGroup do header → cada input exatamente
+            sob sua coluna. Espaçamento vertical mínimo (py-1.5) coladinho ao cabeçalho. */}
+        <div className="hidden md:block border-x border-gray-800 bg-surface/60">
+          <table className="w-full text-sm table-fixed">
+            {colGroup}
+            <tbody>
+              <tr className="border-b border-gray-800">
+                {selectMode && <td className="px-2 py-1.5" />}
+                {[
+                  { key: 'data', ph: 'DD/MM/AAAA' },
+                  { key: 'historico', ph: 'Histórico' },
+                  { key: 'favorecido', ph: 'Favorecido' },
+                  { key: 'de', ph: 'Conta De' },
+                  { key: 'para', ph: 'Conta Para' },
+                ].map(c => (
+                  <td key={c.key} className="px-2 py-1.5">
+                    <input
+                      type="text"
+                      value={filtros[c.key] || ''}
+                      onChange={e => setFiltros(f => ({ ...f, [c.key]: e.target.value }))}
+                      placeholder={c.ph}
+                      className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-gray-500 placeholder:text-gray-600"
+                    />
+                  </td>
+                ))}
+                <td className="px-1 py-1.5">
+                  <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-blue-500" />
+                </td>
+                <td className="px-1 py-1.5">
+                  <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-orange-500" />
+                </td>
+                <td colSpan={3} className="px-2 py-1.5">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
+                      {[
+                        { v: 'todos', label: 'Todos' },
+                        { v: 'conciliados', label: '✓ Conc.' },
+                        { v: 'pendentes', label: '○ Pend.' },
+                      ].map(o => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          onClick={() => setReconFilter(o.v)}
+                          className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
+                            reconFilter === o.v
+                              ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
+                              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFiltros(EMPTY_LANC_FILTROS)}
+                      disabled={!hasLancFiltros(filtros)}
+                      title="Limpar todos os filtros"
+                      className={`shrink-0 p-1.5 rounded-md transition-colors ${
+                        hasLancFiltros(filtros)
+                          ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800'
+                          : 'text-gray-700 cursor-not-allowed'
+                      }`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Filtros — MOBILE: barra flex compacta (componente compartilhado). */}
+        <div className="md:hidden border-x border-gray-800 bg-surface">
           <LancamentoFiltros
             filtros={filtros}
             setFiltros={setFiltros}
             extra={
               <>
-                <ValueFilterDropdown
-                  label="Entrada"
-                  values={entradaValues}
-                  selected={selEntradas}
-                  onChange={setSelEntradas}
-                  iconColor="text-blue-500"
-                />
-                <ValueFilterDropdown
-                  label="Saída"
-                  values={saidaValues}
-                  selected={selSaidas}
-                  onChange={setSelSaidas}
-                  iconColor="text-orange-500"
-                />
+                <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-blue-500" />
+                <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-orange-500" />
                 <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
                   {[
                     { v: 'todos', label: 'Todos' },
