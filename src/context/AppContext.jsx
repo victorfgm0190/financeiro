@@ -124,6 +124,11 @@ const defaultData = {
     currency: 'BRL',
     recurringMatchExceptions: [],
     categoryGroups: [], // rótulos de grupos de categoria (inclui grupos vazios criados manualmente)
+    // Estornos de cartão: quando enabled === true, aplica a categoria estornoCartaoCategoryId
+    // (+ grupo D) aos estornos na importação/conciliação. null = ainda não configurado (dispara
+    // o modal na primeira importação com estorno); false = não perguntar mais.
+    estornoCartaoEnabled: null,
+    estornoCartaoCategoryId: null,
   },
   accounts: [],
   transactions: [],

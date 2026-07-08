@@ -523,6 +523,39 @@ export default function SettingsPanel() {
         </div>
       </div>
 
+      {/* Estornos de Cartão */}
+      <div className="card">
+        <h2 className="text-sm font-semibold text-gray-300 mb-1">Estornos de Cartão</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Estornos detectados na importação/conciliação de fatura (receitas que não são pagamento
+          nem anuidade) podem receber uma categoria padrão automaticamente, no grupo D · Despesa.
+        </p>
+        <label className="flex items-center gap-2.5 cursor-pointer mb-3">
+          <div className="relative shrink-0">
+            <input
+              type="checkbox"
+              checked={!!settings.estornoCartaoEnabled}
+              onChange={e => updateSettings({ estornoCartaoEnabled: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+            <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+          </div>
+          <span className="text-sm text-gray-300 select-none">Aplicar categoria padrão para estornos de cartão</span>
+        </label>
+        {settings.estornoCartaoEnabled && (
+          <div>
+            <label className="label">Categoria</label>
+            <CategorySelect
+              categories={categories}
+              value={settings.estornoCartaoCategoryId || ''}
+              onChange={e => updateSettings({ estornoCartaoCategoryId: e.target.value })}
+              placeholder="— Selecione a categoria —"
+            />
+          </div>
+        )}
+      </div>
+
       {/* Perfis CPF / CNPJ */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">

@@ -120,6 +120,62 @@ function mergeParcelaXls(desc, parc) {
   return `${desc} ${num}/${total}`.trim()
 }
 
+// Estorno de cartão (p/ categoria padrão): lançamento importado como RECEITA (valor positivo)
+// que NÃO é pagamento de fatura (esses já são filtrados no parse, não viram income) e cuja
+// descrição NÃO contém "anuidade" (case-insensitive — anuidade/estorno de anuidade fica de fora).
+function isEstornoRow(row) {
+  return row?.type === 'income' && !/anuidade/i.test(row.description || '')
+}
+
+// Aplica a categoria padrão + grupo D (Despesa) aos estornos das linhas, quando configurado.
+function applyEstornoConfig(rows, categoryId, grupoDId) {
+  if (!categoryId) return rows
+  return rows.map(r => (isEstornoRow(r) ? { ...r, categoryId, grupoGerencial: grupoDId } : r))
+}
+
+// Modal exibido na 1ª importação/conciliação com estornos (quando estornoCartaoEnabled ainda é
+// null). Pergunta se deve aplicar categoria padrão; grava a escolha em settings e devolve a
+// categoria (ou null) via onDecide, para o fluxo aplicar imediatamente nos estornos atuais.
+function EstornoConfigModal({ count, categories, updateSettings, onDecide, onClose }) {
+  const [step, setStep] = useState('ask')
+  const [catId, setCatId] = useState('')
+  return (
+    <Modal open onClose={onClose} title="Estornos detectados" size="sm">
+      {step === 'ask' ? (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-300">
+            Foram detectados <span className="font-semibold">{count}</span> lançamento{count !== 1 ? 's' : ''} de estorno nesta fatura.
+            Deseja aplicar uma categoria padrão para eles automaticamente?
+          </p>
+          <div className="flex flex-wrap gap-3 justify-end">
+            <button className="btn-secondary" onClick={() => { updateSettings({ estornoCartaoEnabled: false }); onDecide(null) }}>
+              Não, classificar manualmente
+            </button>
+            <button className="btn-primary" onClick={() => setStep('pick')}>Sim, configurar</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <label className="label">Categoria padrão para estornos</label>
+            <CategorySelect categories={categories} value={catId} onChange={e => setCatId(e.target.value)} placeholder="— Selecione a categoria —" searchable />
+          </div>
+          <div className="flex gap-3 justify-end">
+            <button className="btn-secondary" onClick={() => setStep('ask')}>Voltar</button>
+            <button
+              className="btn-primary"
+              disabled={!catId}
+              onClick={() => { updateSettings({ estornoCartaoEnabled: true, estornoCartaoCategoryId: catId }); onDecide(catId) }}
+            >
+              Salvar e aplicar
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 // Parser do XLS/XLSX exportado pelo internet banking do Itaú (fatura de cartão). Recebe a matriz
 // de células (parseFile, header:1, cellDates:true) e devolve o MESMO formato de parseItauCSV,
 // para o fluxo de conciliação seguir sem alteração.
@@ -884,7 +940,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
-    reserveFunctions, settings,
+    reserveFunctions, settings, updateSettings,
   } = useApp()
 
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
@@ -916,6 +972,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [corrigirToast, setCorrigirToast] = useState(null)
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
+  // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
+  const [estornoModal, setEstornoModal] = useState(null)
 
   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
   const [conciliarMode, setConciliarMode] = useState(false)
@@ -1085,10 +1143,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
       if (detected) alignedRows = applyReferenceFatura(alignedRows, detected, resolvedClosingDay, resolvedDueDay, financialStartDay)
-      setRows(alignedRows)
-      setCardInfo({ cardName, faturaStr })
-      setMatchQueue(pendingMatches)
-      if (detected) setFaturaMonthYear(detected)
+
+      // Continuação: popula o preview. `estornoCat` (quando informado) aplica a categoria
+      // padrão + grupo D aos estornos antes de exibir.
+      const finish = (estornoCat) => {
+        const finalRows = estornoCat ? applyEstornoConfig(alignedRows, estornoCat, grupoD) : alignedRows
+        setRows(finalRows)
+        setCardInfo({ cardName, faturaStr })
+        setMatchQueue(pendingMatches)
+        if (detected) setFaturaMonthYear(detected)
+      }
+
+      const estornoCount = alignedRows.filter(isEstornoRow).length
+      const estEnabled = settings?.estornoCartaoEnabled
+      if (estEnabled === true && settings?.estornoCartaoCategoryId) {
+        finish(settings.estornoCartaoCategoryId)               // já configurado → aplica automático
+      } else if ((estEnabled === null || estEnabled === undefined) && estornoCount > 0) {
+        // 1ª vez com estorno → pergunta ANTES do preview. onDecide devolve a categoria (ou null).
+        setEstornoModal({ count: estornoCount, onDecide: (catId) => { setEstornoModal(null); finish(catId || null) } })
+      } else {
+        finish(null)                                            // desativado (false) ou sem estorno
+      }
     } catch (err) {
       setError('Erro ao ler arquivo: ' + err.message)
     }
@@ -1815,32 +1890,45 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Match guloso 1:1 por descrição (normalizada, sem o sufixo de parcela) + valor
       // (tolerância R$ 0,50) + tipo. O valor e a data permanecem como critérios — só a
       // comparação de descrição é melhorada (sistema "01/03" casa com Itaú "1/3").
-      const usedSys = new Set()
-      const matched = []
-      const soItau = []
-      for (const c of csvClassified) {
-        const sys = sysItens.find(t =>
-          !usedSys.has(t.id) &&
-          t.type === c.type &&
-          Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) <= 0.50 &&
-          normalizeDescForMatch(t.description) === normalizeDescForMatch(c.description)
-        )
-        if (sys) { usedSys.add(sys.id); matched.push({ csv: c, sys }) }
-        else soItau.push(c)
+      // Continuação: (opcional) aplica a categoria padrão + grupo D aos estornos do CSV, faz o
+      // match guloso 1:1 com o sistema e popula as seções da conciliação.
+      const finishConc = (estornoCat) => {
+        const classificados = estornoCat ? applyEstornoConfig(csvClassified, estornoCat, grupoD) : csvClassified
+        const usedSys = new Set()
+        const matched = []
+        const soItau = []
+        for (const c of classificados) {
+          const sys = sysItens.find(t =>
+            !usedSys.has(t.id) &&
+            t.type === c.type &&
+            Math.abs((Number(t.amount) || 0) - (Number(c.amount) || 0)) <= 0.50 &&
+            normalizeDescForMatch(t.description) === normalizeDescForMatch(c.description)
+          )
+          if (sys) { usedSys.add(sys.id); matched.push({ csv: c, sys }) }
+          else soItau.push(c)
+        }
+        const soSistema = sysItens
+          .filter(t => !usedSys.has(t.id))
+          .map(t => ({ ...t, acao: 'manter' }))
+        // Conciliação inteligente cruzada: pré-marca duplicatas entre os dois leftovers.
+        const cross = crossMatchConciliacao(soItau, soSistema)
+        setConcMatched(matched)
+        setConcSoItau(cross.soItau)
+        setConcSoSistema(cross.soSistema)
+        setConciliarMode(true)
+        setRows([])
+        setResult(null)
       }
-      const soSistema = sysItens
-        .filter(t => !usedSys.has(t.id))
-        .map(t => ({ ...t, acao: 'manter' }))
 
-      // Conciliação inteligente cruzada: pré-marca duplicatas entre os dois leftovers.
-      const cross = crossMatchConciliacao(soItau, soSistema)
-
-      setConcMatched(matched)
-      setConcSoItau(cross.soItau)
-      setConcSoSistema(cross.soSistema)
-      setConciliarMode(true)
-      setRows([])
-      setResult(null)
+      const estornoCount = csvClassified.filter(isEstornoRow).length
+      const estEnabled = settings?.estornoCartaoEnabled
+      if (estEnabled === true && settings?.estornoCartaoCategoryId) {
+        finishConc(settings.estornoCartaoCategoryId)               // já configurado → automático
+      } else if ((estEnabled === null || estEnabled === undefined) && estornoCount > 0) {
+        setEstornoModal({ count: estornoCount, onDecide: (catId) => { setEstornoModal(null); finishConc(catId || null) } })
+      } else {
+        finishConc(null)
+      }
     } catch (err) {
       setConcError('Erro ao ler arquivo: ' + err.message)
     }
@@ -2983,6 +3071,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         reserveFunctions={reserveFunctions}
         financialMonthStartDay={financialStartDay}
       />
+
+      {estornoModal && (
+        <EstornoConfigModal
+          count={estornoModal.count}
+          categories={categories}
+          updateSettings={updateSettings}
+          onDecide={estornoModal.onDecide}
+          onClose={() => { setEstornoModal(null); estornoModal.onDecide(null) }}
+        />
+      )}
     </div>
   )
 }
