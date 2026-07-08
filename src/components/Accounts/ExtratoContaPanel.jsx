@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
-import { computeScheduleDate } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
@@ -454,7 +453,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
+  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
 
@@ -678,62 +677,63 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     return { conciliado, pendente }
   }, [displayRows, account.id])
 
-  // Totalizadores por fatura_ref (só em conta gerencial). Itera sobre TODAS as transações da
-  // conta com faturaRef preenchido — independente do mês exibido, para não perder os tx_gerA_*
-  // provisionados no "mês anterior" (date fora do período visível). Por fatura separa:
-  //   • débitos (entradas, txDelta > 0) em "mês ant." vs "este mês" pela fronteira do ciclo
-  //     financeiro da fatura = computeScheduleDate(faturaRef, financialMonthStartDay);
-  //   • resgates (saídas, txDelta < 0) com sourceScheduleId — devoluções gerenciais.
-  // Faturas de ciclos FUTUROS são excluídas (à-vista/parcela-1 já materializam etapa A em
-  // faturas de meses seguintes; não devem aparecer aqui). O limite é a fatura do ciclo
-  // financeiro atual (mesma janela de reconcileFaturaState: calendário vs. custom startDay).
-  // Líquido = débitos − resgates. Ordenado cronologicamente (YYYY, depois MM). Faturas sem
-  // débitos e com líquido zero são omitidas.
+  // Totalizador gerencial (só em conta gerencial): resume a fatura ANTERIOR e a ATUAL do ciclo
+  // financeiro (financialMonthStartDay, mesma regra do resto do app). Para a fatura anterior:
+  //   • entradas = provisões recebidas na subconta (etapa A tx_gerA_*, txDelta > 0);
+  //   • resgate  = devoluções/resgates JÁ EXECUTADOS (saídas com sourceScheduleId, faturaRef =
+  //                anterior) MAIS agendamentos gerenciais PENDENTES (não registrados) que saem
+  //                desta subconta com fatura_mes_ano = anterior;
+  //   • líquido  = entradas − resgate.
+  // Para a fatura atual: só as entradas. "Total" = saldo real da subconta (account.balance).
+  // Retorna null fora de conta gerencial; a fatura anterior é omitida quando não tem entradas.
   const faturaTotals = useMemo(() => {
-    if (!isGerencial) return []
+    if (!isGerencial) return null
     const r2 = (x) => Math.round(x * 100) / 100
     const startDay = settings?.financialMonthStartDay || 1
-    // Mês do ciclo financeiro atual → fatura-limite. No modo custom, antes do startDay o ciclo
-    // ainda é o do mês anterior. cutoff = cicloStart dessa fatura (mesma unidade que os cicloStart
-    // por fatura), então a comparação de datas reduz-se a "mês da fatura ≤ mês do ciclo atual".
+    // Mês do ciclo financeiro atual (no modo custom, antes do startDay ainda é o mês anterior).
     const nowRef = new Date()
     const curCycle = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
       ? new Date(nowRef.getFullYear(), nowRef.getMonth() - 1, 1)
       : new Date(nowRef.getFullYear(), nowRef.getMonth(), 1)
-    const cutoff = computeScheduleDate(
-      `${String(curCycle.getMonth() + 1).padStart(2, '0')}/${curCycle.getFullYear()}`,
-      startDay,
-    )
-    const map = new Map()
-    const get = (ref) => {
-      let e = map.get(ref)
-      if (!e) { e = { ref, debMesAnt: 0, debEsteMes: 0, resgates: 0 }; map.set(ref, e) }
-      return e
-    }
+    const prevCycle = new Date(curCycle.getFullYear(), curCycle.getMonth() - 1, 1)
+    const mkRef = (dt) => `${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
+    const refAtual = mkRef(curCycle)
+    const refAnterior = mkRef(prevCycle)
+    const mesAnoAnterior = `${prevCycle.getFullYear()}-${String(prevCycle.getMonth() + 1).padStart(2, '0')}`
+
+    let entradasAnt = 0, entradasAtual = 0, resgate = 0
     for (const tx of transactions) {
       const ref = tx.faturaRef
       if (!ref) continue
       if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
-      const cicloStart = computeScheduleDate(ref, startDay)
-      if (cicloStart > cutoff) continue // fatura de ciclo futuro — não exibe
       const d = txDelta(tx, account.id)
-      const e = get(ref)
       if (d > 0) {
-        if (tx.date < cicloStart) e.debMesAnt = r2(e.debMesAnt + d)
-        else e.debEsteMes = r2(e.debEsteMes + d)
-      } else if (d < 0 && tx.sourceScheduleId) {
-        e.resgates = r2(e.resgates + (-d))
+        if (ref === refAnterior) entradasAnt = r2(entradasAnt + d)
+        else if (ref === refAtual) entradasAtual = r2(entradasAtual + d)
+      } else if (d < 0 && tx.sourceScheduleId && ref === refAnterior) {
+        resgate = r2(resgate + (-d))
       }
     }
-    return [...map.values()]
-      .map(e => ({ ...e, liquido: r2(e.debMesAnt + e.debEsteMes - e.resgates) }))
-      .filter(e => !(e.liquido === 0 && e.debMesAnt === 0 && e.debEsteMes === 0))
-      .sort((a, b) => {
-        const [ma, ya] = a.ref.split('/')
-        const [mb, yb] = b.ref.split('/')
-        return (Number(ya) - Number(yb)) || (Number(ma) - Number(mb))
-      })
-  }, [transactions, account.id, isGerencial, settings])
+    // Resgates PENDENTES da fatura anterior: agendamentos de devolução/resgate que SAEM desta
+    // subconta (accountId === conta) ainda não registrados. Grupo G → 'gerencial_devolucao';
+    // conta-origem de reserva → 'resgate_reserva'.
+    for (const s of schedules) {
+      if (s.accountId !== account.id) continue
+      if (s.tipo !== 'gerencial_devolucao' && s.tipo !== 'resgate_reserva') continue
+      if (s.faturaMesAno !== mesAnoAnterior) continue
+      if ((s.registered || []).length > 0) continue
+      resgate = r2(resgate + (Number(s.amount) || 0))
+    }
+
+    const anterior = entradasAnt > 0
+      ? { ref: refAnterior, entradas: entradasAnt, resgate, liquido: r2(entradasAnt - resgate) }
+      : null
+    return {
+      anterior,
+      atual: { ref: refAtual, entradas: entradasAtual },
+      total: Number(account.balance) || 0,
+    }
+  }, [transactions, schedules, account.id, account.balance, isGerencial, settings])
 
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
   const toggleSelectAllVisible = () => setSelectedIds(prev => {
@@ -991,22 +991,43 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           />
         </div>
 
-        {/* Totalizadores por fatura (conta gerencial) + Conciliados/Pendentes (lançamentos visíveis) */}
-        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals.length > 0) && (
-          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-            {faturaTotals.map(f => (
-              <span key={f.ref} className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-nowrap rounded bg-gray-800/60 px-2 py-0.5">
-                <span className="text-gray-500">Fatura {f.ref}:</span>
-                {f.debMesAnt > 0 && (
-                  <span className="text-blue-600">Mês ant. <span className="font-semibold">{fmt(f.debMesAnt)}</span></span>
+        {/* Totalizador gerencial (fatura anterior + atual) + Conciliados/Pendentes (lançamentos visíveis) */}
+        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals) && (
+          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 text-xs">
+            {faturaTotals && (
+              <div className="rounded bg-gray-800/60 px-3 py-1.5 space-y-1 min-w-[210px]">
+                {faturaTotals.anterior && (
+                  <>
+                    <div className="flex items-center justify-between gap-6">
+                      <span className="text-gray-500">Fatura {faturaTotals.anterior.ref}</span>
+                      <span className="font-semibold text-blue-600">{fmt(faturaTotals.anterior.entradas)}</span>
+                    </div>
+                    {faturaTotals.anterior.resgate > 0 && (
+                      <div className="flex items-center justify-between gap-6">
+                        <span className="text-gray-500">Resgate</span>
+                        <span className="font-semibold text-orange-600">{fmt(faturaTotals.anterior.resgate)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-6">
+                      <span className="text-gray-500">Líquido</span>
+                      <span className={`font-semibold ${
+                        faturaTotals.anterior.liquido === 0 ? 'text-gray-500'
+                          : faturaTotals.anterior.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                      }`}>{fmt(faturaTotals.anterior.liquido)}</span>
+                    </div>
+                    <div className="border-t border-gray-700/60 my-1" />
+                  </>
                 )}
-                <span className="text-blue-600">Este mês <span className="font-semibold">{fmt(f.debEsteMes)}</span></span>
-                {f.resgates > 0 && (
-                  <span className="text-orange-600">Resgate <span className="font-semibold">-{fmt(f.resgates)}</span></span>
-                )}
-                <span className={`font-semibold ${f.liquido >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>= Líquido {fmt(f.liquido)}</span>
-              </span>
-            ))}
+                <div className="flex items-center justify-between gap-6">
+                  <span className="text-gray-500">Fatura {faturaTotals.atual.ref}</span>
+                  <span className="font-semibold text-blue-600">{fmt(faturaTotals.atual.entradas)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-6">
+                  <span className="text-gray-500">Total</span>
+                  <span className={`font-semibold ${faturaTotals.total < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(faturaTotals.total)}</span>
+                </div>
+              </div>
+            )}
             <ReconciledTotals
               conciliado={reconciledTotals.conciliado}
               pendente={reconciledTotals.pendente}
