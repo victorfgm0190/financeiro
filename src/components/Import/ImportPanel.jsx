@@ -992,7 +992,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text, categories))
       } else {
         const rawRows = await parseFile(file)
-        ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
+        // Fatura do Itaú (internet banking): header "Data … Valor", coluna Lançamento e datas
+        // em serial numérico. Tenta primeiro o parser do Itaú; se não achar lançamentos, cai
+        // no formato Dindin (header com "Descrição").
+        const itau = parseItauXLS(rawRows, categories)
+        if (itau.rows.length > 0) {
+          ;({ cardName, faturaStr, rows: parsed } = itau)
+        } else {
+          ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
+        }
       }
 
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }

@@ -18,14 +18,32 @@ export function parseFile(file) {
   })
 }
 
+// Serial de data do Excel (dias desde 1899-12-30) → 'YYYY-MM-DD'. O Itaú passou a exportar
+// as datas da fatura como número serial (ex.: 46195 = 2026-06-15) em vez de texto. Constrói
+// a data na meia-noite UTC exata, então toISOString não desloca o dia. Retorna '' fora de um
+// intervalo de anos plausível (2000–2100), para não confundir números avulsos com datas.
+export function excelSerialToISO(serial) {
+  if (typeof serial !== 'number' || !isFinite(serial) || serial <= 0) return ''
+  const d = new Date(Math.round((serial - 25569) * 86400 * 1000))
+  if (isNaN(d.getTime())) return ''
+  const y = d.getUTCFullYear()
+  if (y < 2000 || y > 2100) return ''
+  return d.toISOString().split('T')[0]
+}
+
 export function normalizeDate(val) {
   if (!val) return ''
   if (val instanceof Date) return val.toISOString().split('T')[0]
+  // Serial numérico do Excel (novo formato de exportação do Itaú).
+  if (typeof val === 'number') return excelSerialToISO(val)
   const s = String(val)
   const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
   if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`
   const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (m2) return s.slice(0, 10)
+  // Fallback: serial do Excel vindo como texto ("46195").
+  const t = s.trim()
+  if (/^\d{4,6}$/.test(t)) return excelSerialToISO(Number(t))
   return s
 }
 
