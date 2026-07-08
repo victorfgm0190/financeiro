@@ -701,36 +701,35 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     const refAnterior = mkRef(prevCycle)
     const mesAnoAnterior = `${prevCycle.getFullYear()}-${String(prevCycle.getMonth() + 1).padStart(2, '0')}`
 
-    let entradasAnt = 0, entradasAtual = 0, resgate = 0
-    for (const tx of transactions) {
-      const ref = tx.faturaRef
-      if (!ref) continue
-      if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
-      const d = txDelta(tx, account.id)
-      if (d > 0) {
-        if (ref === refAnterior) entradasAnt = r2(entradasAnt + d)
-        else if (ref === refAtual) entradasAtual = r2(entradasAtual + d)
-      } else if (d < 0 && tx.sourceScheduleId && ref === refAnterior) {
-        resgate = r2(resgate + (-d))
+    const mesAnoAtual = `${curCycle.getFullYear()}-${String(curCycle.getMonth() + 1).padStart(2, '0')}`
+
+    // Resume UMA fatura: entradas (etapa A recebida na subconta, d>0) e resgate = devoluções/
+    // resgates JÁ EXECUTADOS (saídas d<0 com sourceScheduleId, mesma faturaRef) + agendamentos
+    // gerenciais PENDENTES (não registrados) que saem desta subconta com o mesmo fatura_mes_ano.
+    // Aplica-se igual à fatura anterior e à atual. Líquido = entradas − resgate.
+    const resumoFatura = (ref, mesAno) => {
+      let entradas = 0, resgate = 0
+      for (const tx of transactions) {
+        if (tx.faturaRef !== ref) continue
+        if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
+        const d = txDelta(tx, account.id)
+        if (d > 0) entradas = r2(entradas + d)
+        else if (d < 0 && tx.sourceScheduleId) resgate = r2(resgate + (-d))
       }
-    }
-    // Resgates PENDENTES da fatura anterior: agendamentos de devolução/resgate que SAEM desta
-    // subconta (accountId === conta) ainda não registrados. Grupo G → 'gerencial_devolucao';
-    // conta-origem de reserva → 'resgate_reserva'.
-    for (const s of schedules) {
-      if (s.accountId !== account.id) continue
-      if (s.tipo !== 'gerencial_devolucao' && s.tipo !== 'resgate_reserva') continue
-      if (s.faturaMesAno !== mesAnoAnterior) continue
-      if ((s.registered || []).length > 0) continue
-      resgate = r2(resgate + (Number(s.amount) || 0))
+      for (const s of schedules) {
+        if (s.accountId !== account.id) continue
+        if (s.tipo !== 'gerencial_devolucao' && s.tipo !== 'resgate_reserva') continue
+        if (s.faturaMesAno !== mesAno) continue
+        if ((s.registered || []).length > 0) continue
+        resgate = r2(resgate + (Number(s.amount) || 0))
+      }
+      return { ref, entradas, resgate, liquido: r2(entradas - resgate) }
     }
 
-    const anterior = entradasAnt > 0
-      ? { ref: refAnterior, entradas: entradasAnt, resgate, liquido: r2(entradasAnt - resgate) }
-      : null
+    const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
     return {
-      anterior,
-      atual: { ref: refAtual, entradas: entradasAtual },
+      anterior: anteriorResumo.entradas > 0 ? anteriorResumo : null,
+      atual: resumoFatura(refAtual, mesAnoAtual),
       total: Number(account.balance) || 0,
     }
   }, [transactions, schedules, account.id, account.balance, isGerencial, settings])
@@ -996,32 +995,29 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 text-xs">
             {faturaTotals && (
               <div className="rounded bg-gray-800/60 px-3 py-1.5 space-y-1 min-w-[210px]">
-                {faturaTotals.anterior && (
-                  <>
+                {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
+                  <div key={f.ref} className="space-y-1">
+                    {i > 0 && <div className="border-t border-gray-700/60 my-1" />}
                     <div className="flex items-center justify-between gap-6">
-                      <span className="text-gray-500">Fatura {faturaTotals.anterior.ref}</span>
-                      <span className="font-semibold text-blue-600">{fmt(faturaTotals.anterior.entradas)}</span>
+                      <span className="text-gray-500">Fatura {f.ref}</span>
+                      <span className="font-semibold text-blue-600">{fmt(f.entradas)}</span>
                     </div>
-                    {faturaTotals.anterior.resgate > 0 && (
+                    {f.resgate > 0 && (
                       <div className="flex items-center justify-between gap-6">
                         <span className="text-gray-500">Resgate</span>
-                        <span className="font-semibold text-orange-600">{fmt(faturaTotals.anterior.resgate)}</span>
+                        <span className="font-semibold text-orange-600">{fmt(f.resgate)}</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between gap-6">
-                      <span className="text-gray-500">Líquido</span>
-                      <span className={`font-semibold ${
-                        faturaTotals.anterior.liquido === 0 ? 'text-gray-500'
-                          : faturaTotals.anterior.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
-                      }`}>{fmt(faturaTotals.anterior.liquido)}</span>
-                    </div>
-                    <div className="border-t border-gray-700/60 my-1" />
-                  </>
-                )}
-                <div className="flex items-center justify-between gap-6">
-                  <span className="text-gray-500">Fatura {faturaTotals.atual.ref}</span>
-                  <span className="font-semibold text-blue-600">{fmt(faturaTotals.atual.entradas)}</span>
-                </div>
+                    {f.entradas > 0 && (
+                      <div className="flex items-center justify-between gap-6">
+                        <span className="text-gray-500">Líquido</span>
+                        <span className={`font-semibold ${
+                          f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                        }`}>{fmt(f.liquido)}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
                 <div className="flex items-center justify-between gap-6">
                   <span className="text-gray-500">Total</span>
                   <span className={`font-semibold ${faturaTotals.total < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(faturaTotals.total)}</span>
