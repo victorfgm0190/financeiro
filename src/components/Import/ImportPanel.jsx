@@ -614,8 +614,8 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
 // Reescreve cada linha base para o mês de referência. As parcelas geradas (siblings)
 // seguem ancoradas à fatura da linha base.
 //
-// Itaú CSV (row._csvItau): fatura_ref = SEMPRE o mês de referência; a date de sistema
-// mantém a data original do CSV quando ela está dentro do período válido da fatura
+// Itaú CSV e XLS/XLSX (row._itau): fatura_ref = SEMPRE o mês de referência; a date de sistema
+// mantém a data original do arquivo quando ela está dentro do período válido da fatura
 // (início = closingDay+1 do mês anterior; fim = closingDay do mês de referência) e, se
 // estiver fora (parcelados antigos), clampa para o dia de fechamento do mês de referência.
 //
@@ -631,7 +631,7 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStar
     const clampedDay = String(Math.min(origDay, daysInMonth)).padStart(2, '0')
     const dateCartao = row._dateCartao || row.date
     const num = row._installment?.num || 1
-    if (row._csvItau) {
+    if (row._itau) {
       const baseDate = clampDateToFatura(dateCartao, reference, closingDay)
       return {
         ...row,
@@ -985,6 +985,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     try {
       const isCsv = /\.csv$/i.test(file.name)
       let cardName = '', faturaStr = '', parsed = []
+      // Marca origem Itaú (CSV ou XLS/XLSX do internet banking): fatura_ref fixa no mês de
+      // referência selecionado. O XLS do Dindin continua com o cálculo pelo fechamento.
+      let isItau = isCsv
 
       if (isCsv) {
         const text = await readFileAsText(file)
@@ -998,6 +1001,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const itau = parseItauXLS(rawRows, categories)
         if (itau.rows.length > 0) {
           ;({ cardName, faturaStr, rows: parsed } = itau)
+          isItau = true
         } else {
           ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
         }
@@ -1055,8 +1059,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaMonthYear: baseFatura, _origDay: rowDay,
           // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
           _dateCartao: row.date,
-          // Itaú CSV usa regra própria de date/fatura_ref em applyReferenceFatura.
-          _csvItau: isCsv,
+          // Itaú (CSV e XLS/XLSX) usa regra própria de date/fatura_ref em applyReferenceFatura:
+          // fatura_ref = sempre o mês de referência selecionado.
+          _itau: isItau,
         }
         processed.push(baseRow)
         // As parcelas futuras (num+1 … total) não entram na lista principal — são
