@@ -711,18 +711,25 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     const mesAnoAtual = mkYm(atualCycle)
     const mesAnoAnterior = mkYm(anteriorCycle)
 
-    // Resume UMA fatura: entradas (etapa A recebida na subconta, d>0) e resgate = devoluções/
-    // resgates JÁ EXECUTADOS (saídas d<0 com sourceScheduleId, mesma faturaRef) + agendamentos
-    // gerenciais PENDENTES (não registrados) que saem desta subconta com o mesmo fatura_mes_ano.
-    // Aplica-se igual à fatura anterior e à atual. Líquido = entradas − resgate.
+    // Resume UMA fatura. As entradas (etapa A recebida na subconta, d>0) são separadas pela
+    // FRONTEIRA = dia 1 do mês da fatura: date < 01/MM → "mês anterior" (gastos do mês anterior que
+    // já pertencem a esta fatura); date >= 01/MM → "este mês". Resgate = devoluções/resgates JÁ
+    // EXECUTADOS (saídas d<0 com sourceScheduleId, mesma faturaRef) + agendamentos gerenciais
+    // PENDENTES (não registrados/pulados) que saem desta subconta com o mesmo fatura_mes_ano.
+    // Líquido = (mês ant. + este mês) − resgate. Aplica-se igual à fatura anterior e à atual.
     const resumoFatura = (ref, mesAno) => {
-      let entradas = 0, resgate = 0
+      const cutMonth = `${mesAno}-01` // dia 1 do mês da fatura; tx.date é ISO YYYY-MM-DD (compara string)
+      let mesAnt = 0, esteMes = 0, resgate = 0
       for (const tx of transactions) {
         if (tx.faturaRef !== ref) continue
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
-        if (d > 0) entradas = r2(entradas + d)
-        else if (d < 0 && tx.sourceScheduleId) resgate = r2(resgate + (-d))
+        if (d > 0) {
+          if ((tx.date || '') < cutMonth) mesAnt = r2(mesAnt + d)
+          else esteMes = r2(esteMes + d)
+        } else if (d < 0 && tx.sourceScheduleId) {
+          resgate = r2(resgate + (-d))
+        }
       }
       for (const s of schedules) {
         if (s.accountId !== account.id) continue
@@ -731,7 +738,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         if (countEntries(s.registered) > 0 || countEntries(s.skipped) > 0) continue // já executado/pulado
         resgate = r2(resgate + (Number(s.amount) || 0))
       }
-      return { ref, entradas, resgate, liquido: r2(entradas - resgate) }
+      const entradas = r2(mesAnt + esteMes)
+      return { ref, mesAnt, esteMes, entradas, resgate, liquido: r2(entradas - resgate) }
     }
 
     const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
@@ -1006,10 +1014,19 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
                   <div key={f.ref} className="space-y-1">
                     {i > 0 && <div className="border-t border-gray-700/60 my-1" />}
-                    <div className="flex items-center justify-between gap-6">
-                      <span className="text-gray-500">Fatura {f.ref}</span>
-                      <span className="font-semibold text-blue-600">{fmt(f.entradas)}</span>
-                    </div>
+                    <div className="text-gray-400 font-medium">Fatura {f.ref}</div>
+                    {f.mesAnt > 0 && (
+                      <div className="flex items-center justify-between gap-6">
+                        <span className="text-gray-500">Mês anterior</span>
+                        <span className="font-semibold text-blue-600">{fmt(f.mesAnt)}</span>
+                      </div>
+                    )}
+                    {f.esteMes > 0 && (
+                      <div className="flex items-center justify-between gap-6">
+                        <span className="text-gray-500">Este mês</span>
+                        <span className="font-semibold text-blue-600">{fmt(f.esteMes)}</span>
+                      </div>
+                    )}
                     {f.resgate > 0 && (
                       <div className="flex items-center justify-between gap-6">
                         <span className="text-gray-500">Resgate</span>
