@@ -1374,16 +1374,22 @@ export function AppProvider({ children }) {
       accounts = applyBalanceEffect(accounts, newTx, 1)
       let transactions = d.transactions.map(t => t.id === id ? newTx : t)
 
-      // Mudança de grupo gerencial que SAI do Grupo G (number 1): remove a etapa A órfã
-      // (transferência imediata Conta Principal → Ger. subconta, id tx_gerA_<id>) e desfaz seu
-      // efeito no saldo. O motor (reconcileFaturaState) CRIA a etapa A ao ENTRAR em G, mas não a
-      // remove ao SAIR — a remoção é por id (mesmo padrão de deleteTransaction / reverseGerencialCascadeOnly).
-      // Os agendamentos geridos (resgate_reserva / gerencial_devolucao / pagamento_fatura) do grupo
-      // ANTIGO e do NOVO são reconstruídos pelo gatilho reconciliarGerencial logo abaixo.
+      // Mudança de grupo gerencial de uma despesa de cartão: mantém a etapa A (transferência
+      // imediata Conta Principal → Ger. subconta, id tx_gerA_<id>) em sincronia — de forma
+      // SÍNCRONA aqui, não delegada ao motor. Motivo: reconcileFaturaState só materializa a
+      // etapa A para faturas do ciclo financeiro ATUAL/futuro (guarda faturaCicloNoPassado);
+      // ao editar um lançamento de uma fatura de ciclo já encerrado (caso comum ao reclassificar
+      // faturas importadas), a criação/remoção delegada não acontecia. Os agendamentos geridos
+      // (resgate_reserva / gerencial_devolucao / pagamento_fatura) continuam pelo gatilho
+      // reconciliarGerencial logo abaixo.
       if (oldTx.type === 'expense' && oldTx.accountType === 'credit') {
         const oldGrupo = d.gerencialGroups?.find(g => g.id === oldTx.grupoGerencial)
         const newGrupo = d.gerencialGroups?.find(g => g.id === newTx.grupoGerencial)
-        if (oldGrupo?.number === 1 && newGrupo?.number !== 1) {
+        const wasG = oldGrupo?.number === 1
+        const isG = newGrupo?.number === 1
+        if (wasG && !isG) {
+          // SAI do Grupo G → remove a etapa A órfã por id e desfaz seu efeito no saldo
+          // (mesmo padrão de deleteTransaction / reverseGerencialCascadeOnly).
           const etapaATx = transactions.find(t => t.id === etapaAId(id))
           if (etapaATx) {
             accounts = accounts.map(a => {
@@ -1392,6 +1398,50 @@ export function AppProvider({ children }) {
               return a
             })
             transactions = transactions.filter(t => t.id !== etapaATx.id)
+          }
+        } else if (!wasG && isG) {
+          // ENTRA no Grupo G → cria a etapa A imediata (à vista / parcela 1), simétrica à remoção.
+          // Parcela 2..N não tem etapa A imediata (provisão fica p/ o Executar Gerenciais). Idempotente:
+          // usa o id determinístico tx_gerA_<id> e o mesmo formato do motor (reconcileFaturaState §7),
+          // então o reconcile seguinte reencontra a etapa A e não a duplica nem reaplica saldo.
+          const ehParcela2aN = Number(newTx.installmentNum) > 1 || newTx.parentTxId != null || newTx.origin === 'parcela'
+          const jaExiste = transactions.some(t => t.id === etapaAId(id))
+          const card = d.accounts.find(a => a.id === newTx.accountId)
+          const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+            || d.accounts.find(a => a.isMain && a.type !== 'credit')
+            || d.accounts.find(a => a.type === 'checking')
+          if (!ehParcela2aN && !jaExiste && card && contaPrincipal) {
+            const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
+            const subcontaName = `Ger. ${apelido}`
+            let subconta = accounts.find(a => a.name === subcontaName)
+            if (!subconta) {
+              subconta = {
+                id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+                name: subcontaName, type: 'checking', balance: 0,
+                bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
+                fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+                grupoGerencial: newGrupo.id, accountGroupId: contaPrincipal.accountGroupId || null,
+              }
+              accounts = [...accounts, subconta]
+            }
+            const amount = Number(newTx.amount) || 0
+            const faturaRef = newTx.faturaMonthYear
+              ? (() => { const [y, m] = newTx.faturaMonthYear.split('-'); return `${m}/${y}` })()
+              : computeFaturaRef(new Date(newTx.date + 'T00:00:00'), card.closingDay || 14)
+            transactions = [...transactions, {
+              id: etapaAId(id), type: 'transfer',
+              accountId: contaPrincipal.id, toAccountId: subconta.id,
+              amount, date: newTx.date,
+              description: `Reserva Gerencial - ${newTx.description || ''}`.trim(),
+              grupoGerencial: newGrupo.id, cardId: newTx.accountId,
+              faturaRef, sourceExpenseId: id,
+              createdAt: new Date().toISOString(),
+            }]
+            accounts = accounts.map(a => {
+              if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - amount) }
+              if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + amount) }
+              return a
+            })
           }
         }
       }
