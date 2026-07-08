@@ -689,19 +689,27 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const faturaTotals = useMemo(() => {
     if (!isGerencial) return null
     const r2 = (x) => Math.round(x * 100) / 100
+    // Conta ocorrências em registered/skipped tolerando array ([]) ou objeto ({}), pois o JSONB
+    // pode vir em qualquer das duas formas. > 0 = agendamento já executado/pulado (não pendente).
+    const countEntries = (v) => Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 0)
     const startDay = settings?.financialMonthStartDay || 1
-    // Mês do ciclo financeiro atual (no modo custom, antes do startDay ainda é o mês anterior).
     const nowRef = new Date()
-    const curCycle = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
+    // Âncora do ciclo financeiro corrente: no modo custom, antes do dia startDay o ciclo ainda é o
+    // do mês anterior (ex.: 08/07 com startDay 15 → ciclo iniciado em 15/06 → âncora = junho).
+    const cycleAnchor = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
       ? new Date(nowRef.getFullYear(), nowRef.getMonth() - 1, 1)
       : new Date(nowRef.getFullYear(), nowRef.getMonth(), 1)
-    const prevCycle = new Date(curCycle.getFullYear(), curCycle.getMonth() - 1, 1)
+    // A FATURA atual é a que vence no FIM do ciclo corrente = mês SEGUINTE ao âncora (sua devolução,
+    // no dia startDay do mês da fatura, ainda está por ocorrer). A anterior é o próprio mês âncora.
+    // Ex.: âncora junho → fatura atual 07/2026, fatura anterior 06/2026.
+    const atualCycle = new Date(cycleAnchor.getFullYear(), cycleAnchor.getMonth() + 1, 1)
+    const anteriorCycle = cycleAnchor
     const mkRef = (dt) => `${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
-    const refAtual = mkRef(curCycle)
-    const refAnterior = mkRef(prevCycle)
-    const mesAnoAnterior = `${prevCycle.getFullYear()}-${String(prevCycle.getMonth() + 1).padStart(2, '0')}`
-
-    const mesAnoAtual = `${curCycle.getFullYear()}-${String(curCycle.getMonth() + 1).padStart(2, '0')}`
+    const mkYm = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
+    const refAtual = mkRef(atualCycle)
+    const refAnterior = mkRef(anteriorCycle)
+    const mesAnoAtual = mkYm(atualCycle)
+    const mesAnoAnterior = mkYm(anteriorCycle)
 
     // Resume UMA fatura: entradas (etapa A recebida na subconta, d>0) e resgate = devoluções/
     // resgates JÁ EXECUTADOS (saídas d<0 com sourceScheduleId, mesma faturaRef) + agendamentos
@@ -720,7 +728,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         if (s.accountId !== account.id) continue
         if (s.tipo !== 'gerencial_devolucao' && s.tipo !== 'resgate_reserva') continue
         if (s.faturaMesAno !== mesAno) continue
-        if ((s.registered || []).length > 0) continue
+        if (countEntries(s.registered) > 0 || countEntries(s.skipped) > 0) continue // já executado/pulado
         resgate = r2(resgate + (Number(s.amount) || 0))
       }
       return { ref, entradas, resgate, liquido: r2(entradas - resgate) }
@@ -992,7 +1000,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Totalizador gerencial (fatura anterior + atual) + Conciliados/Pendentes (lançamentos visíveis) */}
         {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals) && (
-          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-start justify-between gap-x-4 gap-y-2 text-xs">
+          <div className="border-x border-gray-800 bg-surface/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs">
             {faturaTotals && (
               <div className="rounded bg-gray-800/60 px-3 py-1.5 space-y-1 min-w-[210px]">
                 {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
