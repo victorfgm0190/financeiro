@@ -1372,7 +1372,31 @@ export function AppProvider({ children }) {
       // campos de saldo não mudam (ex.: só descrição/categoria/reconciliado), o efeito é nulo.
       let accounts = applyBalanceEffect(d.accounts, oldTx, -1)
       accounts = applyBalanceEffect(accounts, newTx, 1)
-      return { ...d, accounts, transactions: d.transactions.map(t => t.id === id ? newTx : t) }
+      let transactions = d.transactions.map(t => t.id === id ? newTx : t)
+
+      // Mudança de grupo gerencial que SAI do Grupo G (number 1): remove a etapa A órfã
+      // (transferência imediata Conta Principal → Ger. subconta, id tx_gerA_<id>) e desfaz seu
+      // efeito no saldo. O motor (reconcileFaturaState) CRIA a etapa A ao ENTRAR em G, mas não a
+      // remove ao SAIR — a remoção é por id (mesmo padrão de deleteTransaction / reverseGerencialCascadeOnly).
+      // Os agendamentos geridos (resgate_reserva / gerencial_devolucao / pagamento_fatura) do grupo
+      // ANTIGO e do NOVO são reconstruídos pelo gatilho reconciliarGerencial logo abaixo.
+      if (oldTx.type === 'expense' && oldTx.accountType === 'credit') {
+        const oldGrupo = d.gerencialGroups?.find(g => g.id === oldTx.grupoGerencial)
+        const newGrupo = d.gerencialGroups?.find(g => g.id === newTx.grupoGerencial)
+        if (oldGrupo?.number === 1 && newGrupo?.number !== 1) {
+          const etapaATx = transactions.find(t => t.id === etapaAId(id))
+          if (etapaATx) {
+            accounts = accounts.map(a => {
+              if (a.id === etapaATx.accountId)   return { ...a, balance: rb(a.balance + etapaATx.amount) }
+              if (a.id === etapaATx.toAccountId) return { ...a, balance: rb(a.balance - etapaATx.amount) }
+              return a
+            })
+            transactions = transactions.filter(t => t.id !== etapaATx.id)
+          }
+        }
+      }
+
+      return { ...d, accounts, transactions }
     })
     if (recalcArgs) {
       recalcFaturaRef.current?.(recalcArgs.cartaoId, recalcArgs.updated.date, recalcArgs.updated.faturaMonthYear)
