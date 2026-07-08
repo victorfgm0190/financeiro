@@ -694,16 +694,25 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     const countEntries = (v) => Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 0)
     const startDay = settings?.financialMonthStartDay || 1
     const nowRef = new Date()
-    // Âncora do ciclo financeiro corrente: no modo custom, antes do dia startDay o ciclo ainda é o
-    // do mês anterior (ex.: 08/07 com startDay 15 → ciclo iniciado em 15/06 → âncora = junho).
-    const cycleAnchor = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
-      ? new Date(nowRef.getFullYear(), nowRef.getMonth() - 1, 1)
-      : new Date(nowRef.getFullYear(), nowRef.getMonth(), 1)
-    // A FATURA atual é a que vence no FIM do ciclo corrente = mês SEGUINTE ao âncora (sua devolução,
-    // no dia startDay do mês da fatura, ainda está por ocorrer). A anterior é o próprio mês âncora.
-    // Ex.: âncora junho → fatura atual 07/2026, fatura anterior 06/2026.
-    const atualCycle = new Date(cycleAnchor.getFullYear(), cycleAnchor.getMonth() + 1, 1)
-    const anteriorCycle = cycleAnchor
+    // O totalizador segue o MÊS VISUALIZADO no extrato (selectedMonth = year/month, 1-indexed),
+    // não o mês de hoje. Regras:
+    //   • Visualizando o mês CALENDÁRIO corrente → mantém a lógica do ciclo financeiro: antes do dia
+    //     startDay a fatura atual ainda é a do mês visualizado; a partir do startDay, a do mês seguinte
+    //     (a devolução, no dia startDay do mês da fatura, ainda está por ocorrer).
+    //   • Visualizando um mês passado/futuro → o ciclo daquele mês está encerrado: fatura atual = mês
+    //     visualizado, fatura anterior = mês anterior a ele.
+    const isMesCorrente = year === nowRef.getFullYear() && (month - 1) === nowRef.getMonth()
+    let atualCycle, anteriorCycle
+    if (isMesCorrente) {
+      const cycleAnchor = ((settings?.financialMonthMode || 'custom') !== 'calendar' && nowRef.getDate() < startDay)
+        ? new Date(year, month - 2, 1)  // ciclo ainda no mês anterior ao visualizado
+        : new Date(year, month - 1, 1)  // ciclo no próprio mês visualizado
+      atualCycle = new Date(cycleAnchor.getFullYear(), cycleAnchor.getMonth() + 1, 1)
+      anteriorCycle = cycleAnchor
+    } else {
+      atualCycle = new Date(year, month - 1, 1)      // fatura do próprio mês visualizado
+      anteriorCycle = new Date(year, month - 2, 1)   // fatura do mês anterior
+    }
     const mkRef = (dt) => `${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
     const mkYm = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
     const refAtual = mkRef(atualCycle)
@@ -748,7 +757,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       atual: resumoFatura(refAtual, mesAnoAtual),
       total: Number(account.balance) || 0,
     }
-  }, [transactions, schedules, account.id, account.balance, isGerencial, settings])
+  }, [transactions, schedules, account.id, account.balance, isGerencial, settings, year, month])
 
   const allVisibleSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id))
   const toggleSelectAllVisible = () => setSelectedIds(prev => {
