@@ -10,6 +10,7 @@ const TYPES = [
   { value: 'savings', label: 'Poupança' },
   { value: 'credit', label: 'Cartão de Crédito' },
   { value: 'cash', label: 'Dinheiro' },
+  { value: 'gerencial', label: 'Gerencial' },
   { value: 'asset', label: 'Bem / Ativo' },
   { value: 'liability', label: 'Dívida / Passivo' },
 ]
@@ -116,6 +117,8 @@ export default function AccountForm({ initial, onClose }) {
       name: form.name,
       apelido: form.apelido.slice(0, 8),
       type: form.type,
+      // Flag de conta gerencial: verdadeira quando o tipo é "gerencial" (identificador explícito).
+      isGerencial: form.type === 'gerencial',
       bank: form.bank,
       balance: isCredit
         ? (initial?.balance || 0)

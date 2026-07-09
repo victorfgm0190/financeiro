@@ -118,6 +118,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     faturaMonthYear: initial?.faturaMonthYear || '',
+    faturaRef: initial?.faturaRef || '',
     reservaFuncaoId: initial?.reservaFuncaoId || '',
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
@@ -252,6 +253,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     return { billTotal, pagando, dif: Math.round((pagando - billTotal) * 100) / 100 }
   }, [form.type, transferToAcc, transactions, schedules, form.faturaMonthYear, form.amount])
   const transferFromAcc = form.type === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
+  // Conta gerencial: tipo 'gerencial', flag isGerencial, ou grupoGerencial já preenchido (flag existente).
+  const isGerencialAccount = (a) => a?.type === 'gerencial' || a?.isGerencial === true || a?.grupoGerencial != null
+  // Campo "Fatura de Referência": só em transferências que envolvem uma conta gerencial (origem ou destino).
+  const showFaturaRef = form.type === 'transfer' && (isGerencialAccount(transferFromAcc) || isGerencialAccount(transferToAcc))
   const isDepositToReserva = !!transferToAcc?.isReserva
   const isWithdrawFromReserva = !!transferFromAcc?.isReserva
   const reservaTransferAcc = isDepositToReserva ? transferToAcc : isWithdrawFromReserva ? transferFromAcc : null
@@ -385,6 +390,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear
         : (form.type === 'transfer' && transferToAcc?.type === 'credit' && form.faturaMonthYear) ? form.faturaMonthYear
         : null,
+      // Fatura de Referência (MM/AAAA) — editável só em transferências gerenciais; nos demais casos
+      // preserva o valor existente (ex.: etapa A tx_gerA_* já traz faturaRef própria).
+      faturaRef: showFaturaRef ? ((form.faturaRef || '').trim() || null) : (initial?.faturaRef ?? null),
       dateCartao: form.dateCartao || null,
       installmentNum,
       installmentTotal,
@@ -1252,6 +1260,18 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <label className="label">Descrição</label>
         <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Descrição do lançamento" />
       </div>
+
+      {showFaturaRef && (
+        <div>
+          <label className="label">Fatura de Referência</label>
+          <input
+            className="input"
+            value={form.faturaRef}
+            onChange={e => set('faturaRef', e.target.value)}
+            placeholder="MM/AAAA (ex: 06/2026)"
+          />
+        </div>
+      )}
 
       {/* Item 6: card "Parcela N de M" editável (override manual) + irmãs + geração das faltantes. */}
       {eligivelParcela && (

@@ -167,6 +167,7 @@ export default async function handler(req, res) {
     // condicional (consórcio, imóvel na planta, previdência). Comportamento igual à
     // reserva específica; categoria vinculada gera despesa/receita automática.
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_investimento BOOLEAN DEFAULT false`)
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_gerencial BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS investment_category_id TEXT`)
     // Migração de dados: contas que já eram reserva passam a ter vinculo_tipo='reserva'.
     await query(`UPDATE contas SET vinculo_tipo = 'reserva' WHERE is_reserva = true AND (vinculo_tipo IS NULL OR vinculo_tipo = 'none')`)
