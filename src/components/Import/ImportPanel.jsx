@@ -838,6 +838,76 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   )
 }
 
+// Modal "Categoria → Gerencial": lista as associações únicas (categoria → grupo gerencial mais
+// comum) dos lançamentos do preview. Trocar o grupo de uma categoria aplica em lote (onChangeGrupo
+// → setRows) a TODOS os lançamentos daquela categoria, imediatamente. Sem botão "Aplicar".
+function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose }) {
+  const assoc = useMemo(() => {
+    const catName = (id) => (id ? (categories.find(c => c.id === id)?.name || 'Categoria') : 'Sem categoria')
+    const map = new Map() // catId ('' = sem categoria) → Map(grupoId → contagem)
+    for (const r of rows) {
+      const catId = r.categoryId || ''
+      if (!map.has(catId)) map.set(catId, new Map())
+      const gc = map.get(catId)
+      const g = r.grupoGerencial || ''
+      gc.set(g, (gc.get(g) || 0) + 1)
+    }
+    const list = [...map.entries()].map(([catId, gc]) => {
+      let grupo = '', top = -1
+      for (const [g, c] of gc) { if (c > top) { top = c; grupo = g } }
+      return { catId, name: catName(catId), grupo }
+    })
+    list.sort((a, b) => {
+      if (!a.catId && b.catId) return 1  // "Sem categoria" por último
+      if (a.catId && !b.catId) return -1
+      return a.name.localeCompare(b.name, 'pt-BR')
+    })
+    return list
+  }, [rows, categories])
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-gray-100">Categoria → Gerencial</h3>
+        <p className="text-xs text-gray-500">Trocar o grupo de uma categoria aplica em todos os lançamentos dela nesta importação.</p>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-xs text-gray-400">
+                <th className="text-left px-2 py-2 font-medium">Categoria</th>
+                <th className="text-left px-2 py-2 font-medium">Grupo Gerencial</th>
+              </tr>
+            </thead>
+            <tbody>
+              {assoc.map(item => (
+                <tr key={item.catId || '__none__'} className="border-b border-gray-800/50">
+                  <td className="px-2 py-1.5 text-gray-200 truncate max-w-[220px]" title={item.name}>{item.name}</td>
+                  <td className="px-2 py-1.5">
+                    <select
+                      className="input text-xs py-1"
+                      value={item.grupo}
+                      onChange={e => onChangeGrupo(item.catId, e.target.value)}
+                    >
+                      {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
+                    </select>
+                  </td>
+                </tr>
+              ))}
+              {assoc.length === 0 && (
+                <tr><td colSpan={2} className="px-2 py-4 text-center text-gray-600 text-xs">Nenhum lançamento.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end">
+          <button className="btn-primary" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // installment_key de um lançamento EXISTENTE (usa num/total gravados; cai p/ detecção
 // quando faltarem). null quando não é parcela reconhecível.
 function keyOfExistingTx(tx) {
@@ -980,6 +1050,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [confirmRevertId, setConfirmRevertId] = useState(null)
   const [editingImport, setEditingImport] = useState(null)
   const [showBatchFill, setShowBatchFill] = useState(false)
+  const [showCatGer, setShowCatGer] = useState(false)
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
   const [showImportPreview, setShowImportPreview] = useState(false)
@@ -1384,6 +1455,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             grupoGerencial: grupoGerencial || r.grupoGerencial,
             _reservaFuncaoId: grupoGerencial ? (reservaFuncaoId || null) : r._reservaFuncaoId,
           }
+        : r
+    ))
+  }
+
+  // Cat → Ger: troca o grupo gerencial de TODOS os rows de uma categoria (catId '' = sem categoria).
+  const applyCatGer = (catId, novoGrupo) => {
+    if (!novoGrupo) return
+    setRows(prev => prev.map(r =>
+      (catId ? r.categoryId === catId : !r.categoryId)
+        ? { ...r, grupoGerencial: novoGrupo }
         : r
     ))
   }
@@ -2504,6 +2585,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           onClose={() => setShowBatchFill(false)}
         />
       )}
+      {showCatGer && (
+        <CatGerModal
+          rows={rows}
+          categories={categories}
+          sortedGrupos={sortedGrupos}
+          onChangeGrupo={applyCatGer}
+          onClose={() => setShowCatGer(false)}
+        />
+      )}
 
       {rateioRow && (
         <RateioModal
@@ -2737,6 +2827,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   <Layers size={12} /> Preencher em Lote
                 </button>
               )}
+              <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={() => setShowCatGer(true)}>
+                <ArrowRight size={12} /> Cat → Ger
+              </button>
               <button className="btn-secondary text-xs py-1.5" onClick={() => { setRows([]); setEditingImport(null) }}>
                 <X size={12} className="mr-1 inline" /> Cancelar
               </button>
