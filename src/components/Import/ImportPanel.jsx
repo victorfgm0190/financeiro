@@ -1180,9 +1180,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const isParcelado = !!installInfo
         const grupoFromRules = classified?.grupoGerencial
           || classifyGerencialByRules(row.description, row.amount, isParcelado)
+        // Prioridade descrição > categoria: sem regra de descrição, usa o grupo gerencial padrão
+        // da categoria aplicada; senão, o padrão D.
+        const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
         // Função de reserva da regra → só pré-preenche quando a conta-origem do grupo
         // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
-        const grupoFinal = grupoFromRules || grupoD
+        const grupoFinal = grupoFromRules || catDefaultGrupo || grupoD
         const funcsDoGrupo = reserveFuncsForGroup(grupoFinal)
         const reservaFuncaoFromRule = (classified?.reservaFuncaoId
           && funcsDoGrupo.length > 1
@@ -1485,6 +1488,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
       // Apply gerencial rule if found and category rule didn't set a grupo
       if (gerencialId && !updates.grupoGerencial) updates.grupoGerencial = gerencialId
+
+      // Categoria (padrão): PRIORIDADE descrição > categoria. Se nenhuma regra de descrição
+      // definiu o grupo e a linha ainda está no padrão (D/vazio), usa o grupo gerencial padrão
+      // da categoria aplicada. Não sobrescreve grupo escolhido manualmente (≠ D).
+      if (!updates.grupoGerencial && (row.grupoGerencial === grupoD || !row.grupoGerencial)) {
+        const catId = updates.categoryId || row.categoryId
+        const cat = catId ? categories.find(c => c.id === catId) : null
+        if (cat?.defaultGerencialGroup) updates.grupoGerencial = cat.defaultGerencialGroup
+      }
 
       // Função de reserva da regra → só aplica quando a conta-origem do grupo final
       // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
@@ -2929,7 +2941,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               categories={categories}
                               className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                               value={row.categoryId}
-                              onChange={e => { updateRow(row._id, { categoryId: e.target.value }); if (e.target.value) learnClassification(row.description, e.target.value, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId }) }}
+                              onChange={e => {
+                                const newCat = e.target.value
+                                const changes = { categoryId: newCat }
+                                const cat = newCat ? categories.find(c => c.id === newCat) : null
+                                // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
+                                // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
+                                if (cat?.defaultGerencialGroup && (!row.grupoGerencial || row.grupoGerencial === defaultGrupoD)) {
+                                  changes.grupoGerencial = cat.defaultGerencialGroup
+                                }
+                                updateRow(row._id, changes)
+                                if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
+                              }}
                               searchable
                             />
                           )}

@@ -422,6 +422,8 @@ export const categoryToRow = (c) => ({
   investment_account_id: c.investmentAccountId || null,
   gera_espelho: !!c.geraEspelho,
   conta_espelho_id: c.contaEspelhoId || null,
+  // Grupo gerencial padrão da categoria (id do grupo, mesmo formato de lancamentos.grupo_gerencial).
+  default_gerencial_group: c.defaultGerencialGroup || null,
 })
 
 export const rowToCategory = (r) => ({
@@ -434,6 +436,7 @@ export const rowToCategory = (r) => ({
   investmentAccountId: r.investment_account_id || null,
   geraEspelho: !!r.gera_espelho,
   contaEspelhoId: r.conta_espelho_id || null,
+  defaultGerencialGroup: r.default_gerencial_group || null,
 })
 
 export const budgetToRow = (b) => ({

@@ -325,6 +325,19 @@ export default function SettingsPanel() {
           <option value="">Sem grupo</option>
           {categoryGroups.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
+        <select
+          className="input w-auto text-xs py-1 max-w-[150px]"
+          title="Grupo Gerencial Padrão — pré-seleciona este grupo ao lançar/importar nesta categoria (regra por descrição tem prioridade)"
+          value={cat.defaultGerencialGroup || ''}
+          onChange={e => updateCategory(cat.id, { defaultGerencialGroup: e.target.value || null })}
+        >
+          <option value="">Sem grupo gerencial</option>
+          {[...gerencialGroups].sort((a, b) => {
+            if (a.number === 'D') return 1
+            if (b.number === 'D') return -1
+            return typeof a.number === 'number' && typeof b.number === 'number' ? a.number - b.number : 0
+          }).map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
+        </select>
         {aplicAccounts.length > 0 && cat.type !== 'income' && (
           <select
             className="input w-auto text-xs py-1 max-w-[150px]"

@@ -177,6 +177,7 @@ export default async function handler(req, res) {
     // Empréstimos: categoria gera lançamento espelho e a conta vinculada (TEXT, sem FK).
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS conta_espelho_id TEXT`)
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS default_gerencial_group TEXT`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]'`)

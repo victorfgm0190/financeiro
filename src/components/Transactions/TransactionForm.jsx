@@ -193,6 +193,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const isCredit = selectedAccount?.type === 'credit'
   const showGerencial = isCredit && form.type === 'expense'
 
+  // Seleção de categoria: além de gravar a categoria, aplica o grupo gerencial PADRÃO da categoria
+  // quando o gerencial é aplicável (showGerencial) e o grupo atual está vazio ou no padrão D
+  // (não sobrescreve escolha manual ≠ D). Prioridade: escolha manual > padrão da categoria.
+  const onCategoryChange = (id) => {
+    set('categoryId', id)
+    const cat = id ? categories.find(c => c.id === id) : null
+    if (cat?.defaultGerencialGroup && showGerencial && (!form.grupoGerencial || form.grupoGerencial === defaultGrupoId)) {
+      set('grupoGerencial', cat.defaultGerencialGroup)
+    }
+  }
+
   // Grupo gerencial numerado (2,3,…) selecionado: a reserva é determinada pela conta-origem
   // do grupo (defaultAccountId), não escolhida pelo usuário. Nesse modo o toggle
   // "Pago com reserva?" expõe um select de FUNÇÃO de reserva (igual ao inline da importação)
@@ -1143,7 +1154,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               <SearchableSelect
                 options={expenseCatOpts}
                 value={form.categoryId}
-                onChange={id => set('categoryId', id)}
+                onChange={onCategoryChange}
                 placeholder="Sem categoria"
                 ungroupedLast
                 ungroupedLabel="Sem grupo"
@@ -1224,7 +1235,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   <SearchableSelect
                     options={categoryOpts}
                     value={form.categoryId}
-                    onChange={id => set('categoryId', id)}
+                    onChange={onCategoryChange}
                     placeholder="Sem categoria"
                     ungroupedLast
                     ungroupedLabel="Sem grupo"
