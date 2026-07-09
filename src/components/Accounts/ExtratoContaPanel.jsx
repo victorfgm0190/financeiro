@@ -728,15 +728,22 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     // Líquido = (mês ant. + este mês) − resgate. Aplica-se igual à fatura anterior e à atual.
     const resumoFatura = (ref, mesAno) => {
       const cutMonth = `${mesAno}-01` // dia 1 do mês da fatura; tx.date é ISO YYYY-MM-DD (compara string)
+      // Fallback p/ devoluções antigas sem source_schedule_id: identifica pela descrição
+      // "Devolução Gerencial" E pela fatura (faturaRef gravado OU referência MM/AAAA na descrição).
+      const isDevolucaoGerencial = (tx) => {
+        const desc = (tx.description || '').toLowerCase()
+        const ehDev = desc.includes('devolução gerencial') || desc.includes('devolucao gerencial')
+        return ehDev && (tx.faturaRef === ref || (tx.description || '').includes(ref))
+      }
       let mesAnt = 0, esteMes = 0, resgate = 0
       for (const tx of transactions) {
-        if (tx.faturaRef !== ref) continue
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
         if (d > 0) {
+          if (tx.faturaRef !== ref) continue // entradas: só por faturaRef gravado
           if ((tx.date || '') < cutMonth) mesAnt = r2(mesAnt + d)
           else esteMes = r2(esteMes + d)
-        } else if (d < 0 && tx.sourceScheduleId) {
+        } else if (d < 0 && ((tx.sourceScheduleId && tx.faturaRef === ref) || isDevolucaoGerencial(tx))) {
           resgate = r2(resgate + (-d))
         }
       }
