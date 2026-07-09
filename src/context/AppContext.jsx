@@ -4394,7 +4394,7 @@ export function AppProvider({ children }) {
       addProfile, updateProfile, deleteProfile,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
-      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions,
+      addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions, ensureGerencialState,
       rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
       addCategory, updateCategory, deleteCategory,
       categoryGroups,

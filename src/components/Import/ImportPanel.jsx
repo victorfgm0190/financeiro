@@ -934,7 +934,7 @@ function InstallmentControl({ installment, description, onChange }) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
-    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, classifyGerencialByRules,
+    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, ensureGerencialState, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     schedules,
     cardImports, addCardImport, updateCardImport, revertCardImport,
@@ -1448,6 +1448,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: reservaFuncaoId, amount: amt })
       }
 
+      // Ids gerenciais (grupo != D e != nulo) → ensureGerencialState no fim (idempotente),
+      // p/ materializar etapa A/agendamentos também em faturas de ciclo passado.
+      const gerencialTxIds = []
       toImport.forEach(row => {
         updateTransaction(row._id, {
           faturaMonthYear: row.faturaMonthYear || null,
@@ -1461,6 +1464,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         addFaturaAfetada(row.faturaMonthYear, row.date)
         if (row.grupoGerencial) {
           registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
+          if (row.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(row._id)
         }
       })
 
@@ -1488,6 +1492,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           _fromImport: true,
         })
         if (fId) novosTxIds.push(fId)
+        if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
         const parentRow = resolvedRows.find(r => r._id === fp.parentId)
         if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
         if (fp.grupoGerencial) {
@@ -1519,6 +1524,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura
       // só ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a reedição.
       reconciliarGerencial(editingImport.accountId)
+      // Garante o estado gerencial por lançamento (idempotente) — cobre faturas de ciclo passado,
+      // que o motor ignora (faturaCicloNoPassado). Os editados já passam por ensureGerencialState
+      // via updateTransaction; este laço cobre também as parcelas futuras recém-criadas.
+      gerencialTxIds.forEach(id => ensureGerencialState(id))
       setEditingImport(null)
       setResult(toImport.length)
       setRows([])
@@ -1542,6 +1551,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
 
     const txIds = []
+    // Ids dos lançamentos gerenciais (grupo != D e != nulo) → ensureGerencialState no fim, para
+    // materializar etapa A/agendamentos também em faturas de ciclo passado (o motor as ignora).
+    const gerencialTxIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
     const importClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
     const faturasAfetadas = new Set()
@@ -1591,6 +1603,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _fromImport: true,
       })
       txIds.push(txId)
+      if (txId && isExpense && row.grupoGerencial && row.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(txId)
       // Rateio: grava os rateios desta linha para o lançamento recém-criado.
       if (txId && row._rateios?.length > 0) saveRateiosFor(txId, row._rateios)
       // AJUSTE 2: cada despesa preenchida vira uma regra de classificação (contém = descrição),
@@ -1638,6 +1651,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         _fromImport: true,
       })
       if (fId) txIds.push(fId)
+      if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
       // PARTE 2: parcela futura herda o mesmo rateio da parcela principal (parent).
       const parentRow = resolvedRows.find(r => r._id === fp.parentId)
       if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
@@ -1702,6 +1716,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
     // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a importação.
     reconciliarGerencial(selectedAccount)
+    // Garante o estado gerencial por lançamento (etapa A do Grupo G / resgate dos numerados),
+    // idempotente. Necessário para faturas de CICLO PASSADO, que o motor (reconcileFaturaState)
+    // ignora pela guarda faturaCicloNoPassado — sem isto os gerenciais não seriam materializados.
+    gerencialTxIds.forEach(id => ensureGerencialState(id))
 
     const totalProcessed = toImport.length + collisionsToApply.length
     const pending = []
