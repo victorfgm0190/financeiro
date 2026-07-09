@@ -710,8 +710,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       atualCycle = new Date(cycleAnchor.getFullYear(), cycleAnchor.getMonth() + 1, 1)
       anteriorCycle = cycleAnchor
     } else {
-      atualCycle = new Date(year, month - 1, 1)      // fatura do próprio mês visualizado
-      anteriorCycle = new Date(year, month - 2, 1)   // fatura do mês anterior
+      // Mês passado/futuro: a fatura ANTERIOR é a do mês visualizado e a ATUAL é a do mês seguinte
+      // (consistente com o mês corrente antes do startDay). Ex.: jun → anterior 06/2026, atual 07/2026.
+      anteriorCycle = new Date(year, month - 1, 1)   // fatura do mês visualizado
+      atualCycle = new Date(year, month, 1)          // fatura do mês seguinte
     }
     const mkRef = (dt) => `${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`
     const mkYm = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`
