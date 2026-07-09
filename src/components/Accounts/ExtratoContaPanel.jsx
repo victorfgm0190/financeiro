@@ -737,12 +737,19 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         const ehDev = desc.includes('devolução gerencial') || desc.includes('devolucao gerencial')
         return ehDev && (tx.faturaRef === ref || (tx.description || '').includes(ref))
       }
+      // Fallback p/ entradas antigas sem faturaRef gravado: identifica pela descrição
+      // "Reserva Gerencial ... Fatura MM/YYYY" (referência MM/AAAA na descrição).
+      const isReservaGerencial = (tx) => {
+        const desc = (tx.description || '').toLowerCase()
+        return desc.includes('reserva gerencial') && (tx.description || '').includes(ref)
+      }
       let mesAnt = 0, esteMes = 0, resgateExec = 0, resgateAgend = 0
       for (const tx of transactions) {
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
         if (d > 0) {
-          if (tx.faturaRef !== ref) continue // entradas: só por faturaRef gravado
+          const faturaMatch = tx.faturaRef === ref || (!tx.faturaRef && isReservaGerencial(tx))
+          if (!faturaMatch) continue // entradas: por faturaRef gravado, ou fallback pela descrição
           if ((tx.date || '') < cutMonth) mesAnt = r2(mesAnt + d)
           else esteMes = r2(esteMes + d)
         } else if (d < 0 && ((tx.sourceScheduleId && tx.faturaRef === ref) || isDevolucaoGerencial(tx))) {
@@ -763,7 +770,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
     const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
     return {
-      anterior: anteriorResumo.entradas > 0 ? anteriorResumo : null,
+      anterior: (anteriorResumo.entradas > 0 || anteriorResumo.resgate > 0) ? anteriorResumo : null,
       atual: resumoFatura(refAtual, mesAnoAtual),
     }
   }, [transactions, schedules, account.id, account.balance, isGerencial, settings, year, month])
@@ -1117,7 +1124,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                             <span className="font-semibold text-yellow-400">{fmt(f.resgateAgend)}</span>
                           </div>
                         )}
-                        {f.entradas > 0 && (
+                        {(f.entradas > 0 || f.resgate > 0) && (
                           <div className="flex items-center justify-between gap-6">
                             <span className="text-gray-500">Líquido</span>
                             <span className={`font-semibold ${
