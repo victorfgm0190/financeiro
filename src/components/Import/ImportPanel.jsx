@@ -768,6 +768,9 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   const [categoryId, setCategoryId] = useState('')
   const [grupoGerencial, setGrupoGerencial] = useState(sortedGrupos[0]?.id || '')
   const [reservaFuncaoId, setReservaFuncaoId] = useState('')
+  // Marcado (padrão): aplica só nas despesas (type 'expense'), ignorando estornos (receitas),
+  // que já têm categoria automática própria. Desmarcado: aplica em todos os itens que casam.
+  const [apenasDespesas, setApenasDespesas] = useState(true)
   // Mesma regra do select inline: só oferece função de reserva quando a conta-origem
   // do grupo numerado tem mais de uma função.
   const funcs = reserveFuncsForGroup(grupoGerencial)
@@ -786,7 +789,7 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
               onChange={e => setContains(e.target.value)}
               placeholder="ex: uber"
               autoFocus
-              onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '') }}
+              onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '', apenasDespesas) }}
             />
           </div>
           <div>
@@ -815,9 +818,18 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
             </div>
           )}
         </div>
+        <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300 select-none">
+          <input
+            type="checkbox"
+            className="accent-[#0F6E56] w-4 h-4 shrink-0"
+            checked={apenasDespesas}
+            onChange={e => setApenasDespesas(e.target.checked)}
+          />
+          Apenas despesas (ignorar estornos)
+        </label>
         <div className="flex gap-3 justify-end">
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary" disabled={!contains.trim()} onClick={() => onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '')}>
+          <button className="btn-primary" disabled={!contains.trim()} onClick={() => onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '', apenasDespesas)}>
             Aplicar
           </button>
         </div>
@@ -1360,12 +1372,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // AJUSTE 2: preenche categoria + gerencial (+ função de reserva) em lote para itens
   // cuja descrição contém o texto. Ao trocar o grupo, redefine a função de reserva da linha
   // (mesma semântica do select inline, que zera _reservaFuncaoId quando o grupo muda).
-  const applyBatchFill = (containsText, categoryId, grupoGerencial, reservaFuncaoId) => {
+  const applyBatchFill = (containsText, categoryId, grupoGerencial, reservaFuncaoId, apenasDespesas = true) => {
     setShowBatchFill(false)
     const t = (containsText || '').trim().toLowerCase()
     if (!t) return
     setRows(prev => prev.map(r =>
-      (r.description || '').toLowerCase().includes(t)
+      (r.description || '').toLowerCase().includes(t) && (!apenasDespesas || r.type === 'expense')
         ? {
             ...r,
             categoryId: categoryId || r.categoryId,
