@@ -940,7 +940,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     cardImports, addCardImport, updateCardImport, revertCardImport,
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
-    reserveFunctions, settings, updateSettings,
+    reserveFunctions, settings, updateSettings, data,
   } = useApp()
 
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
@@ -1207,8 +1207,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Carrega uma importação do histórico para reedição
   const loadImportForEdit = (imp) => {
     const txSet = new Set(imp.txIds || [])
-    const impTxs = transactions.filter(t => txSet.has(t.id) && t.type !== 'transfer')
-    if (impTxs.length === 0) return
+    // Busca na lista COMPLETA (data.transactions), não na visão filtrada por perfil
+    // (profileTransactions), senão importações de um cartão de outro perfil não abririam.
+    const impTxs = data.transactions.filter(t => txSet.has(t.id) && t.type !== 'transfer')
+    if (impTxs.length === 0) {
+      alert('Nenhum lançamento encontrado para esta importação. Os lançamentos podem ter sido excluídos.')
+      return
+    }
     // Descrição raiz: descrição sem o sufixo de parcelamento "N/Total".
     const rootOf = (desc) => {
       const di = detectInstallment(desc || '')
@@ -1221,7 +1226,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       let reservaFuncaoId = t.reservaFuncaoId || null
       if (!reservaFuncaoId && inst && inst.num > 1) {
         const root = inst.base.toLowerCase().trim()
-        const sibling = transactions.find(o =>
+        const sibling = data.transactions.find(o =>
           o.id !== t.id && o.accountId === imp.accountId && o.reservaFuncaoId && rootOf(o.description) === root
         )
         reservaFuncaoId = sibling?.reservaFuncaoId || null
