@@ -735,7 +735,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         const ehDev = desc.includes('devolução gerencial') || desc.includes('devolucao gerencial')
         return ehDev && (tx.faturaRef === ref || (tx.description || '').includes(ref))
       }
-      let mesAnt = 0, esteMes = 0, resgate = 0
+      let mesAnt = 0, esteMes = 0, resgateExec = 0, resgateAgend = 0
       for (const tx of transactions) {
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
@@ -744,7 +744,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           if ((tx.date || '') < cutMonth) mesAnt = r2(mesAnt + d)
           else esteMes = r2(esteMes + d)
         } else if (d < 0 && ((tx.sourceScheduleId && tx.faturaRef === ref) || isDevolucaoGerencial(tx))) {
-          resgate = r2(resgate + (-d))
+          resgateExec = r2(resgateExec + (-d)) // resgate EXECUTADO (lançamento real)
         }
       }
       for (const s of schedules) {
@@ -752,17 +752,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         if (s.tipo !== 'gerencial_devolucao' && s.tipo !== 'resgate_reserva') continue
         if (s.faturaMesAno !== mesAno) continue
         if (countEntries(s.registered) > 0 || countEntries(s.skipped) > 0) continue // já executado/pulado
-        resgate = r2(resgate + (Number(s.amount) || 0))
+        resgateAgend = r2(resgateAgend + (Number(s.amount) || 0)) // resgate AGENDADO (pendente)
       }
       const entradas = r2(mesAnt + esteMes)
-      return { ref, mesAnt, esteMes, entradas, resgate, liquido: r2(entradas - resgate) }
+      const resgate = r2(resgateExec + resgateAgend)
+      return { ref, mesAnt, esteMes, entradas, resgateExec, resgateAgend, resgate, liquido: r2(entradas - resgate) }
     }
 
     const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
     return {
       anterior: anteriorResumo.entradas > 0 ? anteriorResumo : null,
       atual: resumoFatura(refAtual, mesAnoAtual),
-      total: Number(account.balance) || 0,
     }
   }, [transactions, schedules, account.id, account.balance, isGerencial, settings, year, month])
 
@@ -1085,7 +1085,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     vertical entre as colunas no desktop (border-l), com alturas iguais (items-stretch). */}
                 <div className="flex flex-wrap items-stretch gap-y-2">
                   {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => {
-                    const isAtual = f === faturaTotals.atual
                     return (
                       <div
                         key={f.ref}
@@ -1104,10 +1103,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                             <span className="font-semibold text-blue-600">{fmt(f.esteMes)}</span>
                           </div>
                         )}
-                        {f.resgate > 0 && (
+                        {f.resgateExec > 0 && (
                           <div className="flex items-center justify-between gap-6">
                             <span className="text-gray-500">Resgate</span>
-                            <span className="font-semibold text-orange-600">{fmt(f.resgate)}</span>
+                            <span className="font-semibold text-orange-600">{fmt(f.resgateExec)}</span>
+                          </div>
+                        )}
+                        {f.resgateAgend > 0 && (
+                          <div className="flex items-center justify-between gap-6">
+                            <span className="text-gray-500">Resgate (agend.)</span>
+                            <span className="font-semibold text-yellow-400">{fmt(f.resgateAgend)}</span>
                           </div>
                         )}
                         {f.entradas > 0 && (
@@ -1116,12 +1121,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                             <span className={`font-semibold ${
                               f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
                             }`}>{fmt(f.liquido)}</span>
-                          </div>
-                        )}
-                        {isAtual && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Total</span>
-                            <span className={`font-semibold ${faturaTotals.total < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(faturaTotals.total)}</span>
                           </div>
                         )}
                       </div>
