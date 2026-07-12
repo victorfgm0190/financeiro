@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, ChevronDown, ChevronUp,
   ChevronLeft, ChevronRight, X, Undo2, Edit2, Plus, Trash2, Check, Circle, CheckSquare, Zap,
-  ListChecks, PencilLine,
+  ListChecks, PencilLine, Download,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
@@ -679,6 +679,94 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     return { conciliado, pendente }
   }, [displayRows, account.id])
 
+  // Exporta o extrato atual (mês + filtros aplicados = displayRows) para .xlsx via ExcelJS
+  // (lazy-load, mesmo padrão do Demonstrativo). Uma linha por linha exibida; valores
+  // monetários como número (não texto) para permitir soma/formatação no Excel.
+  const handleExportExcel = async () => {
+    if (displayRows.length === 0) { showToast('Nenhum lançamento para exportar'); return }
+    const accName = (id) => {
+      const a = accounts.find(x => x.id === id)
+      return a ? (a.apelido || a.name) : ''
+    }
+    const r2 = (x) => Math.round(x * 100) / 100
+    const thisName = account.apelido || account.name
+
+    const ExcelJS = (await import('exceljs')).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Extrato', { views: [{ state: 'frozen', ySplit: 1 }] })
+    ws.columns = [
+      { header: 'Data', key: 'data', width: 12 },
+      { header: 'Histórico', key: 'hist', width: 44 },
+      { header: 'Fatura', key: 'fatura', width: 10 },
+      { header: 'Origem', key: 'origem', width: 22 },
+      { header: 'Favorecido', key: 'favorecido', width: 22 },
+      { header: 'De', key: 'de', width: 20 },
+      { header: 'Até', key: 'ate', width: 20 },
+      { header: 'Valor Entrada', key: 'entrada', width: 14 },
+      { header: 'Valor Saída', key: 'saida', width: 14 },
+      { header: 'Saldo', key: 'saldo', width: 15 },
+      { header: 'Conciliado', key: 'conc', width: 11 },
+    ]
+
+    for (const row of displayRows) {
+      if (row.kind === 'single') {
+        const tx = row.tx
+        const d = txDelta(tx, account.id)
+        const isTransferLike = tx.type === 'transfer' || tx.type === 'credit_payment'
+        ws.addRow({
+          data: fmtDate(tx.date),
+          hist: tx.description || '',
+          fatura: tx.faturaRef || '',
+          origem: tx.sourceExpenseId || '',
+          favorecido: tx.payee || '',
+          de: accName(tx.fromAccountId) || (isTransferLike ? accName(tx.accountId) : ''),
+          ate: accName(tx.toAccountId),
+          entrada: d > 0 ? r2(d) : null,
+          saida: d < 0 ? r2(-d) : null,
+          saldo: row.runningBalance,
+          conc: tx.reconciled ? 'Sim' : 'Não',
+        })
+      } else {
+        // Transferência netizada (par bidirecional): uma linha resumo pelo netFlow.
+        const otherName = accName(row.otherAccountId) || '?'
+        const isIn = row.netFlow > 0
+        const tx0 = row.txs[0] || {}
+        ws.addRow({
+          data: fmtDate(row.date),
+          hist: `Transferência · ${otherName}`,
+          fatura: tx0.faturaRef || '',
+          origem: '',
+          favorecido: '',
+          de: isIn ? otherName : thisName,
+          ate: isIn ? thisName : otherName,
+          entrada: isIn ? r2(row.netFlow) : null,
+          saida: !isIn ? r2(-row.netFlow) : null,
+          saldo: row.runningBalance,
+          conc: row.txs.every(t => t.reconciled) ? 'Sim' : 'Não',
+        })
+      }
+    }
+
+    // Cabeçalho em negrito.
+    const headerRow = ws.getRow(1)
+    headerRow.font = { bold: true }
+    headerRow.alignment = { vertical: 'middle' }
+    // Colunas monetárias como número (não texto).
+    for (const key of ['entrada', 'saida', 'saldo']) {
+      ws.getColumn(key).numFmt = 'R$ #,##0.00'
+    }
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    // Ex.: Gltauper-Mai2026.xlsx
+    a.download = `${thisName}-${MONTH_NAMES[month - 1]}${year}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // Totalizador gerencial (só em conta gerencial): resume a fatura ANTERIOR e a ATUAL do ciclo
   // financeiro (financialMonthStartDay, mesma regra do resto do app). Para a fatura anterior:
   //   • entradas = provisões recebidas na subconta (etapa A tx_gerA_*, txDelta > 0);
@@ -914,6 +1002,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <Zap size={12} /> Conciliar Gerenciais
               </button>
+              {isGerencial && (
+                <button
+                  onClick={handleExportExcel}
+                  className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                  title="Exportar o extrato do mês (com filtros aplicados) para Excel (.xlsx)"
+                >
+                  <Download size={12} /> Excel
+                </button>
+              )}
               {onNewTx && (
                 <button onClick={onNewTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
