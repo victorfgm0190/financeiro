@@ -39,6 +39,17 @@ function CopyIdBadge({ id }) {
   )
 }
 
+// Badge amarelo de parcela ("3/12") — mesmo estilo do badge de parcela da importação.
+// Retorna null quando o lançamento não é parcelado (num nulo/0).
+function InstallmentBadge({ num, total }) {
+  if (!num || num <= 0) return null
+  return (
+    <span className="mt-0.5 inline-block bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded font-medium">
+      {num}/{total || '?'}
+    </span>
+  )
+}
+
 // Fatura do mês M: fecha no dia F de M e vai do dia F+1 de M-1 ao dia F de M.
 // dia <= F → mês corrente; dia > F → mês seguinte (label = mês de fechamento).
 function getBillPeriod(dateStr, closingDay) {
@@ -104,6 +115,9 @@ export default function RelatorioFatura({ initialCardId }) {
     return gerencialGroups.find(g => g.id === gid) || null
   }
 
+  // Parcela "num/total" para exportação (CSV/Excel); vazio quando não é parcelado.
+  const parcelaOf = (tx) => (tx.installmentNum > 0 ? `${tx.installmentNum}/${tx.installmentTotal || '?'}` : '')
+
   // Derive billing periods from card transactions
   const billPeriods = useMemo(() => {
     if (!selectedCardId) return []
@@ -150,7 +164,7 @@ export default function RelatorioFatura({ initialCardId }) {
   const handleExportCSV = () => {
     const headers = [
       'Data', 'Descrição', 'Descrição original', 'ID', 'Fatura',
-      'Categoria', 'Favorecido', 'Grupo Gerencial', 'Valor',
+      'Categoria', 'Favorecido', 'Grupo Gerencial', 'Parcela', 'Valor',
     ]
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csvRows = billTxs.map(tx => {
@@ -165,6 +179,7 @@ export default function RelatorioFatura({ initialCardId }) {
         q(cat ? `${cat.icon} ${cat.name}` : ''),
         q(tx.payee || ''),
         q(grupo ? grupo.alias : ''),
+        q(parcelaOf(tx)),
         q(tx.amount.toFixed(2).replace('.', ',')),
       ].join(';')
     })
@@ -194,6 +209,7 @@ export default function RelatorioFatura({ initialCardId }) {
       { header: 'Categoria', key: 'categoria', width: 26 },
       { header: 'Favorecido', key: 'favorecido', width: 22 },
       { header: 'Grupo Gerencial', key: 'grupo', width: 14 },
+      { header: 'Parcela', key: 'parcela', width: 10 },
       { header: 'Valor', key: 'valor', width: 15 },
     ]
 
@@ -209,6 +225,7 @@ export default function RelatorioFatura({ initialCardId }) {
         categoria: cat ? `${cat.icon} ${cat.name}` : '',
         favorecido: tx.payee || '',
         grupo: grupo ? grupo.alias : '',
+        parcela: parcelaOf(tx),
         valor: tx.amount,
       })
     }
@@ -370,6 +387,8 @@ export default function RelatorioFatura({ initialCardId }) {
                       <p className="truncate">{tx.description}</p>
                       {/* Descrição original (Observações) — linha secundária menor em cinza. */}
                       {tx.notes && <p className="text-xs text-gray-500 truncate">{tx.notes}</p>}
+                      {/* Badge de parcela (num/total) abaixo da descrição. */}
+                      <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                       {/* Em telas pequenas, mostra Favorecido/Fatura aqui, já que as colunas somem. */}
                       {tx.payee && <p className="text-xs text-gray-500 lg:hidden">{tx.payee}</p>}
                       {faturaRef && <p className="text-[10px] text-gray-600 md:hidden">Fatura {faturaRef}</p>}

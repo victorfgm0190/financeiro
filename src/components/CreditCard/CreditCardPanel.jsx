@@ -99,6 +99,17 @@ function CopyIdBadge({ id }) {
   )
 }
 
+// Badge amarelo de parcela ("3/12") — mesmo estilo do badge de parcela da importação.
+// Retorna null quando o lançamento não é parcelado (num nulo/0).
+function InstallmentBadge({ num, total }) {
+  if (!num || num <= 0) return null
+  return (
+    <span className="mt-0.5 mr-1.5 inline-block bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded font-medium">
+      {num}/{total || '?'}
+    </span>
+  )
+}
+
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 // Indicador informativo da diferença entre o pago e o total da fatura (diferenca = pago − fatura).
@@ -728,6 +739,7 @@ export default function CreditCardPanel() {
                         <td className="px-4 py-3">
                           <p className="text-gray-200 text-sm">{tx.description}</p>
                           {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                          <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                           <CopyIdBadge id={tx.id} />
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
