@@ -56,7 +56,7 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data, syncError, dismissSyncError } = useApp()
   const { fabAction } = useFab()
 
   // FAB central (BottomNav mobile): usa a ação contextual registrada pela tela
@@ -150,6 +150,9 @@ function AppContent() {
       )}
       {genericToast && (
         <Toast message={genericToast} onClose={() => setGenericToast(null)} />
+      )}
+      {syncError && (
+        <Toast message={syncError} variant="error" duration={8000} onClose={dismissSyncError} />
       )}
       <MonthStartModal />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />

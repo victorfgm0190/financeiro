@@ -697,6 +697,7 @@ export function AppProvider({ children }) {
   const [data, setData] = useState(defaultData)
   const [initialized, setInitialized] = useState(false)
   const [dbStatus, setDbStatus] = useState('connecting')
+  const [syncError, setSyncError] = useState(null) // mensagem visível quando um sync falha
   const [activeProfileId, setActiveProfileId] = useState(null) // session-only, not persisted
   const prevDataRef = useRef(null)
   const syncTimerRef = useRef(null)
@@ -846,8 +847,22 @@ export function AppProvider({ children }) {
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 
-      if (tasks.length > 0) await Promise.all(tasks)
-      prevDataRef.current = data
+      if (tasks.length === 0) {
+        prevDataRef.current = data
+        return
+      }
+      try {
+        await Promise.all(tasks)
+        // Só marca como sincronizado quando o Neon confirmou TODAS as tabelas do lote.
+        prevDataRef.current = data
+        setSyncError(prev => (prev ? null : prev)) // limpa erro anterior sem re-render à toa
+      } catch (err) {
+        // NÃO avança prevDataRef: as tabelas seguem "sujas" e serão reenviadas no próximo
+        // sync (ou no full-sync ao reconectar). Torna o erro visível e ativa o retry (dbStatus).
+        console.error('[sync] falha ao sincronizar com o Neon:', err?.message || err)
+        setDbStatus('local')
+        setSyncError('Erro ao sincronizar dados com o servidor. Suas alterações estão salvas localmente e serão reenviadas automaticamente.')
+      }
     }, 500)
 
     return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }
@@ -4422,6 +4437,8 @@ export function AppProvider({ children }) {
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,
+      syncError,
+      dismissSyncError: () => setSyncError(null),
       getFinancialPeriod,
       getAccountSaldos,
       getFluxoCaixaPrincipal,

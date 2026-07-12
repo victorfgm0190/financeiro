@@ -771,6 +771,7 @@ export async function syncSection(table, prevItems, currItems, toRow) {
     })
   } catch (err) {
     console.error(`[db] sync ${table}:`, err.message)
+    throw err // propaga p/ o chamador não marcar como sincronizado o que falhou
   }
 }
 
@@ -801,6 +802,7 @@ export async function syncAccounts(prevAccounts, currAccounts) {
     })
   } catch (err) {
     console.error('[db] sync accounts:', err.message)
+    throw err
   }
 }
 
@@ -815,6 +817,7 @@ export async function syncPayees(prevPayees, currPayees) {
     }
   } catch (err) {
     console.error('[db] sync payees:', err.message)
+    throw err
   }
 }
 
@@ -836,6 +839,7 @@ export async function syncSettings(settings, costCenters) {
     })
   } catch (err) {
     console.error('[db] sync settings:', err.message)
+    throw err
   }
 }
 
