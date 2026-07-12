@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Download, FileBarChart } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 
 // Fatura do mês M: fecha no dia F de M e vai do dia F+1 de M-1 ao dia F de M.
@@ -26,6 +27,7 @@ function getBillPeriod(dateStr, closingDay) {
 
 export default function RelatorioFatura({ initialCardId }) {
   const { accounts, transactions, categories, gerencialGroups, reserveFunctions } = useApp()
+  useScrollScope('credit:relatorio')
 
   // Lookup id → nome da função de reserva (reserve_functions já está no contexto).
   const reserveFuncName = useMemo(() => {

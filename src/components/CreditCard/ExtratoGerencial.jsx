@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { CheckSquare, Square } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
 
@@ -28,6 +29,7 @@ function getBillLabel(date, card) {
 
 export default function ExtratoGerencial({ initialCardId }) {
   const { accounts, transactions, gerencialGroups, updateTransaction } = useApp()
+  useScrollScope('credit:extrato')
 
   const creditCards = accounts.filter(a => a.type === 'credit')
   const [selectedCardId, setSelectedCardId] = useState(initialCardId || creditCards[0]?.id || '')

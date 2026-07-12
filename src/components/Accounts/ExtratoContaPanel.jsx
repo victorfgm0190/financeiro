@@ -5,6 +5,7 @@ import {
   ListChecks, PencilLine,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Modal from '../shared/Modal'
@@ -456,6 +457,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
+  useScrollScope(`accounts:extrato:${accountProp.id}`)
 
   const now = new Date()
   // Mês de exibição inicial = mês CALENDÁRIO da data atual (qualquer dia de junho → junho),

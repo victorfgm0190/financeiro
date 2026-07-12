@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider, useFab } from './context/FabContext'
 import { useAutoBackup } from './hooks/useAutoBackup'
+import { useScrollRestoration, ScrollScopeContext } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
 import BottomNav from './components/Layout/BottomNav'
@@ -36,6 +37,13 @@ function AppContent() {
   const [showSearch, setShowSearch] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
+
+  // Scroll restoration: <main> é o container que rola. A chave base é a activePage; sub-telas
+  // (extrato) registram uma chave própria via ScrollScopeContext enquanto montadas.
+  const mainRef = useRef(null)
+  const [scrollScope, setScrollScope] = useState(null)
+  useScrollRestoration(mainRef, scrollScope ?? activePage)
+  useEffect(() => { setScrollScope(null) }, [activePage])
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data } = useApp()
   const { fabAction } = useFab()
 
@@ -109,8 +117,10 @@ function AppContent() {
       <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
-          {panels[activePage] ?? panels.dashboard}
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
+          <ScrollScopeContext.Provider value={setScrollScope}>
+            {panels[activePage] ?? panels.dashboard}
+          </ScrollScopeContext.Provider>
         </main>
       </div>
       <BottomNav active={activePage} setActive={setActivePage} onFab={handleFab} />
