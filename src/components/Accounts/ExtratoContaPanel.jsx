@@ -812,6 +812,26 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     const mesAnoAtual = mkYm(atualCycle)
     const mesAnoAnterior = mkYm(anteriorCycle)
 
+    // Índice id → lançamento para resolver a fatura da entrada pela despesa de origem.
+    const txById = new Map(transactions.map(t => [t.id, t]))
+    // fatura_ref (MM/YYYY) EFETIVA de uma entrada da subconta: usa o campo gravado e, quando
+    // ausente (provisões/etapas A criadas antes da propagação de fatura_ref), deriva da despesa
+    // de origem (source_expense_id → parent_tx_id). Garante que TODOS os lançamentos da fatura
+    // sejam contados, independente de quando foram criados ou do estado do backfill.
+    const entryFaturaRef = (tx) => {
+      if (tx.faturaRef) return tx.faturaRef
+      const parent = (tx.sourceExpenseId && txById.get(tx.sourceExpenseId)) ||
+                     (tx.parentTxId && txById.get(tx.parentTxId)) || null
+      if (parent) {
+        if (parent.faturaRef) return parent.faturaRef
+        if (parent.faturaMonthYear) {
+          const [y, m] = parent.faturaMonthYear.split('-')
+          return y && m ? `${m}/${y}` : null
+        }
+      }
+      return null
+    }
+
     // Resume UMA fatura. As entradas (etapa A recebida na subconta, d>0) são separadas pela
     // FRONTEIRA = dia 1 do mês da fatura: date < 01/MM → "mês anterior" (gastos do mês anterior que
     // já pertencem a esta fatura); date >= 01/MM → "este mês". Resgate = devoluções/resgates JÁ
@@ -838,8 +858,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
         if (d > 0) {
-          const faturaMatch = tx.faturaRef === ref || (!tx.faturaRef && isReservaGerencial(tx))
-          if (!faturaMatch) continue // entradas: por faturaRef gravado, ou fallback pela descrição
+          // Fatura da entrada: fatura_ref gravado, ou derivado da despesa de origem, ou (legado
+          // sem nenhum dos dois) o fallback pela descrição. Depois divide pela FRONTEIRA (dia 1).
+          const txRef = entryFaturaRef(tx)
+          const faturaMatch = txRef === ref || (!txRef && isReservaGerencial(tx))
+          if (!faturaMatch) continue
           if ((tx.date || '') < cutMonth) mesAnt = r2(mesAnt + d)
           else esteMes = r2(esteMes + d)
         } else if (d < 0 && ((tx.sourceScheduleId && tx.faturaRef === ref) || isDevolucaoGerencial(tx))) {
