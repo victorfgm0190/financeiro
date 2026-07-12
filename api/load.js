@@ -269,8 +269,14 @@ export default async function handler(req, res) {
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       schedule_id TEXT NOT NULL,
       reserva_funcao_id TEXT NOT NULL,
-      valor NUMERIC(12,2) NOT NULL DEFAULT 0
+      valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+      source_ids JSONB DEFAULT '[]',
+      fatura_ref TEXT
     )`)
+    // Rastreabilidade: source_ids embute os lançamentos que compõem o detalhamento
+    // (id/valor/descricao/data/grupo); fatura_ref identifica a fatura de origem (MM/YYYY).
+    await query(`ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_ids JSONB DEFAULT '[]'`)
+    await query(`ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS fatura_ref TEXT`)
     await query(`CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id)`)
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs] =
       await Promise.all([

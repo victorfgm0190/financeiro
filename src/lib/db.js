@@ -684,6 +684,8 @@ export const scheduleReservaFuncaoToRow = (s) => ({
   schedule_id: s.scheduleId,
   reserva_funcao_id: s.reservaFuncaoId,
   valor: Number(s.valor) || 0,
+  source_ids: Array.isArray(s.sourceIds) ? s.sourceIds : [],
+  fatura_ref: s.faturaRef || null,
 })
 
 export const rowToScheduleReservaFuncao = (r) => ({
@@ -691,6 +693,8 @@ export const rowToScheduleReservaFuncao = (r) => ({
   scheduleId: r.schedule_id,
   reservaFuncaoId: r.reserva_funcao_id,
   valor: Number(r.valor) || 0,
+  sourceIds: Array.isArray(r.source_ids) ? r.source_ids : [],
+  faturaRef: r.fatura_ref || null,
 })
 
 export async function loadRateios(lancamentoId) {

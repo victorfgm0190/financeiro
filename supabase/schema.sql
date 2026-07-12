@@ -705,3 +705,20 @@ UPDATE lancamentos l_ger
     AND l_orig.account_id IS NOT NULL
     AND l_orig.fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'
     AND (l_ger.card_id IS NULL OR l_ger.fatura_ref IS NULL);
+
+-- ─── Detalhamento por função do resgate (schedule_reserva_funcoes) ────────────
+-- Tabela criada dinamicamente por api/load.js; aqui fica a definição de referência.
+-- Recalculada do zero por recalcularAgendamentosFatura a partir dos lançamentos.
+CREATE TABLE IF NOT EXISTS schedule_reserva_funcoes (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  schedule_id TEXT NOT NULL,
+  reserva_funcao_id TEXT NOT NULL,
+  valor NUMERIC(12,2) NOT NULL DEFAULT 0
+);
+-- Rastreabilidade completa: source_ids embute os lançamentos que compõem o
+-- detalhamento ([{id,valor,descricao,data,grupo}]); fatura_ref identifica a
+-- fatura de origem (MM/YYYY). Permite ajustar movimentos automáticos quando um
+-- lançamento muda de grupo gerencial.
+ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_ids JSONB DEFAULT '[]';
+ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS fatura_ref TEXT;
+CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id);

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
-  ListChecks, PencilLine, Check, X, ArrowUpCircle, AlertTriangle,
+  ListChecks, PencilLine, Check, X, ArrowUpCircle, AlertTriangle, GitCompare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
@@ -127,6 +127,46 @@ function DiferencaPagamento({ diferenca, compact = false, className = '' }) {
   )
 }
 
+const ACAO_META = {
+  REMOVER_GERENCIAL:  { icon: Trash2,    color: 'text-red-400',     bg: 'bg-red-500/10',     label: 'Remover transferência gerencial' },
+  CRIAR_GERENCIAL:    { icon: Plus,      color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Criar transferência gerencial' },
+  ATUALIZAR_GERENCIAL:{ icon: RotateCcw, color: 'text-amber-400',   bg: 'bg-amber-500/10',   label: 'Atualizar transferência gerencial' },
+  CRIAR_RESGATE:      { icon: Plus,      color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Criar resgate de reserva' },
+  ATUALIZAR_RESGATE:  { icon: RotateCcw, color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Atualizar resgate de reserva' },
+  REMOVER_RESGATE:    { icon: Trash2,    color: 'text-red-400',     bg: 'bg-red-500/10',     label: 'Remover resgate de reserva' },
+  ATUALIZAR_DEVOLUCAO:{ icon: RotateCcw, color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Atualizar devolução gerencial' },
+  ATUALIZAR_PAGAMENTO:{ icon: RotateCcw, color: 'text-gray-300',    bg: 'bg-gray-700/30',    label: 'Atualizar pagamento da fatura' },
+}
+
+function AcaoRow({ a }) {
+  const meta = ACAO_META[a.tipo] || { icon: RotateCcw, color: 'text-gray-300', bg: 'bg-gray-700/30', label: a.tipo }
+  const Icon = meta.icon
+  const isGer = a.tipo.endsWith('_GERENCIAL')
+  return (
+    <div className={`flex items-start gap-3 rounded-lg p-3 ${meta.bg}`}>
+      <Icon size={16} className={`${meta.color} mt-0.5 shrink-0`} />
+      <div className="min-w-0 flex-1">
+        <p className={`text-xs font-semibold ${meta.color}`}>{meta.label}</p>
+        {isGer ? (
+          <>
+            <p className="text-sm text-gray-200 truncate">{a.descricao || '—'}</p>
+            <p className="text-xs text-gray-500">
+              {a.valor != null ? fmt(a.valor) : `${fmt(a.valor_anterior)} → ${fmt(a.valor_novo)}`}
+              {a.data ? ` · ${fmtDate(a.data)}` : ''}
+              {a.de && a.para ? ` · ${a.de} → ${a.para}` : ''}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-200 truncate">{a.grupo || 'Fatura'}</p>
+            <p className="text-xs text-gray-500">{fmt(a.valor_anterior)} → {fmt(a.valor_novo)}</p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function CreditCardPanel() {
   const {
     profileAccounts: accounts,
@@ -134,11 +174,12 @@ export default function CreditCardPanel() {
     profileSchedules: schedules,
     categories, gerencialGroups,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
-    reconciliarGerencial,
+    reconciliarGerencial, revisarMovimentosFatura,
   } = useApp()
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
   const [reconciling, setReconciling] = useState(false)
+  const [revisarState, setRevisarState] = useState(null) // { loading, executando, preview }
 
   const handleReconciliarGerencial = async () => {
     if (!selectedCard || reconciling) return
@@ -168,6 +209,38 @@ export default function CreditCardPanel() {
       setToast(`Erro ao reconciliar: ${e.message}`)
     } finally {
       setReconciling(false)
+    }
+  }
+
+  const faturaRefFromBillKey = () => {
+    if (!billKey) return null
+    const [by, bm] = billKey.split('-')
+    return `${bm}/${by}`
+  }
+
+  const handleAbrirRevisar = async () => {
+    if (!selectedCard || !billKey) return
+    setRevisarState({ loading: true, executando: false, preview: null })
+    try {
+      const preview = await revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: true })
+      setRevisarState({ loading: false, executando: false, preview })
+    } catch (e) {
+      setRevisarState(null)
+      setToast(`Erro ao revisar: ${e.message}`)
+    }
+  }
+
+  const handleExecutarRevisar = async () => {
+    if (!selectedCard || !billKey || !revisarState?.preview) return
+    setRevisarState(s => ({ ...s, executando: true }))
+    try {
+      const { resumo } = await revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: false })
+      setRevisarState(null)
+      const n = resumo.total || 0
+      setToast(n > 0 ? `${n} movimento${n !== 1 ? 's' : ''} revisado${n !== 1 ? 's' : ''} com sucesso` : 'Tudo em ordem ✓')
+    } catch (e) {
+      setRevisarState(s => ({ ...s, executando: false }))
+      setToast(`Erro ao executar: ${e.message}`)
     }
   }
 
@@ -536,6 +609,13 @@ export default function CreditCardPanel() {
             <RotateCcw size={14} /> Atualizar
           </button>
           <button
+            className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
+            onClick={handleAbrirRevisar}
+            title="Revisa os movimentos automáticos (transferências gerenciais e resgates) da fatura e mostra os ajustes pendentes antes de aplicar"
+          >
+            <GitCompare size={14} /> Revisar Movimentos Automáticos
+          </button>
+          <button
             className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 disabled:opacity-50 transition-colors py-1"
             onClick={handleReconciliarGerencial}
             disabled={reconciling}
@@ -825,6 +905,47 @@ export default function CreditCardPanel() {
           onClose={() => setBulkEditTxs(null)}
           onApplied={(n) => { exitSelect(); setToast(`${n} ${n === 1 ? 'lançamento alterado' : 'lançamentos alterados'}`) }}
         />
+      )}
+
+      {revisarState && (
+        <Modal
+          open
+          onClose={() => { if (!revisarState.executando) setRevisarState(null) }}
+          title={`Revisar Movimentos Automáticos — Fatura ${faturaRefFromBillKey() || ''}`}
+          size="lg"
+        >
+          {revisarState.loading ? (
+            <div className="py-10 text-center text-gray-400 text-sm">
+              <RotateCcw size={20} className="animate-spin mx-auto mb-2" /> Analisando movimentos…
+            </div>
+          ) : (revisarState.preview?.acoes?.length || 0) === 0 ? (
+            <div className="py-10 text-center">
+              <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
+              <p className="text-gray-300 text-sm">Tudo em ordem ✓</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-400">
+                {revisarState.preview.acoes.length} ajuste{revisarState.preview.acoes.length !== 1 ? 's' : ''} identificado{revisarState.preview.acoes.length !== 1 ? 's' : ''}
+              </p>
+              <div className="space-y-2">
+                {revisarState.preview.acoes.map((a, i) => <AcaoRow key={i} a={a} />)}
+              </div>
+            </div>
+          )}
+          {!revisarState.loading && (
+            <div className="flex gap-2 pt-4 mt-4 border-t border-gray-800">
+              <button className="btn-secondary flex-1" onClick={() => setRevisarState(null)} disabled={revisarState.executando}>
+                {(revisarState.preview?.acoes?.length || 0) === 0 ? 'Fechar' : 'Cancelar'}
+              </button>
+              {(revisarState.preview?.acoes?.length || 0) > 0 && (
+                <button className="btn-primary flex-1" onClick={handleExecutarRevisar} disabled={revisarState.executando}>
+                  {revisarState.executando ? 'Executando…' : `Executar ${revisarState.preview.acoes.length} ajuste${revisarState.preview.acoes.length !== 1 ? 's' : ''}`}
+                </button>
+              )}
+            </div>
+          )}
+        </Modal>
       )}
 
       {/* Espaçador p/ a barra de ações fixa não cobrir o último lançamento (mais alto no

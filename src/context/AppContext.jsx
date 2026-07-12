@@ -1390,8 +1390,9 @@ export function AppProvider({ children }) {
   //   Sempre: remove resgates PENDENTES desta fatura cuja origem ficou sem gastos numerados (grupo
   //   antigo esvaziado), preservando os já pagos/registrados. Agendamentos (schedules) são pendências
   //   e não afetam saldo; só a etapa A (transferência real) ajusta saldos.
-  const ensureGerencialState = useCallback((lancId) => {
-    update(d => {
+  // Núcleo PURO do reconcile por lançamento: recebe e devolve `d`. Extraído para ser
+  // composto (revisarMovimentosFatura roda-o em cadeia sobre a fatura inteira, sem mutar).
+  const applyEnsureGerencial = useCallback((d, lancId) => {
       const lanc = d.transactions.find(t => t.id === lancId)
       if (!lanc || lanc.type !== 'expense' || lanc.accountType !== 'credit') return d
       const card = d.accounts.find(a => a.id === lanc.accountId)
@@ -1535,8 +1536,11 @@ export function AppProvider({ children }) {
 
       if (accounts === d.accounts && transactions === d.transactions && schedules === d.schedules) return d
       return { ...d, accounts, transactions, schedules, scheduleReservaFuncoes }
-    })
-  }, [update])
+  }, [])
+
+  const ensureGerencialState = useCallback((lancId) => {
+    update(d => applyEnsureGerencial(d, lancId))
+  }, [update, applyEnsureGerencial])
 
   const updateTransaction = useCallback((id, changes) => {
     // TAREFA 2: se uma despesa de cartão muda de valor ou de fatura, recalcula a(s)
@@ -3217,6 +3221,9 @@ export function AppProvider({ children }) {
       // Detalhamento por função: contaOrigemId → Map(reservaFuncaoId → soma). Lançamentos
       // sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
       const numberedByAccountByFunc = new Map()
+      // Rastreabilidade (schedule_reserva_funcoes.source_ids): contaOrigemId → Map(reservaFuncaoId
+      // → [{id,valor,descricao,data,grupo}]) — os lançamentos que compõem cada detalhamento.
+      const numberedByAccountByFuncSources = new Map()
       // Chain ID: IDs dos lançamentos que compõem cada slot (recomputado a cada recálculo,
       // pois o motor recria os slots pendentes do zero). Persistidos em overrides._sourceTxIds.
       const sourceTxIdsG = []                // slot gerencial_devolucao (grupo G)
@@ -3239,6 +3246,12 @@ export function AppProvider({ children }) {
             if (!numberedByAccountByFunc.has(origem)) numberedByAccountByFunc.set(origem, new Map())
             const fm = numberedByAccountByFunc.get(origem)
             fm.set(tx.reservaFuncaoId, rb((fm.get(tx.reservaFuncaoId) || 0) + amt))
+            if (!numberedByAccountByFuncSources.has(origem)) numberedByAccountByFuncSources.set(origem, new Map())
+            const fs = numberedByAccountByFuncSources.get(origem)
+            if (!fs.has(tx.reservaFuncaoId)) fs.set(tx.reservaFuncaoId, [])
+            fs.get(tx.reservaFuncaoId).push({
+              id: tx.id, valor: amt, descricao: tx.description || '', data: tx.date, grupo: tx.grupoGerencial || null,
+            })
           }
         }
         // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
@@ -3410,6 +3423,7 @@ export function AppProvider({ children }) {
         if (!pendingResgateIds.has(schedId)) continue
         const byFunc = numberedByAccountByFunc.get(origem)
         if (!byFunc) continue
+        const byFuncSources = numberedByAccountByFuncSources.get(origem)
         for (const [funcId, valor] of byFunc) {
           if (!(valor > 0)) continue
           scheduleReservaFuncoes.push({
@@ -3417,6 +3431,8 @@ export function AppProvider({ children }) {
             scheduleId: schedId,
             reservaFuncaoId: funcId,
             valor: rb(valor),
+            sourceIds: byFuncSources?.get(funcId) || [],
+            faturaRef,
           })
         }
       }
@@ -3619,6 +3635,123 @@ export function AppProvider({ children }) {
       })
     })
   }, [update, reconcileFaturaState])
+
+  // ── Revisar Movimentos Automáticos ────────────────────────────────────────────
+  // Núcleo PURO: reconcilia TODA a fatura (etapa A por lançamento + agendamentos geridos)
+  // aplicando a MESMA engine usada nos salvamentos (applyEnsureGerencial em cadeia sobre os
+  // lançamentos + reconcileFaturaState). Devolve o novo estado `nd` e o diff de ações entre o
+  // estado atual e o esperado. Dry-run e execução usam ESTE núcleo → o preview bate 1:1 com o
+  // que a execução fará. Não recalcula saldos globais (isso é papel do "Reconciliar Gerenciais").
+  const computeRevisaoFatura = useCallback((d, cardId, faturaMesAno) => {
+    const emptyResumo = {
+      remover_gerencial: 0, criar_gerencial: 0, atualizar_gerencial: 0,
+      criar_resgate: 0, atualizar_resgate: 0, remover_resgate: 0,
+      atualizar_devolucao: 0, atualizar_pagamento: 0, total: 0,
+    }
+    const card = d.accounts.find(a => a.id === cardId)
+    if (!card) return { nd: d, acoes: [], resumo: emptyResumo }
+    const [yyyy, mm] = faturaMesAno.split('-')
+    const faturaRef = `${mm}/${yyyy}`
+
+    const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto'
+    const faturaExpenses = d.transactions.filter(tx =>
+      tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === cardId &&
+      !isAutomacao(tx) && faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno)
+    const faturaExpenseIds = new Set(faturaExpenses.map(t => t.id))
+
+    // Estado esperado, sem mutar `d`: engine em cadeia sobre a fatura.
+    let nd = d
+    for (const tx of faturaExpenses) nd = applyEnsureGerencial(nd, tx.id)
+    nd = reconcileFaturaState(nd, cardId, yyyy, mm)
+
+    const grupoAlias = (gid) => {
+      const g = d.gerencialGroups?.find(x => x.id === gid)
+      if (!g) return '—'
+      return g.alias || (g.number === 1 ? 'G' : g.name) || String(g.number)
+    }
+    const accName = (aid) => d.accounts.find(a => a.id === aid)?.name || aid
+    const lancInfo = (id) => {
+      const l = d.transactions.find(t => t.id === id)
+      return l ? { descricao: l.description || '', valor: Number(l.amount) || 0, data: l.date, grupo: grupoAlias(l.grupoGerencial) } : null
+    }
+
+    const acoes = []
+    const resumo = { ...emptyResumo }
+
+    // ── Etapa A (transferências gerenciais tx_gerA_) desta fatura ──
+    const isEtapaAFatura = (t) =>
+      t.type === 'transfer' && typeof t.id === 'string' && t.id.startsWith('tx_gerA_') &&
+      ((t.cardId === cardId && t.faturaRef === faturaRef) || faturaExpenseIds.has(t.sourceExpenseId))
+    const beforeEt = new Map(d.transactions.filter(isEtapaAFatura).map(t => [t.id, t]))
+    const afterEt = new Map(nd.transactions.filter(isEtapaAFatura).map(t => [t.id, t]))
+    for (const id of new Set([...beforeEt.keys(), ...afterEt.keys()])) {
+      const b = beforeEt.get(id), a = afterEt.get(id)
+      const srcId = (a || b).sourceExpenseId
+      const info = lancInfo(srcId) || { descricao: (a || b).description || '', valor: Number((a || b).amount) || 0, data: (a || b).date, grupo: '—' }
+      if (a && !b) {
+        acoes.push({ tipo: 'CRIAR_GERENCIAL', lancamento_id: srcId, descricao: info.descricao, valor: Number(a.amount) || 0, data: a.date, de: info.grupo, para: 'G' })
+        resumo.criar_gerencial++
+      } else if (b && !a) {
+        acoes.push({ tipo: 'REMOVER_GERENCIAL', lancamento_id: srcId, descricao: info.descricao, valor: Number(b.amount) || 0, data: b.date, de: 'G', para: info.grupo })
+        resumo.remover_gerencial++
+      } else if (a && b && Math.abs((Number(a.amount) || 0) - (Number(b.amount) || 0)) > 0.005) {
+        acoes.push({ tipo: 'ATUALIZAR_GERENCIAL', lancamento_id: srcId, descricao: info.descricao, valor_anterior: Number(b.amount) || 0, valor_novo: Number(a.amount) || 0, data: a.date })
+        resumo.atualizar_gerencial++
+      }
+    }
+
+    // ── Agendamentos geridos (resgate_reserva / gerencial_devolucao / pagamento_fatura) ──
+    const managedTipos = new Set(['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'])
+    const isManagedFatura = (s) => managedTipos.has(s.tipo) && s.cardId === cardId && s.faturaMesAno === faturaMesAno
+    const beforeSch = new Map(d.schedules.filter(isManagedFatura).map(s => [s.id, s]))
+    const afterSch = new Map(nd.schedules.filter(isManagedFatura).map(s => [s.id, s]))
+    for (const id of new Set([...beforeSch.keys(), ...afterSch.keys()])) {
+      const b = beforeSch.get(id), a = afterSch.get(id)
+      const tipo = (a || b).tipo
+      const vAnt = b ? Number(b.amount) || 0 : 0
+      const vNovo = a ? Number(a.amount) || 0 : 0
+      if (a && b && Math.abs(vNovo - vAnt) <= 0.005) continue
+      if (tipo === 'resgate_reserva') {
+        const beforeSrc = new Set((b?.overrides?._sourceTxIds) || [])
+        const afterSrc = new Set((a?.overrides?._sourceTxIds) || [])
+        const adicionados = [...afterSrc].filter(x => !beforeSrc.has(x))
+        const removidos = [...beforeSrc].filter(x => !afterSrc.has(x))
+        if (a && !b) { acoes.push({ tipo: 'CRIAR_RESGATE', grupo: accName((a).accountId), valor_anterior: 0, valor_novo: vNovo, source_ids_adicionados: adicionados, source_ids_removidos: [] }); resumo.criar_resgate++ }
+        else if (b && !a) { acoes.push({ tipo: 'REMOVER_RESGATE', grupo: accName((b).accountId), valor_anterior: vAnt, valor_novo: 0, source_ids_adicionados: [], source_ids_removidos: [...beforeSrc] }); resumo.remover_resgate++ }
+        else { acoes.push({ tipo: 'ATUALIZAR_RESGATE', grupo: accName((a).accountId), valor_anterior: vAnt, valor_novo: vNovo, source_ids_adicionados: adicionados, source_ids_removidos: removidos }); resumo.atualizar_resgate++ }
+      } else if (tipo === 'gerencial_devolucao') {
+        acoes.push({ tipo: 'ATUALIZAR_DEVOLUCAO', criar: !b, remover: !a, valor_anterior: vAnt, valor_novo: vNovo })
+        resumo.atualizar_devolucao++
+      } else if (tipo === 'pagamento_fatura') {
+        acoes.push({ tipo: 'ATUALIZAR_PAGAMENTO', criar: !b, remover: !a, valor_anterior: vAnt, valor_novo: vNovo })
+        resumo.atualizar_pagamento++
+      }
+    }
+
+    resumo.total = acoes.length
+    return { nd, acoes, resumo }
+  }, [applyEnsureGerencial, reconcileFaturaState])
+
+  // API pública. faturaRef no formato 'MM/YYYY'. dryRun=true → só preview (não muta).
+  // dryRun=false → aplica em UM update atômico e devolve o mesmo resumo do preview.
+  const revisarMovimentosFatura = useCallback(({ cardId, faturaRef, dryRun = true }) => {
+    const [mm, yyyy] = String(faturaRef).split('/')
+    const faturaMesAno = `${yyyy}-${mm}`
+    if (dryRun) {
+      const { acoes, resumo } = computeRevisaoFatura(dataRef.current, cardId, faturaMesAno)
+      return Promise.resolve({ acoes, resumo })
+    }
+    // Resolve DENTRO do updater (como reconciliarGerencial): o updater do setData não roda
+    // sincronamente, então `resumo` só existe ali. `resolved` protege contra dupla invocação.
+    return new Promise(resolve => {
+      let resolved = false
+      update(d => {
+        const { nd, acoes, resumo } = computeRevisaoFatura(d, cardId, faturaMesAno)
+        if (!resolved) { resolved = true; resolve({ acoes, resumo }) }
+        return nd
+      })
+    })
+  }, [update, computeRevisaoFatura])
 
   // Mantém dataRef e o recalc-por-tx atualizados (lidos por addTransaction/
   // updateTransaction em event handlers, após o commit).
@@ -4447,6 +4580,7 @@ export function AppProvider({ children }) {
       criarParcelasGerencial,
       recalcularAgendamentosFatura,
       reconciliarGerencial,
+      revisarMovimentosFatura,
       ajustarParcelasGrupoGerencial,
       propagarValorParcelas,
       getProvisoesPendentes,
