@@ -58,6 +58,26 @@ export default async function handler(req, res) {
       SET fatura_ref = SUBSTRING(fatura_month_year FROM 6 FOR 2) || '/' || SUBSTRING(fatura_month_year FROM 1 FOR 4)
       WHERE fatura_ref IS NULL
         AND fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'`)
+    // Rastreabilidade completa da cadeia: propaga fatura_ref da despesa de origem para os
+    // lançamentos derivados que têm source_expense_id mas fatura_ref NULL. Idempotente (só NULL).
+    // (1) Etapas A (tx_gerA_*) a partir da despesa de origem.
+    await query(`UPDATE lancamentos ger
+      SET fatura_ref = exp.fatura_ref
+      FROM lancamentos exp
+      WHERE ger.id LIKE 'tx_gerA_%'
+        AND ger.source_expense_id = exp.id
+        AND exp.fatura_ref IS NOT NULL
+        AND ger.fatura_ref IS NULL`)
+    // (2) Provisões/resgates (transfer) NÃO-etapa-A com source_expense_id (ex.: tx_ger_* do
+    // "Executar Gerenciais", 1:1 com a parcela de origem via source_expense_id).
+    await query(`UPDATE lancamentos res
+      SET fatura_ref = exp.fatura_ref
+      FROM lancamentos exp
+      WHERE res.source_expense_id = exp.id
+        AND res.id NOT LIKE 'tx_gerA_%'
+        AND exp.fatura_ref IS NOT NULL
+        AND res.fatura_ref IS NULL
+        AND res.type = 'transfer'`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)

@@ -28,6 +28,19 @@ const isParcelada = (tx) =>
 // derivado da despesa que a originou. Fonte única (reconcile, delete, reverse, revert).
 const etapaAId = (expenseId) => `tx_gerA_${expenseId}`
 
+// Deriva a fatura_ref (MM/YYYY) de um lançamento a partir de faturaRef (já MM/YYYY) ou de
+// faturaMonthYear (YYYY-MM). null quando não há referência. Usado para propagar a
+// rastreabilidade da despesa de origem aos lançamentos derivados (etapa A, provisões, resgates).
+function resolveFaturaRef(tx) {
+  if (!tx) return null
+  if (tx.faturaRef) return tx.faturaRef
+  if (tx.faturaMonthYear) {
+    const [y, m] = tx.faturaMonthYear.split('-')
+    return y && m ? `${m}/${y}` : null
+  }
+  return null
+}
+
 // Um grupo gerencial só comporta função de reserva se for NUMERADO (number numérico ≠ 1),
 // com conta-origem (defaultAccountId) que tenha pelo menos uma função vinculada. Espelha
 // reserveFuncsForGroup do ImportPanel. Grupo G (number 1) e D nunca têm função.
@@ -3795,6 +3808,7 @@ export function AppProvider({ children }) {
         categoryId: categoryId || null, payee: payee || null,
         costCenter: costCenter || null, notes: notes || null,
         grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
+        faturaRef: resolveFaturaRef({ faturaMonthYear: futureFatura }),
         reservaFuncaoId: reservaFuncaoId || null,
         installmentNum: i, installmentTotal: installments,
         origin: 'parcela', parentTxId: rootTxId,
@@ -3884,6 +3898,7 @@ export function AppProvider({ children }) {
               startDate: dueDateStr,
               amount,
               description: `Resgate ${newGrupo.name} - Fatura ${faturaRefI}`,
+              faturaRef: faturaRefI,
               overrides: { _gerencialKey: gerKeyI, _originTxId: txId, _originAmount: amount },
               registered: [],
               skipped: [],
@@ -3907,6 +3922,8 @@ export function AppProvider({ children }) {
             startDate: startDateStr,
             amount,
             description: `Provisão ${subconta.name} - Fatura ${faturaRefI}`,
+            faturaRef: faturaRefI,
+            cardId: accountId,
             overrides: { _originTxId: txId },
             registered: [],
             skipped: [],
@@ -4146,6 +4163,10 @@ export function AppProvider({ children }) {
           grupoGerencial: g1.id,
           origin: 'auto-provisao',
           parentTxId: parcela.id,
+          // Rastreabilidade: herda cartão/fatura/despesa-origem da parcela que gerou a provisão.
+          cardId: parcela.accountId,
+          faturaRef: resolveFaturaRef(parcela),
+          sourceExpenseId: parcela.id,
           createdAt: new Date().toISOString(),
         })
       }
