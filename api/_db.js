@@ -26,6 +26,9 @@ const MAX_CHUNK_ROWS = 500
 
 // Executa um único INSERT ... ON CONFLICT para um lote de rows homogêneas (mesmas colunas).
 async function upsertChunk(client, table, cols, rows, conflictCol) {
+  // Guardas: rows/cols vazios geram VALUES vazio → "syntax error at end of input".
+  if (!rows || rows.length === 0 || !cols || cols.length === 0) return
+
   let idx = 1
   const values = rows
     .map(() => `(${cols.map(() => `$${idx++}`).join(', ')})`)
@@ -38,12 +41,20 @@ async function upsertChunk(client, table, cols, rows, conflictCol) {
       return v
     })
   )
-  const updateSet = cols
-    .filter(c => c !== conflictCol)
-    .map(c => `"${c}" = EXCLUDED."${c}"`)
-    .join(', ')
-  const sql = `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateSet}`
-  await client.query(sql, params)
+  // Quando cols só tem a coluna de conflito, o SET fica vazio ("DO UPDATE SET " sem nada
+  // depois) → "syntax error at end of input". Nesse caso não há o que atualizar: DO NOTHING.
+  const updateCols = cols.filter(c => c !== conflictCol)
+  const conflictClause = updateCols.length === 0
+    ? `ON CONFLICT ("${conflictCol}") DO NOTHING`
+    : `ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ')}`
+  const sql = `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ${conflictClause}`
+  try {
+    await client.query(sql, params)
+  } catch (err) {
+    // Loga o SQL gerado (sem os valores dos params) para facilitar debug futuro no Vercel.
+    console.error('[upsertChunk] SQL falhou:', sql, '| nº params:', params.length, '| erro:', err.message)
+    throw err
+  }
 }
 
 // lancamentos tem um índice único parcial uq_lancamentos_installment(installment_key) WHERE
