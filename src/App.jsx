@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider, useFab } from './context/FabContext'
 import { useAutoBackup } from './hooks/useAutoBackup'
-import { useScrollRestoration, ScrollScopeContext } from './hooks/useScrollRestoration'
+import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
 import BottomNav from './components/Layout/BottomNav'
@@ -43,7 +43,19 @@ function AppContent() {
   const mainRef = useRef(null)
   const [scrollScope, setScrollScope] = useState(null)
   useScrollRestoration(mainRef, scrollScope ?? activePage)
-  useEffect(() => { setScrollScope(null) }, [activePage])
+
+  // Troca de painel (único ponto que muda activePage): salva a posição da tela atual e congela
+  // saves na transição antes de navegar — a lista volta na posição certa e o destino abre no
+  // topo. Zera o escopo de sub-tela aqui mesmo (sem effect) para não herdar a chave antiga.
+  const navigate = useCallback((page) => {
+    if (page !== activePage) saveScrollNow(mainRef, scrollScope ?? activePage)
+    setScrollScope(null)
+    setActivePage(page)
+  }, [activePage, scrollScope])
+  const scrollCtx = useMemo(() => ({
+    setScope: setScrollScope,
+    saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
+  }), [scrollScope, activePage])
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data } = useApp()
   const { fabAction } = useFab()
 
@@ -96,13 +108,13 @@ function AppContent() {
   const financialPeriod = getFinancialPeriod()
 
   const panels = {
-    dashboard: <DashboardPanel setActivePage={setActivePage} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
+    dashboard: <DashboardPanel setActivePage={navigate} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
     accounts: <AccountsPanel />,
     transactions: <TransactionsPanel />,
     credit: <CreditCardPanel />,
     schedule: <SchedulePanel />,
     import: <ImportPanel />,
-    cashflow: <CashFlowPanel setActivePage={setActivePage} />,
+    cashflow: <CashFlowPanel setActivePage={navigate} />,
     reservas:   <ReservasPanel />,
     envelopes:  <EnvelopesPanel />,
     budget:     <BudgetPanel />,
@@ -114,16 +126,16 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-950">
-      <Sidebar active={activePage} setActive={setActivePage} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
-          <ScrollScopeContext.Provider value={setScrollScope}>
+          <ScrollScopeContext.Provider value={scrollCtx}>
             {panels[activePage] ?? panels.dashboard}
           </ScrollScopeContext.Provider>
         </main>
       </div>
-      <BottomNav active={activePage} setActive={setActivePage} onFab={handleFab} />
+      <BottomNav active={activePage} setActive={navigate} onFab={handleFab} />
       <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
         <TransactionForm onClose={() => setShowQuickAdd(false)} onToast={setGenericToast} />
       </Modal>

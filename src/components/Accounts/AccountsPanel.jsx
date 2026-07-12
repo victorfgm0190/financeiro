@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
@@ -556,6 +557,7 @@ export default function AccountsPanel() {
   const [showTxForm, setShowTxForm] = useState(false)
   const [editTxInitial, setEditTxInitial] = useState(null)
   const isMobile = useIsMobile()
+  const saveScroll = useScrollSaver()
 
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
@@ -593,7 +595,7 @@ export default function AccountsPanel() {
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
   const handleDelete = (account) => setConfirmDelete(account)
-  const handleExtrato = (account) => setExtratoAccount(account)
+  const handleExtrato = (account) => { saveScroll(); setExtratoAccount(account) }
   const handleUpdateValue = (account) => setUpdateValueAccount(account)
 
   const closeTxForm = () => { setShowTxForm(false); setEditTxInitial(null) }
@@ -617,7 +619,7 @@ export default function AccountsPanel() {
       <>
         <ExtratoContaPanel
           account={liveAccount}
-          onClose={() => setExtratoAccount(null)}
+          onClose={() => { saveScroll(); setExtratoAccount(null) }}
           backButton
           onEdit={(tx) => { setEditTxInitial(tx); setShowTxForm(true) }}
           onNewTx={() => { setEditTxInitial(null); setShowTxForm(true) }}

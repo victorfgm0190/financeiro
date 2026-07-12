@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -170,6 +171,7 @@ export default function CreditCardPanel() {
   })
   const [showExtrato, setShowExtrato] = useState(false)
   const [showRelatorio, setShowRelatorio] = useState(false)
+  const saveScroll = useScrollSaver()
   const [showPayModal, setShowPayModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState(today())
@@ -367,7 +369,7 @@ export default function CreditCardPanel() {
       <div className="space-y-4">
         <button
           className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
-          onClick={() => setShowExtrato(false)}
+          onClick={() => { saveScroll(); setShowExtrato(false) }}
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
         </button>
@@ -381,7 +383,7 @@ export default function CreditCardPanel() {
       <div className="space-y-4">
         <button
           className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
-          onClick={() => setShowRelatorio(false)}
+          onClick={() => { saveScroll(); setShowRelatorio(false) }}
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
         </button>
@@ -436,13 +438,13 @@ export default function CreditCardPanel() {
         {/* Links auxiliares */}
         <div className="flex items-center gap-3 shrink-0 ml-auto">
           <button
-            onClick={() => setShowExtrato(true)}
+            onClick={() => { saveScroll(); setShowExtrato(true) }}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
           >
             <FileText size={12} /> Extrato
           </button>
           <button
-            onClick={() => setShowRelatorio(true)}
+            onClick={() => { saveScroll(); setShowRelatorio(true) }}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
           >
             <FileBarChart size={12} /> Relatório
