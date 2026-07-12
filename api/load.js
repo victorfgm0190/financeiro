@@ -51,6 +51,13 @@ export default async function handler(req, res) {
         AND l_orig.account_id IS NOT NULL
         AND l_orig.fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'
         AND (l_ger.card_id IS NULL OR l_ger.fatura_ref IS NULL)`)
+    // Backfill fatura_ref das DESPESAS de cartão importadas antes do fix (fatura_ref não era
+    // gravado no import, só fatura_month_year). Deriva MM/YYYY de fatura_month_year — mesma
+    // convenção do resto do app. Idempotente: só toca linhas com fatura_ref NULL.
+    await query(`UPDATE lancamentos
+      SET fatura_ref = SUBSTRING(fatura_month_year FROM 6 FOR 2) || '/' || SUBSTRING(fatura_month_year FROM 1 FOR 4)
+      WHERE fatura_ref IS NULL
+        AND fatura_month_year ~ '^[0-9]{4}-[0-9]{2}$'`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS reserva_funcao_id TEXT`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS fatura_ref VARCHAR(7)`)
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS card_id TEXT`)

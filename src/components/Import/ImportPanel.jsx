@@ -664,6 +664,15 @@ function faturaRefFromReference(dateCartaoStr, referenceYYYYMM, closingDay) {
   return day <= (closingDay || 14) ? referenceYYYYMM : addMonthToFatura(referenceYYYYMM, -1)
 }
 
+// fatura_ref (MM/YYYY) persistido no lançamento, derivado do faturaMonthYear (YYYY-MM).
+// Mesma convenção do resto do app (tx_gerA_*, agendamentos e o backfill de api/load.js):
+// a coluna fatura_ref usa MM/YYYY, enquanto fatura_month_year usa YYYY-MM.
+function faturaRefFromMY(faturaMonthYear) {
+  if (!faturaMonthYear) return null
+  const [y, m] = faturaMonthYear.split('-')
+  return (y && m) ? `${m}/${y}` : null
+}
+
 // installmentSystemDate: regra de date (sistema) das parcelas — agora compartilhada em
 // lib/parcelas.js (reutilizada também por buildSeries e criarParcelasGerencial).
 
@@ -1564,6 +1573,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       toImport.forEach(row => {
         updateTransaction(row._id, {
           faturaMonthYear: row.faturaMonthYear || null,
+          faturaRef: faturaRefFromMY(row.faturaMonthYear),
           categoryId: row.categoryId || null,
           grupoGerencial: row.grupoGerencial || null,
           date: row.date,
@@ -1597,6 +1607,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           categoryId: fp.categoryId, payee: fp.payee,
           grupoGerencial: fp.grupoGerencial || defaultGrupoD,
           faturaMonthYear: fp.faturaMonthYear,
+          faturaRef: faturaRefFromMY(fp.faturaMonthYear),
           reservaFuncaoId: fp._reservaFuncaoId || null,
           installmentNum: fp.num, installmentTotal: fp.total,
           _fromImport: true,
@@ -1707,6 +1718,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: row.categoryId, payee: row.payee,
         grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
         faturaMonthYear: row.faturaMonthYear || null,
+        faturaRef: faturaRefFromMY(row.faturaMonthYear),
         reservaFuncaoId: row._reservaFuncaoId || null,
         installmentNum: row._installment?.num || null,
         installmentTotal: row._installment?.total || null,
@@ -1756,6 +1768,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: fp.categoryId, payee: fp.payee,
         grupoGerencial: fp.grupoGerencial || defaultGrupoD,
         faturaMonthYear: fp.faturaMonthYear,
+        faturaRef: faturaRefFromMY(fp.faturaMonthYear),
         reservaFuncaoId: fp._reservaFuncaoId || null,
         installmentNum: fp.num, installmentTotal: fp.total,
         _fromImport: true,
@@ -1790,6 +1803,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         categoryId: row.categoryId || null,
         grupoGerencial: row.grupoGerencial || null,
         faturaMonthYear: row.faturaMonthYear || null,
+        faturaRef: faturaRefFromMY(row.faturaMonthYear),
         reservaFuncaoId: row._reservaFuncaoId || null,
       })
       if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
@@ -2128,6 +2142,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       installmentNum: item._installment?.num || null,
       installmentTotal: item._installment?.total || null,
       faturaMonthYear: faturaMonthYear || null,
+      faturaRef: faturaRefFromMY(faturaMonthYear),
       _fromImport: true,
     })
     if (isExpense && item.grupoGerencial) {
@@ -2212,6 +2227,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           grupoGerencial: item.grupoGerencial || defaultGrupoD,
           reservaFuncaoId: item._reservaFuncaoId || null,
           faturaMonthYear: futFatura,
+          faturaRef: faturaRefFromMY(futFatura),
           installmentNum: k, installmentTotal: inst.total,
           _fromImport: true,
         })
