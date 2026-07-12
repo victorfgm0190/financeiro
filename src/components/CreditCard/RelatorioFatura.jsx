@@ -4,6 +4,41 @@ import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 
+// Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
+// G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
+function GerBadge({ grupoId, gerencialGroups }) {
+  const grupo = gerencialGroups.find(g => g.id === grupoId)
+  if (!grupo) return <span className="text-gray-700 text-xs">—</span>
+  let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
+  if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
+  else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
+  else cls += ' bg-orange-500/20 text-orange-600'
+  return <span className={cls}>{grupo.alias}</span>
+}
+
+// Badge cinza pequeno com o id do lançamento — clique copia o id para a área de transferência
+// (mesmo padrão do extrato do cartão).
+function CopyIdBadge({ id }) {
+  const [copied, setCopied] = useState(false)
+  if (!id) return null
+  const copy = (e) => {
+    e.stopPropagation()
+    navigator.clipboard?.writeText(id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1200)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Clique para copiar o ID"
+      className="inline-block font-mono text-[10px] text-gray-500 hover:text-gray-300 bg-gray-800/60 hover:bg-gray-700/60 px-1 py-0.5 rounded transition-colors"
+    >
+      {copied ? 'copiado ✓' : id}
+    </button>
+  )
+}
+
 // Fatura do mês M: fecha no dia F de M e vai do dia F+1 de M-1 ao dia F de M.
 // dia <= F → mês corrente; dia > F → mês seguinte (label = mês de fechamento).
 function getBillPeriod(dateStr, closingDay) {
@@ -52,6 +87,23 @@ export default function RelatorioFatura({ initialCardId }) {
     [gerencialGroups]
   )
 
+  // fatura_ref (MM/YYYY) do lançamento: usa o campo gravado; se ausente (lançamentos antigos),
+  // deriva de fatura_month_year (YYYY-MM). Vazio quando não há referência.
+  const faturaRefOf = (tx) => {
+    if (tx.faturaRef) return tx.faturaRef
+    if (tx.faturaMonthYear) {
+      const [y, m] = tx.faturaMonthYear.split('-')
+      return y && m ? `${m}/${y}` : ''
+    }
+    return ''
+  }
+
+  // Grupo gerencial efetivo do lançamento (sem grupo → D). Retorna o objeto do grupo ou null.
+  const grupoOf = (tx) => {
+    const gid = tx.grupoGerencial || grpD?.id
+    return gerencialGroups.find(g => g.id === gid) || null
+  }
+
   // Derive billing periods from card transactions
   const billPeriods = useMemo(() => {
     if (!selectedCardId) return []
@@ -97,26 +149,23 @@ export default function RelatorioFatura({ initialCardId }) {
 
   const handleExportCSV = () => {
     const headers = [
-      'Data', 'Descrição', 'Categoria', 'reserva', 'Valor',
-      grp1 ? grp1.alias : 'G',
-      ...customGroups.map(g => g.alias),
-      'D',
+      'Data', 'Descrição', 'Descrição original', 'ID', 'Fatura',
+      'Categoria', 'Favorecido', 'Grupo Gerencial', 'Valor',
     ]
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
     const csvRows = billTxs.map(tx => {
       const cat = categories.find(c => c.id === tx.categoryId)
-      const gid = tx.grupoGerencial
-      const isGrp1 = gid === grp1?.id
-      const isGrpD = !gid || gid === grpD?.id
-      const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`
+      const grupo = grupoOf(tx)
       return [
         q(tx.date),
         q(tx.description),
+        q(tx.notes || ''),
+        q(tx.id),
+        q(faturaRefOf(tx)),
         q(cat ? `${cat.icon} ${cat.name}` : ''),
-        q(tx.reservaFuncaoId ? (reserveFuncName[tx.reservaFuncaoId] || '') : ''),
+        q(tx.payee || ''),
+        q(grupo ? grupo.alias : ''),
         q(tx.amount.toFixed(2).replace('.', ',')),
-        q(isGrp1 ? tx.amount.toFixed(2).replace('.', ',') : ''),
-        ...customGroups.map(g => q(gid === g.id ? tx.amount.toFixed(2).replace('.', ',') : '')),
-        q(isGrpD ? tx.amount.toFixed(2).replace('.', ',') : ''),
       ].join(';')
     })
     const csv = [headers.join(';'), ...csvRows].join('\n')
@@ -227,16 +276,12 @@ export default function RelatorioFatura({ initialCardId }) {
               <tr className="border-b border-gray-800">
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden lg:table-cell">ID</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap hidden md:table-cell">Fatura</th>
                 <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Reserva</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
+                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Ger.</th>
                 <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
-                {grp1 && (
-                  <th className="text-right px-3 py-3 text-xs text-reserva font-medium whitespace-nowrap">{grp1.alias}</th>
-                )}
-                {customGroups.map(g => (
-                  <th key={g.id} className="text-right px-3 py-3 text-xs text-orange-600 font-medium whitespace-nowrap">{g.alias}</th>
-                ))}
-                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">D</th>
               </tr>
             </thead>
             <tbody>
@@ -250,58 +295,44 @@ export default function RelatorioFatura({ initialCardId }) {
                   : !isGrpD
                   ? 'border-b border-gray-800/50 bg-orange-500/5 hover:bg-orange-500/10 transition-colors'
                   : 'border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors'
+                const faturaRef = faturaRefOf(tx)
                 return (
                   <tr key={tx.id} className={rowCls}>
-                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
-                    <td className="px-3 py-2.5 text-gray-200 max-w-xs">
+                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs align-top">{fmtDate(tx.date)}</td>
+                    <td className="px-3 py-2.5 text-gray-200 max-w-xs align-top">
                       <p className="truncate">{tx.description}</p>
-                      {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                      {/* Descrição original (Observações) — linha secundária menor em cinza. */}
+                      {tx.notes && <p className="text-xs text-gray-500 truncate">{tx.notes}</p>}
+                      {/* Em telas pequenas, mostra Favorecido/Fatura aqui, já que as colunas somem. */}
+                      {tx.payee && <p className="text-xs text-gray-500 lg:hidden">{tx.payee}</p>}
+                      {faturaRef && <p className="text-[10px] text-gray-600 md:hidden">Fatura {faturaRef}</p>}
                     </td>
-                    <td className="px-3 py-2.5 hidden md:table-cell">
+                    <td className="px-3 py-2.5 align-top hidden lg:table-cell">
+                      <CopyIdBadge id={tx.id} />
+                    </td>
+                    <td className="px-3 py-2.5 align-top text-xs text-gray-300 whitespace-nowrap hidden md:table-cell">
+                      {faturaRef || <span className="text-gray-700">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 align-top hidden md:table-cell">
                       {cat && (
                         <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">{cat.icon} {cat.name}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 hidden md:table-cell text-xs text-gray-300 whitespace-nowrap">
-                      {tx.reservaFuncaoId ? (reserveFuncName[tx.reservaFuncaoId] || '') : ''}
+                    <td className="px-3 py-2.5 align-top hidden lg:table-cell text-xs text-gray-300">
+                      {tx.payee || <span className="text-gray-700">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-orange-600 whitespace-nowrap">{fmt(tx.amount)}</td>
-                    {grp1 && (
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                        {isGrp1 && <span className="text-reserva font-medium">{fmt(tx.amount)}</span>}
-                      </td>
-                    )}
-                    {customGroups.map(g => (
-                      <td key={g.id} className="px-3 py-2.5 text-right whitespace-nowrap">
-                        {gid === g.id && <span className="text-orange-600 font-medium">{fmt(tx.amount)}</span>}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {isGrpD && <span className="text-gray-300 font-medium">{fmt(tx.amount)}</span>}
+                    <td className="px-3 py-2.5 align-top">
+                      <GerBadge grupoId={gid || grpD?.id} gerencialGroups={gerencialGroups} />
                     </td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-orange-600 whitespace-nowrap align-top">{fmt(tx.amount)}</td>
                   </tr>
                 )
               })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-gray-700 bg-gray-800/60">
-                <td className="px-3 py-3 text-xs text-gray-300 font-bold" colSpan={2}>Total</td>
-                <td className="hidden md:table-cell" />
-                <td className="hidden md:table-cell" />
+                <td className="px-3 py-3 text-xs text-gray-300 font-bold" colSpan={7}>Total · {billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</td>
                 <td className="px-3 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{fmt(totals.total)}</td>
-                {grp1 && (
-                  <td className="px-3 py-3 text-right font-bold text-reserva whitespace-nowrap">
-                    {totals[grp1.id] > 0 ? fmt(totals[grp1.id]) : <span className="text-gray-700">—</span>}
-                  </td>
-                )}
-                {customGroups.map(g => (
-                  <td key={g.id} className="px-3 py-3 text-right font-bold text-orange-600 whitespace-nowrap">
-                    {totals[g.id] > 0 ? fmt(totals[g.id]) : <span className="text-gray-700">—</span>}
-                  </td>
-                ))}
-                <td className="px-3 py-3 text-right font-bold text-gray-300 whitespace-nowrap">
-                  {grpD && totals[grpD.id] > 0 ? fmt(totals[grpD.id]) : <span className="text-gray-700">—</span>}
-                </td>
               </tr>
             </tfoot>
           </table>
