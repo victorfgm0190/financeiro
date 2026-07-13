@@ -3874,6 +3874,7 @@ export function AppProvider({ children }) {
     payee = null,               // favorecido herdado da parcela base
     costCenter = null,          // centro de custo herdado da parcela base
     notes = null,               // observações herdadas da parcela base
+    serieId = null,             // elo da série (gerado na base) — propagado às filhas
   }) => {
     if (!installments || installments <= 1) return []
     if (startFromInstallment > installments) return []
@@ -3944,6 +3945,7 @@ export function AppProvider({ children }) {
         faturaRef: resolveFaturaRef({ faturaMonthYear: futureFatura }),
         reservaFuncaoId: reservaFuncaoId || null,
         installmentNum: i, installmentTotal: installments,
+        serieId: serieId || null,
         origin: 'parcela', parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })

@@ -3,6 +3,13 @@
 // dentro do ImportPanel.
 import { detectInstallment, normalizeInstallmentBase } from './installments.js'
 
+// serie_id: elo único de todas as parcelas de uma mesma compra. Gerado UMA vez na parcela
+// base/origem e propagado às filhas — nunca alterado depois. À vista → null.
+export function newSerieId() {
+  const rand = Math.random().toString(36).slice(2, 10).padEnd(8, '0')
+  return `serie_${Date.now()}_${rand}`
+}
+
 // Avança n meses em um string YYYY-MM (aceita n negativo — ex.: mês anterior).
 export function addMonthToFatura(yyyymm, n) {
   if (!yyyymm) return ''

@@ -691,6 +691,12 @@ ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS card_id TEXT;
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_ref TEXT;
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_expense_id TEXT;
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS source_schedule_id TEXT;
+
+-- serie_id: elo direto entre todas as parcelas de uma mesma compra (gerado uma vez na parcela
+-- base/origem e propagado às filhas). Permite achar as irmãs sem depender do installment_key
+-- concatenado. null em compras à vista e em parcelados legados (fallback: installment_key).
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS serie_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_lancamentos_serie_id ON lancamentos (serie_id) WHERE serie_id IS NOT NULL;
 -- Backfill idempotente: tx_gerA_<expenseId> embute o id da despesa origem no próprio id.
 UPDATE lancamentos SET source_expense_id = SUBSTRING(id FROM 9)
   WHERE id LIKE 'tx_gerA_%' AND source_expense_id IS NULL;

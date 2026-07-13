@@ -5,7 +5,7 @@ import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBi
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment } from '../../lib/installments'
-import { buildSeries, clampDateToFatura } from '../../lib/parcelas'
+import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -389,6 +389,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     const decidedInst = installmentDecision && !installmentDecision.skip ? installmentDecision : null
     const installmentNum = isParcelado ? 1 : (decidedInst ? decidedInst.num : null)
     const installmentTotal = isParcelado ? form.installments : (decidedInst ? decidedInst.total : null)
+    // serie_id: elo da série. Gerado UMA vez na parcela base (compra parcelada) e propagado
+    // às filhas em criarParcelasGerencial. À vista / parcela avulsa detectada → null.
+    const serieId = isParcelado ? newSerieId() : null
 
     // eslint-disable-next-line no-unused-vars
     const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
@@ -407,6 +410,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       dateCartao: form.dateCartao || null,
       installmentNum,
       installmentTotal,
+      serieId,
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
       // Despesa com "Pago com reserva?" ativo (cartão grupo numerado OU conta corrente): função
       // escolhida no select. Em edição, preserva o valor existente (ex.: cartão importado).
@@ -603,6 +607,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         notes: form.notes || null,
         reservaFuncaoId: txData.reservaFuncaoId || null,
         baseFaturaMonthYear: txData.faturaMonthYear || null,
+        serieId,
       })
       if (rateioRows.length > 0 && parcelaIds?.length) {
         for (const pid of parcelaIds) saveRateiosFor(pid, rateioRows)
@@ -716,6 +721,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     if (missing.length === 0) { onClose(); return }
     const card = accounts.find(a => a.id === initial.accountId)
     const closingDay = card?.closingDay || 14
+    // serie_id: parcelas faltantes herdam o elo já existente na série (qualquer irmã que o tenha).
+    // Série legada sem serie_id → null (fallback installment_key). Nunca fabricamos aqui.
+    const serieId = (parcelaSeries?.siblings || []).map(s => s.serieId).find(Boolean) || null
     const faturas = new Set()
     for (const p of missing) {
       const grupo = p.grupoGerencial || defaultGrupoId
@@ -731,6 +739,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         faturaMonthYear: p.faturaMonthYear,
         reservaFuncaoId: p.reservaFuncaoId || null,
         installmentNum: p.num, installmentTotal: p.total,
+        serieId,
         _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
       if (grupo) {
@@ -763,10 +772,19 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     // Irmãs já existentes da série ATUAL (antes da troca) — passam a usar o novo total,
     // mantendo o próprio num, para a série ficar consistente.
     const oldSiblings = parcelaSeries?.siblings || []
-    updateTransaction(initial.id, { installmentNum: num, installmentTotal: total })
+    // serie_id: propaga o elo existente da série para as irmãs que ainda não o têm (só preenche
+    // nulos — nunca sobrescreve um serie_id já gravado). Série totalmente legada → fica no fallback.
+    const serieId = [initial, ...oldSiblings].map(s => s.serieId).find(Boolean) || null
+    updateTransaction(initial.id, {
+      installmentNum: num, installmentTotal: total,
+      ...(serieId && !initial.serieId ? { serieId } : {}),
+    })
     for (const s of oldSiblings) {
       if (s.id === initial.id) continue
-      if ((Number(s.installmentTotal) || null) !== total) updateTransaction(s.id, { installmentTotal: total })
+      const changes = {}
+      if ((Number(s.installmentTotal) || null) !== total) changes.installmentTotal = total
+      if (serieId && !s.serieId) changes.serieId = serieId
+      if (Object.keys(changes).length) updateTransaction(s.id, changes)
     }
     setInstOverride({ num, total })
     setEditInst(false)

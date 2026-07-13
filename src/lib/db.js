@@ -226,6 +226,7 @@ export const txToRow = (tx) => ({
   reserva_conta_id: tx.reservaContaId || null,
   installment_num: tx.installmentNum ?? null,
   installment_total: tx.installmentTotal ?? null,
+  serie_id: tx.serieId || null,
   // Chave única da parcela (mesma fórmula do backfill) — protege contra importação
   // duplicada via uq_lancamentos_installment. null quando não é parcela.
   installment_key: installmentKey({
@@ -275,6 +276,7 @@ export const rowToTx = (r) => ({
   reservaContaId: r.reserva_conta_id || null,
   installmentNum: r.installment_num ?? null,
   installmentTotal: r.installment_total ?? null,
+  serieId: r.serie_id || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
   createdAt: r.created_at,

@@ -9,7 +9,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { detectInstallment, installmentKey } from '../../lib/installments'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -1186,16 +1186,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       // Auto-classify from rules + Movimentação → category; compute per-row fatura
       const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
-      // Herança de grupo entre parcelas da MESMA série: índice série → grupo dos lançamentos
-      // já existentes no cartão. Ignora o grupo D (default) — herdar D é no-op e não deve
-      // sobrepor o default da categoria. Guarda a primeira parcela irmã com grupo significativo.
-      const serieGrupoIndex = new Map()
+      // Herança entre parcelas da MESMA série: índice série → { serieId, grupo } dos lançamentos
+      // já existentes no cartão. Casa por série (installment_key sem o número) porque a nova
+      // parcela ainda não tem serie_id. serie_id é o elo robusto (propagado adiante); grupo herda
+      // a classificação da irmã (ignora D — herdar D é no-op e não sobrepõe o default da categoria).
+      const serieInfoByKey = new Map()
       if (resolvedAccountId) {
         for (const t of transactions) {
           if (t.accountId !== resolvedAccountId || t.type !== 'expense' || t.accountType !== 'credit') continue
-          if (!t.grupoGerencial || t.grupoGerencial === grupoD) continue
           const sk = serieKeyOfExistingTx(t)
-          if (sk && !serieGrupoIndex.has(sk)) serieGrupoIndex.set(sk, t.grupoGerencial)
+          if (!sk) continue
+          const cur = serieInfoByKey.get(sk) || { serieId: null, grupo: null }
+          if (!cur.serieId && t.serieId) cur.serieId = t.serieId
+          if (!cur.grupo && t.grupoGerencial && t.grupoGerencial !== grupoD) cur.grupo = t.grupoGerencial
+          serieInfoByKey.set(sk, cur)
         }
       }
       const processed = []
@@ -1219,15 +1223,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : faturaParc1
         const grupoFromRules = classified?.grupoGerencial
           || classifyGerencialByRules(row.description, row.amount, isParcelado)
-        // Herança entre parcelas: parcela cuja SÉRIE (installment_key sem o número) já tem um
-        // lançamento no banco com grupo != D herda esse grupo (classificação manual de uma
-        // parcela anterior). Só quando não há regra de descrição (regra explícita prevalece).
-        const grupoFromSerie = (isParcelado && resolvedAccountId)
-          ? (serieGrupoIndex.get(serieKeyFromFull(installmentKey({
+        // Casa a linha à série existente no cartão (installment_key sem o número). Traz o
+        // serie_id (elo a propagar) e o grupo classificado numa parcela anterior.
+        const serieInfo = (isParcelado && resolvedAccountId)
+          ? (serieInfoByKey.get(serieKeyFromFull(installmentKey({
               accountId: resolvedAccountId, description: row.description,
               installmentNum: installInfo.num, installmentTotal: installInfo.total,
               amount: row.amount, faturaMonthYear: baseFatura,
             }))) || null)
+          : null
+        // Herança de grupo: parcela cuja série já tem grupo != D no banco herda esse grupo.
+        // Só quando não há regra de descrição (regra explícita prevalece).
+        const grupoFromSerie = serieInfo?.grupo || null
+        // serie_id da linha: junta a série já existente (usa o serie_id dela) ou gera um novo
+        // para uma compra parcelada NOVA. Série legada existente sem serie_id → null (fallback).
+        const serieIdRow = isParcelado
+          ? (serieInfo ? (serieInfo.serieId || null) : newSerieId())
           : null
         // Prioridade: regra de descrição > série (parcela irmã) > default da categoria > D.
         const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
@@ -1242,7 +1253,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoFinal, _installment: installInfo, _generated: false,
-          _reservaFuncaoId: reservaFuncaoFromRule,
+          _reservaFuncaoId: reservaFuncaoFromRule, _serieId: serieIdRow,
           faturaMonthYear: baseFatura, _origDay: rowDay,
           // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
           _dateCartao: row.date,
@@ -1371,6 +1382,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         payee: t.payee || '',
         grupoGerencial: t.grupoGerencial || defaultGrupoD,
         _reservaFuncaoId: reservaFuncaoId,
+        _serieId: t.serieId || null,
         type: t.type,
         isDeposit: false,
         selected: true,
@@ -1473,6 +1485,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           payee: existing ? (existing.payee || '') : row.payee,
           // Replica a função de reserva escolhida na parcela base para as parcelas futuras.
           _reservaFuncaoId: existing ? null : (row._reservaFuncaoId || null),
+          // serie_id herdado da parcela base (elo da série); já existente preserva o próprio.
+          _serieId: existing ? (existing.serieId || null) : (row._serieId || null),
           _exists: !!existing,
         })
       }
@@ -1644,6 +1658,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaRef: faturaRefFromMY(fp.faturaMonthYear),
           reservaFuncaoId: fp._reservaFuncaoId || null,
           installmentNum: fp.num, installmentTotal: fp.total,
+          serieId: fp._serieId || null,
           _fromImport: true,
         })
         if (fId) novosTxIds.push(fId)
@@ -1756,6 +1771,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         reservaFuncaoId: row._reservaFuncaoId || null,
         installmentNum: row._installment?.num || null,
         installmentTotal: row._installment?.total || null,
+        serieId: row._serieId || null,
         _fromImport: true,
       })
       txIds.push(txId)
@@ -1805,6 +1821,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         faturaRef: faturaRefFromMY(fp.faturaMonthYear),
         reservaFuncaoId: fp._reservaFuncaoId || null,
         installmentNum: fp.num, installmentTotal: fp.total,
+        serieId: fp._serieId || null,
         _fromImport: true,
       })
       if (fId) txIds.push(fId)
@@ -2175,6 +2192,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       reservaFuncaoId: isExpense ? (item._reservaFuncaoId || null) : null,
       installmentNum: item._installment?.num || null,
       installmentTotal: item._installment?.total || null,
+      serieId: item._serieId || null,
       faturaMonthYear: faturaMonthYear || null,
       faturaRef: faturaRefFromMY(faturaMonthYear),
       _fromImport: true,
@@ -2263,6 +2281,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           faturaMonthYear: futFatura,
           faturaRef: faturaRefFromMY(futFatura),
           installmentNum: k, installmentTotal: inst.total,
+          serieId: item._serieId || null,
           _fromImport: true,
         })
         if (fId) txIds.push(fId)

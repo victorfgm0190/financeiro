@@ -20,6 +20,11 @@ export default async function handler(req, res) {
     // calculada em txToRow. Índice parcial protege contra importação duplicada.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_key TEXT`)
     await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL`)
+    // serie_id: elo direto entre todas as parcelas de uma mesma compra (gerado uma vez na
+    // parcela base e propagado às filhas). Substitui a dependência do installment_key derivado
+    // para achar as irmãs. null em compras à vista e em parcelados legados (fallback: installment_key).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS serie_id TEXT`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_lancamentos_serie_id ON lancamentos (serie_id) WHERE serie_id IS NOT NULL`)
     // Transferências entre perfis CPF/CNPJ: categoria na visão de cada perfil.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)
