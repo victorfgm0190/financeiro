@@ -939,6 +939,17 @@ function keyOfImportRow(row, accountId) {
     amount: row.amount, faturaMonthYear: row.faturaMonthYear, date: row.date,
   })
 }
+// Chave da SÉRIE de parcelas = installment_key SEM o número da parcela
+// (accountId | base | total | cents | serie_inicio). Parcelas irmãs (2/12, 3/12, …)
+// compartilham esta chave — usada para herdar o grupo gerencial de uma parcela anterior.
+function serieKeyFromFull(fullKey) {
+  if (!fullKey) return null
+  const parts = fullKey.split('|')
+  if (parts.length < 5) return null
+  const total = parts[2].split('/')[1] || parts[2]
+  return `${parts[0]}|${parts[1]}|${total}|${parts[3]}|${parts[4]}`
+}
+function serieKeyOfExistingTx(tx) { return serieKeyFromFull(keyOfExistingTx(tx)) }
 
 // Override manual de parcelamento (camada sobre detectInstallment, sem alterá-lo). Quando a
 // descrição tem N/M, reaproveita base/matchStr do detector; senão base = descrição inteira e
@@ -1160,12 +1171,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (parsed.length === 0) { setError('Nenhum lançamento encontrado. Verifique o formato do arquivo.'); return }
 
       // Auto-match card (before fatura computation so we get the right closingDay/dueDay)
+      let resolvedAccountId = selectedAccount
       let resolvedClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
       let resolvedDueDay = accounts.find(a => a.id === selectedAccount)?.dueDay || null
       if (cardName) {
         const match = fuzzyMatchAccount(cardName, creditAccounts)
         if (match) {
           setSelectedAccount(match.id)
+          resolvedAccountId = match.id
           resolvedClosingDay = match.closingDay || 14
           resolvedDueDay = match.dueDay || null
         }
@@ -1173,6 +1186,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       // Auto-classify from rules + Movimentação → category; compute per-row fatura
       const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
+      // Herança de grupo entre parcelas da MESMA série: índice série → grupo dos lançamentos
+      // já existentes no cartão. Ignora o grupo D (default) — herdar D é no-op e não deve
+      // sobrepor o default da categoria. Guarda a primeira parcela irmã com grupo significativo.
+      const serieGrupoIndex = new Map()
+      if (resolvedAccountId) {
+        for (const t of transactions) {
+          if (t.accountId !== resolvedAccountId || t.type !== 'expense' || t.accountType !== 'credit') continue
+          if (!t.grupoGerencial || t.grupoGerencial === grupoD) continue
+          const sk = serieKeyOfExistingTx(t)
+          if (sk && !serieGrupoIndex.has(sk)) serieGrupoIndex.set(sk, t.grupoGerencial)
+        }
+      }
       const processed = []
       const pendingMatches = []
       let idCtr = 0
@@ -1187,24 +1212,33 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const payee = classified?.payee || row.payee || row.description || ''
         const installInfo = detectInstallment(row.description)
         const isParcelado = !!installInfo
-        const grupoFromRules = classified?.grupoGerencial
-          || classifyGerencialByRules(row.description, row.amount, isParcelado)
-        // Prioridade descrição > categoria: sem regra de descrição, usa o grupo gerencial padrão
-        // da categoria aplicada; senão, o padrão D.
-        const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
-        // Função de reserva da regra → só pré-preenche quando a conta-origem do grupo
-        // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
-        const grupoFinal = grupoFromRules || catDefaultGrupo || grupoD
-        const funcsDoGrupo = reserveFuncsForGroup(grupoFinal)
-        const reservaFuncaoFromRule = (classified?.reservaFuncaoId
-          && funcsDoGrupo.length > 1
-          && funcsDoGrupo.some(f => f.id === classified.reservaFuncaoId))
-          ? classified.reservaFuncaoId : null
         const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
         // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses
         const baseFatura = (installInfo && installInfo.num > 1)
           ? addMonthToFatura(faturaParc1, installInfo.num - 1)
           : faturaParc1
+        const grupoFromRules = classified?.grupoGerencial
+          || classifyGerencialByRules(row.description, row.amount, isParcelado)
+        // Herança entre parcelas: parcela cuja SÉRIE (installment_key sem o número) já tem um
+        // lançamento no banco com grupo != D herda esse grupo (classificação manual de uma
+        // parcela anterior). Só quando não há regra de descrição (regra explícita prevalece).
+        const grupoFromSerie = (isParcelado && resolvedAccountId)
+          ? (serieGrupoIndex.get(serieKeyFromFull(installmentKey({
+              accountId: resolvedAccountId, description: row.description,
+              installmentNum: installInfo.num, installmentTotal: installInfo.total,
+              amount: row.amount, faturaMonthYear: baseFatura,
+            }))) || null)
+          : null
+        // Prioridade: regra de descrição > série (parcela irmã) > default da categoria > D.
+        const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
+        const grupoFinal = grupoFromRules || grupoFromSerie || catDefaultGrupo || grupoD
+        // Função de reserva da regra → só pré-preenche quando a conta-origem do grupo
+        // tem múltiplas funções (mesma condição do select inline) e a função é válida nela.
+        const funcsDoGrupo = reserveFuncsForGroup(grupoFinal)
+        const reservaFuncaoFromRule = (classified?.reservaFuncaoId
+          && funcsDoGrupo.length > 1
+          && funcsDoGrupo.some(f => f.id === classified.reservaFuncaoId))
+          ? classified.reservaFuncaoId : null
         const baseRow = {
           ...row, _id: idCtr++, categoryId, payee,
           grupoGerencial: grupoFinal, _installment: installInfo, _generated: false,
