@@ -1014,6 +1014,28 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 <ChevronRight size={14} />
               </button>
             </div>
+            {/* Resumo de faturas (contas gerenciais) — no centro da barra, entre o seletor de mês
+                e os botões de ação. Usa faturaTotals já calculado; nenhum recálculo aqui. */}
+            {faturaTotals && (
+              <div className="hidden lg:flex items-stretch min-w-0 text-xs">
+                {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
+                  <div key={f.ref} className={`min-w-0 ${i > 0 ? 'border-l border-gray-700 pl-3 ml-3' : ''}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-gray-400 font-medium">Fatura {f.ref}</span>
+                      <span className={`font-bold ${
+                        f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                      }`}>{fmt(f.liquido)}</span>
+                    </div>
+                    <div className="space-y-0.5 text-[11px] mt-0.5">
+                      <ResumoLinha label="Mês anterior"  value={f.mesAnt}       color="text-blue-600" />
+                      <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-blue-600" />
+                      <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-orange-600" />
+                      <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-yellow-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
               <button
                 onClick={toggleSelectMode}
@@ -1074,31 +1096,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             </div>
           </div>
         </div>
-
-        {/* Resumo de faturas (contas gerenciais) — fixo no topo, sempre visível ao rolar.
-            Usa os dados já calculados em faturaTotals; nenhum recálculo aqui. */}
-        {faturaTotals && (
-          <div className="sticky top-0 z-10 mb-1.5 rounded-lg border border-gray-800 bg-surface/95 backdrop-blur-sm px-3 py-2 shadow-sm">
-            <div className="flex items-stretch">
-              {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
-                <div key={f.ref} className={`flex-1 min-w-0 ${i > 0 ? 'border-l border-gray-700/60 pl-4 ml-4' : 'pr-4'}`}>
-                  <div className="flex items-center justify-between gap-4 mb-1 pb-1 border-b border-gray-800">
-                    <span className="text-xs text-gray-400 font-medium">Fatura {f.ref}</span>
-                    <span className={`text-xs font-bold ${
-                      f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
-                    }`}>{fmt(f.liquido)}</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px]">
-                    <ResumoLinha label="Mês anterior"  value={f.mesAnt}       color="text-blue-600" />
-                    <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-blue-600" />
-                    <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-orange-600" />
-                    <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-yellow-400" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Table column header (desktop) */}
         <div className="hidden md:block bg-surface border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
