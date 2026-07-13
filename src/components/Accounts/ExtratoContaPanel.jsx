@@ -20,6 +20,17 @@ import ReconciledTotals from '../shared/ReconciledTotals'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
+// Uma linha do resumo de fatura (contas gerenciais). Valor 0/ausente → "—" em cinza.
+function ResumoLinha({ label, value, color }) {
+  const zero = !(value > 0)
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-gray-500">{label}</span>
+      <span className={`font-semibold ${zero ? 'text-gray-600' : color}`}>{zero ? '—' : fmt(value)}</span>
+    </div>
+  )
+}
+
 // Computes the account balance just before `fromDate` by reversing transactions in
 // [fromDate, hoje]. Lançamentos com data FUTURA (date > hoje) NÃO são revertidos: eles não
 // entram em account.balance (que só soma date <= hoje, igual ao recalcularSaldo), então revertê-los
@@ -1064,6 +1075,31 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           </div>
         </div>
 
+        {/* Resumo de faturas (contas gerenciais) — fixo no topo, sempre visível ao rolar.
+            Usa os dados já calculados em faturaTotals; nenhum recálculo aqui. */}
+        {faturaTotals && (
+          <div className="sticky top-0 z-10 mb-1.5 rounded-lg border border-gray-800 bg-surface/95 backdrop-blur-sm px-3 py-2 shadow-sm">
+            <div className="flex items-stretch">
+              {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
+                <div key={f.ref} className={`flex-1 min-w-0 ${i > 0 ? 'border-l border-gray-700/60 pl-4 ml-4' : 'pr-4'}`}>
+                  <div className="flex items-center justify-between gap-4 mb-1 pb-1 border-b border-gray-800">
+                    <span className="text-xs text-gray-400 font-medium">Fatura {f.ref}</span>
+                    <span className={`text-xs font-bold ${
+                      f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                    }`}>{fmt(f.liquido)}</span>
+                  </div>
+                  <div className="space-y-0.5 text-[11px]">
+                    <ResumoLinha label="Mês anterior"  value={f.mesAnt}       color="text-blue-600" />
+                    <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-blue-600" />
+                    <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-orange-600" />
+                    <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-yellow-400" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Table column header (desktop) */}
         <div className="hidden md:block bg-surface border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
@@ -1207,59 +1243,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           />
         </div>
 
-        {/* Totalizador gerencial (fatura anterior + atual) + Conciliados/Pendentes (lançamentos visíveis) */}
-        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0 || faturaTotals) && (
+        {/* Conciliados/Pendentes (lançamentos visíveis). O resumo de faturas foi movido para o
+            card fixo no topo do extrato. */}
+        {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
           <div className="border-x border-gray-800 bg-surface/40 px-4 py-1.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-4 gap-y-2 text-xs">
-            {faturaTotals && (
-              <div className="rounded bg-gray-800/60 px-3 py-1.5">
-                {/* Faturas lado a lado (horizontal); empilha no mobile via flex-wrap. Separador
-                    vertical entre as colunas no desktop (border-l), com alturas iguais (items-stretch). */}
-                <div className="flex flex-wrap items-stretch gap-y-2">
-                  {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => {
-                    return (
-                      <div
-                        key={f.ref}
-                        className={`space-y-1 flex-1 min-w-[160px] ${i > 0 ? 'sm:border-l sm:border-gray-700/60 sm:pl-4 sm:ml-4' : ''}`}
-                      >
-                        <div className="text-gray-400 font-medium">Fatura {f.ref}</div>
-                        {f.mesAnt > 0 && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Mês anterior</span>
-                            <span className="font-semibold text-blue-600">{fmt(f.mesAnt)}</span>
-                          </div>
-                        )}
-                        {f.esteMes > 0 && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Este mês</span>
-                            <span className="font-semibold text-blue-600">{fmt(f.esteMes)}</span>
-                          </div>
-                        )}
-                        {f.resgateExec > 0 && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Resgate</span>
-                            <span className="font-semibold text-orange-600">{fmt(f.resgateExec)}</span>
-                          </div>
-                        )}
-                        {f.resgateAgend > 0 && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Resgate (agend.)</span>
-                            <span className="font-semibold text-yellow-400">{fmt(f.resgateAgend)}</span>
-                          </div>
-                        )}
-                        {(f.entradas > 0 || f.resgate > 0) && (
-                          <div className="flex items-center justify-between gap-6">
-                            <span className="text-gray-500">Líquido</span>
-                            <span className={`font-semibold ${
-                              f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
-                            }`}>{fmt(f.liquido)}</span>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
             <ReconciledTotals
               conciliado={reconciledTotals.conciliado}
               pendente={reconciledTotals.pendente}
