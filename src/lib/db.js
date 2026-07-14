@@ -58,6 +58,62 @@ export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId }
   return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
 }
 
+// ─── Reservas: histórico de períodos e ajustes (escrita direta, sem diff-sync) ──
+// Diferente das demais seções (sincronizadas por diff debounced), estes registros são
+// gravados diretamente no banco por operação e o state local é atualizado após sucesso.
+
+async function apiPut(path, body) {
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  })
+  if (res.status === 401) { onUnauthorized() }
+  if (!res.ok) {
+    const err = new Error(`PUT ${path} → ${res.status}`)
+    err.status = res.status
+    throw err
+  }
+  return res.json()
+}
+
+async function apiDelete(path) {
+  const res = await fetch(path, { method: 'DELETE', headers: { ...authHeaders() } })
+  if (res.status === 401) { onUnauthorized() }
+  if (!res.ok) {
+    const err = new Error(`DELETE ${path} → ${res.status}`)
+    err.status = res.status
+    throw err
+  }
+  return res.json()
+}
+
+// Períodos de saldo inicial. Objetos em snake_case (mesma forma do banco/endpoint):
+// { id, function_id, data_inicio, saldo_inicial }.
+export async function fetchReservePeriods() {
+  return apiGet('/api/reserve-periods')
+}
+export async function createReservePeriod(period) {
+  return apiPost('/api/reserve-periods', period)
+}
+export async function deleteReservePeriodApi(id) {
+  return apiDelete(`/api/reserve-periods?id=${encodeURIComponent(id)}`)
+}
+
+// Ajustes por função: { id, function_id, data, valor, observacao }.
+export async function fetchReserveAdjustments() {
+  return apiGet('/api/reserve-adjustments')
+}
+export async function createReserveAdjustment(adj) {
+  return apiPost('/api/reserve-adjustments', adj)
+}
+export async function updateReserveAdjustmentApi(adj) {
+  return apiPut('/api/reserve-adjustments', adj)
+}
+export async function deleteReserveAdjustmentApi(id) {
+  return apiDelete(`/api/reserve-adjustments?id=${encodeURIComponent(id)}`)
+}
+
 // Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
 // pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
 // strings (date é TEXT), então convertemos aqui para manter a consistência.

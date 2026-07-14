@@ -26,8 +26,9 @@ function mmYYYY() {
   return `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`
 }
 
-// Funções de reserva vivem no estado global (Neon). accountBalances e periods seguem
-// locais (overrides de saldo real e histórico de viradas — específicos do dispositivo).
+// Funções de reserva vivem no estado global (Neon). accountBalances segue local (override
+// de saldo real da conta — específico do dispositivo). O histórico de saldos iniciais e de
+// ajustes agora vive no banco (reserve_periods / reserve_adjustments), não no localStorage.
 function useReservas() {
   const { reserveFunctions: functions, addReserveFunction, updateReserveFunction, deleteReserveFunction } = useApp()
 
@@ -37,15 +38,8 @@ function useReservas() {
       return s ? JSON.parse(s) : {}
     } catch { return {} }
   })
-  const [periods, setPeriods] = useState(() => {
-    try {
-      const s = localStorage.getItem('finup_reserve_periods')
-      return s ? JSON.parse(s) : []
-    } catch { return [] }
-  })
 
   useEffect(() => { localStorage.setItem('finup_reserve_balances', JSON.stringify(accountBalances)) }, [accountBalances])
-  useEffect(() => { localStorage.setItem('finup_reserve_periods', JSON.stringify(periods)) }, [periods])
 
   const addFunction = (fn) => addReserveFunction(fn)
   const updateFunction = (id, changes) => updateReserveFunction(id, changes)
@@ -55,52 +49,12 @@ function useReservas() {
     setAccountBalancesState(b => ({ ...b, [accountId]: Number(value) }))
   }
 
-  const virarSaldo = (saldosAtualizados, monthKey = null) => {
-    const snapshot = functions.map(f => ({
-      id: f.id,
-      prevSaldoInicial: f.saldoInicial,
-      prevEntradas: f.entradas,
-      prevSaidas: f.saidas,
-      prevEntradasOverride: f.entradasOverride ?? null,
-      prevSaidasOverride: f.saidasOverride ?? null,
-      prevAjusteOverride: f.ajusteOverride ?? null,
-      saldoAtualizado: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
-    }))
-    setPeriods(ps => [...ps, { closedAt: new Date().toISOString().split('T')[0], snapshot }])
-    // Fecha o período: o saldo atualizado vira o novo saldo inicial e as entradas/saídas
-    // são zeradas via override (0), evitando recontar os lançamentos do período já fechado.
-    // O ajuste do mês fechado é removido (já está embutido no saldo atualizado → novo saldo inicial).
-    functions.forEach(f => {
-      const ajuste = { ...(f.ajusteOverride || {}) }
-      if (monthKey) delete ajuste[monthKey]
-      updateReserveFunction(f.id, {
-        saldoInicial: saldosAtualizados[f.id] ?? Math.round((f.saldoInicial + f.entradas - f.saidas) * 100) / 100,
-        entradas: 0,
-        saidas: 0,
-        entradasOverride: 0,
-        saidasOverride: 0,
-        ajusteOverride: ajuste,
-      })
-    })
-  }
+  return { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance }
+}
 
-  const undoVirarSaldo = () => {
-    if (periods.length === 0) return
-    const last = periods[periods.length - 1]
-    last.snapshot.forEach(snap =>
-      updateReserveFunction(snap.id, {
-        saldoInicial: snap.prevSaldoInicial,
-        entradas: snap.prevEntradas,
-        saidas: snap.prevSaidas,
-        entradasOverride: snap.prevEntradasOverride ?? null,
-        saidasOverride: snap.prevSaidasOverride ?? null,
-        ajusteOverride: snap.prevAjusteOverride ?? {},
-      })
-    )
-    setPeriods(ps => ps.slice(0, -1))
-  }
-
-  return { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo }
+// Data local 'YYYY-MM-DD' (evita o shift de fuso do toISOString).
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // ── Inline editable number cell ────────────────────────────────────────────
@@ -456,18 +410,19 @@ function ObsIndicator({ text }) {
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, categories = [], accountBalances, periods, saldosAtualizados, computeSaldo, currentMonthKey, periodStart, periodEnd, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
   // Nome da categoria vinculada à função (quando categoryId preenchido).
   const catNameOf = (id) => categories.find(c => c.id === id)?.name
-  // Grupo (conta + funções) cujo modal de ajustes está aberto.
-  const [ajusteGroup, setAjusteGroup] = useState(null)
+  // Função cujo modal de histórico de ajustes está aberto (Parte 6).
+  const [adjFn, setAdjFn] = useState(null)
   // Modal "Origem" do valor AUTO: { fn, tipo: 'entradas'|'saidas', items, loading, error }.
   const [origem, setOrigem] = useState(null)
   const openOrigem = async (fn, tipo) => {
     setOrigem({ fn, tipo, loading: true, items: [] })
     try {
-      const { transactions: items } = await fetchReserveFunctionTransactions(fn.id, periodStart, periodEnd)
+      const { start, end } = autoBoundsOf(fn.id)
+      const { transactions: items } = await fetchReserveFunctionTransactions(fn.id, start, end)
       setOrigem({ fn, tipo, loading: false, items: items || [] })
     } catch {
       setOrigem({ fn, tipo, loading: false, error: true, items: [] })
@@ -490,7 +445,6 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
   }, [functions, accounts])
 
   const grandTotal = Object.values(saldosAtualizados).reduce((s, v) => s + v, 0)
-  const lastPeriod = periods[periods.length - 1]
 
   const [dragId, setDragId] = useState(null)
   const handleDropOn = (targetFn) => {
@@ -529,8 +483,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
           <span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">Total reservado:</span>
           <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(grandTotal)}</span>
         </div>
-        {lastPeriod && (
-          <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {lastPeriod.closedAt}</span>
+        {lastFechamento && (
+          <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {fmtDate(lastFechamento)}</span>
         )}
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto flex-wrap justify-end">
           {functions.length > 0 && (
@@ -538,7 +492,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
-          {periods.length > 0 && (
+          {canUndo && (
             <button onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
             </button>
@@ -639,6 +593,10 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                         Garante que os botões editar/excluir nunca saiam da tela e que os selos
                         AUTO/MANUAL não sejam truncados. */}
                     <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-gray-500 shrink-0">Saldo inicial:</span>
+                        <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} />
+                      </div>
                       <div className="flex items-center gap-4 text-xs">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-gray-500 shrink-0">Entradas:</span>
@@ -653,13 +611,13 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="text-gray-500 shrink-0">Ajuste:</span>
                           <button
-                            onClick={() => setAjusteGroup({ account, fns })}
+                            onClick={() => setAdjFn(f)}
                             className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
-                            title="Editar ajuste do mês"
+                            title="Ver histórico de ajustes"
                           >
                             {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
-                            {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500 shrink-0">manual</span>}
                           </button>
+                          <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-gray-500 hover:text-blue-600 shrink-0"><Plus size={12} /></button>
                           {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
@@ -703,10 +661,6 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                         </span>
                       )}
                     </div>
-                    {/* Período considerado no cálculo AUTO de Entradas/Saídas. */}
-                    <span className="w-full text-xs text-gray-500">
-                      Período: <span className="text-gray-400">{fmtDate(periodStart)} – {fmtDate(periodEnd)}</span>
-                    </span>
                   </>
                 ) : (
                   <span className="text-sm font-semibold text-gray-500 italic">Sem conta vinculada</span>
@@ -748,7 +702,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                               {catNameOf(f.categoryId) && <span className="text-xs text-gray-400">{catNameOf(f.categoryId)}</span>}
                             </span>
                           </td>
-                          <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(f.saldoInicial)}</td>
+                          <td className="px-4 py-2 text-right text-xs text-gray-400">
+                            <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} align="right" />
+                          </td>
                           <td className="px-4 py-2 text-right">
                             <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
                           </td>
@@ -758,13 +714,13 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
                           <td className="px-4 py-2 text-right">
                             <span className="inline-flex items-center justify-end gap-1">
                               <button
-                                onClick={() => setAjusteGroup({ account, fns })}
-                                title="Editar ajuste do mês"
+                                onClick={() => setAdjFn(f)}
+                                title="Ver histórico de ajustes"
                                 className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
                               >
                                 {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
-                                {f.ajuste !== 0 && <span className="text-[8px] uppercase tracking-wide text-gray-500">manual</span>}
                               </button>
+                              <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-gray-500 hover:text-blue-600 shrink-0"><Plus size={11} /></button>
                               {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                             </span>
                           </td>
@@ -820,13 +776,16 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, peri
         )
       })}
 
-      {ajusteGroup && (
-        <AjusteModal
-          account={ajusteGroup.account}
-          fns={ajusteGroup.fns}
-          defaultMonthKey={currentMonthKey}
-          onUpdateFunction={onUpdateFunction}
-          onClose={() => setAjusteGroup(null)}
+      {adjFn && (
+        <AjusteHistoricoModal
+          fn={adjFn}
+          adjustments={adjustmentsByFn[adjFn.id] || []}
+          activePeriod={activePeriodByFn[adjFn.id]}
+          todayStr={todayStr}
+          onAdd={onAddAdjustment}
+          onUpdate={onUpdateAdjustment}
+          onDelete={onDeleteAdjustment}
+          onClose={() => setAdjFn(null)}
         />
       )}
 
@@ -887,106 +846,258 @@ function OrigemModal({ origem, onClose }) {
   )
 }
 
-// ── Modal de Ajustes de Reserva (por conta, por mês) ────────────────────────
-function AjusteModal({ account, fns, defaultMonthKey, onUpdateFunction, onClose }) {
-  // Campos editáveis por função para um mês (string p/ aceitar '-'/'+'/vazio).
-  // ajusteOverride[mk] tem o formato { valor, observacao } (migrado on-the-fly).
-  const buildVals = (mk) => Object.fromEntries(fns.map(f => {
-    const v = Number(f.ajusteOverride?.[mk]?.valor)
-    return [f.id, v ? String(v) : '']
-  }))
-  const buildObs = (mk) => Object.fromEntries(fns.map(f => [f.id, f.ajusteOverride?.[mk]?.observacao || '']))
-  const [monthKey, setMonthKey] = useState(defaultMonthKey)
-  const [vals, setVals] = useState(() => buildVals(defaultMonthKey))
-  const [obs, setObs] = useState(() => buildObs(defaultMonthKey))
-  // Troca de mês recarrega os campos (sem efeito → evita set-state-in-effect).
-  const changeMonth = (mk) => { setMonthKey(mk); setVals(buildVals(mk)); setObs(buildObs(mk)) }
+// id único (uuid quando disponível; fallback determinístico p/ ambientes sem crypto).
+function newId(prefix = 'id') {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
 
-  // Opções de mês: 12 meses ao redor do mês padrão (mês anterior … +10).
-  const monthOptions = useMemo(() => {
-    const [y, m] = defaultMonthKey.split('-').map(Number)
-    return Array.from({ length: 13 }, (_, i) => {
-      const d = new Date(y, m - 1 - 1 + i, 1) // começa um mês antes
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      return { key, label: `${MONTH_LABELS[d.getMonth()]}/${d.getFullYear()}` }
-    })
-  }, [defaultMonthKey])
+// ── Célula "Saldo Inicial" clicável (Parte 5) ───────────────────────────────
+// Mostra o saldo inicial efetivo (do período ativo, ou legado). Ao clicar abre um popover
+// inline (não modal) para registrar um NOVO período: { data_inicio, saldo_inicial }.
+function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'left' }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(todayStr)
+  const [valor, setValor] = useState('')
+  const [saving, setSaving] = useState(false)
+  const ref = useRef(null)
 
-  const setVal = (id, v) => setVals(s => ({ ...s, [id]: v }))
-  const setObsVal = (id, v) => setObs(s => ({ ...s, [id]: v }))
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('touchstart', onDoc)
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('touchstart', onDoc) }
+  }, [open])
 
-  // Grava o ajuste do mês em cada função como { valor, observacao }; valor
-  // 0/inválido remove a chave do mês (e a observação junto).
-  const persist = (getValor, getObs) => {
-    fns.forEach(f => {
-      const valor = getValor(f)
-      const next = { ...(f.ajusteOverride || {}) }
-      if (valor && Number.isFinite(valor)) {
-        next[monthKey] = {
-          valor: Math.round(valor * 100) / 100,
-          observacao: (getObs ? getObs(f) : '').trim(),
-        }
-      } else {
-        delete next[monthKey]
-      }
-      onUpdateFunction(f.id, { ajusteOverride: next })
-    })
+  const openPopover = () => {
+    setData(todayStr)
+    setValor(String(f.saldoInicial ?? 0))
+    setOpen(true)
   }
-
-  const handleSave = () => {
-    persist(f => parseFloat(vals[f.id]), f => obs[f.id] || '')
-    onClose()
-  }
-  const handleClearAll = () => {
-    persist(() => 0)
-    setVals(Object.fromEntries(fns.map(f => [f.id, ''])))
-    setObs(Object.fromEntries(fns.map(f => [f.id, ''])))
+  const save = async () => {
+    const v = parseFloat(valor)
+    if (isNaN(v) || !data) { setOpen(false); return }
+    setSaving(true)
+    try {
+      await onAddPeriod({ id: newId('rp'), function_id: f.id, data_inicio: data, saldo_inicial: Math.round(v * 100) / 100 })
+      setOpen(false)
+    } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title={`Ajustes de Reserva — ${account ? (account.apelido || account.name) : 'Sem conta'}`} size="md">
+    <span ref={ref} className={`relative inline-flex items-center gap-1 group ${align === 'right' ? 'justify-end w-full' : ''}`}>
+      <button
+        onClick={openPopover}
+        title={activePeriod ? `Período desde ${fmtDate(activePeriod.data_inicio)} — clique para definir um novo` : 'Definir saldo inicial com data de referência'}
+        className="inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer text-gray-300"
+      >
+        {fmt(f.saldoInicial ?? 0)}
+        <Edit2 size={10} className="text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      </button>
+      {open && (
+        <div className={`absolute z-40 top-full mt-1 w-56 rounded-lg border border-gray-700 bg-surface p-3 shadow-xl text-left space-y-2.5 normal-case ${align === 'right' ? 'right-0' : 'left-0'}`}>
+          <div>
+            <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data de referência</label>
+            <input type="date" value={data} onChange={e => setData(e.target.value)} className="input w-full text-xs py-1" />
+          </div>
+          <div>
+            <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">💰 Valor</label>
+            <input type="number" step="0.01" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00 (aceita negativo)" className="input w-full text-xs py-1 text-right" />
+          </div>
+          <div className="flex gap-2 pt-0.5">
+            <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1 text-xs py-1" disabled={saving}>Cancelar</button>
+            <button type="button" onClick={save} className="btn-primary flex-1 text-xs py-1" disabled={saving}>{saving ? '…' : 'Salvar'}</button>
+          </div>
+        </div>
+      )}
+    </span>
+  )
+}
+
+// ── Modal "Ajustes — [função]": histórico de ajustes (Parte 6) ──────────────
+// Lista os ajustes (reserve_adjustments) da função, com edição inline e exclusão. O TOTAL
+// e o cálculo do Resumo consideram apenas os ajustes dentro do período ativo.
+function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, onUpdate, onDelete, onClose }) {
+  const [newData, setNewData] = useState(todayStr)
+  const [newValor, setNewValor] = useState('')
+  const [newObs, setNewObs] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [editValor, setEditValor] = useState('')
+  const [editObs, setEditObs] = useState('')
+  const [confirmDelId, setConfirmDelId] = useState(null)
+
+  // Azul (+), laranja (−), cinza (0) — nunca verde/vermelho como único diferenciador.
+  const valorColor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-500'
+  const fmtSigned = (v) => (v > 0 ? '+' : '') + fmt(v)
+
+  const inPeriod = (a) => !activePeriod || a.data >= activePeriod.data_inicio
+  const sorted = [...(adjustments || [])].sort((x, y) => x.data.localeCompare(y.data))
+  const total = Math.round(sorted.reduce((s, a) => inPeriod(a) ? s + (Number(a.valor) || 0) : s, 0) * 100) / 100
+
+  const handleAdd = async () => {
+    const v = parseFloat(newValor)
+    if (isNaN(v) || !newData) return
+    setBusy(true)
+    try {
+      await onAdd({ id: newId('adj'), function_id: fn.id, data: newData, valor: Math.round(v * 100) / 100, observacao: newObs.trim() })
+      setNewData(todayStr); setNewValor(''); setNewObs('')
+    } finally { setBusy(false) }
+  }
+
+  const startEdit = (a) => { setEditId(a.id); setEditValor(String(a.valor)); setEditObs(a.observacao || '') }
+  const saveEdit = async () => {
+    const v = parseFloat(editValor)
+    if (isNaN(v)) { setEditId(null); return }
+    setBusy(true)
+    try {
+      await onUpdate({ id: editId, valor: Math.round(v * 100) / 100, observacao: editObs.trim() })
+      setEditId(null)
+    } finally { setBusy(false) }
+  }
+
+  const confirmDelete = async (id) => {
+    setBusy(true)
+    try { await onDelete(id); setConfirmDelId(null) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Ajustes — ${fn.name}`} size="lg">
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-500 shrink-0">Mês de referência:</label>
-          <select className="input py-1.5 text-xs max-w-[180px]" value={monthKey} onChange={e => changeMonth(e.target.value)}>
-            {monthOptions.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-          </select>
+        {activePeriod && (
+          <p className="text-xs text-gray-500">
+            Período ativo desde <span className="text-gray-300">{fmtDate(activePeriod.data_inicio)}</span> — o total considera os ajustes a partir desta data.
+          </p>
+        )}
+
+        <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-left">
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Observação</th>
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right w-20">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 && (
+                <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-500 text-sm">Nenhum ajuste registrado</td></tr>
+              )}
+              {sorted.map(a => {
+                const editing = editId === a.id
+                const fora = !inPeriod(a)
+                return (
+                  <tr key={a.id} className={`border-b border-gray-800/40 ${fora ? 'opacity-40' : ''}`}>
+                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">
+                      {fmtDate(a.data)}
+                      {fora && <span className="ml-1 text-[9px] uppercase text-gray-600" title="Fora do período ativo — não entra no total">(fora)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      {editing
+                        ? <input type="number" step="0.01" value={editValor} onChange={e => setEditValor(e.target.value)} className="input w-24 text-xs py-1 text-right" />
+                        : <span className={`text-xs font-semibold ${valorColor(Number(a.valor))}`}>{fmtSigned(Number(a.valor) || 0)}</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-300">
+                      {editing
+                        ? <input type="text" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Observação" className="input w-full text-xs py-1" />
+                        : <span className="truncate" title={a.observacao || ''}>{a.observacao || <span className="text-gray-600">—</span>}</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-end gap-1">
+                        {editing ? (
+                          <>
+                            <button onClick={saveEdit} disabled={busy} className="text-xs text-blue-600 hover:underline px-1">Salvar</button>
+                            <button onClick={() => setEditId(null)} className="text-xs text-gray-500 hover:underline px-1">✕</button>
+                          </>
+                        ) : confirmDelId === a.id ? (
+                          <>
+                            <span className="text-[10px] text-gray-400">Excluir?</span>
+                            <button onClick={() => confirmDelete(a.id)} disabled={busy} className="text-xs text-orange-500 hover:underline px-1">Sim</button>
+                            <button onClick={() => setConfirmDelId(null)} className="text-xs text-gray-500 hover:underline px-1">Não</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEdit(a)} title="Editar" className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-200"><Edit2 size={12} /></button>
+                            <button onClick={() => setConfirmDelId(a.id)} title="Excluir" className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-orange-400"><Trash2 size={12} /></button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-700 bg-gray-800/20">
+                <td className="px-3 py-2 text-xs font-semibold text-gray-400">TOTAL</td>
+                <td className={`px-3 py-2 text-right text-xs font-bold ${valorColor(total)}`}>{total !== 0 ? fmtSigned(total) : <span className="text-gray-600">0,00</span>}</td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          </table>
         </div>
 
-        <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-0.5">
-          {fns.map(f => (
-            <div key={f.id} className="space-y-1.5 pb-3 border-b border-gray-800/50 last:border-0 last:pb-0">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-300 flex-1 truncate">{f.name}</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={vals[f.id] ?? ''}
-                  onChange={e => setVal(f.id, e.target.value)}
-                  placeholder="0,00 (± )"
-                  className="input w-32 text-xs py-1.5 text-right"
-                />
-              </div>
-              <textarea
-                value={obs[f.id] ?? ''}
-                onChange={e => setObsVal(f.id, e.target.value)}
-                placeholder="Observação (opcional)"
-                rows={2}
-                className="input w-full text-xs py-1.5 resize-none"
-              />
+        {/* Novo ajuste */}
+        <div className="rounded-lg border border-gray-700/60 p-3 space-y-2.5">
+          <p className="text-xs font-semibold text-gray-300">+ Novo Ajuste</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data</label>
+              <input type="date" value={newData} onChange={e => setNewData(e.target.value)} className="input w-full text-xs py-1" />
             </div>
-          ))}
+            <div>
+              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">💰 Valor (±)</label>
+              <input type="number" step="0.01" value={newValor} onChange={e => setNewValor(e.target.value)} placeholder="0,00" className="input w-full text-xs py-1 text-right" />
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📝 Observação</label>
+              <input type="text" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Opcional" className="input w-full text-xs py-1" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="button" onClick={handleAdd} disabled={busy || !newValor} className="btn-primary text-xs py-1.5 px-4">Salvar</button>
+          </div>
         </div>
 
         <p className="text-xs text-gray-600 leading-relaxed">
-          O ajuste entra no saldo do mês (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores
-          negativos (ex.: -500). Zero remove o ajuste do mês (e sua observação). A observação aparece
-          como ícone no Resumo, ao lado do valor.
+          Cada ajuste entra no saldo (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores negativos
+          (ex.: -50). Positivos em azul, negativos em laranja.
         </p>
+      </div>
+    </Modal>
+  )
+}
 
+// ── Modal "Virar Saldo" com data de início (Parte 7) ────────────────────────
+function VirarSaldoModal({ defaultDate, onConfirm, onClose }) {
+  const [data, setData] = useState(defaultDate)
+  const [saving, setSaving] = useState(false)
+  const confirm = async () => {
+    if (!data) return
+    setSaving(true)
+    try { await onConfirm(data) } finally { setSaving(false) }
+  }
+  return (
+    <Modal open onClose={onClose} title="Virar Saldo" size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-300">Informe a data de início do novo período:</p>
+        <div>
+          <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data de início</label>
+          <input type="date" value={data} onChange={e => setData(e.target.value)} className="input w-full text-sm" />
+        </div>
+        <p className="text-xs text-gray-600 leading-relaxed">
+          O Saldo Atualizado de cada função vira o Saldo Inicial de um novo período a partir desta data.
+          Nada é sobrescrito — o histórico anterior é preservado.
+        </p>
         <div className="flex gap-3 pt-1">
-          <button type="button" className="btn-secondary flex-1" onClick={handleClearAll}>Limpar tudo</button>
-          <button type="button" className="btn-primary flex-1" onClick={handleSave}>Salvar</button>
+          <button type="button" className="btn-secondary flex-1" onClick={onClose} disabled={saving}>Cancelar</button>
+          <button type="button" className="btn-primary flex-1 bg-emerald-700 hover:bg-emerald-600" onClick={confirm} disabled={saving}>
+            {saving ? 'Virando…' : 'Confirmar Virada'}
+          </button>
         </div>
       </div>
     </Modal>
@@ -1324,42 +1435,86 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
 
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
-  const { profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules, scheduleReservaFuncoes, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions } = useApp()
-  const { functions, accountBalances, periods, addFunction, updateFunction, deleteFunction, setAccountBalance, virarSaldo, undoVirarSaldo } = useReservas()
+  const {
+    profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules,
+    scheduleReservaFuncoes, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions,
+    // Histórico no banco (fonte da verdade): períodos de saldo inicial + ajustes.
+    reservePeriods, reserveAdjustments, addReservePeriod, deleteReservePeriod,
+    addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
+  } = useApp()
+  const { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance } = useReservas()
   const [tab, setTab] = useState('contas')
   const [showForm, setShowForm] = useState(false)
   const [editFn, setEditFn] = useState(null)
-  const [confirmVirar, setConfirmVirar] = useState(false)
-  const [confirmUndo, setConfirmUndo] = useState(false)
+  const [virarModal, setVirarModal] = useState(false)  // modal "Virar Saldo" (pede data de início)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  // ids dos períodos criados na última virada (undo em sessão — o banco é a fonte da verdade,
+  // não há mais snapshot em localStorage). Vazio → botão "Desfazer" oculto.
+  const [lastViradaIds, setLastViradaIds] = useState([])
 
-  // Saldo = Saldo Inicial + Entradas − Saídas + Ajuste (ajuste do mês atual, pode ser ±).
+  // Saldo = Saldo Inicial + Entradas − Saídas + Ajuste (ajuste do período, pode ser ±).
   const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0)) * 100) / 100
 
   const period = getFinancialPeriod()
   const periodStart = period.start.toISOString().split('T')[0]
   const periodEnd = period.end.toISOString().split('T')[0]
-  // Mês de referência do ajuste = mês-CALENDÁRIO atual (YYYY-MM). É o que o usuário entende
-  // por "o mês corrente" e o que o modal de Ajustes rotula (opções por mês-calendário). Antes
-  // usava o mês do FIM do ciclo financeiro, que para financialMonthStartDay > 1 cai no mês
-  // seguinte — fazendo a tabela ler um mês diferente do que foi salvo (Ajuste sempre 0,00).
-  // Para startDay = 1, o fim do ciclo já é o mês-calendário, então não há mudança.
+  // Mês de referência do ajuste LEGADO = mês-CALENDÁRIO atual (YYYY-MM) — usado só no fallback
+  // do ajuste_override JSONB para funções sem registros em reserve_adjustments.
   const _now = new Date()
   const currentMonthKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`
+  const todayStr = localDateStr(_now)
+  const tomorrowStr = localDateStr(new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() + 1))
 
-  // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada
-  // função (reservaFuncaoId) dentro do período financeiro atual.
+  // Período ativo de cada função = registro de data_inicio mais recente com data_inicio <= hoje
+  // (uma virada com data futura só passa a valer na sua data). functionId → período ({..., data_inicio, saldo_inicial}).
+  const activePeriodByFn = useMemo(() => {
+    const m = {}
+    for (const p of (reservePeriods || [])) {
+      if (!p.data_inicio || p.data_inicio > todayStr) continue
+      const cur = m[p.function_id]
+      if (!cur || p.data_inicio > cur.data_inicio) m[p.function_id] = p
+    }
+    return m
+  }, [reservePeriods, todayStr])
+
+  // Ajustes agrupados por função (todos; o filtro por período ativo é aplicado no cálculo).
+  const adjustmentsByFn = useMemo(() => {
+    const m = {}
+    for (const a of (reserveAdjustments || [])) {
+      ;(m[a.function_id] = m[a.function_id] || []).push(a)
+    }
+    return m
+  }, [reserveAdjustments])
+
+  // Data inicial do cálculo AUTO de Entradas/Saídas por função: início do período ativo
+  // (acumula do data_inicio até hoje) ou, sem período, o ciclo financeiro atual (comportamento legado).
+  const autoBoundsOf = useMemo(() => {
+    return (fnId) => {
+      const ap = activePeriodByFn[fnId]
+      return ap ? { start: ap.data_inicio, end: todayStr } : { start: periodStart, end: periodEnd }
+    }
+  }, [activePeriodByFn, todayStr, periodStart, periodEnd])
+
+  // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada função
+  // (reservaFuncaoId). Filtro por função: com período ativo → date >= data_inicio (até hoje);
+  // sem período → ciclo financeiro atual.
   //   • receita vinculada → entrada | despesa vinculada → saída
   //   • transferência → entrada se ENTRA na conta da função (depósito);
   //     saída se SAI da conta da função (resgate). Despesa (cartão) não é movimento de reserva.
   const computedMovs = useMemo(() => {
     const m = {}
     const reservaAccOf = {} // functionId → conta de reserva da própria função
-    functions.forEach(f => { m[f.id] = { entradas: 0, saidas: 0 }; reservaAccOf[f.id] = f.accountId || null })
+    const boundsOf = {}     // functionId → { start, end }
+    functions.forEach(f => {
+      m[f.id] = { entradas: 0, saidas: 0 }
+      reservaAccOf[f.id] = f.accountId || null
+      boundsOf[f.id] = autoBoundsOf(f.id)
+    })
     transactions.forEach(tx => {
       const slot = tx.reservaFuncaoId && m[tx.reservaFuncaoId]
       if (!slot) return
-      if (tx.date < periodStart || tx.date > periodEnd) return
+      const b = boundsOf[tx.reservaFuncaoId]
+      if (tx.date < b.start || tx.date > b.end) return
       // Entrada: receita NA conta da reserva, ou transferência ENTRANDO nela.
       // Saída: transferência SAINDO da conta da reserva (resgate). Despesa de cartão é só
       // provisão/justificativa — NÃO é movimento de reserva, não entra em entradas/saídas.
@@ -1375,23 +1530,42 @@ export default function ReservasPanel() {
       s.saidas = Math.round(s.saidas * 100) / 100
     })
     return m
-  }, [functions, transactions, periodStart, periodEnd])
+  }, [functions, transactions, autoBoundsOf])
 
-  // Funções com entradas/saídas EFETIVAS: override manual quando definido, senão o
-  // valor calculado. Tudo a jusante (saldo, saldo atualizado, fluxo) usa estes valores.
+  // Funções EFETIVAS: saldo inicial vem do período ativo (fallback f.saldoInicial legado);
+  // entradas/saídas do cálculo AUTO ou override manual; ajuste da soma dos reserve_adjustments
+  // do período ativo (fallback ajuste_override JSONB do mês atual). Tudo a jusante usa estes valores.
   const effectiveFunctions = useMemo(() => functions.map(f => {
     const comp = computedMovs[f.id] || { entradas: 0, saidas: 0 }
+    const ap = activePeriodByFn[f.id]
+    const saldoInicial = ap ? (Number(ap.saldo_inicial) || 0) : (Number(f.saldoInicial) || 0)
+
+    // Ajuste: soma dos adjustments (dentro do período ativo, se houver). Sem nenhum adjustment
+    // para a função → fallback no ajuste_override legado do mês atual.
+    const adjs = adjustmentsByFn[f.id]
+    let ajuste, ajusteObs
+    if (adjs && adjs.length > 0) {
+      const start = ap ? ap.data_inicio : null
+      ajuste = Math.round(adjs.reduce((s, a) => (!start || a.data >= start) ? s + (Number(a.valor) || 0) : s, 0) * 100) / 100
+      ajusteObs = ''  // observações vivem na lista/modal de ajustes
+    } else {
+      ajuste = Number(f.ajusteOverride?.[currentMonthKey]?.valor) || 0
+      ajusteObs = f.ajusteOverride?.[currentMonthKey]?.observacao || ''
+    }
+
     return {
       ...f,
+      saldoInicial,
       entradas: f.entradasOverride != null ? f.entradasOverride : comp.entradas,
       saidas: f.saidasOverride != null ? f.saidasOverride : comp.saidas,
       entradasAuto: f.entradasOverride == null,
       saidasAuto: f.saidasOverride == null,
-      // Ajuste manual do mês atual (0 quando não definido) + observação.
-      ajuste: Number(f.ajusteOverride?.[currentMonthKey]?.valor) || 0,
-      ajusteObs: f.ajusteOverride?.[currentMonthKey]?.observacao || '',
+      ajuste,
+      ajusteObs,
+      hasPeriod: !!ap,
+      hasAdjustments: !!(adjs && adjs.length > 0),
     }
-  }), [functions, computedMovs, currentMonthKey])
+  }), [functions, computedMovs, currentMonthKey, activePeriodByFn, adjustmentsByFn])
 
   const saldosAtualizados = useMemo(() => {
     const result = {}
@@ -1415,14 +1589,46 @@ export default function ReservasPanel() {
     return result
   }, [effectiveFunctions, accounts, accountBalances])
 
-  const handleVirar = () => {
-    virarSaldo(saldosAtualizados, currentMonthKey)
-    setConfirmVirar(false)
+  // Virar Saldo: para cada função, cria um NOVO período iniciando na data escolhida, com
+  // saldo_inicial = Saldo Atualizado atual. Não sobrescreve reserve_functions nem grava em
+  // localStorage — o banco é a fonte da verdade. Guarda os ids criados para o "Desfazer".
+  const handleVirar = async (dataInicio) => {
+    const criados = []
+    try {
+      for (const f of effectiveFunctions) {
+        const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `rp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        await addReservePeriod({
+          id,
+          function_id: f.id,
+          data_inicio: dataInicio,
+          saldo_inicial: saldosAtualizados[f.id] ?? computeSaldo(f),
+        })
+        criados.push(id)
+      }
+      setLastViradaIds(criados)
+    } finally {
+      setVirarModal(false)
+    }
+  }
+
+  // Desfazer a última virada: remove os períodos criados nela (sessão atual).
+  const handleUndoVirada = async () => {
+    for (const id of lastViradaIds) {
+      try { await deleteReservePeriod(id) } catch { /* segue removendo os demais */ }
+    }
+    setLastViradaIds([])
   }
 
   const nonCreditAccounts = accounts.filter(a => a.type !== 'credit')
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva), [accounts])
-  const lastPeriod = periods[periods.length - 1]
+  // "Último fechamento": data_inicio mais recente registrada entre todos os períodos.
+  const lastFechamento = useMemo(() => {
+    let max = null
+    for (const p of (reservePeriods || [])) {
+      if (p.data_inicio && (!max || p.data_inicio > max)) max = p.data_inicio
+    }
+    return max
+  }, [reservePeriods])
 
   return (
     <div className="space-y-4">
@@ -1463,19 +1669,25 @@ export default function ReservasPanel() {
           accounts={nonCreditAccounts}
           categories={categories}
           accountBalances={accountBalances}
-          periods={periods}
+          adjustmentsByFn={adjustmentsByFn}
+          activePeriodByFn={activePeriodByFn}
           saldosAtualizados={saldosAtualizados}
           computeSaldo={computeSaldo}
-          currentMonthKey={currentMonthKey}
-          periodStart={periodStart}
-          periodEnd={periodEnd}
+          todayStr={todayStr}
+          autoBoundsOf={autoBoundsOf}
+          lastFechamento={lastFechamento}
+          canUndo={lastViradaIds.length > 0}
           onAdd={() => { setEditFn(null); setShowForm(true) }}
           onEdit={f => { setEditFn(f); setShowForm(true) }}
           onDelete={f => setConfirmDelete(f)}
           onUpdateFunction={updateFunction}
           onSetAccountBalance={setAccountBalance}
-          onVirar={() => setConfirmVirar(true)}
-          onUndo={() => setConfirmUndo(true)}
+          onAddPeriod={addReservePeriod}
+          onAddAdjustment={addReserveAdjustment}
+          onUpdateAdjustment={updateReserveAdjustment}
+          onDeleteAdjustment={deleteReserveAdjustment}
+          onVirar={() => setVirarModal(true)}
+          onUndo={handleUndoVirada}
           onReorder={reorderReserveFunctions}
         />
       )}
@@ -1511,22 +1723,13 @@ export default function ReservasPanel() {
         />
       </Modal>
 
-      <ConfirmDialog
-        open={confirmVirar}
-        onClose={() => setConfirmVirar(false)}
-        onConfirm={handleVirar}
-        title="Virar Saldo"
-        message="O Saldo Atualizado de cada função se tornará o novo Saldo Inicial, e Entradas/Saídas serão zeradas. Um histórico do período atual será salvo."
-      />
-
-      <ConfirmDialog
-        open={confirmUndo}
-        onClose={() => setConfirmUndo(false)}
-        onConfirm={() => { undoVirarSaldo(); setConfirmUndo(false) }}
-        title="Desfazer Virada de Saldo"
-        message={`Restaurar o período anterior? (fechado em ${lastPeriod?.closedAt || '?'}). Saldos iniciais, entradas e saídas serão restaurados.`}
-        danger
-      />
+      {virarModal && (
+        <VirarSaldoModal
+          defaultDate={tomorrowStr}
+          onConfirm={handleVirar}
+          onClose={() => setVirarModal(false)}
+        />
+      )}
 
       <ConfirmDialog
         open={!!confirmDelete}

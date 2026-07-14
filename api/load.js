@@ -159,6 +159,29 @@ export default async function handler(req, res) {
         )
       }
     }
+    // Histórico de períodos de saldo inicial por função de reserva. Cada registro fixa o
+    // saldo inicial a partir de data_inicio; o período ativo de uma função é o de data_inicio
+    // mais recente. Substitui o saldo_inicial fixo de reserve_functions (mantido como fallback).
+    await query(`CREATE TABLE IF NOT EXISTS reserve_periods (
+      id TEXT PRIMARY KEY,
+      function_id TEXT NOT NULL,
+      data_inicio DATE NOT NULL,
+      saldo_inicial NUMERIC NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
+    // Histórico de ajustes por função (data + valor ± + observação). Substitui o
+    // ajuste_override JSONB de reserve_functions (mantido como fallback para dados legados).
+    await query(`CREATE TABLE IF NOT EXISTS reserve_adjustments (
+      id TEXT PRIMARY KEY,
+      function_id TEXT NOT NULL,
+      data DATE NOT NULL,
+      valor NUMERIC NOT NULL,
+      observacao TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
+    // Índices para os filtros por função das duas tabelas de histórico de reservas.
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_periods_function ON reserve_periods (function_id)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_adjustments_function ON reserve_adjustments (function_id)`)
     // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
     // de virarem lançamentos. status: pendente | confirmado | ignorado.
     await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (

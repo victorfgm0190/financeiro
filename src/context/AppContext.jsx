@@ -9,7 +9,10 @@ import {
   saveRateios, deleteRateios,
   scheduleReservaFuncaoToRow,
   bulkUpdateTransactionsApi,
+  fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
+  fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
 } from '../lib/db'
+import { getToken } from '../lib/api'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate } from '../lib/parcelas'
@@ -727,6 +730,29 @@ export function AppProvider({ children }) {
   // add/update/deleteTransaction de cartão antes da sua declaração.
   const reconcileGerencialRef = useRef(null)
   const dataRef = useRef(data)
+
+  // ── Reservas: histórico de períodos e ajustes ──────────────────────────────
+  // Vivem fora do objeto `data` (que é sincronizado por diff debounced): são gravados
+  // diretamente no banco por operação e o state local é atualizado após sucesso.
+  // Registros em snake_case, na mesma forma do endpoint/banco.
+  const [reservePeriods, setReservePeriods] = useState([])
+  const [reserveAdjustments, setReserveAdjustments] = useState([])
+
+  // Carrega os dois históricos no mount (paralelo ao load principal). Falha silenciosa
+  // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
+  useEffect(() => {
+    if (!getToken()) return
+    let cancelled = false
+    Promise.all([
+      fetchReservePeriods().catch(() => ({ periods: [] })),
+      fetchReserveAdjustments().catch(() => ({ adjustments: [] })),
+    ]).then(([p, a]) => {
+      if (cancelled) return
+      setReservePeriods(p?.periods || [])
+      setReserveAdjustments(a?.adjustments || [])
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
@@ -2755,6 +2781,48 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // ── Reservas: períodos de saldo inicial (CRUD direto no banco) ────────────────
+  // Grava no banco e atualiza o state local após sucesso. period em snake_case:
+  // { id, function_id, data_inicio, saldo_inicial }.
+  const addReservePeriod = useCallback(async (period) => {
+    await createReservePeriod(period)
+    setReservePeriods(prev => {
+      const norm = { ...period, saldo_inicial: Number(period.saldo_inicial) || 0 }
+      const rest = prev.filter(p => p.id !== period.id) // upsert por id
+      return [...rest, norm]
+    })
+    return period.id
+  }, [])
+
+  const deleteReservePeriod = useCallback(async (id) => {
+    await deleteReservePeriodApi(id)
+    setReservePeriods(prev => prev.filter(p => p.id !== id))
+  }, [])
+
+  // ── Reservas: ajustes (CRUD direto no banco) ─────────────────────────────────
+  // adj em snake_case: { id, function_id, data, valor, observacao }.
+  const addReserveAdjustment = useCallback(async (adj) => {
+    await createReserveAdjustment(adj)
+    setReserveAdjustments(prev => {
+      const norm = { ...adj, valor: Number(adj.valor) || 0, observacao: adj.observacao ?? '' }
+      const rest = prev.filter(a => a.id !== adj.id)
+      return [...rest, norm]
+    })
+    return adj.id
+  }, [])
+
+  const updateReserveAdjustment = useCallback(async (adj) => {
+    await updateReserveAdjustmentApi(adj)
+    setReserveAdjustments(prev => prev.map(a =>
+      a.id === adj.id ? { ...a, valor: Number(adj.valor) || 0, observacao: adj.observacao ?? '' } : a
+    ))
+  }, [])
+
+  const deleteReserveAdjustment = useCallback(async (id) => {
+    await deleteReserveAdjustmentApi(id)
+    setReserveAdjustments(prev => prev.filter(a => a.id !== id))
+  }, [])
+
   // ── Gerencial Groups ─────────────────────────────────────────────────────────
   const addGerencialGroup = useCallback((group) => {
     update(d => {
@@ -4559,6 +4627,9 @@ export function AppProvider({ children }) {
       reserveFunctions: data.reserveFunctions || [],
       scheduleReservaFuncoes: data.scheduleReservaFuncoes || [],
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
+      reservePeriods, reserveAdjustments,
+      addReservePeriod, deleteReservePeriod,
+      addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
