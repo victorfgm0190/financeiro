@@ -1561,13 +1561,14 @@ export default function ReservasPanel() {
   }, [reserveAdjustments])
 
   // Data inicial do cálculo AUTO de Entradas/Saídas por função: início do período ativo
-  // (acumula do data_inicio até hoje) ou, sem período, o ciclo financeiro atual (comportamento legado).
+  // (acumula do data_inicio até hoje) ou, SEM período, todos os lançamentos (sem corte de
+  // data, de 0001-01-01 até hoje) — até que a primeira virada de saldo crie um período.
   const autoBoundsOf = useMemo(() => {
     return (fnId) => {
       const ap = activePeriodByFn[fnId]
-      return ap ? { start: ap.data_inicio, end: todayStr } : { start: periodStart, end: periodEnd }
+      return ap ? { start: ap.data_inicio, end: todayStr } : { start: '0001-01-01', end: todayStr }
     }
-  }, [activePeriodByFn, todayStr, periodStart, periodEnd])
+  }, [activePeriodByFn, todayStr])
 
   // Etapa 2: entradas/saídas calculadas a partir dos lançamentos vinculados a cada função
   // (reservaFuncaoId). Filtro por função: com período ativo → date >= data_inicio (até hoje);
