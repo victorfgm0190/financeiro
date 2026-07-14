@@ -1576,14 +1576,119 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   )
 }
 
+// ── Tab 3: Histórico (snapshots das viradas) ────────────────────────────────
+function HistoricoTab({ snapshots }) {
+  const num = (v) => Number(v) || 0
+  const ajCor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-500'
+  const iniLabel = (d) => d && d !== '0001-01-01' ? fmtDate(d) : '(início)'
+
+  // Agrupa por data_fim (cada virada). data_inicio para o rótulo = a mais antiga do grupo.
+  const groups = useMemo(() => {
+    const byFim = {}
+    for (const s of (snapshots || [])) {
+      ;(byFim[s.data_fim] = byFim[s.data_fim] || []).push(s)
+    }
+    return Object.entries(byFim)
+      .map(([dataFim, snaps]) => ({
+        dataFim,
+        dataInicio: snaps.reduce((min, s) => (!min || s.data_inicio < min) ? s.data_inicio : min, null),
+        snaps: [...snaps].sort((a, b) => (a.function_name || '').localeCompare(b.function_name || '', 'pt-BR')),
+      }))
+      .sort((a, b) => b.dataFim.localeCompare(a.dataFim)) // mais recente primeiro
+  }, [snapshots])
+
+  const [selFim, setSelFim] = useState(null)
+  const sel = groups.find(g => g.dataFim === selFim) || groups[0] || null
+
+  if (!snapshots || snapshots.length === 0) {
+    return (
+      <div className="card text-center py-12">
+        <RotateCcw size={32} className="text-gray-700 mx-auto mb-3" />
+        <p className="text-gray-500 text-sm">Nenhuma virada registrada ainda.</p>
+        <p className="text-xs text-gray-600 mt-1">Ao usar "Virar Saldo" no Resumo, o período fechado fica guardado aqui.</p>
+      </div>
+    )
+  }
+
+  const t = sel ? {
+    saldoInicial: sel.snaps.reduce((s, x) => s + num(x.saldo_inicial), 0),
+    entradas: sel.snaps.reduce((s, x) => s + num(x.entradas), 0),
+    saidas: sel.snaps.reduce((s, x) => s + num(x.saidas), 0),
+    ajuste: sel.snaps.reduce((s, x) => s + num(x.ajuste), 0),
+    saldo: sel.snaps.reduce((s, x) => s + num(x.saldo), 0),
+    atualizado: sel.snaps.reduce((s, x) => s + num(x.saldo_atualizado), 0),
+  } : null
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <label className="text-xs text-gray-500 uppercase tracking-wide shrink-0">Período fechado:</label>
+        <select
+          className="input py-1.5 text-xs max-w-[280px]"
+          value={sel?.dataFim || ''}
+          onChange={e => setSelFim(e.target.value)}
+        >
+          {groups.map(g => (
+            <option key={g.dataFim} value={g.dataFim}>{iniLabel(g.dataInicio)} → {fmtDate(g.dataFim)}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card p-0 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ minWidth: 640 }}>
+            <thead>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Função</th>
+                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
+                <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
+                <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
+                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
+                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
+                <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(sel?.snaps || []).map(s => (
+                <tr key={s.id} className="border-b border-gray-800/50">
+                  <td className="px-4 py-2 text-xs text-gray-200">{s.function_name}</td>
+                  <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(num(s.saldo_inicial))}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">{num(s.entradas) !== 0 ? fmt(num(s.entradas)) : <span className="text-gray-700">0,00</span>}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">{num(s.saidas) !== 0 ? fmt(num(s.saidas)) : <span className="text-gray-700">0,00</span>}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${ajCor(num(s.ajuste))}`}>
+                    {num(s.ajuste) !== 0 ? (num(s.ajuste) > 0 ? '+' : '') + fmt(num(s.ajuste)) : <span className="text-gray-700">0,00</span>}
+                  </td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${num(s.saldo) < 0 ? 'text-orange-600' : 'text-gray-200'}`}>{fmt(num(s.saldo))}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-bold ${num(s.saldo_atualizado) < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(num(s.saldo_atualizado))}</td>
+                </tr>
+              ))}
+              {t && (
+                <tr className="border-t border-gray-700 bg-gray-800/20">
+                  <td className="px-4 py-2 text-xs font-semibold text-gray-500">Total</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-gray-400">{fmt(t.saldoInicial)}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">{fmt(t.entradas)}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">{fmt(t.saidas)}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${ajCor(t.ajuste)}`}>{t.ajuste !== 0 ? (t.ajuste > 0 ? '+' : '') + fmt(t.ajuste) : <span className="text-gray-700">0,00</span>}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${t.saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>{fmt(t.saldo)}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-bold ${t.atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(t.atualizado)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Panel ──────────────────────────────────────────────────────────────
 export default function ReservasPanel() {
   const {
     profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules,
     scheduleReservaFuncoes, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions,
-    // Histórico no banco (fonte da verdade): períodos de saldo inicial + ajustes.
-    reservePeriods, reserveAdjustments, addReservePeriod, deleteReservePeriod,
-    addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
+    // Histórico no banco (fonte da verdade): períodos de saldo inicial + ajustes + snapshots.
+    reservePeriods, reserveAdjustments, reserveSnapshots, addReservePeriod, deleteReservePeriod,
+    addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment, addReserveSnapshots,
   } = useApp()
   const { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance } = useReservas()
   const [tab, setTab] = useState('contas')
@@ -1608,17 +1713,19 @@ export default function ReservasPanel() {
   const todayStr = localDateStr(_now)
   const tomorrowStr = localDateStr(new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() + 1))
 
-  // Período ativo de cada função = registro de data_inicio mais recente com data_inicio <= hoje
-  // (uma virada com data futura só passa a valer na sua data). functionId → período ({..., data_inicio, saldo_inicial}).
+  // Período ativo de cada função = registro de data_inicio MAIS RECENTE (independente de ser
+  // hoje/passado/futuro). Assim uma virada feita agora (data_inicio = amanhã) já passa a valer
+  // imediatamente: as Entradas/Saídas filtram a partir dessa data (ficam vazias até surgirem
+  // novos lançamentos), sem mostrar o histórico do período fechado. functionId → período.
   const activePeriodByFn = useMemo(() => {
     const m = {}
     for (const p of (reservePeriods || [])) {
-      if (!p.data_inicio || p.data_inicio > todayStr) continue
+      if (!p.data_inicio) continue
       const cur = m[p.function_id]
       if (!cur || p.data_inicio > cur.data_inicio) m[p.function_id] = p
     }
     return m
-  }, [reservePeriods, todayStr])
+  }, [reservePeriods])
 
   // Ajustes agrupados por função (todos; o filtro por período ativo é aplicado no cálculo).
   const adjustmentsByFn = useMemo(() => {
@@ -1746,15 +1853,36 @@ export default function ReservasPanel() {
   const handleVirar = async (dataInicio) => {
     const criados = []
     try {
+      // data_fim do período que se encerra = véspera do início do novo período.
+      const [y, m, d] = dataInicio.split('-').map(Number)
+      const dataFim = localDateStr(new Date(y, m - 1, d - 1))
+
+      // Snapshot do estado atual de cada função (período que fecha) — ANTES de criar os períodos.
+      const snapshots = effectiveFunctions.map(f => ({
+        id: newId('snap'),
+        periodo_id: activePeriodByFn[f.id]?.id ?? 'legacy',
+        data_inicio: activePeriodByFn[f.id]?.data_inicio ?? '0001-01-01',
+        data_fim: dataFim,
+        function_id: f.id,
+        function_name: f.name,
+        saldo_inicial: f.saldoInicial,
+        entradas: f.entradas,
+        saidas: f.saidas,
+        ajuste: f.ajuste,
+        saldo: computeSaldo(f),
+        saldo_atualizado: saldosAtualizados[f.id] ?? computeSaldo(f),
+      }))
+      await addReserveSnapshots(snapshots)
+
       for (const f of effectiveFunctions) {
-        const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `rp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        const periodoId = newId('rp')
         await addReservePeriod({
-          id,
+          id: periodoId,
           function_id: f.id,
           data_inicio: dataInicio,
           saldo_inicial: saldosAtualizados[f.id] ?? computeSaldo(f),
         })
-        criados.push(id)
+        criados.push(periodoId) // ids dos períodos criados → usados pelo "Desfazer"
       }
       setLastViradaIds(criados)
     } finally {
@@ -1789,6 +1917,7 @@ export default function ReservasPanel() {
           { id: 'contas', label: 'Contas Reserva' },
           { id: 'resumo', label: 'Resumo' },
           { id: 'fluxo', label: 'Fluxo Futuro' },
+          { id: 'historico', label: 'Histórico' },
         ].map(t => (
           <button
             key={t.id}
@@ -1854,6 +1983,10 @@ export default function ReservasPanel() {
           scheduleReservaFuncoes={scheduleReservaFuncoes}
           getNextOccurrences={getNextOccurrences}
         />
+      )}
+
+      {tab === 'historico' && (
+        <HistoricoTab snapshots={reserveSnapshots} />
       )}
 
       <Modal

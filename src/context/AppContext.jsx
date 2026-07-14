@@ -11,6 +11,7 @@ import {
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
+  fetchReserveSnapshots, createReserveSnapshots,
 } from '../lib/db'
 import { getToken } from '../lib/api'
 import { saveLocal, loadLocal } from '../lib/storage'
@@ -737,8 +738,9 @@ export function AppProvider({ children }) {
   // Registros em snake_case, na mesma forma do endpoint/banco.
   const [reservePeriods, setReservePeriods] = useState([])
   const [reserveAdjustments, setReserveAdjustments] = useState([])
+  const [reserveSnapshots, setReserveSnapshots] = useState([])
 
-  // Carrega os dois históricos no mount (paralelo ao load principal). Falha silenciosa
+  // Carrega os históricos no mount (paralelo ao load principal). Falha silenciosa
   // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
   useEffect(() => {
     if (!getToken()) return
@@ -746,10 +748,12 @@ export function AppProvider({ children }) {
     Promise.all([
       fetchReservePeriods().catch(() => ({ periods: [] })),
       fetchReserveAdjustments().catch(() => ({ adjustments: [] })),
-    ]).then(([p, a]) => {
+      fetchReserveSnapshots().catch(() => ({ snapshots: [] })),
+    ]).then(([p, a, s]) => {
       if (cancelled) return
       setReservePeriods(p?.periods || [])
       setReserveAdjustments(a?.adjustments || [])
+      setReserveSnapshots(s?.snapshots || [])
     })
     return () => { cancelled = true }
   }, [])
@@ -2823,6 +2827,13 @@ export function AppProvider({ children }) {
     setReserveAdjustments(prev => prev.filter(a => a.id !== id))
   }, [])
 
+  // ── Reservas: snapshots de virada (gravação em lote, imutáveis) ──────────────
+  const addReserveSnapshots = useCallback(async (snapshots) => {
+    if (!snapshots || snapshots.length === 0) return
+    await createReserveSnapshots(snapshots)
+    setReserveSnapshots(prev => [...prev, ...snapshots])
+  }, [])
+
   // ── Gerencial Groups ─────────────────────────────────────────────────────────
   const addGerencialGroup = useCallback((group) => {
     update(d => {
@@ -4627,9 +4638,10 @@ export function AppProvider({ children }) {
       reserveFunctions: data.reserveFunctions || [],
       scheduleReservaFuncoes: data.scheduleReservaFuncoes || [],
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
-      reservePeriods, reserveAdjustments,
+      reservePeriods, reserveAdjustments, reserveSnapshots,
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
+      addReserveSnapshots,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,

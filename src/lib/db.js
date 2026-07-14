@@ -100,6 +100,14 @@ export async function deleteReservePeriodApi(id) {
   return apiDelete(`/api/reserve-periods?id=${encodeURIComponent(id)}`)
 }
 
+// Snapshots das viradas (histórico de períodos). Leitura de todos; escrita em lote.
+export async function fetchReserveSnapshots() {
+  return apiGet('/api/reserve-snapshots')
+}
+export async function createReserveSnapshots(snapshots) {
+  return apiPost('/api/reserve-snapshots', { snapshots })
+}
+
 // Ajustes por função: { id, function_id, data, valor, observacao }.
 export async function fetchReserveAdjustments() {
   return apiGet('/api/reserve-adjustments')

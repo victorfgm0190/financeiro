@@ -182,6 +182,26 @@ export default async function handler(req, res) {
     // Índices para os filtros por função das duas tabelas de histórico de reservas.
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_periods_function ON reserve_periods (function_id)`)
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_adjustments_function ON reserve_adjustments (function_id)`)
+    // Snapshots do estado de cada função no momento da virada de saldo (fecha um período).
+    // Congela saldo inicial / entradas / saídas / ajuste / saldo / saldo atualizado do período
+    // que se encerra (data_inicio..data_fim). Alimenta a aba "Histórico".
+    await query(`CREATE TABLE IF NOT EXISTS reserve_period_snapshots (
+      id TEXT PRIMARY KEY,
+      periodo_id TEXT NOT NULL,
+      data_inicio DATE NOT NULL,
+      data_fim DATE NOT NULL,
+      function_id TEXT NOT NULL,
+      function_name TEXT NOT NULL,
+      saldo_inicial NUMERIC NOT NULL DEFAULT 0,
+      entradas NUMERIC NOT NULL DEFAULT 0,
+      saidas NUMERIC NOT NULL DEFAULT 0,
+      ajuste NUMERIC NOT NULL DEFAULT 0,
+      saldo NUMERIC NOT NULL DEFAULT 0,
+      saldo_atualizado NUMERIC NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_data ON reserve_period_snapshots (data_fim DESC)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_function ON reserve_period_snapshots (function_id)`)
     // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
     // de virarem lançamentos. status: pendente | confirmado | ignorado.
     await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (
