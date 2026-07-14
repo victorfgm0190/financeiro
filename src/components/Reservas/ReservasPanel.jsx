@@ -481,7 +481,7 @@ function ObsIndicator({ text }) {
 }
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
-function ResumoTab({ functions, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
+function ResumoTab({ functions, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, movFuturosByFn = {}, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
   // Nome da categoria vinculada à função (quando categoryId preenchido).
   const catNameOf = (id) => categories.find(c => c.id === id)?.name
@@ -588,6 +588,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
       {groups.map(({ accountId, account, fns }) => {
         const totalSaldo = fns.reduce((s, f) => s + computeSaldo(f), 0)
         const totalAtualizado = fns.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
+        const totalMovFuturos = fns.reduce((s, f) => s + (movFuturosByFn[f.id] || 0), 0)
+        const totalSaldoFuturo = Math.round((totalAtualizado - totalMovFuturos) * 100) / 100
         const saldoReal = accountId !== null
           ? (accountBalances[accountId] !== undefined ? accountBalances[accountId] : (account?.balance || 0))
           : null
@@ -635,6 +637,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               {fns.map(f => {
                 const saldo = computeSaldo(f)
                 const atualizado = saldosAtualizados[f.id] ?? saldo
+                const movFuturos = movFuturosByFn[f.id] || 0
+                const saldoFuturo = Math.round((atualizado - movFuturos) * 100) / 100
                 return (
                   <div
                     key={f.id}
@@ -658,6 +662,13 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     </div>
                     <div className={`text-lg font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                       {fmt(atualizado)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">
+                        Saldo Futuro:
+                        {movFuturos > 0 && <span className="text-orange-600 ml-1">(−{fmt(movFuturos)})</span>}
+                      </span>
+                      <span className={`font-semibold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(saldoFuturo)}</span>
                     </div>
                     <div className="h-px bg-gray-800" />
                     {/* Duas linhas no mobile: (1) Entradas + Saídas  (2) Ajuste à esq., botões à dir.
@@ -749,6 +760,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
+                      <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Mov. Futuros</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Futuro</th>
                       <th className="w-14" />
                     </tr>
                   </thead>
@@ -756,6 +769,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {fns.map(f => {
                       const saldo = computeSaldo(f)
                       const atualizado = saldosAtualizados[f.id] ?? saldo
+                      const movFuturos = movFuturosByFn[f.id] || 0
+                      const saldoFuturo = Math.round((atualizado - movFuturos) * 100) / 100
                       return (
                         <tr
                           key={f.id}
@@ -801,6 +816,14 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                             {fmt(atualizado)}
                           </td>
+                          <td className="px-4 py-2 text-right text-xs font-semibold">
+                            {movFuturos > 0
+                              ? <span className="text-orange-600">−{fmt(movFuturos)}</span>
+                              : <span className="text-gray-700">0,00</span>}
+                          </td>
+                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                            {fmt(saldoFuturo)}
+                          </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-end gap-0.5">
                               <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
@@ -836,6 +859,14 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       </td>
                       <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                         {fmt(totalAtualizado)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold">
+                        {totalMovFuturos > 0
+                          ? <span className="text-orange-600">−{fmt(totalMovFuturos)}</span>
+                          : <span className="text-gray-700">0,00</span>}
+                      </td>
+                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                        {fmt(totalSaldoFuturo)}
                       </td>
                       <td />
                     </tr>
@@ -1178,6 +1209,106 @@ function VirarSaldoModal({ defaultDate, onConfirm, onClose }) {
   )
 }
 
+// ── Fluxo Futuro: janela + projeção de dep/res/prov por função (lógica compartilhada) ──
+// Extraídos para serem reusados tanto pelo FluxoTab quanto pelo Resumo (colunas Mov. Futuros /
+// Saldo Futuro) — fonte única, sem duplicar o cálculo.
+
+// Janela deslizante de 12 meses: do mês ANTERIOR ao atual (índice 0) até +10.
+function buildFluxoWindow() {
+  const now = new Date()
+  const base = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const windowMonths = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1)
+    return { year: d.getFullYear(), month0: d.getMonth(), label: MONTH_LABELS[d.getMonth()], isYearStart: d.getMonth() === 0 && i > 0 }
+  })
+  const winStart = `${windowMonths[0].year}-${String(windowMonths[0].month0 + 1).padStart(2, '0')}-01`
+  const lastWm = windowMonths[11]
+  const winEndDate = new Date(lastWm.year, lastWm.month0 + 1, 0)
+  const winEnd = `${winEndDate.getFullYear()}-${String(winEndDate.getMonth() + 1).padStart(2, '0')}-${String(winEndDate.getDate()).padStart(2, '0')}`
+  const winIndexOf = (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00')
+    return (d.getFullYear() - windowMonths[0].year) * 12 + (d.getMonth() - windowMonths[0].month0)
+  }
+  return { windowMonths, winStart, winEnd, winIndexOf }
+}
+
+// Dep/Res/Prov por função/mês (arrays de 12) a partir dos AGENDAMENTOS reais + provisões.
+// Resgates com detalhamento (schedule_reserva_funcoes) projetam UMA saída por função (valor da
+// linha); os demais usam reservaFuncaoId único + schedule.amount. Ver comentários originais.
+function computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win) {
+  const { winStart, winEnd, winIndexOf } = win
+  const round2 = (n) => Math.round(n * 100) / 100
+  const accById = new Map(accounts.map(a => [a.id, a]))
+  const detBySchedule = new Map()
+  for (const srf of (scheduleReservaFuncoes || [])) {
+    if (!detBySchedule.has(srf.scheduleId)) detBySchedule.set(srf.scheduleId, [])
+    detBySchedule.get(srf.scheduleId).push(srf)
+  }
+  const transfers = (schedules || []).filter(s =>
+    s.transactionType === 'transfer' && (s.reservaFuncaoId || detBySchedule.has(s.id))
+  )
+  const provisoes = (schedules || []).filter(s =>
+    s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId
+  )
+  const result = {}
+  for (const f of linked) {
+    const deps = new Array(12).fill(0)
+    const ress = new Array(12).fill(0)
+    const provs = new Array(12).fill(0)
+    for (const p of provisoes) {
+      if (p.reservaFuncaoId !== f.id) continue
+      const amt = Number(p.amount) || 0
+      if (!amt) continue
+      const occs = getNextOccurrences(p, 24)
+      const until = p.provisaoEfetivadaUntil || null
+      const proxima = until ? occs.find(dd => dd > until) : occs[0]
+      if (!proxima || proxima < winStart || proxima > winEnd) continue
+      const idx = winIndexOf(proxima)
+      if (idx < 0 || idx > 11) continue
+      provs[idx] = round2(provs[idx] + amt)
+    }
+    for (const s of transfers) {
+      const isDep = !!accById.get(s.toAccountId)?.isReserva
+      const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
+      if (!isDep && !isRes) continue
+      const det = detBySchedule.get(s.id)
+      let amt = 0
+      if (det && det.length > 0) {
+        amt = det.reduce((sum, srf) => srf.reservaFuncaoId === f.id ? round2(sum + (Number(srf.valor) || 0)) : sum, 0)
+      } else if (s.reservaFuncaoId === f.id) {
+        amt = s.amount || 0
+      }
+      if (!amt) continue
+      for (const dateStr of getNextOccurrences(s, 140)) {
+        if (dateStr < winStart || dateStr > winEnd) continue
+        const idx = winIndexOf(dateStr)
+        if (idx < 0 || idx > 11) continue
+        if (isDep) deps[idx] = round2(deps[idx] + amt)
+        else ress[idx] = round2(ress[idx] + amt)
+      }
+    }
+    result[f.id] = { deps, ress, provs }
+  }
+  return result
+}
+
+// Total de resgates FUTUROS por função (resgates reais + provisões) na janela do Fluxo Futuro.
+// Considera os meses futuros (índice >= 1; o índice 0 é o mês anterior/referência). Retorna
+// { [functionId]: totalResgatesFuturos }.
+function futureResgatesByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences) {
+  const win = buildFluxoWindow()
+  const sched = computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win)
+  const out = {}
+  for (const f of linked) {
+    const s = sched[f.id]
+    if (!s) { out[f.id] = 0; continue }
+    let total = 0
+    for (let i = 1; i < 12; i++) total += (s.ress[i] || 0) + (s.provs[i] || 0)
+    out[f.id] = Math.round(total * 100) / 100
+  }
+  return out
+}
+
 // ── Tab 2: Fluxo Futuro ─────────────────────────────────────────────────────
 function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
@@ -1203,73 +1334,11 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   }
 
   // Dep/Res por função/mês a partir dos AGENDAMENTOS reais (não dos campos de planejamento).
-  // Resgates com detalhamento (schedule_reserva_funcoes) projetam UMA saída por função
-  // (valor da linha); os demais usam o campo único reservaFuncaoId + schedule.amount.
-  const scheduledByFunction = useMemo(() => {
-    const accById = new Map(accounts.map(a => [a.id, a]))
-    // schedule_id → [{ reservaFuncaoId, valor }] (detalhamento por função do resgate)
-    const detBySchedule = new Map()
-    for (const srf of (scheduleReservaFuncoes || [])) {
-      if (!detBySchedule.has(srf.scheduleId)) detBySchedule.set(srf.scheduleId, [])
-      detBySchedule.get(srf.scheduleId).push(srf)
-    }
-    // Entram no fluxo agendamentos de transferência com detalhamento OU com função única.
-    const transfers = (schedules || []).filter(s =>
-      s.transactionType === 'transfer' && (s.reservaFuncaoId || detBySchedule.has(s.id))
-    )
-    // Provisões de despesa ainda não efetivadas, vinculadas a uma função de reserva. Projetam
-    // uma SAÍDA provisória ("Resgate futuro (provisão)") — adicional ao resgate real. Quando a
-    // provisão é efetivada vira o resgate real (transfer) e deixa de entrar aqui.
-    const provisoes = (schedules || []).filter(s =>
-      s.isProvisao && !s.provisaoEfetivada && s.transactionType === 'expense' && s.reservaFuncaoId
-    )
-    const result = {}
-    for (const f of linked) {
-      const deps = new Array(12).fill(0)
-      const ress = new Array(12).fill(0)
-      const provs = new Array(12).fill(0)
-      for (const p of provisoes) {
-        if (p.reservaFuncaoId !== f.id) continue
-        const amt = Number(p.amount) || 0
-        if (!amt) continue
-        // Projeta APENAS a próxima ocorrência ainda não efetivada (primeira após
-        // provisao_efetivada_until, ou a próxima se until null) — não a janela inteira.
-        // Ocorrências já efetivadas viram resgate real (transfer) e entram em `ress`.
-        const occs = getNextOccurrences(p, 24)
-        const until = p.provisaoEfetivadaUntil || null
-        const proxima = until ? occs.find(dd => dd > until) : occs[0]
-        if (!proxima || proxima < winStart || proxima > winEnd) continue
-        const idx = winIndexOf(proxima)
-        if (idx < 0 || idx > 11) continue
-        provs[idx] = round2(provs[idx] + amt)
-      }
-      for (const s of transfers) {
-        const isDep = !!accById.get(s.toAccountId)?.isReserva
-        const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
-        if (!isDep && !isRes) continue
-        // Valor atribuível a ESTA função neste agendamento:
-        //  - com detalhamento → soma das linhas desta função (ignora o reservaFuncaoId único)
-        //  - sem detalhamento → schedule.amount quando a função única é esta
-        const det = detBySchedule.get(s.id)
-        let amt = 0
-        if (det && det.length > 0) {
-          amt = det.reduce((sum, srf) => srf.reservaFuncaoId === f.id ? round2(sum + (Number(srf.valor) || 0)) : sum, 0)
-        } else if (s.reservaFuncaoId === f.id) {
-          amt = s.amount || 0
-        }
-        if (!amt) continue
-        for (const dateStr of getNextOccurrences(s, 140)) {
-          if (dateStr < winStart || dateStr > winEnd) continue
-          const idx = winIndexOf(dateStr)
-          if (idx < 0 || idx > 11) continue
-          if (isDep) deps[idx] = round2(deps[idx] + amt)
-          else ress[idx] = round2(ress[idx] + amt)
-        }
-      }
-      result[f.id] = { deps, ress, provs }
-    }
-    return result
-  }, [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, winStart, winEnd]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Lógica extraída para computeScheduledByFunction (compartilhada com o Resumo).
+  const scheduledByFunction = useMemo(
+    () => computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, { winStart, winEnd, winIndexOf }),
+    [linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, winStart, winEnd], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   const projections = useMemo(() => {
     return linked.map(f => {
@@ -1664,6 +1733,13 @@ export default function ReservasPanel() {
     return result
   }, [effectiveFunctions, accounts, accountBalances])
 
+  // Resgates FUTUROS por função — mesma lógica/janela do Fluxo Futuro (resgates reais + provisões
+  // nos próximos 12 meses). Alimenta as colunas Mov. Futuros / Saldo Futuro do Resumo.
+  const movFuturosByFn = useMemo(
+    () => futureResgatesByFunction(effectiveFunctions.filter(f => f.accountId), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences),
+    [effectiveFunctions, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences],
+  )
+
   // Virar Saldo: para cada função, cria um NOVO período iniciando na data escolhida, com
   // saldo_inicial = Saldo Atualizado atual. Não sobrescreve reserve_functions nem grava em
   // localStorage — o banco é a fonte da verdade. Guarda os ids criados para o "Desfazer".
@@ -1747,6 +1823,7 @@ export default function ReservasPanel() {
           adjustmentsByFn={adjustmentsByFn}
           activePeriodByFn={activePeriodByFn}
           saldosAtualizados={saldosAtualizados}
+          movFuturosByFn={movFuturosByFn}
           computeSaldo={computeSaldo}
           todayStr={todayStr}
           autoBoundsOf={autoBoundsOf}
