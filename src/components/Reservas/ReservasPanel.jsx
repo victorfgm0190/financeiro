@@ -487,6 +487,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
   const catNameOf = (id) => categories.find(c => c.id === id)?.name
   // Função cujo modal de histórico de ajustes está aberto (Parte 6).
   const [adjFn, setAdjFn] = useState(null)
+  // Função cujo modal de Movimentos Futuros (detalhamento) está aberto.
+  const [movFn, setMovFn] = useState(null)
   // Modal "Origem" do valor AUTO: { fn, tipo: 'entradas'|'saidas', items, loading, error }.
   const [origem, setOrigem] = useState(null)
   const openOrigem = async (fn, tipo) => {
@@ -588,8 +590,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
       {groups.map(({ accountId, account, fns }) => {
         const totalSaldo = fns.reduce((s, f) => s + computeSaldo(f), 0)
         const totalAtualizado = fns.reduce((s, f) => s + (saldosAtualizados[f.id] || 0), 0)
-        const totalMovFuturos = fns.reduce((s, f) => s + (movFuturosByFn[f.id] || 0), 0)
-        const totalSaldoFuturo = Math.round((totalAtualizado - totalMovFuturos) * 100) / 100
+        const totalLiquido = Math.round(fns.reduce((s, f) => s + (movFuturosByFn[f.id]?.liquido || 0), 0) * 100) / 100
+        const totalSaldoFuturo = Math.round((totalAtualizado + totalLiquido) * 100) / 100
         const saldoReal = accountId !== null
           ? (accountBalances[accountId] !== undefined ? accountBalances[accountId] : (account?.balance || 0))
           : null
@@ -637,8 +639,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               {fns.map(f => {
                 const saldo = computeSaldo(f)
                 const atualizado = saldosAtualizados[f.id] ?? saldo
-                const movFuturos = movFuturosByFn[f.id] || 0
-                const saldoFuturo = Math.round((atualizado - movFuturos) * 100) / 100
+                const liquido = movFuturosByFn[f.id]?.liquido || 0
+                const saldoFuturo = Math.round((atualizado + liquido) * 100) / 100
                 return (
                   <div
                     key={f.id}
@@ -663,12 +665,16 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     <div className={`text-lg font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                       {fmt(atualizado)}
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">
-                        Saldo Futuro:
-                        {movFuturos > 0 && <span className="text-orange-600 ml-1">(−{fmt(movFuturos)})</span>}
+                    <div className="flex items-center justify-between text-xs gap-3">
+                      <button onClick={() => setMovFn(f)} className="text-gray-500 hover:underline whitespace-nowrap">
+                        Mov. Futuros:
+                        <span className={`ml-1 font-semibold ${liquido > 0 ? 'text-blue-600' : liquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}>
+                          {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : '0,00'}
+                        </span>
+                      </button>
+                      <span className="text-gray-500 whitespace-nowrap">
+                        Saldo Futuro: <span className={`font-semibold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(saldoFuturo)}</span>
                       </span>
-                      <span className={`font-semibold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(saldoFuturo)}</span>
                     </div>
                     <div className="h-px bg-gray-800" />
                     {/* Duas linhas no mobile: (1) Entradas + Saídas  (2) Ajuste à esq., botões à dir.
@@ -760,7 +766,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
-                      <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Mov. Futuros</th>
+                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Mov. Futuros</th>
                       <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Futuro</th>
                       <th className="w-14" />
                     </tr>
@@ -769,8 +775,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {fns.map(f => {
                       const saldo = computeSaldo(f)
                       const atualizado = saldosAtualizados[f.id] ?? saldo
-                      const movFuturos = movFuturosByFn[f.id] || 0
-                      const saldoFuturo = Math.round((atualizado - movFuturos) * 100) / 100
+                      const liquido = movFuturosByFn[f.id]?.liquido || 0
+                      const saldoFuturo = Math.round((atualizado + liquido) * 100) / 100
                       return (
                         <tr
                           key={f.id}
@@ -817,9 +823,13 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             {fmt(atualizado)}
                           </td>
                           <td className="px-4 py-2 text-right text-xs font-semibold">
-                            {movFuturos > 0
-                              ? <span className="text-orange-600">−{fmt(movFuturos)}</span>
-                              : <span className="text-gray-700">0,00</span>}
+                            <button
+                              onClick={() => setMovFn(f)}
+                              title="Ver movimentos futuros previstos"
+                              className={`hover:underline cursor-pointer ${liquido > 0 ? 'text-blue-600' : liquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}
+                            >
+                              {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : <span className="text-gray-700">0,00</span>}
+                            </button>
                           </td>
                           <td className={`px-4 py-2 text-right text-xs font-bold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
                             {fmt(saldoFuturo)}
@@ -860,10 +870,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                         {fmt(totalAtualizado)}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold">
-                        {totalMovFuturos > 0
-                          ? <span className="text-orange-600">−{fmt(totalMovFuturos)}</span>
-                          : <span className="text-gray-700">0,00</span>}
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalLiquido > 0 ? 'text-blue-600' : totalLiquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}>
+                        {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmt(totalLiquido) : <span className="text-gray-700">0,00</span>}
                       </td>
                       <td className={`px-4 py-2 text-right text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
                         {fmt(totalSaldoFuturo)}
@@ -894,7 +902,78 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
       {origem && (
         <OrigemModal origem={origem} onClose={() => setOrigem(null)} />
       )}
+
+      {movFn && (
+        <MovFuturosModal fn={movFn} data={movFuturosByFn[movFn.id]} onClose={() => setMovFn(null)} />
+      )}
     </div>
+  )
+}
+
+// Seção (tabela) do modal de Movimentos Futuros — Entradas ou Saídas previstas.
+function MovFuturosSecao({ titulo, cor, items, total, vazio }) {
+  return (
+    <div>
+      <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${cor}`}>{titulo}</p>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-500 py-3 text-center">{vazio}</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-left">
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Descrição</th>
+                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={i} className="border-b border-gray-800/40">
+                  <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
+                  <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={it.label}>{it.label}</td>
+                  <td className={`px-3 py-2 text-xs text-right font-medium whitespace-nowrap ${cor}`}>{fmt(it.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-gray-700 bg-gray-800/20">
+                <td className="px-3 py-2 text-xs font-semibold text-gray-500">TOTAL</td>
+                <td />
+                <td className={`px-3 py-2 text-right text-xs font-bold ${cor}`}>{fmt(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Modal "Movimentos Futuros": entradas e saídas previstas (próximos 12 meses) de uma função.
+function MovFuturosModal({ fn, data, onClose }) {
+  const deps = data?.deps || []
+  const ress = data?.ress || []
+  const totalDeps = data?.totalDeps || 0
+  const totalRess = data?.totalRess || 0
+  const liquido = data?.liquido || 0
+
+  return (
+    <Modal open onClose={onClose} title={`Movimentos Futuros — ${fn.name}`} size="lg">
+      <div className="space-y-5">
+        <MovFuturosSecao titulo="Entradas previstas" cor="text-blue-600" items={deps} total={totalDeps} vazio="Nenhuma entrada prevista" />
+        <MovFuturosSecao titulo="Saídas previstas" cor="text-orange-600" items={ress} total={totalRess} vazio="Nenhuma saída prevista" />
+        <div className="flex items-center justify-between border-t border-gray-800 pt-3">
+          <span className="text-sm font-semibold text-gray-300">LÍQUIDO</span>
+          <span className={`text-lg font-bold ${liquido < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+            {(liquido > 0 ? '+' : '') + fmt(liquido)}
+          </span>
+        </div>
+        <div className="flex justify-end">
+          <button type="button" className="btn-secondary text-xs py-1.5 px-5" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -1255,6 +1334,10 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
     const deps = new Array(12).fill(0)
     const ress = new Array(12).fill(0)
     const provs = new Array(12).fill(0)
+    // Itens individuais (ocorrências) para o modal de detalhamento. Coletados só para os meses
+    // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
+    const depItems = []  // { date, label, amount }
+    const resItems = []  // { date, label, amount } (resgates reais + provisões)
     for (const p of provisoes) {
       if (p.reservaFuncaoId !== f.id) continue
       const amt = Number(p.amount) || 0
@@ -1266,6 +1349,7 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
       const idx = winIndexOf(proxima)
       if (idx < 0 || idx > 11) continue
       provs[idx] = round2(provs[idx] + amt)
+      if (idx >= 1) resItems.push({ date: proxima, label: p.description || 'Resgate (provisão)', amount: amt })
     }
     for (const s of transfers) {
       const isDep = !!accById.get(s.toAccountId)?.isReserva
@@ -1283,28 +1367,35 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
         if (dateStr < winStart || dateStr > winEnd) continue
         const idx = winIndexOf(dateStr)
         if (idx < 0 || idx > 11) continue
-        if (isDep) deps[idx] = round2(deps[idx] + amt)
-        else ress[idx] = round2(ress[idx] + amt)
+        if (isDep) {
+          deps[idx] = round2(deps[idx] + amt)
+          if (idx >= 1) depItems.push({ date: dateStr, label: s.description || 'Depósito', amount: amt })
+        } else {
+          ress[idx] = round2(ress[idx] + amt)
+          if (idx >= 1) resItems.push({ date: dateStr, label: s.description || 'Resgate', amount: amt })
+        }
       }
     }
-    result[f.id] = { deps, ress, provs }
+    result[f.id] = { deps, ress, provs, depItems, resItems }
   }
   return result
 }
 
-// Total de resgates FUTUROS por função (resgates reais + provisões) na janela do Fluxo Futuro.
-// Considera os meses futuros (índice >= 1; o índice 0 é o mês anterior/referência). Retorna
-// { [functionId]: totalResgatesFuturos }.
-function futureResgatesByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences) {
+// Movimentos FUTUROS por função na janela do Fluxo Futuro (meses futuros, índice >= 1). Retorna
+// { [functionId]: { liquido, deps, ress, totalDeps, totalRess } } — deps/ress são as ocorrências
+// individuais (entradas / saídas previstas); líquido = totalDeps − totalRess.
+function futureMovimentosByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences) {
   const win = buildFluxoWindow()
   const sched = computeScheduledByFunction(linked, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences, win)
+  const round2 = (n) => Math.round(n * 100) / 100
   const out = {}
   for (const f of linked) {
     const s = sched[f.id]
-    if (!s) { out[f.id] = 0; continue }
-    let total = 0
-    for (let i = 1; i < 12; i++) total += (s.ress[i] || 0) + (s.provs[i] || 0)
-    out[f.id] = Math.round(total * 100) / 100
+    const deps = (s?.depItems || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+    const ress = (s?.resItems || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+    const totalDeps = round2(deps.reduce((t, x) => t + (Number(x.amount) || 0), 0))
+    const totalRess = round2(ress.reduce((t, x) => t + (Number(x.amount) || 0), 0))
+    out[f.id] = { liquido: round2(totalDeps - totalRess), deps, ress, totalDeps, totalRess }
   }
   return out
 }
@@ -1840,10 +1931,10 @@ export default function ReservasPanel() {
     return result
   }, [effectiveFunctions, accounts, accountBalances])
 
-  // Resgates FUTUROS por função — mesma lógica/janela do Fluxo Futuro (resgates reais + provisões
-  // nos próximos 12 meses). Alimenta as colunas Mov. Futuros / Saldo Futuro do Resumo.
+  // Movimentos FUTUROS por função — mesma lógica/janela do Fluxo Futuro. { [fid]: { liquido,
+  // deps, ress, totalDeps, totalRess } }. Alimenta as colunas Mov. Futuros / Saldo Futuro e o modal.
   const movFuturosByFn = useMemo(
-    () => futureResgatesByFunction(effectiveFunctions.filter(f => f.accountId), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences),
+    () => futureMovimentosByFunction(effectiveFunctions.filter(f => f.accountId), accounts, schedules, scheduleReservaFuncoes, getNextOccurrences),
     [effectiveFunctions, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences],
   )
 
