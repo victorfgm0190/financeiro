@@ -58,59 +58,19 @@ function localDateStr(d) {
 }
 
 // ── Inline editable number cell ────────────────────────────────────────────
-// isOverride=false → valor calculado automaticamente (mostra selo "auto"); editar grava
-// um override manual. isOverride=true → valor manual; onReset volta ao cálculo automático.
-function InlineEdit({ value, onSave, textClass = 'text-gray-300', isOverride = false, onReset, onAuto }) {
-  const [editing, setEditing] = useState(false)
-  const inputRef = useRef(null)
-
-  useEffect(() => {
-    if (editing && inputRef.current) { inputRef.current.value = String(value); inputRef.current.select() }
-  }, [editing, value])
-
-  const save = () => {
-    const n = parseFloat(inputRef.current?.value ?? '')
-    if (!isNaN(n)) onSave(Math.round(n * 100) / 100)
-    setEditing(false)
-  }
-
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        className="w-24 bg-gray-800 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-right text-gray-200 focus:outline-none"
-        type="number"
-        step="0.01"
-        onBlur={save}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-      />
-    )
-  }
-
+// Valor de movimentação (Entradas/Saídas) do Resumo — SOMENTE LEITURA, clicável. Ao clicar,
+// abre o modal de origem com os lançamentos que compõem o valor (via onClick → openOrigem).
+// Cores: azul (entradas) / laranja (saídas) / cinza (zero). Sem edição manual / selos AUTO.
+function MovValue({ value, tipo, onClick }) {
+  const color = value !== 0 ? (tipo === 'entradas' ? 'text-blue-600' : 'text-orange-600') : 'text-gray-500'
   return (
-    <span className="inline-flex items-center justify-end gap-1 w-full">
-      <button
-        onClick={() => setEditing(true)}
-        className={`text-right text-xs font-semibold hover:underline cursor-pointer ${textClass}`}
-        title={isOverride ? 'Valor manual — clique para editar' : 'Calculado dos lançamentos — clique para sobrescrever'}
-      >
-        {value !== 0 ? fmt(value) : <span className="text-gray-700">0,00</span>}
-      </button>
-      {isOverride
-        ? (onReset && (
-          <button
-            onClick={onReset}
-            title="Voltar ao cálculo automático"
-            className="text-gray-600 hover:text-blue-400 shrink-0"
-          >
-            <RotateCcw size={10} />
-          </button>
-        ))
-        : (onAuto
-          ? <button onClick={onAuto} title="Ver lançamentos que compõem este valor (AUTO)" className="text-[8px] uppercase tracking-wide text-gray-500 hover:text-blue-400 shrink-0 cursor-pointer">auto</button>
-          : <span title="Calculado automaticamente a partir dos lançamentos" className="text-[8px] uppercase tracking-wide text-gray-600 shrink-0">auto</span>)
-      }
-    </span>
+    <button
+      onClick={onClick}
+      title="Ver lançamentos que compõem este valor"
+      className={`text-right text-xs font-semibold hover:underline cursor-pointer ${color}`}
+    >
+      {value !== 0 ? fmt(value) : <span className="text-gray-700">0,00</span>}
+    </button>
   )
 }
 
@@ -136,7 +96,7 @@ function DespesaToggle({ on, onToggle }) {
   )
 }
 
-function FunctionForm({ initial, accounts, categories = [], onSubmit, onClose }) {
+function FunctionForm({ initial, accounts, categories = [], transactions = [], onSubmit, onClose }) {
   const isMobile = useIsMobile()
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -154,6 +114,49 @@ function FunctionForm({ initial, accounts, categories = [], onSubmit, onClose })
   const categoryOpts = [...categories]
     .filter(c => c.type === 'expense' || c.type === 'both')
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'))
+
+  // Sugestões calculadas dos lançamentos reais vinculados (reservaFuncaoId) nos últimos 12 meses.
+  // Só para funções EXISTENTES com conta vinculada (transfers precisam da conta p/ classificar).
+  //   SAÍDA  = transfer saindo da conta (accountId === conta)
+  //   ENTRADA = transfer entrando (toAccountId === conta) OU receita na conta (income)
+  // enough=false (< 2 meses de dados, ou sem conta) → "Dados insuficientes".
+  const suggestions = useMemo(() => {
+    const fnId = initial?.id
+    const accId = initial?.accountId
+    if (!fnId) return null
+    const now = new Date()
+    const cutoff = localDateStr(new Date(now.getFullYear(), now.getMonth() - 12, now.getDate()))
+    const today = localDateStr(now)
+    let entradas = 0, saidas = 0
+    const saidasByMonth = {}
+    const monthsSeen = new Set()
+    for (const tx of (transactions || [])) {
+      if (tx.reservaFuncaoId !== fnId) continue
+      if (tx.date < cutoff || tx.date > today) continue
+      monthsSeen.add(tx.date.slice(0, 7))
+      if (tx.type === 'transfer' && tx.accountId === accId) {
+        saidas += tx.amount
+        const mo = Number(tx.date.slice(5, 7))
+        saidasByMonth[mo] = (saidasByMonth[mo] || 0) + tx.amount
+      } else if (tx.type === 'transfer' && tx.toAccountId === accId) {
+        entradas += tx.amount
+      } else if (tx.type === 'income' && tx.accountId === accId) {
+        entradas += tx.amount
+      }
+    }
+    // Mês (1-12) com maior volume de saídas; empate ou sem saídas → null.
+    let mesVencimento = null
+    const porMes = Object.entries(saidasByMonth).sort((a, b) => b[1] - a[1])
+    if (porMes.length === 1 || (porMes.length > 1 && porMes[0][1] > porMes[1][1])) {
+      mesVencimento = Number(porMes[0][0])
+    }
+    return {
+      enough: !!accId && monthsSeen.size >= 2,
+      despesaAnual: Math.round(saidas * 100) / 100,
+      depositoMensal: Math.round((entradas / 12) * 100) / 100,
+      mesVencimento,
+    }
+  }, [transactions, initial])
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit({
@@ -185,10 +188,22 @@ function FunctionForm({ initial, accounts, categories = [], onSubmit, onClose })
         <div>
           <label className="label">Despesa Anual (R$)</label>
           <input className="input" type="number" step="0.01" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
+          {suggestions && (suggestions.enough
+            ? <p className="text-xs text-gray-600 mt-1">Calculado dos lançamentos: {fmt(suggestions.despesaAnual)}
+                <button type="button" onClick={() => set('despesaAnual', suggestions.despesaAnual)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+              </p>
+            : <p className="text-xs text-gray-600 mt-1">Dados insuficientes para calcular</p>
+          )}
         </div>
         <div>
           <label className="label">Depósito Mensal (R$)</label>
           <input className="input" type="number" step="0.01" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
+          {suggestions && (suggestions.enough
+            ? <p className="text-xs text-gray-600 mt-1">Calculado dos lançamentos: {fmt(suggestions.depositoMensal)} / mês
+                <button type="button" onClick={() => set('depositoMensal', suggestions.depositoMensal)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+              </p>
+            : <p className="text-xs text-gray-600 mt-1">Dados insuficientes para calcular</p>
+          )}
         </div>
       </div>
       <div>
@@ -198,6 +213,11 @@ function FunctionForm({ initial, accounts, categories = [], onSubmit, onClose })
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
         <p className="text-xs text-gray-600 mt-1">Quando não definido, a despesa anual é dividida em 12 parcelas mensais</p>
+        {suggestions && suggestions.enough && suggestions.mesVencimento && (
+          <p className="text-xs text-gray-600 mt-1">Maior volume em: {MONTH_LABELS[suggestions.mesVencimento - 1]}
+            <button type="button" onClick={() => set('mesVencimento', suggestions.mesVencimento)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+          </p>
+        )}
       </div>
       <div>
         <label className="label">Categoria da Despesa</label>
@@ -600,11 +620,11 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <div className="flex items-center gap-4 text-xs">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-gray-500 shrink-0">Entradas:</span>
-                          <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
+                          <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                         </div>
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-gray-500 shrink-0">Saídas:</span>
-                          <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
+                          <MovValue value={f.saidas} tipo="saidas" onClick={() => openOrigem(f, 'saidas')} />
                         </div>
                       </div>
                       <div className="flex items-center justify-between gap-4 text-xs">
@@ -706,10 +726,10 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} align="right" />
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.entradas} onSave={v => onUpdateFunction(f.id, { entradasOverride: v })} onReset={() => onUpdateFunction(f.id, { entradasOverride: null })} isOverride={!f.entradasAuto} onAuto={() => openOrigem(f, 'entradas')} textClass="text-blue-600" />
+                            <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                           </td>
                           <td className="px-4 py-2 text-right">
-                            <InlineEdit value={f.saidas} onSave={v => onUpdateFunction(f.id, { saidasOverride: v })} onReset={() => onUpdateFunction(f.id, { saidasOverride: null })} isOverride={!f.saidasAuto} onAuto={() => openOrigem(f, 'saidas')} textClass="text-orange-600" />
+                            <MovValue value={f.saidas} tipo="saidas" onClick={() => openOrigem(f, 'saidas')} />
                           </td>
                           <td className="px-4 py-2 text-right">
                             <span className="inline-flex items-center justify-end gap-1">
@@ -807,16 +827,16 @@ function OrigemModal({ origem, onClose }) {
     ? `${t.conta_nome || '—'} → ${t.conta_destino_nome || '—'}`
     : (t.conta_nome || '—')
 
+  const titulo = `${tipo === 'entradas' ? 'Entradas' : 'Saídas'} — ${fn?.name || ''}`
   return (
-    <Modal open onClose={onClose} title={`Origem: ${fn?.name || ''}`} size="lg">
-      <div className="space-y-3">
-        <p className="text-xs text-gray-500">{tipo === 'entradas' ? 'Entradas (+)' : 'Saídas (−)'} do período</p>
+    <Modal open onClose={onClose} title={titulo} size="lg">
+      <div className="space-y-4">
         {loading ? (
           <p className="text-sm text-gray-500 py-6 text-center">Carregando…</p>
         ) : error ? (
           <p className="text-sm text-orange-500 py-6 text-center">Erro ao buscar os lançamentos.</p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-gray-500 py-6 text-center">Nenhum lançamento encontrado</p>
+          <p className="text-sm text-gray-500 py-6 text-center">Nenhum lançamento encontrado neste período</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-700/60">
             <table className="w-full text-sm">
@@ -841,6 +861,9 @@ function OrigemModal({ origem, onClose }) {
             </table>
           </div>
         )}
+        <div className="flex justify-end pt-1">
+          <button type="button" className="btn-secondary text-xs py-1.5 px-5" onClick={onClose}>Fechar</button>
+        </div>
       </div>
     </Modal>
   )
@@ -1556,10 +1579,10 @@ export default function ReservasPanel() {
     return {
       ...f,
       saldoInicial,
-      entradas: f.entradasOverride != null ? f.entradasOverride : comp.entradas,
-      saidas: f.saidasOverride != null ? f.saidasOverride : comp.saidas,
-      entradasAuto: f.entradasOverride == null,
-      saidasAuto: f.saidasOverride == null,
+      // Entradas/Saídas SEMPRE do cálculo AUTO (lançamentos). Os overrides manuais foram
+      // removidos da UI; as colunas entradas_override/saidas_override seguem no banco, ignoradas aqui.
+      entradas: comp.entradas,
+      saidas: comp.saidas,
       ajuste,
       ajusteObs,
       hasPeriod: !!ap,
@@ -1713,6 +1736,7 @@ export default function ReservasPanel() {
           initial={editFn}
           accounts={nonCreditAccounts}
           categories={categories}
+          transactions={transactions}
           onSubmit={data => {
             if (editFn) updateFunction(editFn.id, data)
             else addFunction(data)
