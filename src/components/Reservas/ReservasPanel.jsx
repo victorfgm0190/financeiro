@@ -96,7 +96,7 @@ function DespesaToggle({ on, onToggle }) {
   )
 }
 
-function FunctionForm({ initial, accounts, categories = [], transactions = [], onSubmit, onClose }) {
+function FunctionForm({ initial, accounts, categories = [], transactions = [], schedules = [], onSubmit, onClose }) {
   const isMobile = useIsMobile()
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -115,11 +115,12 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], o
     .filter(c => c.type === 'expense' || c.type === 'both')
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'))
 
-  // Sugestões calculadas dos lançamentos reais vinculados (reservaFuncaoId) nos últimos 12 meses.
+  // Sugestões dos lançamentos reais + agendamentos pendentes vinculados (reservaFuncaoId).
   // Só para funções EXISTENTES com conta vinculada (transfers precisam da conta p/ classificar).
   //   SAÍDA  = transfer saindo da conta (accountId === conta)
   //   ENTRADA = transfer entrando (toAccountId === conta) OU receita na conta (income)
-  // enough=false (< 2 meses de dados, ou sem conta) → "Dados insuficientes".
+  // Agendamentos: transactionType/frequency; o modelo não tem campo 'status' — todo agendamento
+  // vinculado conta como pendente. enough=false (< 2 meses e sem agendamento, ou sem conta).
   const suggestions = useMemo(() => {
     const fnId = initial?.id
     const accId = initial?.accountId
@@ -127,7 +128,9 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], o
     const now = new Date()
     const cutoff = localDateStr(new Date(now.getFullYear(), now.getMonth() - 12, now.getDate()))
     const today = localDateStr(now)
-    let entradas = 0, saidas = 0
+
+    // ── Lançamentos efetivados (últimos 12 meses) ──
+    let entradasTx = 0, saidasTx = 0
     const saidasByMonth = {}
     const monthsSeen = new Set()
     for (const tx of (transactions || [])) {
@@ -135,28 +138,70 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], o
       if (tx.date < cutoff || tx.date > today) continue
       monthsSeen.add(tx.date.slice(0, 7))
       if (tx.type === 'transfer' && tx.accountId === accId) {
-        saidas += tx.amount
+        saidasTx += tx.amount
         const mo = Number(tx.date.slice(5, 7))
         saidasByMonth[mo] = (saidasByMonth[mo] || 0) + tx.amount
       } else if (tx.type === 'transfer' && tx.toAccountId === accId) {
-        entradas += tx.amount
+        entradasTx += tx.amount
       } else if (tx.type === 'income' && tx.accountId === accId) {
-        entradas += tx.amount
+        entradasTx += tx.amount
       }
     }
-    // Mês (1-12) com maior volume de saídas; empate ou sem saídas → null.
+
+    // ── Agendamentos pendentes vinculados (transactionType/frequency) ──
+    const linked = (schedules || []).filter(s => s.reservaFuncaoId === fnId && s.transactionType && s.status !== 'paid')
+    const perYear = { daily: 365, weekly: 52, biweekly: 26, monthly: 12, quarterly: 4, semiannual: 2, annual: 1 }
+    const isEntradaS = (s) => (s.transactionType === 'transfer' && s.toAccountId === accId) || (s.transactionType === 'income' && s.accountId === accId)
+    const isSaidaS = (s) => s.transactionType === 'transfer' && s.accountId === accId
+    const monthOf = (d) => {
+      if (!d) return null
+      if (d instanceof Date) return d.getMonth() + 1
+      return Number(String(d).slice(5, 7)) || null
+    }
+
+    let entradaMensalRecorrente = 0  // Σ equivalente mensal das entradas recorrentes
+    let entradaSchedOnce = 0         // Σ entradas 'once'
+    let despesaAnualSched = 0        // Σ saídas recorrentes projetadas p/ 12 meses
+    let mesAnualSched = null         // mês da próxima saída anual agendada
+
+    for (const s of linked) {
+      const freq = s.frequency
+      const recorrente = freq && freq !== 'once'
+      if (isEntradaS(s)) {
+        // Recorrente → valor mensal equivalente (amount × ocorrências/ano ÷ 12); monthly = amount.
+        if (recorrente) entradaMensalRecorrente += (s.amount * (perYear[freq] || 12)) / 12
+        else entradaSchedOnce += s.amount
+      } else if (isSaidaS(s)) {
+        // Recorrente → projeção anual (monthly ×12, annual ×1, outros × estimativa de ocorrências/ano).
+        if (recorrente) despesaAnualSched += s.amount * (perYear[freq] || 1)
+        if (freq === 'annual') mesAnualSched = monthOf(s.nextOccurrence || s.startDate) || mesAnualSched
+      }
+    }
+
+    // a) Depósito Mensal = maior entre: (recorrentes já mensais) e ((lançamentos + 'once')/12).
+    const depAbordagemA = Math.round(entradaMensalRecorrente * 100) / 100
+    const depAbordagemB = Math.round(((entradasTx + entradaSchedOnce) / 12) * 100) / 100
+    const depositoMensal = Math.max(depAbordagemA, depAbordagemB)
+
+    // b) Despesa Anual = saídas de lançamentos (12m) + saídas recorrentes agendadas projetadas.
+    const despesaAnual = Math.round((saidasTx + despesaAnualSched) * 100) / 100
+
+    // c) Mês de Vencimento: maior volume de saídas nos lançamentos; havendo saída ANUAL agendada,
+    //    prevalece o mês da próxima ocorrência. Empate/sem dado → null.
     let mesVencimento = null
     const porMes = Object.entries(saidasByMonth).sort((a, b) => b[1] - a[1])
     if (porMes.length === 1 || (porMes.length > 1 && porMes[0][1] > porMes[1][1])) {
       mesVencimento = Number(porMes[0][0])
     }
+    if (mesAnualSched) mesVencimento = mesAnualSched
+
     return {
-      enough: !!accId && monthsSeen.size >= 2,
-      despesaAnual: Math.round(saidas * 100) / 100,
-      depositoMensal: Math.round((entradas / 12) * 100) / 100,
+      enough: !!accId && (monthsSeen.size >= 2 || linked.length > 0),
+      despesaAnual,
+      depositoMensal,
       mesVencimento,
     }
-  }, [transactions, initial])
+  }, [transactions, schedules, initial])
 
   return (
     <form onSubmit={e => { e.preventDefault(); onSubmit({
@@ -1737,6 +1782,7 @@ export default function ReservasPanel() {
           accounts={nonCreditAccounts}
           categories={categories}
           transactions={transactions}
+          schedules={schedules}
           onSubmit={data => {
             if (editFn) updateFunction(editFn.id, data)
             else addFunction(data)
