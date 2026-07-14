@@ -175,6 +175,12 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         // Recorrente → projeção anual (monthly ×12, annual ×1, outros × estimativa de ocorrências/ano).
         if (recorrente) despesaAnualSched += s.amount * (perYear[freq] || 1)
         if (freq === 'annual') mesAnualSched = monthOf(s.nextOccurrence || s.startDate) || mesAnualSched
+      } else if (s.isProvisao && s.transactionType === 'expense') {
+        // Provisão de despesa vinculada (não é transferência): despesa futura estimada.
+        // annual/once → amount; monthly → ×12; demais frequências → × ocorrências/ano.
+        if (freq === 'monthly') despesaAnualSched += s.amount * 12
+        else if (freq === 'annual' || freq === 'once' || !freq) despesaAnualSched += s.amount
+        else despesaAnualSched += s.amount * (perYear[freq] || 1)
       }
     }
 
