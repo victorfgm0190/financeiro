@@ -858,10 +858,15 @@ export async function syncSection(table, prevItems, currItems, toRow) {
 // de detalhamento e inflavam/estouravam a section. Cada chamada substitui TODO o detalhamento de
 // um schedule_id (DELETE + INSERT). As rows são mapeadas p/ snake_case (mesmo mapper do sync).
 export async function syncSrf(scheduleId, rows) {
-  return apiPost('/api/sync-srf', {
-    scheduleId,
-    rows: (rows || []).map(scheduleReservaFuncaoToRow),
-  })
+  try {
+    return await apiPost('/api/sync-srf', {
+      scheduleId,
+      rows: (rows || []).map(scheduleReservaFuncaoToRow),
+    })
+  } catch (err) {
+    console.error(`[syncSrf] falha ao sincronizar detalhamento de ${scheduleId}:`, err?.message || err)
+    throw err
+  }
 }
 
 // Assinatura estável de um conjunto de linhas de um schedule (ordem-independente) — usada para

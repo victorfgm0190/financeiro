@@ -727,4 +727,7 @@ CREATE TABLE IF NOT EXISTS schedule_reserva_funcoes (
 -- lançamento muda de grupo gerencial.
 ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_ids JSONB DEFAULT '[]';
 ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS fatura_ref TEXT;
+ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_lancamento_id TEXT;
+-- gerencial_devolucao (Grupo G) não tem função de reserva → reserva_funcao_id NULL permitido.
+ALTER TABLE schedule_reserva_funcoes ALTER COLUMN reserva_funcao_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id);
