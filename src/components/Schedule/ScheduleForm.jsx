@@ -3,6 +3,7 @@ import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -261,6 +262,12 @@ export default function ScheduleForm({ initial, onClose }) {
   const showFuncaoReserva = form.transactionType === 'expense' && isCredit && isNumberedGerencial && reservaGroupFuncs.length > 1
   const reservaGroupAccount = showFuncaoReserva && schGerGrupo?.defaultAccountId
     ? accounts.find(a => a.id === schGerGrupo.defaultAccountId)
+    : null
+
+  // Fatura a que a Data de Vencimento Atual pertence (só despesa em cartão de crédito).
+  // Recalcula automaticamente quando muda a conta (closingDay) ou a data.
+  const faturaCalculada = form.transactionType === 'expense' && isCredit && form.nextOccurrence && selectedAccount?.closingDay
+    ? computeFaturaRef(new Date(form.nextOccurrence + 'T12:00:00'), selectedAccount.closingDay)
     : null
 
   const schToAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
@@ -595,6 +602,11 @@ export default function ScheduleForm({ initial, onClose }) {
             <p className="text-[11px] text-gray-500 mt-1">
               Próxima ocorrência. Altere o dia (ex.: 20 → 30) para mudar as próximas; a Data de Início é preservada.
             </p>
+            {faturaCalculada && (
+              <p className="text-xs text-purple-400 mt-1">
+                📅 Entrará na fatura {faturaCalculada}
+              </p>
+            )}
           </div>
         )}
 
