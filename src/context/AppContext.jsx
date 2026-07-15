@@ -3561,6 +3561,18 @@ export function AppProvider({ children }) {
             const desc = `Reserva Gerencial - ${e.description || ''}`.trim()
             const idx = arr.findIndex(t => t.id === id)
             if (idx === -1) {
+              // Guarda simétrica: se já existe uma provisão gerencial MANUAL (tx_ger_*,
+              // origin gerencial_auto/auto-provisao) para esta MESMA despesa, o manual é o
+              // dono — NÃO materializa a etapa A por cima. Evita a duplicata quando a parcela
+              // 2..N transita de fatura futura (provisionada em Executar Gerenciais) para o
+              // ciclo atual (materializado aqui). Casa por parentTxId/sourceExpenseId e mesma
+              // subconta destino, nunca por descrição (parcelas irmãs a compartilham).
+              const temProvisaoManual = arr.some(t =>
+                isGerencialAutoOrigin(t) && t.type === 'transfer' &&
+                (t.parentTxId === e.id || t.sourceExpenseId === e.id) &&
+                t.toAccountId === subcontaId
+              )
+              if (temProvisaoManual) continue
               // CREATE: debita principal, credita subconta.
               arr.push({
                 id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
