@@ -244,6 +244,23 @@ export default function ScheduleForm({ initial, onClose }) {
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
 
+  // Função de reserva para DESPESA em cartão de crédito com grupo gerencial NUMERADO (2..N —
+  // CA, Phlo, Impr etc.; não G, não reserva(1), não D). Pré-define de qual bucket sairá o
+  // resgate quando o agendamento for executado. Mesmo padrão do TransactionForm (grupo numerado).
+  const isCredit = selectedAccount?.type === 'credit'
+  const schGerGrupo = gerencialGroups.find(g => g.id === form.grupoGerencial) || null
+  const isNumberedGerencial = typeof schGerGrupo?.number === 'number' && schGerGrupo.number !== 1
+  const showFuncaoReserva = form.transactionType === 'expense' && isCredit && isNumberedGerencial
+  const reservaGroupFuncs = useMemo(
+    () => (showFuncaoReserva && schGerGrupo?.defaultAccountId)
+      ? (reserveFunctions || []).filter(f => f.accountId === schGerGrupo.defaultAccountId).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name))
+      : [],
+    [showFuncaoReserva, schGerGrupo, reserveFunctions]
+  )
+  const reservaGroupAccount = showFuncaoReserva && schGerGrupo?.defaultAccountId
+    ? accounts.find(a => a.id === schGerGrupo.defaultAccountId)
+    : null
+
   const schToAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.toAccountId) : null
   const schFromAcc = form.transactionType === 'transfer' ? accounts.find(a => a.id === form.accountId) : null
   const schIsDepositToReserva = !!schToAcc?.isReserva
@@ -388,7 +405,7 @@ export default function ScheduleForm({ initial, onClose }) {
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
-            onChange={id => set('accountId', id)}
+            onChange={id => setForm(f => ({ ...f, accountId: id, reservaFuncaoId: '' }))}
             placeholder="Selecione a conta..."
             preserveGroupOrder
             ungroupedLast
@@ -664,7 +681,7 @@ export default function ScheduleForm({ initial, onClose }) {
             <select
               className="input"
               value={form.grupoGerencial || ''}
-              onChange={e => set('grupoGerencial', e.target.value || null)}
+              onChange={e => setForm(f => ({ ...f, grupoGerencial: e.target.value || null, reservaFuncaoId: '' }))}
             >
               <option value="">G — Gasto Normal (débito direto)</option>
               {sortedGerGrupos.filter(g => g.number !== 'D').map(g => (
@@ -693,6 +710,33 @@ export default function ScheduleForm({ initial, onClose }) {
                 </p>
               )
             })()}
+
+            {/* Função de reserva do bucket a resgatar — só p/ despesa em cartão com grupo numerado */}
+            {showFuncaoReserva && (
+              <div>
+                <label className="label text-xs uppercase tracking-wide text-orange-400" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                <select
+                  className="input"
+                  value={form.reservaFuncaoId || ''}
+                  onChange={e => set('reservaFuncaoId', e.target.value)}
+                >
+                  <option value="">Sem função específica</option>
+                  {reservaGroupFuncs.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+                {reservaGroupFuncs.length === 0 ? (
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Nenhuma função vinculada a <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'esta reserva'}</strong>.
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
+                    o resgate ao registrar este agendamento.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
