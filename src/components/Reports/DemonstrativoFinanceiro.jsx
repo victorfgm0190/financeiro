@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, ArrowLeftRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra } from '../shared/utils'
+import { isPatrimonioOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -108,7 +109,7 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
     // "Ocultar movimentos de reserva": esconde transferências que tocam conta de reserva E
     // as sombras automáticas (reservaAuto: "Reserva: X" / "Resgate Reserva: X", accountId null).
     !(reservaSet && (reservaSet.has(tx.accountId) || reservaSet.has(tx.toAccountId) || tx.reservaAuto === true)) &&
-    !(hidePatrimonio && tx.origin === 'patrimonioAuto')
+    !(hidePatrimonio && isPatrimonioOrigin(tx))
   )
 
   function buildSection(txList) {

@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { prevMonthScheduleDate } from '../../lib/fatura'
+import { ORIGIN } from '../../lib/origins'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -280,6 +281,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         amount, date: payDate, categoryId: payCategoryId,
         grupoGerencial: payGrupo || undefined,
         description: schedule.description, notes: payNotes,
+        origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
@@ -289,12 +291,12 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
           if (grupo.number === 1) {
             const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
             if (payAccountId && contaReserva) {
-              addTransaction({ type: 'transfer', accountId: payAccountId, toAccountId: contaReserva.id, amount, date: payDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id })
+              addTransaction({ type: 'transfer', accountId: payAccountId, toAccountId: contaReserva.id, amount, date: payDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
             }
           } else {
             const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
             if (contaResgate && contaPrincipal) {
-              addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount, date: payDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id })
+              addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount, date: payDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
             }
           }
         }
@@ -305,6 +307,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount: parseFloat(recAmount) || 0, date: recDate,
         categoryId: recCategoryId, description: schedule.description, notes: recNotes,
+        origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
@@ -325,6 +328,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         amount: parseFloat(trfAmount) || 0, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: autoFuncId,
+        origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)
     }
@@ -1303,12 +1307,12 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     if (grupo.number === 1) {
       const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
       if (schedule.accountId && contaReserva) {
-        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id })
+        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
       }
     } else {
       const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
       if (contaResgate && contaPrincipal) {
-        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id })
+        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
       }
     }
   }

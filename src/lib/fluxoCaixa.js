@@ -8,6 +8,8 @@
 //   PROJETADO     = saldoFinal (já com os envelopes restantes subtraídos)
 //   FINAL CICLO   = saldoFinal + envelopesTotal (mesma projeção SEM subtrair os envelopes)
 
+import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins'
+
 const round2 = n => Math.round(n * 100) / 100
 
 // Ciclos de um envelope (dueDay D: período de D+1 de um mês até D do mês seguinte) que se
@@ -167,7 +169,7 @@ export function computeFluxoCaixa({
     // (limite − gasto no ciclo), datado no fim do ciclo (vencimento).
     const isEnvExpense = (tx) =>
       tx.type === 'expense' && !tx.reservaAuto &&
-      tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto'
+      !isReservaShadowOrigin(tx) && !isPatrimonioOrigin(tx) && !isInvestAutoOrigin(tx)
 
     ;(envelopes || []).forEach(env => {
       if (!env.accountId || !accountIds.has(env.accountId)) return

@@ -19,6 +19,10 @@ import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleD
 import { installmentSystemDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
+import {
+  ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
+  isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
+} from '../lib/origins'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
@@ -436,7 +440,7 @@ const defaultData = {
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true) e de
-// patrimônio (accountId: null, origin: 'patrimonioAuto'). Ambos seguem a mesma mecânica:
+// patrimônio (accountId: null, origin: 'patrimonio_auto'). Ambos seguem a mesma mecânica:
 // transferência PARA a conta vinculada = despesa; transferência DA conta = receita.
 // Efeito de uma transferência nos saldos. Pagamento de fatura VINCULADO (destino = cartão
 // type 'credit' + faturaMonthYear preenchido) abate creditDebt/creditMonthBill como um
@@ -527,7 +531,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       type: 'expense', accountId: null, amount: Number(tx.amount),
       categoryId: toAcc.patrimonioCategoryId,
       description: `Patrimônio: ${toAcc.apelido || toAcc.name}`,
-      date: tx.date, createdAt: now, origin: 'patrimonioAuto',
+      date: tx.date, createdAt: now, origin: ORIGIN.PATRIMONIO_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -537,7 +541,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       type: 'income', accountId: null, amount: Number(tx.amount),
       categoryId: fromAcc.patrimonioCategoryId,
       description: `Resgate Patrimônio: ${fromAcc.apelido || fromAcc.name}`,
-      date: tx.date, createdAt: now, origin: 'patrimonioAuto',
+      date: tx.date, createdAt: now, origin: ORIGIN.PATRIMONIO_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -553,7 +557,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       type: 'expense', accountId: null, amount: Number(tx.amount),
       categoryId: toAcc.investmentCategoryId,
       description: `Investimento - ${toAcc.apelido || toAcc.name}`,
-      date: tx.date, createdAt: now, reservaAuto: true,
+      date: tx.date, createdAt: now, reservaAuto: true, origin: ORIGIN.RESERVA_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -563,7 +567,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       type: 'income', accountId: null, amount: Number(tx.amount),
       categoryId: fromAcc.investmentCategoryId,
       description: `Resgate Investimento - ${fromAcc.apelido || fromAcc.name}`,
-      date: tx.date, createdAt: now, reservaAuto: true,
+      date: tx.date, createdAt: now, reservaAuto: true, origin: ORIGIN.RESERVA_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -583,7 +587,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       categoryId: catId,
       reservaFuncaoId: funcId,
       description: `Reserva: ${toAcc.apelido || toAcc.name}`,
-      date: tx.date, createdAt: now, reservaAuto: true,
+      date: tx.date, createdAt: now, reservaAuto: true, origin: ORIGIN.RESERVA_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -601,7 +605,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       categoryId: catId,
       reservaFuncaoId: rsgFunc,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
-      date: tx.date, createdAt: now, reservaAuto: true,
+      date: tx.date, createdAt: now, reservaAuto: true, origin: ORIGIN.RESERVA_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
     extraTxs.push({
@@ -610,7 +614,7 @@ function buildReservaAutoTxs(tx, accounts, parentTxId = null, reserveFunctions =
       categoryId: catId,
       reservaFuncaoId: rsgFunc,
       description: `Resgate Reserva: ${fromAcc.apelido || fromAcc.name}`,
-      date: tx.date, createdAt: now, reservaAuto: true,
+      date: tx.date, createdAt: now, reservaAuto: true, origin: ORIGIN.RESERVA_AUTO,
       ...(parentTxId ? { parentTxId } : {}),
     })
   }
@@ -631,7 +635,7 @@ function buildEspelhoTxs(tx, parentId, categories, accounts) {
   const base = Date.now()
   const mk = (suffix, obj) => ({
     id: 'tx_esp_' + base + '_' + Math.random().toString(36).slice(2) + suffix,
-    amount, date: tx.date, isEspelho: true, origin: 'espelho',
+    amount, date: tx.date, isEspelho: true, origin: ORIGIN.ESPELHO,
     parentTxId: parentId, createdAt: now, ...obj,
   })
 
@@ -678,7 +682,7 @@ function buildEspelhoTxs(tx, parentId, categories, accounts) {
 
 // Gera a receita/aporte automático numa conta de investimento quando uma despesa
 // (de qualquer tipo de conta) tem categoria vinculada a uma conta de investimento
-// (categoria com investmentAccountId). Retorna o lançamento de entrada (origin: 'investAuto') ou null.
+// (categoria com investmentAccountId). Retorna o lançamento de entrada (origin: 'invest_auto') ou null.
 function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
   if (tx.type !== 'expense') return null
   const cat = (categories || []).find(c => c.id === tx.categoryId)
@@ -694,7 +698,7 @@ function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
     categoryId: null,
     date: tx.date,
     description: `${tx.description || ''} [aporte auto]`.trim(),
-    origin: 'investAuto',
+    origin: ORIGIN.INVEST_AUTO,
     parentTxId,
     createdAt: new Date().toISOString(),
   }
@@ -1082,7 +1086,7 @@ export function AppProvider({ children }) {
             date,
             scheduleId: schedule.id,
             reservaFuncaoId: schedule.reservaFuncaoId || null,
-            origin: 'agendamento',
+            origin: ORIGIN.AGENDAMENTO_AUTO,
             createdAt: new Date().toISOString(),
           }
           if (schedule.transactionType === 'income') {
@@ -1168,7 +1172,7 @@ export function AppProvider({ children }) {
     const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     // Guarda: não grava função de reserva quando o grupo do lançamento não comporta função.
     const newTx = sanitizeReservaFuncao(
-      { ...txClean, id, amount: Number(txClean.amount), createdAt: new Date().toISOString() },
+      { ...txClean, id, amount: Number(txClean.amount), origin: txClean.origin || ORIGIN.MANUAL, createdAt: new Date().toISOString() },
       dataRef.current.gerencialGroups, dataRef.current.reserveFunctions,
     )
     update(d => {
@@ -1329,7 +1333,7 @@ export function AppProvider({ children }) {
       }
 
       // Reverte saldos das auto-provisões geradas para as parcelas importadas
-      for (const p of transactions.filter(t => t.origin === 'auto-provisao' && txIds.has(t.parentTxId))) {
+      for (const p of transactions.filter(t => isGerencialAutoOrigin(t) && txIds.has(t.parentTxId))) {
         accounts = accounts.map(a => {
           if (a.id === p.accountId) return { ...a, balance: rb(a.balance + p.amount) }
           if (a.id === p.toAccountId) return { ...a, balance: rb(a.balance - p.amount) }
@@ -1338,7 +1342,7 @@ export function AppProvider({ children }) {
       }
 
       // Reverte saldos das receitas investAuto (aportes) geradas para despesas importadas
-      for (const p of transactions.filter(t => t.origin === 'investAuto' && txIds.has(t.parentTxId))) {
+      for (const p of transactions.filter(t => isInvestAutoOrigin(t) && txIds.has(t.parentTxId))) {
         accounts = accounts.map(a => a.id === p.accountId ? { ...a, balance: rb(a.balance - p.amount) } : a)
       }
 
@@ -1362,10 +1366,7 @@ export function AppProvider({ children }) {
       transactions = transactions.filter(t =>
         !txIds.has(t.id) &&
         !etapaAIds.has(t.id) &&
-        !(t.reservaAuto && txIds.has(t.parentTxId)) &&
-        !(t.origin === 'auto-provisao' && txIds.has(t.parentTxId)) &&
-        !(t.origin === 'investAuto' && txIds.has(t.parentTxId)) &&
-        !(t.origin === 'patrimonioAuto' && txIds.has(t.parentTxId))
+        !(isAutomacaoOrigin(t) && txIds.has(t.parentTxId))
       )
 
       // Remove os contas-a-pagar (payables) gerados por ESTE lote. Operação SOMENTE de
@@ -1441,7 +1442,7 @@ export function AppProvider({ children }) {
       const grupo = d.gerencialGroups?.find(g => g.id === lanc.grupoGerencial)
       const isG = grupo?.number === 1
       const isNumbered = typeof grupo?.number === 'number' && grupo.number !== 1
-      const ehParcela2aN = Number(lanc.installmentNum) > 1 || lanc.parentTxId != null || lanc.origin === 'parcela'
+      const ehParcela2aN = Number(lanc.installmentNum) > 1 || lanc.parentTxId != null || isParcelaGeradaOrigin(lanc)
 
       let accounts = d.accounts
       let transactions = d.transactions
@@ -1476,7 +1477,7 @@ export function AppProvider({ children }) {
           grupoGerencial: grupo.id, cardId: lanc.accountId, faturaRef, sourceExpenseId: lancId,
         }
         if (!existingEt) {
-          transactions = [...transactions, { ...etFields, createdAt: new Date().toISOString() }]
+          transactions = [...transactions, { ...etFields, origin: ORIGIN.ETAPA_A, createdAt: new Date().toISOString() }]
           accounts = accounts.map(a => {
             if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - amount) }
             if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + amount) }
@@ -1511,7 +1512,7 @@ export function AppProvider({ children }) {
           .filter(g => typeof g.number === 'number' && g.number !== 1 && g.defaultAccountId)
           .map(g => [g.id, g.defaultAccountId])
       )
-      const isAutomacao = (t) => t.reservaAuto || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto'
+      const isAutomacao = (t) => isAutomacaoOrigin(t)
       const somaPorOrigem = new Map()
       for (const t of d.transactions) {
         if (t.type !== 'expense' || t.accountType !== 'credit' || t.accountId !== card.id || isAutomacao(t)) continue
@@ -1667,7 +1668,7 @@ export function AppProvider({ children }) {
     }
     if (txBefore) {
       addFatura(txBefore)
-      before.transactions.filter(t => t.parentTxId === id && t.origin === 'parcela').forEach(addFatura)
+      before.transactions.filter(t => t.parentTxId === id && isParcelaGeradaOrigin(t)).forEach(addFatura)
     }
 
     update(d => {
@@ -1720,7 +1721,7 @@ export function AppProvider({ children }) {
       // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, patrimonioAuto, auto-provisão, investAuto)
       const children = transactions.filter(t =>
         t.parentTxId === id &&
-        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto' || t.reservaAuto)
+        (isParcelaGeradaOrigin(t) || isAutomacaoOrigin(t))
       )
       for (const c of children) reverseBalance(c)
       const childIds = new Set(children.map(c => c.id))
@@ -1772,7 +1773,7 @@ export function AppProvider({ children }) {
     }
     if (txBefore) {
       addFatura(txBefore)
-      before.transactions.filter(t => t.parentTxId === id && t.origin === 'parcela').forEach(addFatura)
+      before.transactions.filter(t => t.parentTxId === id && isParcelaGeradaOrigin(t)).forEach(addFatura)
     }
 
     update(d => {
@@ -1834,7 +1835,7 @@ export function AppProvider({ children }) {
       // Remove e reverte os lançamentos-filhos (parcelas futuras, reservaAuto, patrimonioAuto, auto-provisão, investAuto)
       const children = transactions.filter(t =>
         t.parentTxId === id &&
-        (t.origin === 'parcela' || t.origin === 'auto-provisao' || t.origin === 'investAuto' || t.origin === 'patrimonioAuto' || t.reservaAuto)
+        (isParcelaGeradaOrigin(t) || isAutomacaoOrigin(t))
       )
       for (const c of children) reverseBalance(c)
       const childIds = new Set(children.map(c => c.id))
@@ -2125,7 +2126,7 @@ export function AppProvider({ children }) {
           date,
           scheduleId,
           reservaFuncaoId: srf.reservaFuncaoId,
-          origin: 'agendamento',
+          origin: ORIGIN.AGENDAMENTO,
           ...gerTrace,
           createdAt: nowIso,
         }))
@@ -2168,7 +2169,7 @@ export function AppProvider({ children }) {
         date,
         scheduleId,
         reservaFuncaoId: schedule.reservaFuncaoId || null,
-        origin: 'agendamento',
+        origin: ORIGIN.AGENDAMENTO,
         ...gerTrace,
       }
       const newTx = { ...tx, id: newTxId, createdAt: new Date().toISOString() }
@@ -2514,7 +2515,7 @@ export function AppProvider({ children }) {
       if (env.accountId !== account.id) continue
       let spent = 0
       for (const tx of data.transactions) {
-        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
+        if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
         if (!env.categoryIds?.includes(tx.categoryId)) continue
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
         spent += tx.amount
@@ -2689,7 +2690,7 @@ export function AppProvider({ children }) {
       if (!poolIds.has(env.accountId)) continue
       let spent = 0
       for (const tx of data.transactions) {
-        if (tx.type !== 'expense' || tx.reservaAuto || tx.origin === 'reservaAuto' || tx.origin === 'patrimonioAuto' || tx.origin === 'investAuto') continue
+        if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
         if (!env.categoryIds?.includes(tx.categoryId)) continue
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
         spent += tx.amount
@@ -3088,6 +3089,7 @@ export function AppProvider({ children }) {
         amount: principalAmount,
         date,
         description: description || 'Pagamento de parcela',
+        origin: ORIGIN.PAGAMENTO_DIVIDA,
         createdAt: now,
       })
 
@@ -3102,6 +3104,7 @@ export function AppProvider({ children }) {
           categoryId: interestCategoryId,
           date,
           description: `Juros — ${description || ''}`,
+          origin: ORIGIN.PAGAMENTO_DIVIDA,
           createdAt: now,
         })
       }
@@ -3286,7 +3289,7 @@ export function AppProvider({ children }) {
       const subcontaName = `Ger. ${apelido}`
 
       // 1. Gastos reais desta fatura (ignora automações: reservaAuto / auto-provisao / investAuto)
-      const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto'
+      const isAutomacao = (tx) => isAutomacaoOrigin(tx)
       const belongs = (tx) =>
         tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === cardId &&
         !isAutomacao(tx) &&
@@ -3536,7 +3539,7 @@ export function AppProvider({ children }) {
           // parcelas importadas via conciliação que têm installment_num = null mas parent_tx_id/
           // origin definidos. À vista / parcela 1 (nenhum desses) recebe etapa A sempre (atual +
           // futuro); parcela 2..N só no ciclo atual.
-          const ehParcela2aN = Number(tx.installmentNum) > 1 || tx.parentTxId != null || tx.origin === 'parcela'
+          const ehParcela2aN = Number(tx.installmentNum) > 1 || tx.parentTxId != null || isParcelaGeradaOrigin(tx)
           return !ehParcela2aN || faturaCicloAtual
         })
         if (gExpenses.length) {
@@ -3555,6 +3558,7 @@ export function AppProvider({ children }) {
                 id, type: 'transfer', accountId: contaPrincipal.id, toAccountId: subcontaId,
                 amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
                 cardId, faturaRef, sourceExpenseId: e.id,
+                origin: ORIGIN.ETAPA_A,
                 createdAt: new Date().toISOString(),
               })
               principalDelta -= amount
@@ -3641,7 +3645,7 @@ export function AppProvider({ children }) {
           const faturas = new Set()
           for (const tx of nd.transactions) {
             if (tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === card.id) {
-              if (tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto') continue
+              if (isAutomacaoOrigin(tx)) continue
               const fmy = faturaMesAnoOf(card, tx.date, tx.faturaMonthYear)
               if (fmy) faturas.add(fmy)
             }
@@ -3732,7 +3736,7 @@ export function AppProvider({ children }) {
     const [yyyy, mm] = faturaMesAno.split('-')
     const faturaRef = `${mm}/${yyyy}`
 
-    const isAutomacao = (tx) => tx.reservaAuto || tx.origin === 'auto-provisao' || tx.origin === 'investAuto' || tx.origin === 'patrimonioAuto'
+    const isAutomacao = (tx) => isAutomacaoOrigin(tx)
     const faturaExpenses = d.transactions.filter(tx =>
       tx.type === 'expense' && tx.accountType === 'credit' && tx.accountId === cardId &&
       !isAutomacao(tx) && faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno)
@@ -4025,7 +4029,7 @@ export function AppProvider({ children }) {
         reservaFuncaoId: reservaFuncaoId || null,
         installmentNum: i, installmentTotal: installments,
         serieId: serieId || null,
-        origin: 'parcela', parentTxId: rootTxId,
+        origin: ORIGIN.PARCELA_GERADA, parentTxId: rootTxId,
         _fromImport: true, // pula o recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
       if (id) createdIds.push(id)
@@ -4375,7 +4379,7 @@ export function AppProvider({ children }) {
           date: transferDate,
           description: `Reserva Gerencial - ${parcela.description}`,
           grupoGerencial: g1.id,
-          origin: 'auto-provisao',
+          origin: ORIGIN.GERENCIAL_AUTO,
           parentTxId: parcela.id,
           // Rastreabilidade: herda cartão/fatura/despesa-origem da parcela que gerou a provisão.
           cardId: parcela.accountId,

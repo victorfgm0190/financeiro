@@ -6,6 +6,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
+import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -121,7 +122,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   const handleDuplicate = (tx, newDate) => {
     // eslint-disable-next-line no-unused-vars
     const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
-    setEditTx({ ...rest, date: newDate || tx.date })
+    setEditTx({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
     setShowEdit(true)
   }
 

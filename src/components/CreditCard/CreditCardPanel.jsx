@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
+import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
@@ -271,7 +272,7 @@ export default function CreditCardPanel() {
   const handleDuplicate = (tx, newDate) => {
     // eslint-disable-next-line no-unused-vars
     const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
-    setEditTx({ ...rest, date: newDate || tx.date })
+    setEditTx({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
   }
 
   const selectedCard = useMemo(

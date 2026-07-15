@@ -1,3 +1,5 @@
+import { isInvestAutoOrigin } from '../../lib/origins'
+
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
 }
@@ -78,7 +80,7 @@ export function aplicacaoAccountIds(accounts) {
 // O aporte investAuto (Receita na conta de investimento) movimenta o saldo da conta,
 // mas é invisível em Demonstrativo, pizza, ranking e totais de receita/despesa.
 export function isReportExcluded(tx) {
-  return tx.origin === 'investAuto'
+  return isInvestAutoOrigin(tx)
 }
 
 // Conta como receita nos relatórios (exclui lançamentos automáticos ocultos). Também exclui

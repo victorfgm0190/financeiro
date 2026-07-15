@@ -4,6 +4,7 @@ import { ptBR } from 'date-fns/locale'
 import { Package, Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 
@@ -309,7 +310,7 @@ export default function EnvelopesPanel() {
     return envelopes.map(env => {
       const txs = transactions.filter(tx =>
         tx.type === 'expense' &&
-        !tx.reservaAuto && tx.origin !== 'reservaAuto' && tx.origin !== 'patrimonioAuto' && tx.origin !== 'investAuto' &&
+        !tx.reservaAuto && !isReservaShadowOrigin(tx) && !isPatrimonioOrigin(tx) && !isInvestAutoOrigin(tx) &&
         env.categoryIds.includes(tx.categoryId) &&
         competenciaKeyOf(tx.date, startDay) === compKey
       )

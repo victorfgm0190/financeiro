@@ -278,6 +278,9 @@ export const txToRow = (tx) => ({
   reserva_auto: !!tx.reservaAuto,
   is_espelho: !!tx.isEspelho,
   espelho_origem_id: tx.espelhoOrigemId || null,
+  // Procedência (ver src/lib/origins.js). `|| 'manual'` só preenche ausência/vazio — um origin
+  // já setado (ex.: 'importacao_fatura', 'reserva_auto') é truthy e passa intacto. A coluna é
+  // gravada na criação e NUNCA reescrita: updateTransaction/bulk-update não tocam em origin.
   origin: tx.origin || 'manual',
   gerencial_schedule_id: tx.gerencialScheduleId || null,
   fatura_month_year: tx.faturaMonthYear || null,

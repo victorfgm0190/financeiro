@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { X, CheckCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { ORIGIN } from '../../lib/origins'
 import { fmt, fmtDate } from './utils'
 
 const SESSION_KEY = 'monthStartModalDismissed'
@@ -61,6 +62,7 @@ export default function MonthStartModal() {
         amount: sch.amount,
         date: todayStr,
         description: sch.description,
+        origin: ORIGIN.AGENDAMENTO,
       })
     })
     handleDismiss()

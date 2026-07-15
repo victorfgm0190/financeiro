@@ -10,6 +10,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
+import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 
 const PIE_COLORS = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899']
@@ -104,7 +105,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   }
 
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
-  const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && tx.origin !== 'investAuto')
+  const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && !isInvestAutoOrigin(tx))
   const income = periodTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   // Reservas do período (funções sem categoria): líquido = utilizadas (resgate _r) − feitas (depósito).
@@ -122,7 +123,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Previous period (same duration, shifted back)
   const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
   const prevEnd = subMonths(period.end, 1).toISOString().split('T')[0]
-  const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && tx.origin !== 'investAuto')
+  const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && !isInvestAutoOrigin(tx))
   const prevIncome = prevTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const prevExpense = prevTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
   const prevBalance = prevIncome - prevExpense
@@ -175,7 +176,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       const start = startOfMonth(d).toISOString().split('T')[0]
       const end = endOfMonth(d).toISOString().split('T')[0]
       const label = format(d, "MMM'/'yy", { locale: ptBR })
-      const inc = transactions.filter(tx => isIncomeTx(tx) && tx.origin !== 'investAuto' && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
+      const inc = transactions.filter(tx => isIncomeTx(tx) && !isInvestAutoOrigin(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       const exp = transactions.filter(tx => isExpenseTx(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       return { label, income: inc, expense: exp }
     })

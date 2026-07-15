@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
+import { ORIGIN } from '../../lib/origins'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
@@ -540,7 +541,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     if (!onEdit) return
     // eslint-disable-next-line no-unused-vars
     const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
-    onEdit({ ...rest, date: newDate || tx.date })
+    onEdit({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
   }
 
   const todayStr = now.toISOString().split('T')[0]

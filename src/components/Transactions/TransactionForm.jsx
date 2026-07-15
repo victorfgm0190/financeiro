@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
+import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
 import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -564,6 +565,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       return
     }
 
+    // Procedência de um lançamento NOVO: preserva o `origin` vindo do initial (ex.: duplicação
+    // carimba 'duplicado'). Lançamento novo comum (initial sem origin) cai no default 'manual'
+    // do addTransaction. Nunca chega no updateTransaction (edição só passa por cima, acima).
+    if (initial?.origin) txData.origin = initial.origin
+
     if (form.type === 'transfer' && form.toAccountId && !initial?.id) {
       const toAcc = accounts.find(a => a.id === form.toAccountId)
       const toGroup = (accountGroups || []).find(g => g.id === toAcc?.accountGroupId)
@@ -740,6 +746,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         reservaFuncaoId: p.reservaFuncaoId || null,
         installmentNum: p.num, installmentTotal: p.total,
         serieId,
+        origin: ORIGIN.PARCELA_GERADA,
         _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
       if (grupo) {

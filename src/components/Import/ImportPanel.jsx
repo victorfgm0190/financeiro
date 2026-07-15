@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
+import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, installmentKey } from '../../lib/installments'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -496,6 +497,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
         date: row.date,
         description: row.description,
         grupoGerencial: defaultGrupoD,
+        origin: ORIGIN.IMPORTACAO_FATURA,
       })
     })
     setResult(toImport.length)
@@ -1650,6 +1652,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         addFaturaAfetada(fp.faturaMonthYear, fpDate)
         if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
         const fId = addTransaction({
+          origin: ORIGIN.IMPORTACAO_FATURA,
           type: 'expense', accountId: selectedAccount, accountType: 'credit',
           amount: fp.amount, date: fpDate, description: fp.description,
           categoryId: fp.categoryId, payee: fp.payee,
@@ -1761,6 +1764,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       if (row.payee && !payees.includes(row.payee)) addPayee(row.payee)
       const txId = addTransaction({
+        origin: ORIGIN.IMPORTACAO_FATURA,
         type: row.type || 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: row.amount, date: saveDate, description: row.description,
         dateCartao: row._dateCartao || null,
@@ -1813,6 +1817,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
       const fId = addTransaction({
+        origin: ORIGIN.IMPORTACAO_FATURA,
         type: 'expense', accountId: selectedAccount, accountType: 'credit',
         amount: fp.amount, date: fpDate, description: fp.description,
         categoryId: fp.categoryId, payee: fp.payee,
@@ -2184,6 +2189,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const isExpense = (item.type || 'expense') === 'expense'
     if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
     const txId = addTransaction({
+      origin: ORIGIN.RECONCILIACAO_FATURA,
       type: item.type || 'expense', accountId: selectedAccount, accountType: 'credit',
       amount: item.amount, date: saveDate, description: item.description,
       dateCartao: item._dateCartao || item.date || null,
@@ -2273,6 +2279,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
         const fId = addTransaction({
+          origin: ORIGIN.RECONCILIACAO_FATURA,
           type: 'expense', accountId: selectedAccount, accountType: 'credit',
           amount: item.amount, date: futDate, description: futDesc,
           categoryId: item.categoryId, payee: item.payee,

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, Fragment } from 'react'
 import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { isInvestAutoOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 
@@ -149,7 +150,7 @@ export default function RelatorioPorFavorecido() {
     if (!applied) return []
     const inRange = transactions.filter(tx =>
       (tx.type === 'expense' || tx.type === 'income') &&
-      tx.origin !== 'investAuto' &&
+      !isInvestAutoOrigin(tx) &&
       tx.date >= applied.from && tx.date <= applied.to &&
       (applied.accs.length === 0 || applied.accs.includes(tx.accountId))
     )

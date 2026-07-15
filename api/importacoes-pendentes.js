@@ -60,7 +60,7 @@ export default async function handler(req, res) {
         return res.json({ ok: true })
       }
 
-      // Confirma um conjunto de ids: grava em lancamentos (origin='DINDIN') e marca
+      // Confirma um conjunto de ids: grava em lancamentos (origin='importacao_dindin') e marca
       // a linha de staging como 'confirmado'. Só confirma linhas com conta resolvida.
       if (action === 'confirm') {
         const { ids } = body
@@ -87,7 +87,7 @@ export default async function handler(req, res) {
             date: r.data,
             description: r.descricao,
             category_id: r.categoria_id || null,
-            origin: 'DINDIN',
+            origin: 'importacao_dindin',
           })
           okIds.push(r.id)
         }
