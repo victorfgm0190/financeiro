@@ -3314,6 +3314,7 @@ export function AppProvider({ children }) {
       // Chain ID: IDs dos lançamentos que compõem cada slot (recomputado a cada recálculo,
       // pois o motor recria os slots pendentes do zero). Persistidos em overrides._sourceTxIds.
       const sourceTxIdsG = []                // slot gerencial_devolucao (grupo G)
+      const sourceGDetail = []               // gerencial_devolucao: 1 linha por lançamento ({id, valor})
       const sourceTxIdsByOrigem = new Map()  // contaOrigemId → IDs (slots resgate_reserva)
       const sourceTxIdsAll = []              // slot pagamento_fatura (todos os gastos da fatura)
       for (const tx of expenses) {
@@ -3324,6 +3325,7 @@ export function AppProvider({ children }) {
         if (grupo && grupo.number === 1) {
           totalG = rb(totalG + amt)
           sourceTxIdsG.push(tx.id)
+          sourceGDetail.push({ id: tx.id, valor: amt })
         } else if (grupo && typeof grupo.number === 'number' && grupo.number !== 1 && grupo.defaultAccountId) {
           const origem = grupo.defaultAccountId
           numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
@@ -3495,10 +3497,16 @@ export function AppProvider({ children }) {
           .filter(dsh => dsh.tipo === 'resgate_reserva' && !registeredSlots.has(dsh.slot))
           .map(dsh => dsh.id)
       )
-      // Limpa o SRF antigo dos resgates pendentes (recriados) — vale também p/ ciclo passado,
-      // removendo órfãos dos resgates que NÃO serão re-materializados pela guarda acima.
+      // Mesmo detalhamento (1 linha por lançamento) para o gerencial_devolucao pendente.
+      const pendingGerencialDevolucaoIds = new Set(
+        desired
+          .filter(dsh => dsh.tipo === 'gerencial_devolucao' && !registeredSlots.has(dsh.slot))
+          .map(dsh => dsh.id)
+      )
+      // Limpa o SRF antigo dos resgates + gerencial_devolucao pendentes (recriados) — vale também
+      // p/ ciclo passado, removendo órfãos dos slots que NÃO serão re-materializados pela guarda acima.
       let scheduleReservaFuncoes = (d.scheduleReservaFuncoes || [])
-        .filter(srf => !pendingResgateIds.has(srf.scheduleId))
+        .filter(srf => !pendingResgateIds.has(srf.scheduleId) && !pendingGerencialDevolucaoIds.has(srf.scheduleId))
       // Só reinsere o detalhamento quando a fatura NÃO é de ciclo passado (senão não há
       // schedule de resgate correspondente — evita SRF órfão).
       // Modelo 1 LINHA POR LANÇAMENTO do cartão (rastreabilidade completa): cada linha carrega o
@@ -3524,6 +3532,24 @@ export function AppProvider({ children }) {
               faturaRef,
             })
           }
+        }
+      }
+      // Detalhamento por lançamento do gerencial_devolucao (Grupo G): 1 linha por despesa do
+      // cartão que compõe o total (mesma tabela/modelo do resgate). reserva_funcao_id = null,
+      // pois o Grupo G não tem função de reserva. A soma das linhas = amount do agendamento (totalG).
+      if (!faturaCicloNoPassado) for (const schedId of pendingGerencialDevolucaoIds) {
+        for (const src of sourceGDetail) {
+          const v = Number(src.valor) || 0
+          if (!(v > 0)) continue
+          scheduleReservaFuncoes.push({
+            id: `srf_${schedId}_${src.id}`,
+            scheduleId: schedId,
+            reservaFuncaoId: null,
+            valor: rb(v),
+            sourceLancamentoId: src.id,
+            sourceIds: [src.id],
+            faturaRef,
+          })
         }
       }
 
