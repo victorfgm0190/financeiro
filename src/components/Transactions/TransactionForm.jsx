@@ -228,6 +228,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       : null,
     [reservaFuncaoMode, selectedGerencialGroup, accounts]
   )
+  // Só exibe o SELECT de função quando o grupo numerado tem MAIS DE 1 função vinculada.
+  // Com 1 única (ex.: PharmaLog), o resgate usa a conta do grupo automaticamente (sem select).
+  const showFuncaoReservaSelect = reservaGroupFuncs.length > 1
 
   const isMobile = useIsMobile()
   const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva && a.active !== false && (!isMobile || !a.hideOnMobile)), [accounts, isMobile])
@@ -1382,7 +1385,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observações adicionais..." />
       </div>
 
-      {form.type === 'expense' && !initial?.id && reservaAccounts.length > 0 && (
+      {form.type === 'expense' && !initial?.id && reservaAccounts.length > 0 && !reservaFuncaoMode && (
         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
@@ -1621,9 +1624,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   </p>
                 )}
 
-                {/* Função de reserva específica deste lançamento (edição). Oculto quando a
-                    conta de reserva do grupo não tem funções cadastradas. */}
-                {initial?.id && reservaGroupFuncs.length > 0 && (
+                {/* Função de reserva específica deste lançamento (novo e edição). Só quando o grupo
+                    tem MAIS DE 1 função; com 1 única, o resgate usa a conta do grupo automaticamente. */}
+                {showFuncaoReservaSelect && (
                   <div>
                     <label className="label text-xs uppercase tracking-wide text-blue-400">Função de Reserva</label>
                     <select

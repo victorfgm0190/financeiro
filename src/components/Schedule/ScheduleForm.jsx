@@ -250,13 +250,15 @@ export default function ScheduleForm({ initial, onClose }) {
   const isCredit = selectedAccount?.type === 'credit'
   const schGerGrupo = gerencialGroups.find(g => g.id === form.grupoGerencial) || null
   const isNumberedGerencial = typeof schGerGrupo?.number === 'number' && schGerGrupo.number !== 1
-  const showFuncaoReserva = form.transactionType === 'expense' && isCredit && isNumberedGerencial
   const reservaGroupFuncs = useMemo(
-    () => (showFuncaoReserva && schGerGrupo?.defaultAccountId)
+    () => (isNumberedGerencial && schGerGrupo?.defaultAccountId)
       ? (reserveFunctions || []).filter(f => f.accountId === schGerGrupo.defaultAccountId).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name))
       : [],
-    [showFuncaoReserva, schGerGrupo, reserveFunctions]
+    [isNumberedGerencial, schGerGrupo, reserveFunctions]
   )
+  // Só exibe o select quando o grupo numerado tem MAIS DE 1 função (com 1 única, usa-se
+  // automaticamente a conta do grupo, sem select).
+  const showFuncaoReserva = form.transactionType === 'expense' && isCredit && isNumberedGerencial && reservaGroupFuncs.length > 1
   const reservaGroupAccount = showFuncaoReserva && schGerGrupo?.defaultAccountId
     ? accounts.find(a => a.id === schGerGrupo.defaultAccountId)
     : null
@@ -725,16 +727,10 @@ export default function ScheduleForm({ initial, onClose }) {
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
-                {reservaGroupFuncs.length === 0 ? (
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Nenhuma função vinculada a <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'esta reserva'}</strong>.
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
-                    o resgate ao registrar este agendamento.
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
+                  o resgate ao registrar este agendamento.
+                </p>
               </div>
             )}
           </div>
