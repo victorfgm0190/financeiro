@@ -67,6 +67,16 @@ function seriesKeyOf(s) {
   return null
 }
 
+// Data de vencimento EXIBIDA (e usada no particionamento da lista) para um agendamento
+// RECORRENTE: casa com o campo "Data de Vencimento Atual" do formulário — nextOccurrence
+// explícito; senão a próxima ocorrência >= hoje (não a que ficou em atraso). Para 'once'/faturas
+// e concluídos (nextDate null) devolve nextDate inalterado. É puramente visual: as ações
+// (pagar/pular/estornar) continuam usando nextDate (a ocorrência pendente real).
+function scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, todayStr) {
+  if (!nextDate || (schedule.frequency || 'once') === 'once') return nextDate
+  return schedule.nextOccurrence || getNextOccurrences(schedule, 24).find(d => d >= todayStr) || nextDate
+}
+
 // Aglutina a lista de agendamentos em "grupos" de exibição (somente visual — não toca dados):
 //   • Série de fatura: vira 1 linha; primary = fatura pendente mais próxima; futureItems = as
 //     demais faturas pendentes (cada uma com seu amount já calculado pelo reconcileFaturaState).
@@ -74,6 +84,8 @@ function seriesKeyOf(s) {
 //     (getNextOccurrences) com o valor fixo do agendamento.
 //   • Único 'once' avulso: 1 linha, sem futureItems (inalterado).
 function buildScheduleGroups(schedules, getNextOccurrences) {
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const displayDateOf = (s, nextDate) => scheduleDisplayDueDate(s, nextDate, getNextOccurrences, todayStr)
   const seriesMap = new Map()
   const singles = []
   for (const s of schedules) {
@@ -93,7 +105,7 @@ function buildScheduleGroups(schedules, getNextOccurrences) {
     if (pending.length === 0) {
       // Série inteiramente concluída: representa pela fatura mais recente (linha "Concluído").
       const rep = members.slice().sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))[0]
-      groups.push({ schedule: rep, nextDate: null, futureItems: [] })
+      groups.push({ schedule: rep, nextDate: null, displayDate: null, futureItems: [] })
       continue
     }
     const primary = pending[0]
@@ -102,7 +114,7 @@ function buildScheduleGroups(schedules, getNextOccurrences) {
       const { date, amount } = occEfetiva(m.s, m.next)
       return { date, amount }
     })
-    groups.push({ schedule: primary.s, nextDate: primary.next, futureItems })
+    groups.push({ schedule: primary.s, nextDate: primary.next, displayDate: displayDateOf(primary.s, primary.next), futureItems })
   }
 
   for (const s of singles) {
@@ -117,7 +129,7 @@ function buildScheduleGroups(schedules, getNextOccurrences) {
           return { date, amount }
         })
     }
-    groups.push({ schedule: s, nextDate, futureItems })
+    groups.push({ schedule: s, nextDate, displayDate: displayDateOf(s, nextDate), futureItems })
   }
   return groups
 }
@@ -635,8 +647,12 @@ function ScheduleRow({
   const totalDone = registered.length + skipped.length
   const isInstallment = schedule.occurrenceType === 'installment'
 
-  const daysLate = nextDate && nextDate < today
-    ? differenceInDays(parseISO(today), parseISO(nextDate))
+  // Data exibida na coluna e usada no badge "em atraso": casa com o campo "Data de Vencimento
+  // Atual" do formulário (ver scheduleDisplayDueDate). As ações seguem usando nextDate.
+  const displayDueDate = scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, today)
+
+  const daysLate = displayDueDate && displayDueDate < today
+    ? differenceInDays(parseISO(today), parseISO(displayDueDate))
     : 0
 
   const [showPay, setShowPay] = useState(false)
@@ -719,7 +735,7 @@ function ScheduleRow({
         <td className="px-3 py-3 whitespace-nowrap">
           {nextDate ? (
             <div>
-              <p className="text-xs text-gray-300 font-medium">{fmtDate(nextDate)}</p>
+              <p className="text-xs text-gray-300 font-medium">{fmtDate(displayDueDate)}</p>
               {daysLate > 0 && (
                 <span className="inline-flex items-center gap-0.5 mt-0.5 text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-medium">
                   <AlertTriangle size={9} />
@@ -1238,10 +1254,12 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // com ocorrências futuras em futureItems). Particionamento/seleção seguem usando nextDate.
   const rows = useMemo(() => buildScheduleGroups(schedules, getNextOccurrences), [schedules, getNextOccurrences])
 
-  const overdue    = rows.filter(r => r.nextDate && r.nextDate < today).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const next7      = rows.filter(r => r.nextDate && r.nextDate >= today && r.nextDate <= in7).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const next30     = rows.filter(r => r.nextDate && r.nextDate > in7 && r.nextDate <= in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
-  const future     = rows.filter(r => r.nextDate && r.nextDate > in30).sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+  // Particionamento por DATA usa displayDate (mesma data mostrada na linha e no formulário);
+  // seleção/ações continuam por nextDate (ocorrência real).
+  const overdue    = rows.filter(r => r.displayDate && r.displayDate < today).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
+  const next7      = rows.filter(r => r.displayDate && r.displayDate >= today && r.displayDate <= in7).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
+  const next30     = rows.filter(r => r.displayDate && r.displayDate > in7 && r.displayDate <= in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
+  const future     = rows.filter(r => r.displayDate && r.displayDate > in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
   const completed  = rows.filter(r => !r.nextDate).sort((a, b) => (b.schedule.startDate || '').localeCompare(a.schedule.startDate || ''))
 
   const selectableRows = rows.filter(r => r.nextDate)
