@@ -186,6 +186,21 @@ export default function CreditCardPanel() {
     if (!selectedCard || reconciling) return
     setReconciling(true)
     try {
+      // Persiste o detalhamento por lançamento (schedule_reserva_funcoes) do gerencial_devolucao /
+      // resgate_reserva ANTES de reconciliar. recalcularAgendamentosFatura aplica o estado sem o
+      // gate de "mudança" de reconciliarGerencial — esse gate só conta agendamentos/saldos e ignora
+      // o SRF, então descartaria as linhas novas quando amount/saldo já estão corretos (backfill).
+      // Espelha o fluxo de import (recalc → reconcile); reconciliarGerencial preserva o SRF já baked.
+      const faturasCartao = new Set(
+        schedules
+          .filter(s => s.cardId === selectedCard.id && s.faturaMesAno &&
+            (s.tipo === 'gerencial_devolucao' || s.tipo === 'resgate_reserva' || s.tipo === 'pagamento_fatura'))
+          .map(s => s.faturaMesAno)
+      )
+      for (const fmy of faturasCartao) {
+        const [y, m] = fmy.split('-')
+        if (y && m) recalcularAgendamentosFatura(selectedCard.id, y, m)
+      }
       const r = await reconciliarGerencial(selectedCard.id)
       // Auditoria: ao contrário de apenas marcar reconciled=true, este botão recalcula
       // (cria/atualiza/remove) os agendamentos gerenciais da(s) fatura(s) do cartão via
