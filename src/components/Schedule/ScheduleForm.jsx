@@ -185,9 +185,14 @@ export default function ScheduleForm({ initial, onClose }) {
   const reservaDetalhe = useMemo(() => {
     if (!initial?.id) return []
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
-    return (scheduleReservaFuncoes || [])
-      .filter(srf => srf.scheduleId === initial.id)
-      .map(srf => ({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 }))
+    // O detalhamento tem 1 linha por lançamento; agrupa por função (soma) para exibir 1 linha por função.
+    const porFuncao = new Map()
+    for (const srf of (scheduleReservaFuncoes || [])) {
+      if (srf.scheduleId !== initial.id) continue
+      porFuncao.set(srf.reservaFuncaoId, (porFuncao.get(srf.reservaFuncaoId) || 0) + (Number(srf.valor) || 0))
+    }
+    return [...porFuncao]
+      .map(([funcId, valor]) => ({ name: funcName.get(funcId) || 'Função', valor: Math.round(valor * 100) / 100 }))
       .sort((a, b) => b.valor - a.valor)
   }, [scheduleReservaFuncoes, reserveFunctions, initial])
   const hasReservaDetalhe = reservaDetalhe.length > 0

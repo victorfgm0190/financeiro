@@ -2105,9 +2105,16 @@ export function AppProvider({ children }) {
         ? { cardId: schedule.cardId || null, faturaRef: schedule.faturaRef || null, sourceScheduleId: scheduleId }
         : {}
 
-      // Resgate com detalhamento por função (Etapa B): gera UMA transferência por linha
-      // de schedule_reserva_funcoes (valor + função própria), em vez da transferência única.
-      const detalhe = (d.scheduleReservaFuncoes || []).filter(srf => srf.scheduleId === scheduleId)
+      // Resgate com detalhamento por função (Etapa B): gera UMA transferência por FUNÇÃO
+      // (valor + função própria), em vez da transferência única. O detalhamento agora tem uma
+      // linha por lançamento do cartão, então reagrupamos por reserva_funcao_id (somando os
+      // lançamentos da mesma função) para preservar 1 transferência por função na execução.
+      const detalhePorFuncao = new Map()
+      for (const srf of (d.scheduleReservaFuncoes || [])) {
+        if (srf.scheduleId !== scheduleId) continue
+        detalhePorFuncao.set(srf.reservaFuncaoId, rb((detalhePorFuncao.get(srf.reservaFuncaoId) || 0) + (Number(srf.valor) || 0)))
+      }
+      const detalhe = [...detalhePorFuncao].map(([reservaFuncaoId, valor]) => ({ reservaFuncaoId, valor }))
       if (schedule.transactionType === 'transfer' && detalhe.length > 0) {
         const funcName = new Map((d.reserveFunctions || []).map(f => [f.id, f.name]))
         const nowIso = new Date().toISOString()
@@ -3300,11 +3307,9 @@ export function AppProvider({ children }) {
       let totalG = 0
       let totalGeral = 0
       const numberedByAccount = new Map() // contaOrigemId → soma dos grupos numerados
-      // Detalhamento por função: contaOrigemId → Map(reservaFuncaoId → soma). Lançamentos
-      // sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
-      const numberedByAccountByFunc = new Map()
-      // Rastreabilidade (schedule_reserva_funcoes.source_ids): contaOrigemId → Map(reservaFuncaoId
-      // → [{id,valor,descricao,data,grupo}]) — os lançamentos que compõem cada detalhamento.
+      // Detalhamento por função (schedule_reserva_funcoes, 1 linha por lançamento): contaOrigemId →
+      // Map(reservaFuncaoId → [{id,valor,descricao,data,grupo}]) — os lançamentos que compõem cada
+      // detalhamento. Lançamentos sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
       const numberedByAccountByFuncSources = new Map()
       // Chain ID: IDs dos lançamentos que compõem cada slot (recomputado a cada recálculo,
       // pois o motor recria os slots pendentes do zero). Persistidos em overrides._sourceTxIds.
@@ -3325,9 +3330,6 @@ export function AppProvider({ children }) {
           if (!sourceTxIdsByOrigem.has(origem)) sourceTxIdsByOrigem.set(origem, [])
           sourceTxIdsByOrigem.get(origem).push(tx.id)
           if (tx.reservaFuncaoId) {
-            if (!numberedByAccountByFunc.has(origem)) numberedByAccountByFunc.set(origem, new Map())
-            const fm = numberedByAccountByFunc.get(origem)
-            fm.set(tx.reservaFuncaoId, rb((fm.get(tx.reservaFuncaoId) || 0) + amt))
             if (!numberedByAccountByFuncSources.has(origem)) numberedByAccountByFuncSources.set(origem, new Map())
             const fs = numberedByAccountByFuncSources.get(origem)
             if (!fs.has(tx.reservaFuncaoId)) fs.set(tx.reservaFuncaoId, [])
@@ -3499,23 +3501,29 @@ export function AppProvider({ children }) {
         .filter(srf => !pendingResgateIds.has(srf.scheduleId))
       // Só reinsere o detalhamento quando a fatura NÃO é de ciclo passado (senão não há
       // schedule de resgate correspondente — evita SRF órfão).
+      // Modelo 1 LINHA POR LANÇAMENTO do cartão (rastreabilidade completa): cada linha carrega o
+      // valor do próprio lançamento + source_lancamento_id. O valor total do resgate continua sendo
+      // a soma (numberedByAccount); os consumidores (Etapa B / UI) reagrupam por função ao exibir/executar.
       if (!faturaCicloNoPassado) for (const [origem, soma] of numberedByAccount) {
         if (soma <= 0) continue
         const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
         if (!pendingResgateIds.has(schedId)) continue
-        const byFunc = numberedByAccountByFunc.get(origem)
-        if (!byFunc) continue
         const byFuncSources = numberedByAccountByFuncSources.get(origem)
-        for (const [funcId, valor] of byFunc) {
-          if (!(valor > 0)) continue
-          scheduleReservaFuncoes.push({
-            id: `srf_${schedId}_${funcId}`,
-            scheduleId: schedId,
-            reservaFuncaoId: funcId,
-            valor: rb(valor),
-            sourceIds: byFuncSources?.get(funcId) || [],
-            faturaRef,
-          })
+        if (!byFuncSources) continue
+        for (const [funcId, sources] of byFuncSources) {
+          for (const src of sources) {
+            const v = Number(src.valor) || 0
+            if (!(v > 0)) continue
+            scheduleReservaFuncoes.push({
+              id: `srf_${schedId}_${src.id}`,
+              scheduleId: schedId,
+              reservaFuncaoId: funcId,
+              valor: rb(v),
+              sourceLancamentoId: src.id,
+              sourceIds: [src.id],
+              faturaRef,
+            })
+          }
         }
       }
 

@@ -754,6 +754,10 @@ export const scheduleReservaFuncaoToRow = (s) => ({
   reserva_funcao_id: s.reservaFuncaoId,
   valor: Number(s.valor) || 0,
   source_ids: Array.isArray(s.sourceIds) ? s.sourceIds : [],
+  // ID do lançamento do cartão que originou esta linha (modelo 1 linha por lançamento). Derivado
+  // de forma determinística do id da linha; o motor reconstrói o detalhamento a cada recálculo, então
+  // o valor é sempre o mesmo para um dado id — nunca é sobrescrito com valor diferente num update.
+  source_lancamento_id: s.sourceLancamentoId || null,
   fatura_ref: s.faturaRef || null,
 })
 
@@ -763,6 +767,7 @@ export const rowToScheduleReservaFuncao = (r) => ({
   reservaFuncaoId: r.reserva_funcao_id,
   valor: Number(r.valor) || 0,
   sourceIds: Array.isArray(r.source_ids) ? r.source_ids : [],
+  sourceLancamentoId: r.source_lancamento_id || null,
   faturaRef: r.fatura_ref || null,
 })
 

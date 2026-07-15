@@ -222,9 +222,14 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   // registrada por função (registerScheduleOccurrence) e o valor total não é editável.
   const reservaDetalhe = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
-    return (scheduleReservaFuncoes || [])
-      .filter(srf => srf.scheduleId === schedule.id)
-      .map(srf => ({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 }))
+    // O detalhamento tem 1 linha por lançamento; agrupa por função (soma) para exibir 1 linha por função.
+    const porFuncao = new Map()
+    for (const srf of (scheduleReservaFuncoes || [])) {
+      if (srf.scheduleId !== schedule.id) continue
+      porFuncao.set(srf.reservaFuncaoId, (porFuncao.get(srf.reservaFuncaoId) || 0) + (Number(srf.valor) || 0))
+    }
+    return [...porFuncao]
+      .map(([funcId, valor]) => ({ name: funcName.get(funcId) || 'Função', valor: Math.round(valor * 100) / 100 }))
       .sort((a, b) => b.valor - a.valor)
   }, [scheduleReservaFuncoes, reserveFunctions, schedule.id])
   const hasDetalhe = reservaDetalhe.length > 0
@@ -1201,12 +1206,20 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
-    const m = new Map()
+    // 1 linha por lançamento → agrupa por (agendamento, função) somando, para exibir 1 linha por função.
+    const byId = new Map() // scheduleId → Map(funcId → soma)
     for (const srf of (scheduleReservaFuncoes || [])) {
-      if (!m.has(srf.scheduleId)) m.set(srf.scheduleId, [])
-      m.get(srf.scheduleId).push({ name: funcName.get(srf.reservaFuncaoId) || 'Função', valor: Number(srf.valor) || 0 })
+      if (!byId.has(srf.scheduleId)) byId.set(srf.scheduleId, new Map())
+      const fm = byId.get(srf.scheduleId)
+      fm.set(srf.reservaFuncaoId, (fm.get(srf.reservaFuncaoId) || 0) + (Number(srf.valor) || 0))
     }
-    for (const arr of m.values()) arr.sort((a, b) => b.valor - a.valor)
+    const m = new Map()
+    for (const [schedId, fm] of byId) {
+      const arr = [...fm]
+        .map(([funcId, valor]) => ({ name: funcName.get(funcId) || 'Função', valor: Math.round(valor * 100) / 100 }))
+        .sort((a, b) => b.valor - a.valor)
+      m.set(schedId, arr)
+    }
     return m
   }, [scheduleReservaFuncoes, reserveFunctions])
 

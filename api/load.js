@@ -325,7 +325,11 @@ export default async function handler(req, res) {
     // (id/valor/descricao/data/grupo); fatura_ref identifica a fatura de origem (MM/YYYY).
     await query(`ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_ids JSONB DEFAULT '[]'`)
     await query(`ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS fatura_ref TEXT`)
+    // Rastreabilidade 1:1 — cada linha do detalhamento aponta o lançamento do cartão que a originou
+    // (source_lancamento_id). Preenchido só na criação; o motor reconstrói o detalhamento do zero.
+    await query(`ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_lancamento_id TEXT`)
     await query(`CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_srf_source_lancamento ON schedule_reserva_funcoes (source_lancamento_id)`)
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs] =
       await Promise.all([
         query('SELECT * FROM contas'),
