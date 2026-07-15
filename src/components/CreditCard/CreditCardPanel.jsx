@@ -315,7 +315,12 @@ export default function CreditCardPanel() {
     setRevisarState(s => ({ ...s, executando: true }))
     try {
       const [y, m] = billKey.split('-')
+      // recalcularAgendamentosFatura só atualiza o estado em memória (reconcileFaturaState via
+      // update). Em seguida reconciliarGerencial fecha o ciclo — mesmo padrão do botão "Reconciliar
+      // Gerenciais" (recalc → reconciliar) — garantindo que o detalhamento recém-gerado seja
+      // persistido no banco (/api/sync-srf, via o diff de scheduleReservaFuncoes no sync).
       await recalcularAgendamentosFatura(selectedCard.id, y, m)
+      await reconciliarGerencial(selectedCard.id)
       setRevisarState(null)
       setToast('Agendamentos recalculados ✓')
     } catch (e) {
