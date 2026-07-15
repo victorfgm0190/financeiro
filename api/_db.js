@@ -116,6 +116,33 @@ export async function deleteRows(table, ids, col = 'id') {
   await getPool().query(`DELETE FROM ${table} WHERE "${col}" = ANY($1)`, [ids])
 }
 
+// Substitui atomicamente TODO o detalhamento (schedule_reserva_funcoes) de UM agendamento:
+// DELETE por schedule_id + INSERT das novas rows em lotes, numa transação única. Isola esse
+// detalhamento — que numa fatura grande passa de 188 linhas — do payload/section do /api/sync
+// genérico. As rows já chegam em snake_case (produzidas por scheduleReservaFuncaoToRow no
+// frontend). Retorna o nº de linhas inseridas. rows vazio ⇒ só remove (schedule sem detalhe).
+export async function replaceScheduleReservaFuncoes(scheduleId, rows, chunkRows = 100) {
+  const list = (rows || []).filter(Boolean)
+  const client = await getPool().connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('DELETE FROM schedule_reserva_funcoes WHERE schedule_id = $1', [scheduleId])
+    if (list.length > 0) {
+      const cols = Object.keys(list[0])
+      for (let i = 0; i < list.length; i += chunkRows) {
+        await upsertChunk(client, 'schedule_reserva_funcoes', cols, list.slice(i, i + chunkRows), 'id')
+      }
+    }
+    await client.query('COMMIT')
+    return list.length
+  } catch (err) {
+    try { await client.query('ROLLBACK') } catch { /* ignore */ }
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
 // Lê e parseia o body JSON de uma Vercel Function request.
 export async function parseBody(req) {
   if (req.body && typeof req.body === 'object') return req.body

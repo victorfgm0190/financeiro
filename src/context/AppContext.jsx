@@ -7,7 +7,7 @@ import {
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
   importToRow, gerencialRuleToRow, reserveFunctionToRow,
   saveRateios, deleteRateios,
-  scheduleReservaFuncaoToRow,
+  syncScheduleReservaFuncoes,
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
@@ -890,7 +890,7 @@ export function AppProvider({ children }) {
       if (prev.reserveFunctions !== data.reserveFunctions)
         tasks.push(syncSection('reserve_functions', prev.reserveFunctions || [], data.reserveFunctions || [], reserveFunctionToRow))
       if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
-        tasks.push(syncSection('schedule_reserva_funcoes', prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || [], scheduleReservaFuncaoToRow))
+        tasks.push(syncScheduleReservaFuncoes(prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || []))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
         tasks.push(syncSettings(data.settings, data.costCenters))
 

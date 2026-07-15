@@ -853,6 +853,53 @@ export async function syncSection(table, prevItems, currItems, toRow) {
   }
 }
 
+// Detalhamento (schedule_reserva_funcoes) sincronizado por AGENDAMENTO num endpoint dedicado
+// (/api/sync-srf), FORA do payload do /api/sync genérico: faturas grandes chegam a 188+ linhas
+// de detalhamento e inflavam/estouravam a section. Cada chamada substitui TODO o detalhamento de
+// um schedule_id (DELETE + INSERT). As rows são mapeadas p/ snake_case (mesmo mapper do sync).
+export async function syncSrf(scheduleId, rows) {
+  return apiPost('/api/sync-srf', {
+    scheduleId,
+    rows: (rows || []).map(scheduleReservaFuncaoToRow),
+  })
+}
+
+// Assinatura estável de um conjunto de linhas de um schedule (ordem-independente) — usada para
+// pular agendamentos cujo detalhamento não mudou entre prev e curr (o motor regenera de forma
+// determinística: mesmo id ⇒ mesmos valores).
+function srfSignature(rows) {
+  return (rows || [])
+    .map(r => `${r.id}:${r.valor}:${r.reservaFuncaoId ?? ''}:${r.sourceLancamentoId ?? ''}:${r.faturaRef ?? ''}`)
+    .sort()
+    .join('|')
+}
+
+// Diffa o detalhamento por schedule_id entre prev e curr e reenvia (via /api/sync-srf) SOMENTE os
+// agendamentos cujo conjunto de linhas mudou — inclusive os que perderam todas as linhas (rows []
+// ⇒ o endpoint só apaga). Substitui a antiga syncSection('schedule_reserva_funcoes', ...).
+export async function syncScheduleReservaFuncoes(prevItems, currItems) {
+  const groupBy = (items) => {
+    const m = new Map()
+    for (const it of (items || [])) {
+      if (!it?.scheduleId) continue
+      if (!m.has(it.scheduleId)) m.set(it.scheduleId, [])
+      m.get(it.scheduleId).push(it)
+    }
+    return m
+  }
+  const prevBy = groupBy(prevItems)
+  const currBy = groupBy(currItems)
+  const scheduleIds = new Set([...prevBy.keys(), ...currBy.keys()])
+  const tasks = []
+  for (const scheduleId of scheduleIds) {
+    const prevRows = prevBy.get(scheduleId) || []
+    const currRows = currBy.get(scheduleId) || []
+    if (srfSignature(prevRows) === srfSignature(currRows)) continue // sem mudança → não reenvia
+    tasks.push(syncSrf(scheduleId, currRows))
+  }
+  if (tasks.length > 0) await Promise.all(tasks)
+}
+
 export async function syncAccounts(prevAccounts, currAccounts) {
   try {
     const prevIds = new Set((prevAccounts || []).map((a) => a.id))
