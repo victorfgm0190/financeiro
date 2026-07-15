@@ -173,7 +173,7 @@ export default function CreditCardPanel() {
     profileAccounts: accounts,
     profileTransactions: transactions,
     profileSchedules: schedules,
-    categories, gerencialGroups,
+    categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
     reconciliarGerencial, revisarMovimentosFatura,
   } = useApp()
@@ -230,12 +230,50 @@ export default function CreditCardPanel() {
     return `${bm}/${by}`
   }
 
+  // Verificações extras (client-side) sobre a fatura selecionada — complementam a engine
+  // (revisarMovimentosFatura, seção 1). Não mutam nada; só levantam inconsistências p/ preview.
+  //  A) Fantasmas: lançamentos na conta Ger. do cartão sem fatura_ref e com id NÃO reconhecido
+  //     (não começa com tx_gerA_ nem tx_ger_).
+  //  B) resgate_reserva cuja soma do detalhamento (schedule_reserva_funcoes) diverge do amount.
+  //  C) gerencial_devolucao sem detalhamento (0 linhas) ou com soma divergente do amount.
+  const computeRevisaoExtras = () => {
+    if (!selectedCard || !billKey) return { fantasmas: [], agendamentos: [] }
+    const apelido = selectedCard.apelido || selectedCard.name?.slice(0, 6) || 'CC'
+    const gerAccId = accounts.find(a => a.name === `Ger. ${apelido}`)?.id || null
+
+    const fantasmas = gerAccId ? transactions.filter(tx =>
+      tx.toAccountId === gerAccId &&
+      !tx.faturaRef &&
+      !(typeof tx.id === 'string' && (tx.id.startsWith('tx_gerA_') || tx.id.startsWith('tx_ger_')))
+    ) : []
+
+    const linhasDe = (schedId) => (scheduleReservaFuncoes || []).filter(srf => srf.scheduleId === schedId)
+    const somaDe = (schedId) => linhasDe(schedId).reduce((acc, srf) => acc + (Number(srf.valor) || 0), 0)
+
+    const faturaSchedules = (schedules || []).filter(s => s.cardId === selectedCard.id && s.faturaMesAno === billKey)
+    const fatura = faturaRefFromBillKey()
+    const agendamentos = []
+    for (const s of faturaSchedules.filter(s => s.tipo === 'resgate_reserva')) {
+      const soma = somaDe(s.id)
+      if (Math.abs((Number(s.amount) || 0) - soma) > 0.01)
+        agendamentos.push({ tipo: 'resgate_reserva', fatura, esperado: Number(s.amount) || 0, soma, motivo: 'divergencia' })
+    }
+    for (const s of faturaSchedules.filter(s => s.tipo === 'gerencial_devolucao')) {
+      const soma = somaDe(s.id)
+      const qtd = linhasDe(s.id).length
+      if (qtd === 0 || Math.abs((Number(s.amount) || 0) - soma) > 0.01)
+        agendamentos.push({ tipo: 'gerencial_devolucao', fatura, esperado: Number(s.amount) || 0, soma, motivo: qtd === 0 ? 'sem_detalhamento' : 'divergencia' })
+    }
+    return { fantasmas, agendamentos }
+  }
+
   const handleAbrirRevisar = async () => {
     if (!selectedCard || !billKey) return
-    setRevisarState({ loading: true, executando: false, preview: null })
+    setRevisarState({ loading: true, executando: false, preview: null, fantasmas: [], agendamentos: [] })
     try {
       const preview = await revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: true })
-      setRevisarState({ loading: false, executando: false, preview })
+      const { fantasmas, agendamentos } = computeRevisaoExtras()
+      setRevisarState({ loading: false, executando: false, preview, fantasmas, agendamentos })
     } catch (e) {
       setRevisarState(null)
       setToast(`Erro ao revisar: ${e.message}`)
@@ -253,6 +291,36 @@ export default function CreditCardPanel() {
     } catch (e) {
       setRevisarState(s => ({ ...s, executando: false }))
       setToast(`Erro ao executar: ${e.message}`)
+    }
+  }
+
+  // Seção 2 — remove os lançamentos fantasma (preview já mostrou a lista antes da ação).
+  const handleDeletarFantasmas = async () => {
+    const fantasmas = revisarState?.fantasmas || []
+    if (fantasmas.length === 0) return
+    setRevisarState(s => ({ ...s, executando: true }))
+    try {
+      for (const tx of fantasmas) deleteTransaction(tx.id)
+      setRevisarState(null)
+      setToast(`${fantasmas.length} lançamento${fantasmas.length !== 1 ? 's' : ''} fantasma removido${fantasmas.length !== 1 ? 's' : ''}`)
+    } catch (e) {
+      setRevisarState(s => ({ ...s, executando: false }))
+      setToast(`Erro ao deletar: ${e.message}`)
+    }
+  }
+
+  // Seção 3 — recalcula os agendamentos geridos da fatura (reconstrói amount + detalhamento).
+  const handleRecalcularAgendamentos = async () => {
+    if (!selectedCard || !billKey) return
+    setRevisarState(s => ({ ...s, executando: true }))
+    try {
+      const [y, m] = billKey.split('-')
+      await recalcularAgendamentosFatura(selectedCard.id, y, m)
+      setRevisarState(null)
+      setToast('Agendamentos recalculados ✓')
+    } catch (e) {
+      setRevisarState(s => ({ ...s, executando: false }))
+      setToast(`Erro ao recalcular: ${e.message}`)
     }
   }
 
@@ -930,31 +998,86 @@ export default function CreditCardPanel() {
             <div className="py-10 text-center text-gray-400 text-sm">
               <RotateCcw size={20} className="animate-spin mx-auto mb-2" /> Analisando movimentos…
             </div>
-          ) : (revisarState.preview?.acoes?.length || 0) === 0 ? (
-            <div className="py-10 text-center">
-              <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
-              <p className="text-gray-300 text-sm">Tudo em ordem ✓</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-400">
-                {revisarState.preview.acoes.length} ajuste{revisarState.preview.acoes.length !== 1 ? 's' : ''} identificado{revisarState.preview.acoes.length !== 1 ? 's' : ''}
-              </p>
-              <div className="space-y-2">
-                {revisarState.preview.acoes.map((a, i) => <AcaoRow key={i} a={a} />)}
+          ) : (() => {
+            const acoes = revisarState.preview?.acoes || []
+            const fantasmas = revisarState.fantasmas || []
+            const agendamentos = revisarState.agendamentos || []
+            const busy = revisarState.executando
+            if (acoes.length + fantasmas.length + agendamentos.length === 0) return (
+              <div className="py-10 text-center">
+                <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
+                <p className="text-gray-300 text-sm">✅ Nenhuma inconsistência encontrada</p>
               </div>
-            </div>
-          )}
+            )
+            return (
+              <div className="space-y-5">
+                {/* SEÇÃO 1 — Transferências Gerenciais (engine existente) */}
+                {acoes.length > 0 && (
+                  <section className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Transferências Gerenciais</h4>
+                      <span className="text-xs text-gray-500">{acoes.length} ajuste{acoes.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="space-y-2">{acoes.map((a, i) => <AcaoRow key={i} a={a} />)}</div>
+                    <button className="btn-primary w-full text-sm" onClick={handleExecutarRevisar} disabled={busy}>
+                      {busy ? 'Executando…' : `Executar ${acoes.length} ajuste${acoes.length !== 1 ? 's' : ''}`}
+                    </button>
+                  </section>
+                )}
+                {/* SEÇÃO 2 — Lançamentos sem origem reconhecida (fantasmas) */}
+                {fantasmas.length > 0 && (
+                  <section className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Lançamentos sem origem reconhecida</h4>
+                    <div className="space-y-2">
+                      {fantasmas.map(tx => (
+                        <div key={tx.id} className="flex items-start gap-3 rounded-lg p-3 bg-amber-500/10">
+                          <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-200 truncate">{tx.description || '—'}</p>
+                            <p className="text-xs text-gray-500">{fmt(Number(tx.amount) || 0)}{tx.date ? ` · ${fmtDate(tx.date)}` : ''}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn-danger w-full text-sm" onClick={handleDeletarFantasmas} disabled={busy}>
+                      {busy ? 'Processando…' : `Deletar ${fantasmas.length} lançamento${fantasmas.length !== 1 ? 's' : ''} fantasma`}
+                    </button>
+                  </section>
+                )}
+                {/* SEÇÃO 3 — Agendamentos de resgate (divergência / detalhamento) */}
+                {agendamentos.length > 0 && (
+                  <section className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Agendamentos de resgate</h4>
+                    <div className="space-y-2">
+                      {agendamentos.map((ag, i) => (
+                        <div key={i} className="flex items-start gap-3 rounded-lg p-3 bg-sky-500/10">
+                          <RotateCcw size={16} className="text-sky-400 mt-0.5 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-gray-200">
+                              {ag.tipo === 'resgate_reserva' ? 'Resgate Reserva' : 'Devolução Gerencial'}
+                              {ag.fatura ? ` · Fatura ${ag.fatura}` : ''}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {ag.motivo === 'sem_detalhamento' ? 'Sem detalhamento · ' : ''}
+                              esperado {fmt(ag.esperado)} · soma atual {fmt(ag.soma)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn-primary w-full text-sm" onClick={handleRecalcularAgendamentos} disabled={busy}>
+                      {busy ? 'Recalculando…' : 'Recalcular agendamentos'}
+                    </button>
+                  </section>
+                )}
+              </div>
+            )
+          })()}
           {!revisarState.loading && (
             <div className="flex gap-2 pt-4 mt-4 border-t border-gray-800">
               <button className="btn-secondary flex-1" onClick={() => setRevisarState(null)} disabled={revisarState.executando}>
-                {(revisarState.preview?.acoes?.length || 0) === 0 ? 'Fechar' : 'Cancelar'}
+                Fechar
               </button>
-              {(revisarState.preview?.acoes?.length || 0) > 0 && (
-                <button className="btn-primary flex-1" onClick={handleExecutarRevisar} disabled={revisarState.executando}>
-                  {revisarState.executando ? 'Executando…' : `Executar ${revisarState.preview.acoes.length} ajuste${revisarState.preview.acoes.length !== 1 ? 's' : ''}`}
-                </button>
-              )}
             </div>
           )}
         </Modal>
