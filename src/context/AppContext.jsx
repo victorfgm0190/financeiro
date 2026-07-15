@@ -3489,13 +3489,14 @@ export function AppProvider({ children }) {
       })
 
       // 6. Detalhamento por função (schedule_reserva_funcoes) dos resgates desta fatura.
-      //    Idempotente: para cada resgate_reserva (pendente) recriado, apaga o detalhamento
-      //    antigo do seu schedule_id e reinsere uma linha por função somada. Resgates já
-      //    registrados (executados) preservam seu detalhamento.
-      const pendingResgateIds = new Set(
-        desired
-          .filter(dsh => dsh.tipo === 'resgate_reserva' && !registeredSlots.has(dsh.slot))
-          .map(dsh => dsh.id)
+      //    Idempotente: apaga o detalhamento antigo do schedule_id e reinsere uma linha por
+      //    lançamento. Cobre resgate_reserva pendente E já executado/registrado (mesmo padrão do
+      //    gerencial_devolucao) — faturas cujo resgate já foi executado ficavam sem detalhamento
+      //    (soma 0) para sempre. Usa os ids que REALMENTE existem no estado final `schedules`.
+      const resgateReservaIds = new Set(
+        schedules
+          .filter(s => s.tipo === 'resgate_reserva' && s.cardId === cardId && s.faturaMesAno === faturaMesAno)
+          .map(s => s.id)
       )
       // Detalhamento (1 linha por lançamento) para o gerencial_devolucao desta fatura. Diferente do
       // resgate, cobrimos TAMBÉM o já executado/registrado (não só o pendente): faturas cujo
@@ -3508,19 +3509,19 @@ export function AppProvider({ children }) {
           .filter(s => s.tipo === 'gerencial_devolucao' && s.cardId === cardId && s.faturaMesAno === faturaMesAno)
           .map(s => s.id)
       )
-      // Limpa o SRF antigo dos resgates pendentes + de todo gerencial_devolucao desta fatura
+      // Limpa o SRF antigo de todo resgate_reserva + gerencial_devolucao desta fatura
       // (idempotente: recriado logo abaixo). Vale também p/ ciclo passado, removendo órfãos.
       let scheduleReservaFuncoes = (d.scheduleReservaFuncoes || [])
-        .filter(srf => !pendingResgateIds.has(srf.scheduleId) && !gerencialDevolucaoIds.has(srf.scheduleId))
-      // Só reinsere o detalhamento quando a fatura NÃO é de ciclo passado (senão não há
-      // schedule de resgate correspondente — evita SRF órfão).
+        .filter(srf => !resgateReservaIds.has(srf.scheduleId) && !gerencialDevolucaoIds.has(srf.scheduleId))
       // Modelo 1 LINHA POR LANÇAMENTO do cartão (rastreabilidade completa): cada linha carrega o
       // valor do próprio lançamento + source_lancamento_id. O valor total do resgate continua sendo
       // a soma (numberedByAccount); os consumidores (Etapa B / UI) reagrupam por função ao exibir/executar.
-      if (!faturaCicloNoPassado) for (const [origem, soma] of numberedByAccount) {
+      // Sem gate de ciclo: resgateReservaIds só contém agendamentos que já existem no estado
+      // (materializados/registrados), então o detalhamento é gerado inclusive p/ faturas passadas.
+      for (const [origem, soma] of numberedByAccount) {
         if (soma <= 0) continue
         const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
-        if (!pendingResgateIds.has(schedId)) continue
+        if (!resgateReservaIds.has(schedId)) continue
         const byFuncSources = numberedByAccountByFuncSources.get(origem)
         if (!byFuncSources) continue
         for (const [funcId, sources] of byFuncSources) {
