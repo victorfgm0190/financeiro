@@ -191,14 +191,10 @@ export default function CreditCardPanel() {
       // gate de "mudança" de reconciliarGerencial — esse gate só conta agendamentos/saldos e ignora
       // o SRF, então descartaria as linhas novas quando amount/saldo já estão corretos (backfill).
       // Espelha o fluxo de import (recalc → reconcile); reconciliarGerencial preserva o SRF já baked.
-      const faturasCartao = new Set(
-        schedules
-          .filter(s => s.cardId === selectedCard.id && s.faturaMesAno &&
-            (s.tipo === 'gerencial_devolucao' || s.tipo === 'resgate_reserva' || s.tipo === 'pagamento_fatura'))
-          .map(s => s.faturaMesAno)
-      )
-      for (const fmy of faturasCartao) {
-        const [y, m] = fmy.split('-')
+      // Apenas a FATURA SELECIONADA (billKey): o usuário reconcilia fatura por fatura, evitando um
+      // payload gigante de /api/sync (todas as faturas do cartão de uma vez → erro de sincronização).
+      if (billKey) {
+        const [y, m] = billKey.split('-')
         if (y && m) recalcularAgendamentosFatura(selectedCard.id, y, m)
       }
       const r = await reconciliarGerencial(selectedCard.id)
