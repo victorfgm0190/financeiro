@@ -3307,10 +3307,11 @@ export function AppProvider({ children }) {
       let totalG = 0
       let totalGeral = 0
       const numberedByAccount = new Map() // contaOrigemId → soma dos grupos numerados
-      // Detalhamento por função (schedule_reserva_funcoes, 1 linha por lançamento): contaOrigemId →
-      // Map(reservaFuncaoId → [{id,valor,descricao,data,grupo}]) — os lançamentos que compõem cada
-      // detalhamento. Lançamentos sem reserva_funcao_id somam em numberedByAccount mas não entram aqui.
-      const numberedByAccountByFuncSources = new Map()
+      // Detalhamento (schedule_reserva_funcoes, 1 linha por lançamento): contaOrigemId →
+      // [{id,valor,reservaFuncaoId}] — TODOS os lançamentos numerados da conta, INCLUSIVE os sem
+      // reserva_funcao_id (grupos numerados sem subdivisão, ex.: PharmaLog). A soma das linhas de
+      // uma origem = numberedByAccount[origem] = amount do resgate_reserva → diferença zero.
+      const numberedByAccountSources = new Map()
       // Chain ID: IDs dos lançamentos que compõem cada slot (recomputado a cada recálculo,
       // pois o motor recria os slots pendentes do zero). Persistidos em overrides._sourceTxIds.
       const sourceTxIdsG = []                // slot gerencial_devolucao (grupo G)
@@ -3331,14 +3332,10 @@ export function AppProvider({ children }) {
           numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
           if (!sourceTxIdsByOrigem.has(origem)) sourceTxIdsByOrigem.set(origem, [])
           sourceTxIdsByOrigem.get(origem).push(tx.id)
-          if (tx.reservaFuncaoId) {
-            if (!numberedByAccountByFuncSources.has(origem)) numberedByAccountByFuncSources.set(origem, new Map())
-            const fs = numberedByAccountByFuncSources.get(origem)
-            if (!fs.has(tx.reservaFuncaoId)) fs.set(tx.reservaFuncaoId, [])
-            fs.get(tx.reservaFuncaoId).push({
-              id: tx.id, valor: amt, descricao: tx.description || '', data: tx.date, grupo: tx.grupoGerencial || null,
-            })
-          }
+          // 1 linha por lançamento — INCLUSIVE quando reserva_funcao_id é null (grupo numerado sem
+          // subdivisão): rastreabilidade por source_lancamento_id + valor (reserva_funcao_id null).
+          if (!numberedByAccountSources.has(origem)) numberedByAccountSources.set(origem, [])
+          numberedByAccountSources.get(origem).push({ id: tx.id, valor: amt, reservaFuncaoId: tx.reservaFuncaoId || null })
         }
         // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
       }
@@ -3522,22 +3519,20 @@ export function AppProvider({ children }) {
         if (soma <= 0) continue
         const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
         if (!resgateReservaIds.has(schedId)) continue
-        const byFuncSources = numberedByAccountByFuncSources.get(origem)
-        if (!byFuncSources) continue
-        for (const [funcId, sources] of byFuncSources) {
-          for (const src of sources) {
-            const v = Number(src.valor) || 0
-            if (!(v > 0)) continue
-            scheduleReservaFuncoes.push({
-              id: `srf_${schedId}_${src.id}`,
-              scheduleId: schedId,
-              reservaFuncaoId: funcId,
-              valor: rb(v),
-              sourceLancamentoId: src.id,
-              sourceIds: [src.id],
-              faturaRef,
-            })
-          }
+        const sources = numberedByAccountSources.get(origem)
+        if (!sources) continue
+        for (const src of sources) {
+          const v = Number(src.valor) || 0
+          if (!(v > 0)) continue
+          scheduleReservaFuncoes.push({
+            id: `srf_${schedId}_${src.id}`,
+            scheduleId: schedId,
+            reservaFuncaoId: src.reservaFuncaoId || null,
+            valor: rb(v),
+            sourceLancamentoId: src.id,
+            sourceIds: [src.id],
+            faturaRef,
+          })
         }
       }
       // Detalhamento por lançamento do gerencial_devolucao (Grupo G): 1 linha por despesa do
