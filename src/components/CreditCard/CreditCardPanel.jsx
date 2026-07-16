@@ -703,7 +703,7 @@ export default function CreditCardPanel() {
           <p className="text-xs text-gray-500 mt-1">
             de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
-          <DiferencaPagamento diferenca={diferencaPagamento} className="mt-1.5" />
+          <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
         </div>
         <div className="flex flex-col gap-2">
           <button
