@@ -138,6 +138,51 @@ function advanceByFrequency(dateStr, frequency) {
   return format(d, 'yyyy-MM-dd')
 }
 
+// Próximas `count` ocorrências PENDENTES de um agendamento (exclui registered/skipped).
+// Puro — reusado por getNextOccurrences (contexto) e pelo avanço no registro. next_occurrence
+// re-ancora a série (dia de vencimento atual); null → desde start_date.
+function computeOccurrences(schedule, count = 12) {
+  const occurrences = []
+  const registered = schedule.registered || []
+  const skipped = schedule.skipped || []
+  let current = parseISO(schedule.nextOccurrence || schedule.startDate)
+  const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
+  let totalOccurrences = 0
+  const allDone = [...registered, ...skipped]
+
+  while (occurrences.length < count && totalOccurrences < maxInstallments) {
+    const dateStr = format(current, 'yyyy-MM-dd')
+    totalOccurrences++
+    if (!allDone.includes(dateStr)) occurrences.push(dateStr)
+    if (occurrences.length >= count) break
+    switch (schedule.frequency) {
+      case 'daily': current = addDays(current, 1); break
+      case 'weekly': current = addWeeks(current, 1); break
+      case 'biweekly': current = addWeeks(current, 2); break
+      case 'monthly': current = addMonths(current, 1); break
+      case 'bimonthly': current = addMonths(current, 2); break
+      case 'quarterly': current = addMonths(current, 3); break
+      case 'quadrimestral': current = addMonths(current, 4); break
+      case 'semiannual': current = addMonths(current, 6); break
+      case 'annual': current = addYears(current, 1); break
+      default: break
+    }
+    if (schedule.frequency === 'once') break
+  }
+  return occurrences
+}
+
+// Aplica o novo array `registered` a um agendamento e, para RECORRENTES, AVANÇA next_occurrence
+// p/ a próxima ocorrência pendente REAL (não o displayDueDate visual). Persistido no banco →
+// destrava o "Em atraso" quando o agendamento tinha uma next_occurrence antiga fixada. Sem mais
+// pendências → next_occurrence null. 'once' (inclui pagamento_fatura) mantém o comportamento
+// original — só o array `registered` (montado pelo call site) e confirmado.
+function registerAndAdvance(s, registered) {
+  if ((s.frequency || 'once') === 'once') return { ...s, registered, confirmado: false }
+  const nextOccurrence = computeOccurrences({ ...s, registered }, 1)[0] ?? null
+  return { ...s, registered, nextOccurrence, confirmado: false }
+}
+
 const defaultData = {
   settings: {
     financialMonthStartDay: 1,
@@ -2158,7 +2203,7 @@ export function AppProvider({ children }) {
           ...d, accounts,
           transactions: [...d.transactions, ...detTxs, ...detAutoTxs],
           schedules: d.schedules.map(s =>
-            s.id === scheduleId ? { ...s, registered: [...(s.registered || []), occurrenceDate], confirmado: false } : s
+            s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s
           ),
         }
       }
@@ -2236,7 +2281,7 @@ export function AppProvider({ children }) {
         ...d, accounts,
         transactions: [...d.transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])],
         schedules: d.schedules.map(s =>
-          s.id === scheduleId ? { ...s, registered: [...(s.registered || []), occurrenceDate], confirmado: false } : s
+          s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s
         ),
       }
     })
@@ -2401,37 +2446,7 @@ export function AppProvider({ children }) {
   }, [data.settings.financialMonthStartDay, data.settings.financialMonthMode])
 
   // ── Schedule Occurrences ─────────────────────────────────────────────────────
-  const getNextOccurrences = useCallback((schedule, count = 12) => {
-    const occurrences = []
-    const registered = schedule.registered || []
-    const skipped = schedule.skipped || []
-    // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
-    let current = parseISO(schedule.nextOccurrence || schedule.startDate)
-    const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
-    let totalOccurrences = 0
-    const allDone = [...registered, ...skipped]
-
-    while (occurrences.length < count && totalOccurrences < maxInstallments) {
-      const dateStr = format(current, 'yyyy-MM-dd')
-      totalOccurrences++
-      if (!allDone.includes(dateStr)) occurrences.push(dateStr)
-      if (occurrences.length >= count) break
-      switch (schedule.frequency) {
-        case 'daily': current = addDays(current, 1); break
-        case 'weekly': current = addWeeks(current, 1); break
-        case 'biweekly': current = addWeeks(current, 2); break
-        case 'monthly': current = addMonths(current, 1); break
-        case 'bimonthly': current = addMonths(current, 2); break
-        case 'quarterly': current = addMonths(current, 3); break
-        case 'quadrimestral': current = addMonths(current, 4); break
-        case 'semiannual': current = addMonths(current, 6); break
-        case 'annual': current = addYears(current, 1); break
-        default: break
-      }
-      if (schedule.frequency === 'once') break
-    }
-    return occurrences
-  }, [])
+  const getNextOccurrences = useCallback((schedule, count = 12) => computeOccurrences(schedule, count), [])
 
   // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
   // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
@@ -3978,9 +3993,7 @@ export function AppProvider({ children }) {
     update(d => ({
       ...d,
       schedules: d.schedules.map(s =>
-        s.id === scheduleId
-          ? { ...s, registered: [...(s.registered || []).filter(d => d !== date), date], confirmado: false }
-          : s
+        s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []).filter(d => d !== date), date]) : s
       ),
     }))
   }, [update])
