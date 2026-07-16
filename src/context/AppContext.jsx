@@ -2297,6 +2297,15 @@ export function AppProvider({ children }) {
     if (schedRateios.length > 0) {
       saveRateiosFor(newTxId, schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })))
     }
+    // Despesa registrada em cartão de crédito: recalcula os agendamentos da fatura afetada
+    // (pagamento_fatura etc.) — o novo lançamento entra no total da fatura. Mesma via usada pelo
+    // addTransaction (recalcFaturaRef → faturaMesAnoOf → recalcularAgendamentosFatura). Os
+    // campos lidos (transactionType/accountId/type/closingDay) não mudam com o registro.
+    const schedReg = dataRef.current.schedules.find(s => s.id === scheduleId)
+    const acctReg = schedReg && dataRef.current.accounts.find(a => a.id === schedReg.accountId)
+    if (schedReg?.transactionType === 'expense' && acctReg?.type === 'credit') {
+      recalcFaturaRef.current?.(acctReg.id, date, null)
+    }
     return newTxId
   }, [update, saveRateiosFor])
 
