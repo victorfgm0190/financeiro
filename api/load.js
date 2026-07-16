@@ -258,6 +258,7 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]'`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS estorno_cartao_enabled BOOLEAN`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS estorno_cartao_category_id TEXT`)
+    await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS faturas_fechadas JSONB DEFAULT '{}'`)
 
     // Seed idempotente: categoria "Capitalização" vinculada à conta de investimento Brasilcap.
     // Só insere se houver uma conta cujo nome casa com "brasil...cap" e a categoria ainda não existir.

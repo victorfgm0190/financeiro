@@ -3656,6 +3656,34 @@ export function AppProvider({ children }) {
     [update, reconcileFaturaState]
   )
 
+  // ── Fatura fechada/aberta (cardId + faturaMonthYear 'YYYY-MM') ─────────────────
+  // Persistido em settings.faturasFechadas = { '<cardId>_<YYYY-MM>': true }. Fatura fechada
+  // bloqueia novos lançamentos e importação; lançamentos existentes seguem editáveis.
+  const faturaFechadaKey = (cardId, faturaMonthYear) => `${cardId}_${faturaMonthYear}`
+  const isFaturaFechada = useCallback(
+    (cardId, faturaMonthYear) =>
+      !!(cardId && faturaMonthYear && data.settings?.faturasFechadas?.[faturaFechadaKey(cardId, faturaMonthYear)] === true),
+    [data.settings]
+  )
+  // Fecha a fatura e recalcula seus agendamentos (mesmo efeito do "Atualizar").
+  const fecharFatura = useCallback((cardId, faturaMonthYear) => {
+    if (!cardId || !faturaMonthYear) return
+    const k = faturaFechadaKey(cardId, faturaMonthYear)
+    update(d => ({ ...d, settings: { ...d.settings, faturasFechadas: { ...(d.settings.faturasFechadas || {}), [k]: true } } }))
+    const [y, m] = faturaMonthYear.split('-')
+    if (y && m) recalcularAgendamentosFatura(cardId, y, m)
+  }, [update, recalcularAgendamentosFatura])
+  // Reabre a fatura (remove a marca de fechada).
+  const abrirFatura = useCallback((cardId, faturaMonthYear) => {
+    if (!cardId || !faturaMonthYear) return
+    const k = faturaFechadaKey(cardId, faturaMonthYear)
+    update(d => {
+      const next = { ...(d.settings.faturasFechadas || {}) }
+      delete next[k]
+      return { ...d, settings: { ...d.settings, faturasFechadas: next } }
+    })
+  }, [update])
+
   // ── Reconciliador gerencial ───────────────────────────────────────────────────
   // Garante consistência entre as despesas de cartão, os agendamentos de fatura geridos
   // (gerencial_devolucao / resgate_reserva / pagamento_fatura) e o balance das contas Ger.
@@ -4717,6 +4745,7 @@ export function AppProvider({ children }) {
       processarLancamentoGerencial,
       criarParcelasGerencial,
       recalcularAgendamentosFatura,
+      isFaturaFechada, fecharFatura, abrirFatura,
       reconciliarGerencial,
       revisarMovimentosFatura,
       ajustarParcelasGrupoGerencial,

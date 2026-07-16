@@ -662,6 +662,7 @@ export async function loadFromDb(defaultData) {
               lastBalanceSnapshot: d.cfg.balance_snapshot || null,
               estornoCartaoEnabled: d.cfg.estorno_cartao_enabled ?? null,
               estornoCartaoCategoryId: d.cfg.estorno_cartao_category_id ?? null,
+              faturasFechadas: d.cfg.faturas_fechadas ?? {},
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,
@@ -965,6 +966,7 @@ export async function syncSettings(settings, costCenters) {
         balance_snapshot: settings.lastBalanceSnapshot || null,
         estorno_cartao_enabled: settings.estornoCartaoEnabled ?? null,
         estorno_cartao_category_id: settings.estornoCartaoCategoryId ?? null,
+        faturas_fechadas: settings.faturasFechadas ?? {},
       },
     })
   } catch (err) {

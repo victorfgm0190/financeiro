@@ -176,6 +176,7 @@ export default function CreditCardPanel() {
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
     reconciliarGerencial, revisarMovimentosFatura, getNextOccurrences,
+    isFaturaFechada, fecharFatura, abrirFatura,
   } = useApp()
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
@@ -469,6 +470,19 @@ export default function CreditCardPanel() {
   // pagamento (isFaturaPaga/isFaturaParcial), que seguem baseados só nos lançamentos efetivados.
   const saldoAPagarComPrevistos = saldoRestante + totalPrevisto
   const billTotalComPrevistos = billTotal + totalPrevisto
+
+  // Fatura fechada: bloqueia novos lançamentos e importação; edição/exclusão dos existentes segue normal.
+  const faturaFechada = isFaturaFechada(selectedCard?.id, billKey)
+  const handleFecharFatura = () => {
+    if (!selectedCard || !billKey) return
+    fecharFatura(selectedCard.id, billKey)
+    setToast('🔒 Fatura fechada.')
+  }
+  const handleAbrirFatura = () => {
+    if (!selectedCard || !billKey) return
+    abrirFatura(selectedCard.id, billKey)
+    setToast('🔓 Fatura aberta.')
+  }
   // Diferença pago − fatura. NUNCA armazenada: recalculada no render a partir de totalPago e
   // billTotal (ambos reativos a `transactions`), então reage a reimportações que mudem o billTotal.
   const diferencaPagamento = Math.round((totalPago - billTotal) * 100) / 100
@@ -527,8 +541,8 @@ export default function CreditCardPanel() {
   // FAB mobile: novo lançamento no cartão/fatura selecionados (inativo nas
   // subtelas de extrato/relatório, onde o modal não está montado).
   useRegisterFab(
-    () => { if (!showExtrato && !showRelatorio) setShowNewTx(true) },
-    [showExtrato, showRelatorio]
+    () => { if (!showExtrato && !showRelatorio && !faturaFechada) setShowNewTx(true) },
+    [showExtrato, showRelatorio, faturaFechada]
   )
 
   // ── Pay invoice ──────────────────────────────────────────────────────────
@@ -704,10 +718,22 @@ export default function CreditCardPanel() {
             de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
           <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
+          <button
+            onClick={faturaFechada ? handleAbrirFatura : handleFecharFatura}
+            className={`mt-2 inline-block text-xs rounded px-3 py-1 border transition-colors ${
+              faturaFechada
+                ? 'text-emerald-400 border-emerald-600 hover:bg-emerald-500/10'
+                : 'text-orange-400 border-orange-600 hover:bg-orange-500/10'
+            }`}
+          >
+            {faturaFechada ? '🔓 Abrir Fatura' : '🔒 Fechar Fatura'}
+          </button>
         </div>
         <div className="flex flex-col gap-2">
           <button
-            className="btn-primary flex-1 hidden md:flex items-center justify-center gap-2 text-sm"
+            disabled={faturaFechada}
+            title={faturaFechada ? 'Fatura fechada — abra a fatura para adicionar lançamentos' : undefined}
+            className={`btn-primary flex-1 hidden md:flex items-center justify-center gap-2 text-sm ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => setShowNewTx(true)}
           >
             <Plus size={14} /> Novo Lançamento
@@ -761,7 +787,14 @@ export default function CreditCardPanel() {
           <DiferencaPagamento diferenca={diferencaPagamento} />
         </div>
         <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-gray-300">{getBillLabel(billKey)}</h3>
+          <h3 className="text-sm font-semibold text-gray-300">
+            {getBillLabel(billKey)}
+            {faturaFechada && (
+              <span className="ml-2 text-xs bg-orange-900 text-orange-300 px-2 py-0.5 rounded font-medium align-middle">
+                FECHADA
+              </span>
+            )}
+          </h3>
           <div className="flex items-center gap-3">
             {hasGer && (
               <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -799,7 +832,11 @@ export default function CreditCardPanel() {
           <div className="text-center py-12">
             <Calendar size={28} className="text-gray-700 mx-auto mb-2" />
             <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
-            <button onClick={() => setShowNewTx(true)} className="btn-primary mt-3 text-xs">
+            <button
+              onClick={() => setShowNewTx(true)}
+              disabled={faturaFechada}
+              className={`btn-primary mt-3 text-xs ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
               Adicionar lançamento
             </button>
           </div>

@@ -1045,6 +1045,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
     reserveFunctions, settings, updateSettings, data,
+    isFaturaFechada,
   } = useApp()
 
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
@@ -1577,6 +1578,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }
 
   const handleImport = () => {
+    // Fatura fechada bloqueia importação nova (reedição de existentes segue permitida).
+    if (!editingImport && isFaturaFechada(selectedAccount, faturaMonthYear)) {
+      setError('Esta fatura está fechada. Abra-a antes de importar.')
+      return
+    }
     const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
 
     // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória. Não
