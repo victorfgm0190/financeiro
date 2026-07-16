@@ -464,6 +464,11 @@ export default function CreditCardPanel() {
     [totalPagoReal, scheduledPaidTotal]
   )
   const { saldoRestante, isFaturaPaga, isFaturaParcial } = classifyFatura(billTotal, totalPago)
+  // Saldo a Pagar e total da fatura EXIBIDOS no KPI incluem as despesas ainda agendadas
+  // (totalPrevisto) → total real previsto. Não afetam billTotal nem a classificação de
+  // pagamento (isFaturaPaga/isFaturaParcial), que seguem baseados só nos lançamentos efetivados.
+  const saldoAPagarComPrevistos = saldoRestante + totalPrevisto
+  const billTotalComPrevistos = billTotal + totalPrevisto
   // Diferença pago − fatura. NUNCA armazenada: recalculada no render a partir de totalPago e
   // billTotal (ambos reativos a `transactions`), então reage a reimportações que mudem o billTotal.
   const diferencaPagamento = Math.round((totalPago - billTotal) * 100) / 100
@@ -693,10 +698,10 @@ export default function CreditCardPanel() {
             <span className="text-xs uppercase tracking-wide">{totalPago === 0 ? 'Saldo a Pagar' : 'Valor Pago'}</span>
           </div>
           <p className={`text-2xl font-bold ${isFaturaPaga ? 'text-emerald-400' : isFaturaParcial ? 'text-orange-500' : 'text-gray-200'}`}>
-            {fmt(totalPago === 0 ? saldoRestante : totalPago)}
+            {fmt(totalPago === 0 ? saldoAPagarComPrevistos : totalPago)}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            de {fmt(billTotal)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
+            de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
           <DiferencaPagamento diferenca={diferencaPagamento} className="mt-1.5" />
         </div>
