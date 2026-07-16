@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { addMonths, addWeeks, addDays, addYears, format, parseISO } from 'date-fns'
+import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
 import {
   loadFromDb, seedDefaults, pingDb,
   syncSection, syncAccounts, syncPayees, syncSettings,
@@ -89,12 +89,19 @@ export const DEFAULT_ACCOUNT_GROUPS = [
 
 const AppContext = createContext(null)
 
+// Constrói uma Date ao MEIO-DIA local a partir de uma string de data (usa só os 10 primeiros
+// chars 'YYYY-MM-DD'). Evita o off-by-one de fuso: parseISO/new Date de uma string com hora 'Z'
+// (ex.: start_date lido como '2026-06-28T00:00:00Z') recuaria 1 dia em fusos negativos (BRT).
+function parseScheduleDate(dateStr) {
+  return new Date(String(dateStr).slice(0, 10) + 'T12:00:00')
+}
+
 // Retorna todas as ocorrências pendentes de um agendamento até upToDateStr (inclusive)
 function computePendingUpTo(schedule, upToDateStr) {
   const allDone = new Set([...(schedule.registered || []), ...(schedule.skipped || [])])
   const pending = []
   // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
-  let current = parseISO(schedule.nextOccurrence || schedule.startDate)
+  let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? (schedule.installments || 1) : 9999
   let count = 0
   while (count < maxInstallments) {
@@ -122,7 +129,7 @@ function computePendingUpTo(schedule, upToDateStr) {
 // Avança uma data (YYYY-MM-DD) por UM intervalo da frequência informada (ex.: semanal → +7d).
 // Usado ao efetivar uma provisão recorrente: a série reinicia em data_real + 1 intervalo.
 function advanceByFrequency(dateStr, frequency) {
-  let d = parseISO(dateStr)
+  let d = parseScheduleDate(dateStr)
   switch (frequency) {
     case 'daily':         d = addDays(d, 1); break
     case 'weekly':        d = addWeeks(d, 1); break
@@ -145,7 +152,7 @@ function computeOccurrences(schedule, count = 12) {
   const occurrences = []
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
-  let current = parseISO(schedule.nextOccurrence || schedule.startDate)
+  let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
   let totalOccurrences = 0
   const allDone = [...registered, ...skipped]
