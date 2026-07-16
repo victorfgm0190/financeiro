@@ -175,7 +175,7 @@ export default function CreditCardPanel() {
     profileSchedules: schedules,
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
-    reconciliarGerencial, revisarMovimentosFatura,
+    reconciliarGerencial, revisarMovimentosFatura, getNextOccurrences,
   } = useApp()
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
@@ -348,6 +348,7 @@ export default function CreditCardPanel() {
   const [showNewTx, setShowNewTx] = useState(false)
   const [editTx, setEditTx] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [showPrevistos, setShowPrevistos] = useState(false)
 
   // Duplicar lançamento de cartão: abre o form em modo NOVO (sem id) com os dados originais e a
   // data escolhida. Mantém o account_id do cartão e o grupo gerencial; descarta vínculos de
@@ -429,6 +430,27 @@ export default function CreditCardPanel() {
       .filter(s => s.tipo === 'pagamento_fatura' && s.cardId === selectedCard.id && s.faturaMesAno === billKey)
       .reduce((sum, s) => sum + (s.registered?.length || 0) * (Number(s.amount) || 0), 0)
   }, [schedules, selectedCard, billKey])
+
+  // Despesas AGENDADAS (manuais) do cartão cujas próximas ocorrências PENDENTES caem na fatura
+  // selecionada — projeção do que ainda vai entrar. getNextOccurrences já exclui ocorrências
+  // registradas/puladas, evitando dupla contagem com os lançamentos já efetivados (billTotal).
+  // Exclui os agendamentos automáticos da fatura (pagamento/devolução/resgate).
+  const agendamentosPrevistos = useMemo(() => {
+    if (!selectedCard || !billKey) return []
+    const AUTO_TIPOS = ['pagamento_fatura', 'gerencial_devolucao', 'resgate_reserva']
+    const out = []
+    for (const s of (schedules || [])) {
+      if (s.transactionType !== 'expense') continue
+      if (s.accountId !== selectedCard.id) continue
+      if (AUTO_TIPOS.includes(s.tipo)) continue
+      const occsNaFatura = getNextOccurrences(s, 24).filter(d => getBillKey(d, selectedCard) === billKey)
+      for (const occ of occsNaFatura) {
+        out.push({ key: `${s.id}_${occ}`, description: s.description, date: occ, amount: Number(s.amount) || 0 })
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date))
+  }, [schedules, selectedCard, billKey, getNextOccurrences])
+  const totalPrevisto = agendamentosPrevistos.reduce((sum, a) => sum + a.amount, 0)
 
   // Pagamentos REAIS (credit_payment + transferências vinculadas) da fatura.
   const totalPagoReal = useMemo(
@@ -636,6 +658,16 @@ export default function CreditCardPanel() {
           </div>
           <p className="text-2xl font-bold text-orange-600">{fmt(billTotal)}</p>
           <p className="text-xs text-gray-500 mt-1">{billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</p>
+          {totalPrevisto > 0 && (
+            <>
+              <p className="text-xs text-gray-400 mt-1">
+                + <span className="text-purple-400">{fmt(totalPrevisto)} previstos</span>
+              </p>
+              <p className="text-sm font-semibold text-gray-100 mt-0.5">
+                = {fmt(billTotal + totalPrevisto)} total
+              </p>
+            </>
+          )}
         </div>
         <div className="card">
           <div className="flex items-center gap-2 mb-2 text-gray-400">
@@ -972,6 +1004,39 @@ export default function CreditCardPanel() {
           </>
         )}
       </div>
+
+      {/* ── Agendamentos previstos (despesas agendadas que ainda vão entrar nesta fatura) ── */}
+      {agendamentosPrevistos.length > 0 && (
+        <div className="mt-4 border border-dashed border-gray-600 rounded-lg">
+          <button
+            onClick={() => setShowPrevistos(p => !p)}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300"
+          >
+            <span>
+              📅 Agendamentos previstos ({agendamentosPrevistos.length})
+              <span className="ml-2 text-purple-400">+ {fmt(totalPrevisto)}</span>
+            </span>
+            <span className="text-gray-500">{showPrevistos ? '▲' : '▼'}</span>
+          </button>
+
+          {showPrevistos && (
+            <div className="px-4 pb-3 space-y-2">
+              {agendamentosPrevistos.map(a => (
+                <div key={a.key} className="flex items-center justify-between py-2 border-t border-gray-700 opacity-75">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    </span>
+                    <span className="text-sm text-gray-200 truncate">{a.description}</span>
+                    <span className="text-xs bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded shrink-0">Previsto</span>
+                  </div>
+                  <span className="text-sm text-orange-400 shrink-0">{fmt(a.amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Modais ── */}
 
