@@ -444,7 +444,10 @@ export default function CreditCardPanel() {
       if (s.transactionType !== 'expense') continue
       if (s.accountId !== selectedCard.id) continue
       if (AUTO_TIPOS.includes(s.tipo)) continue
-      const occsNaFatura = getNextOccurrences(s, 24).filter(d => getBillKey(d, selectedCard) === billKey)
+      // Normaliza a data (10 primeiros chars 'YYYY-MM-DD') antes do getBillKey: caso a
+      // ocorrência carregue componente de hora/'Z', getBillKey (new Date(date+'T00:00:00'))
+      // geraria Invalid Date e a fatura nunca casaria — o previsto sumiria da lista.
+      const occsNaFatura = getNextOccurrences(s, 24).filter(d => getBillKey(String(d).slice(0, 10), selectedCard) === billKey)
       for (const occ of occsNaFatura) {
         out.push({ key: `${s.id}_${occ}`, description: s.description, date: occ, amount: Number(s.amount) || 0 })
       }
