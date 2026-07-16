@@ -670,7 +670,9 @@ export default function CreditCardPanel() {
 
       {/* ── KPIs + botões de ação ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-        <div className="card">
+        {/* Fatura Selecionada ocupa a linha inteira no mobile (col-span-2) p/ os "previstos"/
+            "total" caberem — no grid estreito de 2 colunas ficavam apertados/cortados. */}
+        <div className="card col-span-2 sm:col-span-1">
           <div className="flex items-center gap-2 mb-2 text-gray-400">
             <Calendar size={13} />
             <span className="text-xs uppercase tracking-wide">Fatura Selecionada</span>
