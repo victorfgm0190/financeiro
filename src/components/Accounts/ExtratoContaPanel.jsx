@@ -341,7 +341,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   )
 }
 
-function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selectMode, onEditTx, onDeleteTx, onDeleteGroup }) {
+function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selectMode, onEditTx, onReverseTx, onDeleteTx, onDeleteGroup }) {
   const [open, setOpen] = useState(false)
   const { netFlow, otherAccountId, txs } = row
   const isIn = netFlow > 0
@@ -444,6 +444,15 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                     className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
                   >
                     <Edit2 size={13} />
+                  </button>
+                )}
+                {onReverseTx && !tx.reservaAuto && (
+                  <button
+                    onClick={() => onReverseTx(tx)}
+                    title="Estornar transferência"
+                    className="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+                  >
+                    <Undo2 size={13} />
                   </button>
                 )}
                 {onDeleteTx && (
@@ -1279,7 +1288,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
               {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
-                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} onEditTx={onEdit} onDeleteTx={setConfirmDelete} onDeleteGroup={setConfirmDeleteGroup} />
+                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} onEditTx={onEdit} onReverseTx={setConfirmEstorno} onDeleteTx={setConfirmDelete} onDeleteGroup={setConfirmDeleteGroup} />
                 ) : (
                   <SingleRow
                     key={i}

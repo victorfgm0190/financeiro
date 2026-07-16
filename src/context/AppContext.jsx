@@ -59,10 +59,13 @@ const grupoTemFuncoes = (grupoId, gerencialGroups, reserveFunctions) => {
 }
 // Guarda de integridade: zera reserva_funcao_id quando o grupo do lançamento não comporta
 // função de reserva (evita função órfã grudada, ex.: despesa do Grupo G com função de outro grupo).
-// Exceção: quando há reservaContaId ("Será pago com reserva" em despesa de conta corrente), a
-// função é o par do vínculo de reserva — não depende de grupo gerencial e NÃO deve ser zerada.
+// Exceções: (1) reservaContaId ("Será pago com reserva" em despesa de conta corrente) — a função
+// é o par do vínculo de reserva, não depende de grupo gerencial; (2) TRANSFERÊNCIA — a função
+// vem da conta de reserva envolvida (origem/destino), e transferências não carregam grupo
+// gerencial (zerar aqui apagava a função dos resgates de reserva, ex.: pagamento de agendamento
+// resgate_reserva sem detalhamento).
 const sanitizeReservaFuncao = (tx, gerencialGroups, reserveFunctions) =>
-  (tx?.reservaFuncaoId && !tx?.reservaContaId && !grupoTemFuncoes(tx.grupoGerencial, gerencialGroups, reserveFunctions))
+  (tx?.reservaFuncaoId && tx?.type !== 'transfer' && !tx?.reservaContaId && !grupoTemFuncoes(tx.grupoGerencial, gerencialGroups, reserveFunctions))
     ? { ...tx, reservaFuncaoId: null }
     : tx
 
