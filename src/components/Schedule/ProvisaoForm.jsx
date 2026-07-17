@@ -24,7 +24,7 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule } = useApp()
+  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences } = useApp()
 
   // Conta principal (Itaú Principal): a provisão é uma despesa futura debitada da conta
   // principal — aparece no Fluxo de Caixa Principal como despesa "Uma vez".
@@ -71,6 +71,20 @@ export default function ProvisaoForm({ initial, onClose }) {
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isRecorrente = form.frequency && form.frequency !== 'once'
+
+  // Prévia das próximas ocorrências — mesma lógica do ScheduleForm: reusa getNextOccurrences
+  // com um schedule "virtual" montado do form. Contínua → próximas 12; Parcelada → só as N datas
+  // (getNextOccurrences limita por installments). Recalculada a cada render → atualiza em tempo real
+  // quando muda data/frequência/nº de parcelas. 'Única' não tem próximas ocorrências.
+  const previewSchedule = {
+    startDate: form.startDate,
+    frequency: form.frequency,
+    occurrenceType: form.occurrenceType,
+    installments: form.occurrenceType === 'installment' ? (Number(form.installments) || 0) : 0,
+    registered: [],
+    skipped: [],
+  }
+  const preview = isRecorrente && form.startDate ? getNextOccurrences(previewSchedule, 12) : []
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -207,6 +221,30 @@ export default function ProvisaoForm({ initial, onClose }) {
             value={form.installments}
             onChange={e => set('installments', e.target.value)}
           />
+        </div>
+      )}
+
+      {/* Prévia das próximas ocorrências (read-only) — reusa a lógica do modal de Agendamento */}
+      {preview.length > 0 && (
+        <div>
+          <label className="label">Prévia das próximas ocorrências</label>
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            {preview.map((date, i) => (
+              <div
+                key={date}
+                className={`text-center p-2 rounded-lg text-xs ${
+                  i === 0 ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'bg-gray-800 text-gray-400'
+                }`}
+              >
+                {date.split('-').reverse().join('/')}
+              </div>
+            ))}
+          </div>
+          {form.occurrenceType === 'installment' && (
+            <p className="text-xs text-gray-500 mt-1.5">
+              {preview.length} parcela{preview.length !== 1 ? 's' : ''}.
+            </p>
+          )}
         </div>
       )}
 
