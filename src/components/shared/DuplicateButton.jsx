@@ -8,7 +8,6 @@ import { today } from './utils'
 // (estado + posicionamento próprios) para ser reutilizado nos extratos de Contas e de Cartão.
 export default function DuplicateButton({ onConfirm, iconSize = 14, className }) {
   const [open, setOpen] = useState(false)
-  const [rect, setRect] = useState(null)
   const [date, setDate] = useState(today())
   const btnRef = useRef(null)
   const popRef = useRef(null)
@@ -32,7 +31,6 @@ export default function DuplicateButton({ onConfirm, iconSize = 14, className })
   const openPopover = (e) => {
     e.stopPropagation()
     setDate(today())
-    setRect(btnRef.current?.getBoundingClientRect() || null)
     setOpen(true)
   }
 
@@ -41,11 +39,6 @@ export default function DuplicateButton({ onConfirm, iconSize = 14, className })
     setOpen(false)
     onConfirm(date)
   }
-
-  // Posiciona o popover abaixo do botão, alinhado à direita (sem estourar a borda da tela).
-  const popWidth = 232
-  const left = rect ? Math.max(8, Math.min(rect.right - popWidth, window.innerWidth - popWidth - 8)) : 0
-  const top = rect ? rect.bottom + 4 : 0
 
   return (
     <>
@@ -58,14 +51,22 @@ export default function DuplicateButton({ onConfirm, iconSize = 14, className })
       >
         <Copy size={iconSize} />
       </button>
-      {open && rect && createPortal(
-        <div
-          ref={popRef}
-          style={{ position: 'fixed', left, top, width: popWidth, zIndex: 9999 }}
-          className="bg-surface border border-gray-700 rounded-lg shadow-2xl p-3"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <label className="block text-xs text-gray-400 mb-1.5">Data da cópia</label>
+      {open && createPortal(
+        <>
+          {/* Overlay escuro: cobre a viewport e fecha ao clicar fora. */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+            className="bg-black/60"
+            onClick={() => setOpen(false)}
+          />
+          {/* Modal centralizado — funciona igual em desktop e mobile (independe da posição do botão). */}
+          <div
+            ref={popRef}
+            style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }}
+            className="bg-surface border border-gray-700 rounded-lg shadow-2xl p-3 w-[232px] max-w-[calc(100vw-2rem)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <label className="block text-xs text-gray-400 mb-1.5">Data da cópia</label>
           <input
             type="date"
             className="input w-full text-sm"
@@ -90,7 +91,8 @@ export default function DuplicateButton({ onConfirm, iconSize = 14, className })
               Duplicar
             </button>
           </div>
-        </div>,
+          </div>
+        </>,
         document.body
       )}
     </>
