@@ -2051,7 +2051,7 @@ export function AppProvider({ children }) {
   // Em ambos os casos, havendo reservaFuncaoId, cria um agendamento de Transferência (Uma vez)
   // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
   // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
-  const efetivarProvisao = useCallback((id, { amount, date }) => {
+  const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
     update(d => {
       const prov = d.schedules.find(s => s.id === id)
       if (!prov) return d
@@ -2088,7 +2088,8 @@ export function AppProvider({ children }) {
           payee: prov.payee || '',
           costCenter: prov.costCenter || '',
           frequency: 'once',
-          startDate: date,
+          // Ancora à ocorrência efetivada (não à 1ª); cai p/ `date` se a modal não enviar occurrenceDate.
+          startDate: occurrenceDate || date,
           occurrenceType: 'continuous',
           installments: 0,
           registered: [],
@@ -2125,7 +2126,8 @@ export function AppProvider({ children }) {
             payee: '',
             costCenter: '',
             frequency: 'once',
-            startDate: date,
+            // Resgate ancorado à ocorrência efetivada (corrige uso da data da 1ª ocorrência).
+            startDate: occurrenceDate || date,
             occurrenceType: 'continuous',
             installments: 0,
             registered: [],
