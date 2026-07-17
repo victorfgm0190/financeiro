@@ -106,7 +106,13 @@ function computePendingUpTo(schedule, upToDateStr) {
   // next_occurrence re-ancora a série (dia de vencimento atual); null → desde start_date.
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? (schedule.installments || 1) : 9999
-  let count = 0
+  // Parcelas já consumidas (registradas OU puladas) anteriores ao ponto de partida (next_occurrence)
+  // não são iteradas no laço — pré-contamos para que `maxInstallments` reflita o total REAL
+  // consumido. Sem isso, um parcelado com autoRegister e ocorrências já registradas/puladas
+  // recomeçava a contagem do zero e auto-gerava uma parcela FANTASMA além do total (mesmo bug de
+  // computeOccurrences, corrigido em 6ba73c6).
+  const startStr = format(current, 'yyyy-MM-dd')
+  let count = [...allDone].filter(d => d < startStr).length
   while (count < maxInstallments) {
     const dateStr = format(current, 'yyyy-MM-dd')
     if (dateStr > upToDateStr) break
