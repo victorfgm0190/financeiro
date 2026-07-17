@@ -1916,8 +1916,19 @@ export default function SchedulePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allSchedules, gerencialOrigemIds, activeProfileId, allAccounts]
   )
-  const displayGerencial = showZeroed ? gerencialResgates : gerencialResgates.filter(s => Number(s.amount) !== 0)
+  // Split da aba por TIPO da conta de ORIGEM do resgate (s.accountId):
+  //   • type 'savings' (poupança) → Resgates Anuais (resgate das poupanças dos grupos numerados)
+  //   • demais (contas 'gerencial'/subcontas "Ger.") → Gerencial (devoluções do Grupo 1)
+  // A soma das duas abas = gerencialResgates (nenhum agendamento some).
+  const isResgateAnualOrigem = (s) => allAccounts.find(a => a.id === s.accountId)?.type === 'savings'
+  const gerencialSomente = gerencialResgates.filter(s => !isResgateAnualOrigem(s))
+  const resgatesAnuais   = gerencialResgates.filter(s =>  isResgateAnualOrigem(s))
+
+  const displayGerencial = showZeroed ? gerencialSomente : gerencialSomente.filter(s => Number(s.amount) !== 0)
   const pendingGerencial = displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0).length
+
+  const displayResgatesAnuais = showZeroed ? resgatesAnuais : resgatesAnuais.filter(s => Number(s.amount) !== 0)
+  const pendingResgatesAnuais = displayResgatesAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   const filteredSchedules = useMemo(() => {
     const now = new Date()
@@ -2031,6 +2042,9 @@ export default function SchedulePanel() {
         </TabButton>
         <TabButton active={activeTab === 'gerencial'} onClick={() => setActiveTab('gerencial')} badge={pendingGerencial}>
           <BarChart3 size={14} /> Gerencial
+        </TabButton>
+        <TabButton active={activeTab === 'resgates'} onClick={() => setActiveTab('resgates')} badge={pendingResgatesAnuais}>
+          <ArrowLeftRight size={14} /> Resgates Anuais
         </TabButton>
         <button
           onClick={() => setShowZeroed(v => !v)}
@@ -2191,6 +2205,31 @@ export default function SchedulePanel() {
         ) : (
           <SchedulesTable
             schedules={displayGerencial}
+            categories={categories}
+            accounts={allAccounts}
+            gerencialGroups={gerencialGroups}
+            addTransaction={addTransaction}
+            markScheduleRegistered={markScheduleRegistered}
+            deleteSchedule={deleteSchedule}
+            registerScheduleOccurrence={registerScheduleOccurrence}
+            skipScheduleOccurrence={skipScheduleOccurrence}
+            getNextOccurrences={getNextOccurrences}
+            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
+            onEditSchedule={openEditSchedule}
+          />
+        )
+      )}
+
+      {activeTab === 'resgates' && (
+        displayResgatesAnuais.length === 0 ? (
+          <div className="card text-center py-12">
+            <ArrowLeftRight size={32} className="text-gray-700 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Nenhum resgate anual agendado</p>
+            <p className="text-gray-600 text-xs mt-1">Resgates das contas poupança (grupos gerenciais numerados) para a conta principal aparecem aqui</p>
+          </div>
+        ) : (
+          <SchedulesTable
+            schedules={displayResgatesAnuais}
             categories={categories}
             accounts={allAccounts}
             gerencialGroups={gerencialGroups}
