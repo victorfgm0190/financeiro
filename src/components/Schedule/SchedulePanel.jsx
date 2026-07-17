@@ -298,6 +298,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         amount, date: payDate, categoryId: payCategoryId,
         grupoGerencial: payGrupo || undefined,
         description: schedule.description, notes: payNotes,
+        scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)
@@ -324,6 +325,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount: parseFloat(recAmount) || 0, date: recDate,
         categoryId: recCategoryId, description: schedule.description, notes: recNotes,
+        scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)
@@ -346,6 +348,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         amount: parseFloat(trfAmount) || 0, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
+        scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate)

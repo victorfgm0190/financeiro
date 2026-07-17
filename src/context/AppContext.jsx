@@ -1864,14 +1864,28 @@ export function AppProvider({ children }) {
 
       reverseBalance(tx)
 
-      // Desfaz o registro da ocorrência no agendamento vinculado (estorno reabre a ocorrência).
+      // Desfaz o registro da ocorrência no agendamento vinculado (estorno reabre a ocorrência
+      // e o agendamento volta a pendente). pagamento_fatura mantém o comportamento original
+      // (o motor de fatura tem lógica própria de creditDebt/reconciliação).
       let schedules = d.schedules
       if (tx.scheduleId) {
-        schedules = d.schedules.map(s =>
-          s.id === tx.scheduleId
-            ? { ...s, registered: (s.registered || []).filter(r => r !== tx.date) }
-            : s
-        )
+        schedules = d.schedules.map(s => {
+          if (s.id !== tx.scheduleId) return s
+          if (s.tipo === 'pagamento_fatura') {
+            return { ...s, registered: (s.registered || []).filter(r => r !== tx.date) }
+          }
+          if ((s.frequency || 'once') === 'once') {
+            // Única ocorrência possível — limpa o registro inteiro. Cobre pagamento com a data
+            // editada no modal (registered guarda a data da OCORRÊNCIA; tx.date, a do pagamento).
+            return { ...s, registered: [], confirmado: false }
+          }
+          // Recorrente: reabre a ocorrência pela data do lançamento e RECUA next_occurrence
+          // para ela quando necessário (registerAndAdvance avançou a âncora ao pagar).
+          const registered = (s.registered || []).filter(r => r !== tx.date)
+          if (registered.length === (s.registered || []).length) return s // ocorrência não encontrada
+          const nextOccurrence = (s.nextOccurrence && s.nextOccurrence <= tx.date) ? s.nextOccurrence : tx.date
+          return { ...s, registered, nextOccurrence, confirmado: false }
+        })
       }
       let transactions = d.transactions.filter(t => t.id !== id)
 
@@ -2317,9 +2331,17 @@ export function AppProvider({ children }) {
   const skipScheduleOccurrence = useCallback((scheduleId, date) => {
     update(d => ({
       ...d,
-      schedules: d.schedules.map(s =>
-        s.id === scheduleId ? { ...s, skipped: [...(s.skipped || []), date] } : s
-      ),
+      schedules: d.schedules.map(s => {
+        if (s.id !== scheduleId) return s
+        const skipped = [...(s.skipped || []), date]
+        // 'once' não tem próxima ocorrência — só marca como pulado. RECORRENTE: avança
+        // next_occurrence p/ a próxima ocorrência pendente (computeOccurrences exclui
+        // registered+skipped), espelhando registerAndAdvance. Sem isso, a "Data de Vencimento
+        // Atual" continuava fixada na ocorrência pulada (aparecia em destaque "Pulado").
+        if ((s.frequency || 'once') === 'once') return { ...s, skipped }
+        const nextOccurrence = computeOccurrences({ ...s, skipped }, 1)[0] ?? null
+        return { ...s, skipped, nextOccurrence }
+      }),
     }))
   }, [update])
 
