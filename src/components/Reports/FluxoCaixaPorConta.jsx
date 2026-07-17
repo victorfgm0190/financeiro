@@ -95,19 +95,24 @@ export default function FluxoCaixaPorConta() {
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
 
   // Fonte ÚNICA do cálculo (compartilhada com os KPIs FINAL CICLO/PROJETADO do Painel Geral).
-  const { rows, saldoAnterior } = useMemo(() => {
+  const { rows, saldoAnteriorRealizado, saldoAnteriorComAgendamentos } = useMemo(() => {
     const r = computeFluxoCaixa({
       accountIds, currentBalance, start, end,
       transactions, schedules, envelopes, reserveFunctions,
       getNextOccurrences, includeSchedules,
       hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
     })
-    return { rows: r.rows, saldoAnterior: r.saldoAnterior }
+    return {
+      rows: r.rows,
+      saldoAnteriorRealizado: r.saldoAnteriorRealizado,
+      saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
+    }
   }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions])
 
   const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
-  const saldoFinal = rows.length ? rows[rows.length - 1].saldo : saldoAnterior
+  // O acumulador do período parte do saldo anterior C/ AGENDAMENTOS (mesma base da lib).
+  const saldoFinal = rows.length ? rows[rows.length - 1].saldo : saldoAnteriorComAgendamentos
   // Dia imediatamente anterior à data inicial (rótulo do saldo base).
   const prevDayStr = start ? format(addDays(new Date(start + 'T00:00:00'), -1), 'yyyy-MM-dd') : ''
 
@@ -152,7 +157,8 @@ export default function FluxoCaixaPorConta() {
   const handleExport = () => {
     const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Categoria', 'Conta Reserva', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
     const aoa = [header]
-    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior', '', '', '', '', '', '', round2(saldoAnterior), ''])
+    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior realizado', '', '', '', '', '', '', round2(saldoAnteriorRealizado), ''])
+    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior c/ agendamentos', '', '', '', '', '', '', round2(saldoAnteriorComAgendamentos), ''])
     rows.forEach(r => {
       aoa.push([
         fmtDate(r.date),
@@ -313,8 +319,13 @@ export default function FluxoCaixaPorConta() {
             </label>
           </div>
           {!noSelection && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-              <Wallet size={13} /> Saldo anterior: <span className="font-semibold text-gray-200">{fmt(saldoAnterior)}</span>
+            <span className="inline-flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-gray-500">
+              <span className="inline-flex items-center gap-1.5">
+                <Wallet size={13} /> Saldo anterior realizado: <span className="font-semibold text-gray-200">{fmt(saldoAnteriorRealizado)}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                c/ agendamentos: <span className="font-bold text-blue-400">{fmt(saldoAnteriorComAgendamentos)}</span>
+              </span>
             </span>
           )}
         </div>
@@ -377,11 +388,18 @@ export default function FluxoCaixaPorConta() {
                 </tr>
               </thead>
               <tbody>
-                {/* Saldo anterior (dia imediatamente anterior à data inicial) */}
-                <tr className="border-b border-gray-800/50 bg-gray-800/20">
+                {/* Saldo anterior REALIZADO (só lançamentos registrados/conciliados antes da data inicial) */}
+                <tr className="border-b border-gray-800/40 bg-gray-800/10">
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
-                  <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior</td>
-                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnterior >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnterior)}</td>
+                  <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior realizado</td>
+                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorRealizado >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnteriorRealizado)}</td>
+                  <td className="px-3 py-2" />
+                </tr>
+                {/* Saldo anterior C/ AGENDAMENTOS (realizado + pendentes/a pagar/provisões antes da data inicial) — base do acumulador */}
+                <tr className="border-b border-gray-800/50 bg-blue-500/5">
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
+                  <td className="px-3 py-2 text-xs text-blue-300 italic font-medium" colSpan={4}>Saldo anterior c/ agendamentos</td>
+                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorComAgendamentos >= 0 ? 'text-blue-400' : 'text-orange-600'}`}>{fmt(saldoAnteriorComAgendamentos)}</td>
                   <td className="px-3 py-2" />
                 </tr>
                 {rows.map(r => (

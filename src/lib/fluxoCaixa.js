@@ -65,7 +65,9 @@ export function computeFluxoCaixa({
   patrimonioSet = new Set(),
 }) {
   const empty = {
-    rows: [], saldoAnterior: currentBalance, saldoFinal: currentBalance,
+    rows: [], saldoAnterior: currentBalance,
+    saldoAnteriorRealizado: currentBalance, saldoAnteriorComAgendamentos: currentBalance,
+    saldoFinal: currentBalance,
     saldoFinalSemEnvelopes: currentBalance, totalEntrada: 0, totalSaida: 0, envelopesTotal: 0,
   }
   if (!accountIds || accountIds.size === 0 || !start || !end || start > end) return empty
@@ -108,7 +110,10 @@ export function computeFluxoCaixa({
     })
   })
 
-  // 2. Agendamentos pendentes (ocorrências não registradas) dentro do período.
+  // 2. Agendamentos pendentes (ocorrências não registradas). Os que caem DENTRO do período viram
+  // linhas; os ANTERIORES a `start` (a pagar/provisões vencidas ainda não registradas) somam-se ao
+  // "saldo anterior c/ agendamentos" (agendamentosAntes) — sem virar linha do período.
+  let agendamentosAntes = 0
   if (includeSchedules) {
     schedules.forEach(s => {
       // Provisão de despesa COM reserva vinculada (não efetivada): projeta DUAS linhas por
@@ -121,27 +126,34 @@ export function computeFluxoCaixa({
         if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)) return
         getNextOccurrences(s, 400).forEach(origDate => {
           const { date, amount } = occEfetiva(s, origDate)
-          if (date < start || date > end) return
+          if (date > end) return
+          const antes = date < start
           if (!oculto(reservaAccId, principalId)) {
             const m1 = classify('transfer', reservaAccId, principalId, amount)
-            if (m1) out.push({
-              date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
-              fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
-              reservaFuncaoId: s.reservaFuncaoId || null,
-              entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
-              _key: s.id + '_resg_' + origDate,
-            })
+            if (m1) {
+              if (antes) agendamentosAntes = round2(agendamentosAntes + m1.entrada - m1.saida)
+              else out.push({
+                date, description: `Resgate reserva — ${s.description || 'provisão'}`, type: 'transfer',
+                fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
+                reservaFuncaoId: s.reservaFuncaoId || null,
+                entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
+                _key: s.id + '_resg_' + origDate,
+              })
+            }
           }
           if (!oculto(principalId, null)) {
             const m2 = classify('expense', principalId, null, amount)
-            if (m2) out.push({
-              date, description: s.description || '(agendamento)', type: 'expense',
-              fromAccountId: principalId, toAccountId: null,
-              categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
-              reservaFuncaoId: s.reservaFuncaoId || null,
-              entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
-              _key: s.id + '_desp_' + origDate,
-            })
+            if (m2) {
+              if (antes) agendamentosAntes = round2(agendamentosAntes + m2.entrada - m2.saida)
+              else out.push({
+                date, description: s.description || '(agendamento)', type: 'expense',
+                fromAccountId: principalId, toAccountId: null,
+                categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
+                reservaFuncaoId: s.reservaFuncaoId || null,
+                entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
+                _key: s.id + '_desp_' + origDate,
+              })
+            }
           }
         })
         return
@@ -151,9 +163,10 @@ export function computeFluxoCaixa({
       if (oculto(s.accountId, s.toAccountId)) return
       getNextOccurrences(s, 400).forEach(origDate => {
         const { date, amount } = occEfetiva(s, origDate)
-        if (date < start || date > end) return
+        if (date > end) return
         const m = classify(s.transactionType, s.accountId, s.toAccountId, amount)
         if (!m) return
+        if (date < start) { agendamentosAntes = round2(agendamentosAntes + m.entrada - m.saida); return }
         out.push({
           date, description: s.description || '(agendamento)', type: s.transactionType,
           fromAccountId: s.accountId, toAccountId: s.toAccountId,
@@ -206,22 +219,28 @@ export function computeFluxoCaixa({
     if (!m) return
     efeitoDesdeStart = round2(efeitoDesdeStart + m.entrada - m.saida)
   })
+  // Saldo anterior REALIZADO: só transações reais (o balance reflete apenas elas) na véspera de start.
   const saldoAnterior = round2(currentBalance - efeitoDesdeStart)
+  // Saldo anterior C/ AGENDAMENTOS: realizado + agendamentos pendentes/provisões com data < start.
+  const saldoAnteriorComAgendamentos = round2(saldoAnterior + agendamentosAntes)
 
-  let bal = saldoAnterior
+  // O acumulador do período parte do saldo anterior C/ AGENDAMENTOS (inclui as pendências vencidas).
+  let bal = saldoAnteriorComAgendamentos
   let envelopesTotal = 0
   out.forEach(r => {
     if (r._envelope) envelopesTotal = round2(envelopesTotal + r.saida)
     bal = round2(bal + r.entrada - r.saida)
     r.saldo = bal
   })
-  const saldoFinal = out.length ? out[out.length - 1].saldo : saldoAnterior
+  const saldoFinal = out.length ? out[out.length - 1].saldo : saldoAnteriorComAgendamentos
   const totalEntrada = round2(out.reduce((s, r) => s + r.entrada, 0))
   const totalSaida = round2(out.reduce((s, r) => s + r.saida, 0))
 
   return {
     rows: out,
-    saldoAnterior,
+    saldoAnterior,                               // = realizado (mantido p/ retrocompat)
+    saldoAnteriorRealizado: saldoAnterior,
+    saldoAnteriorComAgendamentos,
     saldoFinal,                                  // PROJETADO (com envelopes subtraídos)
     saldoFinalSemEnvelopes: round2(saldoFinal + envelopesTotal), // FINAL CICLO (sem envelopes)
     totalEntrada,
