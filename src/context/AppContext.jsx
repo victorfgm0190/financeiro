@@ -157,8 +157,13 @@ function computeOccurrences(schedule, count = 12) {
   const skipped = schedule.skipped || []
   let current = parseScheduleDate(schedule.nextOccurrence || schedule.startDate)
   const maxInstallments = schedule.occurrenceType === 'installment' ? schedule.installments : Infinity
-  let totalOccurrences = 0
   const allDone = [...registered, ...skipped]
+  // Parcelas já consumidas (registradas OU puladas) que ficam ANTES do ponto de partida
+  // (next_occurrence) não são iteradas no laço — pré-contamos para que `maxInstallments` reflita
+  // o total REAL consumido. Sem isso, registrar/pular a parcela N reancorava next_occurrence e a
+  // contagem recomeçava do zero, gerando uma parcela FANTASMA além do total (ex.: 2x virava 3x).
+  const startStr = format(current, 'yyyy-MM-dd')
+  let totalOccurrences = allDone.filter(d => d < startStr).length
 
   while (occurrences.length < count && totalOccurrences < maxInstallments) {
     const dateStr = format(current, 'yyyy-MM-dd')
