@@ -1916,19 +1916,37 @@ export default function SchedulePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allSchedules, gerencialOrigemIds, activeProfileId, allAccounts]
   )
-  // Split da aba por TIPO da conta de ORIGEM do resgate (s.accountId):
-  //   • type 'savings' (poupança) → Resgates Anuais (resgate das poupanças dos grupos numerados)
-  //   • demais (contas 'gerencial'/subcontas "Ger.") → Gerencial (devoluções do Grupo 1)
-  // A soma das duas abas = gerencialResgates (nenhum agendamento some).
-  const isResgateAnualOrigem = (s) => allAccounts.find(a => a.id === s.accountId)?.type === 'savings'
-  const gerencialSomente = gerencialResgates.filter(s => !isResgateAnualOrigem(s))
-  const resgatesAnuais   = gerencialResgates.filter(s =>  isResgateAnualOrigem(s))
+  // Aba "Gerencial": devoluções/resgates de contas gerenciais → conta principal, EXCETO os que
+  // saem de conta poupança (type 'savings'), que passam para a aba "Contas Anuais".
+  const isSavingsOrigem = (s) => allAccounts.find(a => a.id === s.accountId)?.type === 'savings'
+  const gerencialSomente = gerencialResgates.filter(s => !isSavingsOrigem(s))
 
   const displayGerencial = showZeroed ? gerencialSomente : gerencialSomente.filter(s => Number(s.amount) !== 0)
   const pendingGerencial = displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0).length
 
-  const displayResgatesAnuais = showZeroed ? resgatesAnuais : resgatesAnuais.filter(s => Number(s.amount) !== 0)
-  const pendingResgatesAnuais = displayResgatesAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
+  // Aba "Contas Anuais": movimentações (transfers) das contas poupança (type 'savings') — tanto
+  // RESGATES (poupança → conta) quanto DEPÓSITOS/aplicações (conta → poupança). Independe de
+  // gerencialResgates (que só captura SAÍDAS de contas gerenciais); casa a poupança nas DUAS pontas.
+  const savingsIds = useMemo(
+    () => new Set(allAccounts.filter(a => a.type === 'savings').map(a => a.id)),
+    [allAccounts]
+  )
+  const contasAnuais = useMemo(
+    () => allSchedules.filter(s => {
+      if (isObsoleteLegacy(s)) return false
+      if (s.transactionType !== 'transfer') return false
+      const origemSavings  = savingsIds.has(s.accountId)
+      const destinoSavings = savingsIds.has(s.toAccountId)
+      if (!origemSavings && !destinoSavings) return false
+      // Perfil: respeita a conta NÃO-poupança envolvida (subcontas podem não ter profileId).
+      return accountInProfile(origemSavings ? s.toAccountId : s.accountId)
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allSchedules, savingsIds, activeProfileId, allAccounts]
+  )
+
+  const displayContasAnuais = showZeroed ? contasAnuais : contasAnuais.filter(s => Number(s.amount) !== 0)
+  const pendingContasAnuais = displayContasAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   const filteredSchedules = useMemo(() => {
     const now = new Date()
@@ -2043,8 +2061,8 @@ export default function SchedulePanel() {
         <TabButton active={activeTab === 'gerencial'} onClick={() => setActiveTab('gerencial')} badge={pendingGerencial}>
           <BarChart3 size={14} /> Gerencial
         </TabButton>
-        <TabButton active={activeTab === 'resgates'} onClick={() => setActiveTab('resgates')} badge={pendingResgatesAnuais}>
-          <ArrowLeftRight size={14} /> Resgates Anuais
+        <TabButton active={activeTab === 'anuais'} onClick={() => setActiveTab('anuais')} badge={pendingContasAnuais}>
+          <ArrowLeftRight size={14} /> Contas Anuais
         </TabButton>
         <button
           onClick={() => setShowZeroed(v => !v)}
@@ -2220,16 +2238,16 @@ export default function SchedulePanel() {
         )
       )}
 
-      {activeTab === 'resgates' && (
-        displayResgatesAnuais.length === 0 ? (
+      {activeTab === 'anuais' && (
+        displayContasAnuais.length === 0 ? (
           <div className="card text-center py-12">
             <ArrowLeftRight size={32} className="text-gray-700 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhum resgate anual agendado</p>
-            <p className="text-gray-600 text-xs mt-1">Resgates das contas poupança (grupos gerenciais numerados) para a conta principal aparecem aqui</p>
+            <p className="text-gray-500 text-sm">Nenhuma movimentação anual agendada</p>
+            <p className="text-gray-600 text-xs mt-1">Depósitos (aplicações) e resgates das contas poupança aparecem aqui</p>
           </div>
         ) : (
           <SchedulesTable
-            schedules={displayResgatesAnuais}
+            schedules={displayContasAnuais}
             categories={categories}
             accounts={allAccounts}
             gerencialGroups={gerencialGroups}
