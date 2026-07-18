@@ -382,6 +382,11 @@ export const scheduleToRow = (s) => ({
   provisao_efetivada: !!s.provisaoEfetivada,
   provisao_efetivada_until: s.provisaoEfetivadaUntil || null,
   next_occurrence: s.nextOccurrence || null,
+  // Fase 1 (migração per-gasto): lista dos ids de gastos de cartão que originaram este
+  // agendamento (resgate_reserva). Coluna JSONB (igual registered/skipped/overrides — o sync
+  // serializa arrays com JSON.stringify). Vazio [] = comportamento atual; nenhuma lógica de
+  // criação/reconciliação depende disto ainda (Fase 2).
+  source_expense_ids: Array.isArray(s.sourceExpenseIds) ? s.sourceExpenseIds : [],
 })
 
 export const rowToSchedule = (r) => ({
@@ -417,6 +422,8 @@ export const rowToSchedule = (r) => ({
   provisaoEfetivada: !!r.provisao_efetivada,
   provisaoEfetivadaUntil: toDateStr(r.provisao_efetivada_until),
   nextOccurrence: toDateStr(r.next_occurrence),
+  // Fase 1: null/ausente → []. pg devolve JSONB já parseado (array JS).
+  sourceExpenseIds: Array.isArray(r.source_expense_ids) ? r.source_expense_ids : [],
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

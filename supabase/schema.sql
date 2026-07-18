@@ -732,3 +732,22 @@ ALTER TABLE schedule_reserva_funcoes ADD COLUMN IF NOT EXISTS source_lancamento_
 -- gerencial_devolucao (Grupo G) não tem função de reserva → reserva_funcao_id NULL permitido.
 ALTER TABLE schedule_reserva_funcoes ALTER COLUMN reserva_funcao_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id);
+
+-- ─── Fase 1 (migração per-gasto): rastreabilidade por ID nos agendamentos ──────
+-- Lista dos ids de gastos de cartão que originaram cada agendamento de resgate
+-- (resgate_reserva). JSONB (NÃO text[]) para casar com registered/skipped/overrides
+-- e com o sync (api/_db.js serializa arrays via JSON.stringify — um text[] receberia
+-- '["a","b"]' e falharia). Vazio [] = comportamento atual; Fase 2 passa a usar isto.
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS source_expense_ids JSONB DEFAULT '[]';
+
+-- Backfill: 1) do detalhamento per-lançamento (schedule_reserva_funcoes.source_lancamento_id);
+--           2) fallback do array agregado overrides->'_sourceTxIds'. Rode o SELECT de preview
+--           antes do UPDATE. Idempotente (só preenche resgate_reserva).
+-- UPDATE agendamentos a
+-- SET source_expense_ids = COALESCE(
+--   (SELECT jsonb_agg(DISTINCT srf.source_lancamento_id)
+--      FROM schedule_reserva_funcoes srf
+--     WHERE srf.schedule_id = a.id AND srf.source_lancamento_id IS NOT NULL),
+--   a.overrides->'_sourceTxIds',
+--   '[]'::jsonb)
+-- WHERE a.tipo = 'resgate_reserva';
