@@ -4421,6 +4421,9 @@ export function AppProvider({ children }) {
 
       // "Resgate já pago" = agendamento registrado/pulado/confirmado OU lançamento executado
       // (transfer com sourceScheduleId apontando p/ o slot).
+      // Devolução (Grupo G) é slot ÚNICO por fatura (sem delta per-gasto) → detecção por slot.
+      // Resgate da reserva de DESTINO (newReserve) é pergunta slot-level: o gasto ainda NÃO pertence
+      // a esse resgate, então a detecção per-gasto não se aplica (usa o id-base).
       const devolSchedId = `fsch_${accountId}_${yyyy}${mm}_gerencial_devolucao`
       const resgateSchedId = (origem) => `fsch_${accountId}_${yyyy}${mm}_resgate_reserva_${origem}`
 
@@ -4434,7 +4437,10 @@ export function AppProvider({ children }) {
       // se cancelam — nada a ajustar.
       const mesmaReserva = prevKind === 'NUM' && newKind === 'NUM' && prevReserve && prevReserve === newReserve
       if (!mesmaReserva) {
-        if (prevKind === 'NUM' && prevReserve && isResgatePago(resgateSchedId(prevReserve), d.schedules, d.transactions)) {
+        // Origem NUM: detecção PER-GASTO (Fase 3) — o próprio gasto está no source_expense_ids do
+        // resgate da reserva anterior. Mais preciso que o slot: um base já pago não dispara a
+        // reposição se ESTE gasto ainda está num delta (_p{n}) pendente.
+        if (prevKind === 'NUM' && prevReserve && isResgatePagoParaGasto(txId, d.schedules, d.transactions)) {
           legs.push({ from: contaPrincipal.id, to: prevReserve }) // repõe na reserva anterior
         }
         if (newKind === 'NUM' && newReserve && isResgatePago(resgateSchedId(newReserve), d.schedules, d.transactions)) {
