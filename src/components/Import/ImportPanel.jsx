@@ -1982,6 +1982,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const [y, m] = f.split('-')
       recalcularAgendamentosFatura(editingImport.accountId, y, m)
     }
+    // (Re)materializa os resgates que o motor descarta em faturas passadas (faturaCicloNoPassado):
+    // reconciliarGerencial roda applyEnsureGerencial por despesa. Espelha os outros fluxos de import.
+    reconciliarGerencial(editingImport.accountId)
     setShowCorrigirDatas(false)
     setCorrigirToast(`${changed.length} data${changed.length !== 1 ? 's' : ''} corrigida${changed.length !== 1 ? 's' : ''}`)
   }

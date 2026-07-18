@@ -47,6 +47,7 @@ export default function SettingsPanel() {
     restoreBalanceSnapshot,
     corrigirDadosGerencial,
     recalcularAgendamentosFatura,
+    reconciliarGerencial,
     data,
   } = useApp()
 
@@ -92,6 +93,10 @@ export default function SettingsPanel() {
           await new Promise(r => setTimeout(r, 0))
         }
       }
+      // reconciliarGerencial roda applyEnsureGerencial por despesa e (re)materializa os resgates
+      // que o motor descarta em faturas de ciclo passado (faturaCicloNoPassado) — sem isto, o
+      // recálculo em massa apagava resgates de faturas fechadas.
+      reconciliarGerencial(card.id)
     }
     setFaturaStatus({ running: false, total, done: total, finished: true })
   }

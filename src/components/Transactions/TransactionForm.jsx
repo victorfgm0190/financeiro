@@ -692,6 +692,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         if (fmy) {
           const [y, m] = fmy.split('-')
           recalcularAgendamentosFatura(form.accountId, y, m)
+          // Motor descarta pendências de fatura passada (faturaCicloNoPassado) — re-executa o
+          // applyEnsureGerencial p/ (re)materializar o resgate deste lançamento novo. Idempotente.
+          if (txId) ensureGerencialState(txId)
         }
       }
     }
@@ -720,13 +723,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     // Série legada sem serie_id → null (fallback installment_key). Nunca fabricamos aqui.
     const serieId = (parcelaSeries?.siblings || []).map(s => s.serieId).find(Boolean) || null
     const faturas = new Set()
+    const gerIds = []
     for (const p of missing) {
       const grupo = p.grupoGerencial || defaultGrupoId
       // p.date já segue a regra (parcela >1 → mês anterior à fatura). NÃO clampar essas, senão
       // a data voltaria para o mês da própria fatura. Parcela 1 mantém o clamp ao período.
       const date = (p.num || 1) > 1 ? p.date : clampDateToFatura(p.date, p.faturaMonthYear, closingDay)
       if (p.payee && !payees.includes(p.payee)) addPayee(p.payee)
-      addTransaction({
+      const pid = addTransaction({
         type: 'expense', accountId: initial.accountId, accountType: 'credit',
         amount: p.amount, date, description: p.description,
         categoryId: p.categoryId || null, payee: p.payee || null,
@@ -738,12 +742,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         origin: ORIGIN.PARCELA_GERADA,
         _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
+      if (pid) gerIds.push(pid)
       faturas.add(p.faturaMonthYear)
     }
     for (const fmy of faturas) {
       const [y, m] = (fmy || '').split('-')
       if (y && m) recalcularAgendamentosFatura(initial.accountId, y, m)
     }
+    // Motor descarta pendências de fatura passada (faturaCicloNoPassado) — re-executa o
+    // applyEnsureGerencial por parcela criada p/ (re)materializar os resgates. Idempotente
+    // (em faturas futuras o motor já criou; ensureGerencialState não duplica).
+    gerIds.forEach(id => ensureGerencialState(id))
     onToast?.(`${missing.length} parcela${missing.length !== 1 ? 's' : ''} gerada${missing.length !== 1 ? 's' : ''}.`)
     onClose()
   }

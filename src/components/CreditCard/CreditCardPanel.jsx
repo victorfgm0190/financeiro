@@ -755,6 +755,10 @@ export default function CreditCardPanel() {
               if (!selectedCard || !billKey) return
               const [by, bm] = billKey.split('-')
               recalcularAgendamentosFatura(selectedCard.id, by, bm)
+              // O motor descarta pendências de fatura passada sem recriá-las (faturaCicloNoPassado);
+              // reconciliarGerencial roda applyEnsureGerencial por despesa e (re)materializa os
+              // resgates — sem isto, "Atualizar" apagava o resgate de fatura fechada.
+              reconciliarGerencial(selectedCard.id)
               setToast(`Fatura atualizada: ${fmt(billTotal)}`)
             }}
             title="Recalcula o total da fatura e atualiza a conta a pagar"
