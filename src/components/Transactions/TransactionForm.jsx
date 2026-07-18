@@ -78,7 +78,7 @@ function buildCatOpts(categories, type) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
+    gerencialGroups, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -547,6 +547,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           if (fmy) {
             const [y, m] = fmy.split('-')
             recalcularAgendamentosFatura(initial.accountId, y, m)
+            // O motor (reconcileFaturaState) descarta pendências de fatura de ciclo PASSADO e não
+            // as recria (guard faturaCicloNoPassado) — apagando o resgate que o applyEnsureGerencial
+            // criou p/ a transição pós-pago. Re-executamos o applyEnsureGerencial DEPOIS do recálculo
+            // para que ele volte a ser a autoridade final e (re)materialize o resgate em faturas
+            // passadas. Idempotente em faturas correntes (o resgate já existe → não duplica).
+            ensureGerencialState(initial.id)
           }
         }
       }
