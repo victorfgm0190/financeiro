@@ -878,8 +878,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       for (const tx of transactions) {
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
-        // Lançamentos de ajuste de grupo (transição pós-resgate) desta fatura: somados à parte,
-        // fora de entradas/resgate. Sinal = delta na conta (saída negativa, entrada positiva).
+        // Lançamentos de ajuste de grupo (transição pós-resgate) desta fatura: contabilizados
+        // à parte (linha "Ajuste"), MAS somados ao líquido com o sinal do delta na conta —
+        // to_account = conta gerencial → ENTRADA (+); account_id = conta gerencial → SAÍDA (−),
+        // igual a qualquer transferência. Assim o ajuste que REPÕE o gerencial zera o líquido.
         if (tx.origin === ORIGIN.AJUSTE_GRUPO) {
           if (tx.faturaRef === ref) ajuste = r2(ajuste + d)
           continue
@@ -905,7 +907,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       }
       const entradas = r2(mesAnt + esteMes)
       const resgate = r2(resgateExec + resgateAgend)
-      return { ref, mesAnt, esteMes, entradas, resgateExec, resgateAgend, resgate, ajuste, liquido: r2(entradas - resgate) }
+      return { ref, mesAnt, esteMes, entradas, resgateExec, resgateAgend, resgate, ajuste, liquido: r2(entradas - resgate + ajuste) }
     }
 
     const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
