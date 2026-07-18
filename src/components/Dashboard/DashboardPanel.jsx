@@ -464,6 +464,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Reservas"
           value={reservaLiquido}
           valueColor={reservaLiquido >= 0 ? 'text-blue-600' : 'text-orange-600'}
+          onClick={() => setTxModal({
+            title: 'Reservas',
+            total: reservaLiquido,
+            color: reservaLiquido >= 0 ? 'text-blue-600' : 'text-orange-600',
+            // Líquido = utilizadas (resgates, +) − feitas (depósitos, −).
+            txs: [...reservasUtilizadas, ...reservasFeitas],
+            mixed: true,
+          })}
         />
         <KpiCard
           icon={Wallet}
@@ -474,6 +482,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           deltaAbs={mkDelta(balance, prevBalance).abs}
           deltaPct={mkDelta(balance, prevBalance).pct}
           goodWhenPositive={true}
+          onClick={() => setTxModal({
+            title: 'Saldo do Mês',
+            total: balance,
+            color: balance >= 0 ? 'text-blue-600' : 'text-orange-600',
+            // Saldo = receitas (+) − despesas (−) do período.
+            txs: [...periodTxs.filter(isIncomeTx), ...periodTxs.filter(isExpenseTx)],
+            mixed: true,
+          })}
         />
         <KpiCard
           icon={PiggyBank}
@@ -776,6 +792,16 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
               </span>
               <span className={`text-lg font-bold ${txModal.color}`}>{fmt(txModal.total)}</span>
             </div>
+            {txModal.mixed && txModal.txs.length > 0 && (() => {
+              const ent = txModal.txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+              const sai = txModal.txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+              return (
+                <div className="flex items-center gap-4 text-xs -mt-1">
+                  <span className="text-gray-500">Entradas <span className="text-blue-600 font-medium">+{fmt(ent)}</span></span>
+                  <span className="text-gray-500">Saídas <span className="text-orange-600 font-medium">−{fmt(sai)}</span></span>
+                </div>
+              )
+            })()}
             {txModal.txs.length === 0 ? (
               <p className="text-xs text-gray-500 text-center py-6">Nenhum lançamento no período.</p>
             ) : (
@@ -793,7 +819,12 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                           {` · ${accLabel(tx.accountId)}`}
                         </p>
                       </div>
-                      <span className={`text-sm font-semibold shrink-0 ${txModal.color}`}>{fmt(tx.amount)}</span>
+                      {(() => {
+                        const isInc = tx.type === 'income'
+                        const rowColor = txModal.mixed ? (isInc ? 'text-blue-600' : 'text-orange-600') : txModal.color
+                        const sign = txModal.mixed ? (isInc ? '+' : '−') : ''
+                        return <span className={`text-sm font-semibold shrink-0 ${rowColor}`}>{sign}{fmt(tx.amount)}</span>
+                      })()}
                     </div>
                   ))
                 }
