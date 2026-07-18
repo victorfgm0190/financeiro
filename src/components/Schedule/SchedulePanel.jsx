@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -15,6 +15,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
 import ProvisaoForm from './ProvisaoForm'
+import ResgateBreakdownModal from './ResgateBreakdownModal'
 import AccountOptions from '../shared/AccountOptions'
 import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
@@ -646,6 +647,8 @@ function ScheduleRow({
   const toAcc = accounts.find(a => a.id === schedule.toAccountId)
   const isDepositoReserva = schedule.transactionType === 'transfer' && !!toAcc?.isReserva
   const isResgateReserva  = schedule.transactionType === 'transfer' && !!acc?.isReserva && !isDepositoReserva
+  // Fase 4: resgate gerencial com rastreabilidade per-gasto (sourceExpenseIds) → botão "Ver gastos".
+  const hasBreakdown = schedule.tipo === 'resgate_reserva' && (schedule.sourceExpenseIds || []).length > 0
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
   const totalDone = registered.length + skipped.length
@@ -665,6 +668,7 @@ function ScheduleRow({
   const [showEfetivar, setShowEfetivar] = useState(false)
   const [showPularUnico, setShowPularUnico] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [showBreakdown, setShowBreakdown] = useState(false)
   const hasFuture = futureItems.length > 0
   const toggleExpand = () => setExpanded(v => !v)
 
@@ -672,7 +676,7 @@ function ScheduleRow({
   // lançamentos vinculados ao agendamento (scheduleId), carregados via /api/load no contexto.
   // Pareamento por data mais próxima (consome cada lançamento uma vez); sem lançamento
   // vinculado, usa a data prevista e o valor efetivo da ocorrência (override individual).
-  const { profileTransactions } = useApp()
+  const { profileTransactions, transactions } = useApp()
   const hasHistory = registered.length > 0
   const canExpand = hasFuture || hasHistory
   const paymentHistory = useMemo(() => {
@@ -785,6 +789,16 @@ function ScheduleRow({
               <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title="Fatura de referência">
                 {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}
               </span>
+            )}
+            {hasBreakdown && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setShowBreakdown(true) }}
+                title="Ver os gastos que compõem este resgate"
+                className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-500 px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-blue-500/25 transition-colors"
+              >
+                <List size={10} /> Ver gastos
+              </button>
             )}
             {isInstallment && (
               <span className="text-xs bg-gray-700/60 text-gray-400 px-1 py-0.5 rounded whitespace-nowrap">
@@ -1025,6 +1039,15 @@ function ScheduleRow({
           accounts={accounts}
           onClose={() => setShowEfetivar(false)}
           onConfirm={(payload) => { efetivarProvisao(schedule.id, payload); setShowEfetivar(false) }}
+        />
+      )}
+
+      {showBreakdown && (
+        <ResgateBreakdownModal
+          schedule={schedule}
+          transactions={transactions}
+          categories={categories}
+          onClose={() => setShowBreakdown(false)}
         />
       )}
     </>

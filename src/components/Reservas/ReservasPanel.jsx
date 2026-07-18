@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
-  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare,
+  ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare, List,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
@@ -10,6 +10,7 @@ import { fetchReserveFunctionTransactions } from '../../lib/db'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -980,6 +981,18 @@ function MovFuturosModal({ fn, data, onClose }) {
 // Modal "Origem": lançamentos que compõem o valor AUTO (Entradas ou Saídas) de uma função.
 function OrigemModal({ origem, onClose }) {
   const { fn, tipo, loading, error, items } = origem
+  const { transactions, schedules, categories } = useApp()
+  const [breakdownSched, setBreakdownSched] = useState(null)
+  // Fase 4: resolve o agendamento de resgate (com composição per-gasto) de uma linha de SAÍDA —
+  // via a transferência executada (sourceScheduleId) → schedule resgate_reserva com sourceExpenseIds.
+  // Sem link (resgate legado / saída comum) → null, e o botão não aparece (silencioso).
+  const resgateSchedOf = (t) => {
+    const tx = (transactions || []).find(x => x.id === t.id)
+    const sid = tx?.sourceScheduleId
+    if (!sid) return null
+    const s = (schedules || []).find(x => x.id === sid && x.tipo === 'resgate_reserva')
+    return s && (s.sourceExpenseIds || []).length > 0 ? s : null
+  }
   // Direção vem do endpoint (classificada pelo account_id da função): só transferências
   // entrando/saindo da conta da reserva. Despesa de cartão é 'neutro' e não aparece aqui.
   const alvo = tipo === 'entradas' ? 'entrada' : 'saida'
@@ -990,6 +1003,7 @@ function OrigemModal({ origem, onClose }) {
 
   const titulo = `${tipo === 'entradas' ? 'Entradas' : 'Saídas'} — ${fn?.name || ''}`
   return (
+    <>
     <Modal open onClose={onClose} title={titulo} size="lg">
       <div className="space-y-4">
         {loading ? (
@@ -1013,7 +1027,21 @@ function OrigemModal({ origem, onClose }) {
                 {filtered.map(t => (
                   <tr key={t.id} className="border-b border-gray-800/40">
                     <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(t.date)}</td>
-                    <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={t.description}>{t.description || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-300 max-w-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate" title={t.description}>{t.description || '—'}</span>
+                        {tipo === 'saidas' && resgateSchedOf(t) && (
+                          <button
+                            type="button"
+                            onClick={() => setBreakdownSched(resgateSchedOf(t))}
+                            title="Ver os gastos que compõem este resgate"
+                            className="inline-flex items-center gap-1 text-[11px] bg-blue-500/15 text-blue-500 px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-blue-500/25 transition-colors shrink-0"
+                          >
+                            <List size={10} /> Ver gastos
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2 text-xs text-gray-400 truncate">{contaLabel(t)}</td>
                     <td className={`px-3 py-2 text-xs text-right whitespace-nowrap font-medium ${tipo === 'entradas' ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(t.amount)}</td>
                   </tr>
@@ -1027,6 +1055,15 @@ function OrigemModal({ origem, onClose }) {
         </div>
       </div>
     </Modal>
+    {breakdownSched && (
+      <ResgateBreakdownModal
+        schedule={breakdownSched}
+        transactions={transactions}
+        categories={categories}
+        onClose={() => setBreakdownSched(null)}
+      />
+    )}
+    </>
   )
 }
 
