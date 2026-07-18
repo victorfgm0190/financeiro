@@ -4301,7 +4301,7 @@ export function AppProvider({ children }) {
   // Quando o resgate/devolução de um grupo JÁ foi executado e o lançamento muda de grupo, o
   // dinheiro já se moveu para/da reserva errada. Cria lançamento(s) de ajuste (transfer,
   // origin 'ajuste_grupo') que reconciliam os saldos, por "pernas" derivadas da transição:
-  //   • origem G  + devolução executada  → Ger. → Principal        (devolve o gerencial)
+  //   • origem G  + devolução executada  → Principal → Ger.        (repõe no gerencial)
   //   • origem NUM + resgate executado    → Principal → reserva ant. (repõe na reserva)
   //   • destino NUM + resgate já executado→ reserva nova → Principal (resgata da nova reserva)
   // (destino G: o tx_gerA_ é criado pelo motor; destino D: sem reserva). As pernas se compõem
@@ -4356,7 +4356,9 @@ export function AppProvider({ children }) {
 
       const legs = []
       if (prevKind === 'G' && subcontaGer && isPaid(devolSchedId)) {
-        legs.push({ from: subcontaGer.id, to: contaPrincipal.id }) // devolve o gerencial já executado
+        // Repõe no gerencial o valor que saiu indevidamente: a devolução (Ger→Principal) já foi
+        // executada, mas o lançamento não é mais G → devolve o dinheiro à subconta Ger.
+        legs.push({ from: contaPrincipal.id, to: subcontaGer.id })
       }
       // Reservas numeradas: se origem e destino compartilham a MESMA conta de resgate, as pernas
       // se cancelam — nada a ajustar.
