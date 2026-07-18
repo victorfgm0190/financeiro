@@ -20,6 +20,7 @@ export const ORIGIN = {
   GERENCIAL_AUTO: 'gerencial_auto',
   PAGAMENTO_DIVIDA: 'pagamento_divida',
   IMPORTACAO_DINDIN: 'importacao_dindin',
+  AJUSTE_GRUPO: 'ajuste_grupo',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).

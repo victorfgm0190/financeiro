@@ -78,7 +78,7 @@ function buildCatOpts(categories, type) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
+    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -511,6 +511,16 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               accountId: initial.accountId,
             })
           }
+
+          // — Ajuste de diferença quando o resgate/devolução do grupo já foi executado —
+          // (transição pós-pago). Cria lançamento(s) 'ajuste_grupo' que reconciliam os saldos
+          // das reservas/gerencial; no-op quando nada foi pago ainda (caminho "antes do pago").
+          criarLancamentoDiferenca(initial.id, {
+            prevGrupoId,
+            newGrupoId,
+            amount: Number(form.amount),
+            accountId: initial.accountId,
+          })
         } else if (amountChanged) {
           // — Mesmo grupo, valor alterado —
           if (wasGerencial1) {

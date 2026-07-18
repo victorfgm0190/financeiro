@@ -4297,6 +4297,95 @@ export function AppProvider({ children }) {
     })
   }, [data.gerencialGroups, data.accounts, data.settings, update])
 
+  // ── Lançamento de diferença ao mudar grupo gerencial DEPOIS do resgate pago ───
+  // Quando o resgate/devolução de um grupo JÁ foi executado e o lançamento muda de grupo, o
+  // dinheiro já se moveu para/da reserva errada. Cria lançamento(s) de ajuste (transfer,
+  // origin 'ajuste_grupo') que reconciliam os saldos, por "pernas" derivadas da transição:
+  //   • origem G  + devolução executada  → Ger. → Principal        (devolve o gerencial)
+  //   • origem NUM + resgate executado    → Principal → reserva ant. (repõe na reserva)
+  //   • destino NUM + resgate já executado→ reserva nova → Principal (resgata da nova reserva)
+  // (destino G: o tx_gerA_ é criado pelo motor; destino D: sem reserva). As pernas se compõem
+  // para produzir os resultados da matriz (ex.: CA→Imp = Principal→CA + Imp→Principal = Imp↔CA).
+  // Idempotente por (source_expense_id + grupo destino). Prev/new group vêm do TransactionForm
+  // (determinístico). Só dispara quando o schedule correspondente foi executado — assim o saldo
+  // não é revertido duas vezes (a remoção do tx_gerA_ pendente é do caminho "antes do pago").
+  const criarLancamentoDiferenca = useCallback((txId, { prevGrupoId, newGrupoId, amount, accountId }) => {
+    const V = Math.round((Number(amount) || 0) * 100) / 100
+    if (!(V > 0)) return
+    update(d => {
+      const lanc = d.transactions.find(t => t.id === txId)
+      if (!lanc) return d
+      const card = d.accounts.find(a => a.id === accountId)
+      if (!card) return d
+      const faturaMesAno = faturaMesAnoOf(card, lanc.date, lanc.faturaMonthYear) // YYYY-MM
+      if (!faturaMesAno) return d
+      const [yyyy, mm] = faturaMesAno.split('-')
+      const faturaRef = `${mm}/${yyyy}`
+      const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
+
+      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
+        || d.accounts.find(a => a.isMain && a.type !== 'credit')
+        || d.accounts.find(a => a.type === 'checking')
+      if (!contaPrincipal) return d
+      const subcontaGer = d.accounts.find(a => a.name === `Ger. ${apelido}`)
+
+      const prevGrupo = d.gerencialGroups?.find(g => g.id === prevGrupoId)
+      const newGrupo  = d.gerencialGroups?.find(g => g.id === newGrupoId)
+      const kindOf = (g) => g?.number === 1 ? 'G' : (typeof g?.number === 'number' && g.number !== 1 ? 'NUM' : 'D')
+      const prevKind = kindOf(prevGrupo)
+      const newKind  = kindOf(newGrupo)
+      const prevReserve = prevGrupo?.defaultAccountId || null
+      const newReserve  = newGrupo?.defaultAccountId || null
+
+      // Idempotência: 1 ajuste por (source_expense_id + grupo destino).
+      const jaExiste = d.transactions.some(t =>
+        t.origin === ORIGIN.AJUSTE_GRUPO && t.sourceExpenseId === txId && (t.grupoGerencial || null) === (newGrupoId || null)
+      )
+      if (jaExiste) return d
+
+      // "Resgate já pago" = agendamento registrado/pulado/confirmado OU lançamento executado
+      // (transfer com sourceScheduleId apontando p/ o slot).
+      const isPaid = (schedId) => {
+        const s = d.schedules.find(x => x.id === schedId)
+        const regPaid = !!(s && ((s.registered || []).length > 0 || (s.skipped || []).length > 0 || s.confirmado === true))
+        const txPaid = d.transactions.some(t => t.type === 'transfer' && t.sourceScheduleId === schedId)
+        return regPaid || txPaid
+      }
+      const devolSchedId = `fsch_${accountId}_${yyyy}${mm}_gerencial_devolucao`
+      const resgateSchedId = (origem) => `fsch_${accountId}_${yyyy}${mm}_resgate_reserva_${origem}`
+
+      const legs = []
+      if (prevKind === 'G' && subcontaGer && isPaid(devolSchedId)) {
+        legs.push({ from: subcontaGer.id, to: contaPrincipal.id }) // devolve o gerencial já executado
+      }
+      // Reservas numeradas: se origem e destino compartilham a MESMA conta de resgate, as pernas
+      // se cancelam — nada a ajustar.
+      const mesmaReserva = prevKind === 'NUM' && newKind === 'NUM' && prevReserve && prevReserve === newReserve
+      if (!mesmaReserva) {
+        if (prevKind === 'NUM' && prevReserve && isPaid(resgateSchedId(prevReserve))) {
+          legs.push({ from: contaPrincipal.id, to: prevReserve }) // repõe na reserva anterior
+        }
+        if (newKind === 'NUM' && newReserve && isPaid(resgateSchedId(newReserve))) {
+          legs.push({ from: newReserve, to: contaPrincipal.id }) // resgata da nova reserva já paga
+        }
+      }
+      if (legs.length === 0) return d
+
+      const desc = `Ajuste Gerencial - ${lanc.description || ''} - Fatura ${faturaRef}`.trim()
+      const hoje = new Date().toISOString().slice(0, 10)
+      const stamp = new Date().toISOString()
+      let accounts = d.accounts
+      const novos = legs.map((leg, i) => ({
+        id: `tx_ajg_${Date.now()}_${Math.random().toString(36).slice(2)}_${i}`,
+        type: 'transfer', accountId: leg.from, toAccountId: leg.to, amount: V, date: hoje,
+        description: desc, origin: ORIGIN.AJUSTE_GRUPO, sourceExpenseId: txId,
+        grupoGerencial: newGrupoId || null, faturaRef, reservaAuto: false, createdAt: stamp,
+      }))
+      for (const t of novos) accounts = applyBalanceEffect(accounts, t, 1)
+      return { ...d, accounts, transactions: [...d.transactions, ...novos] }
+    })
+  }, [update])
+
   // ── Propaga um novo valor para as parcelas seguintes (X+1..N) de uma cadeia X/N ──
   // Atualiza cada lançamento da cadeia e ajusta os reflexos gerenciais:
   //   • Grupo G (1): parcelas futuras → ajusta os agendamentos (provisão/resgate/pagamento);
@@ -4816,6 +4905,7 @@ export function AppProvider({ children }) {
       reconciliarGerencial,
       revisarMovimentosFatura,
       ajustarParcelasGrupoGerencial,
+      criarLancamentoDiferenca,
       propagarValorParcelas,
       getProvisoesPendentes,
       executarProvisoesGerenciais,

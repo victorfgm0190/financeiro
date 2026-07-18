@@ -874,10 +874,16 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         const desc = (tx.description || '').toLowerCase()
         return desc.includes('reserva gerencial') && (tx.description || '').includes(ref)
       }
-      let mesAnt = 0, esteMes = 0, resgateExec = 0, resgateAgend = 0
+      let mesAnt = 0, esteMes = 0, resgateExec = 0, resgateAgend = 0, ajuste = 0
       for (const tx of transactions) {
         if (tx.accountId !== account.id && tx.toAccountId !== account.id) continue
         const d = txDelta(tx, account.id)
+        // Lançamentos de ajuste de grupo (transição pós-resgate) desta fatura: somados à parte,
+        // fora de entradas/resgate. Sinal = delta na conta (saída negativa, entrada positiva).
+        if (tx.origin === ORIGIN.AJUSTE_GRUPO) {
+          if (tx.faturaRef === ref) ajuste = r2(ajuste + d)
+          continue
+        }
         if (d > 0) {
           // Fatura da entrada: fatura_ref gravado, ou derivado da despesa de origem, ou (legado
           // sem nenhum dos dois) o fallback pela descrição. Depois divide pela FRONTEIRA (dia 1).
@@ -899,12 +905,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       }
       const entradas = r2(mesAnt + esteMes)
       const resgate = r2(resgateExec + resgateAgend)
-      return { ref, mesAnt, esteMes, entradas, resgateExec, resgateAgend, resgate, liquido: r2(entradas - resgate) }
+      return { ref, mesAnt, esteMes, entradas, resgateExec, resgateAgend, resgate, ajuste, liquido: r2(entradas - resgate) }
     }
 
     const anteriorResumo = resumoFatura(refAnterior, mesAnoAnterior)
     return {
-      anterior: (anteriorResumo.entradas > 0 || anteriorResumo.resgate > 0) ? anteriorResumo : null,
+      anterior: (anteriorResumo.entradas > 0 || anteriorResumo.resgate > 0 || anteriorResumo.ajuste !== 0) ? anteriorResumo : null,
       atual: resumoFatura(refAtual, mesAnoAtual),
     }
   }, [transactions, schedules, account.id, account.balance, isGerencial, settings, year, month])
@@ -1041,6 +1047,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                       <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-blue-600" />
                       <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-orange-600" />
                       <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-yellow-400" />
+                      {f.ajuste !== 0 && (
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-500">Ajuste</span>
+                          <span className={`font-semibold flex items-center gap-1 ${f.ajuste < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                            {f.ajuste < 0
+                              ? <ArrowUpCircle size={11} className="shrink-0" />
+                              : <ArrowDownCircle size={11} className="shrink-0" />}
+                            {fmt(f.ajuste)}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
