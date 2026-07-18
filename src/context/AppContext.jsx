@@ -4413,12 +4413,6 @@ export function AppProvider({ children }) {
       const prevReserve = prevGrupo?.defaultAccountId || null
       const newReserve  = newGrupo?.defaultAccountId || null
 
-      // Idempotência: 1 ajuste por (source_expense_id + grupo destino).
-      const jaExiste = d.transactions.some(t =>
-        t.origin === ORIGIN.AJUSTE_GRUPO && t.sourceExpenseId === txId && (t.grupoGerencial || null) === (newGrupoId || null)
-      )
-      if (jaExiste) return d
-
       // "Resgate já pago" = agendamento registrado/pulado/confirmado OU lançamento executado
       // (transfer com sourceScheduleId apontando p/ o slot).
       // Devolução (Grupo G) é slot ÚNICO por fatura (sem delta per-gasto) → detecção por slot.
@@ -4447,20 +4441,51 @@ export function AppProvider({ children }) {
           legs.push({ from: newReserve, to: contaPrincipal.id }) // resgata da nova reserva já paga
         }
       }
-      if (legs.length === 0) return d
+
+      // Ajustes com id DETERMINÍSTICO por (gasto + origem + destino) → reconciliação idempotente e
+      // limpeza dos órfãos ao trocar de grupo de novo (substitui o id aleatório + guard grosseiro
+      // por grupo-destino anteriores). Regras ao reconciliar contra os ajustes JÁ existentes deste
+      // gasto (de transições passadas):
+      //   • perna OPOSTA já existe (gasto voltou p/ a reserva antes reposta) → as duas se cancelam:
+      //     remove o oposto e NÃO cria esta (mesmo saldo líquido, sem lançamentos redundantes).
+      //   • perna de MESMO sentido já existe → substitui (revert + recria, atualiza valor).
+      //   • ajustes de OUTRAS reservas (não casam com nenhuma perna atual) → preservados: são
+      //     neutralizações válidas de resgates executados que ainda contêm este gasto.
+      const ajgId = (from, to) => `tx_ajg_${txId}_${from}_${to}`
+      let accounts = d.accounts
+      let transactions = d.transactions
+      const existentes = new Map(
+        transactions.filter(t => t.origin === ORIGIN.AJUSTE_GRUPO && t.sourceExpenseId === txId).map(t => [t.id, t])
+      )
+      const removeIds = new Set()
+      const criarLegs = []
+      for (const leg of legs) {
+        if (existentes.has(ajgId(leg.to, leg.from))) { removeIds.add(ajgId(leg.to, leg.from)); continue }
+        if (existentes.has(ajgId(leg.from, leg.to))) removeIds.add(ajgId(leg.from, leg.to))
+        criarLegs.push(leg)
+      }
+      // Reverte o saldo dos ajustes removidos e os retira das transações.
+      for (const id of removeIds) {
+        const t = existentes.get(id)
+        if (t) accounts = applyBalanceEffect(accounts, t, -1)
+      }
+      if (removeIds.size) transactions = transactions.filter(t => !removeIds.has(t.id))
+
+      if (criarLegs.length === 0) {
+        return removeIds.size ? { ...d, accounts, transactions } : d // persiste a limpeza, se houve
+      }
 
       const desc = `Ajuste Gerencial - ${lanc.description || ''} - Fatura ${faturaRef}`.trim()
       const hoje = new Date().toISOString().slice(0, 10)
       const stamp = new Date().toISOString()
-      let accounts = d.accounts
-      const novos = legs.map((leg, i) => ({
-        id: `tx_ajg_${Date.now()}_${Math.random().toString(36).slice(2)}_${i}`,
+      const novos = criarLegs.map(leg => ({
+        id: ajgId(leg.from, leg.to),
         type: 'transfer', accountId: leg.from, toAccountId: leg.to, amount: V, date: hoje,
         description: desc, origin: ORIGIN.AJUSTE_GRUPO, sourceExpenseId: txId,
         grupoGerencial: newGrupoId || null, faturaRef, reservaAuto: false, createdAt: stamp,
       }))
       for (const t of novos) accounts = applyBalanceEffect(accounts, t, 1)
-      return { ...d, accounts, transactions: [...d.transactions, ...novos] }
+      return { ...d, accounts, transactions: [...transactions, ...novos] }
     })
   }, [update])
 
