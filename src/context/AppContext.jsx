@@ -4431,10 +4431,18 @@ export function AppProvider({ children }) {
       // se cancelam — nada a ajustar.
       const mesmaReserva = prevKind === 'NUM' && newKind === 'NUM' && prevReserve && prevReserve === newReserve
       if (!mesmaReserva) {
-        // Origem NUM: detecção PER-GASTO (Fase 3) — o próprio gasto está no source_expense_ids do
-        // resgate da reserva anterior. Mais preciso que o slot: um base já pago não dispara a
-        // reposição se ESTE gasto ainda está num delta (_p{n}) pendente.
-        if (prevKind === 'NUM' && prevReserve && isResgatePagoParaGasto(txId, d.schedules, d.transactions)) {
+        // Origem NUM: detecção PER-GASTO (Fase 3) ESPECÍFICA da reserva anterior — o gasto está no
+        // source_expense_ids de um resgate DA prevReserve que já foi executado. Não usar
+        // isResgatePagoParaGasto(txId) global aqui: ele dispara se QUALQUER resgate pago contém o
+        // gasto (mesmo de outra reserva), gerando uma perna phantom que repõe numa reserva que nunca
+        // resgatou este gasto (ex.: CA paga disparava a perna da Imp ao voltar Imp→CA).
+        const origemResgatouEsteGasto = d.schedules.some(s =>
+          s.tipo === 'resgate_reserva' &&
+          s.accountId === prevReserve &&
+          (s.sourceExpenseIds || []).includes(txId) &&
+          isResgatePago(s.id, d.schedules, d.transactions)
+        )
+        if (prevKind === 'NUM' && prevReserve && origemResgatouEsteGasto) {
           legs.push({ from: contaPrincipal.id, to: prevReserve }) // repõe na reserva anterior
         }
         if (newKind === 'NUM' && newReserve && isResgatePago(resgateSchedId(newReserve), d.schedules, d.transactions)) {
