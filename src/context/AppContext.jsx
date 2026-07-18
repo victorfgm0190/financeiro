@@ -152,6 +152,18 @@ export const isResgatePago = (schedId, schedules, transactions) => {
   return regPaid || txPaid
 }
 
+// Fase 2 (base da detecção per-gasto — ainda NÃO ligada na Fase 2; usada na Fase 3): "este GASTO
+// específico já teve seu resgate executado?". Complementa isResgatePago (que checa por id/slot):
+// procura um resgate_reserva EXECUTADO cujo source_expense_ids contém o id do gasto.
+export const isResgatePagoParaGasto = (txId, schedules, transactions) => {
+  if (!txId) return false
+  return (schedules || []).some(s =>
+    s.tipo === 'resgate_reserva' &&
+    (s.sourceExpenseIds || []).includes(txId) &&
+    isResgatePago(s.id, schedules, transactions)
+  )
+}
+
 // Avança uma data (YYYY-MM-DD) por UM intervalo da frequência informada (ex.: semanal → +7d).
 // Usado ao efetivar uma provisão recorrente: a série reinicia em data_real + 1 intervalo.
 function advanceByFrequency(dateStr, frequency) {
@@ -1597,25 +1609,32 @@ export function AppProvider({ children }) {
       )
       const isAutomacao = (t) => isAutomacaoOrigin(t)
       const somaPorOrigem = new Map()
+      // Fase 2: ids dos gastos que compõem cada origem (rastreabilidade per-gasto → source_expense_ids).
+      const sourceIdsPorOrigem = new Map()
       for (const t of d.transactions) {
         if (t.type !== 'expense' || t.accountType !== 'credit' || t.accountId !== card.id || isAutomacao(t)) continue
         if (faturaMesAnoOf(card, t.date, t.faturaMonthYear) !== faturaMesAno) continue
         const origem = origemById.get(t.grupoGerencial)
         if (!origem) continue
         somaPorOrigem.set(origem, rb((somaPorOrigem.get(origem) || 0) + (Number(t.amount) || 0)))
+        if (!sourceIdsPorOrigem.has(origem)) sourceIdsPorOrigem.set(origem, [])
+        sourceIdsPorOrigem.get(origem).push(t.id)
       }
 
       if (isNumbered && grupo.defaultAccountId) {
         const origem = grupo.defaultAccountId
         const soma = somaPorOrigem.get(origem) || 0
+        const idsOrigem = sourceIdsPorOrigem.get(origem) || []
         const schedId = `fsch_${card.id}_${yyyy}${mm}_resgate_reserva_${origem}`
         const existing = schedules.find(s =>
           s.id === schedId ||
           (s.tipo === 'resgate_reserva' && s.cardId === card.id && s.faturaMesAno === faturaMesAno && s.accountId === origem)
         )
+        // Fase 2: não duplicar se ALGUM resgate_reserva já rastreia este gasto (source_expense_ids).
+        const jaRastreado = schedules.some(s => s.tipo === 'resgate_reserva' && (s.sourceExpenseIds || []).includes(lancId))
         // "já pago": schedule presente (qualquer estado) OU resgate já executado (transferência
         // com sourceScheduleId apontando p/ este slot, caso o schedule tenha sido removido).
-        if (!existing && !isResgatePago(schedId, schedules, transactions) && soma > 0) {
+        if (!existing && !jaRastreado && !isResgatePago(schedId, schedules, transactions) && soma > 0) {
           const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
           schedules = [...schedules, {
             id: schedId, tipo: 'resgate_reserva',
@@ -1625,8 +1644,16 @@ export function AppProvider({ children }) {
             reservaFuncaoId: lanc.reservaFuncaoId || null,
             frequency: 'once', occurrenceType: 'installment', installments: 1, autoRegister: false,
             registered: [], skipped: [], cardId: card.id, faturaMesAno, faturaRef,
+            sourceExpenseIds: idsOrigem, // Fase 2
             overrides: { _gerencial: { faturaRef, cardId: card.id, checkingAccountId: contaPrincipal.id } },
           }]
+        } else if (existing && !isResgatePago(existing.id, schedules, transactions)) {
+          // Fase 2: resgate pendente já existe → enriquece source_expense_ids com os ids atuais da
+          // origem (sem tocar em amount/saldo — a agregação de valor segue no reconcileFaturaState).
+          const merged = [...new Set([...(existing.sourceExpenseIds || []), ...idsOrigem])]
+          if (merged.length !== (existing.sourceExpenseIds || []).length) {
+            schedules = schedules.map(s => s.id === existing.id ? { ...s, sourceExpenseIds: merged } : s)
+          }
         }
       }
 
@@ -3476,6 +3503,7 @@ export function AppProvider({ children }) {
           transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
           startDate: devolDate, amount: totalG,
           description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
+          sourceExpenseIds: sourceTxIdsG, // Fase 2
           overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
         })
       }
@@ -3492,6 +3520,7 @@ export function AppProvider({ children }) {
           startDate: dueDate, amount: soma,
           description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
           reservaFuncaoId,
+          sourceExpenseIds: sourceTxIdsByOrigem.get(origem) || [], // Fase 2: gastos que compõem o resgate
           overrides: { _gerencial: meta, _sourceTxIds: sourceTxIdsByOrigem.get(origem) || [] },
         })
       }
@@ -3503,6 +3532,7 @@ export function AppProvider({ children }) {
           transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
           startDate: dueDate, amount: totalPagamento,
           description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+          sourceExpenseIds: sourceTxIdsAll, // Fase 2
           overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
         })
       }
@@ -3533,6 +3563,7 @@ export function AppProvider({ children }) {
       }
 
       const desiredSlots = new Set(desired.map(x => x.slot))
+      const desiredBySlot = new Map(desired.map(x => [x.slot, x])) // Fase 2: p/ atualizar source_expense_ids
       const registeredSlots = new Set()
       const schedules = []
       for (const s of d.schedules) {
@@ -3560,7 +3591,10 @@ export function AppProvider({ children }) {
         if (faturaCicloNoPassado) {
           const sl = slotOf(s)
           if (sl && desiredSlots.has(sl)) {
-            schedules.push(s)
+            // Fase 2: ao preservar, atualiza source_expense_ids com os ids atuais do `desired`
+            // (mantém a rastreabilidade correta mesmo sem recriar). Amount preservado (inalterado).
+            const dsh = desiredBySlot.get(sl)
+            schedules.push(dsh ? { ...s, sourceExpenseIds: dsh.sourceExpenseIds || s.sourceExpenseIds || [] } : s)
             registeredSlots.add(sl) // impede recriação duplicada do mesmo slot
           }
         }
