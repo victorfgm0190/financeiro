@@ -4427,6 +4427,14 @@ export function AppProvider({ children }) {
         // executada, mas o lançamento não é mais G → devolve o dinheiro à subconta Ger.
         legs.push({ from: contaPrincipal.id, to: subcontaGer.id })
       }
+      // Destino G (entrando no Grupo G) com a devolução já executada → "resgata do gerencial":
+      // perna OPOSTA à neutralização de saída ({Principal→subGer}). Simétrica à perna de destino NUM
+      // ("resgata da nova reserva já paga"). No round-trip G→X→G o cancelamento (par oposto) a remove,
+      // restaurando os saldos; numa entrada NOVA reconcilia o gerencial já devolvido (contrapondo a
+      // etapa A que o motor materializa ao reentrar no G).
+      if (newKind === 'G' && subcontaGer && isResgatePago(devolSchedId, d.schedules, d.transactions)) {
+        legs.push({ from: subcontaGer.id, to: contaPrincipal.id })
+      }
       // Reservas numeradas: se origem e destino compartilham a MESMA conta de resgate, as pernas
       // se cancelam — nada a ajustar.
       const mesmaReserva = prevKind === 'NUM' && newKind === 'NUM' && prevReserve && prevReserve === newReserve
