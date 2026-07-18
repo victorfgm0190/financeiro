@@ -3532,6 +3532,7 @@ export function AppProvider({ children }) {
         return null
       }
 
+      const desiredSlots = new Set(desired.map(x => x.slot))
       const registeredSlots = new Set()
       const schedules = []
       for (const s of d.schedules) {
@@ -3548,12 +3549,25 @@ export function AppProvider({ children }) {
           schedules.push(s)
           const sl = slotOf(s)
           if (sl) registeredSlots.add(sl)
+          continue
         }
-        // pendente → descartado; será recriado a partir de `desired`
+        // Pendente. Em fatura de ciclo PASSADO o motor NÃO recria (guard `faturaCicloNoPassado`
+        // abaixo). Para não PERDER um agendamento gerido ainda necessário, PRESERVA o pendente cujo
+        // slot continua em `desired` (evita o descarte-sem-recriação que forçava re-executar
+        // applyEnsureGerencial — os band-aids 0f26994/16d491f). Pendente ÓRFÃO (slot fora de
+        // `desired`, ex.: grupo reclassificado p/ D) segue descartado. Fatura corrente/futura:
+        // pendente descartado → recriado a partir de `desired` (abaixo) para atualizar valores.
+        if (faturaCicloNoPassado) {
+          const sl = slotOf(s)
+          if (sl && desiredSlots.has(sl)) {
+            schedules.push(s)
+            registeredSlots.add(sl) // impede recriação duplicada do mesmo slot
+          }
+        }
       }
       for (const dsh of desired) {
-        if (registeredSlots.has(dsh.slot)) continue // já há um executado nesse slot
-        if (faturaCicloNoPassado) continue // ciclo encerrado: não materializa pendência retroativa
+        if (registeredSlots.has(dsh.slot)) continue // já há um executado/preservado nesse slot
+        if (faturaCicloNoPassado) continue // ciclo encerrado: não materializa pendência retroativa NOVA
         const { slot, ...rest } = dsh
         schedules.push({ ...baseSch, ...rest })
       }
