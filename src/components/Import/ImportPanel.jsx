@@ -1037,7 +1037,7 @@ function InstallmentControl({ installment, description, onChange }) {
 
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
-    categories, classificationRules, gerencialGroups, processarLancamentoGerencial,
+    categories, classificationRules, gerencialGroups,
     addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, ensureGerencialState, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     schedules,
@@ -1675,10 +1675,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const parentRow = resolvedRows.find(r => r._id === fp.parentId)
         if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
         if (fp.grupoGerencial) {
-          processarLancamentoGerencial(
-            { accountId: selectedAccount, amount: fp.amount, date: fpDate, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
-            fp.grupoGerencial, null, { immediate: false }
-          )
           registrarReservaFuncao(fp.faturaMonthYear, fp.grupoGerencial, fp._reservaFuncaoId, fp.amount)
         }
       })
@@ -1799,14 +1795,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
       }
       if (row.grupoGerencial) {
-        // Item 8: a etapa A (transferência imediata do Grupo G) não é mais criada aqui —
-        // o motor (reconcileFaturaState) a deriva no recálculo abaixo, com id determinístico
-        // (tx_gerA_<id>) e só para a fatura do ciclo atual.
-        processarLancamentoGerencial(
-          { accountId: selectedAccount, amount: row.amount, date: saveDate, description: row.description, faturaMonthYear: row.faturaMonthYear },
-          row.grupoGerencial, null, { immediate: true }
-        )
-        // Vínculo de função de reserva → agendamento de resgate desta fatura.
+        // Os agendamentos gerenciais (etapa A do G, resgate dos numerados) são derivados pelo
+        // motor (reconcileFaturaState) no recálculo abaixo. Aqui só vinculamos a função de
+        // reserva → agendamento de resgate desta fatura.
         registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       }
 
@@ -1841,12 +1832,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const parentRow = resolvedRows.find(r => r._id === fp.parentId)
       if (fId && parentRow?._rateios?.length > 0) saveRateiosFor(fId, parentRow._rateios)
       if (fp.grupoGerencial) {
-        // Futura: só os agendamentos (resgate + pagamento) da própria fatura, sem
-        // transferência imediata — esta ocorre quando a parcela cair no mês dela.
-        processarLancamentoGerencial(
-          { accountId: selectedAccount, amount: fp.amount, date: fpDate, description: fp.description, faturaMonthYear: fp.faturaMonthYear },
-          fp.grupoGerencial, null, { immediate: false }
-        )
+        // Futura: os agendamentos da própria fatura são derivados pelo motor no recálculo.
         // Função de reserva replicada da parcela base → agendamento de resgate da fatura da parcela.
         registrarReservaFuncao(fp.faturaMonthYear, fp.grupoGerencial, fp._reservaFuncaoId, fp.amount)
       }
@@ -2209,12 +2195,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       faturaRef: faturaRefFromMY(faturaMonthYear),
       _fromImport: true,
     })
-    if (isExpense && item.grupoGerencial) {
-      processarLancamentoGerencial(
-        { accountId: selectedAccount, amount: item.amount, date: saveDate, description: item.description, faturaMonthYear },
-        item.grupoGerencial, null, { immediate: true }
-      )
-    }
     return txId
   }
 
@@ -2299,10 +2279,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         })
         if (fId) txIds.push(fId)
         if (item.grupoGerencial) {
-          processarLancamentoGerencial(
-            { accountId: selectedAccount, amount: item.amount, date: futDate, description: futDesc, faturaMonthYear: futFatura },
-            item.grupoGerencial, null, { immediate: false }
-          )
           registrarFunc(futFatura, item.grupoGerencial, item._reservaFuncaoId, item.amount)
         }
         futurasFaturas.add(futFatura)

@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
-import { useApp } from '../../context/AppContext'
+import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -78,7 +78,7 @@ function buildCatOpts(categories, type) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, processarLancamentoGerencial, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
+    gerencialGroups, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -473,8 +473,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           if (wasNumbered && initial.gerencialScheduleId) {
             const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
             if (oldSch) {
-              const done = (oldSch.registered || []).includes(oldSch.startDate)
-                        || (oldSch.skipped   || []).includes(oldSch.startDate)
+              const done = isResgatePago(oldSch.id, schedules, transactions)
               if (!done) {
                 const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - initial.amount) * 100) / 100)
                 if (newAmt <= 0) deleteSchedule(oldSch.id)
@@ -485,21 +484,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           }
 
           // — Aplica automação do novo grupo —
-          if (isGerencial1) {
-            const contaId = gerencialContaId
-            if (contaId) localStorage.setItem(GERENCIAL_CONTA_KEY, contaId)
-            processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
-              newGrupoId, contaId || null
-            )
-          }
-          if (isNumbered) {
-            const res = processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
-              newGrupoId, null
-            )
-            if (res.gerencialScheduleId) updateTransaction(initial.id, { gerencialScheduleId: res.gerencialScheduleId })
-            if (res.scheduleDate) onToast?.(`Agendamento de resgate criado para ${fmtDate(res.scheduleDate)}.`)
+          // Os agendamentos (etapa A do G, resgate dos numerados) são gerados pelo motor
+          // (recalcularAgendamentosFatura, disparado por updateTransaction). Aqui só persistimos
+          // a preferência de conta gerencial do Grupo G.
+          if (isGerencial1 && gerencialContaId) {
+            localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
           }
 
           // — Cascata parcelas 2..N —
@@ -525,16 +514,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           // — Mesmo grupo, valor alterado —
           if (wasGerencial1) {
             reverseGerencialCascadeOnly(initial)
-            processarLancamentoGerencial(
-              { accountId: initial.accountId, amount: Number(form.amount), date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
-              newGrupoId, gerencialContaId || null
-            )
           }
           if (wasNumbered && initial.gerencialScheduleId) {
             const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
             if (oldSch) {
-              const done = (oldSch.registered || []).includes(oldSch.startDate)
-                        || (oldSch.skipped   || []).includes(oldSch.startDate)
+              const done = isResgatePago(oldSch.id, schedules, transactions)
               if (!done) {
                 const delta  = Number(form.amount) - initial.amount
                 const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) + delta) * 100) / 100)
@@ -681,29 +665,15 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
     if (showGerencial && form.grupoGerencial) {
       const g = gerencialGroups.find(g => g.id === form.grupoGerencial)
-      const contaId = g?.number === 1 ? gerencialContaId : null
       if (g?.number === 1 && gerencialContaId) {
         localStorage.setItem(GERENCIAL_CONTA_KEY, gerencialContaId)
-      }
-      const resultado = processarLancamentoGerencial(
-        { accountId: form.accountId, amount: installmentAmount, date: form.date, description: form.description, faturaMonthYear: txData.faturaMonthYear || null },
-        form.grupoGerencial,
-        contaId,
-      )
-      if (resultado.gerencialScheduleId) {
-        updateTransaction(txId, { gerencialScheduleId: resultado.gerencialScheduleId })
-      }
-      if (resultado.scheduleDate) {
-        onToast?.(`Agendamento de resgate criado para ${fmtDate(resultado.scheduleDate)}.`)
       }
       // (As parcelas futuras 2..N já foram criadas logo após addTransaction, independentemente
       // do grupo gerencial — ver criarParcelasGerencial acima.)
 
-      // Recálculo EXPLÍCITO da fatura da parcela base (Grupo G ou numerado). Roda DEPOIS de
-      // processarLancamentoGerencial — que já garantiu a subconta "Ger. {apelido}" — então o
-      // gerencial_devolucao/resgate é gerado de forma confiável, sem depender do timing do
-      // gatilho implícito (antes, a subconta podia não existir quando o gatilho rodava, e o
-      // agendamento de devolução não era gerado para cartões usados pela 1ª vez no Grupo G).
+      // Recálculo EXPLÍCITO da fatura da parcela base (Grupo G ou numerado). O motor
+      // (reconcileFaturaState) garante a subconta "Ger. {apelido}" e gera o
+      // gerencial_devolucao/resgate de forma confiável, sem depender do timing do gatilho implícito.
       const ehGerido = g && (g.number === 1 || (typeof g.number === 'number' && g.number !== 1))
       if (ehGerido) {
         const card = accounts.find(a => a.id === form.accountId)
@@ -762,12 +732,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         origin: ORIGIN.PARCELA_GERADA,
         _fromImport: true, // pula recálculo por-tx; recalculamos a fatura abaixo, uma vez
       })
-      if (grupo) {
-        processarLancamentoGerencial(
-          { accountId: initial.accountId, amount: p.amount, date, description: p.description, faturaMonthYear: p.faturaMonthYear },
-          grupo, null, { immediate: false }
-        )
-      }
       faturas.add(p.faturaMonthYear)
     }
     for (const fmy of faturas) {

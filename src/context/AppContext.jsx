@@ -135,6 +135,23 @@ function computePendingUpTo(schedule, upToDateStr) {
   return pending
 }
 
+// Detecção ÚNICA de "resgate/devolução já pago" (unifica as variantes que existiam espalhadas).
+// Pago = agendamento registrado/pulado/confirmado OU lançamento executado (transfer com
+// source_schedule_id apontando p/ o slot, caso o agendamento tenha sido removido). Função pura.
+export const isResgatePago = (schedId, schedules, transactions) => {
+  if (!schedId) return false
+  const s = (schedules || []).find(x => x.id === schedId)
+  const regPaid = !!(s && (
+    (s.registered || []).length > 0 ||
+    (s.skipped || []).length > 0 ||
+    s.confirmado === true
+  ))
+  const txPaid = (transactions || []).some(
+    t => t.type === 'transfer' && t.sourceScheduleId === schedId
+  )
+  return regPaid || txPaid
+}
+
 // Avança uma data (YYYY-MM-DD) por UM intervalo da frequência informada (ex.: semanal → +7d).
 // Usado ao efetivar uma provisão recorrente: a série reinicia em data_real + 1 intervalo.
 function advanceByFrequency(dateStr, frequency) {
@@ -1587,7 +1604,6 @@ export function AppProvider({ children }) {
         if (!origem) continue
         somaPorOrigem.set(origem, rb((somaPorOrigem.get(origem) || 0) + (Number(t.amount) || 0)))
       }
-      const isPago = (s) => (s.registered || []).length > 0 || (s.skipped || []).length > 0 || s.confirmado === true
 
       if (isNumbered && grupo.defaultAccountId) {
         const origem = grupo.defaultAccountId
@@ -1599,8 +1615,7 @@ export function AppProvider({ children }) {
         )
         // "já pago": schedule presente (qualquer estado) OU resgate já executado (transferência
         // com sourceScheduleId apontando p/ este slot, caso o schedule tenha sido removido).
-        const jaPago = transactions.some(t => t.type === 'transfer' && t.sourceScheduleId === schedId)
-        if (!existing && !jaPago && soma > 0) {
+        if (!existing && !isResgatePago(schedId, schedules, transactions) && soma > 0) {
           const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
           schedules = [...schedules, {
             id: schedId, tipo: 'resgate_reserva',
@@ -1620,7 +1635,7 @@ export function AppProvider({ children }) {
       const removedResgateIds = []
       schedules = schedules.filter(s => {
         if (s.tipo !== 'resgate_reserva' || s.cardId !== card.id || s.faturaMesAno !== faturaMesAno) return true
-        if (isPago(s)) return true
+        if (isResgatePago(s.id, schedules, transactions)) return true
         if ((somaPorOrigem.get(s.accountId) || 0) > 0) return true
         removedResgateIds.push(s.id)
         return false
@@ -3528,7 +3543,7 @@ export function AppProvider({ children }) {
         // descartava o agendamento pago e recriava o slot como pendente — resgate fantasma.)
         // NB: este ramo só roda para isManaged; agendamentos comuns saíram no `continue` acima e
         // seguem com o guard por data exata em getNextOccurrences.
-        const done = (s.registered || []).length > 0 || (s.skipped || []).length > 0
+        const done = isResgatePago(s.id, d.schedules, d.transactions)
         if (done) {
           schedules.push(s)
           const sl = slotOf(s)
@@ -4052,40 +4067,6 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
-  // ── Gerencial Processing ──────────────────────────────────────────────────────
-  // Item 8: a etapa A (transferência imediata do Grupo G) deixou de ser criada aqui — agora
-  // é derivada pelo motor (reconcileFaturaState). Os antigos parâmetros contaDestinoId/options
-  // (immediate) foram removidos da assinatura; chamadas que ainda os passam posicionalmente são
-  // inofensivas (argumentos extras são ignorados). A conta-origem do gerencial passa a ser a
-  // contaPrincipal do motor (mesma usada por devolução/pagamento), garantindo consistência.
-  const processarLancamentoGerencial = useCallback((lancamento, grupoId) => {
-    const grupo = data.gerencialGroups?.find(g => g.id === grupoId)
-    if (!grupo) return { needsResgate: false }
-    if (grupo.number === 'D') return { needsResgate: false }
-
-    if (grupo.number === 1) {
-      // Item 8 (Opção Y): a etapa A — transferência imediata Conta Principal → Ger. subconta —
-      // NÃO é mais criada aqui. Ela passa a ser DERIVADA das despesas G da fatura e
-      // materializada pelo motor (reconcileFaturaState), que roda logo após via recalc.
-      // O crédito na subconta também é responsabilidade do motor. Aqui só devolvemos a
-      // fatura_ref para os agendamentos.
-      const cardAccount = data.accounts.find(a => a.id === lancamento.accountId)
-      const closingDay = cardAccount?.closingDay || 14
-      let faturaRef
-      if (lancamento.faturaMonthYear) {
-        const [y, m] = lancamento.faturaMonthYear.split('-')
-        faturaRef = `${m}/${y}`
-      } else {
-        faturaRef = computeFaturaRef(new Date(lancamento.date + 'T00:00:00'), closingDay)
-      }
-      return { needsResgate: false, faturaRef, etapaATxId: null }
-    }
-
-    // Grupos numerados (2,3,…) e Grupo D: sem transferência imediata. Os agendamentos
-    // (resgate de reserva e pagamento da fatura) são gerados por recalcularAgendamentosFatura.
-    return { needsResgate: false }
-  }, [data.gerencialGroups, data.accounts])
-
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
   // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na
   // sua fatura, e recalcula os agendamentos de cada fatura afetada. Cada parcela vira um gasto
@@ -4345,17 +4326,11 @@ export function AppProvider({ children }) {
 
       // "Resgate já pago" = agendamento registrado/pulado/confirmado OU lançamento executado
       // (transfer com sourceScheduleId apontando p/ o slot).
-      const isPaid = (schedId) => {
-        const s = d.schedules.find(x => x.id === schedId)
-        const regPaid = !!(s && ((s.registered || []).length > 0 || (s.skipped || []).length > 0 || s.confirmado === true))
-        const txPaid = d.transactions.some(t => t.type === 'transfer' && t.sourceScheduleId === schedId)
-        return regPaid || txPaid
-      }
       const devolSchedId = `fsch_${accountId}_${yyyy}${mm}_gerencial_devolucao`
       const resgateSchedId = (origem) => `fsch_${accountId}_${yyyy}${mm}_resgate_reserva_${origem}`
 
       const legs = []
-      if (prevKind === 'G' && subcontaGer && isPaid(devolSchedId)) {
+      if (prevKind === 'G' && subcontaGer && isResgatePago(devolSchedId, d.schedules, d.transactions)) {
         // Repõe no gerencial o valor que saiu indevidamente: a devolução (Ger→Principal) já foi
         // executada, mas o lançamento não é mais G → devolve o dinheiro à subconta Ger.
         legs.push({ from: contaPrincipal.id, to: subcontaGer.id })
@@ -4364,10 +4339,10 @@ export function AppProvider({ children }) {
       // se cancelam — nada a ajustar.
       const mesmaReserva = prevKind === 'NUM' && newKind === 'NUM' && prevReserve && prevReserve === newReserve
       if (!mesmaReserva) {
-        if (prevKind === 'NUM' && prevReserve && isPaid(resgateSchedId(prevReserve))) {
+        if (prevKind === 'NUM' && prevReserve && isResgatePago(resgateSchedId(prevReserve), d.schedules, d.transactions)) {
           legs.push({ from: contaPrincipal.id, to: prevReserve }) // repõe na reserva anterior
         }
-        if (newKind === 'NUM' && newReserve && isPaid(resgateSchedId(newReserve))) {
+        if (newKind === 'NUM' && newReserve && isResgatePago(resgateSchedId(newReserve), d.schedules, d.transactions)) {
           legs.push({ from: newReserve, to: contaPrincipal.id }) // resgata da nova reserva já paga
         }
       }
@@ -4900,7 +4875,6 @@ export function AppProvider({ children }) {
       addGerencialRule, updateGerencialRule, deleteGerencialRule, moveGerencialRule, classifyGerencialByRules,
       addPayee, addCostCenter,
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
-      processarLancamentoGerencial,
       criarParcelasGerencial,
       recalcularAgendamentosFatura,
       isFaturaFechada, fecharFatura, abrirFatura,
