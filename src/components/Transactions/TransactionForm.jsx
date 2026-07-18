@@ -547,11 +547,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           if (fmy) {
             const [y, m] = fmy.split('-')
             recalcularAgendamentosFatura(initial.accountId, y, m)
-            // O motor (reconcileFaturaState) descarta pendências de fatura de ciclo PASSADO e não
-            // as recria (guard faturaCicloNoPassado) — apagando o resgate que o applyEnsureGerencial
-            // criou p/ a transição pós-pago. Re-executamos o applyEnsureGerencial DEPOIS do recálculo
-            // para que ele volte a ser a autoridade final e (re)materialize o resgate em faturas
-            // passadas. Idempotente em faturas correntes (o resgate já existe → não duplica).
+            // O motor per-gasto já (re)materializa os resgates em qualquer ciclo, mas mantém o guard
+            // faturaCicloNoPassado na ETAPA A (Grupo G): em fatura passada ele NÃO cria/atualiza a
+            // transferência imediata Principal→Ger. Por isso re-executamos o applyEnsureGerencial, que
+            // garante a etapa A também no ciclo passado. Idempotente no ciclo atual (etapa A já existe).
             ensureGerencialState(initial.id)
           }
         }
@@ -692,8 +691,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         if (fmy) {
           const [y, m] = fmy.split('-')
           recalcularAgendamentosFatura(form.accountId, y, m)
-          // Motor descarta pendências de fatura passada (faturaCicloNoPassado) — re-executa o
-          // applyEnsureGerencial p/ (re)materializar o resgate deste lançamento novo. Idempotente.
+          // O motor mantém o guard faturaCicloNoPassado na ETAPA A (Grupo G) — não a materializa em
+          // fatura passada. applyEnsureGerencial garante a etapa A deste lançamento novo. Idempotente.
           if (txId) ensureGerencialState(txId)
         }
       }
@@ -749,9 +748,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       const [y, m] = (fmy || '').split('-')
       if (y && m) recalcularAgendamentosFatura(initial.accountId, y, m)
     }
-    // Motor descarta pendências de fatura passada (faturaCicloNoPassado) — re-executa o
-    // applyEnsureGerencial por parcela criada p/ (re)materializar os resgates. Idempotente
-    // (em faturas futuras o motor já criou; ensureGerencialState não duplica).
+    // O motor mantém o guard faturaCicloNoPassado na ETAPA A (Grupo G): não a materializa em fatura
+    // passada. applyEnsureGerencial por parcela criada garante a etapa A também no passado. Idempotente
+    // (no ciclo atual/futuro o motor já criou; ensureGerencialState não duplica).
     gerIds.forEach(id => ensureGerencialState(id))
     onToast?.(`${missing.length} parcela${missing.length !== 1 ? 's' : ''} gerada${missing.length !== 1 ? 's' : ''}.`)
     onClose()

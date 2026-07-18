@@ -1625,34 +1625,58 @@ export function AppProvider({ children }) {
         const origem = grupo.defaultAccountId
         const soma = somaPorOrigem.get(origem) || 0
         const idsOrigem = sourceIdsPorOrigem.get(origem) || []
-        const schedId = `fsch_${card.id}_${yyyy}${mm}_resgate_reserva_${origem}`
-        const existing = schedules.find(s =>
-          s.id === schedId ||
-          (s.tipo === 'resgate_reserva' && s.cardId === card.id && s.faturaMesAno === faturaMesAno && s.accountId === origem)
+        const base = `fsch_${card.id}_${yyyy}${mm}_resgate_reserva_${origem}`
+        // Resgate PENDENTE existente desta origem. O EXECUTADO não bloqueia (gastos novos ganham um
+        // delta próprio) — alinhado ao modelo per-gasto do reconcileFaturaState.
+        const existingPend = schedules.find(s =>
+          s.tipo === 'resgate_reserva' && s.cardId === card.id && s.faturaMesAno === faturaMesAno &&
+          s.accountId === origem && !isResgatePago(s.id, schedules, transactions)
         )
         // Fase 2: não duplicar se ALGUM resgate_reserva já rastreia este gasto (source_expense_ids).
         const jaRastreado = schedules.some(s => s.tipo === 'resgate_reserva' && (s.sourceExpenseIds || []).includes(lancId))
-        // "já pago": schedule presente (qualquer estado) OU resgate já executado (transferência
-        // com sourceScheduleId apontando p/ este slot, caso o schedule tenha sido removido).
-        if (!existing && !jaRastreado && !isResgatePago(schedId, schedules, transactions) && soma > 0) {
-          const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
-          schedules = [...schedules, {
-            id: schedId, tipo: 'resgate_reserva',
-            transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
-            startDate: dueDate, amount: soma,
-            description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
-            reservaFuncaoId: lanc.reservaFuncaoId || null,
-            frequency: 'once', occurrenceType: 'installment', installments: 1, autoRegister: false,
-            registered: [], skipped: [], cardId: card.id, faturaMesAno, faturaRef,
-            sourceExpenseIds: idsOrigem, // Fase 2
-            overrides: { _gerencial: { faturaRef, cardId: card.id, checkingAccountId: contaPrincipal.id } },
-          }]
-        } else if (existing && !isResgatePago(existing.id, schedules, transactions)) {
-          // Fase 2: resgate pendente já existe → enriquece source_expense_ids com os ids atuais da
-          // origem (sem tocar em amount/saldo — a agregação de valor segue no reconcileFaturaState).
-          const merged = [...new Set([...(existing.sourceExpenseIds || []), ...idsOrigem])]
-          if (merged.length !== (existing.sourceExpenseIds || []).length) {
-            schedules = schedules.map(s => s.id === existing.id ? { ...s, sourceExpenseIds: merged } : s)
+        const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
+        // Campos comuns do resgate_reserva desta origem/fatura (id/amount/sourceExpenseIds variam
+        // entre o agendamento agregado e o delta pós-resgate).
+        const buildResgate = (id, amount, sourceIds) => ({
+          id, tipo: 'resgate_reserva',
+          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+          startDate: dueDate, amount,
+          description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+          reservaFuncaoId: lanc.reservaFuncaoId || null,
+          frequency: 'once', occurrenceType: 'installment', installments: 1, autoRegister: false,
+          registered: [], skipped: [], cardId: card.id, faturaMesAno, faturaRef,
+          sourceExpenseIds: sourceIds,
+          overrides: { _gerencial: { faturaRef, cardId: card.id, checkingAccountId: contaPrincipal.id } },
+        })
+        // "slot pago": resgate desta origem já executado (schedule registrado OU transferência com
+        // sourceScheduleId apontando p/ o slot, mesmo que o schedule tenha sido removido).
+        const slotPago = isResgatePago(base, schedules, transactions)
+        if (!existingPend && !jaRastreado && soma > 0) {
+          // Fase 3 — per-gasto: cria pendência SÓ para os gastos ainda sem resgate executado. O
+          // executado (se houver) cobre os seus. Id determinístico: base quando não há resgate
+          // executado na origem; base_p{n} com n executados (mesmo esquema do reconcileFaturaState).
+          const idsNovos = idsOrigem.filter(id => !isResgatePagoParaGasto(id, schedules, transactions))
+          const somaNova = rb(idsNovos.reduce((acc, id) => {
+            const tx = transactions.find(t => t.id === id)
+            return acc + (Number(tx?.amount) || 0)
+          }, 0))
+          // Se o slot está pago mas NENHUM gasto é atribuível per-gasto (schedule executado removido),
+          // não recria — mantém a segurança anterior de não duplicar um resgate já executado.
+          const podeCriar = idsNovos.length > 0 && somaNova > 0 && (!slotPago || idsNovos.length < idsOrigem.length)
+          if (podeCriar) {
+            const n = schedules.filter(s =>
+              s.tipo === 'resgate_reserva' && s.accountId === origem && s.cardId === card.id &&
+              s.faturaMesAno === faturaMesAno && isResgatePago(s.id, schedules, transactions)
+            ).length
+            schedules = [...schedules, buildResgate(n === 0 ? base : `${base}_p${n}`, somaNova, idsNovos)]
+          }
+        } else if (existingPend) {
+          // Resgate pendente já existe → enriquece source_expense_ids com os gastos ainda-não-pagos
+          // da origem (sem tocar em amount/saldo — a agregação segue no reconcileFaturaState).
+          const idsNovos = idsOrigem.filter(id => !isResgatePagoParaGasto(id, schedules, transactions))
+          const merged = [...new Set([...(existingPend.sourceExpenseIds || []), ...idsNovos])]
+          if (merged.length !== (existingPend.sourceExpenseIds || []).length) {
+            schedules = schedules.map(s => s.id === existingPend.id ? { ...s, sourceExpenseIds: merged } : s)
           }
         }
       }
@@ -3478,7 +3502,16 @@ export function AppProvider({ children }) {
         }]
       }
 
-      // 3. Conjunto desejado de agendamentos (slot = tipo + conta-origem para resgate)
+      // 3. Reconciliação PER-GASTO. Preserva os agendamentos EXECUTADOS (histórico) e recria os
+      //    PENDENTES. Modelo (Fase 3 — substitui slot/desired/registeredSlots):
+      //      • gerencial_devolucao / pagamento_fatura — slot ÚNICO por fatura: se já executado,
+      //        preserva e não recria; senão recria do estado atual. Ciclo passado NÃO materializa
+      //        pendência NOVA (só preserva a existente) — política retroativa inalterada.
+      //      • resgate_reserva — PER-GASTO (source_expense_ids): cada gasto é coberto por UM resgate.
+      //        Os executados são preservados; recria-se UMA pendência por origem só para os gastos
+      //        que ainda NÃO têm resgate executado (isResgatePagoParaGasto), em QUALQUER ciclo. Um
+      //        gasto novo lançado após o resgate já pago ganha seu próprio agendamento (delta), sem
+      //        recriar o já pago — fim do "resgate fantasma" e dos band-aids (0f26994/16d491f).
       const meta = { faturaRef, cardId, checkingAccountId: contaPrincipal.id }
       const baseSch = {
         frequency: 'once', occurrenceType: 'installment', installments: 1,
@@ -3494,51 +3527,6 @@ export function AppProvider({ children }) {
         }
       }
 
-      const desired = []
-      if (totalG > 0 && subcontaId) {
-        desired.push({
-          slot: 'gerencial_devolucao',
-          id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
-          tipo: 'gerencial_devolucao',
-          transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
-          startDate: devolDate, amount: totalG,
-          description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
-          sourceExpenseIds: sourceTxIdsG, // Fase 2
-          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
-        })
-      }
-      for (const [origem, soma] of numberedByAccount) {
-        if (soma <= 0) continue
-        const reservaFuncaoId =
-          (reservaFuncaoByAccount && reservaFuncaoByAccount[origem]) ||
-          prevReservaFuncaoByOrigem[origem] || null
-        desired.push({
-          slot: `resgate_reserva_${origem}`,
-          id: `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`,
-          tipo: 'resgate_reserva',
-          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
-          startDate: dueDate, amount: soma,
-          description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
-          reservaFuncaoId,
-          sourceExpenseIds: sourceTxIdsByOrigem.get(origem) || [], // Fase 2: gastos que compõem o resgate
-          overrides: { _gerencial: meta, _sourceTxIds: sourceTxIdsByOrigem.get(origem) || [] },
-        })
-      }
-      if (totalPagamento > 0) {
-        desired.push({
-          slot: 'pagamento_fatura',
-          id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
-          tipo: 'pagamento_fatura',
-          transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
-          startDate: dueDate, amount: totalPagamento,
-          description: `Pagamento Fatura ${apelido} ${faturaRef}`,
-          sourceExpenseIds: sourceTxIdsAll, // Fase 2
-          overrides: { _gerencialKey: `${gerencialKey(cardId, faturaRef)}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
-        })
-      }
-
-      // 4. Reconciliação. Identifica os agendamentos desta fatura (novos + legados),
-      //    preserva os já registrados/pulados e descarta os pendentes (serão recriados).
       const gerKey = gerencialKey(cardId, faturaRef)
       const legacyKeys = new Set([
         `${gerKey}_resgate`, `${gerKey}_payment`, `${gerKey}_provision`, `${gerKey}_resgate_parc`,
@@ -3552,58 +3540,113 @@ export function AppProvider({ children }) {
         if (k.startsWith('ger_num_') && k.includes(`_${cardId}_`) && s.startDate === dueDate) return true
         return false
       }
-      const slotOf = (s) => {
-        if (s.tipo === 'resgate_reserva') return `resgate_reserva_${s.accountId}`
-        if (s.tipo) return s.tipo
+      // Classifica um agendamento gerido no seu tipo canônico (via tipo novo ou _gerencialKey legado).
+      // Para resgate_reserva devolve também a conta-origem.
+      const classify = (s) => {
+        if (s.tipo === 'resgate_reserva') return { type: 'resgate_reserva', origem: s.accountId }
+        if (s.tipo === 'gerencial_devolucao' || s.tipo === 'pagamento_fatura') return { type: s.tipo, origem: null }
         const k = s.overrides?._gerencialKey || ''
-        if (k === `${gerKey}_payment`) return 'pagamento_fatura'
-        if (k === `${gerKey}_resgate` || k === `${gerKey}_provision` || k === `${gerKey}_resgate_parc`) return 'gerencial_devolucao'
-        if (k.startsWith('ger_num_')) return `resgate_reserva_${s.accountId}`
-        return null
+        if (k === `${gerKey}_payment`) return { type: 'pagamento_fatura', origem: null }
+        if (k === `${gerKey}_resgate` || k === `${gerKey}_provision` || k === `${gerKey}_resgate_parc`) return { type: 'gerencial_devolucao', origem: null }
+        if (k.startsWith('ger_num_')) return { type: 'resgate_reserva', origem: s.accountId }
+        return { type: null, origem: null }
       }
 
-      const desiredSlots = new Set(desired.map(x => x.slot))
-      const desiredBySlot = new Map(desired.map(x => [x.slot, x])) // Fase 2: p/ atualizar source_expense_ids
-      const registeredSlots = new Set()
+      // 3a. Separa os geridos: preserva executados (histórico); guarda pendentes de slot único
+      //     (devolução/pagamento) p/ decisão por ciclo; descarta pendentes de resgate (recriados
+      //     per-gasto abaixo). Conta resgates executados por origem → id determinístico do delta.
+      //     Geridos são frequency:'once' — QUALQUER registro/pulo = executado (isResgatePago), sem
+      //     exigir match de data (o pagamento detalhado grava trfDate editável em `registered`).
       const schedules = []
+      let hasExecDevolucao = false
+      let hasExecPagamento = false
+      let pendingDevolucao = null
+      let pendingPagamento = null
+      const execResgateCountByOrigem = new Map()
       for (const s of d.schedules) {
         if (!isManaged(s)) { schedules.push(s); continue }
-        // Agendamentos gerenciados são frequency:'once' — uma ÚNICA ocorrência possível. Logo,
-        // QUALQUER registro/pulo já significa executado, sem exigir match exato com startDate.
-        // (O pagamento de resgate_reserva detalhado grava em `registered` a data editável trfDate,
-        // que pode divergir do startDate; o guard antigo por data exata então marcava done=false,
-        // descartava o agendamento pago e recriava o slot como pendente — resgate fantasma.)
-        // NB: este ramo só roda para isManaged; agendamentos comuns saíram no `continue` acima e
-        // seguem com o guard por data exata em getNextOccurrences.
         const done = isResgatePago(s.id, d.schedules, d.transactions)
+        const { type, origem } = classify(s)
         if (done) {
           schedules.push(s)
-          const sl = slotOf(s)
-          if (sl) registeredSlots.add(sl)
+          if (type === 'gerencial_devolucao') hasExecDevolucao = true
+          else if (type === 'pagamento_fatura') hasExecPagamento = true
+          else if (type === 'resgate_reserva' && origem != null) {
+            execResgateCountByOrigem.set(origem, (execResgateCountByOrigem.get(origem) || 0) + 1)
+          }
           continue
         }
-        // Pendente. Em fatura de ciclo PASSADO o motor NÃO recria (guard `faturaCicloNoPassado`
-        // abaixo). Para não PERDER um agendamento gerido ainda necessário, PRESERVA o pendente cujo
-        // slot continua em `desired` (evita o descarte-sem-recriação que forçava re-executar
-        // applyEnsureGerencial — os band-aids 0f26994/16d491f). Pendente ÓRFÃO (slot fora de
-        // `desired`, ex.: grupo reclassificado p/ D) segue descartado. Fatura corrente/futura:
-        // pendente descartado → recriado a partir de `desired` (abaixo) para atualizar valores.
+        // Pendente: guarda os de slot único (decisão por ciclo abaixo); resgate/órfão são descartados.
+        if (type === 'gerencial_devolucao') pendingDevolucao = s
+        else if (type === 'pagamento_fatura') pendingPagamento = s
+      }
+
+      // 3b. Recria pendências.
+      // gerencial_devolucao (slot único). Ciclo passado: não materializa NOVA, só preserva a existente.
+      if (!hasExecDevolucao && totalG > 0 && subcontaId) {
         if (faturaCicloNoPassado) {
-          const sl = slotOf(s)
-          if (sl && desiredSlots.has(sl)) {
-            // Fase 2: ao preservar, atualiza source_expense_ids com os ids atuais do `desired`
-            // (mantém a rastreabilidade correta mesmo sem recriar). Amount preservado (inalterado).
-            const dsh = desiredBySlot.get(sl)
-            schedules.push(dsh ? { ...s, sourceExpenseIds: dsh.sourceExpenseIds || s.sourceExpenseIds || [] } : s)
-            registeredSlots.add(sl) // impede recriação duplicada do mesmo slot
-          }
+          if (pendingDevolucao) schedules.push({ ...pendingDevolucao, sourceExpenseIds: sourceTxIdsG })
+        } else {
+          schedules.push({
+            ...baseSch,
+            id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
+            tipo: 'gerencial_devolucao',
+            transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
+            startDate: devolDate, amount: totalG,
+            description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
+            sourceExpenseIds: sourceTxIdsG,
+            overrides: { _gerencialKey: `${gerKey}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
+          })
         }
       }
-      for (const dsh of desired) {
-        if (registeredSlots.has(dsh.slot)) continue // já há um executado/preservado nesse slot
-        if (faturaCicloNoPassado) continue // ciclo encerrado: não materializa pendência retroativa NOVA
-        const { slot, ...rest } = dsh
-        schedules.push({ ...baseSch, ...rest })
+      // pagamento_fatura (slot único). Mesma política de ciclo passado.
+      if (!hasExecPagamento && totalPagamento > 0) {
+        if (faturaCicloNoPassado) {
+          if (pendingPagamento) schedules.push({ ...pendingPagamento, sourceExpenseIds: sourceTxIdsAll })
+        } else {
+          schedules.push({
+            ...baseSch,
+            id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
+            tipo: 'pagamento_fatura',
+            transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
+            startDate: dueDate, amount: totalPagamento,
+            description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+            sourceExpenseIds: sourceTxIdsAll,
+            overrides: { _gerencialKey: `${gerKey}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
+          })
+        }
+      }
+      // resgate_reserva (per-gasto). Recria UMA pendência por origem só p/ os gastos SEM resgate
+      // executado — em QUALQUER ciclo (a detecção per-gasto evita duplicar o já pago). Id
+      // determinístico: base quando não há resgate executado na origem; base_p{n} quando já há n
+      // executados (evita colisão com o preservado, sem recorrer a timestamp).
+      for (const [origem, somaOrigem] of numberedByAccount) {
+        if (somaOrigem <= 0) continue
+        const allSrc = sourceTxIdsByOrigem.get(origem) || []
+        const unpaidSrc = allSrc.filter(id => !isResgatePagoParaGasto(id, schedules, d.transactions))
+        if (!unpaidSrc.length) continue
+        const somaUnpaid = rb(unpaidSrc.reduce((acc, id) => {
+          const tx = d.transactions.find(t => t.id === id)
+          return acc + (Number(tx?.amount) || 0)
+        }, 0))
+        if (somaUnpaid <= 0) continue
+        const n = execResgateCountByOrigem.get(origem) || 0
+        const base = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
+        const schedId = n === 0 ? base : `${base}_p${n}`
+        const reservaFuncaoId =
+          (reservaFuncaoByAccount && reservaFuncaoByAccount[origem]) ||
+          prevReservaFuncaoByOrigem[origem] || null
+        schedules.push({
+          ...baseSch,
+          id: schedId,
+          tipo: 'resgate_reserva',
+          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+          startDate: dueDate, amount: somaUnpaid,
+          description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+          reservaFuncaoId,
+          sourceExpenseIds: unpaidSrc,
+          overrides: { _gerencial: meta, _sourceTxIds: unpaidSrc },
+        })
       }
 
       // 5. Limpeza dos contas_a_pagar (payables) LEGADOS de fatura deste cartão/mês — gerados
@@ -3619,43 +3662,47 @@ export function AppProvider({ children }) {
 
       // 6. Detalhamento por função (schedule_reserva_funcoes) dos resgates desta fatura.
       //    Idempotente: apaga o detalhamento antigo do schedule_id e reinsere uma linha por
-      //    lançamento. Cobre resgate_reserva pendente E já executado/registrado (mesmo padrão do
-      //    gerencial_devolucao) — faturas cujo resgate já foi executado ficavam sem detalhamento
-      //    (soma 0) para sempre. Usa os ids que REALMENTE existem no estado final `schedules`.
-      const resgateReservaIds = new Set(
-        schedules
-          .filter(s => s.tipo === 'resgate_reserva' && s.cardId === cardId && s.faturaMesAno === faturaMesAno)
-          .map(s => s.id)
-      )
+      //    lançamento. Cobre resgate_reserva pendente E já executado/registrado — faturas cujo
+      //    resgate já foi executado ficavam sem detalhamento (soma 0) para sempre.
+      //    Mapa gasto → resgate que o cobre, no estado final (executado OU pendente): cada gasto é
+      //    coberto pelo agendamento cujo sourceExpenseIds o contém. Substitui o id-base fixo — no
+      //    modelo per-gasto a mesma origem pode ter o executado (base) e o delta pendente (base_p{n}).
+      const resgateSchedByGasto = new Map()
+      for (const s of schedules) {
+        if (s.tipo === 'resgate_reserva' && s.cardId === cardId && s.faturaMesAno === faturaMesAno) {
+          for (const gid of (s.sourceExpenseIds || [])) resgateSchedByGasto.set(gid, s.id)
+        }
+      }
       // Detalhamento (1 linha por lançamento) para o gerencial_devolucao desta fatura. Diferente do
       // resgate, cobrimos TAMBÉM o já executado/registrado (não só o pendente): faturas cujo
       // gerencial_devolucao já foi executado nunca passaram pelo caminho "pendente" e, sem isto,
-      // ficariam para sempre sem detalhamento (o resgate escapou porque o dele foi criado ainda
-      // pendente, no import, e preservado). Usa os ids que REALMENTE existem no estado final
-      // `schedules` (pendente materializado OU registrado) desta fatura/cartão.
+      // ficariam para sempre sem detalhamento. Usa os ids que REALMENTE existem no estado final.
       const gerencialDevolucaoIds = new Set(
         schedules
           .filter(s => s.tipo === 'gerencial_devolucao' && s.cardId === cardId && s.faturaMesAno === faturaMesAno)
           .map(s => s.id)
       )
-      // Limpa o SRF antigo de todo resgate_reserva + gerencial_devolucao desta fatura
-      // (idempotente: recriado logo abaixo). Vale também p/ ciclo passado, removendo órfãos.
+      // Limpa o SRF antigo desta fatura (idempotente: recriado abaixo). Remove por PREFIXO do resgate
+      // (base + qualquer delta base_p{n}, presente ou órfão de um id que mudou) + os devolução atuais.
+      const resgatePrefix = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_`
       let scheduleReservaFuncoes = (d.scheduleReservaFuncoes || [])
-        .filter(srf => !resgateReservaIds.has(srf.scheduleId) && !gerencialDevolucaoIds.has(srf.scheduleId))
+        .filter(srf => !(
+          (typeof srf.scheduleId === 'string' && srf.scheduleId.startsWith(resgatePrefix)) ||
+          gerencialDevolucaoIds.has(srf.scheduleId)
+        ))
       // Modelo 1 LINHA POR LANÇAMENTO do cartão (rastreabilidade completa): cada linha carrega o
-      // valor do próprio lançamento + source_lancamento_id. O valor total do resgate continua sendo
-      // a soma (numberedByAccount); os consumidores (Etapa B / UI) reagrupam por função ao exibir/executar.
-      // Sem gate de ciclo: resgateReservaIds só contém agendamentos que já existem no estado
-      // (materializados/registrados), então o detalhamento é gerado inclusive p/ faturas passadas.
+      // valor do próprio lançamento + source_lancamento_id, apontando para o resgate que o cobre.
+      // Os consumidores (Etapa B / UI) reagrupam por função/agendamento ao exibir/executar. Vale
+      // inclusive p/ faturas passadas — resgateSchedByGasto só contém agendamentos do estado final.
       for (const [origem, soma] of numberedByAccount) {
         if (soma <= 0) continue
-        const schedId = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
-        if (!resgateReservaIds.has(schedId)) continue
         const sources = numberedByAccountSources.get(origem)
         if (!sources) continue
         for (const src of sources) {
           const v = Number(src.valor) || 0
           if (!(v > 0)) continue
+          const schedId = resgateSchedByGasto.get(src.id)
+          if (!schedId) continue // gasto sem resgate no estado final (não esperado)
           scheduleReservaFuncoes.push({
             id: `srf_${schedId}_${src.id}`,
             scheduleId: schedId,

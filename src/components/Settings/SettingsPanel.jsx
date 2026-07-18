@@ -93,9 +93,9 @@ export default function SettingsPanel() {
           await new Promise(r => setTimeout(r, 0))
         }
       }
-      // reconciliarGerencial roda applyEnsureGerencial por despesa e (re)materializa os resgates
-      // que o motor descarta em faturas de ciclo passado (faturaCicloNoPassado) — sem isto, o
-      // recálculo em massa apagava resgates de faturas fechadas.
+      // reconciliarGerencial recalcula os SALDOS das contas Ger. (passo B) além de reconciliar as
+      // faturas — o recálculo em massa acima (recalcularAgendamentosFatura) não recompõe saldos.
+      // O motor per-gasto já (re)materializa os resgates em qualquer ciclo.
       reconciliarGerencial(card.id)
     }
     setFaturaStatus({ running: false, total, done: total, finished: true })
