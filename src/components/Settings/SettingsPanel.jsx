@@ -359,11 +359,12 @@ export default function SettingsPanel() {
         <button
           type="button"
           onClick={() => updateCategory(cat.id, { geraEspelho: !cat.geraEspelho })}
-          title="Gera lançamento espelho (Empréstimos)"
-          className={`shrink-0 text-[9px] uppercase tracking-wide font-bold px-1.5 py-1 rounded transition-colors ${
+          title={cat.geraEspelho ? 'Espelho ativo — clique para desativar' : 'Espelho inativo — clique para ativar'}
+          className={`shrink-0 inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wide font-bold px-1.5 py-1 rounded transition-colors ${
             cat.geraEspelho ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 'bg-gray-700/50 text-gray-500 hover:bg-gray-600/60'
           }`}
         >
+          {cat.geraEspelho ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
           Espelho
         </button>
         {cat.geraEspelho && (
