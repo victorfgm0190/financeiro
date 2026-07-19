@@ -11,6 +11,8 @@ import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, installmentKey } from '../../lib/installments'
 import { extractLearnKeyword } from '../../lib/descMatch'
+import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
+import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
@@ -38,12 +40,12 @@ function readFileAsText(file) {
 
 // Detecta se o texto é CSV do Itaú (linha de cabeçalho "data,lançamento,valor")
 function isItauCSV(text) {
-  const clean = text.replace(/^﻿/, '')
+  const clean = text.replace(/^\uFEFF/, '')
   return /^data[,;]lan[çc]amento[,;]valor/im.test(clean)
 }
 
 function parseItauCSV(text, categories = []) {
-  const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const clean = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
 
   // Localizar linha de cabeçalho
@@ -366,6 +368,39 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
       <p className="text-xs text-gray-600 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
       <input ref={ref} type="file" accept={accept} disabled={disabled} className="hidden"
         onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
+    </div>
+  )
+}
+
+// ITEM 9 — indicador de progresso do fluxo de importação de cartão (3 passos).
+// step: 1 = carregar arquivo · 2 = revisar lançamentos · 3 = confirmar importação.
+function WizardSteps({ step }) {
+  const steps = [
+    { n: 1, label: 'Carregar arquivo' },
+    { n: 2, label: 'Revisar lançamentos' },
+    { n: 3, label: 'Confirmar importação' },
+  ]
+  return (
+    <div className="flex items-start justify-center gap-1 sm:gap-2 py-1">
+      {steps.map((s, i) => {
+        const done = step > s.n
+        const current = step === s.n
+        return (
+          <div key={s.n} className="flex items-start gap-1 sm:gap-2">
+            <div className="flex flex-col items-center gap-1 w-24 sm:w-32">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
+                current ? 'bg-blue-600 text-white'
+                  : done ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'bg-gray-800 text-gray-500 border border-gray-700'
+              }`}>
+                {done ? <Check size={14} /> : s.n}
+              </div>
+              <span className={`text-[11px] text-center leading-tight ${current ? 'text-blue-400 font-medium' : done ? 'text-gray-400' : 'text-gray-600'}`}>{s.label}</span>
+            </div>
+            {i < steps.length - 1 && <div className={`w-8 sm:w-14 h-px mt-3.5 ${step > s.n ? 'bg-blue-500/50' : 'bg-gray-700'}`} />}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -700,6 +735,61 @@ function faturaRefFromMY(faturaMonthYear) {
   if (!faturaMonthYear) return null
   const [y, m] = faturaMonthYear.split('-')
   return (y && m) ? `${m}/${y}` : null
+}
+
+// ── ITEM 10 — funções puras extraídas do handleImport (testáveis, sem efeito colateral) ──
+
+// Linhas efetivamente importáveis: selecionadas, não-duplicadas e sem colisão por installment_key.
+function filterSelectedRows(rows) {
+  return (rows || []).filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
+}
+
+// faturaMonthYear (YYYY-MM) de um item, para agrupar por fatura: a fatura explícita da linha,
+// senão derivada da data pelo dia de fechamento. Núcleo do addFaturaAfetada.
+function faturaMyOf(faturaMonthYear, dateStr, closingDay) {
+  if (faturaMonthYear) return faturaMonthYear
+  const ref = computeFaturaRef(new Date(dateStr + 'T00:00:00'), closingDay || 14) // MM/YYYY
+  const [m, y] = ref.split('/')
+  return `${y}-${m}`
+}
+
+// Objeto de transação de uma linha importada (à vista / parcela corrente). saveDate = data de
+// sistema já calculada (computeSaveDate). Mesmo shape que o addTransaction inline usava.
+function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
+  const isExpense = (row.type || 'expense') === 'expense'
+  return {
+    origin: ORIGIN.IMPORTACAO_FATURA,
+    type: row.type || 'expense', accountId, accountType: 'credit',
+    amount: row.amount, date: saveDate, description: row.description,
+    dateCartao: row._dateCartao || null,
+    categoryId: row.categoryId, payee: row.payee,
+    grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
+    faturaMonthYear: row.faturaMonthYear || null,
+    faturaRef: faturaRefFromMY(row.faturaMonthYear),
+    reservaFuncaoId: row._reservaFuncaoId || null,
+    installmentNum: row._installment?.num || null,
+    installmentTotal: row._installment?.total || null,
+    serieId: row._serieId || null,
+    _fromImport: true,
+  }
+}
+
+// Objeto de transação de uma parcela FUTURA ausente (projeção; date_cartao null). fp.date já é a
+// data de sistema correta (parcela >1 → mês anterior à fatura).
+function buildInstallmentFromRow(fp, { accountId, defaultGrupoD }) {
+  return {
+    origin: ORIGIN.IMPORTACAO_FATURA,
+    type: 'expense', accountId, accountType: 'credit',
+    amount: fp.amount, date: fp.date, description: fp.description,
+    categoryId: fp.categoryId, payee: fp.payee,
+    grupoGerencial: fp.grupoGerencial || defaultGrupoD,
+    faturaMonthYear: fp.faturaMonthYear,
+    faturaRef: faturaRefFromMY(fp.faturaMonthYear),
+    reservaFuncaoId: fp._reservaFuncaoId || null,
+    installmentNum: fp.num, installmentTotal: fp.total,
+    serieId: fp._serieId || null,
+    _fromImport: true,
+  }
 }
 
 // installmentSystemDate: regra de date (sistema) das parcelas — agora compartilhada em
@@ -1106,6 +1196,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [closingDayWarnDismissed, setClosingDayWarnDismissed] = useState(false)
   const [applyAllToast, setApplyAllToast] = useState(null) // { count, similarIds, changes }
   const applyAllTimerRef = useRef(null)
+  const [csvMapper, setCsvMapper] = useState(null) // { file, headers, rows } — CSV genérico não reconhecido
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
@@ -1170,7 +1261,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return typeof a.number === 'number' && typeof b.number === 'number' ? a.number - b.number : 0
   }), [gerencialGroups])
 
-  const handleFile = async (file) => {
+  const handleFile = async (file, preParsed = null) => {
     setError('')
     setResult(null)
     setMatchQueue([])
@@ -1178,21 +1269,39 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setFilename(file.name)
     setClosingDayWarnDismissed(false)
     try {
-      const isCsv = /\.csv$/i.test(file.name)
       let cardName = '', faturaStr = '', parsed = []
-      // Marca origem Itaú (CSV ou XLS/XLSX do internet banking): fatura_ref fixa no mês de
-      // referência selecionado. O XLS do Dindin continua com o cálculo pelo fechamento.
-      let isItau = isCsv
+      // Origem Itaú (CSV ou XLS/XLSX do internet banking): fatura_ref fixa no mês de referência.
+      // Dindin e CSV genérico (ITEM 8) calculam a fatura pelo fechamento (isItau=false).
+      let isItau = false
 
-      if (isCsv) {
+      if (preParsed) {
+        // Linhas já convertidas (ex.: CSV genérico após o mapeamento de colunas).
+        parsed = preParsed.parsed || []
+        cardName = preParsed.cardName || ''
+        faturaStr = preParsed.faturaStr || ''
+        isItau = !!preParsed.isItau
+      } else if (/\.csv$/i.test(file.name)) {
         const text = await readFileAsText(file)
-        if (!isItauCSV(text)) { setError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).'); return }
-        ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text, categories))
+        if (isItauCSV(text)) {
+          isItau = true
+          ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text, categories))
+        } else {
+          // ITEM 8: CSV genérico (Nubank/Bradesco/C6/…) → mapeamento de colunas. Aplica um mapeamento
+          // salvo se já houver; senão abre o CsvColumnMapperModal (que re-chama handleFile via preParsed).
+          const gen = parseGenericCsv(text)
+          if (gen.headers.length === 0 || gen.rows.length === 0) { setError('CSV vazio ou ilegível.'); return }
+          const saved = loadCsvMapping(gen.headers)
+          if (saved) {
+            parsed = mapGenericRows(gen.rows, saved, categories)
+          } else {
+            setCsvMapper({ file, headers: gen.headers, rows: gen.rows })
+            return
+          }
+        }
       } else {
         const rawRows = await parseFile(file)
-        // Fatura do Itaú (internet banking): header "Data … Valor", coluna Lançamento e datas
-        // em serial numérico. Tenta primeiro o parser do Itaú; se não achar lançamentos, cai
-        // no formato Dindin (header com "Descrição").
+        // Fatura do Itaú (internet banking): tenta primeiro o parser do Itaú; se não achar
+        // lançamentos, cai no formato Dindin (header com "Descrição").
         const itau = parseItauXLS(rawRows, categories)
         if (itau.rows.length > 0) {
           ;({ cardName, faturaStr, rows: parsed } = itau)
@@ -1692,7 +1801,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       setError('Esta fatura está fechada. Abra-a antes de importar.')
       return
     }
-    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
+    // 1. Filtrar linhas efetivamente importáveis (selecionadas, sem duplicata/colisão).
+    const toImport = filterSelectedRows(resolvedRows)
 
     // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória. Não
     // bloqueia com alert — destaca as linhas pendentes (borda laranja no select) e rola até a 1ª.
@@ -1710,12 +1820,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     if (editingImport) {
       const editClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
       const faturasAfetadas = new Set()
-      const addFaturaAfetada = (faturaMY, dataStr) => {
-        if (faturaMY) { faturasAfetadas.add(faturaMY); return }
-        const ref = computeFaturaRef(new Date(dataStr + 'T00:00:00'), editClosingDay) // MM/YYYY
-        const [m, y] = ref.split('/')
-        faturasAfetadas.add(`${y}-${m}`)
-      }
+      const addFaturaAfetada = (faturaMY, dataStr) => faturasAfetadas.add(faturaMyOf(faturaMY, dataStr, editClosingDay))
       // Função de reserva por (fatura → conta-origem); desempate pelo lançamento de maior valor.
       const reservaFuncaoPorFatura = new Map() // faturaMesAno → Map(contaOrigem → { funcId, amount })
       const registrarReservaFuncao = (faturaMY, grupoId, reservaFuncaoId, amount) => {
@@ -1766,19 +1871,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const fpDate = fp.date
         addFaturaAfetada(fp.faturaMonthYear, fpDate)
         if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
-        const fId = addTransaction({
-          origin: ORIGIN.IMPORTACAO_FATURA,
-          type: 'expense', accountId: selectedAccount, accountType: 'credit',
-          amount: fp.amount, date: fpDate, description: fp.description,
-          categoryId: fp.categoryId, payee: fp.payee,
-          grupoGerencial: fp.grupoGerencial || defaultGrupoD,
-          faturaMonthYear: fp.faturaMonthYear,
-          faturaRef: faturaRefFromMY(fp.faturaMonthYear),
-          reservaFuncaoId: fp._reservaFuncaoId || null,
-          installmentNum: fp.num, installmentTotal: fp.total,
-          serieId: fp._serieId || null,
-          _fromImport: true,
-        })
+        const fId = addTransaction(buildInstallmentFromRow(fp, { accountId: selectedAccount, defaultGrupoD }))
         if (fId) novosTxIds.push(fId)
         if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
         const parentRow = resolvedRows.find(r => r._id === fp.parentId)
@@ -1841,12 +1934,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
     const importClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
     const faturasAfetadas = new Set()
-    const addFaturaAfetada = (faturaMY, dataStr) => {
-      if (faturaMY) { faturasAfetadas.add(faturaMY); return }
-      const ref = computeFaturaRef(new Date(dataStr + 'T00:00:00'), importClosingDay) // MM/YYYY
-      const [m, y] = ref.split('/')
-      faturasAfetadas.add(`${y}-${m}`)
-    }
+    const addFaturaAfetada = (faturaMY, dataStr) => faturasAfetadas.add(faturaMyOf(faturaMY, dataStr, importClosingDay))
     // AJUSTE 2: contains (descrições) que já viraram regra — evita duplicar no lote.
     const ruleContainsSeen = new Set(classificationRules.map(r => (r.contains || '').trim().toLowerCase()).filter(Boolean))
 
@@ -1869,26 +1957,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: reservaFuncaoId, amount: amt })
     }
 
+    // 2. Criar as transações das linhas importadas (à vista / parcela corrente).
     toImport.forEach(row => {
       const saveDate = computeSaveDate(row)
       const isExpense = (row.type || 'expense') === 'expense'
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       if (row.payee && !payees.includes(row.payee)) addPayee(row.payee)
-      const txId = addTransaction({
-        origin: ORIGIN.IMPORTACAO_FATURA,
-        type: row.type || 'expense', accountId: selectedAccount, accountType: 'credit',
-        amount: row.amount, date: saveDate, description: row.description,
-        dateCartao: row._dateCartao || null,
-        categoryId: row.categoryId, payee: row.payee,
-        grupoGerencial: isExpense ? (row.grupoGerencial || defaultGrupoD) : null,
-        faturaMonthYear: row.faturaMonthYear || null,
-        faturaRef: faturaRefFromMY(row.faturaMonthYear),
-        reservaFuncaoId: row._reservaFuncaoId || null,
-        installmentNum: row._installment?.num || null,
-        installmentTotal: row._installment?.total || null,
-        serieId: row._serieId || null,
-        _fromImport: true,
-      })
+      const txId = addTransaction(buildTransactionFromRow(row, { accountId: selectedAccount, defaultGrupoD, saveDate }))
       txIds.push(txId)
       if (txId && isExpense && row.grupoGerencial && row.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(txId)
       // Rateio: grava os rateios desta linha para o lançamento recém-criado.
@@ -1912,7 +1987,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     })
 
-    // Parcelas futuras (seção secundária): cria as AUSENTES no banco herdando a
+    // 3. Parcelas futuras AUSENTES (seção secundária): cria projeções herdando a
     // categoria/gerencial da parcela importada; as já existentes não são alteradas.
     futureParcelas.forEach(fp => {
       if (fp._exists) return
@@ -1922,19 +1997,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const fpDate = fp.date
       addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
-      const fId = addTransaction({
-        origin: ORIGIN.IMPORTACAO_FATURA,
-        type: 'expense', accountId: selectedAccount, accountType: 'credit',
-        amount: fp.amount, date: fpDate, description: fp.description,
-        categoryId: fp.categoryId, payee: fp.payee,
-        grupoGerencial: fp.grupoGerencial || defaultGrupoD,
-        faturaMonthYear: fp.faturaMonthYear,
-        faturaRef: faturaRefFromMY(fp.faturaMonthYear),
-        reservaFuncaoId: fp._reservaFuncaoId || null,
-        installmentNum: fp.num, installmentTotal: fp.total,
-        serieId: fp._serieId || null,
-        _fromImport: true,
-      })
+      const fId = addTransaction(buildInstallmentFromRow(fp, { accountId: selectedAccount, defaultGrupoD }))
       if (fId) txIds.push(fId)
       if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
       // PARTE 2: parcela futura herda o mesmo rateio da parcela principal (parent).
@@ -1984,8 +2047,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
     }
 
-    // Gatilho: recálculo acumulativo dos agendamentos (devolução gerencial / resgate /
-    // pagamento) de TODA fatura tocada — por inserções novas OU por colisões atualizadas.
+    // 4. Reconciliar gerencial — recálculo acumulativo dos agendamentos (devolução gerencial /
+    // resgate / pagamento) de TODA fatura tocada, por inserções novas OU colisões atualizadas.
     for (const fmy of faturasAfetadas) {
       const [y, m] = fmy.split('-')
       const byOrigem = reservaFuncaoPorFatura.get(fmy)
@@ -2019,7 +2082,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Clique em "Confirmar Importação": valida a função obrigatória (mesmo guard do handleImport)
   // e, se passar, abre o modal de preview. A confirmação real (handleImport) só roda no modal.
   const handleConfirmImport = () => {
-    const toImport = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
+    const toImport = filterSelectedRows(resolvedRows)
     const pendentesFunc = toImport.filter(r =>
       reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
     if (pendentesFunc.length > 0) {
@@ -2046,7 +2109,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const found = resolvedRows.length
   const dups = resolvedRows.filter(r => r._isDuplicate).length
-  const toImportCount = resolvedRows.filter(r => r.selected && !r._isDuplicate && !r._collisionTx).length
+  const toImportCount = filterSelectedRows(resolvedRows).length
   // Item 7: linhas que colidem com parcela já existente (mesma installment_key).
   const collisionRows = resolvedRows.filter(r => r._collisionTx)
   const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id)).length
@@ -2890,6 +2953,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         />
       )}
 
+      {/* ITEM 9 — wizard de passos (durante o fluxo; oculto na tela de sucesso) */}
+      {result === null && (
+        <WizardSteps step={rows.length === 0 ? 1 : (showImportPreview ? 3 : 2)} />
+      )}
+
       {result !== null && scheduleMatchQueue.length === 0 && (
         <div className="card flex items-center gap-3 text-emerald-400">
           <Check size={20} />
@@ -3452,6 +3520,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             <X size={14} />
           </button>
         </div>
+      )}
+
+      {csvMapper && (
+        <CsvColumnMapperModal
+          headers={csvMapper.headers}
+          previewRows={csvMapper.rows.slice(0, 3)}
+          initialMapping={loadCsvMapping(csvMapper.headers)}
+          onSave={(mapping) => { saveCsvMapping(csvMapper.headers, mapping); setCorrigirToast('Mapeamento salvo.') }}
+          onConfirm={(mapping) => {
+            saveCsvMapping(csvMapper.headers, mapping)
+            const mapped = mapGenericRows(csvMapper.rows, mapping, categories)
+            const file = csvMapper.file
+            setCsvMapper(null)
+            handleFile(file, { parsed: mapped, isItau: false })
+          }}
+          onClose={() => setCsvMapper(null)}
+        />
       )}
 
       <ImportPreviewModal
