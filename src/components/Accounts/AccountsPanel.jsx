@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, ArrowUp, ArrowDown, Settings, Building2,
-  ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye,
+  ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye, Scale,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
@@ -20,7 +20,7 @@ const ACCOUNT_ICONS = {
   credit: CreditCard,
   cash: DollarSign,
   asset: Building2,
-  liability: Landmark,
+  liability: Scale,
 }
 
 const ACCOUNT_LABELS = {
