@@ -340,17 +340,28 @@ function CrossBadge({ level }) {
 
 function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = false }) {
   const ref = useRef()
+  const [dragging, setDragging] = useState(false)
+  // Reutiliza o handleFile já existente (via onFile) tanto p/ clique, arrastar quanto colar.
+  const takeFiles = (files) => { if (!disabled && files && files[0]) onFile(files[0]) }
   return (
     <div
-      className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+      className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors outline-none ${
         disabled
           ? 'border-gray-800 opacity-40 cursor-not-allowed select-none'
-          : 'border-gray-700 cursor-pointer hover:border-[#0F6E56]'
+          : dragging
+            ? 'border-blue-500 bg-blue-500/5 animate-pulse cursor-copy'
+            : 'border-gray-700 cursor-pointer hover:border-[#0F6E56]'
       }`}
       onClick={() => !disabled && ref.current?.click()}
+      tabIndex={disabled ? undefined : 0}
+      onDragEnter={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
+      onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true) }}
+      onDragLeave={(e) => { e.preventDefault(); setDragging(false) }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); takeFiles(e.dataTransfer?.files) }}
+      onPaste={(e) => { if (e.clipboardData?.files?.length) { e.preventDefault(); takeFiles(e.clipboardData.files) } }}
     >
-      <Upload size={28} className="text-gray-600 mx-auto mb-2" />
-      <p className="text-sm text-gray-400">{label || 'Clique para selecionar arquivo XLS/XLSX'}</p>
+      <Upload size={28} className={`mx-auto mb-2 ${dragging ? 'text-blue-400' : 'text-gray-600'}`} />
+      <p className="text-sm text-gray-400">{dragging ? 'Solte o arquivo aqui' : (label || 'Clique, arraste ou cole um arquivo')}</p>
       <p className="text-xs text-gray-600 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
       <input ref={ref} type="file" accept={accept} disabled={disabled} className="hidden"
         onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
@@ -651,6 +662,21 @@ function calcFatura(dateStr, closingDay = 14) {
   if (day <= closingDay) { m = d.getMonth() + 1; y = d.getFullYear() }
   else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); m = n.getMonth() + 1; y = n.getFullYear() }
   return `${y}-${String(m).padStart(2, '0')}`
+}
+
+// Item 4: a data (date_cartao) cai FORA da janela da fatura YYYY-MM para o closingDay dado?
+// Janela = (closingDay+1 do mês anterior) até (closingDay do mês da fatura). Usado só como
+// heurística de aviso ("dia de fechamento pode estar errado"), nunca para bloquear o import.
+function isDateOutOfFatura(dateStr, faturaYYYYMM, closingDay) {
+  if (!dateStr || !faturaYYYYMM || !closingDay) return false
+  const [y, m] = faturaYYYYMM.split('-').map(Number)
+  if (!y || !m) return false
+  const lastDay = new Date(y, m, 0).getDate()
+  const endDay = Math.min(closingDay, lastDay)
+  const end = new Date(y, m - 1, endDay)             // closingDay do mês da fatura
+  const start = new Date(y, m - 2, closingDay + 1)   // (closingDay+1) do mês anterior
+  const d = new Date(dateStr + 'T00:00:00')
+  return d < start || d > end
 }
 
 // fatura_ref (YYYY-MM) a partir do DIA da data ORIGINAL do extrato (date_cartao),
@@ -1076,6 +1102,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showCatGer, setShowCatGer] = useState(false)
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
+  const [closingDayWarnDismissed, setClosingDayWarnDismissed] = useState(false)
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
@@ -1146,6 +1173,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setMatchQueue([])
     setEditingImport(null)
     setFilename(file.name)
+    setClosingDayWarnDismissed(false)
     try {
       const isCsv = /\.csv$/i.test(file.name)
       let cardName = '', faturaStr = '', parsed = []
@@ -1315,6 +1343,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Recomputa faturas e datas de todas as linhas quando o cartão muda
   const handleAccountChange = (accountId) => {
     setSelectedAccount(accountId)
+    setClosingDayWarnDismissed(false)
     if (rows.length === 0) return
     const acc = accounts.find(a => a.id === accountId)
     const cl = acc?.closingDay || 14
@@ -2003,6 +2032,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
     return { importar, jaExistem, estornos, total: importar + jaExistem - estornos }
   }, [resolvedRows])
+
+  // Item 4 — heurística de "dia de fechamento errado": quantas linhas À VISTA (num<=1) têm a
+  // date_cartao FORA da janela da fatura de referência p/ o closingDay do cartão. Parcelas antigas
+  // (num>1) são excluídas — a data do cartão é a da compra original, legitimamente fora da janela.
+  const outOfPeriod = useMemo(() => {
+    const acc = accounts.find(a => a.id === selectedAccount)
+    const cl = acc?.closingDay
+    if (!cl || !faturaMonthYear || rows.length === 0) return { count: 0, total: 0, closingDay: cl }
+    const avista = rows.filter(r => {
+      if (r._generated) return false
+      const inst = detectInstallment(r.description)
+      return !inst || inst.num <= 1
+    })
+    const count = avista.filter(r => isDateOutOfFatura(r._dateCartao || r.date, faturaMonthYear, cl)).length
+    return { count, total: avista.length, closingDay: cl }
+  }, [rows, selectedAccount, faturaMonthYear, accounts])
+  const showClosingDayWarn = outOfPeriod.total > 0 && outOfPeriod.count / outOfPeriod.total > 0.20 && !closingDayWarnDismissed
 
   // ── Conciliação de Fatura ──────────────────────────────────────────────────
 
@@ -2859,6 +2905,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               </div>
             </div>
           </div>
+
+          {/* Item 4 — aviso (não bloqueia) de dia de fechamento possivelmente errado */}
+          {showClosingDayWarn && (
+            <div className="card flex items-start gap-3 py-3 border border-amber-500/30 bg-amber-500/10">
+              <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-300/90 leading-relaxed flex-1">
+                ⚠️ {outOfPeriod.count} de {outOfPeriod.total} lançamento{outOfPeriod.count !== 1 ? 's' : ''} à vista
+                {outOfPeriod.count !== 1 ? ' parecem' : ' parece'} estar fora do período da fatura selecionada.
+                Verifique se o dia de fechamento do cartão (dia {outOfPeriod.closingDay}) está correto.
+              </p>
+              <button
+                type="button"
+                onClick={() => setClosingDayWarnDismissed(true)}
+                className="text-amber-400/70 hover:text-amber-200 shrink-0"
+                title="Dispensar aviso"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Totalizador da fatura */}
           <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
