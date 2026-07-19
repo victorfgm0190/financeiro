@@ -874,7 +874,7 @@ export default function CreditCardPanel() {
                   subtitle={tx.payee ? tx.description : null}
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.amount}
-                  dimmed={!tx.reconciled}
+                  dimmed={tx.reconciled}
                   onClick={selectMode ? () => toggleSelect(tx.id) : () => setEditTx(tx)}
                   leading={
                     selectMode ? (
@@ -961,7 +961,7 @@ export default function CreditCardPanel() {
                       <tr
                         key={tx.id}
                         onClick={selectMode ? () => toggleSelect(tx.id) : undefined}
-                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'} ${tx.reconciled ? '' : 'opacity-60'}`}
+                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'} ${tx.reconciled ? 'opacity-40' : ''}`}
                       >
                         {selectMode && (
                           <td className="px-3 py-3">
@@ -985,7 +985,7 @@ export default function CreditCardPanel() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-gray-200 text-sm">{tx.description}</p>
+                          <p className={`text-sm ${tx.reconciled ? 'text-gray-200' : 'text-white font-medium'}`}>{tx.description}</p>
                           {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
                           <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                           <CopyIdBadge id={tx.id} />
@@ -1004,7 +1004,7 @@ export default function CreditCardPanel() {
                               : <span className="text-gray-700 text-xs">—</span>}
                           </td>
                         )}
-                        <td className="px-4 py-3 text-right font-semibold text-orange-600 whitespace-nowrap text-sm">
+                        <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${tx.reconciled ? 'text-orange-600' : 'text-orange-400'}`}>
                           {fmt(tx.amount)}
                         </td>
                         <td className="px-4 py-3">
