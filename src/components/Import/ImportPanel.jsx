@@ -10,6 +10,7 @@ import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, installmentKey } from '../../lib/installments'
+import { extractLearnKeyword } from '../../lib/descMatch'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
@@ -1103,6 +1104,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showCorrigirDatas, setShowCorrigirDatas] = useState(false)
   const [corrigirToast, setCorrigirToast] = useState(null)
   const [closingDayWarnDismissed, setClosingDayWarnDismissed] = useState(false)
+  const [applyAllToast, setApplyAllToast] = useState(null) // { count, similarIds, changes }
+  const applyAllTimerRef = useRef(null)
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
@@ -1305,6 +1308,58 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           if (match) pendingMatches.push({ row: baseRow, existingTx: match, installInfo })
         }
       })
+
+      // ITEM 5/7 — sugestões por histórico do MESMO fornecedor (keyword normalizada +
+      // descSimilarity ≥ 0.75). Índice do histórico bloqueado pelo 1º token p/ evitar O(linhas×hist).
+      const histBlocks = new Map()
+      for (const t of transactions) {
+        if (!t.categoryId && !t.reservaFuncaoId) continue
+        const kw = extractLearnKeyword(t.description)
+        if (!kw) continue
+        const token = kw.split(' ')[0]
+        let arr = histBlocks.get(token); if (!arr) { arr = []; histBlocks.set(token, arr) }
+        arr.push({ kw, categoryId: t.categoryId || null, reservaFuncaoId: t.reservaFuncaoId || null })
+      }
+      const topOf = (arr, field) => {
+        const counts = new Map()
+        for (const x of arr) { const v = x[field]; if (v) counts.set(v, (counts.get(v) || 0) + 1) }
+        let best = null, n = 0
+        for (const [k, c] of counts) if (c > n) { n = c; best = k }
+        return best
+      }
+      const histMatchesOf = (desc) => {
+        const kw = extractLearnKeyword(desc)
+        if (!kw) return null
+        const block = histBlocks.get(kw.split(' ')[0])
+        if (!block) return null
+        const m = block.filter(x => descSimilarity(kw, x.kw) >= 0.75)
+        return m.length ? m : null
+      }
+      for (const row of processed) {
+        if (row._generated) continue
+        const matches = histMatchesOf(row.description)
+        if (!matches) continue
+        // ITEM 5: categoria sugerida quando a linha ficou sem categoria após as regras.
+        if (!row.categoryId) {
+          const catId = topOf(matches, 'categoryId')
+          if (catId) {
+            row.categoryId = catId
+            row._suggestedCategory = true
+            const cat = categories.find(c => c.id === catId)
+            if (cat?.defaultGerencialGroup && (!row.grupoGerencial || row.grupoGerencial === grupoD)) {
+              row.grupoGerencial = cat.defaultGerencialGroup
+            }
+          }
+        }
+        // ITEM 7: função de reserva sugerida — grupo numerado multi-função ainda sem função.
+        if (!row._reservaFuncaoId && reserveFuncsForGroup(row.grupoGerencial).length > 1) {
+          const funcId = topOf(matches, 'reservaFuncaoId')
+          if (funcId && reserveFuncsForGroup(row.grupoGerencial).some(f => f.id === funcId)) {
+            row._reservaFuncaoId = funcId
+            row._suggestedReserva = true
+          }
+        }
+      }
 
       const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
 
@@ -1529,6 +1584,31 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD, financialStartDay])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
+
+  // ITEM 6 — ao classificar uma linha, oferece propagar a MESMA classificação às demais linhas do
+  // MESMO fornecedor (keyword + descSimilarity ≥ 0.75) ainda NÃO editadas manualmente. Toast some
+  // em 5s. `changes` = { categoryId?, grupoGerencial?, _reservaFuncaoId? } aplicado à origem.
+  const offerApplyToAll = (srcRow, changes) => {
+    const kw = extractLearnKeyword(srcRow.description)
+    if (!kw) return
+    const similarIds = rows.filter(r => {
+      if (r._generated || r._id === srcRow._id || r._manualEdit) return false
+      const k = extractLearnKeyword(r.description)
+      return k && descSimilarity(kw, k) >= 0.75
+    }).map(r => r._id)
+    if (similarIds.length === 0) return
+    setApplyAllToast({ count: similarIds.length, similarIds, changes })
+    if (applyAllTimerRef.current) clearTimeout(applyAllTimerRef.current)
+    applyAllTimerRef.current = setTimeout(() => setApplyAllToast(null), 5000)
+  }
+  const applyToAll = () => {
+    if (!applyAllToast) return
+    const idSet = new Set(applyAllToast.similarIds)
+    const patch = { ...applyAllToast.changes, _suggestedCategory: false, _suggestedReserva: false }
+    setRows(prev => prev.map(r => (idSet.has(r._id) && !r._manualEdit) ? { ...r, ...patch } : r))
+    if (applyAllTimerRef.current) clearTimeout(applyAllTimerRef.current)
+    setApplyAllToast(null)
+  }
   const toggleRow = (id) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: !r.selected } : r))
   const toggleAll = (v) => setRows(prev => prev.map(r => ({ ...r, selected: r._isDuplicate ? false : v })))
 
@@ -3070,7 +3150,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               value={row.categoryId}
                               onChange={e => {
                                 const newCat = e.target.value
-                                const changes = { categoryId: newCat }
+                                const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true }
                                 const cat = newCat ? categories.find(c => c.id === newCat) : null
                                 // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
                                 // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
@@ -3079,9 +3159,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                                 }
                                 updateRow(row._id, changes)
                                 if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
+                                if (newCat) offerApplyToAll(row, changes.grupoGerencial ? { categoryId: newCat, grupoGerencial: changes.grupoGerencial } : { categoryId: newCat })
                               }}
                               searchable
                             />
+                          )}
+                          {row._suggestedCategory && (
+                            <button
+                              type="button"
+                              title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
+                              onClick={() => {
+                                if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
+                                updateRow(row._id, { _suggestedCategory: false, _manualEdit: true })
+                              }}
+                              className="inline-flex items-center gap-0.5 text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-blue-500/25 shrink-0"
+                            >
+                              💡 Sugerido ✓
+                            </button>
                           )}
                           <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
                         </div>
@@ -3090,7 +3184,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <select
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={row.grupoGerencial}
-                          onChange={e => updateRow(row._id, { grupoGerencial: e.target.value, _reservaFuncaoId: null })}
+                          onChange={e => {
+                            const g = e.target.value
+                            updateRow(row._id, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true })
+                            offerApplyToAll(row, { grupoGerencial: g, _reservaFuncaoId: null })
+                          }}
                         >
                           {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
                         </select>
@@ -3105,13 +3203,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               <select
                                 className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
                                 value={row._reservaFuncaoId || ''}
-                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null })}
+                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true })}
                                 title="Função de reserva do resgate"
                               >
                                 <option value="">— Selecionar —</option>
                                 {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                               </select>
                               {pendente && <p className="text-[10px] text-orange-500 mt-0.5">Selecione a função</p>}
+                              {row._suggestedReserva && !pendente && <p className="text-[10px] text-blue-400 mt-0.5">💡 Sugerido</p>}
                             </>
                           )
                         })()}
@@ -3334,6 +3433,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       />
 
       {corrigirToast && <Toast message={corrigirToast} onClose={() => setCorrigirToast(null)} />}
+
+      {/* ITEM 6 — propagar classificação p/ linhas do mesmo fornecedor (some em 5s) */}
+      {applyAllToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] flex items-center gap-3 bg-surface border border-blue-500/40 rounded-xl shadow-2xl px-4 py-3 max-w-[92vw]">
+          <span className="text-sm text-gray-200">
+            Aplicar a <span className="font-semibold text-blue-400">{applyAllToast.count}</span> lançamento{applyAllToast.count !== 1 ? 's' : ''} do mesmo fornecedor?
+          </span>
+          <button type="button" onClick={applyToAll} className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap">
+            Aplicar a todos ({applyAllToast.count})
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (applyAllTimerRef.current) clearTimeout(applyAllTimerRef.current); setApplyAllToast(null) }}
+            className="text-gray-500 hover:text-gray-300 shrink-0"
+            title="Dispensar"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <ImportPreviewModal
         open={showImportPreview}
