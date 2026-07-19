@@ -356,7 +356,7 @@ export default function PatrimonioPanel() {
                     <div className="mt-2">
                       <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                         <div
-                          className="h-1.5 bg-red-500 rounded-full"
+                          className="h-1.5 bg-despesa rounded-full"
                           style={{ width: `${Math.min(100, (a.balance / a.acquisitionValue) * 100)}%` }}
                         />
                       </div>
