@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Edit2, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Edit2, TrendingUp, AlertTriangle, Ban } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
@@ -109,7 +109,12 @@ export default function BudgetPanel() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {overBudget && <AlertTriangle size={14} className="text-red-400" />}
+                    {overBudget && (
+                      <span className="flex items-center gap-1 text-red-400">
+                        <Ban size={14} />
+                        <span className="text-[11px] font-semibold uppercase tracking-wide">Estourado</span>
+                      </span>
+                    )}
                     {nearLimit && <AlertTriangle size={14} className="text-amber-400" />}
                     <span className={`text-sm font-bold ${overBudget ? 'text-red-400' : nearLimit ? 'text-amber-400' : 'text-gray-300'}`}>
                       {pct.toFixed(0)}%
