@@ -90,14 +90,14 @@ export default function AlertsPanel() {
   const alertBadgeColor = (type) => {
     if (type === 'overdue') return 'bg-red-500/20 text-red-400'
     if (type === 'due_today') return 'bg-amber-500/20 text-amber-400'
-    return 'bg-violet-500/20 text-violet-600'
+    return 'bg-violet-500/20 text-violet-400'
   }
 
   const alertIcon = (alert) => {
     if (alert.type === 'overdue') return <AlertTriangle size={18} className="text-red-400" />
     if (alert.type === 'due_today') return <AlertTriangle size={18} className="text-amber-400" />
-    if (alert.kind === 'schedule') return <Calendar size={18} className="text-violet-600" />
-    return <Bell size={18} className="text-violet-600" />
+    if (alert.kind === 'schedule') return <Calendar size={18} className="text-violet-400" />
+    return <Bell size={18} className="text-violet-400" />
   }
 
   const alertLabel = (a) => {
@@ -150,7 +150,7 @@ export default function AlertsPanel() {
                       </p>
                       <span className={`badge ${alertBadgeColor(alert.type)}`}>{alertLabel(alert)}</span>
                       {alert.kind === 'schedule' && (
-                        <span className="badge bg-violet-500/20 text-violet-600">Agendamento</span>
+                        <span className="badge bg-violet-500/20 text-violet-400">Agendamento</span>
                       )}
                       {alert.kind === 'credit' && (
                         <span className="badge bg-gray-700/60 text-gray-400">Cartão</span>
@@ -197,7 +197,7 @@ export default function AlertsPanel() {
             return (
               <div key={acc.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <CreditCard size={14} className="text-violet-600" />
+                  <CreditCard size={14} className="text-violet-400" />
                   <span className="text-sm text-gray-300">{acc.name}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
