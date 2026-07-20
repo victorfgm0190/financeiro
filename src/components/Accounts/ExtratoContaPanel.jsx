@@ -618,10 +618,17 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   )
 
   // Conciliar Gerenciais: marca como conciliados todos os lançamentos pendentes do
-  // período/conta cuja descrição começa com "Reserva Gerencial - " (sem abrir modal).
+  // período/conta em que a conta de ORIGEM ou de DESTINO é gerencial (sem abrir modal).
+  // Critério estrutural (mesmo predicado de TransactionForm) em vez do antigo prefixo
+  // "Reserva Gerencial - " na descrição: aquele só casava a etapa A / provisão automática
+  // e deixava passar resgates, devoluções, ajustes e provisões, que usam outros prefixos.
+  const isContaGerencial = (accountId) => {
+    const acc = accounts.find(a => a.id === accountId)
+    return acc?.type === 'gerencial' || acc?.isGerencial === true || acc?.grupoGerencial != null
+  }
   const handleConciliarGerenciais = () => {
     const pend = periodReconcilable.filter(
-      tx => !tx.reconciled && (tx.description || '').startsWith('Reserva Gerencial - ')
+      tx => !tx.reconciled && (isContaGerencial(tx.accountId) || isContaGerencial(tx.toAccountId))
     )
     if (pend.length === 0) { showToast('Nenhum lançamento gerencial pendente'); return }
     setReconciled(pend.map(t => t.id), true)
@@ -1083,7 +1090,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <button
                 onClick={handleConciliarGerenciais}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
-                title='Conciliar todos os lançamentos "Reserva Gerencial" pendentes do período'
+                title="Conciliar todos os lançamentos pendentes do período que envolvem uma conta gerencial (origem ou destino)"
               >
                 <Zap size={12} /> Conciliar Gerenciais
               </button>
