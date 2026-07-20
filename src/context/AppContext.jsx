@@ -4662,6 +4662,30 @@ export function AppProvider({ children }) {
       })
   }, [data.gerencialGroups, data.accounts, data.transactions])
 
+  // Todas as faturas com parcelas Grupo G (executadas + pendentes), cada uma com a flag
+  // `pendente` = tem ≥1 parcela AINDA SEM a transferência gerencial (mesma checagem
+  // jaProvisionada de getProvisoesPendentes: parentTxId OU etapa A determinística tx_gerA_).
+  // Usada pelo seletor de Fatura do modal "Executar Provisões" para, opcionalmente, ocultar as
+  // faturas já totalmente executadas. Espelha exatamente os filtros de getProvisoesPendentes.
+  const getFaturasProvisaoGerencial = useCallback(() => {
+    const g1 = data.gerencialGroups?.find(g => g.number === 1)
+    if (!g1) return []
+    const byFatura = new Map() // ym (YYYY-MM) → pendente (boolean)
+    for (const tx of data.transactions) {
+      if (tx.type !== 'expense' || tx.accountType !== 'credit') continue
+      if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) continue
+      if (!isParcelada(tx)) continue
+      const jaProvisionada = data.transactions.some(t =>
+        t.type === 'transfer' && t.grupoGerencial === g1.id &&
+        (t.parentTxId === tx.id || t.id === etapaAId(tx.id))
+      )
+      byFatura.set(tx.faturaMonthYear, (byFatura.get(tx.faturaMonthYear) || false) || !jaProvisionada)
+    }
+    return [...byFatura.entries()]
+      .map(([ym, pendente]) => ({ ym, pendente }))
+      .sort((a, b) => a.ym.localeCompare(b.ym)) // YYYY-MM ordena cronologicamente
+  }, [data.gerencialGroups, data.transactions])
+
   // Executa as provisões selecionadas: transferência imediata Conta Principal → Ger. (igual ao
   // fluxo à vista) na data calculada de cada parcela.
   const executarProvisoesGerenciais = useCallback((parcelaIds) => {
@@ -5036,6 +5060,7 @@ export function AppProvider({ children }) {
       criarLancamentoDiferenca,
       propagarValorParcelas,
       getProvisoesPendentes,
+      getFaturasProvisaoGerencial,
       executarProvisoesGerenciais,
       corrigirDadosGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,

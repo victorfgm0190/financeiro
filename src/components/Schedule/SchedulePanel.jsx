@@ -1641,7 +1641,7 @@ function faturaNoCicloAtual(p, accounts, financialMonthStartDay, financialMonthM
   return dueDateObj >= cicloStart && dueDateObj <= cicloEnd
 }
 
-function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay = 1, financialMonthMode = 'custom', onConfirm, onClose }) {
+function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financialMonthStartDay = 1, financialMonthMode = 'custom', onConfirm, onClose }) {
   // Pré-seleção inicial: apenas provisões da fatura do ciclo atual. Passadas/futuras iniciam
   // desmarcadas (o usuário pode marcar manualmente). Filtros de fatura/cartão são independentes.
   const [selected, setSelected] = useState(
@@ -1649,6 +1649,9 @@ function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay =
   )
   const [faturaFiltro, setFaturaFiltro] = useState('')
   const [cartaoFiltro, setCartaoFiltro] = useState('')
+  // Seletor de Fatura: por padrão esconde faturas já totalmente executadas (todas as parcelas G já
+  // têm tx_gerA_). Marcado → mostra todas. Não afeta a lista, só as opções do dropdown.
+  const [mostrarExecutadas, setMostrarExecutadas] = useState(false)
   const toggle = (id) => setSelected(prev => {
     const n = new Set(prev)
     if (n.has(id)) n.delete(id); else n.add(id)
@@ -1656,11 +1659,15 @@ function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay =
   })
   const accName = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
 
-  // Opções de filtro derivadas dos itens da lista (distinct), em tempo real.
-  const faturaOptions = useMemo(
-    () => [...new Set(provisoes.map(p => p.faturaMonthYear).filter(Boolean))].sort(), // YYYY-MM ordena cronologicamente
-    [provisoes]
-  )
+  // Opções do seletor de Fatura. Padrão (mostrarExecutadas=false): só faturas PENDENTES (≥1 parcela
+  // Grupo G sem tx_gerA_). Marcado: inclui as já executadas. `faturasInfo` traz TODAS as faturas
+  // parceladas do Grupo G com a flag `pendente`; fallback p/ as faturas das provisões (compat).
+  const faturaOptions = useMemo(() => {
+    const base = faturasInfo.length
+      ? faturasInfo.filter(f => mostrarExecutadas || f.pendente).map(f => f.ym)
+      : provisoes.map(p => p.faturaMonthYear).filter(Boolean)
+    return [...new Set(base)].sort() // YYYY-MM ordena cronologicamente
+  }, [faturasInfo, provisoes, mostrarExecutadas])
   const cartaoOptions = useMemo(() => {
     const ids = [...new Set(provisoes.map(p => p.cardId).filter(Boolean))]
     return ids
@@ -1685,6 +1692,14 @@ function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay =
   }
   const handleFaturaFiltro = (val) => { setFaturaFiltro(val); pruneSelected(val, cartaoFiltro) }
   const handleCartaoFiltro = (val) => { setCartaoFiltro(val); pruneSelected(faturaFiltro, val) }
+  // Ao DESmarcar "mostrar já executadas", se a fatura selecionada era executada (não é mais opção),
+  // volta para "Todas as faturas" — evita um filtro apontando p/ uma fatura oculta.
+  const handleMostrarExecutadas = (checked) => {
+    setMostrarExecutadas(checked)
+    if (!checked && faturaFiltro && !faturasInfo.some(f => f.ym === faturaFiltro && f.pendente)) {
+      handleFaturaFiltro('')
+    }
+  }
 
   // Contador, total e confirmação consideram só itens visíveis E marcados.
   const selectedVisible = visibleProvisoes.filter(p => selected.has(p.id))
@@ -1704,33 +1719,44 @@ function ExecutarGerenciaisModal({ provisoes, accounts, financialMonthStartDay =
         </div>
 
         {/* Filtros (fatura + cartão) — aplicados em tempo real na lista */}
-        <div className="grid grid-cols-2 gap-3 px-5 py-3 border-b border-gray-800 shrink-0">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Fatura</label>
-            <select
-              className="input text-sm py-1.5"
-              value={faturaFiltro}
-              onChange={e => handleFaturaFiltro(e.target.value)}
-            >
-              <option value="">Todas as faturas</option>
-              {faturaOptions.map(ym => (
-                <option key={ym} value={ym}>{faturaLabel(ym)}</option>
-              ))}
-            </select>
+        <div className="px-5 py-3 border-b border-gray-800 shrink-0 space-y-2.5">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Fatura</label>
+              <select
+                className="input text-sm py-1.5"
+                value={faturaFiltro}
+                onChange={e => handleFaturaFiltro(e.target.value)}
+              >
+                <option value="">Todas as faturas</option>
+                {faturaOptions.map(ym => (
+                  <option key={ym} value={ym}>{faturaLabel(ym)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Cartão</label>
+              <select
+                className="input text-sm py-1.5"
+                value={cartaoFiltro}
+                onChange={e => handleCartaoFiltro(e.target.value)}
+              >
+                <option value="">Todos os cartões</option>
+                {cartaoOptions.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Cartão</label>
-            <select
-              className="input text-sm py-1.5"
-              value={cartaoFiltro}
-              onChange={e => handleCartaoFiltro(e.target.value)}
-            >
-              <option value="">Todos os cartões</option>
-              {cartaoOptions.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={mostrarExecutadas}
+              onChange={e => handleMostrarExecutadas(e.target.checked)}
+              className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer shrink-0"
+            />
+            <span className="text-xs text-gray-400">Mostrar já executadas</span>
+          </label>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
@@ -1786,11 +1812,12 @@ export default function SchedulePanel() {
     gerencialGroups, addTransaction,
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
-    getProvisoesPendentes, executarProvisoesGerenciais, efetivarProvisao,
+    getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
     activeProfileId, settings,
   } = useApp()
 
   const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
+  const faturasProvisao = useMemo(() => getFaturasProvisaoGerencial(), [getFaturasProvisaoGerencial])
   const [showExecutarGer, setShowExecutarGer] = useState(false)
 
   const [activeTab, setActiveTab] = useState('conta')
@@ -2306,6 +2333,7 @@ export default function SchedulePanel() {
       {showExecutarGer && (
         <ExecutarGerenciaisModal
           provisoes={provisoesPendentes}
+          faturasInfo={faturasProvisao}
           accounts={accounts}
           financialMonthStartDay={settings?.financialMonthStartDay || 1}
           financialMonthMode={settings?.financialMonthMode || 'custom'}
