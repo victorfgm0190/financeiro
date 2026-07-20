@@ -190,6 +190,8 @@ export const accountToRow = (a) => ({
   credit_month_bill: Number(a.creditMonthBill) || 0,
   closing_day: a.closingDay || null,
   due_day: a.dueDay || null,
+  // Conta que paga a fatura (só cartões). null = conta principal padrão.
+  payment_account_id: a.paymentAccountId || null,
   is_main: !!a.isMain,
   fluxo_caixa_principal: !!a.fluxoCaixaPrincipal,
   conta_corrente_principal: !!a.contaCorrentePrincipal,
@@ -231,6 +233,7 @@ export const rowToAccount = (r) => ({
   creditMonthBill: Number(r.credit_month_bill) || 0,
   closingDay: r.closing_day || null,
   dueDay: r.due_day || null,
+  paymentAccountId: r.payment_account_id || null,
   isMain: !!r.is_main,
   fluxoCaixaPrincipal: !!r.fluxo_caixa_principal,
   contaCorrentePrincipal: !!r.conta_corrente_principal,

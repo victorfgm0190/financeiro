@@ -1528,6 +1528,12 @@ export function AppProvider({ children }) {
         || d.accounts.find(a => a.isMain && a.type !== 'credit')
         || d.accounts.find(a => a.type === 'checking')
       if (!contaPrincipal) return d
+      // Conta pagadora deste cartão — MESMA resolução do reconcileFaturaState. Os dois
+      // caminhos criam o resgate_reserva com o mesmo id determinístico
+      // (fsch_<card>_<AAAAMM>_resgate_reserva_<origem>); divergir aqui faria um reconciliador
+      // reescrever a perna do outro a cada save.
+      const contaPagadora = (card.paymentAccountId
+        && d.accounts.find(a => a.id === card.paymentAccountId)) || contaPrincipal
 
       const faturaMesAno = faturaMesAnoOf(card, lanc.date, lanc.faturaMonthYear) // YYYY-MM
       if (!faturaMesAno) return d
@@ -1640,7 +1646,7 @@ export function AppProvider({ children }) {
         // entre o agendamento agregado e o delta pós-resgate).
         const buildResgate = (id, amount, sourceIds) => ({
           id, tipo: 'resgate_reserva',
-          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+          transactionType: 'transfer', accountId: origem, toAccountId: contaPagadora.id,
           startDate: dueDate, amount,
           description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
           reservaFuncaoId: lanc.reservaFuncaoId || null,
@@ -3429,6 +3435,15 @@ export function AppProvider({ children }) {
         || d.accounts.find(a => a.type === 'checking')
       if (!contaPrincipal) return d
 
+      // Conta pagadora DESTE cartão (campo "Conta Pagadora" / payment_account_id). É a perna
+      // de caixa dos agendamentos de fatura: paga o cartão (pagamento_fatura) e recebe as
+      // voltas (gerencial_devolucao, resgate_reserva). Fallback = conta principal padrão,
+      // preservando o comportamento anterior para cartões sem o campo preenchido (e para
+      // ids órfãos, ex.: conta pagadora excluída). contaPrincipal segue sendo a referência
+      // do restante do fluxo (subconta Ger., meta._gerencial.checkingAccountId).
+      const contaPagadora = (card.paymentAccountId
+        && d.accounts.find(a => a.id === card.paymentAccountId)) || contaPrincipal
+
       const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
       const subcontaName = `Ger. ${apelido}`
 
@@ -3593,7 +3608,7 @@ export function AppProvider({ children }) {
             ...baseSch,
             id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
             tipo: 'gerencial_devolucao',
-            transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
+            transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPagadora.id,
             startDate: devolDate, amount: totalG,
             description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
             sourceExpenseIds: sourceTxIdsG,
@@ -3610,7 +3625,7 @@ export function AppProvider({ children }) {
             ...baseSch,
             id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
             tipo: 'pagamento_fatura',
-            transactionType: 'transfer', accountId: contaPrincipal.id, toAccountId: cardId,
+            transactionType: 'transfer', accountId: contaPagadora.id, toAccountId: cardId,
             startDate: dueDate, amount: totalPagamento,
             description: `Pagamento Fatura ${apelido} ${faturaRef}`,
             sourceExpenseIds: sourceTxIdsAll,
@@ -3642,7 +3657,7 @@ export function AppProvider({ children }) {
           ...baseSch,
           id: schedId,
           tipo: 'resgate_reserva',
-          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+          transactionType: 'transfer', accountId: origem, toAccountId: contaPagadora.id,
           startDate: dueDate, amount: somaUnpaid,
           description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
           reservaFuncaoId,

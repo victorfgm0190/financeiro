@@ -51,6 +51,7 @@ export default function AccountForm({ initial, onClose }) {
     creditLimit: initial?.creditLimit ?? '',
     closingDay: initial?.closingDay ?? 1,
     dueDay: initial?.dueDay ?? 10,
+    paymentAccountId: initial?.paymentAccountId || null,
     isMain: initial?.isMain || false,
     fluxoCaixaPrincipal: initial?.fluxoCaixaPrincipal || false,
     contaCorrentePrincipal: initial?.contaCorrentePrincipal || false,
@@ -78,6 +79,11 @@ export default function AccountForm({ initial, onClose }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const isCredit = form.type === 'credit'
+  // Candidatas a "Conta Pagadora" da fatura: só contas de liquidez real (Conta Corrente /
+  // Poupança) e ativas — exclui cartões, gerenciais, dinheiro e patrimoniais.
+  const contasPagadoras = accounts
+    .filter(a => (a.type === 'checking' || a.type === 'savings') && a.active !== false)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   const isChecking = form.type === 'checking'
   const isPatrimonial = form.type === 'asset' || form.type === 'liability'
   // "É Investimento?" disponível apenas para Poupança e Bem/Ativo.
@@ -129,6 +135,8 @@ export default function AccountForm({ initial, onClose }) {
         ? rb(Number(initial ? form.initialBalance : form.balance) || 0)
         : null,
       creditLimit: Number(form.creditLimit),
+      // Só cartões têm conta pagadora; nos demais tipos o campo é sempre limpo.
+      paymentAccountId: isCredit ? (form.paymentAccountId || null) : null,
       closingDay: Number(form.closingDay),
       dueDay: Number(form.dueDay),
       isMain: form.isMain,
@@ -372,6 +380,22 @@ export default function AccountForm({ initial, onClose }) {
                 onChange={e => set('dueDay', e.target.value)}
               />
             </div>
+          </div>
+          <div>
+            <label className="label">Conta Pagadora</label>
+            <select
+              className="input"
+              value={form.paymentAccountId || ''}
+              onChange={e => set('paymentAccountId', e.target.value || null)}
+            >
+              <option value="">Conta principal padrão</option>
+              {contasPagadoras.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Deixe em branco para usar a conta principal padrão
+            </p>
           </div>
         </>
       )}
