@@ -824,7 +824,12 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStar
         date: installmentSystemDate(reference, num, baseDate, financialStartDay),
       }
     }
-    const fatura = faturaRefFromReference(dateCartao, reference, closingDay)
+    // Parcela 2..N: a date_cartao é a data da COMPRA ORIGINAL (fatura antiga) — NUNCA recalcula a
+    // fatura por ela. Todo o arquivo é o extrato de UMA fatura, então a parcela pertence ao mês de
+    // REFERÊNCIA selecionado. Sem isto, parcelas com compra após o fechamento driftam p/ o mês
+    // anterior (totalizador partido, mês "pula" ao reprocessar). À vista / parcela 1 mantêm a regra
+    // por data (dia da compra vs fechamento), que é legítima.
+    const fatura = num > 1 ? reference : faturaRefFromReference(dateCartao, reference, closingDay)
     return {
       ...row,
       faturaMonthYear: fatura,
