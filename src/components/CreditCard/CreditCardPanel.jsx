@@ -875,7 +875,6 @@ export default function CreditCardPanel() {
                   subtitle={tx.payee ? tx.description : null}
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.amount}
-                  dimmed={tx.reconciled}
                   onClick={selectMode ? () => toggleSelect(tx.id) : () => setEditTx(tx)}
                   leading={
                     selectMode ? (

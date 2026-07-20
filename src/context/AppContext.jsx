@@ -1713,16 +1713,15 @@ export function AppProvider({ children }) {
     let recalcArgs = null
     if (old && old.type === 'expense' && old.accountType === 'credit') {
       const updated = { ...old, ...changes }
-      const amountChanged = 'amount' in changes && Number(changes.amount) !== old.amount
       const faturaChanged =
         ('faturaMonthYear' in changes && (changes.faturaMonthYear || null) !== (old.faturaMonthYear || null)) ||
         ('date' in changes && changes.date !== old.date)
-      // Mudança de grupo gerencial reclassifica o gasto (G ↔ numerado ↔ D) → recalcula a fatura.
-      const grupoChanged =
-        'grupoGerencial' in changes && (changes.grupoGerencial || null) !== (old.grupoGerencial || null)
-      if (amountChanged || faturaChanged || grupoChanged) {
-        recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
-      }
+      // Qualquer edição numa despesa de cartão recalcula a fatura afetada. Os agendamentos
+      // (valores e descrição) e o estado gerencial da etapa A derivam de amount/description/
+      // date/fatura/grupo, então o gatilho NÃO pode ficar restrito a amount/fatura/grupo —
+      // editar só a descrição também precisa propagar para agendamentos e contas Ger.
+      // `faturaChanged` segue distinguindo quando a fatura ANTIGA também deve ser recalculada.
+      recalcArgs = { cartaoId: old.accountId, old, updated, faturaChanged }
     }
     update(d => {
       const oldTx = d.transactions.find(t => t.id === id)

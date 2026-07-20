@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
-import { CheckSquare, Square } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
+import ReconcileBadge from '../shared/ReconcileBadge'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -130,7 +130,7 @@ export default function ExtratoGerencial({ initialCardId }) {
                 return (
                   <tr
                     key={tx.id}
-                    className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}
+                    className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
                   >
                     <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
                     <td className="px-3 py-2.5 text-center text-gray-600 text-xs">{tx._seq}</td>
@@ -155,15 +155,11 @@ export default function ExtratoGerencial({ initialCardId }) {
                       {getBillLabel(tx.date, card)}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <button
+                      <ReconcileBadge
+                        reconciled={tx.reconciled}
                         onClick={() => updateTransaction(tx.id, { reconciled: !tx.reconciled })}
-                        className="text-gray-500 hover:text-gray-300 transition-colors"
                         title={tx.reconciled ? 'Desmarcar conferido' : 'Marcar como conferido'}
-                      >
-                        {tx.reconciled
-                          ? <CheckSquare size={14} style={{ color: '#0F6E56' }} />
-                          : <Square size={14} />}
-                      </button>
+                      />
                     </td>
                     <td className="px-3 py-2.5 text-right text-orange-600 font-medium whitespace-nowrap text-xs">
                       {tx._pagamento > 0 ? fmt(tx._pagamento) : ''}
