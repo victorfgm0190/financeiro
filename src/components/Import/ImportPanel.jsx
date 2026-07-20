@@ -1477,12 +1477,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
 
-      // Auto-detectar mês de referência pelo mês de fatura mais frequente e ancorar as parcelas a ele
+      // Auto-detectar mês de referência pelo mês de fatura mais frequente e ancorar as parcelas a ele.
       const detected = detectMainFatura(sortedRows)
-      let alignedRows = detected ? alignInstallmentsToFatura(sortedRows, detected, resolvedDueDay) : sortedRows
+      // Itaú (fatura ABERTA): o arquivo é UMA fatura inteira e a fatura_ref é o mês de REFERÊNCIA
+      // escolhido pelo usuário — TODA linha pertence a ela. As datas das compras (date_cartao) caem
+      // no mês anterior ao fechamento, então detectMainFatura (baseado na data) erra o mês (ex.: à
+      // vista de 10–13/07 com fechamento 13 → 07/2026, quando a fatura aberta é 08/2026). Respeita a
+      // seleção do usuário quando já houver uma; só cai no detectado como palpite inicial. Dindin
+      // segue sempre no detectado (a regra por data é legítima ali).
+      const reference = (isItau && faturaMonthYear) ? faturaMonthYear : detected
+      let alignedRows = reference ? alignInstallmentsToFatura(sortedRows, reference, resolvedDueDay) : sortedRows
       // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
-      if (detected) alignedRows = applyReferenceFatura(alignedRows, detected, resolvedClosingDay, resolvedDueDay, financialStartDay)
+      if (reference) alignedRows = applyReferenceFatura(alignedRows, reference, resolvedClosingDay, resolvedDueDay, financialStartDay)
 
       // Continuação: popula o preview. `estornoCat` (quando informado) aplica a categoria
       // padrão + grupo D aos estornos antes de exibir.
@@ -1491,7 +1498,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         setRows(finalRows)
         setCardInfo({ cardName, faturaStr })
         setMatchQueue(pendingMatches)
-        if (detected) setFaturaMonthYear(detected)
+        if (reference) setFaturaMonthYear(reference)
       }
 
       const estornoCount = alignedRows.filter(isEstornoRow).length
@@ -1528,8 +1535,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         return { ...row, faturaMonthYear: fatura }
       })
       const detected = detectMainFatura(rebased)
-      if (detected) setFaturaMonthYear(detected)
-      return detected ? applyReferenceFatura(rebased, detected, cl, dd, financialStartDay) : rebased
+      // Itaú: mantém o mês de referência escolhido pelo usuário (o arquivo é UMA fatura); o detectado
+      // por data erra p/ fatura aberta. Só usa o detectado quando ainda não há escolha do usuário.
+      const isItauRows = rebased.some(r => r._itau)
+      const reference = (isItauRows && faturaMonthYear) ? faturaMonthYear : detected
+      if (reference) setFaturaMonthYear(reference)
+      return reference ? applyReferenceFatura(rebased, reference, cl, dd, financialStartDay) : rebased
     })
   }
 
@@ -2103,6 +2114,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       setRows(prev => prev.map(r => r._id === rowId ? { ...r, categoryId: catId || r.categoryId, payee: payee || r.payee } : r))
     }
     setMatchQueue(q => q.slice(1))
+  }
+
+  // Vincular TODAS as correspondências pendentes de uma vez (sem passar modal a modal). Igual ao
+  // Vincular individual: herda categoria/favorecido do lançamento existente, NUNCA a fatura_ref.
+  const resolveAllMatches = () => {
+    const byId = new Map(matchQueue.map(m => [m.row._id, m.existingTx]))
+    setRows(prev => prev.map(r => {
+      const ex = byId.get(r._id)
+      return ex ? { ...r, categoryId: ex.categoryId || r.categoryId, payee: ex.payee || r.payee } : r
+    }))
+    setMatchQueue([])
   }
 
   const resolveScheduleMatch = (action) => {
@@ -2936,12 +2958,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-100">Parcela correspondente encontrada</h3>
             <p className="text-xs text-gray-400">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
+            {matchQueue.length > 1 && <p className="text-[11px] text-gray-500">{matchQueue.length} correspondências pendentes</p>}
             <div className="flex gap-3">
               <button className="btn-secondary flex-1" onClick={() => resolveMatch(false)}>Ignorar</button>
               <button className="btn-primary flex-1" onClick={() => resolveMatch(true, matchQueue[0].existingTx.categoryId, matchQueue[0].existingTx.payee)}>
                 <Link size={13} className="mr-1.5 inline" /> Vincular
               </button>
             </div>
+            {matchQueue.length > 1 && (
+              <button className="btn-secondary w-full text-xs" onClick={resolveAllMatches}>
+                <Link size={13} className="mr-1.5 inline" /> Vincular Todos ({matchQueue.length})
+              </button>
+            )}
           </div>
         </div>
       )}
