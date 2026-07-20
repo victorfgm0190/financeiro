@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, ArrowLeft, CreditCard, Wallet,
-  ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2, CheckCircle2, Circle, CheckSquare,
+  ChevronRight, Edit2, Trash2, ArrowUpCircle, Undo2, CheckSquare,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
@@ -17,6 +17,7 @@ import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import DuplicateButton from '../shared/DuplicateButton'
 import ReconciledTotals from '../shared/ReconciledTotals'
+import ReconcileBadge from '../shared/ReconcileBadge'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 
@@ -271,7 +272,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 {displayTxs.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId)
                   return (
-                    <tr key={tx.id} className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${tx.reconciled ? '' : 'opacity-60'}`}>
+                    <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
                         <p className="text-gray-200 text-sm">{tx.description}</p>
@@ -312,16 +313,12 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                         </div>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => setReconciled([tx.id], !tx.reconciled)}
-                          title={tx.reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
-                          className="p-1 rounded hover:bg-gray-700/50 transition-colors"
-                        >
-                          {tx.reconciled
-                            ? <CheckCircle2 size={15} className="text-emerald-500" />
-                            : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
-                        </button>
+                        <div className="inline-flex justify-center">
+                          <ReconcileBadge
+                            reconciled={tx.reconciled}
+                            onClick={() => setReconciled([tx.id], !tx.reconciled)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   )

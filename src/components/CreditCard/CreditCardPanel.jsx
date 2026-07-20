@@ -14,6 +14,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
+import ReconcileBadge from '../shared/ReconcileBadge'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
@@ -886,16 +887,11 @@ export default function CreditCardPanel() {
                         onClick={e => e.stopPropagation()}
                       />
                     ) : (
-                      <button
-                        type="button"
+                      <ReconcileBadge
+                        reconciled={tx.reconciled}
                         onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                        className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
                         title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
-                      >
-                        {tx.reconciled
-                          ? <CheckCircle2 size={16} className="text-emerald-500" />
-                          : <Circle size={16} className="text-gray-600" />}
-                      </button>
+                      />
                     )
                   }
                 />
@@ -961,7 +957,7 @@ export default function CreditCardPanel() {
                       <tr
                         key={tx.id}
                         onClick={selectMode ? () => toggleSelect(tx.id) : undefined}
-                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'} ${tx.reconciled ? 'opacity-40' : ''}`}
+                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'}`}
                       >
                         {selectMode && (
                           <td className="px-3 py-3">
@@ -1031,16 +1027,10 @@ export default function CreditCardPanel() {
                           </div>
                         </td>
                         <td className="px-2 py-3 text-center">
-                          <button
-                            type="button"
+                          <ReconcileBadge
+                            reconciled={tx.reconciled}
                             onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                            title={tx.reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
-                            className="p-1 rounded hover:bg-gray-700/50 transition-colors"
-                          >
-                            {tx.reconciled
-                              ? <CheckCircle2 size={15} className="text-emerald-500" />
-                              : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
-                          </button>
+                          />
                         </td>
                       </tr>
                     )

@@ -18,6 +18,7 @@ import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import DuplicateButton from '../shared/DuplicateButton'
 import ReconciledTotals from '../shared/ReconciledTotals'
+import ReconcileBadge from '../shared/ReconcileBadge'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -188,22 +189,9 @@ function AccountName({ id, accounts, fallback = '—' }) {
   return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
 }
 
-// Ícone clicável de reconciliação para a coluna "R".
+// Badge clicável de reconciliação para a coluna "R" (design quadrado compartilhado).
 function ReconcileBtn({ reconciled, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={reconciled ? 'Reconciliado — clique para desmarcar' : 'Marcar como reconciliado'}
-      className="p-1 rounded hover:bg-gray-700/50 transition-colors"
-    >
-      {reconciled
-        ? <span className="inline-flex items-center justify-center w-[17px] h-[17px] rounded-full bg-green-500 align-middle">
-            <Check size={11} strokeWidth={3} className="text-white" />
-          </span>
-        : <Circle size={15} className="text-gray-600 hover:text-gray-400" />}
-    </button>
-  )
+  return <ReconcileBadge reconciled={reconciled} onClick={onClick} />
 }
 
 function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect }) {
@@ -235,7 +223,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
 
   return (
     <tr
-      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${tx.reconciled ? '' : 'opacity-60'} ${selectMode && selected ? 'bg-blue-500/10' : ''}`}
+      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${selectMode && selected ? 'bg-blue-500/10' : ''}`}
       onClick={() => selectMode ? onToggleSelect(tx.id) : (onEdit && onEdit(tx))}
     >
       {selectMode && (
@@ -1404,16 +1392,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     className="w-5 h-5 rounded accent-blue-500 cursor-pointer shrink-0"
                   />
                 ) : (
-                  <button
-                    type="button"
+                  <ReconcileBadge
+                    reconciled={tx.reconciled}
                     onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                    className="p-1 rounded hover:bg-gray-700/50 transition-colors shrink-0"
                     title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
-                  >
-                    {tx.reconciled
-                      ? <span className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-green-500"><Check size={12} strokeWidth={3} className="text-white" /></span>
-                      : <Circle size={16} className="text-gray-600" />}
-                  </button>
+                  />
                 )
               }
             />
