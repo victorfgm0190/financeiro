@@ -3417,11 +3417,9 @@ export function AppProvider({ children }) {
         }
       }
       const _dueDateObj = new Date(`${dueDate}T00:00:00`)
+      // Só o passado é bloqueado (nada retroativo). Ciclo atual E futuro materializam a etapa A
+      // e o gerencial_devolucao — mantendo a reserva da subconta Ger. consistente com a devolução.
       const faturaCicloNoPassado = _dueDateObj < _cicloStart
-      // Item 8 (D2/Q4): fatura do ciclo ATUAL = vencimento dentro do ciclo financeiro
-      // corrente. Passado/futuro espelhados pela mesma janela. Só o ciclo atual materializa
-      // a etapa A; futuro fica só com o agendamento projetado; passado, nada retroativo.
-      const faturaCicloAtual = _dueDateObj >= _cicloStart && _dueDateObj <= _cicloEnd
 
       const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
         || d.accounts.find(a => a.isMain && a.type !== 'credit')
@@ -3757,17 +3755,18 @@ export function AppProvider({ children }) {
       //    remoção de órfãos é feita por id em delete/edição/reversão.
       let transactions = d.transactions
       if (subcontaId && !faturaCicloNoPassado) {
+        // A etapa A deve cobrir TODO gasto Grupo G desta fatura — o MESMO conjunto que compõe o
+        // totalG do gerencial_devolucao. A devolução (accountId=subconta → contaPrincipal, valor
+        // totalG) devolve a reserva de TODOS os gastos G, sem filtro de parcela; se a etapa A de
+        // alguma parcela 2..N não for materializada, a subconta Ger. fica inconsistente (deve a
+        // reserva na hora da devolução). Por isso NÃO filtramos parcela 2..N aqui: parcelas 2..N
+        // em faturas futuras também recebem a etapa A (provisionada em aDate = início do ciclo
+        // anterior, ver abaixo). A dupla provisão com o "Executar Gerenciais" é evitada nos dois
+        // sentidos: aqui pela guarda temProvisaoManual (pula se já há tx_ger_ manual) e lá pela
+        // guarda jaProvisionada (pula se já existe este tx_gerA_).
         const gExpenses = expenses.filter(tx => {
           const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
-          if (!g || g.number !== 1) return false
-          // Parcela 2..N de uma série NÃO recebe etapa A imediata em faturas futuras (vai para o
-          // Executar Gerenciais). Identificada por QUALQUER um: installment_num > 1 (explícito),
-          // parent_tx_id preenchido (filha de criarParcelasGerencial) OU origin 'parcela'. Cobre
-          // parcelas importadas via conciliação que têm installment_num = null mas parent_tx_id/
-          // origin definidos. À vista / parcela 1 (nenhum desses) recebe etapa A sempre (atual +
-          // futuro); parcela 2..N só no ciclo atual.
-          const ehParcela2aN = Number(tx.installmentNum) > 1 || tx.parentTxId != null || isParcelaGeradaOrigin(tx)
-          return !ehParcela2aN || faturaCicloAtual
+          return !!g && g.number === 1
         })
         if (gExpenses.length) {
           const arr = [...transactions]
