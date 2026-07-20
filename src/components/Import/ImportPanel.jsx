@@ -2197,6 +2197,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     for (const r of resolvedRows) {
       const val = Number(r.amount) || 0
       if (r.type === 'income') { estornos += val; continue }
+      // Colisão (installment_key já existe → será ATUALIZADA, não inserida): conta em "Já existem"
+      // para o Total da fatura refletir TODAS as linhas. Sem isto some do total (selected=false).
+      if (r._collisionTx) { jaExistem += val; continue }
       if (r._isDuplicate) jaExistem += val
       else if (r.selected) importar += val
     }
@@ -2211,7 +2214,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const cl = acc?.closingDay
     if (!cl || !faturaMonthYear || rows.length === 0) return { count: 0, total: 0, closingDay: cl }
     const avista = rows.filter(r => {
-      if (r._generated) return false
+      // Itaú (_itau): a fatura é o mês ESCOLHIDO pelo usuário; a date_cartao (data da compra) cai
+      // legitimamente antes da janela de fechamento → o aviso seria falso positivo. Exclui do cálculo.
+      if (r._generated || r._itau) return false
       const inst = detectInstallment(r.description)
       return !inst || inst.num <= 1
     })
