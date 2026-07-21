@@ -50,7 +50,10 @@ function parseItauCSV(text, categories = []) {
 
   // Localizar linha de cabeçalho
   const headerIdx = lines.findIndex(l => /^data[,;]lan[çc]amento[,;]valor/i.test(l))
-  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '' }
+  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
+
+  // Mês de referência do cabeçalho (linhas de preâmbulo antes da tabela de lançamentos).
+  const faturaMY = extractItauFaturaMonth(lines.slice(0, headerIdx))
 
   // Categoria de estorno (primeira cujo nome contenha "estorno"); vazio se não houver.
   const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
@@ -94,7 +97,7 @@ function parseItauCSV(text, categories = []) {
     })
   }
 
-  return { rows: parsed, cardName: '', faturaStr: '' }
+  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY }
 }
 
 // Valor do XLS do Itaú: já costuma vir como número. Aceita também string (formato pt-BR),
@@ -181,12 +184,48 @@ function EstornoConfigModal({ count, categories, updateSettings, onDecide, onClo
 }
 
 // Parser do XLS/XLSX exportado pelo internet banking do Itaú (fatura de cartão). Recebe a matriz
+// Meses PT-BR → número (2 dígitos). Usado para extrair o mês da fatura do cabeçalho do Itaú.
+const MESES_PT = {
+  janeiro: '01', fevereiro: '02', marco: '03', abril: '04', maio: '05', junho: '06',
+  julho: '07', agosto: '08', setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
+}
+const NOMES_MES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
+// Rótulo amigável (ex.: "Agosto/2026") a partir de um YYYY-MM.
+function faturaMYLabel(my) {
+  if (!my || !/^\d{4}-\d{2}$/.test(my)) return ''
+  const [y, m] = my.split('-')
+  return `${NOMES_MES[parseInt(m, 10) - 1]}/${y}`
+}
+
+// Extrai o mês de REFERÊNCIA da fatura (YYYY-MM) do cabeçalho de um arquivo do Itaú. O cabeçalho
+// traz "Fatura Aberta - Agosto/2026" (o mês verdadeiro da fatura), enquanto as DATAS das compras
+// caem no mês anterior ao fechamento — por isso detectMainFatura (baseado na data) erra numa fatura
+// aberta. Procura primeiro "<Mês>/<Ano>"; como reforço, "Vencimento DD/MM/YYYY" (o mês do vencimento
+// é o mês da fatura). Retorna '' quando nada é encontrado.
+function extractItauFaturaMonth(texts) {
+  const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const meses = Object.keys(MESES_PT).join('|')
+  const reMes = new RegExp(`\\b(${meses})\\b\\s*(?:de\\s*)?\\/?\\s*(\\d{4})`)
+  for (const raw of texts) {
+    const m = norm(raw).match(reMes)
+    if (m && MESES_PT[m[1]]) return `${m[2]}-${MESES_PT[m[1]]}`
+  }
+  for (const raw of texts) {
+    const v = norm(raw).match(/vencimento[^0-9]*(\d{2})\/(\d{2})\/(\d{4})/)
+    if (v) return `${v[3]}-${v[2]}`
+  }
+  return ''
+}
+
 // de células (parseFile, header:1, cellDates:true) e devolve o MESMO formato de parseItauCSV,
 // para o fluxo de conciliação seguir sem alteração.
 // Estrutura: linha de cabeçalho com "Data" (col 1); Lançamento (col 2), Parcelamento (col 3),
 // Valor (col 4) — colunas localizadas RELATIVAS à célula "Data" para tolerar deslocamentos.
+// Retorna também faturaMY (YYYY-MM) extraído do cabeçalho, p/ ancorar a fatura sem depender da data.
 function parseItauXLS(aoa, categories = []) {
-  if (!Array.isArray(aoa) || aoa.length === 0) return { rows: [], cardName: '', faturaStr: '' }
+  if (!Array.isArray(aoa) || aoa.length === 0) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
   const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
 
   // Localiza a linha de cabeçalho: contém "Data" e "Valor". Guarda a coluna de "Data".
@@ -196,7 +235,10 @@ function parseItauXLS(aoa, categories = []) {
     const di = row.findIndex(c => norm(c) === 'data')
     if (di !== -1 && row.some(c => norm(c) === 'valor')) { headerIdx = i; dataCol = di; break }
   }
-  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '' }
+  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
+
+  // Mês de referência a partir do cabeçalho (linhas acima da tabela de lançamentos).
+  const faturaMY = extractItauFaturaMonth(aoa.slice(0, headerIdx).flat())
 
   const descCol = dataCol + 1, parcCol = dataCol + 2, valorCol = dataCol + 3
   const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
@@ -237,7 +279,7 @@ function parseItauXLS(aoa, categories = []) {
     })
   }
 
-  return { rows: parsed, cardName: '', faturaStr: '' }
+  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY }
 }
 
 function isDuplicate(row, existing) {
@@ -1184,6 +1226,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [rateioRow, setRateioRow] = useState(null)
 
   const [faturaMonthYear, setFaturaMonthYear] = useState('')
+  // Mês de referência extraído do cabeçalho do arquivo Itaú (ex.: "Agosto/2026" → '2026-08').
+  // Serve de âncora estável na troca de cartão, evitando o mês errado derivado das datas.
+  const [importFaturaMY, setImportFaturaMY] = useState('')
   const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
@@ -1274,7 +1319,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setFilename(file.name)
     setClosingDayWarnDismissed(false)
     try {
-      let cardName = '', faturaStr = '', parsed = []
+      let cardName = '', faturaStr = '', faturaMY = '', parsed = []
       // Origem Itaú (CSV ou XLS/XLSX do internet banking): fatura_ref fixa no mês de referência.
       // Dindin e CSV genérico (ITEM 8) calculam a fatura pelo fechamento (isItau=false).
       let isItau = false
@@ -1284,12 +1329,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         parsed = preParsed.parsed || []
         cardName = preParsed.cardName || ''
         faturaStr = preParsed.faturaStr || ''
+        faturaMY = preParsed.faturaMY || ''
         isItau = !!preParsed.isItau
       } else if (/\.csv$/i.test(file.name)) {
         const text = await readFileAsText(file)
         if (isItauCSV(text)) {
           isItau = true
-          ;({ rows: parsed, cardName, faturaStr } = parseItauCSV(text, categories))
+          ;({ rows: parsed, cardName, faturaStr, faturaMY } = parseItauCSV(text, categories))
         } else {
           // ITEM 8: CSV genérico (Nubank/Bradesco/C6/…) → mapeamento de colunas. Aplica um mapeamento
           // salvo se já houver; senão abre o CsvColumnMapperModal (que re-chama handleFile via preParsed).
@@ -1309,7 +1355,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // lançamentos, cai no formato Dindin (header com "Descrição").
         const itau = parseItauXLS(rawRows, categories)
         if (itau.rows.length > 0) {
-          ;({ cardName, faturaStr, rows: parsed } = itau)
+          ;({ cardName, faturaStr, faturaMY, rows: parsed } = itau)
           isItau = true
         } else {
           ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
@@ -1483,9 +1529,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // escolhido pelo usuário — TODA linha pertence a ela. As datas das compras (date_cartao) caem
       // no mês anterior ao fechamento, então detectMainFatura (baseado na data) erra o mês (ex.: à
       // vista de 10–13/07 com fechamento 13 → 07/2026, quando a fatura aberta é 08/2026). Respeita a
-      // seleção do usuário quando já houver uma; só cai no detectado como palpite inicial. Dindin
-      // segue sempre no detectado (a regra por data é legítima ali).
-      const reference = (isItau && faturaMonthYear) ? faturaMonthYear : detected
+      // seleção do usuário quando já houver uma; senão usa o mês do CABEÇALHO do arquivo (faturaMY,
+      // ex.: "Fatura Aberta - Agosto/2026"), que é o mês verdadeiro da fatura; só cai no detectado
+      // (por data) como último recurso. Dindin segue sempre no detectado (a regra por data é legítima ali).
+      const reference = (isItau && faturaMonthYear) ? faturaMonthYear
+        : (isItau && faturaMY) ? faturaMY
+        : detected
+      // Guarda o mês do cabeçalho p/ a troca de cartão (handleAccountChange) não voltar ao detectado.
+      setImportFaturaMY(isItau ? faturaMY : '')
       let alignedRows = reference ? alignInstallmentsToFatura(sortedRows, reference, resolvedDueDay) : sortedRows
       // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
@@ -1538,7 +1589,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Itaú: mantém o mês de referência escolhido pelo usuário (o arquivo é UMA fatura); o detectado
       // por data erra p/ fatura aberta. Só usa o detectado quando ainda não há escolha do usuário.
       const isItauRows = rebased.some(r => r._itau)
-      const reference = (isItauRows && faturaMonthYear) ? faturaMonthYear : detected
+      const reference = (isItauRows && faturaMonthYear) ? faturaMonthYear
+        : (isItauRows && importFaturaMY) ? importFaturaMY
+        : detected
       if (reference) setFaturaMonthYear(reference)
       return reference ? applyReferenceFatura(rebased, reference, cl, dd, financialStartDay) : rebased
     })
