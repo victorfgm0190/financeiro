@@ -78,7 +78,7 @@ function buildCatOpts(categories, type) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, criarParcelasGerencial, ajustarParcelasGrupoGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
+    gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
@@ -467,21 +467,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
         if (groupChanged) {
           // — Desfaz automação do grupo anterior —
-          if (wasGerencial1) {
-            reverseGerencialCascadeOnly(initial)
-          }
-          if (wasNumbered && initial.gerencialScheduleId) {
-            const oldSch = schedules.find(s => s.id === initial.gerencialScheduleId)
-            if (oldSch) {
-              const done = isResgatePago(oldSch.id, schedules, transactions)
-              if (!done) {
-                const newAmt = Math.max(0, Math.round(((oldSch.amount || 0) - initial.amount) * 100) / 100)
-                if (newAmt <= 0) deleteSchedule(oldSch.id)
-                else updateSchedule(oldSch.id, { amount: newAmt })
-              }
-            }
-            updateTransaction(initial.id, { gerencialScheduleId: null })
-          }
+          // REFACTOR DETERMINÍSTICO: a reversão da etapa A (Grupo G) e o ajuste do resgate dos
+          // numerados NÃO são mais feitos aqui. O updateTransaction(initial.id, …) acima já disparou
+          // o motor determinístico (reconcileFaturaState + applyEnsureGerencial), que remove a etapa A
+          // órfã (tx_gerA_<id>) e recria/limpa os resgates (fsch_*) por id determinístico. As antigas
+          // chamadas reverseGerencialCascadeOnly(initial) e o lookup por initial.gerencialScheduleId
+          // eram redundantes — no-op garantido, pois a etapa A já havia sido removida pelo motor — e
+          // mantinham vivo o ponteiro legado gerencialScheduleId. Removidas (path legado A).
 
           // — Aplica automação do novo grupo —
           // Os agendamentos (etapa A do G, resgate dos numerados) são gerados pelo motor
@@ -492,18 +484,18 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           }
 
           // — Cascata parcelas 2..N —
-          if (wasGerencial1 || wasNumbered || isGerencial1 || isNumbered) {
-            ajustarParcelasGrupoGerencial(initial.id, {
-              prevGrupoId,
-              newGrupoId: (isGerencial1 || isNumbered) ? newGrupoId : null,
-              amount: Number(form.amount),
-              accountId: initial.accountId,
-            })
-          }
+          // REFACTOR DETERMINÍSTICO: ajustarParcelasGrupoGerencial era o ÚNICO criador de
+          // agendamentos com id ALEATÓRIO (sch_ger_num_* / sch_ger_p_*, chaveados por _originTxId /
+          // _gerencialKey) — um laço legado fechado (só ele criava e só ele lia esses slots). No
+          // modelo atual cada parcela 2..N mora na sua própria fatura e tem os slots fsch_*
+          // regenerados por reconcileFaturaState. Chamada removida (path legado B; função marcada
+          // DEPRECATED em AppContext, definição preservada por segurança).
 
           // — Ajuste de diferença quando o resgate/devolução do grupo já foi executado —
           // (transição pós-pago). Cria lançamento(s) 'ajuste_grupo' que reconciliam os saldos
           // das reservas/gerencial; no-op quando nada foi pago ainda (caminho "antes do pago").
+          // NÃO é redundante com o motor: reconcileFaturaState preserva agendamentos já executados e
+          // nunca mexe em saldo pago — este é o único caminho que reconcilia o pós-pago.
           criarLancamentoDiferenca(initial.id, {
             prevGrupoId,
             newGrupoId,

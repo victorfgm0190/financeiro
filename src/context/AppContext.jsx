@@ -4306,6 +4306,13 @@ export function AppProvider({ children }) {
   }, [addTransaction, recalcularAgendamentosFatura])
 
   // ── Ajusta parcelas 2..N quando o grupo gerencial muda em uma edição ──────────
+  // @deprecated REFACTOR DETERMINÍSTICO — NÃO CHAMAR EM CÓDIGO NOVO.
+  // Único criador dos agendamentos com id ALEATÓRIO (sch_ger_num_* / sch_ger_p_*, chaveados por
+  // _originTxId / _gerencialKey) — laço legado fechado: só esta função criava esses slots e só ela
+  // (e o MonthStartModal, apenas para exibir) os lia. No modelo atual cada parcela 2..N mora na sua
+  // própria fatura e tem os slots fsch_* regenerados por reconcileFaturaState + applyEnsureGerencial
+  // (ids determinísticos). O call site em TransactionForm foi removido. Definição preservada por
+  // segurança/rollback; pode ser deletada após uma migração que limpe os sch_ger_* órfãos legados.
   const ajustarParcelasGrupoGerencial = useCallback((txId, { prevGrupoId, newGrupoId, amount, accountId }) => {
     const prevGrupo = data.gerencialGroups?.find(g => g.id === prevGrupoId)
     const newGrupo  = newGrupoId ? data.gerencialGroups?.find(g => g.id === newGrupoId) : null
