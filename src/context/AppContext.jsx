@@ -3793,7 +3793,15 @@ export function AppProvider({ children }) {
             const id = etapaAId(e.id)
             const amount = Number(e.amount) || 0
             const instNum = Number(e.installmentNum) || 1
-            const aDate = (instNum >= 2 && faturaRef) ? prevMonthScheduleDate(faturaRef, financialStartDay) : e.date
+            // Etapa A da parcela 2..N: no dia financeiro da PRÓPRIA fatura (mesma data do
+            // gerencial_devolucao acima, `devolDate = computeScheduleDate(faturaRef, …)`), NÃO no
+            // mês anterior. Só chegam aqui parcelas 2..N JÁ CONFIRMADAS — as projeções não
+            // confirmadas foram excluídas de gExpenses por isProjecaoParcela (commit 5746050). O
+            // prevMonthScheduleDate era a regra das projeções (provisão no ciclo anterior); ao
+            // excluí-las daqui, ele passou a datar a reserva da parcela confirmada 1 mês antes da
+            // devolução, deixando a subconta Ger. inconsistente e a etapa A no mês errado (ex.:
+            // fatura 08/2026 → reserva caía em 07 em vez de 08). À vista / parcela 1 seguem em e.date.
+            const aDate = (instNum >= 2 && faturaRef) ? computeScheduleDate(faturaRef, financialStartDay) : e.date
             const desc = `Reserva Gerencial - ${e.description || ''}`.trim()
             const idx = arr.findIndex(t => t.id === id)
             if (idx === -1) {
