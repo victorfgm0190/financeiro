@@ -2098,12 +2098,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Clique em "Confirmar Importação": valida a função obrigatória (mesmo guard do handleImport)
   // e, se passar, abre o modal de preview. A confirmação real (handleImport) só roda no modal.
   const handleConfirmImport = () => {
-    // Mesmos guards do handleImport ANTES de abrir a prévia — senão a prévia abre mas o
-    // "Confirmar mesmo assim" (handleImport) bloqueia e parece "não fazer nada".
-    if (!editingImport && isFaturaFechada(selectedAccount, faturaMonthYear)) {
-      setError('Esta fatura está fechada. Abra-a antes de importar.')
-      return
-    }
     const toImport = filterSelectedRows(resolvedRows)
     const pendentesFunc = toImport.filter(r =>
       reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
