@@ -3447,6 +3447,17 @@ export function AppProvider({ children }) {
         faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno
       const expenses = d.transactions.filter(belongs)
 
+      // Projeção de parcela 2..N ainda NÃO confirmada: parcela futura gerada ao importar/criar um
+      // parcelamento (criarParcelas, seção "parcelas futuras" da importação, etc.). Sinal ÚNICO e
+      // robusto em TODOS os caminhos de criação: é parcela 2..N e NÃO tem date_cartao (a compra real
+      // ainda não foi importada; origin não distingue — projeções de importação usam IMPORTACAO_FATURA).
+      // Não gera etapa A NEM entra no totalG do gerencial_devolucao — senão a fatura futura (ainda não
+      // importada) ganharia reserva+devolução de um gasto não confirmado (etapa A em 09/2026, 10/2026…).
+      // Quando a fatura dela for importada, a colisão preenche o date_cartao → vira confirmada e ganha
+      // etapa A + devolução. À vista / parcela 1 nunca são projeção (sempre têm date_cartao) → Regra 1.
+      const isProjecaoParcela = (tx) =>
+        (Number(tx.installmentNum) > 1 || tx.parentTxId != null || isParcelaGeradaOrigin(tx)) && !tx.dateCartao
+
       // 2. Totais por classe de grupo
       let totalG = 0
       let totalGeral = 0
@@ -3468,9 +3479,14 @@ export function AppProvider({ children }) {
         sourceTxIdsAll.push(tx.id)
         const grupo = d.gerencialGroups?.find(g => g.id === tx.grupoGerencial)
         if (grupo && grupo.number === 1) {
-          totalG = rb(totalG + amt)
-          sourceTxIdsG.push(tx.id)
-          sourceGDetail.push({ id: tx.id, valor: amt })
+          // Projeção não confirmada NÃO entra no totalG: a devolução (Regra 3) só cobre gastos que
+          // têm etapa A. Ainda conta no totalGeral (pagamento da fatura) — a projeção representa o
+          // desembolso futuro da parcela.
+          if (!isProjecaoParcela(tx)) {
+            totalG = rb(totalG + amt)
+            sourceTxIdsG.push(tx.id)
+            sourceGDetail.push({ id: tx.id, valor: amt })
+          }
         } else if (grupo && typeof grupo.number === 'number' && grupo.number !== 1 && grupo.defaultAccountId) {
           const origem = grupo.defaultAccountId
           numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + amt))
@@ -3747,26 +3763,28 @@ export function AppProvider({ children }) {
       // 7. Item 8 — etapa A (transferência imediata Conta Principal → Ger. subconta) do
       //    Grupo G, DERIVADA das despesas G da fatura e com id determinístico (tx_gerA_<expenseId>).
       //    Regra de negócio:
-      //      • À vista / parcela 1 (installment_num <= 1): materializa na DATA DA COMPRA tanto na
-      //        fatura do ciclo ATUAL quanto em FATURAS FUTURAS (provisão imediata).
-      //      • Parcelas 2..N (installment_num > 1): só no ciclo atual — as futuras ficam para o
-      //        Executar Gerenciais (provisão no início do ciclo anterior à fatura).
+      //      • À vista / parcela 1: materializa na DATA DA COMPRA na fatura atual E em faturas
+      //        FUTURAS (provisão imediata — gasto confirmado).
+      //      • Parcela 2..N JÁ CONFIRMADA (importada, com date_cartao): também recebe etapa A na
+      //        própria fatura (atual ou futura) — casa com o totalG do gerencial_devolucao.
+      //      • Parcela 2..N PROJETADA (futura, sem date_cartao ainda): NÃO recebe etapa A — só
+      //        quando a fatura dela for importada e a compra virar confirmada (ver isProjecaoParcela).
+      //        Sem isto, importar a fatura 08 criava etapa A nas projeções de 09, 10… (não confirmadas).
       //    Passado fica intocado (nada retroativo). Reconcilia create/update por id determinístico;
       //    remoção de órfãos é feita por id em delete/edição/reversão.
       let transactions = d.transactions
       if (subcontaId && !faturaCicloNoPassado) {
-        // A etapa A deve cobrir TODO gasto Grupo G desta fatura — o MESMO conjunto que compõe o
-        // totalG do gerencial_devolucao. A devolução (accountId=subconta → contaPrincipal, valor
-        // totalG) devolve a reserva de TODOS os gastos G, sem filtro de parcela; se a etapa A de
-        // alguma parcela 2..N não for materializada, a subconta Ger. fica inconsistente (deve a
-        // reserva na hora da devolução). Por isso NÃO filtramos parcela 2..N aqui: parcelas 2..N
-        // em faturas futuras também recebem a etapa A (provisionada em aDate = início do ciclo
-        // anterior, ver abaixo). A dupla provisão com o "Executar Gerenciais" é evitada nos dois
-        // sentidos: aqui pela guarda temProvisaoManual (pula se já há tx_ger_ manual) e lá pela
-        // guarda jaProvisionada (pula se já existe este tx_gerA_).
+        // A etapa A cobre o MESMO conjunto que compõe o totalG do gerencial_devolucao (gastos G
+        // CONFIRMADOS): projeções não confirmadas ficam de fora dos dois, mantendo a subconta Ger.
+        // consistente (nunca há devolução sem a reserva correspondente). A dupla provisão com o
+        // "Executar Gerenciais" é evitada nos dois sentidos: aqui pela guarda temProvisaoManual
+        // (pula se já há tx_ger_ manual) e lá pela guarda jaProvisionada (pula se já existe tx_gerA_).
         const gExpenses = expenses.filter(tx => {
           const g = d.gerencialGroups?.find(gg => gg.id === tx.grupoGerencial)
-          return !!g && g.number === 1
+          // Exclui projeções não confirmadas (parcela 2..N futura sem date_cartao): elas NÃO recebem
+          // etapa A até a fatura delas ser importada. Casa exatamente com o totalG acima (consistência
+          // etapa A ↔ devolução). À vista / parcela 1 e parcelas 2..N já importadas seguem normais.
+          return !!g && g.number === 1 && !isProjecaoParcela(tx)
         })
         if (gExpenses.length) {
           const arr = [...transactions]
