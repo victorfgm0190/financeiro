@@ -3455,8 +3455,15 @@ export function AppProvider({ children }) {
       // importada) ganharia reserva+devolução de um gasto não confirmado (etapa A em 09/2026, 10/2026…).
       // Quando a fatura dela for importada, a colisão preenche o date_cartao → vira confirmada e ganha
       // etapa A + devolução. À vista / parcela 1 nunca são projeção (sempre têm date_cartao) → Regra 1.
+      //
+      // EXCEÇÃO (origin='manual'): um lançamento MANUAL de parcela 2..N é um gasto CONFIRMADO pelo
+      // usuário — e lançamentos manuais nunca têm date_cartao (campo "Data original do extrato" fica
+      // em branco). Sem esta ressalva, o !date_cartao os classificava como projeção e os excluía da
+      // etapa A (25 casos na fatura 08/2026). Projeção só nasce por importação/geração automática
+      // (IMPORTACAO_FATURA / PARCELA_GERADA), nunca com origin manual — então excluí-lo é seguro.
       const isProjecaoParcela = (tx) =>
-        (Number(tx.installmentNum) > 1 || tx.parentTxId != null || isParcelaGeradaOrigin(tx)) && !tx.dateCartao
+        (Number(tx.installmentNum) > 1 || tx.parentTxId != null || isParcelaGeradaOrigin(tx)) &&
+        !tx.dateCartao && tx.origin !== ORIGIN.MANUAL
 
       // 2. Totais por classe de grupo
       let totalG = 0
