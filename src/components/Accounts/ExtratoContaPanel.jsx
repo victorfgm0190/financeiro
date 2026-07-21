@@ -297,7 +297,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
             </button>
           )}
           {onDuplicate && !tx.reservaAuto && (
-            <DuplicateButton onConfirm={(date) => onDuplicate(tx, date)} iconSize={14} />
+            <DuplicateButton onConfirm={(date) => onDuplicate(tx, date)} sourceTx={tx} iconSize={14} />
           )}
           {onReverse && !tx.reservaAuto && (
             <button

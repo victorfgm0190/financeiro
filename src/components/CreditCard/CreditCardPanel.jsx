@@ -1013,6 +1013,7 @@ export default function CreditCardPanel() {
                             </button>
                             <DuplicateButton
                               onConfirm={(date) => handleDuplicate(tx, date)}
+                              sourceTx={tx}
                               iconSize={11}
                               className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
                             />
