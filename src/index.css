@@ -81,6 +81,20 @@
   }
 }
 
+/* Skeleton shimmer — placeholder animado dos valores numéricos enquanto a API não respondeu
+   (dbStatus === 'connecting'). Evita o flicker de pintar o cache local e depois sobrescrever. */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1e2531 25%, #2a3244 50%, #1e2531 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  display: inline-block;
+}
+
 @layer utilities {
   /* iOS PWA (standalone + viewport-fit=cover): respeitar status bar/notch e home
      indicator. O container raiz é h-screen overflow-hidden, então as insets vão nas

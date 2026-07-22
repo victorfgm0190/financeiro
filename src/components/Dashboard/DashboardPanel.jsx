@@ -21,8 +21,15 @@ const PERIOD_OPTS = [
   { value: '3m', label: 'Últimos 3m' },
 ]
 
-function Delta({ abs, pct, goodWhenPositive = true }) {
+// Placeholder shimmer dos valores enquanto a API ainda não respondeu (dbStatus === 'connecting').
+// Evita o flicker de pintar o cache do localStorage e depois sobrescrever com os dados frescos.
+const SkeletonVal = ({ wide }) => (
+  <span className={`skeleton ${wide ? 'w-32' : 'w-24'} h-7 block`} />
+)
+
+function Delta({ abs, pct, goodWhenPositive = true, loading = false }) {
   if (abs === null || abs === undefined) return null
+  if (loading) return <div className="mt-1.5"><SkeletonVal /></div>
   const isGood = goodWhenPositive ? abs >= 0 : abs <= 0
   const color = isGood ? 'text-receita' : 'text-despesa'
   const Icon = abs >= 0 ? TrendingUp : TrendingDown
@@ -37,7 +44,7 @@ function Delta({ abs, pct, goodWhenPositive = true }) {
   )
 }
 
-function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive, onClick }) {
+function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, deltaPct, goodWhenPositive, onClick, loading }) {
   const clickable = typeof onClick === 'function'
   return (
     <div
@@ -51,15 +58,20 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
         <Icon size={15} />
         <span className="text-xs uppercase tracking-wide text-gray-400">{label}</span>
       </div>
-      <p className={`text-2xl font-bold ${valueColor}`}>{fmt(value)}</p>
-      <Delta abs={deltaAbs} pct={deltaPct} goodWhenPositive={goodWhenPositive} />
+      <p className={`text-2xl font-bold ${valueColor}`}>
+        {loading ? <SkeletonVal wide /> : fmt(value)}
+      </p>
+      <Delta abs={deltaAbs} pct={deltaPct} goodWhenPositive={goodWhenPositive} loading={loading} />
     </div>
   )
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences, getSaldoPrincipalBreakdown } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus } = useApp()
   const accounts = profileAccounts
+  // Enquanto a API não respondeu, os valores exibidos vêm do cache local (sessão anterior) e
+  // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.
+  const loading = dbStatus === 'connecting'
   const isMobile = useIsMobile()
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
@@ -405,9 +417,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </div>
         {/* Principal em destaque */}
         <p className="text-[11px] uppercase tracking-wide text-gray-500 mt-3">Principal</p>
-        <p className={`text-3xl font-extrabold tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
-          {fmt(saldoPrincipal)}
-        </p>
+        {loading ? (
+          <SkeletonVal wide />
+        ) : (
+          <p className={`text-3xl font-extrabold tracking-tight ${saldoPrincipal >= 0 ? 'text-receita' : 'text-despesa'}`}>
+            {fmt(saldoPrincipal)}
+          </p>
+        )}
 
         {/* Valores do ciclo (Final Ciclo · Projetado · Atual Cal. · Final Cal.) */}
         {cicloRows.length > 0 && (
@@ -415,9 +431,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             {cicloRows.map(r => (
               <div key={r.label}>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500">{r.label}</p>
-                <p className={`text-xl font-extrabold tracking-tight ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {fmt(r.val)}
-                </p>
+                {loading ? (
+                  <SkeletonVal wide />
+                ) : (
+                  <p className={`text-xl font-extrabold tracking-tight ${r.val >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                    {fmt(r.val)}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -432,6 +452,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Receitas do Mês"
           value={income}
           valueColor="text-blue-600"
+          loading={loading}
           deltaAbs={mkDelta(income, prevIncome).abs}
           deltaPct={mkDelta(income, prevIncome).pct}
           goodWhenPositive={true}
@@ -448,6 +469,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Despesas do Mês"
           value={expense}
           valueColor="text-orange-600"
+          loading={loading}
           deltaAbs={mkDelta(expense, prevExpense).abs}
           deltaPct={mkDelta(expense, prevExpense).pct}
           goodWhenPositive={false}
@@ -464,6 +486,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Reservas"
           value={reservaLiquido}
           valueColor={reservaLiquido >= 0 ? 'text-blue-600' : 'text-orange-600'}
+          loading={loading}
           onClick={() => setTxModal({
             title: 'Reservas',
             total: reservaLiquido,
@@ -479,6 +502,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Saldo do Mês"
           value={balance}
           valueColor={balance >= 0 ? 'text-blue-600' : 'text-orange-600'}
+          loading={loading}
           deltaAbs={mkDelta(balance, prevBalance).abs}
           deltaPct={mkDelta(balance, prevBalance).pct}
           goodWhenPositive={true}
@@ -497,6 +521,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           label="Saldo Total"
           value={totalAssets}
           valueColor="text-gray-300"
+          loading={loading}
         />
 
         {/* Projetado + Final — largura total, abaixo dos 4 KPI cards */}
@@ -537,16 +562,24 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <div className="shrink-0 text-right space-y-1.5">
               <div>
                 <p className="text-xs text-gray-500 mb-0.5">Projetado</p>
-                <p className={`text-xl font-bold ${projetadoModal >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {fmt(projetadoModal)}
-                </p>
+                {loading ? (
+                  <SkeletonVal wide />
+                ) : (
+                  <p className={`text-xl font-bold ${projetadoModal >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                    {fmt(projetadoModal)}
+                  </p>
+                )}
               </div>
               {Math.abs(saldoProjetado.final - saldoProjetado.projetado) >= 0.005 && (
                 <div>
                   <p className="text-xs text-gray-500 mb-0.5">Final</p>
-                  <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-reserva' : 'text-despesa'}`}>
-                    {fmt(saldoProjetado.final)}
-                  </p>
+                  {loading ? (
+                    <SkeletonVal />
+                  ) : (
+                    <p className={`text-base font-bold ${saldoProjetado.final >= 0 ? 'text-reserva' : 'text-despesa'}`}>
+                      {fmt(saldoProjetado.final)}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
