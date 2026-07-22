@@ -952,7 +952,7 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   const showFuncs = funcs.length > 1
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
         <h3 className="text-sm font-semibold text-gray-100">Preencher em Lote</h3>
         <div className="space-y-3">
@@ -1042,7 +1042,7 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
         <h3 className="text-sm font-semibold text-gray-100">Categoria → Gerencial</h3>
         <p className="text-xs text-gray-500">Trocar o grupo de uma categoria aplica em todos os lançamentos dela nesta importação.</p>
@@ -2959,7 +2959,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {showCorrigirDatas && editingImport && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCorrigirDatas(false)} />
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCorrigirDatas(false)} />
           <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
             <div className="px-5 py-4 border-b border-gray-800">
               <h3 className="text-sm font-semibold text-gray-100">
@@ -3012,7 +3012,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {matchQueue.length > 0 && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/60" />
           <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
             <h3 className="text-sm font-semibold text-gray-100">Parcela correspondente encontrada</h3>
             <p className="text-xs text-gray-400">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
