@@ -25,8 +25,13 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
           o backdrop-filter invalida o backing store e o modal "sumia" por um frame. O overlay
           escuro bg-black/60 mantém o mesmo efeito visual de escurecer o fundo. */}
       <div className="absolute inset-0 bg-black/60 hidden md:block" onClick={onClose} />
-      {/* Modal */}
-      <div className={`relative z-10 flex flex-col bg-surface border-b border-gray-800 md:border md:rounded-2xl w-full h-full md:h-auto md:max-h-[90vh] ${MAX_WIDTHS[size] || MAX_WIDTHS.md} shadow-2xl`}>
+      {/* Modal — translateZ(0) promove o painel a uma camada de composição GPU própria,
+          isolando-o das recomposições forçadas por elementos portados acima (ex.: o dropdown
+          do SearchableSelect em z-9999), que faziam o modal "sumir" por um frame. */}
+      <div
+        style={{ transform: 'translateZ(0)' }}
+        className={`relative z-10 flex flex-col bg-surface border-b border-gray-800 md:border md:rounded-2xl w-full h-full md:h-auto md:max-h-[90vh] ${MAX_WIDTHS[size] || MAX_WIDTHS.md} shadow-2xl`}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <h2 className="text-base font-semibold text-gray-100">{title}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded-lg hover:bg-gray-800">
