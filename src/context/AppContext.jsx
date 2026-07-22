@@ -3800,15 +3800,19 @@ export function AppProvider({ children }) {
             const id = etapaAId(e.id)
             const amount = Number(e.amount) || 0
             const instNum = Number(e.installmentNum) || 1
-            // Etapa A da parcela 2..N: no dia financeiro da PRÓPRIA fatura (mesma data do
-            // gerencial_devolucao acima, `devolDate = computeScheduleDate(faturaRef, …)`), NÃO no
-            // mês anterior. Só chegam aqui parcelas 2..N JÁ CONFIRMADAS — as projeções não
-            // confirmadas foram excluídas de gExpenses por isProjecaoParcela (commit 5746050). O
-            // prevMonthScheduleDate era a regra das projeções (provisão no ciclo anterior); ao
-            // excluí-las daqui, ele passou a datar a reserva da parcela confirmada 1 mês antes da
-            // devolução, deixando a subconta Ger. inconsistente e a etapa A no mês errado (ex.:
-            // fatura 08/2026 → reserva caía em 07 em vez de 08). À vista / parcela 1 seguem em e.date.
-            const aDate = (instNum >= 2 && faturaRef) ? computeScheduleDate(faturaRef, financialStartDay) : e.date
+            // Etapa A da parcela 2..N: dia financeiro do mês ANTERIOR à fatura da parcela
+            // (regra do Manual — a provisão é feita no ciclo financeiro anterior ao da fatura).
+            // Ex.: fatura 08/2026 + startDay 15 → 15/07/2026. Mesma regra usada por
+            // executarProvisoesGerenciais e pelo SchedulePanel: a data da etapa A NÃO depende de a
+            // parcela já estar confirmada ou ainda ser projeção.
+            //
+            // ATENÇÃO — esta linha já foi trocada nos dois sentidos; não inverta sem decisão do
+            // dono do produto. O 385663d a mudou para computeScheduleDate (mês da própria fatura)
+            // para casar com o gerencial_devolucao (devolDate, acima); a regra do Manual prevaleceu
+            // e o comportamento foi revertido. Consequência aceita: a etapa A fica 1 mês ANTES da
+            // devolução (15/07 × 15/08) — a defasagem é intencional, é o ciclo de provisão.
+            // À vista / parcela 1 seguem em e.date.
+            const aDate = (instNum >= 2 && faturaRef) ? prevMonthScheduleDate(faturaRef, financialStartDay) : e.date
             const desc = `Reserva Gerencial - ${e.description || ''}`.trim()
             const idx = arr.findIndex(t => t.id === id)
             if (idx === -1) {
