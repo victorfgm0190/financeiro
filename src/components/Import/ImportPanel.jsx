@@ -1691,32 +1691,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
-    // Linha que já existe no banco exibe a classificação REAL do lançamento salvo (categoria,
-    // grupo gerencial e função de reserva), não a do CSV / classificação automática — que é o
-    // que o usuário vê no extrato. Campo vazio no banco cai de volta no valor da linha.
-    const fromDb = (r, tx) => ({
-      ...r,
-      categoryId: tx.categoryId || r.categoryId,
-      grupoGerencial: tx.grupoGerencial || r.grupoGerencial,
-      _reservaFuncaoId: tx.grupoGerencial ? (tx.reservaFuncaoId || null) : r._reservaFuncaoId,
-      _dbTx: tx,
-    })
+    // `_dbTx` = lançamento REAL já salvo no banco que corresponde à linha. Serve só para o
+    // DISPLAY (colunas Categoria/Ger. mostram a classificação do extrato, em vez da do CSV);
+    // os campos da linha NÃO são sobrescritos — a reclassificação via reimportação continua
+    // valendo: a colisão segue fazendo UPDATE com a classificação nova (prévia "atualizar?").
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
       const k = keyOfImportRow(r, selectedAccount)
       const collisionTx = k ? existingParcelaByKey.get(k) : null
-      if (collisionTx) return { ...fromDb(r, collisionTx), _isDuplicate: false, _collisionTx: collisionTx, _dupLevel: null, selected: false }
+      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false }
       // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura.
       const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
       const isCerteza = dupLevel === 'certeza'
       // Certeza: nunca selecionável. Provável/Possível: desmarcado por padrão, salvo se o
       // usuário forçar. Sem duplicata: segue o `selected` da linha.
       const selected = isCerteza ? false : (dupLevel ? forcedDupSelect.has(r._id) : row.selected)
-      // Só o nível "certeza" é o mesmo lançamento com certeza → herda a classificação do banco
-      // e trava a edição. Provável/possível continuam editáveis (podem ser compras distintas).
-      const base = isCerteza ? fromDb(r, dupTx) : r
-      return { ...base, _isDuplicate: isCerteza, _collisionTx: null, _dupLevel: dupLevel, selected }
+      // Só "certeza" é com certeza o mesmo lançamento → exibe a classificação do banco.
+      // Provável/possível seguem editáveis (podem ser compras distintas).
+      return { ...r, _isDuplicate: isCerteza, _collisionTx: null, _dbTx: isCerteza ? dupTx : null, _dupLevel: dupLevel, selected }
     })
   }, [rows, selectedAccount, editingImport, existingParcelaByKey, cardTxsByFatura, forcedDupSelect])
 
@@ -3316,7 +3309,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           {/* Já no banco: mostra a categoria REAL do lançamento salvo, sem edição. */}
                           {row._dbTx ? (
                             <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
-                              {(() => { const c = categories.find(x => x.id === row.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
+                              {(() => { const c = categories.find(x => x.id === row._dbTx.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
                             </span>
                           ) : row._rateios?.length > 0 ? (
                             <span className="text-xs text-gray-300 bg-gray-700/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
@@ -3362,11 +3355,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         </div>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
-                        {/* Já no banco: badge com o grupo gerencial REAL do lançamento salvo (o mesmo
-                            que aparece no extrato), somente leitura — não é reclassificado por aqui. */}
+                        {/* Já no banco: badge com o grupo gerencial REAL do lançamento salvo — o mesmo
+                            que aparece no extrato. Somente leitura; a reclassificação da colisão é
+                            revisada na prévia "Parcelas já no banco — atualizar?" (antes → depois). */}
                         {row._dbTx ? (
-                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial do lançamento já salvo no banco (não editável aqui)">
-                            {(() => { const g = gerencialGroups.find(x => x.id === row.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (não editável aqui — ver prévia 'atualizar?')">
+                            {(() => { const g = gerencialGroups.find(x => x.id === row._dbTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
                           </span>
                         ) : (
                         <select
