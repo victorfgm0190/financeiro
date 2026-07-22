@@ -3306,8 +3306,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5">
-                          {/* Já no banco: mostra a categoria REAL do lançamento salvo, sem edição. */}
-                          {row._dbTx ? (
+                          {/* Duplicata "certeza": não entra no banco de forma alguma → mostra a
+                              categoria REAL do lançamento salvo, sem edição. Colisão segue editável
+                              (a classificação nova é gravada no UPDATE), com o valor do banco à vista. */}
+                          {row._dbTx && !row._collisionTx ? (
                             <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
                               {(() => { const c = categories.find(x => x.id === row._dbTx.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
                             </span>
@@ -3336,7 +3338,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               searchable
                             />
                           )}
-                          {row._suggestedCategory && !row._dbTx && (
+                          {row._suggestedCategory && (!row._dbTx || row._collisionTx) && (
                             <button
                               type="button"
                               title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
@@ -3349,17 +3351,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               💡 Sugerido ✓
                             </button>
                           )}
-                          {!row._dbTx && (
+                          {(!row._dbTx || row._collisionTx) && (
                             <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
                           )}
                         </div>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
-                        {/* Já no banco: badge com o grupo gerencial REAL do lançamento salvo — o mesmo
-                            que aparece no extrato. Somente leitura; a reclassificação da colisão é
-                            revisada na prévia "Parcelas já no banco — atualizar?" (antes → depois). */}
-                        {row._dbTx ? (
-                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (não editável aqui — ver prévia 'atualizar?')">
+                        {/* Duplicata "certeza": badge com o grupo gerencial REAL do lançamento salvo —
+                            o mesmo que aparece no extrato —, somente leitura (a linha nunca é gravada). */}
+                        {row._dbTx && !row._collisionTx ? (
+                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (linha não será importada)">
                             {(() => { const g = gerencialGroups.find(x => x.id === row._dbTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
                           </span>
                         ) : (
@@ -3375,7 +3376,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
                         </select>
                         )}
-                        {!row._dbTx && (() => {
+                        {/* Colisão: o select acima é a classificação NOVA (vai no UPDATE). Mostra ao
+                            lado o grupo que está gravado hoje, quando diferente — evita achar que o
+                            valor exibido é o do extrato. */}
+                        {row._collisionTx && row._collisionTx.grupoGerencial !== row.grupoGerencial && (
+                          <p className="text-[10px] text-amber-500/80 mt-0.5 truncate" title="Grupo gerencial atualmente salvo no banco — será substituído se a atualização for aplicada">
+                            banco: {(() => { const g = gerencialGroups.find(x => x.id === row._collisionTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+                          </p>
+                        )}
+                        {(!row._dbTx || row._collisionTx) && (() => {
                           // Grupo numerado com mais de uma função de reserva na conta-origem:
                           // permite escolher de qual função virá o resgate (gravado no agendamento).
                           const funcs = reserveFuncsForGroup(row.grupoGerencial)
