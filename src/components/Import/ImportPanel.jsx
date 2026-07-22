@@ -1691,16 +1691,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
-    // `_dbTx` = lançamento REAL já salvo no banco que corresponde à linha. Serve só para o
-    // DISPLAY (colunas Categoria/Ger. mostram a classificação do extrato, em vez da do CSV);
-    // os campos da linha NÃO são sobrescritos — a reclassificação via reimportação continua
-    // valendo: a colisão segue fazendo UPDATE com a classificação nova (prévia "atualizar?").
+    // `_dbTx` = lançamento REAL já salvo no banco que corresponde à linha.
+    // Na COLISÃO a linha vira um UPDATE do lançamento salvo, então a classificação DEFAULT é
+    // a que já está no banco (a do extrato) — nunca a do CSV/classificação automática, que
+    // rebaixava tudo para "D · Despesa" ao confirmar. O usuário ainda reclassifica à mão: o
+    // valor editado (`_catEdit` / `_gerEdit`) prevalece sobre o do banco.
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
       const k = keyOfImportRow(r, selectedAccount)
       const collisionTx = k ? existingParcelaByKey.get(k) : null
-      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false }
+      if (collisionTx) return {
+        ...r,
+        categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
+        grupoGerencial: r._gerEdit ? r.grupoGerencial : (collisionTx.grupoGerencial || r.grupoGerencial),
+        _reservaFuncaoId: r._gerEdit ? r._reservaFuncaoId : (collisionTx.reservaFuncaoId || null),
+        _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false,
+      }
       // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura.
       const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
       const isCerteza = dupLevel === 'certeza'
@@ -1716,9 +1723,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Linhas alimentadas ao totalizador por grupo gerencial. O totalizador retrata a fatura
   // INTEIRA (linhas desmarcadas também entram), então quem já está no banco deve pesar no
   // grupo REAL salvo lá — o mesmo do extrato —, não no do CSV/classificação automática.
-  // Vale para colisão ("No banco ↻") e para duplicata "certeza" ("🔴 Já existe").
+  // A colisão já vem com o grupo do banco (ou o que o usuário escolheu no lugar dele); só a
+  // duplicata "certeza" — que nunca é gravada e mantém os campos do CSV — precisa da troca.
   const totalizerRows = useMemo(() => resolvedRows.map(r =>
-    r._dbTx?.grupoGerencial ? { ...r, grupoGerencial: r._dbTx.grupoGerencial } : r
+    (r._dbTx && !r._collisionTx && r._dbTx.grupoGerencial) ? { ...r, grupoGerencial: r._dbTx.grupoGerencial } : r
   ), [resolvedRows])
 
   // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
@@ -1798,7 +1806,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const applyToAll = () => {
     if (!applyAllToast) return
     const idSet = new Set(applyAllToast.similarIds)
-    const patch = { ...applyAllToast.changes, _suggestedCategory: false, _suggestedReserva: false }
+    // Propagação confirmada pelo usuário → também vence a classificação do banco na colisão.
+    const patch = {
+      ...applyAllToast.changes, _suggestedCategory: false, _suggestedReserva: false,
+      ...(applyAllToast.changes.categoryId ? { _catEdit: true } : {}),
+      ...(applyAllToast.changes.grupoGerencial ? { _gerEdit: true } : {}),
+    }
     setRows(prev => prev.map(r => (idSet.has(r._id) && !r._manualEdit) ? { ...r, ...patch } : r))
     if (applyAllTimerRef.current) clearTimeout(applyAllTimerRef.current)
     setApplyAllToast(null)
@@ -1820,6 +1833,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             categoryId: categoryId || r.categoryId,
             grupoGerencial: grupoGerencial || r.grupoGerencial,
             _reservaFuncaoId: grupoGerencial ? (reservaFuncaoId || null) : r._reservaFuncaoId,
+            // Preenchimento em lote é ação explícita → vence a classificação do banco na colisão.
+            _catEdit: categoryId ? true : r._catEdit,
+            _gerEdit: grupoGerencial ? true : r._gerEdit,
           }
         : r
     ))
@@ -3332,12 +3348,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               value={row.categoryId}
                               onChange={e => {
                                 const newCat = e.target.value
-                                const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true }
+                                // `_catEdit`: escolha manual — na colisão, prevalece sobre a categoria do banco.
+                                const changes = { categoryId: newCat, _suggestedCategory: false, _manualEdit: true, _catEdit: true }
                                 const cat = newCat ? categories.find(c => c.id === newCat) : null
                                 // Grupo gerencial padrão da categoria: preenche quando o grupo atual está
                                 // vazio ou no padrão D (não sobrescreve escolha manual ≠ D).
                                 if (cat?.defaultGerencialGroup && (!row.grupoGerencial || row.grupoGerencial === defaultGrupoD)) {
                                   changes.grupoGerencial = cat.defaultGerencialGroup
+                                  changes._gerEdit = true
                                 }
                                 updateRow(row._id, changes)
                                 if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
@@ -3377,7 +3395,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           value={row.grupoGerencial}
                           onChange={e => {
                             const g = e.target.value
-                            updateRow(row._id, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true })
+                            // `_gerEdit`: escolha manual — na colisão, prevalece sobre o grupo do banco.
+                            updateRow(row._id, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true, _gerEdit: true })
                             offerApplyToAll(row, { grupoGerencial: g, _reservaFuncaoId: null })
                           }}
                         >
@@ -3403,7 +3422,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               <select
                                 className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
                                 value={row._reservaFuncaoId || ''}
-                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true })}
+                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
                                 title="Função de reserva do resgate"
                               >
                                 <option value="">— Selecionar —</option>
