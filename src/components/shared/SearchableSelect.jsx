@@ -186,6 +186,11 @@ export default function SearchableSelect({
       {open && rect && createPortal(
         <div
           ref={panelRef}
+          // O dropdown é portado para document.body. Sem isto, o clique numa opção sobe pela
+          // ÁRVORE REACT (portais borbulham por ela, não pelo DOM) até ancestrais como o Modal/
+          // linha do extrato, fechando o modal ou disparando handlers do pai. Barrar a
+          // propagação aqui resolve de uma vez para TODOS os SearchableSelect do sistema.
+          onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
           className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
         >
