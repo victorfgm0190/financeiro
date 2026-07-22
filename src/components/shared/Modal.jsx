@@ -20,8 +20,11 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center md:p-4">
-      {/* Desktop backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm hidden md:block" onClick={onClose} />
+      {/* Desktop backdrop — sem backdrop-filter: sob uma camada composta que se move acima
+          (ex.: o dropdown portado do SearchableSelect, z-9999, ao passar o cursor pelas opções),
+          o backdrop-filter invalida o backing store e o modal "sumia" por um frame. O overlay
+          escuro bg-black/60 mantém o mesmo efeito visual de escurecer o fundo. */}
+      <div className="absolute inset-0 bg-black/60 hidden md:block" onClick={onClose} />
       {/* Modal */}
       <div className={`relative z-10 flex flex-col bg-surface border-b border-gray-800 md:border md:rounded-2xl w-full h-full md:h-auto md:max-h-[90vh] ${MAX_WIDTHS[size] || MAX_WIDTHS.md} shadow-2xl`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
