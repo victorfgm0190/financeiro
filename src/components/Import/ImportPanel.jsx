@@ -1713,6 +1713,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     })
   }, [rows, selectedAccount, editingImport, existingParcelaByKey, cardTxsByFatura, forcedDupSelect])
 
+  // Linhas alimentadas ao totalizador por grupo gerencial. O totalizador retrata a fatura
+  // INTEIRA (linhas desmarcadas também entram), então quem já está no banco deve pesar no
+  // grupo REAL salvo lá — o mesmo do extrato —, não no do CSV/classificação automática.
+  // Vale para colisão ("No banco ↻") e para duplicata "certeza" ("🔴 Já existe").
+  const totalizerRows = useMemo(() => resolvedRows.map(r =>
+    r._dbTx?.grupoGerencial ? { ...r, grupoGerencial: r._dbTx.grupoGerencial } : r
+  ), [resolvedRows])
+
   // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
   // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
   // ausentes → herdam a categoria/gerencial da parcela importada e são criadas na confirmação.
@@ -3232,7 +3240,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           </div>
 
           <div className="card p-0 overflow-hidden">
-            <GerencialTotalizer txs={resolvedRows} gerencialGroups={gerencialGroups} />
+            <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
