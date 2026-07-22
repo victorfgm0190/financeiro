@@ -342,7 +342,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
   return (
     <>
       <tr
-        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
+        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${allReconciled ? '[&>td:not(:last-child)]:opacity-40 [&>td:not(:last-child)]:text-white [&>td:not(:last-child)_*]:text-white' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
         {selectMode && <td className="px-2 py-1.5" title="Transferências não são alteráveis em lote" />}
