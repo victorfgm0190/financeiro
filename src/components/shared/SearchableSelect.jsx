@@ -24,6 +24,32 @@ function sortGroups(groupNames) {
   })
 }
 
+// Posição do dropdown portado (position:fixed = coords de viewport). Mantém o menu COLADO ao
+// campo: abre logo abaixo; se não houver espaço embaixo (campo na parte de baixo do modal/tela),
+// abre ACIMA; e faz clamp horizontal + de altura ao viewport — assim o menu nunca cai "no
+// centro-baixo, longe do campo".
+function computeMenuStyle(rect) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const width = Math.max(rect.width, 220)
+  const left = Math.round(Math.min(Math.max(8, rect.left), Math.max(8, vw - width - 8)))
+  const spaceBelow = vh - rect.bottom
+  const spaceAbove = rect.top
+  // Abre para cima só quando faltar espaço embaixo E houver mais espaço em cima.
+  const openAbove = spaceBelow < 220 && spaceAbove > spaceBelow
+  const maxHeight = Math.max(140, Math.min(256, (openAbove ? spaceAbove : spaceBelow) - 12))
+  return {
+    position: 'fixed',
+    left,
+    width,
+    zIndex: 9999,
+    maxHeight,
+    ...(openAbove
+      ? { bottom: Math.round(vh - rect.top + 4) }
+      : { top: Math.round(rect.bottom + 4) }),
+  }
+}
+
 // options: [{ id, label, group? }]
 // onChange: (id: string) => void   (id='' means cleared)
 export default function SearchableSelect({
@@ -191,7 +217,7 @@ export default function SearchableSelect({
           // linha do extrato, fechando o modal ou disparando handlers do pai. Barrar a
           // propagação aqui resolve de uma vez para TODOS os SearchableSelect do sistema.
           onClick={(e) => e.stopPropagation()}
-          style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: Math.max(rect.width, 220), zIndex: 9999 }}
+          style={computeMenuStyle(rect)}
           className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
         >
           <div className="px-2 py-2 border-b border-gray-800 shrink-0">
