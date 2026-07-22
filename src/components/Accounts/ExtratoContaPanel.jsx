@@ -367,10 +367,13 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         <td />
         <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? otherName : thisName}</td>
         <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? thisName : otherName}</td>
-        <td className="px-3 py-1.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
+        {/* Transferência netizada = movimento neutro → valor em cinza (paleta: transferência = cinza),
+            independente da direção. Fica na coluna Entrada/Saída por alinhamento, mas sem a cor
+            receita/despesa (azul/laranja). */}
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">
           {isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
-        <td className="px-3 py-1.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">
           {!isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
         <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
