@@ -344,9 +344,13 @@ export default function ScheduleForm({ initial, onClose }) {
       installments: Number(form.installments),
       remindDaysBefore: Number(form.remindDaysBefore) || 0,
     }
+    // Criar vs editar se decide pelo `id`, NÃO pela presença de `initial`: o DuplicateButton
+    // ("Duplicar → Criar Agendamento") passa um `initial` só com os campos pré-preenchidos do
+    // lançamento de origem, sem id. Com `if (initial)` isso caía em updateSchedule(undefined, …),
+    // que não casa com nenhum agendamento — o modal fechava e nada era criado, sem erro.
     let schedId = initial?.id
-    if (initial) {
-      updateSchedule(initial.id, data)
+    if (schedId) {
+      updateSchedule(schedId, data)
     } else {
       schedId = addSchedule(data)
     }
@@ -799,7 +803,7 @@ export default function ScheduleForm({ initial, onClose }) {
 
         <div className="col-span-2 flex gap-3 pt-1">
           <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Agendamento'}</button>
+          <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
         </div>
       </form>
 
