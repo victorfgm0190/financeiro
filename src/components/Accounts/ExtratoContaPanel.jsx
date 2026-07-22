@@ -419,10 +419,10 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
             <td className="px-3 py-1.5 text-xs text-gray-500 truncate">
               {toAcc ? (toAcc.apelido || toAcc.name) : '—'}
             </td>
-            <td className="px-3 py-1.5 text-right text-xs text-blue-600/70 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-right text-xs text-gray-400/70 whitespace-nowrap">
               {isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
-            <td className="px-3 py-1.5 text-right text-xs text-orange-600/70 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-right text-xs text-gray-400/70 whitespace-nowrap">
               {!isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
             <td className="px-3 py-1.5" />
