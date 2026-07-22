@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
   DollarSign, ArrowUp, ArrowDown, Settings, Building2,
-  ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye, Scale,
+  ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye, Scale, TrendingUp,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
@@ -12,6 +12,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
 import ExtratoContaPanel from './ExtratoContaPanel'
+import RendimentoModal from './RendimentoModal'
 import TransactionForm from '../Transactions/TransactionForm'
 
 const ACCOUNT_ICONS = {
@@ -261,6 +262,9 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const isAsset = account.type === 'asset'
   const isInactive = account.active === false
   const [confirmInactivate, setConfirmInactivate] = useState(false)
+  // Botão "Lançar Rendimento": só existe quando a conta tem categoria de rendimento definida.
+  const [showRendimento, setShowRendimento] = useState(false)
+  const temRendimento = !!account.rendimentoCategoriaId
 
   // TODA conta corrente/poupança (não cartão/ativo/passivo) exibe os saldos do ciclo (Saldo Atual,
   // Final Ciclo, Projetado, ...), reusando a MESMA engine do card principal (getAccountSaldos).
@@ -340,6 +344,15 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
         <div className="flex flex-col gap-1 shrink-0 ml-2">
           <div className="flex gap-1">
+            {temRendimento && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowRendimento(true) }}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                title="Lançar rendimento"
+              >
+                <TrendingUp size={11} />
+              </button>
+            )}
             <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar conta">
               <Edit2 size={11} />
             </button>
@@ -472,6 +485,10 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         {account.isMain ? 'Conta principal' : 'Definir como principal'}
       </button>
     </div>
+
+    {showRendimento && (
+      <RendimentoModal account={account} onClose={() => setShowRendimento(false)} />
+    )}
 
     <ConfirmDialog
       open={confirmInactivate}

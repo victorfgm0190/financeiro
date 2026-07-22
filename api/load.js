@@ -247,6 +247,11 @@ export default async function handler(req, res) {
     // padrão (conta_corrente_principal / is_main), preservando o comportamento anterior.
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS payment_account_id TEXT`)
     await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS investment_category_id TEXT`)
+    // Lançador de rendimento: categoria (receita) usada pelo botão "Lançar Rendimento" e o
+    // escopo do saldo de referência exibido — 'conta' (só esta conta) ou 'grupo' (soma das
+    // contas do mesmo account_group_id). NULL em rendimento_categoria_id = botão oculto.
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS rendimento_categoria_id TEXT`)
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS rendimento_modo TEXT DEFAULT 'conta'`)
     // Migração de dados: contas que já eram reserva passam a ter vinculo_tipo='reserva'.
     await query(`UPDATE contas SET vinculo_tipo = 'reserva' WHERE is_reserva = true AND (vinculo_tipo IS NULL OR vinculo_tipo = 'none')`)
     // Mantém is_reserva sincronizado com vinculo_tipo (compat. com código legado).

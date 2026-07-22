@@ -72,6 +72,8 @@ export default function AccountForm({ initial, onClose }) {
     patrimonioCategoryId: initial?.patrimonioCategoryId || null,
     isInvestimento: initial?.isInvestimento || false,
     investmentCategoryId: initial?.investmentCategoryId || null,
+    rendimentoCategoriaId: initial?.rendimentoCategoriaId || null,
+    rendimentoModo: initial?.rendimentoModo || 'conta',
   })
   const [vinculoError, setVinculoError] = useState(false)
   const [investError, setInvestError] = useState(false)
@@ -89,6 +91,8 @@ export default function AccountForm({ initial, onClose }) {
   // "É Investimento?" disponível apenas para Poupança e Bem/Ativo.
   const isInvestible = form.type === 'savings' || form.type === 'asset'
   const sortedGroups = [...activeAccountGroups].sort((a, b) => a.order - b.order)
+  // Grupo ao qual a conta pertence — usado só para nomear o escopo no modo "grupo".
+  const grupoDaConta = accountGroups.find(g => g.id === form.accountGroupId) || null
 
   const conflictAccount = isChecking && form.contaCorrentePrincipal
     ? accounts.find(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal)
@@ -159,6 +163,10 @@ export default function AccountForm({ initial, onClose }) {
       patrimonioCategoryId: vinculoAtivo === 'patrimonio' ? form.patrimonioCategoryId : null,
       isInvestimento: investimentoAtivo,
       investmentCategoryId: investimentoAtivo ? form.investmentCategoryId : null,
+      // Rendimento: sem categoria o botão do card não aparece; o modo só faz sentido
+      // acompanhado dela, mas é preservado para não perder a escolha do usuário.
+      rendimentoCategoriaId: form.rendimentoCategoriaId || null,
+      rendimentoModo: form.rendimentoModo === 'grupo' ? 'grupo' : 'conta',
     }
 
     if (initial) {
@@ -579,6 +587,63 @@ export default function AccountForm({ initial, onClose }) {
           )}
         </div>
       )}
+
+      {/* ── Rendimento ─────────────────────────────────────────────────────────
+          Habilita o botão "Lançar Rendimento" no card: o usuário informa o saldo novo
+          e o app cria a receita da diferença. Opcional — sem categoria, nada aparece. */}
+      <div className="space-y-3 pt-1 border-t border-gray-800">
+        <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Rendimento</p>
+        <div>
+          <label className="label">Categoria de Rendimento</label>
+          <CategorySelect
+            categories={categories}
+            type="income"
+            value={form.rendimentoCategoriaId || ''}
+            onChange={e => set('rendimentoCategoriaId', e.target.value || null)}
+            placeholder="Nenhuma (botão desativado)"
+            searchable
+          />
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+            Define a categoria da receita lançada pelo botão <span className="text-gray-300 font-medium">Lançar Rendimento</span> do card desta conta.
+          </p>
+        </div>
+
+        {form.rendimentoCategoriaId && (
+          <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+            <label className="label">Rendimento por</label>
+            <div className="flex rounded-lg overflow-hidden border border-gray-700">
+              {[['conta', 'Conta'], ['grupo', 'Grupo']].map(([v, l]) => (
+                <button
+                  type="button"
+                  key={v}
+                  onClick={() => set('rendimentoModo', v)}
+                  className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    form.rendimentoModo === v ? 'bg-[#185FA5] text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              {form.rendimentoModo === 'grupo' ? (
+                <>
+                  O saldo de referência será a <span className="text-gray-300 font-medium">soma das contas do grupo</span>
+                  {grupoDaConta ? <> <span className="text-gray-300 font-medium">{grupoDaConta.name}</span></> : ''}.
+                  A receita continua sendo lançada nesta conta.
+                  {!form.accountGroupId && (
+                    <span className="block text-amber-400 mt-1">
+                      Esta conta não está em nenhum grupo — o saldo de referência cairá para o desta conta.
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>O saldo de referência será o <span className="text-gray-300 font-medium">saldo atual desta conta</span>.</>
+              )}
+            </p>
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>

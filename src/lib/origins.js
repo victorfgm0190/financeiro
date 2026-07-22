@@ -21,6 +21,9 @@ export const ORIGIN = {
   PAGAMENTO_DIVIDA: 'pagamento_divida',
   IMPORTACAO_DINDIN: 'importacao_dindin',
   AJUSTE_GRUPO: 'ajuste_grupo',
+  // Receita criada pelo botão "Lançar Rendimento" do card da conta (diferença entre o saldo
+  // informado pelo usuário e o saldo atual). Manual na intenção, mas rastreável à parte.
+  RENDIMENTO_MANUAL: 'rendimento_manual',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).
