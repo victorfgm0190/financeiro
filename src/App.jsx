@@ -129,7 +129,7 @@ function AppContent() {
       <Sidebar active={activePage} setActive={navigate} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
           <ScrollScopeContext.Provider value={scrollCtx}>
             {panels[activePage] ?? panels.dashboard}
           </ScrollScopeContext.Provider>

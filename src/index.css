@@ -80,3 +80,13 @@
     @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold;
   }
 }
+
+@layer utilities {
+  /* iOS PWA (standalone + viewport-fit=cover): respeitar status bar/notch e home
+     indicator. O container raiz é h-screen overflow-hidden, então as insets vão nas
+     barras fixas (header/nav), não no body — senão o 100vh estoura. No desktop as
+     env(safe-area-*) resolvem 0, então estas classes são no-op fora do iOS. */
+  .header-safe-top { padding-top: calc(0.625rem + env(safe-area-inset-top)); }   /* 0.625rem = py-2.5 original */
+  .nav-safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .main-safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); } /* 5rem = pb-20 original */
+}

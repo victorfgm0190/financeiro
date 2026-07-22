@@ -11,7 +11,7 @@ const NAV_ITEMS = [
 
 export default function BottomNav({ active, setActive, onFab }) {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-gray-950 border-t border-gray-800 flex items-center h-16">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-gray-950 border-t border-gray-800 flex items-center h-16 nav-safe-bottom">
       {NAV_ITEMS.map(item => {
         if (item.id === '__fab__') {
           return (

@@ -28,7 +28,7 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null
 
   return (
-    <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 py-2.5 flex items-center gap-3 sticky top-0 z-10">
+    <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-10">
       {/* Title + period */}
       <div className="min-w-0">
         <h1 className="text-base font-semibold text-gray-100 leading-tight">{PAGE_TITLES[page] || page}</h1>
