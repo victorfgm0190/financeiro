@@ -167,10 +167,18 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
         </>,
         document.body
       )}
-      {/* Agendamento pré-preenchido — mesmo padrão de abertura de "Novo Agendamento". */}
-      <Modal open={!!schedInitial} onClose={() => setSchedInitial(null)} title="Novo Agendamento" size="lg">
-        {schedInitial && <ScheduleForm initial={schedInitial} onClose={() => setSchedInitial(null)} />}
-      </Modal>
+      {/* Agendamento pré-preenchido — mesmo padrão de abertura de "Novo Agendamento".
+          Portado para o body: este botão vive dentro do container de ações da linha do
+          extrato, que tem `opacity-0 group-hover:opacity-100`. Sem o portal o modal é
+          descendente desse container e some junto quando o cursor deixa a <tr> (o
+          `position: fixed` não escapa de opacity/transform do ancestral). O portal o
+          torna filho do body, igual ao "Novo Lançamento" aberto pelo pai. */}
+      {schedInitial && createPortal(
+        <Modal open onClose={() => setSchedInitial(null)} title="Novo Agendamento" size="lg">
+          <ScheduleForm initial={schedInitial} onClose={() => setSchedInitial(null)} />
+        </Modal>,
+        document.body
+      )}
     </span>
   )
 }
