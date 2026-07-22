@@ -327,20 +327,22 @@ function normalizeDescForMatch(desc) {
 }
 
 // Nível de duplicata, testado em ordem (primeiro match vence). Candidatos = lançamentos da
-// MESMA fatura do cartão. Retorna 'certeza' | 'provavel' | 'possivel' | null.
+// MESMA fatura do cartão. Retorna { level, tx }: level = 'certeza' | 'provavel' | 'possivel' |
+// null e tx = o lançamento do BANCO que casou (null quando não há match).
 //   certeza : date_cartao igual + valor ±0,50 + descrição idêntica
 //   provavel: date_cartao igual + valor ±0,50 + descrição similar (≥70%)
 //   possivel: valor ±0,50 + descrição similar (≥70%), sem considerar data
-function computeDupLevel(row, candidates) {
-  if (!candidates || candidates.length === 0) return null
+function computeDupMatch(row, candidates) {
+  const none = { level: null, tx: null }
+  if (!candidates || candidates.length === 0) return none
   const amt = Number(row.amount) || 0
   const rowCardDate = row._dateCartao || row.date
   const amtClose = (t) => Math.abs((Number(t.amount) || 0) - amt) <= 0.50
   const dateEq = (t) => !!rowCardDate && (t.dateCartao || t.date) === rowCardDate
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return 'certeza'
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && descSimilarity(t.description, row.description) >= 0.7) return 'provavel'
-  for (const t of candidates) if (amtClose(t) && descSimilarity(t.description, row.description) >= 0.7) return 'possivel'
-  return null
+  for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return { level: 'certeza', tx: t }
+  for (const t of candidates) if (amtClose(t) && dateEq(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'provavel', tx: t }
+  for (const t of candidates) if (amtClose(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'possivel', tx: t }
+  return none
 }
 
 // Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (valor
@@ -1689,19 +1691,32 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
+    // Linha que já existe no banco exibe a classificação REAL do lançamento salvo (categoria,
+    // grupo gerencial e função de reserva), não a do CSV / classificação automática — que é o
+    // que o usuário vê no extrato. Campo vazio no banco cai de volta no valor da linha.
+    const fromDb = (r, tx) => ({
+      ...r,
+      categoryId: tx.categoryId || r.categoryId,
+      grupoGerencial: tx.grupoGerencial || r.grupoGerencial,
+      _reservaFuncaoId: tx.grupoGerencial ? (tx.reservaFuncaoId || null) : r._reservaFuncaoId,
+      _dbTx: tx,
+    })
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
       const k = keyOfImportRow(r, selectedAccount)
       const collisionTx = k ? existingParcelaByKey.get(k) : null
-      if (collisionTx) return { ...r, _isDuplicate: false, _collisionTx: collisionTx, _dupLevel: null, selected: false }
+      if (collisionTx) return { ...fromDb(r, collisionTx), _isDuplicate: false, _collisionTx: collisionTx, _dupLevel: null, selected: false }
       // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura.
-      const dupLevel = r._generated ? null : computeDupLevel(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
+      const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
       const isCerteza = dupLevel === 'certeza'
       // Certeza: nunca selecionável. Provável/Possível: desmarcado por padrão, salvo se o
       // usuário forçar. Sem duplicata: segue o `selected` da linha.
       const selected = isCerteza ? false : (dupLevel ? forcedDupSelect.has(r._id) : row.selected)
-      return { ...r, _isDuplicate: isCerteza, _collisionTx: null, _dupLevel: dupLevel, selected }
+      // Só o nível "certeza" é o mesmo lançamento com certeza → herda a classificação do banco
+      // e trava a edição. Provável/possível continuam editáveis (podem ser compras distintas).
+      const base = isCerteza ? fromDb(r, dupTx) : r
+      return { ...base, _isDuplicate: isCerteza, _collisionTx: null, _dupLevel: dupLevel, selected }
     })
   }, [rows, selectedAccount, editingImport, existingParcelaByKey, cardTxsByFatura, forcedDupSelect])
 
@@ -3298,7 +3313,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1.5">
-                          {row._rateios?.length > 0 ? (
+                          {/* Já no banco: mostra a categoria REAL do lançamento salvo, sem edição. */}
+                          {row._dbTx ? (
+                            <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
+                              {(() => { const c = categories.find(x => x.id === row.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
+                            </span>
+                          ) : row._rateios?.length > 0 ? (
                             <span className="text-xs text-gray-300 bg-gray-700/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
                               {row._rateios.length} separadas
                             </span>
@@ -3323,7 +3343,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               searchable
                             />
                           )}
-                          {row._suggestedCategory && (
+                          {row._suggestedCategory && !row._dbTx && (
                             <button
                               type="button"
                               title="Categoria sugerida pelo histórico — clique para aceitar e criar regra permanente"
@@ -3336,10 +3356,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               💡 Sugerido ✓
                             </button>
                           )}
-                          <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
+                          {!row._dbTx && (
+                            <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
+                        {/* Já no banco: badge com o grupo gerencial REAL do lançamento salvo (o mesmo
+                            que aparece no extrato), somente leitura — não é reclassificado por aqui. */}
+                        {row._dbTx ? (
+                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial do lançamento já salvo no banco (não editável aqui)">
+                            {(() => { const g = gerencialGroups.find(x => x.id === row.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+                          </span>
+                        ) : (
                         <select
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={row.grupoGerencial}
@@ -3351,7 +3380,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         >
                           {sortedGrupos.map(g => <option key={g.id} value={g.id}>{g.number} · {g.name}</option>)}
                         </select>
-                        {(() => {
+                        )}
+                        {!row._dbTx && (() => {
                           // Grupo numerado com mais de uma função de reserva na conta-origem:
                           // permite escolher de qual função virá o resgate (gravado no agendamento).
                           const funcs = reserveFuncsForGroup(row.grupoGerencial)
