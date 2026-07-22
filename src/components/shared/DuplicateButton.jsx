@@ -81,8 +81,13 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
     onConfirm(date)
   }
 
+  // Barreira de propagação de cliques: este componente é montado dentro de uma
+  // <tr onClick={onEdit}> (linha do extrato). Cliques dentro do popover e do
+  // ScheduleForm sobem pela ÁRVORE REACT — inclusive através de createPortal — e
+  // disparariam o onEdit da linha, abrindo "Editar Lançamento" por baixo. O span
+  // display:contents (não afeta o layout) intercepta e interrompe essa propagação.
   return (
-    <>
+    <span className="contents" onClick={(e) => e.stopPropagation()}>
       <button
         ref={btnRef}
         type="button"
@@ -166,6 +171,6 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
       <Modal open={!!schedInitial} onClose={() => setSchedInitial(null)} title="Novo Agendamento" size="lg">
         {schedInitial && <ScheduleForm initial={schedInitial} onClose={() => setSchedInitial(null)} />}
       </Modal>
-    </>
+    </span>
   )
 }
