@@ -2696,6 +2696,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       document.getElementById(`concrow-${pendentesFunc[0]._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
+    // Sem itens a importar (ex.: só empurrão de "Fatura encerrada", cuja prévia já aparece no card
+    // do toggle) → o ImportPreviewModal não tem o que mostrar. Confirma direto, pulando o modal.
+    if (importar.length === 0) {
+      confirmarConciliacao()
+      return
+    }
     setShowConciliarPreview(true)
   }
 
