@@ -781,6 +781,29 @@ function faturaRefFromMY(faturaMonthYear) {
   return (y && m) ? `${m}/${y}` : null
 }
 
+// Feature "Fatura encerrada": uma parcela "Só no sistema" é ELEGÍVEL para empurrão quando é
+// parcela de série (num/total válidos, total > 1) e NÃO é a última (a última encerra a série na
+// própria fatura — empurrá-la estenderia o parcelamento). À vista (total <= 1) nunca é elegível.
+function isParcelaEmpurravel(item) {
+  const num = Number(item?.installmentNum)
+  const total = Number(item?.installmentTotal)
+  return Number.isFinite(num) && Number.isFinite(total) && total > 1 && num >= 1 && num < total
+}
+
+// Avança um YYYY-MM-DD em 1 mês mantendo o MESMO dia (clampa ao último dia do mês destino e trata
+// virada de ano). Ex.: 2026-08-05 → 2026-09-05; 2026-12-31 → 2027-01-31. Usada só na data de
+// SISTEMA (date) da parcela empurrada — date_cartao NUNCA passa por aqui.
+function nextMonthSameDay(dateStr) {
+  if (!dateStr) return dateStr
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (!y || !m || !d) return dateStr
+  const ny = m === 12 ? y + 1 : y
+  const nm = m === 12 ? 1 : m + 1
+  const lastDay = new Date(ny, nm, 0).getDate()
+  const day = Math.min(d, lastDay)
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 // ── ITEM 10 — funções puras extraídas do handleImport (testáveis, sem efeito colateral) ──
 
 // Linhas efetivamente importáveis: selecionadas, não-duplicadas e sem colisão por installment_key.
@@ -1262,6 +1285,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [concError, setConcError] = useState('')
   const [concToast, setConcToast] = useState(null)
   const [concEditTx, setConcEditTx] = useState(null) // lançamento existente em edição (seção Conciliados)
+  // Feature "Fatura encerrada": quando ligada, parcelas ausentes (Só no sistema, não-última) são
+  // empurradas para o mês seguinte ao confirmar. Default false → comportamento atual preservado.
+  const [faturaEncerrada, setFaturaEncerrada] = useState(false)
   const concFileRef = useRef()
 
   // Conciliação inteligente: linhas de nível provável/possível que o usuário FORÇOU a importar.
@@ -2414,6 +2440,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         setConcMatched(matched)
         setConcSoItau(cross.soItau)
         setConcSoSistema(cross.soSistema)
+        setFaturaEncerrada(false)
         setConciliarMode(true)
         setRows([])
         setResult(null)
@@ -2439,6 +2466,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setConcSoItau([])
     setConcSoSistema([])
     setConcError('')
+    setFaturaEncerrada(false)
   }
 
   // Base normalizada de um parcelado (para casar parcelas da mesma série).
@@ -2525,6 +2553,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
     excluir.forEach(i => deleteTransaction(i.id))
 
+    // Feature "Fatura encerrada": empurra cada parcela ausente elegível (Só no sistema, não-última,
+    // não marcada p/ excluir) para o mês seguinte. Só date e a fatura (ref + month_year) avançam;
+    // date_cartao, categoria, grupo, função de reserva, favorecido, descrição, notes, num/total,
+    // serie_id e rateio são preservados (updateTransaction faz merge parcial dos campos enviados).
+    const faturasEmpurrao = new Set() // YYYY-MM afetados (antiga + nova) → recálculo de agendamentos
+    if (faturaEncerrada) {
+      for (const item of concSoSistema) {
+        if (item.acao === 'excluir' || !isParcelaEmpurravel(item)) continue
+        const oldMY = item.faturaMonthYear || faturaMonthYear
+        const newMY = addMonthToFatura(oldMY, 1)          // avança 1 mês (trata virada de ano)
+        const newRef = faturaRefFromMY(newMY)             // MM/YYYY a partir da nova fatura
+        const newDate = nextMonthSameDay(item.date)       // mesmo dia do mês seguinte
+        updateTransaction(item.id, { date: newDate, faturaRef: newRef, faturaMonthYear: newMY })
+        if (oldMY) faturasEmpurrao.add(oldMY)
+        if (newMY) faturasEmpurrao.add(newMY)
+      }
+    }
+
     // Função de reserva por (fatura → conta-origem), desempate pelo maior valor — mesmo
     // mecanismo da importação normal: o resgate de cada fatura adota a função escolhida.
     const funcPorFatura = new Map() // faturaMY → Map(origem → { funcId, amount })
@@ -2609,6 +2655,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const [y, m] = fmy.split('-')
       recalcularAgendamentosFatura(selectedAccount, y, m, mapFor(fmy))
     }
+    // Empurrão "Fatura encerrada": recalcula a fatura ANTIGA (de onde a parcela saiu) e a NOVA
+    // (para onde foi), seguindo o mesmo padrão das faturas futuras. Já cobertas acima são puladas
+    // (recalc é idempotente, mas evitamos trabalho repetido).
+    for (const fmy of faturasEmpurrao) {
+      if (fmy === faturaMonthYear || futurasFaturas.has(fmy)) continue
+      const [y, m] = fmy.split('-')
+      recalcularAgendamentosFatura(selectedAccount, y, m, mapFor(fmy))
+    }
     // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
     // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a conciliação.
     reconciliarGerencial(selectedAccount)
@@ -2650,6 +2704,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const importarCount = concSoItau.filter(i => i.acao === 'importar').length
     const excluirCount = concSoSistema.filter(i => i.acao === 'excluir').length
     const diffZero = Math.abs(concTotais.diff) < 0.005
+    // Toggle "Fatura encerrada": só é exibido se houver ≥1 parcela de série em "Só no sistema".
+    const hasParcelaSistema = concSoSistema.some(i => Number(i.installmentNum) > 0 && Number(i.installmentTotal) > 1)
+    // Parcelas que serão de fato empurradas ao confirmar (elegíveis e não marcadas p/ excluir).
+    const parcelasEmpurraveis = faturaEncerrada
+      ? concSoSistema.filter(i => i.acao !== 'excluir' && isParcelaEmpurravel(i))
+      : []
     return (
       <div className="space-y-4">
         {/* Cabeçalho */}
@@ -2688,6 +2748,45 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
         {concError && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {concError}</div>}
 
+        {/* Toggle "Fatura encerrada" — só quando há parcelas de série em "Só no sistema" */}
+        {hasParcelaSistema && (
+          <div className="card flex flex-col gap-2 py-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-[#0F6E56]"
+                checked={faturaEncerrada}
+                onChange={e => setFaturaEncerrada(e.target.checked)}
+              />
+              <span className="text-sm font-medium text-gray-200">Fatura encerrada (o fechamento já passou)</span>
+            </label>
+            {faturaEncerrada && (
+              parcelasEmpurraveis.length > 0 ? (
+                <div className="pl-6 space-y-1">
+                  <p className="text-xs text-gray-500">
+                    {parcelasEmpurraveis.length} parcela{parcelasEmpurraveis.length !== 1 ? 's' : ''} ausente{parcelasEmpurraveis.length !== 1 ? 's' : ''} será{parcelasEmpurraveis.length !== 1 ? 'ão' : ''} empurrada{parcelasEmpurraveis.length !== 1 ? 's' : ''} para o mês seguinte ao confirmar:
+                  </p>
+                  {parcelasEmpurraveis.map(p => {
+                    const oldMY = p.faturaMonthYear || faturaMonthYear
+                    const newMY = addMonthToFatura(oldMY, 1)
+                    const fmtMY = (my) => my?.split('-').reverse().join('/')
+                    return (
+                      <div key={p.id} className="text-xs text-gray-300">
+                        📦 {p.description} — {fmt(p.amount)}
+                        <span className="text-gray-500"> → movida de {fmtMY(oldMY)} para {fmtMY(newMY)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="pl-6 text-xs text-gray-500">
+                  Nenhuma parcela ausente elegível (à vista e a última parcela de cada série não são empurradas).
+                </p>
+              )
+            )}
+          </div>
+        )}
+
         {/* Ação */}
         <div className="flex items-center justify-end gap-2">
           <span className="text-xs text-gray-500 mr-auto">
@@ -2697,7 +2796,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <button className="btn-secondary text-xs py-1.5" onClick={exitConciliacao}>Cancelar</button>
           <button
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
-            disabled={importarCount === 0 && excluirCount === 0}
+            disabled={importarCount === 0 && excluirCount === 0 && parcelasEmpurraveis.length === 0}
             onClick={handleConfirmConciliacao}
           >
             <Check size={12} /> Confirmar Conciliação
