@@ -135,9 +135,55 @@ function isEstornoRow(row) {
 }
 
 // Aplica a categoria padrão + grupo D (Despesa) aos estornos das linhas, quando configurado.
+// Estornos que já herdaram da compra original (`_estornoHerdado`) ficam de fora: a classificação
+// da compra é informação melhor que o default.
 function applyEstornoConfig(rows, categoryId, grupoDId) {
   if (!categoryId) return rows
-  return rows.map(r => (isEstornoRow(r) ? { ...r, categoryId, grupoGerencial: grupoDId } : r))
+  return rows.map(r => (isEstornoRow(r) && !r._estornoHerdado ? { ...r, categoryId, grupoGerencial: grupoDId } : r))
+}
+
+// Candidatos a compra original de um estorno: despesas de crédito da conta importada.
+function estornoCandidates(transactions, accountId) {
+  if (!accountId) return []
+  return (transactions || []).filter(t =>
+    t.accountId === accountId && t.type === 'expense' && t.accountType === 'credit')
+}
+
+// Compra original de um estorno: mesma conta, valor idêntico (em centavos — estorno parcial não
+// casa, de propósito), descrição similar (≥ 0.75, sem o sufixo de parcela) e lançada ATÉ a data do
+// estorno. Vence a mais recente: o estorno referencia a compra imediatamente anterior. null quando
+// nada casa com confiança — melhor cair no default do que herdar a classificação errada.
+function findOriginalPurchase(row, candidates) {
+  const cents = Math.round((Number(row.amount) || 0) * 100)
+  if (!cents) return null
+  let best = null
+  for (const t of candidates) {
+    if (Math.round((Number(t.amount) || 0) * 100) !== cents) continue
+    if (t.date && row.date && t.date > row.date) continue
+    if (descSimilarity(stripParcelaSuffix(t.description), stripParcelaSuffix(row.description)) < 0.75) continue
+    if (!best || (t.date || '') > (best.date || '')) best = t
+  }
+  return best
+}
+
+// Estornos herdam a classificação da compra original (categoria + grupo gerencial + função de
+// reserva). Sem isto o estorno cai no grupo D e não abate o grupo que a compra onerou — a receita
+// entra em D e o gerencial do grupo original fecha inflado. Sem compra original, a linha segue
+// intacta para o default de applyEstornoConfig.
+function applyEstornoInheritance(rows, candidates) {
+  if (!candidates || candidates.length === 0) return rows
+  return rows.map(r => {
+    if (!isEstornoRow(r)) return r
+    const orig = findOriginalPurchase(r, candidates)
+    if (!orig || (!orig.categoryId && !orig.grupoGerencial)) return r
+    return {
+      ...r,
+      categoryId: orig.categoryId || r.categoryId,
+      grupoGerencial: orig.grupoGerencial || r.grupoGerencial,
+      _reservaFuncaoId: orig.reservaFuncaoId || r._reservaFuncaoId || null,
+      _estornoHerdado: { description: orig.description, date: orig.date },
+    }
+  })
 }
 
 // Modal exibido na 1ª importação/conciliação com estornos (quando estornoCartaoEnabled ainda é
@@ -1570,10 +1616,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
       if (reference) alignedRows = applyReferenceFatura(alignedRows, reference, resolvedClosingDay, resolvedDueDay, financialStartDay)
 
-      // Continuação: popula o preview. `estornoCat` (quando informado) aplica a categoria
-      // padrão + grupo D aos estornos antes de exibir.
+      // Continuação: popula o preview. Estornos primeiro herdam a classificação da compra
+      // original; só os SEM compra original caem no default (`estornoCat` + grupo D).
       const finish = (estornoCat) => {
-        const finalRows = estornoCat ? applyEstornoConfig(alignedRows, estornoCat, grupoD) : alignedRows
+        const herdados = applyEstornoInheritance(alignedRows, estornoCandidates(transactions, resolvedAccountId))
+        const finalRows = estornoCat ? applyEstornoConfig(herdados, estornoCat, grupoD) : herdados
         setRows(finalRows)
         setCardInfo({ cardName, faturaStr })
         setMatchQueue(pendingMatches)
@@ -2418,7 +2465,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Continuação: (opcional) aplica a categoria padrão + grupo D aos estornos do CSV, faz o
       // match guloso 1:1 com o sistema e popula as seções da conciliação.
       const finishConc = (estornoCat) => {
-        const classificados = estornoCat ? applyEstornoConfig(csvClassified, estornoCat, grupoD) : csvClassified
+        const herdados = applyEstornoInheritance(csvClassified, estornoCandidates(transactions, selectedAccount))
+        const classificados = estornoCat ? applyEstornoConfig(herdados, estornoCat, grupoD) : herdados
         const usedSys = new Set()
         const matched = []
         const soItau = []
@@ -3551,7 +3599,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400" title="date_cartao + valor iguais e descrição similar — pode importar marcando">🟠 Provável duplicata</span>
                               : row._dupLevel === 'possivel'
                                 ? <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-500" title="valor e descrição similares (data ignorada) — pode importar marcando">🟡 Possível duplicata</span>
-                                : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                                : row._estornoHerdado
+                                  ? <span className="text-xs px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
+                                  : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
                         }
                       </td>
                     </tr>
