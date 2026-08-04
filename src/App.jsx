@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
+import { dueDateInMonth } from './lib/fatura'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider, useFab } from './context/FabContext'
 import { useAutoBackup } from './hooks/useAutoBackup'
@@ -90,8 +91,10 @@ function AppContent() {
     const today = new Date()
     const creditCount = accounts.filter(a => {
       if (a.type !== 'credit') return false
-      let due = new Date(today.getFullYear(), today.getMonth(), a.dueDay || 10)
-      if (due < today) due = new Date(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
+      // dueDateInMonth clampa o dia ao último do mês — dueDay 31 em fevereiro fazia
+      // rollover silencioso para março e o alerta contava os dias até a data errada.
+      let due = dueDateInMonth(today.getFullYear(), today.getMonth(), a.dueDay || 10)
+      if (due < today) due = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, a.dueDay || 10)
       return differenceInDays(due, today) <= 5
     }).length
     const schedCount = schedules.filter(s => {

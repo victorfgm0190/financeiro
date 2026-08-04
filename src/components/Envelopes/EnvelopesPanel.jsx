@@ -5,21 +5,27 @@ import { Package, Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '../../lib/origins'
+import { dueDateInMonth } from '../../lib/fatura'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 
 // ── Period logic ──────────────────────────────────────────────────────────────
 // period runs from (dueDay+1) of one month to (dueDay) of the next
+//
+// O FIM do ciclo usa dueDateInMonth (clampa ao último dia do mês): o formulário limita o dueDay
+// a 28, mas um valor legado maior faria new Date() rolar silenciosamente para o mês seguinte.
+// O INÍCIO (dueDay + 1) segue sem clamp de propósito — ali o rollover É a semântica correta:
+// o dia seguinte ao 28/02 é 01/03, e clampar produziria 28/02, sobrepondo o ciclo anterior.
 export function getEnvelopePeriod(dueDay) {
   const today = new Date()
   const day = today.getDate()
   let from, to
   if (day <= dueDay) {
     from = new Date(today.getFullYear(), today.getMonth() - 1, dueDay + 1)
-    to   = new Date(today.getFullYear(), today.getMonth(),     dueDay)
+    to   = dueDateInMonth(today.getFullYear(), today.getMonth(),     dueDay)
   } else {
     from = new Date(today.getFullYear(), today.getMonth(),     dueDay + 1)
-    to   = new Date(today.getFullYear(), today.getMonth() + 1, dueDay)
+    to   = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, dueDay)
   }
   return {
     from: format(from, 'yyyy-MM-dd'),

@@ -9,6 +9,7 @@
 //   FINAL CICLO   = saldoFinal + envelopesTotal (mesma projeção SEM subtrair os envelopes)
 
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins'
+import { dueDateInMonth } from './fatura'
 
 const round2 = n => Math.round(n * 100) / 100
 
@@ -22,7 +23,10 @@ export function envelopeCyclesOverlapping(dueDay, start, end) {
   const stop = new Date(endD.getFullYear(), endD.getMonth() + 2, 1)
   while (cur < stop) {
     const y = cur.getFullYear(), mo = cur.getMonth()
-    const to = new Date(y, mo, dueDay)
+    // FIM do ciclo clampado ao último dia do mês (dueDay legado > 28 rolaria p/ o mês seguinte).
+    // INÍCIO (dueDay + 1) sem clamp de propósito: o dia seguinte ao 28/02 é 01/03 — clampar
+    // devolveria 28/02 e sobreporia o ciclo anterior. Mesma regra de getEnvelopePeriod.
+    const to = dueDateInMonth(y, mo, dueDay)
     const from = new Date(y, mo - 1, dueDay + 1)
     if (from <= endD && to >= startD) {
       const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

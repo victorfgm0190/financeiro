@@ -62,3 +62,17 @@ export function prevMonthScheduleDate(faturaRef, financialStartDay) {
 export function gerencialKey(cardId, faturaRef) {
   return `ger_${cardId}_${faturaRef.replace('/', '_')}`
 }
+
+/**
+ * Data (objeto Date) do dia `day` no mês (year, monthIndex 0-based), com o dia CLAMPADO ao
+ * último dia daquele mês.
+ *
+ * new Date(y, mo, day) não rejeita um dia inexistente: `new Date(2026, 1, 31)` faz rollover
+ * SILENCIOSO para 03/03. Um cartão com dueDay 31 (o AccountForm aceita até 31) tinha o
+ * vencimento de fevereiro contado como se fosse em março, deslocando os dias-até-vencer dos
+ * alertas. Aqui fevereiro dá 28 (ou 29 em bissexto), como esperado.
+ */
+export function dueDateInMonth(year, monthIndex, day) {
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate()
+  return new Date(year, monthIndex, Math.min(day, lastDay))
+}

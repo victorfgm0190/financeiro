@@ -3,6 +3,7 @@ import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap } from 'luc
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { differenceInDays, format, parseISO } from 'date-fns'
+import { dueDateInMonth } from '../../lib/fatura'
 
 function getDueAlerts(accounts) {
   const today = new Date()
@@ -11,8 +12,9 @@ function getDueAlerts(accounts) {
     .filter(a => a.type === 'credit' && a.active !== false)
     .forEach(account => {
       const dueDay = account.dueDay || 10
-      let dueDate = new Date(today.getFullYear(), today.getMonth(), dueDay)
-      if (dueDate < today) dueDate = new Date(today.getFullYear(), today.getMonth() + 1, dueDay)
+      // dueDateInMonth clampa o dia ao último do mês (dueDay 31 + fevereiro).
+      let dueDate = dueDateInMonth(today.getFullYear(), today.getMonth(), dueDay)
+      if (dueDate < today) dueDate = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, dueDay)
       const daysUntilDue = differenceInDays(dueDate, today)
       if (daysUntilDue <= 5) {
         alerts.push({
@@ -191,8 +193,8 @@ export default function AlertsPanel() {
         <div className="space-y-2">
           {accounts.filter(a => a.type === 'credit' && a.active !== false).map(acc => {
             const today = new Date()
-            let dueDate = new Date(today.getFullYear(), today.getMonth(), acc.dueDay || 10)
-            if (dueDate < today) dueDate = new Date(today.getFullYear(), today.getMonth() + 1, acc.dueDay || 10)
+            let dueDate = dueDateInMonth(today.getFullYear(), today.getMonth(), acc.dueDay || 10)
+            if (dueDate < today) dueDate = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, acc.dueDay || 10)
             const days = differenceInDays(dueDate, today)
             return (
               <div key={acc.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
