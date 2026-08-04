@@ -3638,22 +3638,24 @@ export function AppProvider({ children }) {
           overrides: { _gerencialKey: `${gerKey}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
         })
       }
-      // pagamento_fatura (slot único). Mesma política de ciclo passado.
-      if (!hasExecPagamento && totalPagamento > 0) {
-        if (faturaCicloNoPassado) {
-          if (pendingPagamento) schedules.push({ ...pendingPagamento, sourceExpenseIds: sourceTxIdsAll })
-        } else {
-          schedules.push({
-            ...baseSch,
-            id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
-            tipo: 'pagamento_fatura',
-            transactionType: 'transfer', accountId: contaPagadora.id, toAccountId: cardId,
-            startDate: dueDate, amount: totalPagamento,
-            description: `Pagamento Fatura ${apelido} ${faturaRef}`,
-            sourceExpenseIds: sourceTxIdsAll,
-            overrides: { _gerencialKey: `${gerKey}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
-          })
-        }
+      // pagamento_fatura (slot único). Mesma política de ciclo passado dos outros dois: não
+      // materializa NOVA e devolve a pendente INTACTA. A preservação ficava DENTRO do
+      // `!hasExecPagamento && totalPagamento > 0`, então quando o totalPagamento zerava (todos os
+      // gastos removidos, ou estornos anulando a fatura) o bloco era pulado inteiro e a pendente —
+      // já descartada no loop de classificação — sumia de uma fatura encerrada.
+      if (faturaCicloNoPassado) {
+        if (pendingPagamento) schedules.push(pendingPagamento)
+      } else if (!hasExecPagamento && totalPagamento > 0) {
+        schedules.push({
+          ...baseSch,
+          id: `fsch_${cardId}_${yyyy}${mm}_pagamento_fatura`,
+          tipo: 'pagamento_fatura',
+          transactionType: 'transfer', accountId: contaPagadora.id, toAccountId: cardId,
+          startDate: dueDate, amount: totalPagamento,
+          description: `Pagamento Fatura ${apelido} ${faturaRef}`,
+          sourceExpenseIds: sourceTxIdsAll,
+          overrides: { _gerencialKey: `${gerKey}_payment`, _gerencial: meta, _sourceTxIds: sourceTxIdsAll },
+        })
       }
       // resgate_reserva (per-gasto). Recria UMA pendência por origem só p/ os gastos SEM resgate
       // executado. Id determinístico: base quando não há resgate executado na origem; base_p{n}
