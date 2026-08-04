@@ -3619,22 +3619,24 @@ export function AppProvider({ children }) {
       }
 
       // 3b. Recria pendências.
-      // gerencial_devolucao (slot único). Ciclo passado: não materializa NOVA, só preserva a existente.
-      if (!hasExecDevolucao && totalG > 0 && subcontaId) {
-        if (faturaCicloNoPassado) {
-          if (pendingDevolucao) schedules.push({ ...pendingDevolucao, sourceExpenseIds: sourceTxIdsG })
-        } else {
-          schedules.push({
-            ...baseSch,
-            id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
-            tipo: 'gerencial_devolucao',
-            transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
-            startDate: devolDate, amount: totalG,
-            description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
-            sourceExpenseIds: sourceTxIdsG,
-            overrides: { _gerencialKey: `${gerKey}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
-          })
-        }
+      // gerencial_devolucao (slot único). Ciclo passado: não materializa NOVA e devolve a pendente
+      // INTACTA — mesmo padrão do resgate_reserva abaixo. A preservação ficava DENTRO do
+      // `totalG > 0 && subcontaId && !hasExecDevolucao`, então quando o totalG desta fatura zerava
+      // (gastos G reclassificados/removidos depois) o bloco era pulado inteiro e a pendente — já
+      // descartada no loop de classificação — sumia silenciosamente de uma fatura encerrada.
+      if (faturaCicloNoPassado) {
+        if (pendingDevolucao) schedules.push(pendingDevolucao)
+      } else if (!hasExecDevolucao && totalG > 0 && subcontaId) {
+        schedules.push({
+          ...baseSch,
+          id: `fsch_${cardId}_${yyyy}${mm}_gerencial_devolucao`,
+          tipo: 'gerencial_devolucao',
+          transactionType: 'transfer', accountId: subcontaId, toAccountId: contaPrincipal.id,
+          startDate: devolDate, amount: totalG,
+          description: `Devolução Gerencial ${apelido} - Fatura ${faturaRef}`,
+          sourceExpenseIds: sourceTxIdsG,
+          overrides: { _gerencialKey: `${gerKey}_resgate`, _gerencial: { ...meta, gerencialContaId: subcontaId }, _sourceTxIds: sourceTxIdsG },
+        })
       }
       // pagamento_fatura (slot único). Mesma política de ciclo passado.
       if (!hasExecPagamento && totalPagamento > 0) {
