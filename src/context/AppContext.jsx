@@ -3417,9 +3417,13 @@ export function AppProvider({ children }) {
         }
       }
       const _dueDateObj = new Date(`${dueDate}T00:00:00`)
-      // Só o passado é bloqueado (nada retroativo). Ciclo atual E futuro materializam a etapa A
-      // e o gerencial_devolucao — mantendo a reserva da subconta Ger. consistente com a devolução.
+      // Passado: nada retroativo — os três slots preservam a pendência existente e não criam nova.
       const faturaCicloNoPassado = _dueDateObj < _cicloStart
+      // Futuro: o vencimento cai DEPOIS do fim do ciclo corrente. As pendências (devolução /
+      // pagamento / resgate) seguem sendo agendadas normalmente, mas a etapa A — que é uma
+      // TRANSFERÊNCIA real, movendo saldo — não é materializada aqui: a provisão de fatura futura
+      // é ato explícito do usuário, feito pelo "Executar Gerenciais".
+      const faturaCicloNoFuturo = _cicloEnd ? _dueDateObj > _cicloEnd : false
 
       const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
         || d.accounts.find(a => a.isMain && a.type !== 'credit')
@@ -3799,7 +3803,12 @@ export function AppProvider({ children }) {
       //    Passado fica intocado (nada retroativo). Reconcilia create/update por id determinístico;
       //    remoção de órfãos é feita por id em delete/edição/reversão.
       let transactions = d.transactions
-      if (subcontaId && !faturaCicloNoPassado) {
+      // Só o ciclo ATUAL materializa a etapa A. Fatura futura fica a cargo do "Executar
+      // Gerenciais" (ato explícito) — antes o único guard era o passado, então qualquer gasto G
+      // CONFIRMADO de fatura futura ganhava tx_gerA_* já na importação, movendo saldo sem o
+      // usuário pedir. A dupla provisão segue coberta nos dois sentidos: aqui por
+      // temProvisaoManual e lá por jaProvisionada.
+      if (subcontaId && !faturaCicloNoPassado && !faturaCicloNoFuturo) {
         // A etapa A cobre o MESMO conjunto que compõe o totalG do gerencial_devolucao (gastos G
         // CONFIRMADOS): projeções não confirmadas ficam de fora dos dois, mantendo a subconta Ger.
         // consistente (nunca há devolução sem a reserva correspondente). A dupla provisão com o
