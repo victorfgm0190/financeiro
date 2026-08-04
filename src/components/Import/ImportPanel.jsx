@@ -929,12 +929,14 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStar
     const dateCartao = row._dateCartao || row.date
     const num = row._installment?.num || 1
     if (row._itau) {
-      const baseDate = clampDateToFatura(dateCartao, reference, closingDay)
+      // Parcela 1 / à vista: date = date_cartao, SEM clamp. O clampDateToFatura que havia aqui
+      // jogava uma compra anterior à janela da fatura para o dia de FECHAMENTO — date_cartao
+      // 10/07 + fatura 2026-08 (closing 13) virava 13/08. Parcela >1 segue a regra do Finup
+      // (dia financeiro do mês anterior à fatura). date_cartao nunca é alterada.
       return {
         ...row,
         faturaMonthYear: reference,
-        // Parcela 1/à vista mantém a data efetiva; parcela >1 vai p/ o mês anterior à fatura.
-        date: installmentSystemDate(reference, num, baseDate, financialStartDay),
+        date: num <= 1 ? dateCartao : installmentSystemDate(reference, num, dateCartao, financialStartDay),
       }
     }
     // Parcela 2..N: a date_cartao é a data da COMPRA ORIGINAL (fatura antiga) — NUNCA recalcula a
@@ -1188,6 +1190,43 @@ function serieKeyFromFull(fullKey) {
 }
 function serieKeyOfExistingTx(tx) { return serieKeyFromFull(keyOfExistingTx(tx)) }
 
+// Chave de COLISÃO = installment_key SEM o componente de centavos
+// (accountId | base | num/total | serie_inicio).
+//
+// A installment_key persistida é exata de propósito: ela sustenta o índice UNIQUE
+// uq_lancamentos_installment e o remapeamento de id do upsert (api/_db.js). Arredondá-la
+// criaria colisão falsa entre parcelas legitimamente distintas. Por isso a tolerância de
+// valor mora AQUI, no casamento da importação — não na chave.
+//
+// Sem isto, 1 centavo de diferença virava parcela duplicada: R$100,00 em 3× fica
+// 33,34/33,33/33,33 no banco e o extrato pode trazer 33,37/33,30/33,33.
+function collisionKeyFromFull(fullKey) {
+  if (!fullKey) return null
+  const parts = fullKey.split('|')
+  if (parts.length < 5) return null
+  return `${parts[0]}|${parts[1]}|${parts[2]}|${parts[4]}`
+}
+
+// Tolerância de valor ao casar uma parcela do extrato com a já gravada. Mesma faixa de
+// isDuplicateInstallment / findExistingParcela (lib/parcelas.js) — os três matchers do
+// parcelamento passam a concordar.
+const TOLERANCIA_VALOR = 0.50
+
+// Parcela já no banco que corresponde à linha importada: mesma chave de colisão e valor
+// dentro da tolerância. Havendo mais de uma candidata, vence a de menor diferença.
+function matchParcelaExistente(index, row, accountId) {
+  const k = collisionKeyFromFull(keyOfImportRow(row, accountId))
+  const candidatas = k ? index.get(k) : null
+  if (!candidatas?.length) return null
+  let melhor = null
+  let menorDiff = Infinity
+  for (const t of candidatas) {
+    const diff = Math.abs((Number(t.amount) || 0) - (Number(row.amount) || 0))
+    if (diff <= TOLERANCIA_VALOR && diff < menorDiff) { melhor = t; menorDiff = diff }
+  }
+  return melhor
+}
+
 // Override manual de parcelamento (camada sobre detectInstallment, sem alterá-lo). Quando a
 // descrição tem N/M, reaproveita base/matchStr do detector; senão base = descrição inteira e
 // matchStr = null (as parcelas futuras recebem sufixo " N/M" — ver futureParcelas).
@@ -1359,15 +1398,54 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
 
-  // Item 7: índice das parcelas já existentes do cartão por installment_key, para detectar
-  // colisão na reimportação (mesma chave = mesma parcela → atualizar, não inserir).
+  // Data de SISTEMA (date) que uma linha de importação vai gravar. Vive no escopo do componente
+  // porque a PRÉVIA e a GRAVAÇÃO precisam da mesma resposta — quando a prévia calculava a data
+  // por conta própria (r.date), ela prometia uma data e o banco recebia outra.
+  // A fatura_ref vive separada em row.faturaMonthYear; date_cartao nunca é alterada.
+  // Regras:
+  //   • Parcela N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup, applyReferenceFatura)
+  //     — não clampar, senão a data voltaria p/ o mês da própria fatura.
+  //   • Parcela 1 (Itaú): a date já É a date_cartao — não clampar, senão a compra anterior à
+  //     janela voltaria para o dia de fechamento da fatura.
+  //   • Parcela 1 (Dindin): clamp ao período da fatura (datas fora caem no dia de fechamento).
+  //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
+  const importClosingDay = selectedAcc?.closingDay || 14
+  const computeSaveDate = (row) => {
+    const num = row._installment?.num || 0
+    if (num > 1) return row.date
+    if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+    return row._dateCartao || row.date
+  }
+
+  // Equivalente para a CONCILIAÇÃO: os itens "Só no Itaú" são linhas CRUAS do CSV — não passam
+  // por applyReferenceFatura, então item.date é a data do extrato (= date_cartao) e a regra
+  // precisa ser aplicada inteira aqui. Mesma resposta da importação normal:
+  //   parcela 1 / à vista → date_cartao (sem clamp)
+  //   parcela N > 1       → dia financeiro do mês anterior à fatura (regra do Finup)
+  // O clampDateToFatura que havia no importConcItem jogava TODO parcelado para o dia de
+  // fechamento da fatura — a parcela 1 pelo mesmo motivo do caminho Itaú (compra anterior à
+  // janela) e a parcela N > 1 sempre, já que a date_cartao dela é a compra original, meses atrás.
+  const concSaveDate = (item) => {
+    const num = item._installment?.num || 0
+    const dateCartao = item._dateCartao || item.date
+    return num > 1
+      ? installmentSystemDate(faturaMonthYear, num, dateCartao, financialStartDay)
+      : dateCartao
+  }
+
+  // Item 7: índice das parcelas já existentes do cartão pela chave de COLISÃO (installment_key
+  // sem os centavos), para detectar colisão na reimportação (mesma parcela → atualizar, não
+  // inserir). Cada chave guarda TODAS as candidatas: o desempate por valor (±R$0,50) é feito
+  // em matchParcelaExistente, já que centavos de arredondamento variam entre extratos.
   const existingParcelaByKey = useMemo(() => {
     const m = new Map()
     if (!selectedAccount) return m
     for (const t of transactions) {
       if (t.accountId !== selectedAccount || t.type !== 'expense' || t.accountType !== 'credit') continue
-      const k = keyOfExistingTx(t)
-      if (k && !m.has(k)) m.set(k, t)
+      const k = collisionKeyFromFull(keyOfExistingTx(t))
+      if (!k) continue
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(t)
     }
     return m
   }, [transactions, selectedAccount])
@@ -1772,8 +1850,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
-      const k = keyOfImportRow(r, selectedAccount)
-      const collisionTx = k ? existingParcelaByKey.get(k) : null
+      const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount)
       if (collisionTx) return {
         ...r,
         categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
@@ -2085,28 +2162,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
 
-    // Data de sistema da linha: mantida no mês de referência por applyReferenceFatura
-    // (e editável na tabela de revisão), com clamp ao período válido da fatura — datas
-    // fora do intervalo caem no dia de fechamento do mês da fatura. A fatura_ref vive
-    // separada em row.faturaMonthYear; date_cartao nunca é alterada.
-    // Regras de date (sistema):
-    //   • Parcela N/Total com N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup) —
-    //     não clampar, senão a data voltaria p/ o mês da própria fatura.
-    //   • Parcela 1: clamp ao período da fatura (datas fora caem no dia de fechamento).
-    //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
-    const computeSaveDate = (row) => {
-      const num = row._installment?.num || 0
-      if (num > 1) return row.date
-      if (num === 1) return clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
-      return row._dateCartao || row.date
-    }
+    // computeSaveDate vive no escopo do componente — a prévia usa a MESMA função.
 
     const txIds = []
     // Ids dos lançamentos gerenciais (grupo != D e != nulo) → ensureGerencialState no fim, para
     // materializar etapa A/agendamentos também em faturas de ciclo passado (o motor as ignora).
     const gerencialTxIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
-    const importClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
+    // importClosingDay vem do escopo do componente (mesmo valor: closingDay do cartão selecionado).
     const faturasAfetadas = new Set()
     const addFaturaAfetada = (faturaMY, dataStr) => faturasAfetadas.add(faturaMyOf(faturaMY, dataStr, importClosingDay))
     // AJUSTE 2: contains (descrições) que já viraram regra — evita duplicar no lote.
@@ -2557,12 +2620,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   // Importa um item "Só no Itaú" como lançamento da fatura (mesmo fluxo da importação normal).
   const importConcItem = (item) => {
-    const closingDay = selectedAcc?.closingDay || 14
-    // À vista (sem _installment) mantém a data original do cartão; parcelado clampa à fatura.
-    const isParcelado = (item._installment?.num || 0) > 0
-    const saveDate = isParcelado
-      ? clampDateToFatura(item.date, faturaMonthYear, closingDay)
-      : (item._dateCartao || item.date)
+    const saveDate = concSaveDate(item)
     const isExpense = (item.type || 'expense') === 'expense'
     if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
     const txId = addTransaction({
@@ -2888,7 +2946,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       title="Ver histórico do fornecedor"
                       className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
                     >
-                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
+                      {/* Data do extrato + a data de SISTEMA que será gravada quando as duas
+                          divergirem (parcela N > 1 provisiona no ciclo anterior à fatura).
+                          Mesmo padrão "Sistema/Cartão" da tabela da fatura. */}
+                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                        {(() => {
+                          const sis = concSaveDate(item)
+                          const dt = (s) => (s || '').split('-').reverse().join('/')
+                          return sis && sis !== item.date ? (
+                            <>
+                              <span className="block">Sistema: {dt(sis)}</span>
+                              <span className="block text-[10px] text-gray-600">Cartão: {dt(item.date)}</span>
+                            </>
+                          ) : dt(item.date)
+                        })()}
+                      </td>
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
@@ -3629,9 +3701,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   const apply = !collisionSkip.has(r._id)
                   const nm = (arr, id) => (id && arr.find(x => x.id === id)?.name) || '—'
                   const dt = (s) => (s || '').split('-').reverse().join('/')
+                  // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o confirmado.
+                  // Com a tolerância de ±R$0,50 os dois podem divergir em centavos, então a
+                  // linha "Valor" mostra o valor mantido (sem seta); a divergência do extrato
+                  // aparece no badge "CSV" ao lado da descrição.
+                  const valorCsvDiverge = Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005
                   const fields = [
-                    ['Data', dt(tx.date), dt(r.date)],
-                    ['Valor', fmt(tx.amount), fmt(r.amount)],
+                    // computeSaveDate — a MESMA função da gravação (era dt(r.date), que divergia
+                    // do que o UPDATE realmente escrevia na parcela 1 do Dindin).
+                    ['Data', dt(tx.date), dt(computeSaveDate(r))],
+                    ['Valor', fmt(tx.amount), fmt(tx.amount)],
                     ['Categoria', nm(categories, tx.categoryId), nm(categories, r.categoryId)],
                     ['Grupo', nm(gerencialGroups, tx.grupoGerencial), nm(gerencialGroups, r.grupoGerencial)],
                     ['Reserva', nm(reserveFunctions, tx.reservaFuncaoId), nm(reserveFunctions, r._reservaFuncaoId)],
@@ -3643,6 +3722,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <span className="text-xs text-gray-300 truncate">{r.description}</span>
                         {r._installment && (
                           <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{r._installment.num}/{r._installment.total}</span>
+                        )}
+                        {valorCsvDiverge && (
+                          <span
+                            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-400"
+                            title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido."
+                          >
+                            CSV {fmt(r.amount)}
+                          </span>
                         )}
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-1 pl-6">
