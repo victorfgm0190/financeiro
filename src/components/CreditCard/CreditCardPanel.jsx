@@ -875,6 +875,8 @@ export default function CreditCardPanel() {
               {displayBillTxs.length === 0 ? (
                 <p className="text-center py-8 text-gray-500 text-xs">Nenhum lançamento corresponde aos filtros</p>
               ) : displayBillTxs.map(tx => (
+                // Estorno abate da fatura → valor exibido com sinal negativo (fmt formata
+                // o negativo dentro do TxMobileItem). Só exibição: tx.amount segue positivo.
                 <TxMobileItem
                   key={tx.id}
                   type={tx.type === 'income' ? 'income' : 'expense'}
@@ -882,7 +884,7 @@ export default function CreditCardPanel() {
                   title={tx.payee || tx.description || (tx.type === 'income' ? 'Estorno' : 'Despesa')}
                   subtitle={tx.payee ? tx.description : null}
                   dateLabel={fmtDate(tx.date)}
-                  amount={tx.amount}
+                  amount={tx.type === 'income' ? -tx.amount : tx.amount}
                   onClick={selectMode ? () => toggleSelect(tx.id) : () => setEditTx(tx)}
                   leading={
                     selectMode ? (
@@ -1016,7 +1018,7 @@ export default function CreditCardPanel() {
                           </td>
                         )}
                         <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${isEstorno ? 'text-receita' : tx.reconciled ? 'text-orange-600' : 'text-orange-400'}`}>
-                          {fmt(tx.amount)}
+                          {isEstorno ? `-${fmt(tx.amount)}` : fmt(tx.amount)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-1 justify-end">
