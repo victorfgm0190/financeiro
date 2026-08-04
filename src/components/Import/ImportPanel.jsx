@@ -929,12 +929,14 @@ function applyReferenceFatura(rows, reference, closingDay, dueDay, financialStar
     const dateCartao = row._dateCartao || row.date
     const num = row._installment?.num || 1
     if (row._itau) {
-      const baseDate = clampDateToFatura(dateCartao, reference, closingDay)
+      // Parcela 1 / à vista: date = date_cartao, SEM clamp. O clampDateToFatura que havia aqui
+      // jogava uma compra anterior à janela da fatura para o dia de FECHAMENTO — date_cartao
+      // 10/07 + fatura 2026-08 (closing 13) virava 13/08. Parcela >1 segue a regra do Finup
+      // (dia financeiro do mês anterior à fatura). date_cartao nunca é alterada.
       return {
         ...row,
         faturaMonthYear: reference,
-        // Parcela 1/à vista mantém a data efetiva; parcela >1 vai p/ o mês anterior à fatura.
-        date: installmentSystemDate(reference, num, baseDate, financialStartDay),
+        date: num <= 1 ? dateCartao : installmentSystemDate(reference, num, dateCartao, financialStartDay),
       }
     }
     // Parcela 2..N: a date_cartao é a data da COMPRA ORIGINAL (fatura antiga) — NUNCA recalcula a
@@ -2092,12 +2094,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Regras de date (sistema):
     //   • Parcela N/Total com N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup) —
     //     não clampar, senão a data voltaria p/ o mês da própria fatura.
-    //   • Parcela 1: clamp ao período da fatura (datas fora caem no dia de fechamento).
+    //   • Parcela 1 (Itaú): a date já É a date_cartao (applyReferenceFatura) — não clampar,
+    //     senão a compra anterior à janela voltaria para o dia de fechamento da fatura.
+    //   • Parcela 1 (Dindin): clamp ao período da fatura (datas fora caem no dia de fechamento).
     //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
     const computeSaveDate = (row) => {
       const num = row._installment?.num || 0
       if (num > 1) return row.date
-      if (num === 1) return clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+      if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
       return row._dateCartao || row.date
     }
 
