@@ -625,7 +625,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 function ScheduleRow({
   schedule, nextDate, futureItems = [], cols = 9, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
-  deleteSchedule, updateSchedule, getNextOccurrences, onToast,
+  deleteSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
   srfBySchedule, onToggleConfirmado,
@@ -699,8 +699,12 @@ function ScheduleRow({
 
   // Pular a próxima ocorrência pendente:
   //  • único (frequency 'once'): confirma e cancela (deleteSchedule);
-  //  • recorrente: avança a data adicionando a ocorrência atual aos "skipped" via
-  //    updateSchedule (sem criar lançamento nem registrar ocorrência).
+  //  • recorrente: skipScheduleOccurrence — adiciona aos "skipped" E reancora next_occurrence na
+  //    próxima pendente (sem criar lançamento nem registrar ocorrência). Antes chamava
+  //    updateSchedule só com `skipped`, um merge cego: a coluna next_occurrence ficava congelada
+  //    numa data já pulada. A lista da tela não denunciava (getNextOccurrences filtra os pulados),
+  //    mas o valor persistido travava o "Em atraso" e desalinhava a contagem de parcelas de
+  //    occurrenceType 'installment', que pré-conta os consumidos ANTES da âncora.
   const isRecorrente = (schedule.frequency || 'once') !== 'once'
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
   const effAmount = nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
@@ -708,7 +712,7 @@ function ScheduleRow({
     if (!nextDate) return
     if (!isRecorrente) { setShowPularUnico(true); return }
     const proximo = getNextOccurrences?.(schedule, 2)[1] || null
-    updateSchedule(schedule.id, { skipped: [...(schedule.skipped || []), nextDate] })
+    skipScheduleOccurrence(schedule.id, nextDate)
     onToast?.(proximo
       ? `Agendamento pulado. Próximo vencimento: ${fmtDate(proximo)}`
       : 'Agendamento pulado.')
@@ -1245,7 +1249,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, updateSchedule } = useApp()
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1405,7 +1409,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
-    deleteSchedule, updateSchedule, getNextOccurrences, onToast: showToastMsg,
+    deleteSchedule, getNextOccurrences, onToast: showToastMsg,
     onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
     selectionMode, onToggleSelect: toggleSelect,
     srfBySchedule, onToggleConfirmado: toggleScheduleConfirmado,
