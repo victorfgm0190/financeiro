@@ -16,7 +16,7 @@ import {
 import { getToken } from '../lib/api'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
-import { installmentSystemDate } from '../lib/parcelas'
+import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
@@ -1635,7 +1635,9 @@ export function AppProvider({ children }) {
         )
         // Fase 2: não duplicar se ALGUM resgate_reserva já rastreia este gasto (source_expense_ids).
         const jaRastreado = schedules.some(s => s.tipo === 'resgate_reserva' && (s.sourceExpenseIds || []).includes(lancId))
-        const dueDate = `${yyyy}-${mm}-${String(card.dueDay || 10).padStart(2, '0')}`
+        // faturaToDate clampa o dueDay ao último dia do mês: a concatenação direta gerava data
+        // inválida (dueDay 31 + fevereiro → '2026-02-31').
+        const dueDate = faturaToDate(faturaMesAno, card.dueDay || 10)
         // Campos comuns do resgate_reserva desta origem/fatura (id/amount/sourceExpenseIds variam
         // entre o agendamento agregado e o delta pós-resgate).
         const buildResgate = (id, amount, sourceIds) => ({
@@ -3392,9 +3394,13 @@ export function AppProvider({ children }) {
       const faturaRef = `${mm}/${yyyy}`    // MM/YYYY (helpers de fatura.js)
 
       const financialStartDay = d.settings?.financialMonthStartDay || 1
-      const dueDay = String(card.dueDay || 10).padStart(2, '0')
       const devolDate = computeScheduleDate(faturaRef, financialStartDay) // dia financeiro do mês da fatura
-      const dueDate = `${yyyy}-${mm}-${dueDay}`                            // vencimento do cartão no mês da fatura
+      // Vencimento do cartão no mês da fatura. faturaToDate clampa o dueDay ao último dia do mês.
+      // A concatenação direta gerava '2026-02-31' com dueDay 31 — e o JS NÃO rejeita essa string:
+      // new Date('2026-02-31T00:00:00') faz rollover silencioso para 03/03. O guard de ciclo abaixo
+      // passava a comparar a fatura de FEVEREIRO como se vencesse em MARÇO, podendo classificar
+      // errado passado/atual/futuro. A string ainda ia parar no startDate do agendamento.
+      const dueDate = faturaToDate(faturaMesAno, card.dueDay || 10)
 
       // Variante A — "ciclo no passado": se o vencimento (dueDate) cai ANTES do início do
       // ciclo financeiro ATUAL (mesma regra de getFinancialPeriod, lida de d.settings), a
@@ -4908,8 +4914,8 @@ export function AppProvider({ children }) {
         if (parcelado === 0) return // só corrige faturas com parcelados
 
         const [mm, yyyy] = faturaRef.split('/')
-        const dueDay = String(cardAcc?.dueDay || 10).padStart(2, '0')
-        const scheduleDate = `${yyyy}-${mm}-${dueDay}`
+        // faturaToDate clampa o dueDay ao último dia do mês (dueDay 31 + fevereiro).
+        const scheduleDate = faturaToDate(`${yyyy}-${mm}`, cardAcc?.dueDay || 10)
         const resgateDate = computeScheduleDate(faturaRef, financialStartDay)
         const resgateParceladoDate = nextMonthScheduleDate(faturaRef, financialStartDay)
 
