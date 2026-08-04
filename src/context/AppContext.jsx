@@ -100,6 +100,25 @@ function parseScheduleDate(dateStr) {
   return new Date(String(dateStr).slice(0, 10) + 'T12:00:00')
 }
 
+// Janela do ciclo financeiro CORRENTE, a partir de settings. Mesma regra de getFinancialPeriod.
+// Pura e compartilhada: o motor (reconcileFaturaState) e o reconcile por lançamento
+// (applyEnsureGerencial) precisam concordar sobre o que é "fatura passada" — cópias
+// independentes desse cálculo são justamente como os dois divergiram.
+function cicloFinanceiroAtual(settings, ref = new Date()) {
+  if ((settings?.financialMonthMode || 'custom') === 'calendar') {
+    return {
+      start: new Date(ref.getFullYear(), ref.getMonth(), 1),
+      end: new Date(ref.getFullYear(), ref.getMonth() + 1, 0),
+    }
+  }
+  const startDay = settings?.financialMonthStartDay || 1
+  return ref.getDate() >= startDay
+    ? { start: new Date(ref.getFullYear(), ref.getMonth(), startDay),
+        end: new Date(ref.getFullYear(), ref.getMonth() + 1, startDay - 1) }
+    : { start: new Date(ref.getFullYear(), ref.getMonth() - 1, startDay),
+        end: new Date(ref.getFullYear(), ref.getMonth(), startDay - 1) }
+}
+
 // Retorna todas as ocorrências pendentes de um agendamento até upToDateStr (inclusive)
 function computePendingUpTo(schedule, upToDateStr) {
   const allDone = new Set([...(schedule.registered || []), ...(schedule.skipped || [])])
@@ -1665,7 +1684,13 @@ export function AppProvider({ children }) {
           }, 0))
           // Se o slot está pago mas NENHUM gasto é atribuível per-gasto (schedule executado removido),
           // não recria — mantém a segurança anterior de não duplicar um resgate já executado.
-          const podeCriar = idsNovos.length > 0 && somaNova > 0 && (!slotPago || idsNovos.length < idsOrigem.length)
+          //
+          // E não materializa pendência RETROATIVA: mesma política já aplicada aos três slots do
+          // reconcileFaturaState. Esta função é chamada a cada updateTransaction e ao fim de cada
+          // importação, então uma colisão que movia a parcela de mês fazia nascer resgate em fatura
+          // de ciclo encerrado. O que já existe segue intocado (nada é removido aqui).
+          const faturaCicloNoPassado = new Date(`${dueDate}T00:00:00`) < cicloFinanceiroAtual(d.settings).start
+          const podeCriar = !faturaCicloNoPassado && idsNovos.length > 0 && somaNova > 0 && (!slotPago || idsNovos.length < idsOrigem.length)
           if (podeCriar) {
             const n = schedules.filter(s =>
               s.tipo === 'resgate_reserva' && s.accountId === origem && s.cardId === card.id &&
@@ -3403,25 +3428,12 @@ export function AppProvider({ children }) {
       const dueDate = faturaToDate(faturaMesAno, card.dueDay || 10)
 
       // Variante A — "ciclo no passado": se o vencimento (dueDate) cai ANTES do início do
-      // ciclo financeiro ATUAL (mesma regra de getFinancialPeriod, lida de d.settings), a
-      // fatura está num ciclo já encerrado. Nesse caso NÃO materializamos pendência
-      // retroativa (preservamos o que já foi registrado/pulado e seguimos com as limpezas).
-      // Não afeta faturas do ciclo atual/futuro.
-      const _ref = new Date()
-      let _cicloStart, _cicloEnd
-      if ((d.settings?.financialMonthMode || 'custom') === 'calendar') {
-        _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth(), 1)
-        _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth() + 1, 0)
-      } else {
-        const _startDay = d.settings?.financialMonthStartDay || 1
-        if (_ref.getDate() >= _startDay) {
-          _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth(), _startDay)
-          _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth() + 1, _startDay - 1)
-        } else {
-          _cicloStart = new Date(_ref.getFullYear(), _ref.getMonth() - 1, _startDay)
-          _cicloEnd = new Date(_ref.getFullYear(), _ref.getMonth(), _startDay - 1)
-        }
-      }
+      // ciclo financeiro ATUAL, a fatura está num ciclo já encerrado. Nesse caso NÃO
+      // materializamos pendência retroativa (preservamos o que já foi registrado/pulado e
+      // seguimos com as limpezas). Não afeta faturas do ciclo atual/futuro.
+      // cicloFinanceiroAtual é o mesmo helper usado por applyEnsureGerencial — antes cada um
+      // tinha a sua cópia do cálculo, e só um deles consultava o resultado.
+      const { start: _cicloStart, end: _cicloEnd } = cicloFinanceiroAtual(d.settings)
       const _dueDateObj = new Date(`${dueDate}T00:00:00`)
       // Passado: nada retroativo — os três slots preservam a pendência existente e não criam nova.
       const faturaCicloNoPassado = _dueDateObj < _cicloStart
