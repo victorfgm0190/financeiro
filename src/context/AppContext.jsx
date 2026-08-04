@@ -3585,8 +3585,10 @@ export function AppProvider({ children }) {
       }
 
       // 3a. Separa os geridos: preserva executados (histórico); guarda pendentes de slot único
-      //     (devolução/pagamento) p/ decisão por ciclo; descarta pendentes de resgate (recriados
-      //     per-gasto abaixo). Conta resgates executados por origem → id determinístico do delta.
+      //     (devolução/pagamento) e de resgate p/ decisão por ciclo. No ciclo atual/futuro os
+      //     pendentes de resgate são descartados e recriados per-gasto abaixo; em fatura de ciclo
+      //     PASSADO são devolvidos intactos. Conta resgates executados por origem → id
+      //     determinístico do delta.
       //     Geridos são frequency:'once' — QUALQUER registro/pulo = executado (isResgatePago), sem
       //     exigir match de data (o pagamento detalhado grava trfDate editável em `registered`).
       const schedules = []
@@ -3594,6 +3596,7 @@ export function AppProvider({ children }) {
       let hasExecPagamento = false
       let pendingDevolucao = null
       let pendingPagamento = null
+      const pendingResgates = []
       const execResgateCountByOrigem = new Map()
       for (const s of d.schedules) {
         if (!isManaged(s)) { schedules.push(s); continue }
@@ -3608,9 +3611,11 @@ export function AppProvider({ children }) {
           }
           continue
         }
-        // Pendente: guarda os de slot único (decisão por ciclo abaixo); resgate/órfão são descartados.
+        // Pendente: guarda os de slot único e os de resgate p/ a decisão por ciclo abaixo. Órfão
+        // (type null) segue descartado.
         if (type === 'gerencial_devolucao') pendingDevolucao = s
         else if (type === 'pagamento_fatura') pendingPagamento = s
+        else if (type === 'resgate_reserva') pendingResgates.push(s)
       }
 
       // 3b. Recria pendências.
@@ -3649,36 +3654,46 @@ export function AppProvider({ children }) {
         }
       }
       // resgate_reserva (per-gasto). Recria UMA pendência por origem só p/ os gastos SEM resgate
-      // executado — em QUALQUER ciclo (a detecção per-gasto evita duplicar o já pago). Id
-      // determinístico: base quando não há resgate executado na origem; base_p{n} quando já há n
-      // executados (evita colisão com o preservado, sem recorrer a timestamp).
-      for (const [origem, somaOrigem] of numberedByAccount) {
-        if (somaOrigem <= 0) continue
-        const allSrc = sourceTxIdsByOrigem.get(origem) || []
-        const unpaidSrc = allSrc.filter(id => !isResgatePagoParaGasto(id, schedules, d.transactions))
-        if (!unpaidSrc.length) continue
-        const somaUnpaid = rb(unpaidSrc.reduce((acc, id) => {
-          const tx = d.transactions.find(t => t.id === id)
-          return acc + (Number(tx?.amount) || 0)
-        }, 0))
-        if (somaUnpaid <= 0) continue
-        const n = execResgateCountByOrigem.get(origem) || 0
-        const base = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
-        const schedId = n === 0 ? base : `${base}_p${n}`
-        const reservaFuncaoId =
-          (reservaFuncaoByAccount && reservaFuncaoByAccount[origem]) ||
-          prevReservaFuncaoByOrigem[origem] || null
-        schedules.push({
-          ...baseSch,
-          id: schedId,
-          tipo: 'resgate_reserva',
-          transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
-          startDate: dueDate, amount: somaUnpaid,
-          description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
-          reservaFuncaoId,
-          sourceExpenseIds: unpaidSrc,
-          overrides: { _gerencial: meta, _sourceTxIds: unpaidSrc },
-        })
+      // executado. Id determinístico: base quando não há resgate executado na origem; base_p{n}
+      // quando já há n executados (evita colisão com o preservado, sem recorrer a timestamp).
+      //
+      // Ciclo passado: MESMA política do gerencial_devolucao / pagamento_fatura acima — não
+      // materializa pendência retroativa. Sem isto, importar a fatura do mês corrente criava
+      // resgates em faturas de meses já encerrados: updateTransaction recalcula também a fatura
+      // ANTIGA quando uma colisão move a parcela de mês (AppContext:1740-1742), e este bloco era
+      // o único dos três que ignorava faturaCicloNoPassado. As pendências que já existem são
+      // devolvidas intactas — não cria, não atualiza, não deleta.
+      if (faturaCicloNoPassado) {
+        for (const s of pendingResgates) schedules.push(s)
+      } else {
+        for (const [origem, somaOrigem] of numberedByAccount) {
+          if (somaOrigem <= 0) continue
+          const allSrc = sourceTxIdsByOrigem.get(origem) || []
+          const unpaidSrc = allSrc.filter(id => !isResgatePagoParaGasto(id, schedules, d.transactions))
+          if (!unpaidSrc.length) continue
+          const somaUnpaid = rb(unpaidSrc.reduce((acc, id) => {
+            const tx = d.transactions.find(t => t.id === id)
+            return acc + (Number(tx?.amount) || 0)
+          }, 0))
+          if (somaUnpaid <= 0) continue
+          const n = execResgateCountByOrigem.get(origem) || 0
+          const base = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
+          const schedId = n === 0 ? base : `${base}_p${n}`
+          const reservaFuncaoId =
+            (reservaFuncaoByAccount && reservaFuncaoByAccount[origem]) ||
+            prevReservaFuncaoByOrigem[origem] || null
+          schedules.push({
+            ...baseSch,
+            id: schedId,
+            tipo: 'resgate_reserva',
+            transactionType: 'transfer', accountId: origem, toAccountId: contaPrincipal.id,
+            startDate: dueDate, amount: somaUnpaid,
+            description: `Resgate Reserva ${apelido} - Fatura ${faturaRef}`,
+            reservaFuncaoId,
+            sourceExpenseIds: unpaidSrc,
+            overrides: { _gerencial: meta, _sourceTxIds: unpaidSrc },
+          })
+        }
       }
 
       // 5. Limpeza dos contas_a_pagar (payables) LEGADOS de fatura deste cartão/mês — gerados
