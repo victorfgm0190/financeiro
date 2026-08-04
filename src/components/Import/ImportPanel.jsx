@@ -1398,6 +1398,41 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
 
+  // Data de SISTEMA (date) que uma linha de importação vai gravar. Vive no escopo do componente
+  // porque a PRÉVIA e a GRAVAÇÃO precisam da mesma resposta — quando a prévia calculava a data
+  // por conta própria (r.date), ela prometia uma data e o banco recebia outra.
+  // A fatura_ref vive separada em row.faturaMonthYear; date_cartao nunca é alterada.
+  // Regras:
+  //   • Parcela N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup, applyReferenceFatura)
+  //     — não clampar, senão a data voltaria p/ o mês da própria fatura.
+  //   • Parcela 1 (Itaú): a date já É a date_cartao — não clampar, senão a compra anterior à
+  //     janela voltaria para o dia de fechamento da fatura.
+  //   • Parcela 1 (Dindin): clamp ao período da fatura (datas fora caem no dia de fechamento).
+  //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
+  const importClosingDay = selectedAcc?.closingDay || 14
+  const computeSaveDate = (row) => {
+    const num = row._installment?.num || 0
+    if (num > 1) return row.date
+    if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
+    return row._dateCartao || row.date
+  }
+
+  // Equivalente para a CONCILIAÇÃO: os itens "Só no Itaú" são linhas CRUAS do CSV — não passam
+  // por applyReferenceFatura, então item.date é a data do extrato (= date_cartao) e a regra
+  // precisa ser aplicada inteira aqui. Mesma resposta da importação normal:
+  //   parcela 1 / à vista → date_cartao (sem clamp)
+  //   parcela N > 1       → dia financeiro do mês anterior à fatura (regra do Finup)
+  // O clampDateToFatura que havia no importConcItem jogava TODO parcelado para o dia de
+  // fechamento da fatura — a parcela 1 pelo mesmo motivo do caminho Itaú (compra anterior à
+  // janela) e a parcela N > 1 sempre, já que a date_cartao dela é a compra original, meses atrás.
+  const concSaveDate = (item) => {
+    const num = item._installment?.num || 0
+    const dateCartao = item._dateCartao || item.date
+    return num > 1
+      ? installmentSystemDate(faturaMonthYear, num, dateCartao, financialStartDay)
+      : dateCartao
+  }
+
   // Item 7: índice das parcelas já existentes do cartão pela chave de COLISÃO (installment_key
   // sem os centavos), para detectar colisão na reimportação (mesma parcela → atualizar, não
   // inserir). Cada chave guarda TODAS as candidatas: o desempate por valor (±R$0,50) é feito
@@ -2127,30 +2162,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
 
-    // Data de sistema da linha: mantida no mês de referência por applyReferenceFatura
-    // (e editável na tabela de revisão), com clamp ao período válido da fatura — datas
-    // fora do intervalo caem no dia de fechamento do mês da fatura. A fatura_ref vive
-    // separada em row.faturaMonthYear; date_cartao nunca é alterada.
-    // Regras de date (sistema):
-    //   • Parcela N/Total com N > 1: já tem date no mês ANTERIOR à fatura (regra do Finup) —
-    //     não clampar, senão a data voltaria p/ o mês da própria fatura.
-    //   • Parcela 1 (Itaú): a date já É a date_cartao (applyReferenceFatura) — não clampar,
-    //     senão a compra anterior à janela voltaria para o dia de fechamento da fatura.
-    //   • Parcela 1 (Dindin): clamp ao período da fatura (datas fora caem no dia de fechamento).
-    //   • À vista (sem _installment): mantém a data ORIGINAL do cartão (date_cartao), sem clamp.
-    const computeSaveDate = (row) => {
-      const num = row._installment?.num || 0
-      if (num > 1) return row.date
-      if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
-      return row._dateCartao || row.date
-    }
+    // computeSaveDate vive no escopo do componente — a prévia usa a MESMA função.
 
     const txIds = []
     // Ids dos lançamentos gerenciais (grupo != D e != nulo) → ensureGerencialState no fim, para
     // materializar etapa A/agendamentos também em faturas de ciclo passado (o motor as ignora).
     const gerencialTxIds = []
     // Faturas (YYYY-MM) tocadas por este lote → recálculo dos agendamentos acumulativos no fim.
-    const importClosingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
+    // importClosingDay vem do escopo do componente (mesmo valor: closingDay do cartão selecionado).
     const faturasAfetadas = new Set()
     const addFaturaAfetada = (faturaMY, dataStr) => faturasAfetadas.add(faturaMyOf(faturaMY, dataStr, importClosingDay))
     // AJUSTE 2: contains (descrições) que já viraram regra — evita duplicar no lote.
@@ -2601,12 +2620,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   // Importa um item "Só no Itaú" como lançamento da fatura (mesmo fluxo da importação normal).
   const importConcItem = (item) => {
-    const closingDay = selectedAcc?.closingDay || 14
-    // À vista (sem _installment) mantém a data original do cartão; parcelado clampa à fatura.
-    const isParcelado = (item._installment?.num || 0) > 0
-    const saveDate = isParcelado
-      ? clampDateToFatura(item.date, faturaMonthYear, closingDay)
-      : (item._dateCartao || item.date)
+    const saveDate = concSaveDate(item)
     const isExpense = (item.type || 'expense') === 'expense'
     if (item.payee && !payees.includes(item.payee)) addPayee(item.payee)
     const txId = addTransaction({
@@ -2932,7 +2946,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       title="Ver histórico do fornecedor"
                       className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
                     >
-                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
+                      {/* Data do extrato + a data de SISTEMA que será gravada quando as duas
+                          divergirem (parcela N > 1 provisiona no ciclo anterior à fatura).
+                          Mesmo padrão "Sistema/Cartão" da tabela da fatura. */}
+                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                        {(() => {
+                          const sis = concSaveDate(item)
+                          const dt = (s) => (s || '').split('-').reverse().join('/')
+                          return sis && sis !== item.date ? (
+                            <>
+                              <span className="block">Sistema: {dt(sis)}</span>
+                              <span className="block text-[10px] text-gray-600">Cartão: {dt(item.date)}</span>
+                            </>
+                          ) : dt(item.date)
+                        })()}
+                      </td>
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
@@ -3679,7 +3707,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   // aparece no badge "CSV" ao lado da descrição.
                   const valorCsvDiverge = Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005
                   const fields = [
-                    ['Data', dt(tx.date), dt(r.date)],
+                    // computeSaveDate — a MESMA função da gravação (era dt(r.date), que divergia
+                    // do que o UPDATE realmente escrevia na parcela 1 do Dindin).
+                    ['Data', dt(tx.date), dt(computeSaveDate(r))],
                     ['Valor', fmt(tx.amount), fmt(tx.amount)],
                     ['Categoria', nm(categories, tx.categoryId), nm(categories, r.categoryId)],
                     ['Grupo', nm(gerencialGroups, tx.grupoGerencial), nm(gerencialGroups, r.grupoGerencial)],
