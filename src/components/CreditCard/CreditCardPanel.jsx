@@ -406,7 +406,14 @@ export default function CreditCardPanel() {
   const billTotal = billTxs.reduce((s, t) => s + t.amount, 0) - estornoTotal
   // Lançamentos alimentados ao totalizador gerencial: despesas + estornos.
   const totalizerTxs = useMemo(() => [...billTxs, ...billEstornos], [billTxs, billEstornos])
-  const hasGer = billTxs.some(tx => tx.grupoGerencial)
+  // Lista EXIBIDA da fatura: despesas + estornos numa lista só, ordenada por data.
+  // Só afeta exibição/seleção/reconciliação — billTotal e o abatimento dos estornos
+  // seguem calculados sobre billTxs/estornoTotal acima.
+  const billLancamentos = useMemo(
+    () => [...billTxs, ...billEstornos].sort((a, b) => b.date.localeCompare(a.date)),
+    [billTxs, billEstornos]
+  )
+  const hasGer = billLancamentos.some(tx => tx.grupoGerencial)
 
   // ── Pagamentos da fatura selecionada ─────────────────────────────────────
   // Lançamentos credit_payment do cartão atual cuja fatura_ref OU mês da data caem na
@@ -495,16 +502,16 @@ export default function CreditCardPanel() {
   // calculado sobre a fatura completa (billTotal).
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const displayBillTxs = useMemo(
-    () => hasLancFiltros(filtros) ? billTxs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : billTxs,
-    [billTxs, filtros, accounts]
+    () => hasLancFiltros(filtros) ? billLancamentos.filter(tx => matchLancFiltros(tx, filtros, accounts)) : billLancamentos,
+    [billLancamentos, filtros, accounts]
   )
 
   // Reconciliação — lançamentos NÃO reconciliados da fatura em exibição.
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [bulkEditTxs, setBulkEditTxs] = useState(null)
   const billPending = useMemo(
-    () => billTxs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
-    [billTxs]
+    () => billLancamentos.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
+    [billLancamentos]
   )
 
   // ── Seleção múltipla (modo "Selecionar") ──
@@ -682,7 +689,7 @@ export default function CreditCardPanel() {
             <span className="text-xs uppercase tracking-wide">Fatura Selecionada</span>
           </div>
           <p className="text-2xl font-bold text-orange-600">{fmt(billTotal)}</p>
-          <p className="text-xs text-gray-500 mt-1">{billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-500 mt-1">{billLancamentos.length} lançamento{billLancamentos.length !== 1 ? 's' : ''}</p>
           {totalPrevisto > 0 && (
             <>
               <p className="text-xs text-gray-400 mt-1">
@@ -813,7 +820,7 @@ export default function CreditCardPanel() {
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span>
               </div>
             )}
-            {billTxs.length > 0 && (
+            {billLancamentos.length > 0 && (
               <button
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-2.5 py-1 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
@@ -822,7 +829,7 @@ export default function CreditCardPanel() {
                 <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
               </button>
             )}
-            {billTxs.length > 0 && (
+            {billLancamentos.length > 0 && (
               <button
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
@@ -834,11 +841,11 @@ export default function CreditCardPanel() {
           </div>
         </div>
 
-        {billTxs.length > 0 && (
+        {billLancamentos.length > 0 && (
           <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
         )}
 
-        {billTxs.length === 0 ? (
+        {billLancamentos.length === 0 ? (
           <div className="text-center py-12">
             <Calendar size={28} className="text-gray-700 mx-auto mb-2" />
             <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
@@ -870,8 +877,9 @@ export default function CreditCardPanel() {
               ) : displayBillTxs.map(tx => (
                 <TxMobileItem
                   key={tx.id}
-                  type="expense"
-                  title={tx.payee || tx.description || 'Despesa'}
+                  type={tx.type === 'income' ? 'income' : 'expense'}
+                  typeLabel={tx.type === 'income' ? 'Estorno' : undefined}
+                  title={tx.payee || tx.description || (tx.type === 'income' ? 'Estorno' : 'Despesa')}
                   subtitle={tx.payee ? tx.description : null}
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.amount}
@@ -952,6 +960,9 @@ export default function CreditCardPanel() {
                   {displayBillTxs.map(tx => {
                     const cat = categories.find(c => c.id === tx.categoryId)
                     const isSelected = selectedIds.has(tx.id)
+                    // Estorno = receita lançada no cartão. Aparece na mesma lista, marcado
+                    // com badge azul e valor na cor de receita do app.
+                    const isEstorno = tx.type === 'income'
                     return (
                       <tr
                         key={tx.id}
@@ -980,7 +991,12 @@ export default function CreditCardPanel() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <p className={`text-sm ${tx.reconciled ? 'text-gray-200' : 'text-white font-medium'}`}>{tx.description}</p>
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm ${tx.reconciled ? 'text-gray-200' : 'text-white font-medium'}`}>{tx.description}</p>
+                            {isEstorno && (
+                              <span className="text-[10px] font-bold bg-blue-500/20 text-receita px-1.5 py-0.5 rounded shrink-0">ESTORNO</span>
+                            )}
+                          </div>
                           {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
                           <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                           <CopyIdBadge id={tx.id} />
@@ -999,7 +1015,7 @@ export default function CreditCardPanel() {
                               : <span className="text-gray-700 text-xs">—</span>}
                           </td>
                         )}
-                        <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${tx.reconciled ? 'text-orange-600' : 'text-orange-400'}`}>
+                        <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${isEstorno ? 'text-receita' : tx.reconciled ? 'text-orange-600' : 'text-orange-400'}`}>
                           {fmt(tx.amount)}
                         </td>
                         <td className="px-4 py-3">
