@@ -1190,6 +1190,43 @@ function serieKeyFromFull(fullKey) {
 }
 function serieKeyOfExistingTx(tx) { return serieKeyFromFull(keyOfExistingTx(tx)) }
 
+// Chave de COLISÃO = installment_key SEM o componente de centavos
+// (accountId | base | num/total | serie_inicio).
+//
+// A installment_key persistida é exata de propósito: ela sustenta o índice UNIQUE
+// uq_lancamentos_installment e o remapeamento de id do upsert (api/_db.js). Arredondá-la
+// criaria colisão falsa entre parcelas legitimamente distintas. Por isso a tolerância de
+// valor mora AQUI, no casamento da importação — não na chave.
+//
+// Sem isto, 1 centavo de diferença virava parcela duplicada: R$100,00 em 3× fica
+// 33,34/33,33/33,33 no banco e o extrato pode trazer 33,37/33,30/33,33.
+function collisionKeyFromFull(fullKey) {
+  if (!fullKey) return null
+  const parts = fullKey.split('|')
+  if (parts.length < 5) return null
+  return `${parts[0]}|${parts[1]}|${parts[2]}|${parts[4]}`
+}
+
+// Tolerância de valor ao casar uma parcela do extrato com a já gravada. Mesma faixa de
+// isDuplicateInstallment / findExistingParcela (lib/parcelas.js) — os três matchers do
+// parcelamento passam a concordar.
+const TOLERANCIA_VALOR = 0.50
+
+// Parcela já no banco que corresponde à linha importada: mesma chave de colisão e valor
+// dentro da tolerância. Havendo mais de uma candidata, vence a de menor diferença.
+function matchParcelaExistente(index, row, accountId) {
+  const k = collisionKeyFromFull(keyOfImportRow(row, accountId))
+  const candidatas = k ? index.get(k) : null
+  if (!candidatas?.length) return null
+  let melhor = null
+  let menorDiff = Infinity
+  for (const t of candidatas) {
+    const diff = Math.abs((Number(t.amount) || 0) - (Number(row.amount) || 0))
+    if (diff <= TOLERANCIA_VALOR && diff < menorDiff) { melhor = t; menorDiff = diff }
+  }
+  return melhor
+}
+
 // Override manual de parcelamento (camada sobre detectInstallment, sem alterá-lo). Quando a
 // descrição tem N/M, reaproveita base/matchStr do detector; senão base = descrição inteira e
 // matchStr = null (as parcelas futuras recebem sufixo " N/M" — ver futureParcelas).
@@ -1361,15 +1398,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
 
-  // Item 7: índice das parcelas já existentes do cartão por installment_key, para detectar
-  // colisão na reimportação (mesma chave = mesma parcela → atualizar, não inserir).
+  // Item 7: índice das parcelas já existentes do cartão pela chave de COLISÃO (installment_key
+  // sem os centavos), para detectar colisão na reimportação (mesma parcela → atualizar, não
+  // inserir). Cada chave guarda TODAS as candidatas: o desempate por valor (±R$0,50) é feito
+  // em matchParcelaExistente, já que centavos de arredondamento variam entre extratos.
   const existingParcelaByKey = useMemo(() => {
     const m = new Map()
     if (!selectedAccount) return m
     for (const t of transactions) {
       if (t.accountId !== selectedAccount || t.type !== 'expense' || t.accountType !== 'credit') continue
-      const k = keyOfExistingTx(t)
-      if (k && !m.has(k)) m.set(k, t)
+      const k = collisionKeyFromFull(keyOfExistingTx(t))
+      if (!k) continue
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(t)
     }
     return m
   }, [transactions, selectedAccount])
@@ -1774,8 +1815,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
-      const k = keyOfImportRow(r, selectedAccount)
-      const collisionTx = k ? existingParcelaByKey.get(k) : null
+      const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount)
       if (collisionTx) return {
         ...r,
         categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
@@ -3633,9 +3673,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   const apply = !collisionSkip.has(r._id)
                   const nm = (arr, id) => (id && arr.find(x => x.id === id)?.name) || '—'
                   const dt = (s) => (s || '').split('-').reverse().join('/')
+                  // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o confirmado.
+                  // Com a tolerância de ±R$0,50 os dois podem divergir em centavos, então a
+                  // linha "Valor" mostra o valor mantido (sem seta); a divergência do extrato
+                  // aparece no badge "CSV" ao lado da descrição.
+                  const valorCsvDiverge = Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005
                   const fields = [
                     ['Data', dt(tx.date), dt(r.date)],
-                    ['Valor', fmt(tx.amount), fmt(r.amount)],
+                    ['Valor', fmt(tx.amount), fmt(tx.amount)],
                     ['Categoria', nm(categories, tx.categoryId), nm(categories, r.categoryId)],
                     ['Grupo', nm(gerencialGroups, tx.grupoGerencial), nm(gerencialGroups, r.grupoGerencial)],
                     ['Reserva', nm(reserveFunctions, tx.reservaFuncaoId), nm(reserveFunctions, r._reservaFuncaoId)],
@@ -3647,6 +3692,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <span className="text-xs text-gray-300 truncate">{r.description}</span>
                         {r._installment && (
                           <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{r._installment.num}/{r._installment.total}</span>
+                        )}
+                        {valorCsvDiverge && (
+                          <span
+                            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-400"
+                            title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido."
+                          >
+                            CSV {fmt(r.amount)}
+                          </span>
                         )}
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-1 pl-6">
