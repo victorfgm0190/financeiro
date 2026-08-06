@@ -1,4 +1,4 @@
-import { query } from './_db.js'
+import { withTransaction } from './_db.js'
 
 // Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
 //
@@ -58,12 +58,22 @@ export function getRouteId(req, segmentsFromEnd = 0) {
 // Schema
 // ---------------------------------------------------------------------------
 
-// DDL idempotente (mesmo padrão de api/load.js). As tabelas já existem desde a PHASE 1; isto
-// é um no-op nesse caso e serve de rede de segurança para colunas que faltem em algum ambiente.
-// Cacheado por cold start para não pagar o custo em toda request.
+// DDL idempotente (mesmo padrão de api/load.js). Cacheado por cold start para não pagar o
+// custo em toda request.
+//
+// Roda inteiro dentro de UMA transação: sem isso, um kill no meio (timeout de função,
+// queda de conexão) deixava schema parcial — tipicamente as 10 colunas de `contas`
+// aplicadas e `lancamentos.bem_id` não. Esse estado é auto-perpetuante e derruba o módulo
+// todo: `CREATE INDEX IF NOT EXISTS idx_lancamentos_bem_id` só checa o nome do ÍNDICE, não
+// a coluna, então ele falha com "column bem_id does not exist" — dentro do próprio
+// ensureBemSchema, que é o que criaria a coluna. Todo endpoint de bem passa a devolver 500
+// e a migração nunca se completa sozinha. Com a transação é tudo-ou-nada.
 let schemaReady = null
 
-export function ensureBemSchema() {
+// `force` descarta o cache do instance quente — usado por /api/bem/migrate para reexecutar
+// a migração sob demanda sem depender de um cold start.
+export function ensureBemSchema({ force = false } = {}) {
+  if (force) schemaReady = null
   if (!schemaReady) {
     schemaReady = runSchemaDDL().catch((err) => {
       schemaReady = null
@@ -74,6 +84,12 @@ export function ensureBemSchema() {
 }
 
 async function runSchemaDDL() {
+  return withTransaction(runSchemaStatements)
+}
+
+// Recebe `query` da transação — mesma assinatura (sql, params) do helper do pool, então os
+// statements abaixo são idênticos aos de api/load.js.
+async function runSchemaStatements(query) {
   const contasCols = [
     ['valor_nota_fiscal', 'NUMERIC'],
     ['tipo_bem', 'TEXT'],

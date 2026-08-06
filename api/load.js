@@ -1,5 +1,6 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { ensureBemSchema } from './_bem.js'
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -343,6 +344,20 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE schedule_reserva_funcoes ALTER COLUMN reserva_funcao_id DROP NOT NULL`)
     await query(`CREATE INDEX IF NOT EXISTS idx_srf_schedule ON schedule_reserva_funcoes (schedule_id)`)
     await query(`CREATE INDEX IF NOT EXISTS idx_srf_source_lancamento ON schedule_reserva_funcoes (source_lancamento_id)`)
+
+    // Schema do módulo de bem imobilizado. Mora em api/_bem.js (supabase/schema.sql não tem
+    // nada dele), então antes daqui só era criado quando alguém abria um bem — e um banco que
+    // nunca recebeu essa chamada derrubava a tela de Patrimônio com "column bem_id does not
+    // exist". Pendurar no load faz a migração acontecer sozinha para todo mundo.
+    //
+    // Falha NÃO propaga: o módulo de bem é acessório e não pode derrubar o load do app
+    // inteiro. Quem precisa do erro cru tem GET/POST /api/bem/migrate.
+    try {
+      await ensureBemSchema()
+    } catch (err) {
+      console.error('[api/load] ensureBemSchema:', err.message)
+    }
+
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs] =
       await Promise.all([
         query('SELECT * FROM contas'),
