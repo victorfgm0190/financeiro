@@ -111,6 +111,26 @@ export async function upsertRows(table, rows, conflictCol = 'id') {
   }
 }
 
+// Executa `fn` dentro de uma transação, passando um `q(sql, params)` com a mesma assinatura de
+// `query` mas amarrado ao client da transação. COMMIT no retorno, ROLLBACK em qualquer throw.
+// Endpoints que fazem várias escritas dependentes (pagar parcela, criar financiamento) precisam
+// disso — `query` usa o pool e cada chamada sairia numa conexão/transação diferente.
+export async function withTransaction(fn) {
+  const client = await getPool().connect()
+  const q = async (sql, params = []) => (await client.query(sql, params)).rows
+  try {
+    await client.query('BEGIN')
+    const result = await fn(q)
+    await client.query('COMMIT')
+    return result
+  } catch (err) {
+    try { await client.query('ROLLBACK') } catch { /* ignore */ }
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
 export async function deleteRows(table, ids, col = 'id') {
   if (!ids || ids.length === 0) return
   await getPool().query(`DELETE FROM ${table} WHERE "${col}" = ANY($1)`, [ids])

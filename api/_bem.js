@@ -1,0 +1,361 @@
+import { query } from './_db.js'
+
+// Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
+//
+// Convenção de tipo de conta: o app inteiro (PatrimonioPanel, AccountsPanel, SettingsPanel)
+// discrimina contas por `contas.type` ∈ {checking, savings, credit, asset, liability}. Um bem
+// entra como type='asset' e a conta de dívida como type='liability' — assim aparecem no
+// Patrimônio e nos filtros existentes. O marcador 'bem_imobilizado' pedido na spec vive na
+// coluna nova `tipo_bem`, e é ele que as respostas destes endpoints devolvem em `tipo`.
+
+export const TIPO_BEM = 'bem_imobilizado'
+export const ACCOUNT_TYPE_BEM = 'asset'
+export const ACCOUNT_TYPE_DIVIDA = 'liability'
+
+export const genId = (prefix) =>
+  `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+
+export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
+
+export const num = (v, fallback = 0) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+
+export const isPositiveNumber = (v) => Number.isFinite(Number(v)) && Number(v) > 0
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+export const isIsoDate = (v) => typeof v === 'string' && ISO_DATE.test(v.slice(0, 10))
+
+export const hoje = () => new Date().toISOString().slice(0, 10)
+
+// Soma meses a uma data ISO clampando no último dia do mês de destino: 31/01 + 1 mês → 28/02,
+// nunca 03/03. Aritmética em string para não depender do fuso do runtime da Vercel.
+export function addMonthsClamped(isoDate, months) {
+  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number)
+  const idx = (m - 1) + months
+  const year = y + Math.floor(idx / 12)
+  const month = ((idx % 12) + 12) % 12
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  const day = Math.min(d, lastDay)
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// Lê o parâmetro dinâmico da rota. `req.query.id` cobre o caso normal da Vercel; o fallback pelo
+// pathname mantém o endpoint funcionando em runtimes que não populam req.query (mesmo padrão de
+// api/reserve-periods.js). `segmentsFromEnd` = quantos segmentos existem DEPOIS do id na URL.
+export function getRouteId(req, segmentsFromEnd = 0) {
+  if (req.query?.id) return req.query.id
+  try {
+    const parts = new URL(req.url, 'http://x').pathname.split('/').filter(Boolean)
+    return parts[parts.length - 1 - segmentsFromEnd] || null
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
+
+// DDL idempotente (mesmo padrão de api/load.js). As tabelas já existem desde a PHASE 1; isto
+// é um no-op nesse caso e serve de rede de segurança para colunas que faltem em algum ambiente.
+// Cacheado por cold start para não pagar o custo em toda request.
+let schemaReady = null
+
+export function ensureBemSchema() {
+  if (!schemaReady) {
+    schemaReady = runSchemaDDL().catch((err) => {
+      schemaReady = null
+      throw err
+    })
+  }
+  return schemaReady
+}
+
+async function runSchemaDDL() {
+  const contasCols = [
+    ['valor_nota_fiscal', 'NUMERIC'],
+    ['tipo_bem', 'TEXT'],
+    ['descricao', 'TEXT'],
+    ['foi_vendido', 'BOOLEAN DEFAULT FALSE'],
+    ['data_venda', 'DATE'],
+    ['bem_destino_id', 'TEXT'],
+    ['categoria_perda_bem_id', 'TEXT'],
+    ['categoria_ganho_bem_id', 'TEXT'],
+    ['categoria_prestacao_id', 'TEXT'],
+    ['categoria_taxa_finan_id', 'TEXT'],
+  ]
+  for (const [col, type] of contasCols) {
+    await query(`ALTER TABLE contas ADD COLUMN IF NOT EXISTS ${col} ${type}`)
+  }
+
+  // Vínculo do lançamento com o bem — é o que permite montar o histórico sem varrer descrições.
+  await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS bem_id TEXT`)
+  await query(`CREATE INDEX IF NOT EXISTS idx_lancamentos_bem_id ON lancamentos (bem_id) WHERE bem_id IS NOT NULL`)
+  await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS financing_installment_id TEXT`)
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS financing (
+      id TEXT PRIMARY KEY,
+      bem_id TEXT,
+      valor_principal NUMERIC NOT NULL DEFAULT 0,
+      juros_totais NUMERIC NOT NULL DEFAULT 0,
+      valor_total NUMERIC NOT NULL DEFAULT 0,
+      num_parcelas INTEGER NOT NULL DEFAULT 0,
+      valor_parcela NUMERIC NOT NULL DEFAULT 0,
+      principal_por_parcela NUMERIC DEFAULT 0,
+      juros_por_parcela NUMERIC DEFAULT 0,
+      banco TEXT,
+      status TEXT DEFAULT 'open',
+      conta_divida_id TEXT,
+      conta_origem_id TEXT,
+      data_primeira_parcela DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
+  for (const [col, type] of [
+    ['bem_id', 'TEXT'], ['principal_por_parcela', 'NUMERIC DEFAULT 0'],
+    ['juros_por_parcela', 'NUMERIC DEFAULT 0'], ['banco', 'TEXT'],
+    ['status', "TEXT DEFAULT 'open'"], ['conta_divida_id', 'TEXT'],
+    ['conta_origem_id', 'TEXT'], ['data_primeira_parcela', 'DATE'],
+  ]) {
+    await query(`ALTER TABLE financing ADD COLUMN IF NOT EXISTS ${col} ${type}`)
+  }
+  await query(`CREATE INDEX IF NOT EXISTS idx_financing_bem_id ON financing (bem_id)`)
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS financing_installments (
+      id TEXT PRIMARY KEY,
+      financing_id TEXT NOT NULL,
+      numero_parcela INTEGER NOT NULL,
+      principal_provisioned NUMERIC NOT NULL DEFAULT 0,
+      juros_provisioned NUMERIC NOT NULL DEFAULT 0,
+      total_provisioned NUMERIC NOT NULL DEFAULT 0,
+      principal_pago NUMERIC NOT NULL DEFAULT 0,
+      juros_pago NUMERIC NOT NULL DEFAULT 0,
+      total_pago NUMERIC NOT NULL DEFAULT 0,
+      desvio_juros NUMERIC NOT NULL DEFAULT 0,
+      data_vencimento DATE,
+      data_pagamento DATE,
+      status TEXT DEFAULT 'open',
+      schedule_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
+  for (const [col, type] of [
+    ['desvio_juros', 'NUMERIC NOT NULL DEFAULT 0'], ['schedule_id', 'TEXT'],
+    ['data_pagamento', 'DATE'], ['status', "TEXT DEFAULT 'open'"],
+  ]) {
+    await query(`ALTER TABLE financing_installments ADD COLUMN IF NOT EXISTS ${col} ${type}`)
+  }
+  await query(`CREATE INDEX IF NOT EXISTS idx_fin_inst_financing ON financing_installments (financing_id)`)
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fin_inst_numero ON financing_installments (financing_id, numero_parcela)`)
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS bem_movimentacoes (
+      id TEXT PRIMARY KEY,
+      bem_id TEXT NOT NULL,
+      tipo TEXT NOT NULL,
+      data DATE,
+      descricao TEXT,
+      bem_origem_id TEXT,
+      valor NUMERIC DEFAULT 0,
+      perda_ganho NUMERIC,
+      principal NUMERIC,
+      juros NUMERIC,
+      categoria_id TEXT,
+      parcela_id TEXT,
+      lancamento_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`)
+  for (const [col, type] of [
+    ['principal', 'NUMERIC'], ['juros', 'NUMERIC'], ['parcela_id', 'TEXT'],
+    ['lancamento_id', 'TEXT'], ['bem_origem_id', 'TEXT'], ['perda_ganho', 'NUMERIC'],
+  ]) {
+    await query(`ALTER TABLE bem_movimentacoes ADD COLUMN IF NOT EXISTS ${col} ${type}`)
+  }
+  await query(`CREATE INDEX IF NOT EXISTS idx_bem_mov_bem_id ON bem_movimentacoes (bem_id)`)
+}
+
+// ---------------------------------------------------------------------------
+// Regras de negócio
+// ---------------------------------------------------------------------------
+
+// Rateio de um pagamento entre principal e juros: o principal é quitado PRIMEIRO, os juros
+// recebem só a sobra. O que faltar de juros vira desvio (juros não pagos daquela parcela).
+export function calcularRateio(valorPago, principalProvisioned, jurosProvisioned) {
+  const pago = round2(num(valorPago))
+  const principalPrev = round2(num(principalProvisioned))
+  const jurosPrev = round2(num(jurosProvisioned))
+
+  if (pago >= principalPrev) {
+    const sobra = round2(pago - principalPrev)
+    const jurosPago = Math.min(sobra, jurosPrev)
+    return {
+      principalPago: principalPrev,
+      jurosPago: round2(jurosPago),
+      desvioJuros: round2(jurosPrev - jurosPago),
+    }
+  }
+  return { principalPago: pago, jurosPago: 0, desvioJuros: jurosPrev }
+}
+
+// Provisão das N parcelas. A última absorve o resíduo do arredondamento para que
+// Σ principal === valor_principal e Σ juros === juros_totais exatamente (senão, em 60 parcelas,
+// centavos de erro se acumulam e o financiamento nunca fecha em 'completed').
+export function montarProvisao({ valorPrincipal, numParcelas, valorParcela, dataPrimeiraParcela }) {
+  const valorTotal = round2(valorParcela * numParcelas)
+  const jurosTotais = round2(valorTotal - valorPrincipal)
+  const principalPorParcela = round2(valorPrincipal / numParcelas)
+  const jurosPorParcela = round2(jurosTotais / numParcelas)
+
+  const parcelas = []
+  let principalAcum = 0
+  let jurosAcum = 0
+  for (let i = 1; i <= numParcelas; i++) {
+    const ultima = i === numParcelas
+    const principal = ultima ? round2(valorPrincipal - principalAcum) : principalPorParcela
+    const juros = ultima ? round2(jurosTotais - jurosAcum) : jurosPorParcela
+    principalAcum = round2(principalAcum + principal)
+    jurosAcum = round2(jurosAcum + juros)
+    parcelas.push({
+      numero: i,
+      principal_provisioned: principal,
+      juros_provisioned: juros,
+      total_provisioned: round2(principal + juros),
+      data_vencimento: addMonthsClamped(dataPrimeiraParcela, i - 1),
+    })
+  }
+  return { valorTotal, jurosTotais, principalPorParcela, jurosPorParcela, parcelas }
+}
+
+// ---------------------------------------------------------------------------
+// Escritas reutilizáveis (recebem `q` — pool ou client de transação)
+// ---------------------------------------------------------------------------
+
+// Cria um lançamento já categorizado e vinculado ao bem.
+// `account_id` fica null de propósito: o saldo das contas é movido explicitamente pelo endpoint
+// que chama isto, e o loop de saldo do app ignora contas null — sem isso o valor entraria duas
+// vezes (mesmo padrão das sombras de reserva/patrimônio).
+export async function criarLancamentoCategorizado(q, {
+  categoriaId, valor, descricao, bemId, data, tipo = 'expense', origin = 'pagamento_divida',
+  grupoGerencial = null, notes = null,
+}) {
+  const id = genId('tx_bem')
+  await q(
+    `INSERT INTO lancamentos
+       (id, type, account_id, amount, date, description, category_id, bem_id, origin,
+        grupo_gerencial, notes, reconciled)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, FALSE)`,
+    [id, tipo, round2(valor), data, descricao, categoriaId || null, bemId || null, origin,
+      grupoGerencial, notes],
+  )
+  return id
+}
+
+// Cria um agendamento 'once' por parcela (o motor de agendamentos gera um por ocorrência para
+// séries datadas — mesmo padrão dos agendamentos de fatura).
+// `auto_register = false` é obrigatório: quem baixa a parcela é POST /api/financiamento/parcela/
+// [id]/pagar, e deixar o motor registrar sozinho duplicaria o lançamento e o saldo.
+export async function criarAgendamentosParcelas(q, {
+  parcelas, contaOrigemId, contaDestinoId, valorParcela, descricaoBase, numParcelas,
+  categoriaPrestacaoId = null,
+}) {
+  const ids = []
+  for (const p of parcelas) {
+    const id = genId('sch_fin')
+    await q(
+      `INSERT INTO agendamentos
+         (id, description, transaction_type, account_id, to_account_id, amount, category_id,
+          frequency, start_date, next_occurrence, occurrence_type, installments,
+          auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides)
+       VALUES ($1, $2, 'transfer', $3, $4, $5, $6, 'once', $7, $8, 'continuous', NULL,
+               FALSE, FALSE, 'financiamento_parcela', $9, '[]', '[]', '{}')`,
+      // start_date é TEXT e next_occurrence é DATE: a mesma data precisa ir em dois parâmetros
+      // distintos, senão o Postgres tenta deduzir um único tipo para o placeholder e falha.
+      [id, `${descricaoBase} ${p.numero}/${numParcelas}`, contaOrigemId, contaDestinoId,
+        round2(valorParcela), categoriaPrestacaoId, p.data_vencimento, p.data_vencimento, p.id],
+    )
+    ids.push(id)
+  }
+  return ids
+}
+
+export async function registrarMovimentacao(q, {
+  bemId, tipo, data, descricao, bemOrigemId = null, valor = 0, perdaGanho = null,
+  principal = null, juros = null, categoriaId = null, parcelaId = null, lancamentoId = null,
+}) {
+  const id = genId('mov')
+  await q(
+    `INSERT INTO bem_movimentacoes
+       (id, bem_id, tipo, data, descricao, bem_origem_id, valor, perda_ganho, principal, juros,
+        categoria_id, parcela_id, lancamento_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [id, bemId, tipo, data, descricao, bemOrigemId, round2(valor),
+      perdaGanho === null ? null : round2(perdaGanho),
+      principal === null ? null : round2(principal),
+      juros === null ? null : round2(juros),
+      categoriaId, parcelaId, lancamentoId],
+  )
+  return id
+}
+
+// Valida que todos os ids de categoria informados existem. Retorna os ids inválidos.
+export async function categoriasInexistentes(q, ids) {
+  const alvo = [...new Set(ids.filter(Boolean))]
+  if (alvo.length === 0) return []
+  const rows = await q(`SELECT id FROM categorias WHERE id = ANY($1)`, [alvo])
+  const found = new Set(rows.map(r => r.id))
+  return alvo.filter(id => !found.has(id))
+}
+
+// Payload padrão de um bem (usado por GET /api/bem/[id] e pelas respostas de criação).
+export function serializarBem(conta, categoriasById = {}) {
+  const cat = (id) => (id ? { id, nome: categoriasById[id]?.name ?? null } : null)
+  return {
+    id: conta.id,
+    nome: conta.name,
+    valor_nota_fiscal: num(conta.valor_nota_fiscal),
+    saldo: num(conta.balance),
+    tipo: conta.tipo_bem || TIPO_BEM,
+    account_type: conta.type,
+    descricao: conta.descricao ?? null,
+    foi_vendido: !!conta.foi_vendido,
+    data_venda: conta.data_venda ? String(conta.data_venda).slice(0, 10) : null,
+    bem_destino_id: conta.bem_destino_id ?? null,
+    categorias: {
+      perda: cat(conta.categoria_perda_bem_id),
+      ganho: cat(conta.categoria_ganho_bem_id),
+      prestacao: cat(conta.categoria_prestacao_id),
+      taxa_finan: cat(conta.categoria_taxa_finan_id),
+    },
+  }
+}
+
+// Datas saem via to_char para não sofrerem deslocamento de fuso ao virar Date no driver do pg.
+export const SELECT_PARCELAS = `
+  SELECT id, financing_id, numero_parcela,
+         principal_provisioned, juros_provisioned, total_provisioned,
+         principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
+         to_char(data_vencimento, 'YYYY-MM-DD') AS data_vencimento,
+         to_char(data_pagamento,  'YYYY-MM-DD') AS data_pagamento
+    FROM financing_installments`
+
+export function serializarParcela(p) {
+  return {
+    id: p.id,
+    numero: num(p.numero_parcela),
+    principal_provisioned: num(p.principal_provisioned),
+    juros_provisioned: num(p.juros_provisioned),
+    total_provisioned: num(p.total_provisioned),
+    principal_pago: num(p.principal_pago),
+    juros_pago: num(p.juros_pago),
+    total_pago: num(p.total_pago),
+    desvio_juros: num(p.desvio_juros),
+    status: p.status,
+    data_vencimento: p.data_vencimento,
+    data_pagamento: p.data_pagamento,
+    schedule_id: p.schedule_id ?? null,
+  }
+}
+
+export const fail = (res, status, error) => res.status(status).json({ success: false, error })
