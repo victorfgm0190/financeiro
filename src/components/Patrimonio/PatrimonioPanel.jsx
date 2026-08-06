@@ -4,7 +4,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { Home, AlertTriangle, TrendingUp, Landmark, RefreshCw, ChevronRight } from 'lucide-react'
+import { Home, AlertTriangle, TrendingUp, Landmark, RefreshCw, ChevronRight, Edit2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
@@ -290,13 +290,26 @@ export default function PatrimonioPanel() {
                           </button>
                         )}
                       </div>
-                      <button
-                        onClick={() => setUpdateValueAccount(a)}
-                        className="p-2 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 transition-colors"
-                        title="Atualizar valor"
-                      >
-                        <RefreshCw size={13} />
-                      </button>
+                      {/* gap-1.5 próprio: o gap-3 do container separa bem o valor dos botões,
+                          mas deixaria os dois ícones soltos um do outro. */}
+                      <div className="flex items-center gap-1.5">
+                        {/* Mesmo destino do clique no nome do card — aqui como botão explícito,
+                            já que a área clicável do nome só se anuncia pelo chevron. */}
+                        <button
+                          onClick={() => setDetalheBem(a)}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+                          title="Detalhar bem: nota fiscal, financiamento e parcelas"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          onClick={() => setUpdateValueAccount(a)}
+                          className="p-2 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 transition-colors"
+                          title="Atualizar valor"
+                        >
+                          <RefreshCw size={13} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {isExpanded && (
