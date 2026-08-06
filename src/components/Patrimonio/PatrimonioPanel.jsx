@@ -4,10 +4,11 @@ import { ptBR } from 'date-fns/locale'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { Home, Car, AlertTriangle, TrendingUp, Landmark, RefreshCw } from 'lucide-react'
+import { Home, AlertTriangle, TrendingUp, Landmark, RefreshCw, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
+import BemDetail from './BemDetail'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue } = useApp()
@@ -91,6 +92,7 @@ export default function PatrimonioPanel() {
   const { profileAccounts: accounts, accountGroups } = useApp()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [expandedHistory, setExpandedHistory] = useState(null)
+  const [detalheBem, setDetalheBem] = useState(null)
 
   // Categorize accounts by group behavior / type
   const categorized = useMemo(() => {
@@ -251,8 +253,18 @@ export default function PatrimonioPanel() {
               return (
                 <div key={a.id} className="card">
                   <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-200 text-sm">{a.name}</p>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setDetalheBem(a)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetalheBem(a) } }}
+                      className="min-w-0 flex-1 cursor-pointer group -m-1 p-1 rounded-lg hover:bg-gray-800/40 transition-colors"
+                      title="Ver detalhes, financiamento e parcelas"
+                    >
+                      <p className="font-medium text-gray-200 text-sm flex items-center gap-1">
+                        {a.name}
+                        <ChevronRight size={13} className="text-gray-600 group-hover:text-teal-400 transition-colors" />
+                      </p>
                       {a.bank && <p className="text-xs text-gray-600">{a.bank}</p>}
                       {a.acquisitionValue != null && (
                         <p className="text-xs text-gray-500 mt-0.5">
@@ -424,6 +436,10 @@ export default function PatrimonioPanel() {
           <UpdateValueModal account={updateValueAccount} onClose={() => setUpdateValueAccount(null)} />
         )}
       </Modal>
+
+      {detalheBem && (
+        <BemDetail conta={detalheBem} onClose={() => setDetalheBem(null)} />
+      )}
     </div>
   )
 }

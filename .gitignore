@@ -27,3 +27,6 @@ dist-ssr
 
 # graphify knowledge graph output
 graphify-out/
+
+# bundle temporário do smoke de render (scripts/smoke-render-bem.jsx)
+.smoke-out/
