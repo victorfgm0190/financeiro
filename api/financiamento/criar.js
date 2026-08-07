@@ -80,9 +80,14 @@ export default async function handler(req, res) {
     const contaDividaId = genId('acc_divida')
 
     const criado = await withTransaction(async (q) => {
-      await q(
+      // Saldo = −valor_TOTAL (principal + juros), não −principal: quem amortiza é
+      // POST /parcela/[id]/pagar, com `saldo + valor_pago` — o valor cheio da parcela. Começar
+      // no principal faria a dívida terminar POSITIVA em juros_totais depois da última parcela.
+      // Os dois números só fecham em zero juntos.
+      const [contaDivida] = await q(
         `INSERT INTO contas (id, name, type, balance, initial_balance, descricao)
-         VALUES ($1, $2, $3, $4, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $4, $5)
+         RETURNING id, name, type, balance`,
         [contaDividaId, `Contas a Pagar - Fin. ${bem.name}`, ACCOUNT_TYPE_DIVIDA,
           round2(-provisao.valorTotal), `Financiamento ${banco || ''} — ${bem.name}`.trim()],
       )
@@ -134,7 +139,7 @@ export default async function handler(req, res) {
         )
       }
 
-      return { parcelas, scheduleIds }
+      return { parcelas, scheduleIds, contaDivida }
     })
 
     return res.json({
@@ -157,6 +162,17 @@ export default async function handler(req, res) {
         data_primeira_parcela: String(data_primeira_parcela).slice(0, 10),
         parcelas_criadas: criado.parcelas.length,
         agendamentos_criados: criado.scheduleIds.length,
+      },
+      // A conta de dívida sempre foi criada (é o primeiro INSERT da transação), mas só o id
+      // dela saía daqui — e um id sozinho não dá para o frontend pôr a conta no estado React.
+      // Sem a linha inteira ela só aparecia no próximo full-load, o que faz parecer que o
+      // endpoint não a criou. `type` vem junto de propósito: é 'liability' ('Dívida / Passivo'
+      // em AccountForm, agrupado em Dívidas no Patrimônio), nunca 'debt'.
+      conta_divida: {
+        id: criado.contaDivida.id,
+        name: criado.contaDivida.name,
+        type: criado.contaDivida.type,
+        balance: num(criado.contaDivida.balance),
       },
     })
   } catch (err) {

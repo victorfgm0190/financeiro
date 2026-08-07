@@ -193,6 +193,23 @@ async function main() {
   eq('parcelas criadas', fin?.parcelas_criadas, 60)
   eq('agendamentos criados', fin?.agendamentos_criados, 60)
 
+  // A conta de dívida precisa sair inteira na resposta: o frontend usa esses campos para pôr a
+  // conta no estado React na hora, sem esperar o próximo full-load.
+  const contaDivida = r.body?.conta_divida
+  eq('conta de dívida: id bate com o do financiamento', contaDivida?.id, fin?.conta_divida_id)
+  eq('conta de dívida: nome', contaDivida?.name, `Contas a Pagar - Fin. [SMOKE] TIGGO 5X PRO ${sufixo}`)
+  // 'liability' é o tipo que AccountForm rotula "Dívida / Passivo" e que o PatrimonioPanel
+  // agrupa em Dívidas. Não existe type 'debt' neste app — procurar por ele acha zero linhas.
+  eq('conta de dívida: type', contaDivida?.type, 'liability')
+  eq('conta de dívida: saldo = −valor_total', contaDivida?.balance, -80539.8)
+
+  const [dividaDb] = await query(
+    `SELECT name, type, balance, initial_balance FROM contas WHERE id = $1`, [contaDivida?.id])
+  ok('conta de dívida existe no banco', !!dividaDb, 'nenhuma linha em contas')
+  eq('type no banco', dividaDb?.type, 'liability')
+  eq('saldo no banco', Number(dividaDb?.balance), -80539.8)
+  eq('saldo inicial no banco', Number(dividaDb?.initial_balance), -80539.8)
+
   const [{ n: nAgend }] = await query(
     `SELECT COUNT(*)::int AS n FROM agendamentos WHERE financing_installment_id IN
        (SELECT id FROM financing_installments WHERE financing_id = $1)`, [finId])

@@ -26,7 +26,7 @@ const POR_PAGINA = 20
 export default function BemDetail({ conta, onClose }) {
   const {
     accounts, categories, profileTransactions, payees,
-    updateAccount, updateTransaction, addPayee,
+    addAccount, updateAccount, updateTransaction, addPayee,
   } = useApp()
 
   const [bem, setBem] = useState(null)
@@ -201,7 +201,28 @@ export default function BemDetail({ conta, onClose }) {
   const aposFinanciamento = async (resposta) => {
     setModal(null)
     const fin = resposta.financiamento
-    avisar(`Financiamento criado: ${fin.parcelas_criadas} parcelas e ${fin.agendamentos_criados} agendamentos. Recarregue o app para ver a conta de dívida e os agendamentos nas outras telas.`)
+    const contaDivida = resposta.conta_divida
+
+    // A conta de dívida nasce direto no banco, fora do estado React — antes disso ela só
+    // aparecia depois de um full-load, o que fazia parecer que o endpoint não a criava.
+    // O id vem do backend de propósito: assim o upsert do sync cai na linha que já existe em
+    // vez de criar uma segunda conta.
+    if (contaDivida?.id && !accountsRef.current.some(a => a.id === contaDivida.id)) {
+      addAccount({
+        id: contaDivida.id,
+        name: contaDivida.name,
+        type: contaDivida.type,
+        balance: contaDivida.balance,
+        creditDebt: 0,
+        creditMonthBill: 0,
+      })
+    }
+
+    avisar(
+      `Financiamento criado: ${fin.parcelas_criadas} parcelas e ${fin.agendamentos_criados} agendamentos.`
+      + (contaDivida?.name ? ` Conta “${contaDivida.name}” disponível em Patrimônio › Dívidas.` : '')
+      + ' Recarregue o app para ver os agendamentos nas outras telas.',
+    )
     setAbaAtiva('parcelas')
     setPaginaParcelas(1)
     await recarregarTudo()

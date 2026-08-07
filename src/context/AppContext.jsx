@@ -1161,7 +1161,11 @@ export function AppProvider({ children }) {
 
   // ── Accounts ────────────────────────────────────────────────────────────────
   const addAccount = useCallback((account) => {
-    const id = 'acc_' + Date.now()
+    // Id de fora ganha do gerado: contas criadas pelo backend (a conta de dívida de
+    // /api/financiamento/criar) já existem no banco com id próprio, e inventar outro aqui
+    // criaria uma segunda conta em vez de espelhar a que existe — com o upsert do sync
+    // gravando as duas. O formulário de conta não manda id, então nada mais muda.
+    const id = account.id || 'acc_' + Date.now()
     const initBal = rb(Number(account.balance) || 0)
     update(d => ({ ...d, accounts: [...d.accounts, { ...account, id, balance: initBal, initialBalance: initBal }] }))
     return id
