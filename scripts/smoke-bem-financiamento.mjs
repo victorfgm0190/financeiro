@@ -155,14 +155,17 @@ async function main() {
   const antigo = r.body?.bem_antigo
   eq('perda_ganho (45000 − 80000)', antigo?.perda_ganho, -35000)
   eq('perda', antigo?.perda, 35000)
-  eq('saldo_reducido (80000 − 45000)', antigo?.saldo_reducido, 35000)
+  eq('saldo_reducido (bem liquidado → 0)', antigo?.saldo_reducido, 0)
   eq('foi_vendido', antigo?.foi_vendido, true)
   ok('movimentacao_id gerado', !!antigo?.movimentacao_id)
 
   const [txVinc] = await query(`SELECT bem_id, category_id FROM lancamentos WHERE id = $1`, [txId])
   eq('transferência vinculada ao bem', txVinc?.bem_id, bemId)
-  const [antigoDb] = await query(`SELECT foi_vendido, bem_destino_id FROM contas WHERE id = $1`, [bemAntigoId])
+  const [antigoDb] = await query(
+    `SELECT foi_vendido, bem_destino_id, balance FROM contas WHERE id = $1`, [bemAntigoId])
   eq('bem antigo aponta para o novo', antigoDb?.bem_destino_id, bemId)
+  eq('bem antigo vendido', antigoDb?.foi_vendido, true)
+  eq('saldo do bem antigo zerado no banco', Number(antigoDb?.balance), 0)
 
   r = await call(registrarEntrada, 'POST', `/api/bem/${bemId}/registrar-entrada`, {
     transferencias: [{ bem_origem_id: bemAntigoId, valor: 100 }],

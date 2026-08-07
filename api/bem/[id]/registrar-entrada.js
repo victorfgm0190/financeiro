@@ -15,8 +15,8 @@ import {
 //     saldo, porque não existe lançamento por trás dele (a perda/ganho nasce com
 //     account_id = NULL justamente para não mover saldo).
 //
-// No trade-in o bem antigo é liquidado: perda/ganho = valor_venda − valor_nota_fiscal, o saldo
-// é reduzido pelo valor negociado e a conta é marcada como vendida apontando para o bem novo.
+// No trade-in o bem antigo é LIQUIDADO: perda/ganho = valor_venda − valor_nota_fiscal, o saldo
+// vai a ZERO e a conta é marcada como vendida apontando para o bem novo.
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -135,12 +135,17 @@ export default async function handler(req, res) {
           })
         }
 
+        // Saldo do bem antigo vai a ZERO, não a `saldo − valor`. O bem saiu do patrimônio: não
+        // sobra nada dele para valer. Subtrair só o valor negociado deixava um resíduo de
+        // (saldo − valor_venda) — exatamente a perda, que JÁ virou lançamento logo acima. O bem
+        // continuava aparecendo com saldo positivo e a perda era contada duas vezes (era o caso
+        // do HB20S: NF 80.000, entrada 45.000, sobravam 35.000 fantasma na conta).
         const saldoAnterior = num(antigo.balance)
-        const saldoNovo = round2(saldoAnterior - valor)
+        const saldoNovo = 0
         await q(
-          `UPDATE contas SET balance = $2, foi_vendido = TRUE, data_venda = $3, bem_destino_id = $4
+          `UPDATE contas SET balance = 0, foi_vendido = TRUE, data_venda = $2, bem_destino_id = $3
              WHERE id = $1`,
-          [antigo.id, saldoNovo, data, bemId],
+          [antigo.id, data, bemId],
         )
 
         const movimentacaoId = await registrarMovimentacao(q, {
@@ -161,6 +166,8 @@ export default async function handler(req, res) {
           valor_nota_fiscal: valorNF,
           valor_entrada: valor,
           saldo_anterior: saldoAnterior,
+          // Sempre 0 — é o saldo com que o bem antigo fica. O frontend usa este valor no
+          // sincronizarSaldo, então ele precisa refletir o que foi gravado, não a subtração.
           saldo_reducido: saldoNovo,
           foi_vendido: true,
           data_venda: data,
