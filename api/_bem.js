@@ -191,6 +191,10 @@ async function runSchemaStatements(query) {
   for (const [col, type] of [
     ['principal', 'NUMERIC'], ['juros', 'NUMERIC'], ['parcela_id', 'TEXT'],
     ['lancamento_id', 'TEXT'], ['bem_origem_id', 'TEXT'], ['perda_ganho', 'NUMERIC'],
+    // Saldo do bem de origem ANTES do trade-in. Sem guardá-lo o estorno não tem para onde
+    // devolver o saldo: o trade-in zera a conta e o valor original se perde. Movimentações
+    // gravadas antes desta coluna ficam NULL — o estorno cai na nota fiscal como estimativa.
+    ['saldo_origem_anterior', 'NUMERIC'],
   ]) {
     await query(`ALTER TABLE bem_movimentacoes ADD COLUMN IF NOT EXISTS ${col} ${type}`)
   }
@@ -362,18 +366,20 @@ export async function criarAgendamentosParcelas(q, {
 export async function registrarMovimentacao(q, {
   bemId, tipo, data, descricao, bemOrigemId = null, valor = 0, perdaGanho = null,
   principal = null, juros = null, categoriaId = null, parcelaId = null, lancamentoId = null,
+  saldoOrigemAnterior = null,
 }) {
   const id = genId('mov')
   await q(
     `INSERT INTO bem_movimentacoes
        (id, bem_id, tipo, data, descricao, bem_origem_id, valor, perda_ganho, principal, juros,
-        categoria_id, parcela_id, lancamento_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        categoria_id, parcela_id, lancamento_id, saldo_origem_anterior)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
     [id, bemId, tipo, data, descricao, bemOrigemId, round2(valor),
       perdaGanho === null ? null : round2(perdaGanho),
       principal === null ? null : round2(principal),
       juros === null ? null : round2(juros),
-      categoriaId, parcelaId, lancamentoId],
+      categoriaId, parcelaId, lancamentoId,
+      saldoOrigemAnterior === null ? null : round2(saldoOrigemAnterior)],
   )
   return id
 }

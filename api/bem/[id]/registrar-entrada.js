@@ -158,6 +158,9 @@ export default async function handler(req, res) {
           perdaGanho,
           categoriaId: categoriaResultado || null,
           lancamentoId,
+          // Guardado para o estorno: o UPDATE acima zera o saldo do bem antigo, então este é o
+          // único lugar de onde POST /estornar-entrada consegue tirar o valor a devolver.
+          saldoOrigemAnterior: saldoAnterior,
         })
 
         bensAntigos.push({

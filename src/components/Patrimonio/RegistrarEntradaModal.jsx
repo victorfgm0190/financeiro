@@ -6,6 +6,15 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { registrarEntrada, getBem } from '../../lib/bemApi'
 import { fmtData, hojeIso, round2, montarAjustesEntrada } from './bemUtils'
 
+function Calculo({ label, children, cor }) {
+  return (
+    <div className="flex justify-between gap-3 text-xs">
+      <span className="text-gray-500">{label}</span>
+      <span className={cor || 'text-gray-300'}>{children}</span>
+    </div>
+  )
+}
+
 export default function RegistrarEntradaModal({
   bem, transacoes, contas, favorecidos = [], onCancel, onSuccess, onErro,
 }) {
@@ -85,7 +94,16 @@ export default function RegistrarEntradaModal({
 
   const valorTradeIn = usarBemAntigo ? (Number(valorVenda) || 0) : 0
   const perdaGanho = bemAntigo ? round2(valorTradeIn - (bemAntigo.valor_nota_fiscal || 0)) : null
+  const ehGanho = perdaGanho > 0
   const totalEntrada = round2(totalTransferencias + valorTradeIn)
+
+  // Mesma escolha do backend (registrar-entrada.js): categoria do bem ANTIGO primeiro, a do
+  // bem novo como fallback. Preview e gravação precisam concordar, senão a tela mente.
+  const categoriaResultado = useMemo(() => {
+    if (!bemAntigo) return null
+    const chave = ehGanho ? 'ganho' : 'perda'
+    return bemAntigo.categorias?.[chave]?.nome || bem.categorias?.[chave]?.nome || null
+  }, [bemAntigo, bem, ehGanho])
 
   const tradeInIncompleto = usarBemAntigo && (!bemAntigoId || !(valorTradeIn > 0))
   const podeEnviar = totalEntrada > 0 && !tradeInIncompleto && !loading
@@ -265,9 +283,33 @@ export default function RegistrarEntradaModal({
                   />
                 </div>
                 {perdaGanho !== null && valorTradeIn > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">{perdaGanho >= 0 ? 'Ganho' : 'Perda'}</span>
-                    <span className={perdaGanho >= 0 ? 'text-receita' : 'text-despesa'}>{fmt(perdaGanho)}</span>
+                  <div className={`rounded-lg border p-2.5 space-y-1 ${
+                    ehGanho ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-red-500/20 bg-red-500/5'
+                  }`}>
+                    <p className={`text-[11px] font-semibold ${ehGanho ? 'text-receita' : 'text-despesa'}`}>
+                      Cálculo automático
+                    </p>
+                    <Calculo label={`${bemAntigo.nome} valia (nota fiscal)`}>
+                      {fmt(bemAntigo.valor_nota_fiscal)}
+                    </Calculo>
+                    <Calculo label="Você recebe na troca">{fmt(valorTradeIn)}</Calculo>
+                    <div className="pt-1.5 mt-1.5 border-t border-gray-800">
+                      <Calculo
+                        label={ehGanho ? 'Ganho de capital' : 'Perda de capital'}
+                        cor={ehGanho ? 'text-receita font-semibold' : 'text-despesa font-semibold'}
+                      >
+                        {fmt(perdaGanho)}
+                      </Calculo>
+                    </div>
+                    <p className="text-[11px] text-gray-500 pt-1">
+                      Vai ser lançado como {ehGanho ? 'RECEITA' : 'DESPESA'}
+                      {categoriaResultado ? ` em “${categoriaResultado}”` : ''}.
+                    </p>
+                    <ul className="text-[11px] text-gray-500 pt-1.5 mt-1.5 border-t border-gray-800 space-y-0.5">
+                      <li>• {bem.nome} sobe {fmt(valorTradeIn)}</li>
+                      <li>• {bemAntigo.nome} vai a {fmt(0)} e passa a constar como vendido</li>
+                      <li>• {ehGanho ? 'Ganho' : 'Perda'} de {fmt(Math.abs(perdaGanho))} lançada</li>
+                    </ul>
                   </div>
                 )}
               </>

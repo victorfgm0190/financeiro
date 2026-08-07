@@ -65,6 +65,9 @@ export default async function handler(req, res) {
           bem_origem: m.bem_origem_nome ?? null,
           valor_entrada: num(m.valor),
           perda_ganho: m.perda_ganho === null ? null : num(m.perda_ganho),
+          // NULL nas movimentações gravadas antes da coluna existir — a UI mostra o valor
+          // como estimado nesse caso, porque é dele que o estorno vai partir.
+          saldo_origem_anterior: m.saldo_origem_anterior == null ? null : num(m.saldo_origem_anterior),
           categoria: m.categoria_nome ?? null,
         }
       }

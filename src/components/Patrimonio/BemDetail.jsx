@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Info, ListOrdered, History, Settings2 } from 'lucide-react'
+import { Loader2, Info, ListOrdered, History, Settings2, Wallet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
-import { getBem, getFinanciamento, getParcelas, getMovimentacoes } from '../../lib/bemApi'
+import ConfirmDialog from '../shared/ConfirmDialog'
+import { getBem, getFinanciamento, getParcelas, getMovimentacoes, estornarEntrada } from '../../lib/bemApi'
 import BemInfoTab from './BemInfoTab'
 import BemParcelasTab from './BemParcelasTab'
 import BemHistoricoTab from './BemHistoricoTab'
+import TradeInResumo from './TradeInResumo'
 import FinanciamentoModal from './FinanciamentoModal'
 import PagarParcelaModal from './PagarParcelaModal'
 import RegistrarEntradaModal from './RegistrarEntradaModal'
@@ -42,6 +44,9 @@ export default function BemDetail({ conta, onClose }) {
   const [movimentacoes, setMovimentacoes] = useState(null)
   const [loadingMov, setLoadingMov] = useState(false)
   const [erroMov, setErroMov] = useState(null)
+
+  const [confirmandoEstorno, setConfirmandoEstorno] = useState(false)
+  const [estornando, setEstornando] = useState(false)
 
   const [modal, setModal] = useState(null) // 'financiamento' | 'entrada' | 'parametrizar' | { parcela }
 
@@ -107,15 +112,18 @@ export default function BemDetail({ conta, onClose }) {
     carregarParcelas(financiamento.id, paginaParcelas)
   }, [abaAtiva, financiamento?.id, paginaParcelas, carregarParcelas])
 
+  // Carrega já na abertura, não só ao entrar na aba Histórico: o painel de entrada fica no
+  // topo de todas as abas e é daqui que ele sai. `movimentacoes === null` continua sendo o
+  // gatilho, então recarregarTudo() (que o zera) segue disparando um refetch.
   useEffect(() => {
-    if (abaAtiva !== 'historico' || movimentacoes !== null) return
+    if (movimentacoes !== null) return
     setLoadingMov(true)
     setErroMov(null)
     getMovimentacoes(conta.id)
       .then(r => setMovimentacoes(r.movimentacoes || []))
       .catch(err => setErroMov(err.message))
       .finally(() => setLoadingMov(false))
-  }, [abaAtiva, movimentacoes, conta.id])
+  }, [movimentacoes, conta.id])
 
   const recarregarTudo = useCallback(async () => {
     setMovimentacoes(null)
@@ -146,6 +154,48 @@ export default function BemDetail({ conta, onClose }) {
       + (ajustes.length ? ` ${ajustes.length} lançamento(s) atualizado(s).` : ''),
     )
     await recarregarTudo()
+  }
+
+  const estornar = async () => {
+    setEstornando(true)
+    try {
+      // O flag só vai quando a UI JÁ avisou do financiamento no diálogo — é o que mantém o
+      // 409 do backend útil para qualquer outro chamador que não tenha avisado nada.
+      const r = await estornarEntrada(conta.id, { confirmar_com_financiamento: !!financiamento })
+
+      sincronizarSaldo(conta.id, r.bem?.saldo)
+      for (const b of r.bens_restaurados || []) sincronizarSaldo(b.id, b.saldo)
+      // Mesma razão do sincronizarSaldo em aposEntrada: o backend tirou o `bem_id` das
+      // transferências, mas o sync é diferencial sobre o estado React — sem espelhar aqui, o
+      // próximo full-sync reporia o vínculo que acabamos de desfazer.
+      for (const t of r.transferencias_desvinculadas || []) updateTransaction(t.id, { bemId: null })
+
+      const partes = []
+      if (r.transferencias_desvinculadas?.length) {
+        partes.push(`${r.transferencias_desvinculadas.length} transferência(s) desvinculada(s)`)
+      }
+      if (r.lancamentos_removidos?.length) {
+        partes.push(`${r.lancamentos_removidos.length} lançamento(s) de perda/ganho apagado(s)`)
+      }
+      for (const b of r.bens_restaurados || []) {
+        partes.push(`${b.nome} voltou a ${b.saldo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`)
+      }
+      const estimados = (r.bens_restaurados || []).filter(b => b.saldo_estimado)
+      avisar(
+        `Entrada estornada${partes.length ? `: ${partes.join(' · ')}` : ''}. `
+        + 'Pronto para registrar de novo.'
+        + (estimados.length
+          ? ` Atenção: o saldo de ${estimados.map(b => b.nome).join(', ')} foi restaurado pela `
+            + 'nota fiscal (esta entrada é anterior ao registro do saldo original) — confira.'
+          : ''),
+        estimados.length ? 'error' : 'success',
+      )
+      await recarregarTudo()
+    } catch (err) {
+      avisar(err.message, 'error')
+    } finally {
+      setEstornando(false)
+    }
   }
 
   const aposFinanciamento = async (resposta) => {
@@ -187,6 +237,10 @@ export default function BemDetail({ conta, onClose }) {
 
   const naoParametrizado = bem && !bem.valor_nota_fiscal && !bem.categorias?.prestacao?.id
 
+  const temEntrada = (movimentacoes || []).some(
+    m => m.tipo === 'entrada_venda' || m.tipo === 'entrada_trade_in',
+  )
+
   const resumoParcelas = financiamento ? {
     pagas: financiamento.parcelas?.filter(p => p.status === 'paid').length ?? 0,
     proxima: financiamento.parcelas?.find(p => p.status !== 'paid') ?? null,
@@ -220,6 +274,34 @@ export default function BemDetail({ conta, onClose }) {
                 </div>
                 <button className="btn-primary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5" onClick={() => setModal('parametrizar')}>
                   <Settings2 size={13} /> Parametrizar
+                </button>
+              </div>
+            )}
+
+            {temEntrada && (
+              <TradeInResumo
+                movimentacoes={movimentacoes}
+                saldoBem={bem.saldo}
+                contas={accounts}
+                estornando={estornando}
+                onEstornar={() => setConfirmandoEstorno(true)}
+              />
+            )}
+
+            {movimentacoes !== null && !temEntrada && !bem.foi_vendido && (
+              <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-gray-400">Nenhuma entrada registrada neste bem.</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Vincule as transferências da entrada e, se houve troca, o bem antigo — a
+                    perda ou o ganho é calculado sozinho.
+                  </p>
+                </div>
+                <button
+                  className="btn-primary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5"
+                  onClick={() => setModal('entrada')}
+                >
+                  <Wallet size={13} /> Registrar entrada
                 </button>
               </div>
             )}
@@ -334,6 +416,25 @@ export default function BemDetail({ conta, onClose }) {
           />
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={confirmandoEstorno}
+        onClose={() => setConfirmandoEstorno(false)}
+        onConfirm={estornar}
+        danger
+        title="Estornar a entrada?"
+        confirmLabel="Estornar"
+        message={
+          'Isto desfaz a entrada inteira deste bem: o bem dado na troca volta ao saldo que '
+          + 'tinha e deixa de constar como vendido, o lançamento de perda/ganho é apagado e as '
+          + 'transferências são desvinculadas. As transferências em si NÃO são apagadas — elas '
+          + 'continuam no Extrato, porque são movimentações bancárias reais.'
+          + (financiamento
+            ? ' Atenção: este bem já tem financiamento, e ele foi dimensionado a partir desta '
+              + 'entrada. Estornar agora deixa os dois valores incoerentes até você refazer a entrada.'
+            : '')
+        }
+      />
 
       {toast && (
         <Toast

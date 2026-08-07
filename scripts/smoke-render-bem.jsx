@@ -10,6 +10,7 @@ import { renderToString } from 'react-dom/server'
 import BemInfoTab from '../src/components/Patrimonio/BemInfoTab'
 import BemParcelasTab from '../src/components/Patrimonio/BemParcelasTab'
 import BemHistoricoTab from '../src/components/Patrimonio/BemHistoricoTab'
+import TradeInResumo from '../src/components/Patrimonio/TradeInResumo'
 import FinanciamentoModal from '../src/components/Patrimonio/FinanciamentoModal'
 import PagarParcelaModal from '../src/components/Patrimonio/PagarParcelaModal'
 import RegistrarEntradaModal from '../src/components/Patrimonio/RegistrarEntradaModal'
@@ -53,7 +54,7 @@ const FIN = {
 }
 
 const MOVS = [
-  { movimentacao_id: 'm1', tipo: 'entrada_trade_in', data: '2026-08-15', descricao: 'Recebido HB20S como entrada', bem_origem_id: 'acc_bem_0', bem_origem: 'HB20S', valor_entrada: 45000, perda_ganho: -35000, categoria: 'Perda de Venda de Bem', lancamento_id: 'tx1' },
+  { movimentacao_id: 'm1', tipo: 'entrada_trade_in', data: '2026-08-15', descricao: 'Recebido HB20S como entrada', bem_origem_id: 'acc_bem_0', bem_origem: 'HB20S', valor_entrada: 45000, perda_ganho: -35000, saldo_origem_anterior: 80000, categoria: 'Perda de Venda de Bem', lancamento_id: 'tx1' },
   { movimentacao_id: 'm2', tipo: 'entrada_venda', data: '2026-08-15', descricao: 'Entrada Nubank', valor: 15000, categoria: 'Prestação do Automóvel', lancamento_id: 'tx2' },
   { movimentacao_id: 'm3', tipo: 'pagamento_parcela', data: '2026-09-15', descricao: 'Parcela 1/60 - TIGGO 5X PRO', parcela_id: 'fip_1', numero_parcela: 1, num_parcelas: 60, principal: 1000, juros: 342.33, total: 1342.33, categoria_principal: 'Prestação do Automóvel', categoria_juros: 'Taxa de Financiamento', lancamento_id: 'tx3' },
 ]
@@ -119,6 +120,31 @@ render('BemHistoricoTab',
 render('BemHistoricoTab (vazio)',
   <BemHistoricoTab movimentacoes={[]} loading={false} erro={null} />,
   ['Nenhuma movimentação'])
+
+render('TradeInResumo',
+  <TradeInResumo movimentacoes={MOVS} saldoBem={BEM.saldo} contas={CONTAS} estornando={false} onEstornar={noop} />,
+  ['Entrada registrada', 'Entrada Nubank', 'HB20S', 'Perda de capital', 'Total da entrada',
+    'Estornar entrada', 'continuam no'])
+
+// Sem o saldo original guardado (movimentação anterior à coluna), o painel precisa avisar que
+// o estorno vai chutar pela nota fiscal — senão o usuário confia num número que pode não bater.
+render('TradeInResumo (entrada sem saldo original)',
+  <TradeInResumo
+    movimentacoes={[{ ...MOVS[0], saldo_origem_anterior: null }]}
+    saldoBem={BEM.saldo} contas={CONTAS} estornando={false} onEstornar={noop}
+  />,
+  ['volta pela nota fiscal'])
+
+render('TradeInResumo (estornando)',
+  <TradeInResumo movimentacoes={MOVS} saldoBem={BEM.saldo} contas={CONTAS} estornando onEstornar={noop} />,
+  ['Estornando...'])
+
+// Só pagamento de parcela: não há entrada para estornar, o painel não pode aparecer.
+render('TradeInResumo (sem entrada → não renderiza)',
+  <div data-vazio>
+    <TradeInResumo movimentacoes={[MOVS[2]]} saldoBem={BEM.saldo} contas={CONTAS} onEstornar={noop} />
+  </div>,
+  ['<div data-vazio="true"></div>'])
 
 render('FinanciamentoModal',
   <FinanciamentoModal bem={BEM} contasCorrentes={CONTAS.filter(c => c.type === 'checking')} onCancel={noop} onSuccess={noop} onErro={noop} />,

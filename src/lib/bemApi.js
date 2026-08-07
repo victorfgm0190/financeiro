@@ -53,6 +53,9 @@ export const getBem = (bemId) => request(`/api/bem/${enc(bemId)}`)
 export const registrarEntrada = (bemId, payload) =>
   post(`/api/bem/${enc(bemId)}/registrar-entrada`, payload)
 
+export const estornarEntrada = (bemId, payload = {}) =>
+  post(`/api/bem/${enc(bemId)}/estornar-entrada`, payload)
+
 export const getMovimentacoes = (bemId) => request(`/api/bem/${enc(bemId)}/movimentacoes`)
 
 export const criarFinanciamento = (payload) => post('/api/financiamento/criar', payload)

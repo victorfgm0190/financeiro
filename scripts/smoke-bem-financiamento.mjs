@@ -15,6 +15,7 @@ const { query } = await import('../api/_db.js')
 const criarBem = (await import('../api/bem/criar.js')).default
 const getBem = (await import('../api/bem/[id].js')).default
 const registrarEntrada = (await import('../api/bem/[id]/registrar-entrada.js')).default
+const estornarEntrada = (await import('../api/bem/[id]/estornar-entrada.js')).default
 const movimentacoes = (await import('../api/bem/[id]/movimentacoes.js')).default
 const criarFin = (await import('../api/financiamento/criar.js')).default
 const getFin = (await import('../api/financiamento/[id].js')).default
@@ -307,6 +308,65 @@ async function main() {
   const pag = movs.find(m => m.tipo === 'pagamento_parcela')
   eq('pagamento: parcela 1/60', `${pag?.numero_parcela}/${pag?.num_parcelas}`, '1/60')
   eq('pagamento: categoria de juros', pag?.categoria_juros, 'Taxa de Financiamento')
+  eq('trade-in: saldo do bem antigo antes', tradeIn?.saldo_origem_anterior, 80000)
+
+  console.log('\n9) POST /api/bem/[id]/estornar-entrada')
+  r = await call(estornarEntrada, 'POST', `/api/bem/${bemId}/estornar-entrada`, {}, { id: bemId })
+  eq('com financiamento e sem confirmar → 409', r.status, 409)
+
+  const [saldoAntesEstorno] = await query(`SELECT balance FROM contas WHERE id = $1`, [bemId])
+  r = await call(estornarEntrada, 'POST', `/api/bem/${bemId}/estornar-entrada`,
+    { confirmar_com_financiamento: true }, { id: bemId })
+  eq('status 200', r.status, 200)
+  // Só o trade-in volta do saldo do bem: a transferência nunca somou lá (ela creditou a conta
+  // quando foi criada), então o estorno também não pode tirá-la.
+  eq('saldo do bem', r.body?.bem?.saldo, Number(saldoAntesEstorno.balance) - 45000)
+  eq('trade-in revertido', r.body?.trade_in_revertido, 45000)
+  eq('1 transferência desvinculada', r.body?.transferencias_desvinculadas?.length, 1)
+  eq('1 lançamento de perda apagado', r.body?.lancamentos_removidos?.length, 1)
+  eq('valor da perda apagada', r.body?.lancamentos_removidos?.[0]?.valor, 35000)
+  eq('1 bem restaurado', r.body?.bens_restaurados?.length, 1)
+  eq('saldo restaurado', r.body?.bens_restaurados?.[0]?.saldo, 80000)
+  eq('saldo não é estimativa', r.body?.bens_restaurados?.[0]?.saldo_estimado, false)
+
+  const [antigoRestaurado] = await query(
+    `SELECT balance, foi_vendido, bem_destino_id, data_venda FROM contas WHERE id = $1`, [bemAntigoId])
+  eq('bem antigo: saldo no banco', Number(antigoRestaurado?.balance), 80000)
+  eq('bem antigo: não vendido', antigoRestaurado?.foi_vendido, false)
+  eq('bem antigo: sem destino', antigoRestaurado?.bem_destino_id, null)
+  eq('bem antigo: sem data de venda', antigoRestaurado?.data_venda, null)
+
+  // A transferência é uma movimentação bancária real: sai o vínculo, o lançamento fica.
+  const [txSolta] = await query(`SELECT bem_id FROM lancamentos WHERE id = $1`, [txId])
+  ok('transferência preservada', !!txSolta, 'lançamento foi apagado indevidamente')
+  eq('transferência desvinculada', txSolta?.bem_id, null)
+
+  const [{ n: perdasVivas }] = await query(
+    `SELECT COUNT(*)::int AS n FROM lancamentos WHERE bem_id = $1 AND origin = 'patrimonio_auto'`,
+    [bemId])
+  eq('nenhuma perda/ganho remanescente', perdasVivas, 0)
+
+  r = await call(movimentacoes, 'GET', `/api/bem/${bemId}/movimentacoes`, null, { id: bemId })
+  const movsDepois = r.body?.movimentacoes || []
+  eq('sobrou só o pagamento de parcela', movsDepois.length, 1)
+  eq('tipo remanescente', movsDepois[0]?.tipo, 'pagamento_parcela')
+
+  r = await call(estornarEntrada, 'POST', `/api/bem/${bemId}/estornar-entrada`,
+    { confirmar_com_financiamento: true }, { id: bemId })
+  eq('estornar duas vezes → 400', r.status, 400)
+
+  // Refazer depois do estorno tem que funcionar — é o ciclo inteiro que o usuário faz.
+  console.log('\n9b) refazer a entrada após o estorno')
+  r = await call(registrarEntrada, 'POST', `/api/bem/${bemId}/registrar-entrada`, {
+    data: '2026-08-15',
+    transferencias: [
+      { transferencia_id: txId, valor: 15000, categoria_id: cats.prestacao, descricao: 'Entrada Nubank' },
+      { bem_origem_id: bemAntigoId, valor: 60000, descricao: 'Trade-in HB20 refeito' },
+    ],
+  }, { id: bemId })
+  eq('status 200', r.status, 200)
+  eq('perda recalculada (60000 − 80000)', r.body?.bem_antigo?.perda_ganho, -20000)
+  eq('bem antigo zerado de novo', r.body?.bem_antigo?.saldo_reducido, 0)
 }
 
 try {
