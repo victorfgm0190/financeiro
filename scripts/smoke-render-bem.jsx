@@ -14,7 +14,7 @@ import FinanciamentoModal from '../src/components/Patrimonio/FinanciamentoModal'
 import PagarParcelaModal from '../src/components/Patrimonio/PagarParcelaModal'
 import RegistrarEntradaModal from '../src/components/Patrimonio/RegistrarEntradaModal'
 import ParametrizarBemModal from '../src/components/Patrimonio/ParametrizarBemModal'
-import { calcularRateio, statusParcela, fmtData } from '../src/components/Patrimonio/bemUtils'
+import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada } from '../src/components/Patrimonio/bemUtils'
 
 // Payloads no formato EXATO devolvido por api/bem/* e api/financiamento/*.
 const BEM = {
@@ -136,6 +136,11 @@ render('RegistrarEntradaModal',
   <RegistrarEntradaModal bem={BEM} transacoes={TXS} contas={CONTAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
   ['Transferências Disponíveis', 'Entrada Nubank', 'trade-in', 'Total da Entrada'])
 
+// `favorecidos` tem default [] — o caso acima cobre a ausência da prop.
+render('RegistrarEntradaModal (com favorecidos)',
+  <RegistrarEntradaModal bem={BEM} transacoes={TXS} contas={CONTAS} favorecidos={['Shopping Car Londrina', 'Banco Itaú']} onCancel={noop} onSuccess={noop} onErro={noop} />,
+  ['Favorecido', 'Shopping Car Londrina', 'Aplicado a todas as transferências selecionadas'])
+
 render('ParametrizarBemModal',
   <ParametrizarBemModal conta={CONTAS[1]} categorias={CATEGORIAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
   ['Valor da Nota Fiscal', 'Perda de Venda de Bem', 'Patrimônio', 'Transporte'])
@@ -156,6 +161,24 @@ eq('status: aberta', statusParcela({ status: 'open', data_vencimento: '2099-01-0
 eq('status: parcial', statusParcela({ status: 'partial', data_vencimento: '2099-01-01' }), 'parcial')
 eq('data sem shift de fuso', fmtData('2026-09-15'), '15/set/2026')
 eq('data nula', fmtData(null), '—')
+
+// Ajustes aplicados às transferências ao registrar a entrada (favorecido + categoria).
+const TXS_AJUSTE = [{ id: 'tx1' }, { id: 'tx2' }, { id: 'tx3' }]
+eq('ajustes: favorecido + categoria',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: 'c3', tx2: 'c1' }, favorecido: 'Shopping Car' }),
+  [{ id: 'tx1', mudancas: { payee: 'Shopping Car', categoryId: 'c3' } },
+    { id: 'tx2', mudancas: { payee: 'Shopping Car', categoryId: 'c1' } }])
+eq('ajustes: só categoria (favorecido vazio)',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: 'c3' }, favorecido: '   ' }),
+  [{ id: 'tx1', mudancas: { categoryId: 'c3' } }])
+eq('ajustes: só favorecido (categoria vazia)',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: '' }, favorecido: 'Shopping Car' }),
+  [{ id: 'tx1', mudancas: { payee: 'Shopping Car' } }])
+eq('ajustes: nada preenchido não gera update',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: '', tx2: '' }, favorecido: '' }), [])
+eq('ajustes: ignora transferência não selecionada',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx3: 'c4' }, favorecido: '' }),
+  [{ id: 'tx3', mudancas: { categoryId: 'c4' } }])
 
 console.log(falhas === 0 ? '\nSMOKE DE RENDER OK' : `\n${falhas} FALHA(S)`)
 process.exit(falhas === 0 ? 0 : 1)

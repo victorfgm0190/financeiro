@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Search } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import DateInput from '../shared/DateInput'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { registrarEntrada, getBem } from '../../lib/bemApi'
-import { fmtData, hojeIso, round2 } from './bemUtils'
+import { fmtData, hojeIso, round2, montarAjustesEntrada } from './bemUtils'
 
 export default function RegistrarEntradaModal({
-  bem, transacoes, contas, onCancel, onSuccess, onErro,
+  bem, transacoes, contas, favorecidos = [], onCancel, onSuccess, onErro,
 }) {
   const [busca, setBusca] = useState('')
   const [escolhidas, setEscolhidas] = useState({}) // { [txId]: categoriaId | '' }
+  const [favorecido, setFavorecido] = useState('')
   const [usarBemAntigo, setUsarBemAntigo] = useState(false)
   const [bemAntigoId, setBemAntigoId] = useState('')
   const [bemAntigo, setBemAntigo] = useState(null)
@@ -103,7 +105,16 @@ export default function RegistrarEntradaModal({
       }
 
       const resposta = await registrarEntrada(bem.id, { data, transferencias: itens })
-      onSuccess(resposta)
+
+      // Espelha no estado do app o que a entrada mudou nas transferências escolhidas.
+      // A CATEGORIA o backend já grava (UPDATE lancamentos ... category_id = COALESCE(...)),
+      // mas o estado React não sabe disso — e o sync é diferencial sobre ele, então sem
+      // espelhar aqui o próximo full-sync reenviaria a categoria antiga por cima da nova
+      // (mesmo motivo do sincronizarSaldo em BemDetail). O FAVORECIDO é só do frontend: o
+      // endpoint não o toca, e chega ao banco pelo sync normal.
+      // Campo vazio não entra em `mudancas` — não sobrescreve o que já existe no lançamento.
+      const ajustes = montarAjustesEntrada({ transacoes, escolhidas, favorecido })
+      onSuccess(resposta, { ajustes, favorecido: favorecido.trim() })
     } catch (err) {
       onErro(err.message)
     } finally {
@@ -170,6 +181,20 @@ export default function RegistrarEntradaModal({
             )
           })}
         </div>
+      </div>
+
+      <div>
+        <label className="label">Favorecido</label>
+        <FavorecidoAutocomplete
+          value={favorecido}
+          onChange={setFavorecido}
+          suggestions={favorecidos}
+          placeholder="Ex: Shopping Car Londrina"
+        />
+        <p className="text-xs text-gray-600 mt-1">
+          Aplicado a todas as transferências selecionadas. Em branco, mantém o favorecido atual
+          de cada lançamento.
+        </p>
       </div>
 
       <div className="border border-gray-800 rounded-lg p-3 space-y-3">

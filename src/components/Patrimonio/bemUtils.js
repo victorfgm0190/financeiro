@@ -40,6 +40,27 @@ export function statusParcela(parcela) {
   return 'aberta'
 }
 
+// Monta as edições a aplicar (via updateTransaction) nas transferências escolhidas ao registrar
+// uma entrada à vista. Campo vazio é OMITIDO — o modal não pode sobrescrever com "nada" o
+// favorecido ou a categoria que o lançamento já tinha. Transferência sem nenhuma mudança
+// efetiva não entra na lista, para não disparar update inútil.
+//
+// A categoria o backend já grava no lançamento (registrar-entrada faz
+// `category_id = COALESCE($3, category_id)`); espelhá-la aqui é o que impede o sync
+// diferencial — que compara contra o estado React — de reenviar a categoria antiga depois.
+export function montarAjustesEntrada({ transacoes, escolhidas, favorecido }) {
+  const payee = (favorecido || '').trim()
+  return transacoes
+    .filter(t => t.id in escolhidas)
+    .map(t => {
+      const mudancas = {}
+      if (payee) mudancas.payee = payee
+      if (escolhidas[t.id]) mudancas.categoryId = escolhidas[t.id]
+      return { id: t.id, mudancas }
+    })
+    .filter(a => Object.keys(a.mudancas).length > 0)
+}
+
 export const ESTILO_STATUS = {
   paga: { label: 'PAGO', texto: 'text-receita', fundo: 'bg-emerald-500/10', borda: 'border-emerald-500/20' },
   parcial: { label: 'PARCIAL', texto: 'text-amber-400', fundo: 'bg-amber-500/10', borda: 'border-amber-500/20' },

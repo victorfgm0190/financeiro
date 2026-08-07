@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Info, ListOrdered, History, Settings2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
@@ -21,7 +21,10 @@ const ABAS = [
 const POR_PAGINA = 20
 
 export default function BemDetail({ conta, onClose }) {
-  const { accounts, categories, profileTransactions, updateAccount } = useApp()
+  const {
+    accounts, categories, profileTransactions, payees,
+    updateAccount, updateTransaction, addPayee,
+  } = useApp()
 
   const [bem, setBem] = useState(null)
   const [financiamento, setFinanciamento] = useState(null)
@@ -124,13 +127,23 @@ export default function BemDetail({ conta, onClose }) {
     await recarregarTudo()
   }
 
-  const aposEntrada = async (resposta) => {
+  const aposEntrada = async (resposta, { ajustes = [], favorecido = '' } = {}) => {
     setModal(null)
     sincronizarSaldo(conta.id, resposta.bem?.saldo)
     for (const antigo of resposta.bens_antigos || []) {
       sincronizarSaldo(antigo.id, antigo.saldo_reducido)
     }
-    avisar(`Entrada de ${resposta.entrada_total?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} registrada.`)
+    // Favorecido e categoria das transferências escolhidas — mesma razão do sincronizarSaldo:
+    // o sync é diferencial sobre o estado React, então o que o backend gravou (categoria) e o
+    // que só o frontend conhece (favorecido) precisam existir aqui para não se perderem.
+    for (const { id, mudancas } of ajustes) updateTransaction(id, mudancas)
+    if (favorecido && !payees.includes(favorecido)) addPayee(favorecido)
+
+    const total = resposta.entrada_total?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    avisar(
+      `Entrada de ${total} registrada.`
+      + (ajustes.length ? ` ${ajustes.length} lançamento(s) atualizado(s).` : ''),
+    )
     await recarregarTudo()
   }
 
@@ -156,6 +169,15 @@ export default function BemDetail({ conta, onClose }) {
   const contasCorrentes = accounts.filter(
     a => !['credit', 'asset', 'liability', 'gerencial'].includes(a.type),
   )
+
+  // Mesma ordenação do autocomplete de TransactionForm: os mais usados primeiro.
+  const favorecidosOrdenados = useMemo(() => {
+    const usos = {}
+    for (const tx of profileTransactions) {
+      if (tx.payee) usos[tx.payee] = (usos[tx.payee] || 0) + 1
+    }
+    return [...new Set(payees)].sort((a, b) => (usos[b] || 0) - (usos[a] || 0))
+  }, [profileTransactions, payees])
 
   const naoParametrizado = bem && !bem.valor_nota_fiscal && !bem.categorias?.prestacao?.id
 
@@ -285,6 +307,7 @@ export default function BemDetail({ conta, onClose }) {
             bem={bem}
             transacoes={profileTransactions}
             contas={accounts}
+            favorecidos={favorecidosOrdenados}
             onCancel={() => setModal(null)}
             onSuccess={aposEntrada}
             onErro={(m) => avisar(m, 'error')}
