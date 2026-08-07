@@ -1,7 +1,7 @@
 import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
-  ensureBemSchema, genId, num, round2, fail, serializarBem,
+  genId, num, round2, fail, serializarBem,
   categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM,
 } from '../_bem.js'
 
@@ -14,7 +14,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const body = await parseBody(req)
     const {
       nome, valor_nota_fiscal, conta_id, descricao,

@@ -1,7 +1,7 @@
 import { query, parseBody, withTransaction } from '../../../_db.js'
 import { requireAuth } from '../../../_auth.js'
 import {
-  ensureBemSchema, getRouteId, num, round2, hoje, isIsoDate, fail,
+  getRouteId, num, round2, hoje, isIsoDate, fail,
   calcularRateio, criarLancamentoCategorizado, registrarMovimentacao,
 } from '../../../_bem.js'
 
@@ -21,7 +21,6 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const body = await parseBody(req)
     const parcelaId = getRouteId(req, 1) || body.parcela_id
     if (!parcelaId) return fail(res, 400, 'parcela_id é obrigatório')

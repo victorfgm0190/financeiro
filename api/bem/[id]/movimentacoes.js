@@ -1,6 +1,6 @@
 import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
-import { ensureBemSchema, getRouteId, num, fail } from '../../_bem.js'
+import { getRouteId, num, fail } from '../../_bem.js'
 
 // GET /api/bem/[id]/movimentacoes — histórico do bem em ordem cronológica: entradas à vista,
 // trade-ins (com perda/ganho) e pagamentos de parcela (principal × juros).
@@ -10,7 +10,6 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const bemId = getRouteId(req, 1)
     if (!bemId) return fail(res, 400, 'id do bem é obrigatório')
 

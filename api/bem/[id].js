@@ -1,6 +1,6 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-import { ensureBemSchema, getRouteId, num, fail, serializarBem } from '../_bem.js'
+import { getRouteId, num, fail, serializarBem } from '../_bem.js'
 
 // GET /api/bem/[id] — bem com saldo atual, categorias parametrizadas, status de venda e o
 // financiamento vinculado (null se ainda não houver).
@@ -10,7 +10,6 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const id = getRouteId(req)
     if (!id) return fail(res, 400, 'id é obrigatório')
 

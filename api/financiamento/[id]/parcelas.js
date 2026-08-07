@@ -1,7 +1,7 @@
 import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import {
-  ensureBemSchema, getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela,
+  getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela,
 } from '../../_bem.js'
 
 // GET /api/financiamento/[id]/parcelas?page=1&limit=20 — lista paginada das parcelas.
@@ -19,7 +19,6 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const financingId = getRouteId(req, 1)
     if (!financingId) return fail(res, 400, 'id do financiamento é obrigatório')
 

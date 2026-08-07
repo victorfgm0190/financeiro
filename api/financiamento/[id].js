@@ -1,7 +1,7 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
-  ensureBemSchema, getRouteId, num, round2, fail, SELECT_PARCELAS, serializarParcela,
+  getRouteId, num, round2, fail, SELECT_PARCELAS, serializarParcela,
 } from '../_bem.js'
 
 // GET /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
@@ -13,7 +13,6 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
   try {
-    await ensureBemSchema()
     const id = getRouteId(req)
     if (!id) return fail(res, 400, 'id é obrigatório')
 

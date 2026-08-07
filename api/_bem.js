@@ -58,8 +58,13 @@ export function getRouteId(req, segmentsFromEnd = 0) {
 // Schema
 // ---------------------------------------------------------------------------
 
-// DDL idempotente (mesmo padrão de api/load.js). Cacheado por cold start para não pagar o
-// custo em toda request.
+// DDL idempotente (mesmo padrão de api/load.js).
+//
+// Só DOIS lugares chamam isso: api/load.js (uma vez por carregamento do app) e
+// /api/bem/migrate (sob demanda). Os endpoints de bem/financiamento NÃO chamam — o cache
+// `schemaReady` é por instância de função serverless, então na Vercel cada cold start
+// pagava os ~38 statements de novo e travava o BemDetail, que dispara 4 requests em
+// paralelo. O schema já existe no banco; se algum dia faltar, /api/bem/migrate reaplica.
 //
 // Roda inteiro dentro de UMA transação: sem isso, um kill no meio (timeout de função,
 // queda de conexão) deixava schema parcial — tipicamente as 10 colunas de `contas`
