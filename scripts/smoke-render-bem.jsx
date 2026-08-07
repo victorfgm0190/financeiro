@@ -16,7 +16,8 @@ import FinanciamentoModal from '../src/components/Patrimonio/FinanciamentoModal'
 import PagarParcelaModal from '../src/components/Patrimonio/PagarParcelaModal'
 import RegistrarEntradaModal from '../src/components/Patrimonio/RegistrarEntradaModal'
 import ParametrizarBemModal from '../src/components/Patrimonio/ParametrizarBemModal'
-import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada, transferenciasElegiveisEntrada, valorPatrimonial, valorPatrimonialEhFallback } from '../src/components/Patrimonio/bemUtils'
+import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada, transferenciasElegiveisEntrada } from '../src/components/Patrimonio/bemUtils'
+import { valorPatrimonial, valorPatrimonialEhFallback, calcularPatrimonioTotal } from '../src/lib/patrimonio'
 
 // Payloads no formato EXATO devolvido por api/bem/* e api/financiamento/*.
 const BEM = {
@@ -236,6 +237,17 @@ eq('patrimônio: bem sem saldo entra pela NF', valorPatrimonial({ balance: 0, va
 eq('patrimônio: NF em branco cai no saldo', valorPatrimonial({ balance: 4200, valorNotaFiscal: null, patrimonioUseMethod: 'nota_fiscal' }), 4200)
 eq('patrimônio: fallback sinalizado', valorPatrimonialEhFallback(conta()), true)
 eq('patrimônio: sem fallback quando preenchido', valorPatrimonialEhFallback(conta({ valorPagoManual: 60000 })), false)
+// Total: cada bem entra pelo SEU método. Aqui 114900 (NF) + 300000 (pago) + 0 (saldo puro).
+eq('patrimônio: total soma por método de cada bem', calcularPatrimonioTotal([
+  conta({ patrimonioUseMethod: 'nota_fiscal' }),
+  { balance: 0, valorPagoManual: 300000, patrimonioUseMethod: 'valor_pago' },
+  { balance: 0, valorNotaFiscal: null, valorPagoManual: null, patrimonioUseMethod: 'valor_pago' },
+]), 414900)
+// Conta comum (sem nada do módulo de bem) entra pelo saldo — é o que permite usar a mesma
+// função no KPI do painel de Contas sem ramificar por tipo.
+eq('patrimônio: conta comum entra pelo saldo', calcularPatrimonioTotal([{ balance: 5000 }]), 5000)
+eq('patrimônio: lista vazia', calcularPatrimonioTotal([]), 0)
+eq('patrimônio: lista ausente', calcularPatrimonioTotal(undefined), 0)
 
 eq('rateio: cobre tudo', calcularRateio(1342.33, 1000, 342.33), { principalPago: 1000, jurosPago: 342.33, desvioJuros: 0 })
 eq('rateio: só principal', calcularRateio(800, 1000, 342.33), { principalPago: 800, jurosPago: 0, desvioJuros: 342.33 })

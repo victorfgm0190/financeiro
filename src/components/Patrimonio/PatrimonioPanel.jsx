@@ -9,7 +9,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import BemDetail from './BemDetail'
-import { valorPatrimonial } from './bemUtils'
+import { valorPatrimonial, calcularPatrimonioTotal } from '../../lib/patrimonio'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue } = useApp()
@@ -131,7 +131,7 @@ export default function PatrimonioPanel() {
   const totals = useMemo(() => {
     // Bem entra pelo valor que a conta escolheu (nota fiscal × valor pago), não pelo saldo
     // cru: um bem antigo tem saldo 0 e só existe no PL pelo número informado à mão.
-    const bens = categorized.bens.reduce((s, a) => s + valorPatrimonial(a), 0)
+    const bens = calcularPatrimonioTotal(categorized.bens)
     const dividas = categorized.dividas.reduce((s, a) => s + (a.balance || 0), 0)
     const emprestimos = categorized.emprestimos.reduce((s, a) => s + (a.balance || 0), 0)
     const investimentos = categorized.investimentos.reduce((s, a) => s + (a.balance || 0), 0)

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
+import { valorPatrimonial } from '../../lib/patrimonio'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
@@ -576,9 +577,14 @@ export default function AccountsPanel() {
   const isMobile = useIsMobile()
   const saveScroll = useScrollSaver()
 
+  // Bem entra pelo valor que a conta escolheu (nota fiscal × valor pago), igual ao KPI de Bens
+  // do Patrimônio. Somando o saldo cru os dois painéis divergiam: um bem antigo tem saldo 0 e
+  // vale só pelo número informado à mão, então ele aparecia no Patrimônio e sumia daqui.
+  // valorPatrimonial cai no saldo quando não há valor escolhido, que é o caso de toda conta
+  // que não é bem — daí poder aplicar a todas sem ramificar por tipo.
   const totalAssets = accounts
     .filter(a => a.type !== 'credit' && a.type !== 'liability')
-    .reduce((sum, a) => sum + (a.balance || 0), 0)
+    .reduce((sum, a) => sum + valorPatrimonial(a), 0)
   const totalCredit = accounts
     .filter(a => a.type === 'credit')
     .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
