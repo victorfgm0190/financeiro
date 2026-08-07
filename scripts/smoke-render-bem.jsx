@@ -11,17 +11,19 @@ import BemInfoTab from '../src/components/Patrimonio/BemInfoTab'
 import BemParcelasTab from '../src/components/Patrimonio/BemParcelasTab'
 import BemHistoricoTab from '../src/components/Patrimonio/BemHistoricoTab'
 import TradeInResumo from '../src/components/Patrimonio/TradeInResumo'
+import PatrimonioEditavel from '../src/components/Patrimonio/PatrimonioEditavel'
 import FinanciamentoModal from '../src/components/Patrimonio/FinanciamentoModal'
 import PagarParcelaModal from '../src/components/Patrimonio/PagarParcelaModal'
 import RegistrarEntradaModal from '../src/components/Patrimonio/RegistrarEntradaModal'
 import ParametrizarBemModal from '../src/components/Patrimonio/ParametrizarBemModal'
-import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada, transferenciasElegiveisEntrada } from '../src/components/Patrimonio/bemUtils'
+import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada, transferenciasElegiveisEntrada, valorPatrimonial, valorPatrimonialEhFallback } from '../src/components/Patrimonio/bemUtils'
 
 // Payloads no formato EXATO devolvido por api/bem/* e api/financiamento/*.
 const BEM = {
   id: 'acc_bem_1', nome: 'TIGGO 5X PRO', valor_nota_fiscal: 120000, saldo: 60000,
   tipo: 'bem_imobilizado', account_type: 'asset', descricao: 'Veículo agosto/2026',
   foi_vendido: false, data_venda: null, bem_destino_id: null,
+  valor_pago_manual: null, patrimonio_use_method: 'valor_pago',
   categorias: {
     perda: { id: 'c1', nome: 'Perda de Venda de Bem' },
     ganho: { id: 'c2', nome: 'Ganho de Venda de Bem' },
@@ -104,6 +106,35 @@ render('BemInfoTab (sem financiamento)',
 render('BemInfoTab (vendido, sem categorias)',
   <BemInfoTab bem={{ ...BEM, foi_vendido: true, data_venda: '2026-08-15', categorias: {} }} financiamento={null} parcelasResumo={null} onCriarFinanciamento={noop} onRegistrarEntrada={noop} />,
   ['VENDIDO', 'Não parametrizado', '15/ago/2026'])
+
+// Bem antigo: nenhuma movimentação, saldo zero, os dois valores digitados à mão.
+const BEM_ANTIGO = {
+  ...BEM, id: 'acc_bem_2', nome: 'GABRIEL TANIOS IASBIK 191', saldo: 0,
+  valor_nota_fiscal: 500000, valor_pago_manual: 300000, patrimonio_use_method: 'nota_fiscal',
+}
+
+render('PatrimonioEditavel (sem movimentações → editável)',
+  <PatrimonioEditavel bem={BEM_ANTIGO} temMovimentacoes={false} onSalvar={noop} onErro={noop} />,
+  ['Valores do Bem', 'Editar', 'Contrato / Nota Fiscal', 'Valor Pago / IR', 'Usar no Patrimônio'])
+
+// Com movimentações o cadeado tem que aparecer e o botão Editar sumir — a trava real é o 409
+// do endpoint, mas a UI não pode oferecer o que o servidor vai recusar.
+render('PatrimonioEditavel (com movimentações → bloqueado)',
+  <PatrimonioEditavel bem={BEM} temMovimentacoes onSalvar={noop} onErro={noop} />,
+  ['calculado pelo histórico', 'somado pelas movimentações do bem', 'Usar no Patrimônio'])
+
+// Valor pago em branco + método valor_pago: o Patrimônio cai no saldo e precisa dizer isso.
+render('PatrimonioEditavel (valor escolhido em branco → avisa fallback)',
+  <PatrimonioEditavel bem={BEM} temMovimentacoes={false} onSalvar={noop} onErro={noop} />,
+  ['não preenchido', 'o Patrimônio usa o saldo'])
+
+render('BemInfoTab (com card de valores)',
+  <BemInfoTab
+    bem={BEM_ANTIGO} financiamento={null} parcelasResumo={null}
+    onCriarFinanciamento={noop} onRegistrarEntrada={noop}
+    temMovimentacoes={false} onSalvarValores={noop} onErro={noop}
+  />,
+  ['GABRIEL TANIOS IASBIK 191', 'Valores do Bem', 'Editar'])
 
 render('BemParcelasTab',
   <BemParcelasTab financiamento={FIN} parcelas={FIN.parcelas} page={1} totalPages={3} totalParcelas={60} loading={false} onPage={noop} onPagar={noop} />,
@@ -192,6 +223,20 @@ const eq = (label, got, want) => {
     console.log(`FAIL ${label} — got ${JSON.stringify(got)} want ${JSON.stringify(want)}`)
   } else console.log(`ok   ${label}`)
 }
+// valorPatrimonial recebe a conta no formato do estado React (camelCase), não o payload da API.
+const conta = (over = {}) => ({ balance: 75000, valorNotaFiscal: 114900, valorPagoManual: null, patrimonioUseMethod: 'valor_pago', ...over })
+eq('patrimônio: método nota_fiscal usa a NF', valorPatrimonial(conta({ patrimonioUseMethod: 'nota_fiscal' })), 114900)
+eq('patrimônio: método valor_pago sem valor cai no saldo', valorPatrimonial(conta()), 75000)
+eq('patrimônio: valor pago informado ganha do saldo', valorPatrimonial(conta({ valorPagoManual: 60000 })), 60000)
+// 0 é um valor legítimo: `|| saldo` devolveria o saldo justamente no caso que o usuário zerou.
+eq('patrimônio: zero informado é respeitado', valorPatrimonial(conta({ valorPagoManual: 0 })), 0)
+// Bem antigo: saldo 0, só existe no PL pelo número digitado.
+eq('patrimônio: bem sem saldo entra pela NF', valorPatrimonial({ balance: 0, valorNotaFiscal: 500000, patrimonioUseMethod: 'nota_fiscal' }), 500000)
+// NF em branco com método nota_fiscal cai no saldo em vez de sumir do PL como 0.
+eq('patrimônio: NF em branco cai no saldo', valorPatrimonial({ balance: 4200, valorNotaFiscal: null, patrimonioUseMethod: 'nota_fiscal' }), 4200)
+eq('patrimônio: fallback sinalizado', valorPatrimonialEhFallback(conta()), true)
+eq('patrimônio: sem fallback quando preenchido', valorPatrimonialEhFallback(conta({ valorPagoManual: 60000 })), false)
+
 eq('rateio: cobre tudo', calcularRateio(1342.33, 1000, 342.33), { principalPago: 1000, jurosPago: 342.33, desvioJuros: 0 })
 eq('rateio: só principal', calcularRateio(800, 1000, 342.33), { principalPago: 800, jurosPago: 0, desvioJuros: 342.33 })
 eq('rateio: sobra parcial', calcularRateio(1200, 1000, 342.33), { principalPago: 1000, jurosPago: 200, desvioJuros: 142.33 })

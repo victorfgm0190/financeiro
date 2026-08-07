@@ -20,6 +20,7 @@ const COLUNAS_ESPERADAS = {
     'valor_nota_fiscal', 'tipo_bem', 'descricao', 'foi_vendido', 'data_venda',
     'bem_destino_id', 'categoria_perda_bem_id', 'categoria_ganho_bem_id',
     'categoria_prestacao_id', 'categoria_taxa_finan_id',
+    'valor_pago_manual', 'patrimonio_use_method',
   ],
   lancamentos: ['bem_id'],
   agendamentos: ['financing_installment_id'],

@@ -4,7 +4,9 @@ import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import ConfirmDialog from '../shared/ConfirmDialog'
-import { getBem, getFinanciamento, getParcelas, getMovimentacoes, estornarEntrada } from '../../lib/bemApi'
+import {
+  getBem, getFinanciamento, getParcelas, getMovimentacoes, estornarEntrada, atualizarValoresBem,
+} from '../../lib/bemApi'
 import BemInfoTab from './BemInfoTab'
 import BemParcelasTab from './BemParcelasTab'
 import BemHistoricoTab from './BemHistoricoTab'
@@ -155,6 +157,21 @@ export default function BemDetail({ conta, onClose }) {
     )
     await recarregarTudo()
   }
+
+  // Os valores editáveis moram em colunas que o accountToRow NÃO exporta (mesma regra do
+  // valorNotaFiscal em src/lib/db.js): quem grava é o endpoint, e o updateAccount daqui só
+  // espelha no estado React para o Patrimônio recalcular sem esperar um full-load. Como o
+  // sync não carrega essas chaves, espelhar não corre risco de sobrescrever o banco.
+  const salvarValores = useCallback(async (payload) => {
+    const r = await atualizarValoresBem(conta.id, payload)
+    setBem(atual => (atual ? { ...atual, ...r.bem } : atual))
+    updateAccount(conta.id, {
+      valorNotaFiscal: r.valores.valor_nota_fiscal,
+      valorPagoManual: r.valores.valor_pago_manual,
+      patrimonioUseMethod: r.valores.patrimonio_use_method,
+    })
+    avisar('Valores do bem atualizados.')
+  }, [conta.id, updateAccount, avisar])
 
   const estornar = async () => {
     setEstornando(true)
@@ -363,6 +380,9 @@ export default function BemDetail({ conta, onClose }) {
                 parcelasResumo={resumoParcelas}
                 onCriarFinanciamento={() => setModal('financiamento')}
                 onRegistrarEntrada={() => setModal('entrada')}
+                temMovimentacoes={(movimentacoes || []).length > 0}
+                onSalvarValores={salvarValores}
+                onErro={(m) => avisar(m, 'error')}
               />
             )}
 

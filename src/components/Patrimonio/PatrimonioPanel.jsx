@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import BemDetail from './BemDetail'
+import { valorPatrimonial } from './bemUtils'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue } = useApp()
@@ -128,7 +129,9 @@ export default function PatrimonioPanel() {
   }, [accounts, accountGroups])
 
   const totals = useMemo(() => {
-    const bens = categorized.bens.reduce((s, a) => s + (a.balance || 0), 0)
+    // Bem entra pelo valor que a conta escolheu (nota fiscal × valor pago), não pelo saldo
+    // cru: um bem antigo tem saldo 0 e só existe no PL pelo número informado à mão.
+    const bens = categorized.bens.reduce((s, a) => s + valorPatrimonial(a), 0)
     const dividas = categorized.dividas.reduce((s, a) => s + (a.balance || 0), 0)
     const emprestimos = categorized.emprestimos.reduce((s, a) => s + (a.balance || 0), 0)
     const investimentos = categorized.investimentos.reduce((s, a) => s + (a.balance || 0), 0)
@@ -151,7 +154,9 @@ export default function PatrimonioPanel() {
         const hist = (a.valueHistory || [])
           .filter(h => h.date <= monthEnd)
           .sort((x, y) => x.date.localeCompare(y.date))
-        return s + (hist.length > 0 ? hist[hist.length - 1].value : (a.balance || 0))
+        // Histórico de valores continua ganhando quando existe (é a avaliação daquele mês);
+        // sem histórico, o fallback é o mesmo valor que o KPI usa, não o saldo.
+        return s + (hist.length > 0 ? hist[hist.length - 1].value : valorPatrimonial(a))
       }, 0)
 
       // Financial accounts: use current (no history tracked)
@@ -280,7 +285,15 @@ export default function PatrimonioPanel() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0 ml-3">
                       <div className="text-right">
-                        <p className="text-lg font-bold text-teal-400">{fmt(a.balance || 0)}</p>
+                        {/* O card mostra o mesmo número que entra no KPI de Bens, senão a
+                            soma da lista não bate com o total exibido acima. */}
+                        <p className="text-lg font-bold text-teal-400">{fmt(valorPatrimonial(a))}</p>
+                        {valorPatrimonial(a) !== (a.balance || 0) && (
+                          <p className="text-[11px] text-gray-600">
+                            {a.patrimonioUseMethod === 'nota_fiscal' ? 'nota fiscal' : 'valor pago'}
+                            {' · '}saldo {fmt(a.balance || 0)}
+                          </p>
+                        )}
                         {(a.valueHistory || []).length > 0 && (
                           <button
                             onClick={() => setExpandedHistory(isExpanded ? null : a.id)}

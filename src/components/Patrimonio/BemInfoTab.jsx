@@ -1,6 +1,7 @@
 import { Landmark, AlertTriangle, Wallet, Tag } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { fmtData } from './bemUtils'
+import PatrimonioEditavel from './PatrimonioEditavel'
 
 function Linha({ label, children, destaque }) {
   return (
@@ -23,6 +24,7 @@ function Categoria({ label, categoria }) {
 
 export default function BemInfoTab({
   bem, financiamento, parcelasResumo, onCriarFinanciamento, onRegistrarEntrada,
+  temMovimentacoes = false, onSalvarValores, onErro,
 }) {
   const categorias = bem.categorias || {}
   const semCategorias = !categorias.perda?.nome && !categorias.ganho?.nome
@@ -45,6 +47,15 @@ export default function BemInfoTab({
         {bem.foi_vendido && <Linha label="Data da Venda">{fmtData(bem.data_venda)}</Linha>}
         {bem.descricao && <Linha label="Descrição">{bem.descricao}</Linha>}
       </div>
+
+      {onSalvarValores && (
+        <PatrimonioEditavel
+          bem={bem}
+          temMovimentacoes={temMovimentacoes}
+          onSalvar={onSalvarValores}
+          onErro={onErro}
+        />
+      )}
 
       {financiamento ? (
         <div className="card border border-red-500/10">

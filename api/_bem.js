@@ -12,6 +12,11 @@ export const TIPO_BEM = 'bem_imobilizado'
 export const ACCOUNT_TYPE_BEM = 'asset'
 export const ACCOUNT_TYPE_DIVIDA = 'liability'
 
+// Qual número representa o bem no Patrimônio. 'valor_pago' é o padrão porque é o que o app
+// sabe sozinho (o saldo da conta); a nota fiscal só existe quando alguém a informou.
+export const METODOS_PATRIMONIO = ['nota_fiscal', 'valor_pago']
+export const METODO_PATRIMONIO_PADRAO = 'valor_pago'
+
 export const genId = (prefix) =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 
@@ -101,6 +106,11 @@ async function runSchemaStatements(query) {
     ['descricao', 'TEXT'],
     ['foi_vendido', 'BOOLEAN DEFAULT FALSE'],
     ['data_venda', 'DATE'],
+    // Valor pago informado à mão (IR, recibo) e qual dos dois números representa o bem no
+    // Patrimônio. Existem para o bem ANTIGO, sem movimentação nenhuma no app: nele nem a nota
+    // fiscal nem o saldo vêm de lugar algum, e sem poder digitá-los o bem entra no PL como zero.
+    ['valor_pago_manual', 'NUMERIC'],
+    ['patrimonio_use_method', "TEXT DEFAULT 'valor_pago'"],
     ['bem_destino_id', 'TEXT'],
     ['categoria_perda_bem_id', 'TEXT'],
     ['categoria_ganho_bem_id', 'TEXT'],
@@ -407,6 +417,12 @@ export function serializarBem(conta, categoriasById = {}) {
     foi_vendido: !!conta.foi_vendido,
     data_venda: conta.data_venda ? String(conta.data_venda).slice(0, 10) : null,
     bem_destino_id: conta.bem_destino_id ?? null,
+    // null (não preenchido) é diferente de 0 (preenchido com zero) — a UI mostra "—" no
+    // primeiro caso e R$ 0,00 no segundo, então num() não serve aqui.
+    valor_pago_manual: conta.valor_pago_manual == null ? null : num(conta.valor_pago_manual),
+    patrimonio_use_method: METODOS_PATRIMONIO.includes(conta.patrimonio_use_method)
+      ? conta.patrimonio_use_method
+      : METODO_PATRIMONIO_PADRAO,
     categorias: {
       perda: cat(conta.categoria_perda_bem_id),
       ganho: cat(conta.categoria_ganho_bem_id),

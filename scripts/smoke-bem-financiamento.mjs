@@ -16,6 +16,7 @@ const criarBem = (await import('../api/bem/criar.js')).default
 const getBem = (await import('../api/bem/[id].js')).default
 const registrarEntrada = (await import('../api/bem/[id]/registrar-entrada.js')).default
 const estornarEntrada = (await import('../api/bem/[id]/estornar-entrada.js')).default
+const atualizarValores = (await import('../api/bem/[id]/atualizar-valores.js')).default
 const movimentacoes = (await import('../api/bem/[id]/movimentacoes.js')).default
 const criarFin = (await import('../api/financiamento/criar.js')).default
 const getFin = (await import('../api/financiamento/[id].js')).default
@@ -384,6 +385,70 @@ async function main() {
   eq('status 200', r.status, 200)
   eq('perda recalculada (60000 − 80000)', r.body?.bem_antigo?.perda_ganho, -20000)
   eq('bem antigo zerado de novo', r.body?.bem_antigo?.saldo_reducido, 0)
+
+  console.log('\n10) POST /api/bem/[id]/atualizar-valores')
+  // Bem "de papel": nunca entrou em movimentação nenhuma, é o caso do Gabriel Tanios — saldo
+  // zero e os dois valores só existem se alguém digitar.
+  r = await call(criarBem, 'POST', '/api/bem/criar', {
+    nome: `[SMOKE] GABRIEL TANIOS ${sufixo}`, valor_nota_fiscal: 1, ...payloadCats,
+  })
+  const bemLivreId = r.body?.bem?.id
+  criados.contas.push(bemLivreId)
+  eq('método padrão é valor_pago', r.body?.bem?.patrimonio_use_method, 'valor_pago')
+  eq('valor_pago_manual nasce vazio', r.body?.bem?.valor_pago_manual, null)
+
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemLivreId}/atualizar-valores`, {
+    valor_nota_fiscal: 500000, valor_pago_manual: 300000, patrimonio_use_method: 'nota_fiscal',
+  }, { id: bemLivreId })
+  eq('status 200', r.status, 200)
+  eq('nota fiscal gravada', r.body?.valores?.valor_nota_fiscal, 500000)
+  eq('valor pago gravado', r.body?.valores?.valor_pago_manual, 300000)
+  eq('método gravado', r.body?.valores?.patrimonio_use_method, 'nota_fiscal')
+  eq('bem serializado acompanha', r.body?.bem?.valor_pago_manual, 300000)
+
+  const [livreDb] = await query(
+    `SELECT valor_nota_fiscal, valor_pago_manual, patrimonio_use_method FROM contas WHERE id = $1`,
+    [bemLivreId])
+  eq('NF no banco', Number(livreDb?.valor_nota_fiscal), 500000)
+  eq('valor pago no banco', Number(livreDb?.valor_pago_manual), 300000)
+  eq('método no banco', livreDb?.patrimonio_use_method, 'nota_fiscal')
+
+  // null explícito limpa; campo ausente não é tocado. COALESCE não distinguiria os dois.
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemLivreId}/atualizar-valores`,
+    { valor_pago_manual: null }, { id: bemLivreId })
+  eq('status 200', r.status, 200)
+  eq('valor pago limpo', r.body?.valores?.valor_pago_manual, null)
+  eq('NF preservada (campo ausente)', r.body?.valores?.valor_nota_fiscal, 500000)
+  eq('método preservado (campo ausente)', r.body?.valores?.patrimonio_use_method, 'nota_fiscal')
+
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemLivreId}/atualizar-valores`, {}, { id: bemLivreId })
+  eq('payload vazio → 400', r.status, 400)
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemLivreId}/atualizar-valores`,
+    { valor_nota_fiscal: -1 }, { id: bemLivreId })
+  eq('valor negativo → 400', r.status, 400)
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemLivreId}/atualizar-valores`,
+    { patrimonio_use_method: 'chute' }, { id: bemLivreId })
+  eq('método inválido → 400', r.status, 400)
+  r = await call(atualizarValores, 'POST', '/api/bem/acc_inexistente/atualizar-valores',
+    { patrimonio_use_method: 'valor_pago' }, { id: 'acc_inexistente' })
+  eq('bem inexistente → 404', r.status, 404)
+
+  console.log('\n10b) trava dos bens com histórico')
+  // TIGGO é destino de movimentações; HB20S é origem do trade-in. Os dois travam.
+  for (const [rotulo, id] of [['bem com movimentações', bemId], ['bem dado em trade-in', bemAntigoId]]) {
+    r = await call(atualizarValores, 'POST', `/api/bem/${id}/atualizar-valores`,
+      { valor_nota_fiscal: 999 }, { id })
+    eq(`${rotulo}: editar valor → 409`, r.status, 409)
+  }
+  const [tiggoIntacto] = await query(`SELECT valor_nota_fiscal FROM contas WHERE id = $1`, [bemId])
+  eq('NF do TIGGO intacta após o 409', Number(tiggoIntacto?.valor_nota_fiscal), 120000)
+
+  // O método continua liberado mesmo com histórico: escolher qual valor o Patrimônio lê não
+  // reescreve nada.
+  r = await call(atualizarValores, 'POST', `/api/bem/${bemId}/atualizar-valores`,
+    { patrimonio_use_method: 'nota_fiscal' }, { id: bemId })
+  eq('bem com movimentações: trocar método → 200', r.status, 200)
+  eq('método trocado', r.body?.valores?.patrimonio_use_method, 'nota_fiscal')
 }
 
 try {

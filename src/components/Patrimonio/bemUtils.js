@@ -88,6 +88,31 @@ export function montarAjustesEntrada({ transacoes, escolhidas, favorecido, bemId
     .filter(a => Object.keys(a.mudancas).length > 0)
 }
 
+// Quanto este bem vale no Patrimônio, segundo o método escolhido em cada conta.
+//
+// Recebe a conta no formato do estado React (camelCase, rowToAccount), não o payload de
+// /api/bem/[id]. Aceita 0 como valor legítimo — `|| saldo` trocaria um bem zerado de propósito
+// pelo saldo, que é justamente o que o usuário quis substituir; por isso o teste é `!= null`.
+//
+// FALLBACK: se o valor escolhido nunca foi preenchido, cai no saldo em vez de devolver 0. Um bem
+// somindo do PL porque o método aponta para um campo vazio é pior — e mais silencioso — do que
+// um bem avaliado pelo saldo. `valorPatrimonialEhFallback` diz quando isso está acontecendo,
+// para a UI conseguir avisar.
+export function valorPatrimonial(conta) {
+  const saldo = Number(conta?.balance) || 0
+  const escolhido = conta?.patrimonioUseMethod === 'nota_fiscal'
+    ? conta?.valorNotaFiscal
+    : conta?.valorPagoManual
+  return escolhido != null ? Number(escolhido) : saldo
+}
+
+export function valorPatrimonialEhFallback(conta) {
+  const escolhido = conta?.patrimonioUseMethod === 'nota_fiscal'
+    ? conta?.valorNotaFiscal
+    : conta?.valorPagoManual
+  return escolhido == null
+}
+
 export const ESTILO_STATUS = {
   paga: { label: 'PAGO', texto: 'text-receita', fundo: 'bg-emerald-500/10', borda: 'border-emerald-500/20' },
   parcial: { label: 'PARCIAL', texto: 'text-amber-400', fundo: 'bg-amber-500/10', borda: 'border-amber-500/20' },

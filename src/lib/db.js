@@ -255,6 +255,10 @@ export const rowToAccount = (r) => ({
   // DO UPDATE SET em todas, então incluí-las aqui apagaria o valor do banco a cada sync.
   // undefined (ambiente sem as colunas, antes de qualquer chamada /api/bem) vira null.
   valorNotaFiscal: r.valor_nota_fiscal != null ? Number(r.valor_nota_fiscal) : null,
+  // Mesma regra somente-leitura acima: quem grava é POST /api/bem/[id]/atualizar-valores.
+  // null aqui é "nunca preenchido", e é o que faz valorPatrimonial cair no saldo.
+  valorPagoManual: r.valor_pago_manual != null ? Number(r.valor_pago_manual) : null,
+  patrimonioUseMethod: r.patrimonio_use_method || 'valor_pago',
   tipoBem: r.tipo_bem || null,
   isReserva: !!r.is_reserva,
   reservaType: r.reserva_type || null,
