@@ -1,6 +1,6 @@
 import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
-import { getRouteId, num, round2, fail, explicarErro } from '../../_bem.js'
+import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '../../_bem.js'
 
 // POST /api/bem/[id]/estornar-entrada — desfaz TODA a entrada à vista registrada no bem
 // (transferências vinculadas + trade-ins), deixando-o pronto para registrar de novo.
@@ -25,6 +25,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
+    // O SELECT lê saldo_origem_anterior; sem a coluna o estorno morre em 500. Ver o comentário
+    // equivalente em atualizar-valores.js.
+    await ensureBemSchema()
+
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')

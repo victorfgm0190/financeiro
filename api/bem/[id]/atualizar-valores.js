@@ -1,7 +1,7 @@
 import { query, parseBody } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import {
-  getRouteId, num, round2, fail, explicarErro, serializarBem,
+  getRouteId, num, round2, fail, explicarErro, serializarBem, ensureBemSchema,
   METODOS_PATRIMONIO, METODO_PATRIMONIO_PADRAO,
 } from '../../_bem.js'
 
@@ -23,6 +23,14 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
+    // valor_pago_manual e patrimonio_use_method são colunas NOVAS num banco que já existe.
+    // Quem as cria é o ensureBemSchema, e até agora ele só rodava no /api/load — cujo erro é
+    // engolido de propósito (api/load.js: o módulo de bem não pode derrubar o load do app).
+    // Num deploy onde aquele passo não rodou ou falhou, este endpoint respondia 500 com
+    // "column does not exist" e não havia como saber disso pela tela. Aqui a garantia é local;
+    // o resultado é memoizado por instância, então custa um DDL por cold start.
+    await ensureBemSchema()
+
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')

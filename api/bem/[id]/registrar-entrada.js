@@ -1,7 +1,7 @@
 import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import {
-  getRouteId, num, round2, hoje, fail,
+  getRouteId, num, round2, hoje, fail, ensureBemSchema,
   criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
 } from '../../_bem.js'
 
@@ -23,6 +23,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
+    // Garante bem_movimentacoes.saldo_origem_anterior, coluna nova de que o estorno depende.
+    // Mesma razão do atualizar-valores: o ensureBemSchema do /api/load pode não ter rodado.
+    await ensureBemSchema()
+
     const body = await parseBody(req)
     const bemId = getRouteId(req, 1) || body.bem_id
     if (!bemId) return fail(res, 400, 'bem_id é obrigatório')
