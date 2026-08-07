@@ -411,12 +411,16 @@ export function serializarBem(conta, categoriasById = {}) {
 }
 
 // Datas saem via to_char para não sofrerem deslocamento de fuso ao virar Date no driver do pg.
+// O `::date` cobre a deriva de schema descrita em normalizarColunasIdParaTexto: estas colunas
+// são declaradas DATE aqui, mas numa tabela pré-existente o CREATE TABLE IF NOT EXISTS é no-op e
+// o tipo real pode ser TEXT — e aí to_char(text, unknown) não existe e a query inteira quebra.
+// Cast identidade quando a coluna já é DATE.
 export const SELECT_PARCELAS = `
   SELECT id, financing_id, numero_parcela,
          principal_provisioned, juros_provisioned, total_provisioned,
          principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
-         to_char(data_vencimento, 'YYYY-MM-DD') AS data_vencimento,
-         to_char(data_pagamento,  'YYYY-MM-DD') AS data_pagamento
+         to_char(data_vencimento::date, 'YYYY-MM-DD') AS data_vencimento,
+         to_char(data_pagamento::date,  'YYYY-MM-DD') AS data_pagamento
     FROM financing_installments`
 
 export function serializarParcela(p) {

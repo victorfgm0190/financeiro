@@ -16,9 +16,15 @@ export default async function handler(req, res) {
     const [bem] = await query(`SELECT id, name FROM contas WHERE id = $1`, [bemId])
     if (!bem) return fail(res, 404, `bem ${bemId} não encontrado`)
 
+    // `m.data::date` antes do to_char: o DDL declara `data DATE`, mas no banco a coluna está
+    // como TEXT (mesma deriva de schema das colunas de id — CREATE TABLE IF NOT EXISTS é no-op
+    // quando a tabela já existe, então o tipo divergente nunca é corrigido). Sem o cast o
+    // Postgres não acha a assinatura e derruba a aba Histórico inteira com
+    // "function to_char(text, unknown) does not exist". Com a coluna já DATE o cast é identidade,
+    // então isto funciona nos dois formatos.
     const rows = await query(
       `SELECT m.*,
-              to_char(m.data, 'YYYY-MM-DD') AS data_iso,
+              to_char(m.data::date, 'YYYY-MM-DD') AS data_iso,
               c.name  AS categoria_nome,
               o.name  AS bem_origem_nome,
               f.numero_parcela,
@@ -29,7 +35,7 @@ export default async function handler(req, res) {
          LEFT JOIN financing_installments f  ON f.id  = m.parcela_id
          LEFT JOIN financing fin             ON fin.id = f.financing_id
         WHERE m.bem_id = $1
-        ORDER BY m.data, m.created_at`,
+        ORDER BY m.data::date, m.created_at`,
       [bemId],
     )
 

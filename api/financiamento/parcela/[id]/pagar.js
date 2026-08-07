@@ -35,7 +35,9 @@ export default async function handler(req, res) {
     const dataPagamento = body.data_pagamento ? String(body.data_pagamento).slice(0, 10) : hoje()
 
     const [parcela] = await query(
-      `SELECT *, to_char(data_vencimento, 'YYYY-MM-DD') AS venc_iso
+      // `::date` pelo mesmo motivo de SELECT_PARCELAS em _bem.js: a coluna pode estar como TEXT
+      // no banco, e aí to_char(text, unknown) não existe.
+      `SELECT *, to_char(data_vencimento::date, 'YYYY-MM-DD') AS venc_iso
          FROM financing_installments WHERE id = $1`, [parcelaId],
     )
     if (!parcela) return fail(res, 404, `parcela ${parcelaId} não encontrada`)
