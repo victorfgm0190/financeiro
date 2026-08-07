@@ -1068,9 +1068,16 @@ export function AppProvider({ children }) {
     )
   }, [data.transactions, profileAccountIds, activeProfileId])
 
+  // Um agendamento pertence ao perfil quando QUALQUER das pontas (origem ou destino) é conta
+  // do perfil — mesma regra de pool do getSaldoPrincipalBreakdown/getAccountSaldos. Casando só
+  // em accountId, transferências que apenas CREDITAM uma conta do perfil (devoluções "Ger.",
+  // resgates de poupança/reserva, cuja origem não carrega profileId) sumiam de toda a UI, mesmo
+  // sendo contabilizadas nos saldos.
   const profileSchedules = useMemo(() => {
     if (!activeProfileId) return data.schedules
-    return data.schedules.filter(s => !s.accountId || profileAccountIds.has(s.accountId))
+    return data.schedules.filter(s =>
+      !s.accountId || profileAccountIds.has(s.accountId) || profileAccountIds.has(s.toAccountId)
+    )
   }, [data.schedules, profileAccountIds, activeProfileId])
 
   const activeProfile = useMemo(
@@ -1236,8 +1243,12 @@ export function AppProvider({ children }) {
             accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
           }
           transactions = [...transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])]
+          // Mesma transição do registro manual (registerScheduleOccurrence): além de marcar a
+          // ocorrência, REANCORA next_occurrence na próxima pendente. Era o único dos 4 caminhos
+          // de escrita de `registered` que não avançava a âncora — o auto-registro deixava
+          // next_occurrence NULL/obsoleto e a "Data de Vencimento Atual" do formulário em branco.
           schedules = schedules.map(s => s.id === schedule.id
-            ? { ...s, registered: [...(s.registered || []), date], confirmado: false } : s)
+            ? registerAndAdvance(s, [...(s.registered || []), date]) : s)
         }
       }
 

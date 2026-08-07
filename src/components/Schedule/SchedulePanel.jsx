@@ -69,13 +69,19 @@ function seriesKeyOf(s) {
 }
 
 // Data de vencimento EXIBIDA (e usada no particionamento da lista) para um agendamento
-// RECORRENTE: casa com o campo "Data de Vencimento Atual" do formulário — nextOccurrence
-// explícito; senão a próxima ocorrência >= hoje (não a que ficou em atraso). Para 'once'/faturas
-// e concluídos (nextDate null) devolve nextDate inalterado. É puramente visual: as ações
-// (pagar/pular/estornar) continuam usando nextDate (a ocorrência pendente real).
+// RECORRENTE. Para 'once'/faturas e concluídos (nextDate null) devolve nextDate inalterado.
+// É puramente visual: as ações (pagar/pular/estornar) continuam usando nextDate (a ocorrência
+// pendente real).
 function scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, todayStr) {
   if (!nextDate || (schedule.frequency || 'once') === 'once') return nextDate
-  return schedule.nextOccurrence || getNextOccurrences(schedule, 24).find(d => d >= todayStr) || nextDate
+  // Ocorrência pendente EM ATRASO manda: ela é a próxima NÃO PAGA e tem de aparecer com a
+  // própria data. Preferir a próxima futura (comportamento anterior) tirava a linha do bucket
+  // "Em atraso" — particionado por displayDate — enquanto o pagamento seguia em aberto.
+  if (nextDate < todayStr) return nextDate
+  // Sem atraso: "Data de Vencimento Atual" do formulário, desde que ela mesma não seja uma data
+  // já consumida (nextOccurrence pode ficar para trás de registered/skipped).
+  if (schedule.nextOccurrence && schedule.nextOccurrence >= todayStr) return schedule.nextOccurrence
+  return getNextOccurrences(schedule, 24).find(d => d >= todayStr) || nextDate
 }
 
 // Aglutina a lista de agendamentos em "grupos" de exibição (somente visual — não toca dados):
@@ -1867,8 +1873,19 @@ export default function SchedulePanel() {
     return ids
   }, [gerencialGroups])
 
+  // "Zerado" = valor base E valor EFETIVO da próxima ocorrência iguais a zero. Um agendamento
+  // de base 0 com override de valor na ocorrência (provisões, ocorrência editada) NÃO é zerado —
+  // ele entra nos saldos via occEfetiva, então esconder aqui o fazia sumir da aba sem sumir do
+  // breakdown "Como chegamos aqui". Mesma leitura efetiva já usada no filtro de mín/máx abaixo.
+  const isZeroed = (s) => {
+    if (Number(s.amount) !== 0) return false
+    const next = getNextOccurrences(s, 1)[0]
+    return !next || Number(occEfetiva(s, next).amount) === 0
+  }
+
   const rawPending = useMemo(() => schedules.filter(s => getNextOccurrences(s, 1).length > 0), [schedules, getNextOccurrences])
-  const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => Number(s.amount) !== 0), [rawPending, showZeroed])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allPending = useMemo(() => showZeroed ? rawPending : rawPending.filter(s => !isZeroed(s)), [rawPending, showZeroed, getNextOccurrences])
 
   // Pertence ao perfil ativo? Em "Tudo" (activeProfileId nulo) sempre true.
   // Caso contrário, mostra se a conta pertence ao perfil OU não está vinculada a
@@ -1919,7 +1936,7 @@ export default function SchedulePanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allSchedules, invoiceFaturaKeys, activeProfileId, allAccounts]
   )
-  const displayFaturaPayments = showZeroed ? faturaPaymentSchedules : faturaPaymentSchedules.filter(s => Number(s.amount) !== 0)
+  const displayFaturaPayments = showZeroed ? faturaPaymentSchedules : faturaPaymentSchedules.filter(s => !isZeroed(s))
   const pendingFaturaPayments = displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   // Cartões de crédito ativos (do perfil) para o seletor da aba Cartão.
@@ -1975,7 +1992,7 @@ export default function SchedulePanel() {
   const isSavingsOrigem = (s) => allAccounts.find(a => a.id === s.accountId)?.type === 'savings'
   const gerencialSomente = gerencialResgates.filter(s => !isSavingsOrigem(s))
 
-  const displayGerencial = showZeroed ? gerencialSomente : gerencialSomente.filter(s => Number(s.amount) !== 0)
+  const displayGerencial = showZeroed ? gerencialSomente : gerencialSomente.filter(s => !isZeroed(s))
   const pendingGerencial = displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   // Aba "Contas Anuais": movimentações (transfers) das contas poupança (type 'savings') — tanto
@@ -1999,7 +2016,7 @@ export default function SchedulePanel() {
     [allSchedules, savingsIds, activeProfileId, allAccounts]
   )
 
-  const displayContasAnuais = showZeroed ? contasAnuais : contasAnuais.filter(s => Number(s.amount) !== 0)
+  const displayContasAnuais = showZeroed ? contasAnuais : contasAnuais.filter(s => !isZeroed(s))
   const pendingContasAnuais = displayContasAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
 
   const filteredSchedules = useMemo(() => {
@@ -2030,8 +2047,9 @@ export default function SchedulePanel() {
   }, [schedules, viewFilter, getNextOccurrences, raAccountIds])
 
   const displaySchedules = useMemo(
-    () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => Number(s.amount) !== 0),
-    [filteredSchedules, showZeroed]
+    () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => !isZeroed(s)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filteredSchedules, showZeroed, getNextOccurrences]
   )
 
   // Filtros em tempo real (data / descrição / categoria / valor) sobre a lista já filtrada por período
