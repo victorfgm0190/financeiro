@@ -295,6 +295,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // habilita um campo OPCIONAL de categoria para classificar o aporte nos relatórios.
   const isTransferToAplicacao = !!transferToAcc?.contaAplicacao && !isDepositToReserva && !isWithdrawFromReserva
 
+  // Transferência já vinculada a um bem imobilizado (entrada à vista de um bem). Diferente da
+  // transferência comum, ela CARREGA categoria e favorecido: quem os grava é o modal "Registrar
+  // Entrada à Vista", e a categoria o backend também grava em /api/bem/[id]/registrar-entrada.
+  // Sem esta exceção o formulário escondia os dois campos e ainda zerava a categoria ao salvar —
+  // a entrada registrada perdia a classificação na primeira edição do lançamento.
+  const isTransferDeBem = form.type === 'transfer' && !!initial?.bemId
+
   // Transferência entre perfis diferentes (CPF↔CNPJ): habilita categorias por visão (PARTE 1).
   const fromProfileId = transferFromAcc?.profileId || null
   const toProfileId = transferToAcc?.profileId || null
@@ -433,8 +440,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     }
 
     // Categoria só é mantida em transferências quando o destino é conta de aplicação
-    // financeira (aporte categorizado). Transferências comuns nunca carregam categoria.
-    if (form.type === 'transfer' && !isTransferToAplicacao) {
+    // financeira (aporte categorizado) ou quando a transferência é a entrada à vista de um bem.
+    // Transferências comuns nunca carregam categoria.
+    if (form.type === 'transfer' && !isTransferToAplicacao && !isTransferDeBem) {
       txData.categoryId = null
     }
 
@@ -1173,6 +1181,33 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 comum (invisível nos relatórios).
               </p>
             </div>
+          )}
+          {isTransferDeBem && (
+            <>
+              <div>
+                <label className="label">Categoria</label>
+                <SearchableSelect
+                  options={categoryOpts}
+                  value={form.categoryId}
+                  onChange={onCategoryChange}
+                  placeholder="Sem categoria"
+                  ungroupedLast
+                  ungroupedLabel="Sem grupo"
+                />
+              </div>
+              <div>
+                <label className="label">Favorecido</label>
+                <FavorecidoAutocomplete
+                  value={form.payee}
+                  onChange={onPayeeChange}
+                  suggestions={sortedPayees}
+                />
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Esta transferência é a entrada à vista de um bem — por isso carrega categoria e
+                  favorecido, ao contrário de uma transferência comum.
+                </p>
+              </div>
+            </>
           )}
           {isInterProfileTransfer && (
             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
