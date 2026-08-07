@@ -7,9 +7,13 @@ import {
 
 // POST /api/bem/[id]/registrar-entrada — registra a entrada à vista do bem.
 //
-// Cada item de `transferencias` é de um dos dois tipos:
-//   • { transferencia_id } → vincula um lançamento/transferência já existente ao bem;
-//   • { bem_origem_id }    → trade-in: um bem antigo dado como parte do pagamento.
+// Cada item de `transferencias` é de um dos dois tipos, e eles afetam o SALDO do bem de forma
+// diferente — é a distinção central deste endpoint:
+//   • { transferencia_id } → vincula um lançamento já existente ao bem. NÃO mexe no saldo: a
+//     transferência já creditou a conta do bem quando foi criada.
+//   • { bem_origem_id }    → trade-in: um bem antigo dado como parte do pagamento. MEXE no
+//     saldo, porque não existe lançamento por trás dele (a perda/ganho nasce com
+//     account_id = NULL justamente para não mover saldo).
 //
 // No trade-in o bem antigo é liquidado: perda/ganho = valor_venda − valor_nota_fiscal, o saldo
 // é reduzido pelo valor negociado e a conta é marcada como vendida apontando para o bem novo.
@@ -52,19 +56,34 @@ export default async function handler(req, res) {
     }
 
     const resultado = await withTransaction(async (q) => {
-      let entradaTotal = 0
+      // Os dois tipos de item entram no total exibido, mas SÓ o trade-in mexe no saldo do bem.
+      // Uma transferência já creditou a conta do bem quando foi criada (applyTransferEffect no
+      // AppContext credita toAccountId, e o sync persiste esse balance), então somá-la de novo
+      // aqui contava o mesmo dinheiro duas vezes. Para a transferência este endpoint é só o
+      // vínculo (`bem_id` no lançamento) + o registro no histórico.
+      let entradaTotalTransferencias = 0
+      let entradaTotalTradeIn = 0
+      let jaVinculadas = 0
       const bensAntigos = []
 
       for (const item of itens) {
         const valor = round2(Number(item.valor))
-        entradaTotal = round2(entradaTotal + valor)
 
         if (item.transferencia_id) {
-          await q(
+          entradaTotalTransferencias = round2(entradaTotalTransferencias + valor)
+          // Idempotência: só vincula o que ainda não aponta para ESTE bem. Sem a guarda, chamar
+          // o endpoint duas vezes com a mesma transferência gravava uma segunda movimentação
+          // 'entrada_venda' e duplicava a linha no histórico do bem.
+          const vinculadas = await q(
             `UPDATE lancamentos SET bem_id = $2, category_id = COALESCE($3, category_id)
-               WHERE id = $1`,
+               WHERE id = $1 AND (bem_id IS NULL OR bem_id <> $2)
+             RETURNING id`,
             [item.transferencia_id, bemId, item.categoria_id || null],
           )
+          if (vinculadas.length === 0) {
+            jaVinculadas++
+            continue
+          }
           await registrarMovimentacao(q, {
             bemId,
             tipo: 'entrada_venda',
@@ -76,6 +95,8 @@ export default async function handler(req, res) {
           })
           continue
         }
+
+        entradaTotalTradeIn = round2(entradaTotalTradeIn + valor)
 
         const [antigo] = await q(`SELECT * FROM contas WHERE id = $1`, [item.bem_origem_id])
         const valorNF = num(antigo.valor_nota_fiscal)
@@ -139,16 +160,38 @@ export default async function handler(req, res) {
         })
       }
 
-      const saldoBemAnterior = num(bem.balance)
-      const saldoBemNovo = round2(saldoBemAnterior + entradaTotal)
-      await q(`UPDATE contas SET balance = $2 WHERE id = $1`, [bemId, saldoBemNovo])
+      // `balance = balance + $2` em vez de ler-somar-gravar: o valor antigo vinha de um SELECT
+      // feito FORA desta transação (linha do `SELECT * FROM contas` lá em cima), então duas
+      // chamadas concorrentes perdiam uma das somas. Com a soma no próprio UPDATE o cálculo é
+      // atômico. Com trade-in zerado o UPDATE é aritmeticamente inócuo e serve só para ler o
+      // saldo corrente de dentro da transação.
+      const [contaBem] = await q(
+        `UPDATE contas SET balance = balance + $2 WHERE id = $1 RETURNING balance`,
+        [bemId, entradaTotalTradeIn],
+      )
+      const saldoBemNovo = round2(num(contaBem?.balance))
+      const saldoBemAnterior = round2(saldoBemNovo - entradaTotalTradeIn)
 
-      return { entradaTotal, saldoBemAnterior, saldoBemNovo, bensAntigos }
+      return {
+        entradaTotal: round2(entradaTotalTransferencias + entradaTotalTradeIn),
+        entradaTotalTransferencias,
+        entradaTotalTradeIn,
+        jaVinculadas,
+        saldoBemAnterior,
+        saldoBemNovo,
+        bensAntigos,
+      }
     })
 
     return res.json({
       success: true,
+      // Soma dos DOIS tipos — é o valor da entrada como um todo, que é o que a UI exibe.
+      // O saldo, porém, só se mexe pelo trade-in: `entrada_total` ≠ (saldo − saldo_anterior)
+      // sempre que houver transferência, e isso é o comportamento correto.
       entrada_total: resultado.entradaTotal,
+      entrada_transferencias: resultado.entradaTotalTransferencias,
+      entrada_trade_in: resultado.entradaTotalTradeIn,
+      transferencias_ja_vinculadas: resultado.jaVinculadas,
       bem: {
         id: bemId,
         nome: bem.name,
