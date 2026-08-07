@@ -40,39 +40,49 @@ export function statusParcela(parcela) {
   return 'aberta'
 }
 
-// Monta as edições a aplicar (via updateTransaction) nas transferências escolhidas ao registrar
-// uma entrada à vista. Campo vazio é OMITIDO — o modal não pode sobrescrever com "nada" o
-// favorecido ou a categoria que o lançamento já tinha. Transferência sem nenhuma mudança
-// efetiva não entra na lista, para não disparar update inútil.
-//
-// A categoria o backend já grava no lançamento (registrar-entrada faz
-// `category_id = COALESCE($3, category_id)`); espelhá-la aqui é o que impede o sync
-// diferencial — que compara contra o estado React — de reenviar a categoria antiga depois.
 // Transferências que o modal de entrada à vista pode oferecer para um bem: as que CREDITARAM a
-// conta dele (`toAccountId === contaId`) e ainda não foram vinculadas a nenhum bem.
+// conta dele (`toAccountId === contaId`).
 //
 // O recorte por `toAccountId` é o mesmo que a correção do endpoint assumiu — essas transferências
 // já somaram ao saldo do bem quando foram criadas, então registrar a entrada apenas as vincula,
 // sem mexer no saldo. Oferecer uma transferência que creditou OUTRA conta quebraria essa premissa:
 // o saldo do bem ficaria menor que a entrada declarada.
+//
+// As já vinculadas (`bemId` preenchido) CONTINUAM na lista, marcadas com um selo e desmarcadas
+// por padrão: reprocessá-las é como se completa o favorecido/categoria de uma entrada registrada
+// antes desses campos existirem. Escondê-las tornava esse conserto impossível pela UI.
 export function transferenciasElegiveisEntrada(transacoes, contaId) {
   return (transacoes || []).filter(
-    t => t.type === 'transfer' && t.toAccountId === contaId && !t.bemId,
+    t => t.type === 'transfer' && t.toAccountId === contaId,
   )
 }
 
-// `bemId` marca a transferência como já vinculada. O backend acabou de gravar isso em
-// lancamentos.bem_id, mas o estado React não recarrega sozinho — sem espelhar, reabrir o modal
-// na mesma sessão reofereceria a transferência que acabou de ser registrada.
+// Monta as edições a aplicar (via updateTransaction) nas transferências escolhidas ao registrar
+// uma entrada à vista.
+//
+// REGRA: preenche apenas o que está EM BRANCO no lançamento. O que já foi classificado à mão
+// nunca é sobrescrito — registrar a entrada de um bem não é motivo para reescrever a categoria
+// ou o favorecido que alguém escolheu antes. Campo vazio no modal também é omitido (não apaga o
+// que existe), e transferência sem nenhuma mudança efetiva sai da lista.
+//
+// Este espelho tem que casar EXATAMENTE com o `COALESCE(category_id, $3)` do endpoint: se aqui a
+// categoria nova entrasse por cima de uma existente, o sync diferencial — que compara contra o
+// estado React — reenviaria ela por cima da que o banco preservou.
+//
+// `bemId` marca a transferência como vinculada. O backend grava isso em lancamentos.bem_id, mas
+// o estado React não recarrega sozinho — sem espelhar, o selo "Já vinculada" só apareceria
+// depois de um reload.
 export function montarAjustesEntrada({ transacoes, escolhidas, favorecido, bemId = null }) {
   const payee = (favorecido || '').trim()
   return transacoes
     .filter(t => t.id in escolhidas)
     .map(t => {
       const mudancas = {}
-      if (payee) mudancas.payee = payee
-      if (escolhidas[t.id]) mudancas.categoryId = escolhidas[t.id]
-      if (bemId) mudancas.bemId = bemId
+      if (payee && !t.payee) mudancas.payee = payee
+      if (escolhidas[t.id] && !t.categoryId) mudancas.categoryId = escolhidas[t.id]
+      // Só quando o vínculo muda de fato — reprocessar uma transferência já deste bem não
+      // precisa gerar update.
+      if (bemId && t.bemId !== bemId) mudancas.bemId = bemId
       return { id: t.id, mudancas }
     })
     .filter(a => Object.keys(a.mudancas).length > 0)

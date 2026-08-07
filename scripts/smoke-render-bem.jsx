@@ -139,12 +139,21 @@ render('RegistrarEntradaModal',
 // `favorecidos` tem default [] — o caso acima cobre a ausência da prop.
 render('RegistrarEntradaModal (com favorecidos)',
   <RegistrarEntradaModal bem={BEM} transacoes={TXS} contas={CONTAS} favorecidos={['Shopping Car Londrina', 'Banco Itaú']} onCancel={noop} onSuccess={noop} onErro={noop} />,
-  ['Favorecido', 'Shopping Car Londrina', 'Aplicado a todas as transferências selecionadas'])
+  ['Favorecido', 'Shopping Car Londrina', 'que estão SEM favorecido'])
+
+// Já vinculada: continua na lista, com selo e desmarcada por padrão.
+render('RegistrarEntradaModal (transferência já vinculada)',
+  <RegistrarEntradaModal
+    bem={BEM}
+    transacoes={[{ ...TXS[0], bemId: 'acc_bem_1', payee: 'Fornecedor X' }]}
+    contas={CONTAS} onCancel={noop} onSuccess={noop} onErro={noop}
+  />,
+  ['Já vinculada', 'Fornecedor X', 'Entrada Nubank'])
 
 // Sem candidatas, o modal precisa explicar o critério — senão a lista vazia parece bug.
 render('RegistrarEntradaModal (sem transferências elegíveis)',
   <RegistrarEntradaModal bem={BEM} transacoes={[]} contas={CONTAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
-  ['Nenhuma transferência disponível', 'TIGGO 5X PRO', 'ainda não foram vinculadas'])
+  ['Nenhuma transferência disponível', 'TIGGO 5X PRO', 'feitas '])
 
 render('ParametrizarBemModal',
   <ParametrizarBemModal conta={CONTAS[1]} categorias={CATEGORIAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
@@ -191,6 +200,31 @@ eq('ajustes: bemId sozinho já gera update (vínculo é mudança real)',
   montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: '' }, favorecido: '', bemId: 'acc_bem_1' }),
   [{ id: 'tx1', mudancas: { bemId: 'acc_bem_1' } }])
 
+// Regra "preenche só o que está em branco" — tem que casar com o COALESCE(category_id, $3)
+// do endpoint, senão o sync diferencial reenvia por cima do que o banco preservou.
+const TXS_PREENCHIDAS = [
+  { id: 'p1', payee: 'Fornecedor X', categoryId: 'cat_do_usuario', bemId: null },
+  { id: 'p2', payee: '', categoryId: '', bemId: null },
+  { id: 'p3', payee: 'Fornecedor X', categoryId: '', bemId: null },
+  { id: 'p4', payee: 'Fornecedor X', categoryId: 'cat_do_usuario', bemId: 'acc_bem_1' },
+]
+const todas = { p1: 'c3', p2: 'c3', p3: 'c3', p4: 'c3' }
+eq('regra: não sobrescreve payee nem categoria já preenchidos',
+  montarAjustesEntrada({ transacoes: TXS_PREENCHIDAS, escolhidas: { p1: 'c3' }, favorecido: 'Shopping Car', bemId: 'acc_bem_1' }),
+  [{ id: 'p1', mudancas: { bemId: 'acc_bem_1' } }])
+eq('regra: preenche os dois quando ambos vazios',
+  montarAjustesEntrada({ transacoes: TXS_PREENCHIDAS, escolhidas: { p2: 'c3' }, favorecido: 'Shopping Car', bemId: 'acc_bem_1' }),
+  [{ id: 'p2', mudancas: { payee: 'Shopping Car', categoryId: 'c3', bemId: 'acc_bem_1' } }])
+eq('regra: preenche só a categoria quando o payee já existe',
+  montarAjustesEntrada({ transacoes: TXS_PREENCHIDAS, escolhidas: { p3: 'c3' }, favorecido: 'Shopping Car', bemId: 'acc_bem_1' }),
+  [{ id: 'p3', mudancas: { categoryId: 'c3', bemId: 'acc_bem_1' } }])
+eq('regra: já vinculada e completa não gera update nenhum',
+  montarAjustesEntrada({ transacoes: TXS_PREENCHIDAS, escolhidas: { p4: 'c3' }, favorecido: 'Shopping Car', bemId: 'acc_bem_1' }), [])
+eq('regra: lote misto aplica caso a caso',
+  montarAjustesEntrada({ transacoes: TXS_PREENCHIDAS, escolhidas: todas, favorecido: 'Shopping Car', bemId: 'acc_bem_1' })
+    .map(a => [a.id, Object.keys(a.mudancas).sort().join('+')]),
+  [['p1', 'bemId'], ['p2', 'bemId+categoryId+payee'], ['p3', 'bemId+categoryId']])
+
 // Recorte das transferências oferecidas pelo modal (a mesma função que BemDetail usa).
 const TXS_FILTRO = [
   { id: 'a', type: 'transfer', toAccountId: 'acc_bem_1', bemId: null },
@@ -199,8 +233,8 @@ const TXS_FILTRO = [
   { id: 'd', type: 'expense', toAccountId: 'acc_bem_1', bemId: null },   // não é transferência
   { id: 'e', type: 'transfer', toAccountId: 'acc_bem_1', bemId: null },
 ]
-eq('filtro: só transfer, para a conta do bem, ainda não vinculada',
-  transferenciasElegiveisEntrada(TXS_FILTRO, 'acc_bem_1').map(t => t.id), ['a', 'e'])
+eq('filtro: só transfer para a conta do bem — inclui as já vinculadas',
+  transferenciasElegiveisEntrada(TXS_FILTRO, 'acc_bem_1').map(t => t.id), ['a', 'c', 'e'])
 eq('filtro: bem sem transferências fica vazio',
   transferenciasElegiveisEntrada(TXS_FILTRO, 'acc_bem_9').map(t => t.id), [])
 

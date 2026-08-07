@@ -71,16 +71,29 @@ export default async function handler(req, res) {
 
         if (item.transferencia_id) {
           entradaTotalTransferencias = round2(entradaTotalTransferencias + valor)
-          // Idempotência: só vincula o que ainda não aponta para ESTE bem. Sem a guarda, chamar
-          // o endpoint duas vezes com a mesma transferência gravava uma segunda movimentação
-          // 'entrada_venda' e duplicava a linha no histórico do bem.
-          const vinculadas = await q(
-            `UPDATE lancamentos SET bem_id = $2, category_id = COALESCE($3, category_id)
-               WHERE id = $1 AND (bem_id IS NULL OR bem_id <> $2)
-             RETURNING id`,
+
+          // Estado ANTES da escrita: é ele que decide se esta transferência já era deste bem.
+          // A guarda de idempotência não pode mais viver no WHERE do UPDATE — o modal agora
+          // oferece transferências já vinculadas justamente para completar o que ficou em
+          // branco, e um WHERE que as excluísse tornaria esse conserto impossível.
+          const [antes] = await q(
+            `SELECT bem_id FROM lancamentos WHERE id = $1`, [item.transferencia_id],
+          )
+          const jaEraDesteBem = antes?.bem_id === bemId
+
+          // `COALESCE(category_id, $3)` — o valor EXISTENTE ganha; o do modal só preenche
+          // quando o lançamento está sem categoria. (Era `COALESCE($3, category_id)`, que fazia
+          // o oposto e sobrescrevia a classificação feita à mão.) O favorecido segue por conta
+          // do frontend, com a mesma regra, em montarAjustesEntrada.
+          await q(
+            `UPDATE lancamentos SET bem_id = $2, category_id = COALESCE(category_id, $3)
+               WHERE id = $1`,
             [item.transferencia_id, bemId, item.categoria_id || null],
           )
-          if (vinculadas.length === 0) {
+
+          // Movimentação só na PRIMEIRA vinculação: sem isso, reprocessar para preencher o
+          // favorecido duplicaria a linha 'entrada_venda' no histórico do bem.
+          if (jaEraDesteBem) {
             jaVinculadas++
             continue
           }

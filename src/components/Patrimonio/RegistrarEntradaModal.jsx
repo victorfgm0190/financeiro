@@ -160,7 +160,7 @@ export default function RegistrarEntradaModal({
             <p className="text-xs text-gray-600 py-3 px-3 text-center">
               {semCandidatas
                 ? 'Nenhuma transferência disponível. Só aparecem aqui transferências feitas '
-                  + `para a conta "${bem.nome}" que ainda não foram vinculadas a um bem.`
+                  + `para a conta "${bem.nome}".`
                 : 'Nenhuma transferência encontrada para essa busca.'}
             </p>
           )}
@@ -172,11 +172,19 @@ export default function RegistrarEntradaModal({
                   <input type="checkbox" className="mt-1 accent-blue-500" checked={marcada} onChange={() => toggle(t)} />
                   <span className="flex-1 min-w-0">
                     <span className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-gray-200 truncate">{t.description || 'Transferência'}</span>
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm text-gray-200 truncate">{t.description || 'Transferência'}</span>
+                        {t.bemId && (
+                          <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+                            Já vinculada
+                          </span>
+                        )}
+                      </span>
                       <span className="text-sm text-gray-200 shrink-0">{fmt(Math.abs(Number(t.amount) || 0))}</span>
                     </span>
                     <span className="block text-xs text-gray-600 truncate">
                       {fmtData(t.date)} · {nomeConta(t.accountId)} → {nomeConta(t.toAccountId)}
+                      {t.payee && ` · ${t.payee}`}
                     </span>
                   </span>
                 </label>
@@ -205,8 +213,8 @@ export default function RegistrarEntradaModal({
           placeholder="Ex: Shopping Car Londrina"
         />
         <p className="text-xs text-gray-600 mt-1">
-          Aplicado a todas as transferências selecionadas. Em branco, mantém o favorecido atual
-          de cada lançamento.
+          Preenche as transferências selecionadas que estão SEM favorecido. As que já têm um
+          não são alteradas — o mesmo vale para a categoria.
         </p>
       </div>
 
