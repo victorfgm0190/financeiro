@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../../../_db.js'
 import { requireAuth } from '../../../_auth.js'
 import {
   getRouteId, num, round2, hoje, isIsoDate, fail,
-  calcularRateio, criarLancamentoCategorizado, registrarMovimentacao,
+  calcularRateio, criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
 } from '../../../_bem.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
@@ -231,6 +231,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/financiamento/parcela/[id]/pagar]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

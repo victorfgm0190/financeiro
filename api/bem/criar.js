@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
   genId, num, round2, fail, serializarBem,
-  categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM,
+  categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM, explicarErro,
 } from '../_bem.js'
 
 // POST /api/bem/criar — cadastro inicial de um bem imobilizado.
@@ -93,6 +93,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/bem/criar]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

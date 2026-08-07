@@ -195,6 +195,64 @@ async function runSchemaStatements(query) {
     await query(`ALTER TABLE bem_movimentacoes ADD COLUMN IF NOT EXISTS ${col} ${type}`)
   }
   await query(`CREATE INDEX IF NOT EXISTS idx_bem_mov_bem_id ON bem_movimentacoes (bem_id)`)
+
+  await normalizarColunasIdParaTexto(query)
+}
+
+// Toda coluna de id do módulo guarda id no formato do app — 'cat_1786063187890', 'acc_...',
+// 'tx_bem_...' — nunca um UUID. Elas são declaradas TEXT logo acima, mas
+// `ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` são no-op quando o objeto já
+// existe, INCLUSIVE quando existe com o tipo errado. Num banco onde essas colunas foram
+// criadas como UUID (migração aplicada à mão no console, fora do repo) o DDL inteiro passa
+// sem erro e só a escrita quebra, com:
+//   invalid input syntax for type uuid: "cat_1786063187890"
+// — o que faz POST /api/bem/criar devolver 500 na hora de parametrizar o bem. Aqui as
+// reconvertemos para TEXT. uuid→text é lossless, e o passo é idempotente: num banco já
+// correto o SELECT não devolve nenhuma coluna uuid e nenhum ALTER roda.
+//
+// Escopo de propósito restrito às colunas que este módulo cria. `contas.id`,
+// `categorias.id` e `lancamentos.id` são compartilhados com o resto do app e não são
+// alterados aqui.
+const COLUNAS_ID_TEXT = [
+  ['contas', 'bem_destino_id'],
+  ['contas', 'categoria_perda_bem_id'],
+  ['contas', 'categoria_ganho_bem_id'],
+  ['contas', 'categoria_prestacao_id'],
+  ['contas', 'categoria_taxa_finan_id'],
+  ['lancamentos', 'bem_id'],
+  ['agendamentos', 'financing_installment_id'],
+  ['financing', 'id'],
+  ['financing', 'bem_id'],
+  ['financing', 'conta_divida_id'],
+  ['financing', 'conta_origem_id'],
+  ['financing_installments', 'id'],
+  ['financing_installments', 'financing_id'],
+  ['financing_installments', 'schedule_id'],
+  ['bem_movimentacoes', 'id'],
+  ['bem_movimentacoes', 'bem_id'],
+  ['bem_movimentacoes', 'bem_origem_id'],
+  ['bem_movimentacoes', 'categoria_id'],
+  ['bem_movimentacoes', 'parcela_id'],
+  ['bem_movimentacoes', 'lancamento_id'],
+]
+
+async function normalizarColunasIdParaTexto(query) {
+  const tabelas = [...new Set(COLUNAS_ID_TEXT.map(([t]) => t))]
+  const rows = await query(
+    `SELECT table_name, column_name, data_type
+       FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = ANY($1)`,
+    [tabelas],
+  )
+  const tipoDe = new Map(rows.map(r => [`${r.table_name}.${r.column_name}`, r.data_type]))
+
+  for (const [tabela, col] of COLUNAS_ID_TEXT) {
+    if (tipoDe.get(`${tabela}.${col}`) !== 'uuid') continue
+    // USING é obrigatório: sem ele o Postgres recusa uuid→text por não haver cast implícito.
+    await query(`ALTER TABLE ${tabela} ALTER COLUMN ${col} TYPE TEXT USING ${col}::text`)
+    console.log(`[bem/schema] ${tabela}.${col}: uuid → text`)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -380,3 +438,17 @@ export function serializarParcela(p) {
 }
 
 export const fail = (res, status, error) => res.status(status).json({ success: false, error })
+
+// 22P02 = invalid_text_representation. Dentro deste módulo isso significa, na prática, uma
+// coluna de id ainda tipada como uuid recebendo um id do app ('cat_1786063187890'). Quem
+// conserta é o ALTER de normalizarColunasIdParaTexto, dentro de ensureBemSchema — que os
+// endpoints não chamam (custo por cold start, ver comentário do DDL). Sem esta dica o usuário
+// vê só o erro cru do Postgres e não tem como saber que a saída é reaplicar a migração.
+export function explicarErro(err) {
+  const msg = err?.message ?? String(err)
+  if (err?.code === '22P02' && /type uuid/i.test(msg)) {
+    return `${msg} — uma coluna de id do módulo de bem ainda está tipada como uuid. `
+      + `Rode POST /api/bem/migrate (ou recarregue o app) para reconvertê-la para TEXT.`
+  }
+  return msg
+}

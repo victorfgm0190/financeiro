@@ -1,6 +1,6 @@
 import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
-import { getRouteId, num, fail } from '../../_bem.js'
+import { getRouteId, num, fail, explicarErro } from '../../_bem.js'
 
 // GET /api/bem/[id]/movimentacoes — histórico do bem em ordem cronológica: entradas à vista,
 // trade-ins (com perda/ganho) e pagamentos de parcela (principal × juros).
@@ -89,6 +89,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/bem/[id]/movimentacoes]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

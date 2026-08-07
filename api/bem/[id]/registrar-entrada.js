@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import {
   getRouteId, num, round2, hoje, fail,
-  criarLancamentoCategorizado, registrarMovimentacao,
+  criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
 } from '../../_bem.js'
 
 // POST /api/bem/[id]/registrar-entrada — registra a entrada à vista do bem.
@@ -161,6 +161,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/bem/[id]/registrar-entrada]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

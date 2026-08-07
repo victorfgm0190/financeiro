@@ -1,7 +1,7 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
-  getRouteId, num, round2, fail, SELECT_PARCELAS, serializarParcela,
+  getRouteId, num, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
 } from '../_bem.js'
 
 // GET /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
@@ -71,6 +71,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/financiamento/[id]]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

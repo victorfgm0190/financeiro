@@ -1,6 +1,6 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-import { ensureBemSchema, fail } from '../_bem.js'
+import { ensureBemSchema, fail, explicarErro } from '../_bem.js'
 
 // /api/bem/migrate — dispara e confere o schema do módulo de bem imobilizado.
 //
@@ -27,24 +27,48 @@ const COLUNAS_ESPERADAS = {
 
 const TABELAS_ESPERADAS = ['financing', 'financing_installments', 'bem_movimentacoes']
 
+// Colunas que precisam ser TEXT porque guardam ids no formato do app ('cat_...', 'acc_...').
+// Uma delas como uuid é o que produz "invalid input syntax for type uuid" ao parametrizar um
+// bem — o DDL sozinho não denuncia isso, porque ADD COLUMN IF NOT EXISTS não retipa.
+const COLUNAS_TEXT_OBRIGATORIO = new Set([
+  'contas.bem_destino_id',
+  'contas.categoria_perda_bem_id', 'contas.categoria_ganho_bem_id',
+  'contas.categoria_prestacao_id', 'contas.categoria_taxa_finan_id',
+  'lancamentos.bem_id', 'agendamentos.financing_installment_id',
+])
+
 async function inspecionar() {
   const alvos = Object.entries(COLUNAS_ESPERADAS)
   const rows = await query(
-    `SELECT table_name, column_name
+    `SELECT table_name, column_name, data_type
        FROM information_schema.columns
       WHERE table_schema = current_schema()
         AND table_name = ANY($1)`,
     [alvos.map(([t]) => t)],
   )
   const presentes = new Set(rows.map(r => `${r.table_name}.${r.column_name}`))
+  const tipoDe = new Map(rows.map(r => [`${r.table_name}.${r.column_name}`, r.data_type]))
 
   const colunas = {}
   let faltando = []
   for (const [tabela, cols] of alvos) {
     const ausentes = cols.filter(c => !presentes.has(`${tabela}.${c}`))
-    colunas[tabela] = { total: cols.length, presentes: cols.length - ausentes.length, faltando: ausentes }
+    colunas[tabela] = {
+      total: cols.length,
+      presentes: cols.length - ausentes.length,
+      faltando: ausentes,
+      tipos: Object.fromEntries(
+        cols.filter(c => presentes.has(`${tabela}.${c}`))
+          .map(c => [c, tipoDe.get(`${tabela}.${c}`)]),
+      ),
+    }
     faltando = faltando.concat(ausentes.map(c => `${tabela}.${c}`))
   }
+
+  // Tipo errado é tão fatal quanto coluna ausente, e bem menos óbvio: reportamos junto.
+  const tipoErrado = [...COLUNAS_TEXT_OBRIGATORIO]
+    .filter(k => presentes.has(k) && tipoDe.get(k) !== 'text')
+    .map(k => `${k} é ${tipoDe.get(k)}, esperado text`)
 
   const tabRows = await query(
     `SELECT table_name FROM information_schema.tables
@@ -55,9 +79,10 @@ async function inspecionar() {
   const tabelasFaltando = TABELAS_ESPERADAS.filter(t => !tabPresentes.has(t))
 
   return {
-    ok: faltando.length === 0 && tabelasFaltando.length === 0,
+    ok: faltando.length === 0 && tabelasFaltando.length === 0 && tipoErrado.length === 0,
     colunas,
     tabelas: { esperadas: TABELAS_ESPERADAS, faltando: tabelasFaltando },
+    tipoErrado,
     faltando: faltando.concat(tabelasFaltando.map(t => `tabela ${t}`)),
   }
 }
@@ -84,6 +109,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/bem/migrate]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

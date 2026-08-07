@@ -1,7 +1,7 @@
 import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import {
-  getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela,
+  getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
 } from '../../_bem.js'
 
 // GET /api/financiamento/[id]/parcelas?page=1&limit=20 — lista paginada das parcelas.
@@ -57,6 +57,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/financiamento/[id]/parcelas]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

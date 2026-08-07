@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
   genId, num, round2, isIsoDate, fail,
-  montarProvisao, criarAgendamentosParcelas, ACCOUNT_TYPE_DIVIDA,
+  montarProvisao, criarAgendamentosParcelas, ACCOUNT_TYPE_DIVIDA, explicarErro,
 } from '../_bem.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
@@ -161,6 +161,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/financiamento/criar]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }

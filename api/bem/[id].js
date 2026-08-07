@@ -1,6 +1,6 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-import { getRouteId, num, fail, serializarBem } from '../_bem.js'
+import { getRouteId, num, fail, serializarBem, explicarErro } from '../_bem.js'
 
 // GET /api/bem/[id] — bem com saldo atual, categorias parametrizadas, status de venda e o
 // financiamento vinculado (null se ainda não houver).
@@ -48,6 +48,6 @@ export default async function handler(req, res) {
     })
   } catch (err) {
     console.error('[api/bem/[id]]', err.message)
-    return fail(res, 500, err.message)
+    return fail(res, 500, explicarErro(err))
   }
 }
