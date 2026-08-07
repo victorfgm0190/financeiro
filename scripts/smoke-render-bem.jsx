@@ -14,7 +14,7 @@ import FinanciamentoModal from '../src/components/Patrimonio/FinanciamentoModal'
 import PagarParcelaModal from '../src/components/Patrimonio/PagarParcelaModal'
 import RegistrarEntradaModal from '../src/components/Patrimonio/RegistrarEntradaModal'
 import ParametrizarBemModal from '../src/components/Patrimonio/ParametrizarBemModal'
-import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada } from '../src/components/Patrimonio/bemUtils'
+import { calcularRateio, statusParcela, fmtData, montarAjustesEntrada, transferenciasElegiveisEntrada } from '../src/components/Patrimonio/bemUtils'
 
 // Payloads no formato EXATO devolvido por api/bem/* e api/financiamento/*.
 const BEM = {
@@ -141,6 +141,11 @@ render('RegistrarEntradaModal (com favorecidos)',
   <RegistrarEntradaModal bem={BEM} transacoes={TXS} contas={CONTAS} favorecidos={['Shopping Car Londrina', 'Banco Itaú']} onCancel={noop} onSuccess={noop} onErro={noop} />,
   ['Favorecido', 'Shopping Car Londrina', 'Aplicado a todas as transferências selecionadas'])
 
+// Sem candidatas, o modal precisa explicar o critério — senão a lista vazia parece bug.
+render('RegistrarEntradaModal (sem transferências elegíveis)',
+  <RegistrarEntradaModal bem={BEM} transacoes={[]} contas={CONTAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
+  ['Nenhuma transferência disponível', 'TIGGO 5X PRO', 'ainda não foram vinculadas'])
+
 render('ParametrizarBemModal',
   <ParametrizarBemModal conta={CONTAS[1]} categorias={CATEGORIAS} onCancel={noop} onSuccess={noop} onErro={noop} />,
   ['Valor da Nota Fiscal', 'Perda de Venda de Bem', 'Patrimônio', 'Transporte'])
@@ -179,6 +184,25 @@ eq('ajustes: nada preenchido não gera update',
 eq('ajustes: ignora transferência não selecionada',
   montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx3: 'c4' }, favorecido: '' }),
   [{ id: 'tx3', mudancas: { categoryId: 'c4' } }])
+eq('ajustes: bemId marca a transferência como vinculada',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: 'c3' }, favorecido: 'Shopping Car', bemId: 'acc_bem_1' }),
+  [{ id: 'tx1', mudancas: { payee: 'Shopping Car', categoryId: 'c3', bemId: 'acc_bem_1' } }])
+eq('ajustes: bemId sozinho já gera update (vínculo é mudança real)',
+  montarAjustesEntrada({ transacoes: TXS_AJUSTE, escolhidas: { tx1: '' }, favorecido: '', bemId: 'acc_bem_1' }),
+  [{ id: 'tx1', mudancas: { bemId: 'acc_bem_1' } }])
+
+// Recorte das transferências oferecidas pelo modal (a mesma função que BemDetail usa).
+const TXS_FILTRO = [
+  { id: 'a', type: 'transfer', toAccountId: 'acc_bem_1', bemId: null },
+  { id: 'b', type: 'transfer', toAccountId: 'acc_cc_1', bemId: null },   // credita outra conta
+  { id: 'c', type: 'transfer', toAccountId: 'acc_bem_1', bemId: 'acc_bem_1' }, // já vinculada
+  { id: 'd', type: 'expense', toAccountId: 'acc_bem_1', bemId: null },   // não é transferência
+  { id: 'e', type: 'transfer', toAccountId: 'acc_bem_1', bemId: null },
+]
+eq('filtro: só transfer, para a conta do bem, ainda não vinculada',
+  transferenciasElegiveisEntrada(TXS_FILTRO, 'acc_bem_1').map(t => t.id), ['a', 'e'])
+eq('filtro: bem sem transferências fica vazio',
+  transferenciasElegiveisEntrada(TXS_FILTRO, 'acc_bem_9').map(t => t.id), [])
 
 console.log(falhas === 0 ? '\nSMOKE DE RENDER OK' : `\n${falhas} FALHA(S)`)
 process.exit(falhas === 0 ? 0 : 1)

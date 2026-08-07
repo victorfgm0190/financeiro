@@ -35,6 +35,14 @@ export default function RegistrarEntradaModal({
     [contas, bem.id],
   )
 
+  // Quem já chega aqui é só transferência que creditou a conta deste bem e ainda não foi
+  // vinculada — o recorte é feito por quem monta o modal. O filtro de tipo fica como guarda
+  // para o componente não depender disso.
+  const semCandidatas = useMemo(
+    () => transacoes.filter(t => t.type === 'transfer').length === 0,
+    [transacoes],
+  )
+
   const transferencias = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     return transacoes
@@ -113,7 +121,7 @@ export default function RegistrarEntradaModal({
       // (mesmo motivo do sincronizarSaldo em BemDetail). O FAVORECIDO é só do frontend: o
       // endpoint não o toca, e chega ao banco pelo sync normal.
       // Campo vazio não entra em `mudancas` — não sobrescreve o que já existe no lançamento.
-      const ajustes = montarAjustesEntrada({ transacoes, escolhidas, favorecido })
+      const ajustes = montarAjustesEntrada({ transacoes, escolhidas, favorecido, bemId: bem.id })
       onSuccess(resposta, { ajustes, favorecido: favorecido.trim() })
     } catch (err) {
       onErro(err.message)
@@ -149,7 +157,12 @@ export default function RegistrarEntradaModal({
 
         <div className="max-h-56 overflow-y-auto space-y-1 border border-gray-800 rounded-lg p-2">
           {transferencias.length === 0 && (
-            <p className="text-xs text-gray-600 py-3 text-center">Nenhuma transferência encontrada.</p>
+            <p className="text-xs text-gray-600 py-3 px-3 text-center">
+              {semCandidatas
+                ? 'Nenhuma transferência disponível. Só aparecem aqui transferências feitas '
+                  + `para a conta "${bem.nome}" que ainda não foram vinculadas a um bem.`
+                : 'Nenhuma transferência encontrada para essa busca.'}
+            </p>
           )}
           {transferencias.map(t => {
             const marcada = t.id in escolhidas

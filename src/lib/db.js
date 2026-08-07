@@ -335,6 +335,12 @@ export const rowToTx = (r) => ({
   dateCartao: toDateStr(r.date_cartao),
   description: r.description || '',
   categoryId: r.category_id || '',
+  // Vínculo com o bem imobilizado (coluna criada por ensureBemSchema em api/_bem.js). Somente
+  // leitura, pelo mesmo motivo de valorNotaFiscal em rowToAccount: quem grava é
+  // POST /api/bem/[id]/registrar-entrada, e como upsertRows deriva as colunas das chaves da row
+  // produzida por txToRow, incluir bem_id LÁ apagaria o vínculo do banco a cada sync.
+  // Serve para o modal de entrada à vista não reoferecer transferências já vinculadas.
+  bemId: r.bem_id || null,
   payee: r.payee || '',
   costCenter: r.cost_center || '',
   notes: r.notes || '',

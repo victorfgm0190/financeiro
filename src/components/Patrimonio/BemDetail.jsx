@@ -11,6 +11,7 @@ import FinanciamentoModal from './FinanciamentoModal'
 import PagarParcelaModal from './PagarParcelaModal'
 import RegistrarEntradaModal from './RegistrarEntradaModal'
 import ParametrizarBemModal from './ParametrizarBemModal'
+import { transferenciasElegiveisEntrada } from './bemUtils'
 
 const ABAS = [
   { id: 'informacoes', label: 'Informações', icone: Info },
@@ -170,6 +171,11 @@ export default function BemDetail({ conta, onClose }) {
     a => !['credit', 'asset', 'liability', 'gerencial'].includes(a.type),
   )
 
+  const transferenciasDoBem = useMemo(
+    () => transferenciasElegiveisEntrada(profileTransactions, conta.id),
+    [profileTransactions, conta.id],
+  )
+
   // Mesma ordenação do autocomplete de TransactionForm: os mais usados primeiro.
   const favorecidosOrdenados = useMemo(() => {
     const usos = {}
@@ -305,7 +311,7 @@ export default function BemDetail({ conta, onClose }) {
         {modal === 'entrada' && bem && (
           <RegistrarEntradaModal
             bem={bem}
-            transacoes={profileTransactions}
+            transacoes={transferenciasDoBem}
             contas={accounts}
             favorecidos={favorecidosOrdenados}
             onCancel={() => setModal(null)}

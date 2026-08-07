@@ -48,7 +48,23 @@ export function statusParcela(parcela) {
 // A categoria o backend já grava no lançamento (registrar-entrada faz
 // `category_id = COALESCE($3, category_id)`); espelhá-la aqui é o que impede o sync
 // diferencial — que compara contra o estado React — de reenviar a categoria antiga depois.
-export function montarAjustesEntrada({ transacoes, escolhidas, favorecido }) {
+// Transferências que o modal de entrada à vista pode oferecer para um bem: as que CREDITARAM a
+// conta dele (`toAccountId === contaId`) e ainda não foram vinculadas a nenhum bem.
+//
+// O recorte por `toAccountId` é o mesmo que a correção do endpoint assumiu — essas transferências
+// já somaram ao saldo do bem quando foram criadas, então registrar a entrada apenas as vincula,
+// sem mexer no saldo. Oferecer uma transferência que creditou OUTRA conta quebraria essa premissa:
+// o saldo do bem ficaria menor que a entrada declarada.
+export function transferenciasElegiveisEntrada(transacoes, contaId) {
+  return (transacoes || []).filter(
+    t => t.type === 'transfer' && t.toAccountId === contaId && !t.bemId,
+  )
+}
+
+// `bemId` marca a transferência como já vinculada. O backend acabou de gravar isso em
+// lancamentos.bem_id, mas o estado React não recarrega sozinho — sem espelhar, reabrir o modal
+// na mesma sessão reofereceria a transferência que acabou de ser registrada.
+export function montarAjustesEntrada({ transacoes, escolhidas, favorecido, bemId = null }) {
   const payee = (favorecido || '').trim()
   return transacoes
     .filter(t => t.id in escolhidas)
@@ -56,6 +72,7 @@ export function montarAjustesEntrada({ transacoes, escolhidas, favorecido }) {
       const mudancas = {}
       if (payee) mudancas.payee = payee
       if (escolhidas[t.id]) mudancas.categoryId = escolhidas[t.id]
+      if (bemId) mudancas.bemId = bemId
       return { id: t.id, mudancas }
     })
     .filter(a => Object.keys(a.mudancas).length > 0)
