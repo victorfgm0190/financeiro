@@ -46,6 +46,9 @@ export default function BemDetail({ conta, onClose }) {
   const [movimentacoes, setMovimentacoes] = useState(null)
   const [loadingMov, setLoadingMov] = useState(false)
   const [erroMov, setErroMov] = useState(null)
+  // Separado da lista de propósito: um bem que só foi ORIGEM de trade-in tem histórico próprio
+  // vazio e mesmo assim tem os valores travados. Quem decide é o servidor (ver movimentacoes.js).
+  const [valoresTravados, setValoresTravados] = useState(false)
 
   const [confirmandoEstorno, setConfirmandoEstorno] = useState(false)
   const [estornando, setEstornando] = useState(false)
@@ -122,7 +125,12 @@ export default function BemDetail({ conta, onClose }) {
     setLoadingMov(true)
     setErroMov(null)
     getMovimentacoes(conta.id)
-      .then(r => setMovimentacoes(r.movimentacoes || []))
+      .then(r => {
+        setMovimentacoes(r.movimentacoes || [])
+        // `??` e não `||`: num backend anterior a este campo o valor é undefined, e aí vale o
+        // critério antigo (só o histórico próprio) em vez de destravar tudo.
+        setValoresTravados(r.valores_travados ?? (r.movimentacoes || []).length > 0)
+      })
       .catch(err => setErroMov(err.message))
       .finally(() => setLoadingMov(false))
   }, [movimentacoes, conta.id])
@@ -380,7 +388,7 @@ export default function BemDetail({ conta, onClose }) {
                 parcelasResumo={resumoParcelas}
                 onCriarFinanciamento={() => setModal('financiamento')}
                 onRegistrarEntrada={() => setModal('entrada')}
-                temMovimentacoes={(movimentacoes || []).length > 0}
+                temMovimentacoes={valoresTravados}
                 onSalvarValores={salvarValores}
                 onErro={(m) => avisar(m, 'error')}
               />

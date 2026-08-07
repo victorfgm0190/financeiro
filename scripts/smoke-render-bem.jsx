@@ -79,14 +79,20 @@ const CATEGORIAS = [
 const noop = () => {}
 let falhas = 0
 
-function render(nome, elemento, esperados = []) {
+// `ausentes` existe para o caso em que o que importa é o que a UI NÃO oferece: um botão de editar
+// num bem travado passa em qualquer asserção de presença e só falha no 409, depois de digitar.
+function render(nome, elemento, esperados = [], ausentes = []) {
   try {
     // renderToString separa nós de texto adjacentes com <!-- -->; remove antes de asserir.
     const html = renderToString(elemento).replace(/<!--\s*-->/g, '')
     const faltando = esperados.filter(t => !html.includes(t))
-    if (faltando.length) {
+    const indevidos = ausentes.filter(t => html.includes(t))
+    if (faltando.length || indevidos.length) {
       falhas++
-      console.log(`FAIL ${nome} — não renderizou: ${faltando.join(' | ')}`)
+      const partes = []
+      if (faltando.length) partes.push(`não renderizou: ${faltando.join(' | ')}`)
+      if (indevidos.length) partes.push(`renderizou indevidamente: ${indevidos.join(' | ')}`)
+      console.log(`FAIL ${nome} — ${partes.join('; ')}`)
     } else {
       console.log(`ok   ${nome}`)
     }
@@ -128,6 +134,15 @@ render('PatrimonioEditavel (com movimentações → bloqueado)',
 render('PatrimonioEditavel (valor escolhido em branco → avisa fallback)',
   <PatrimonioEditavel bem={BEM} temMovimentacoes={false} onSalvar={noop} onErro={noop} />,
   ['não preenchido', 'o Patrimônio usa o saldo'])
+
+// Bem sem histórico PRÓPRIO que foi origem de um trade-in: saldo e lista vazios, mas os valores
+// estão travados assim mesmo, porque a NF dele foi a base da perda/ganho lançada no outro bem.
+// Quem devolve esse recorte é `valores_travados` de GET /movimentacoes — aqui só chega o booleano.
+// Se "Editar" reaparecer, a tela volta a oferecer o que o endpoint recusa com 409.
+render('PatrimonioEditavel (origem de trade-in, sem histórico próprio → bloqueado)',
+  <PatrimonioEditavel bem={BEM_ANTIGO} temMovimentacoes onSalvar={noop} onErro={noop} />,
+  ['calculado pelo histórico', 'Usar no Patrimônio'],
+  ['Editar'])
 
 render('BemInfoTab (com card de valores)',
   <BemInfoTab

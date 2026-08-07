@@ -39,6 +39,16 @@ export default async function handler(req, res) {
       [bemId],
     )
 
+    // O bem também pode ter sido a ORIGEM de um trade-in. Isso não aparece na lista acima, que é
+    // o histórico DELE — mas é o mesmo recorte que trava a edição de valores em
+    // POST /atualizar-valores (`bem_id OR bem_origem_id`): a nota fiscal dele foi a base da
+    // perda/ganho que já virou lançamento em OUTRO bem. Sem devolver isto, a aba Informações
+    // mostrava "Editar" num bem que o servidor recusa com 409 depois de o usuário digitar.
+    const [{ n: comoOrigem }] = await query(
+      `SELECT COUNT(*)::int AS n FROM bem_movimentacoes WHERE bem_origem_id = $1`,
+      [bemId],
+    )
+
     // A categoria de juros não fica na movimentação (ela guarda a de prestação); busca uma vez.
     const [conta] = await query(
       `SELECT categoria_taxa_finan_id FROM contas WHERE id = $1`, [bemId],
@@ -94,6 +104,10 @@ export default async function handler(req, res) {
       bem_id: bemId,
       bem_nome: bem.name,
       total: movimentacoes.length,
+      total_como_origem: comoOrigem,
+      // Espelha exatamente a condição do 409 de POST /atualizar-valores, para a UI travar pelo
+      // mesmo critério do servidor em vez de reimplementá-lo pela metade.
+      valores_travados: movimentacoes.length > 0 || comoOrigem > 0,
       movimentacoes,
     })
   } catch (err) {
