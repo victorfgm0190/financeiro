@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Info, ListOrdered, History, Settings2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import Modal from '../shared/Modal'
@@ -45,13 +45,21 @@ export default function BemDetail({ conta, onClose }) {
     setToast({ mensagem, variante })
   }, [])
 
+  // `accounts` é lido por ref, não por dependência: updateAccount refaz o array
+  // incondicionalmente (AppContext.jsx:1271, `.map()` sem comparar valor), então usá-lo como
+  // dep aqui fechava um ciclo — accounts novo → sincronizarSaldo nova → carregar novo → o
+  // efeito de baixo redispara → sincronizarSaldo chama updateAccount → accounts novo. Cada
+  // volta repunha loading = true e a tela nunca saía de "Carregando bem...".
+  const accountsRef = useRef(accounts)
+  useEffect(() => { accountsRef.current = accounts }, [accounts])
+
   // Mantém o saldo do estado do app alinhado ao que o backend acabou de gravar. Sem isso, um
   // full-sync (reconexão) reenviaria o saldo antigo do React e sobrescreveria o do banco.
   const sincronizarSaldo = useCallback((contaId, saldo) => {
     if (!contaId || saldo == null) return
-    if (!accounts.some(a => a.id === contaId)) return
+    if (!accountsRef.current.some(a => a.id === contaId)) return
     updateAccount(contaId, { balance: saldo })
-  }, [accounts, updateAccount])
+  }, [updateAccount])
 
   const carregar = useCallback(async () => {
     setLoading(true)

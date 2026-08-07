@@ -3,15 +3,30 @@ import { authHeaders, clearTokenAndRedirect } from './api'
 // Cliente dos endpoints de Bem Imobilizado / Financiamento (api/bem/*, api/financiamento/*).
 // Todos exigem Bearer token — daí passar sempre por aqui em vez de fetch() solto.
 
+// Sem isso o fetch fica pendurado indefinidamente quando a função serverless não responde:
+// a promise nunca settla, o `finally` de quem chamou nunca roda e a tela trava no spinner
+// sem nem exibir erro. Com o timeout vira uma falha visível, que a UI já sabe tratar.
+const TIMEOUT_MS = 10000
+
 async function request(url, options = {}) {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(options.headers || {}),
-    },
-  })
+  let res
+  try {
+    res = await fetch(url, {
+      ...options,
+      signal: options.signal ?? AbortSignal.timeout(TIMEOUT_MS),
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders(),
+        ...(options.headers || {}),
+      },
+    })
+  } catch (err) {
+    // DOMException 'signal timed out' não diz nada ao usuário — a mensagem chega crua na tela.
+    if (err?.name === 'TimeoutError') {
+      throw new Error(`Tempo esgotado (${TIMEOUT_MS / 1000}s) ao chamar ${url}`, { cause: err })
+    }
+    throw err
+  }
 
   // Token expirado/inválido: volta pro login em vez de deixar a tela num estado sem sessão.
   if (res.status === 401) {
