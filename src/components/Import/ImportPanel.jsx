@@ -3,15 +3,17 @@ import {
   Upload, FileText, Check, AlertCircle, Wand2, Save,
   Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil,
 } from 'lucide-react'
-import { parseFile, normalizeDate, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
+import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
-import { loadAccountMappings, fetchTransactionHistory } from '../../lib/db'
+import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, installmentKey } from '../../lib/installments'
 import { extractLearnKeyword } from '../../lib/descMatch'
 import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
+import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
+import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, computeDupMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -36,95 +38,6 @@ function readFileAsText(file) {
     reader.onerror = reject
     reader.readAsText(file, 'UTF-8')
   })
-}
-
-// Detecta se o texto é CSV do Itaú (linha de cabeçalho "data,lançamento,valor")
-function isItauCSV(text) {
-  const clean = text.replace(/^\uFEFF/, '')
-  return /^data[,;]lan[çc]amento[,;]valor/im.test(clean)
-}
-
-function parseItauCSV(text, categories = []) {
-  const clean = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
-
-  // Localizar linha de cabeçalho
-  const headerIdx = lines.findIndex(l => /^data[,;]lan[çc]amento[,;]valor/i.test(l))
-  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
-
-  // Mês de referência do cabeçalho (linhas de preâmbulo antes da tabela de lançamentos).
-  const faturaMY = extractItauFaturaMonth(lines.slice(0, headerIdx))
-
-  // Categoria de estorno (primeira cujo nome contenha "estorno"); vazio se não houver.
-  const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
-
-  const sep = lines[headerIdx].includes(';') ? ';' : ','
-  const parsed = []
-  let idCtr = 0
-
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g, ''))
-    if (cols.length < 3) continue
-
-    const date = normalizeDate(cols[0])
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
-
-    const desc = cols[1] || ''
-    if (!desc) continue
-
-    const rawVal = parseFloat(cols[2].replace(',', '.'))
-    if (isNaN(rawVal) || rawVal === 0) continue
-
-    if (rawVal < 0) {
-      // Pagamento de fatura (negativo) → ignorar.
-      if (desc.toLowerCase().includes('pagamento efetuado')) continue
-      // Demais negativos = estorno → importar como RECEITA (valor absoluto),
-      // pré-classificado na categoria de estorno (se houver).
-      parsed.push({
-        _id: idCtr++,
-        date, description: desc, movimentacao: '', amount: Math.abs(rawVal),
-        isDeposit: true, type: 'income', selected: true, _isDuplicate: false,
-        categoryId: estornoCategoryId, payee: '', grupoGerencial: '',
-      })
-      continue
-    }
-
-    parsed.push({
-      _id: idCtr++,
-      date, description: desc, movimentacao: '', amount: rawVal,
-      isDeposit: false, type: 'expense', selected: true, _isDuplicate: false,
-      categoryId: '', payee: '', grupoGerencial: '',
-    })
-  }
-
-  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY }
-}
-
-// Valor do XLS do Itaú: já costuma vir como número. Aceita também string (formato pt-BR),
-// preservando o sinal. Retorna null quando não é um número válido.
-function parseXlsValor(v) {
-  if (typeof v === 'number') return isNaN(v) ? null : v
-  if (v == null) return null
-  const s = String(v).trim()
-  if (!s) return null
-  const neg = /-/.test(s)
-  const cleaned = s.replace(/[R$\s]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.').replace(/-/g, '')
-  const n = parseFloat(cleaned)
-  if (isNaN(n)) return null
-  return neg ? -n : n
-}
-
-// Converte a coluna "Parcelamento" (ex.: "Parcela 1 de 5") em sufixo "N/Total" na descrição,
-// para que o detector de parcelas (detectInstallment) reconheça o lançamento como parcelado —
-// mesmo caminho do CSV, cuja parcela já vem embutida na descrição.
-function mergeParcelaXls(desc, parc) {
-  if (!parc) return desc
-  const m = String(parc).match(/(\d{1,2})\s*de\s*(\d{1,2})/i)
-  if (!m) return desc
-  const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
-  if (!(total >= 2 && num >= 1 && num <= total)) return desc
-  if (detectInstallment(desc)) return desc // já tem padrão N/Total — não duplica
-  return `${desc} ${num}/${total}`.trim()
 }
 
 // Estorno de cartão (p/ categoria padrão): lançamento importado como RECEITA (valor positivo)
@@ -229,194 +142,17 @@ function EstornoConfigModal({ count, categories, updateSettings, onDecide, onClo
   )
 }
 
-// Parser do XLS/XLSX exportado pelo internet banking do Itaú (fatura de cartão). Recebe a matriz
-// Meses PT-BR → número (2 dígitos). Usado para extrair o mês da fatura do cabeçalho do Itaú.
-const MESES_PT = {
-  janeiro: '01', fevereiro: '02', marco: '03', abril: '04', maio: '05', junho: '06',
-  julho: '07', agosto: '08', setembro: '09', outubro: '10', novembro: '11', dezembro: '12',
-}
-const NOMES_MES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-
-// Rótulo amigável (ex.: "Agosto/2026") a partir de um YYYY-MM.
-function faturaMYLabel(my) {
-  if (!my || !/^\d{4}-\d{2}$/.test(my)) return ''
-  const [y, m] = my.split('-')
-  return `${NOMES_MES[parseInt(m, 10) - 1]}/${y}`
-}
-
-// Extrai o mês de REFERÊNCIA da fatura (YYYY-MM) do cabeçalho de um arquivo do Itaú. O cabeçalho
-// traz "Fatura Aberta - Agosto/2026" (o mês verdadeiro da fatura), enquanto as DATAS das compras
-// caem no mês anterior ao fechamento — por isso detectMainFatura (baseado na data) erra numa fatura
-// aberta. Procura primeiro "<Mês>/<Ano>"; como reforço, "Vencimento DD/MM/YYYY" (o mês do vencimento
-// é o mês da fatura). Retorna '' quando nada é encontrado.
-function extractItauFaturaMonth(texts) {
-  const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  const meses = Object.keys(MESES_PT).join('|')
-  const reMes = new RegExp(`\\b(${meses})\\b\\s*(?:de\\s*)?\\/?\\s*(\\d{4})`)
-  for (const raw of texts) {
-    const m = norm(raw).match(reMes)
-    if (m && MESES_PT[m[1]]) return `${m[2]}-${MESES_PT[m[1]]}`
-  }
-  for (const raw of texts) {
-    const v = norm(raw).match(/vencimento[^0-9]*(\d{2})\/(\d{2})\/(\d{4})/)
-    if (v) return `${v[3]}-${v[2]}`
-  }
-  return ''
-}
-
-// de células (parseFile, header:1, cellDates:true) e devolve o MESMO formato de parseItauCSV,
-// para o fluxo de conciliação seguir sem alteração.
-// Estrutura: linha de cabeçalho com "Data" (col 1); Lançamento (col 2), Parcelamento (col 3),
-// Valor (col 4) — colunas localizadas RELATIVAS à célula "Data" para tolerar deslocamentos.
-// Retorna também faturaMY (YYYY-MM) extraído do cabeçalho, p/ ancorar a fatura sem depender da data.
-function parseItauXLS(aoa, categories = []) {
-  if (!Array.isArray(aoa) || aoa.length === 0) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
-  const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
-
-  // Localiza a linha de cabeçalho: contém "Data" e "Valor". Guarda a coluna de "Data".
-  let headerIdx = -1, dataCol = -1
-  for (let i = 0; i < Math.min(aoa.length, 40); i++) {
-    const row = aoa[i] || []
-    const di = row.findIndex(c => norm(c) === 'data')
-    if (di !== -1 && row.some(c => norm(c) === 'valor')) { headerIdx = i; dataCol = di; break }
-  }
-  if (headerIdx === -1) return { rows: [], cardName: '', faturaStr: '', faturaMY: '' }
-
-  // Mês de referência a partir do cabeçalho (linhas acima da tabela de lançamentos).
-  const faturaMY = extractItauFaturaMonth(aoa.slice(0, headerIdx).flat())
-
-  const descCol = dataCol + 1, parcCol = dataCol + 2, valorCol = dataCol + 3
-  const estornoCategoryId = categories.find(c => (c.name || '').toLowerCase().includes('estorno'))?.id || ''
-  const parsed = []
-  let idCtr = 0
-
-  for (let i = headerIdx + 1; i < aoa.length; i++) {
-    const row = aoa[i] || []
-    const date = normalizeDate(row[dataCol])
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
-
-    const desc = String(row[descCol] ?? '').trim()
-    if (!desc) continue
-
-    const rawVal = parseXlsValor(row[valorCol])
-    if (rawVal == null || rawVal === 0) continue
-
-    const description = mergeParcelaXls(desc, row[parcCol])
-
-    if (rawVal < 0) {
-      // Pagamento de fatura (negativo) → ignorar; demais negativos = estorno → RECEITA (abs),
-      // pré-classificado na categoria de estorno (mesmas regras do CSV).
-      if (desc.toLowerCase().includes('pagamento efetuado')) continue
-      parsed.push({
-        _id: idCtr++,
-        date, description, movimentacao: '', amount: Math.abs(rawVal),
-        isDeposit: true, type: 'income', selected: true, _isDuplicate: false,
-        categoryId: estornoCategoryId, payee: '', grupoGerencial: '',
-      })
-      continue
-    }
-
-    parsed.push({
-      _id: idCtr++,
-      date, description, movimentacao: '', amount: rawVal,
-      isDeposit: false, type: 'expense', selected: true, _isDuplicate: false,
-      categoryId: '', payee: '', grupoGerencial: '',
-    })
-  }
-
-  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY }
-}
-
 function isDuplicate(row, existing) {
   return existing.some(t =>
     t.date === row.date &&
+    // Um estorno (income) NUNCA é duplicata da despesa que ele estorna: mesmo valor, mesma
+    // data e mesma descrição são justamente a assinatura do estorno.
+    (t.type || 'expense') === (row.type || 'expense') &&
     Math.abs(t.amount - row.amount) < 0.01 &&
     (t.description || '').trim().toLowerCase() === (row.description || '').trim().toLowerCase() &&
     (t.accountId === row.accountId || t.toAccountId === row.accountId ||
      (row.toAccountId && (t.accountId === row.toAccountId || t.toAccountId === row.toAccountId)))
   )
-}
-
-// ── Conciliação inteligente (Melhoria 1) ──────────────────────────────────────
-// Normaliza texto (maiúsculas, sem acentos) e mede similaridade: 1 = idêntico, 0.9 = um
-// contém o outro, senão Jaccard de palavras (% de palavras em comum). Mesmo critério do
-// backend (/api/transaction-history) para a busca por fornecedor.
-function normText(s) {
-  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim().replace(/\s+/g, ' ')
-}
-function descSimilarity(a, b) {
-  const x = normText(a), y = normText(b)
-  if (!x || !y) return 0
-  if (x === y) return 1
-  if (x.includes(y) || y.includes(x)) return 0.9
-  const wx = x.split(' ').filter(Boolean), wy = y.split(' ').filter(Boolean)
-  const sx = new Set(wx), sy = new Set(wy)
-  let inter = 0
-  for (const w of sx) if (sy.has(w)) inter++
-  const union = new Set([...wx, ...wy]).size
-  return union ? inter / union : 0
-}
-
-// Remove o sufixo de PARCELA do final da descrição (1–2 dígitos / 1–2 dígitos, com ou sem
-// espaços antes). Cobre o lado do sistema ("CLINICA HIGA-CT LT01/03", "CEU INFANTIL-CT   01/06")
-// e o do Itaú já convertido ("Clinica Higa-ct Lt 1/3"). Sem o padrão no final, não altera nada
-// (lançamentos sem parcela ficam intactos).
-function stripParcelaSuffix(s) {
-  return String(s || '').replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
-}
-// Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela e aplica a
-// normalização de texto existente (sem acento, maiúsculas, espaços colapsados). Assim o lançamento
-// do sistema (parcela colada "01/03") casa com o do Itaú ("1/3").
-function normalizeDescForMatch(desc) {
-  return normText(stripParcelaSuffix(desc))
-}
-
-// Nível de duplicata, testado em ordem (primeiro match vence). Candidatos = lançamentos da
-// MESMA fatura do cartão. Retorna { level, tx }: level = 'certeza' | 'provavel' | 'possivel' |
-// null e tx = o lançamento do BANCO que casou (null quando não há match).
-//   certeza : date_cartao igual + valor ±0,50 + descrição idêntica
-//   provavel: date_cartao igual + valor ±0,50 + descrição similar (≥70%)
-//   possivel: valor ±0,50 + descrição similar (≥70%), sem considerar data
-function computeDupMatch(row, candidates) {
-  const none = { level: null, tx: null }
-  if (!candidates || candidates.length === 0) return none
-  const amt = Number(row.amount) || 0
-  const rowCardDate = row._dateCartao || row.date
-  const amtClose = (t) => Math.abs((Number(t.amount) || 0) - amt) <= 0.50
-  const dateEq = (t) => !!rowCardDate && (t.dateCartao || t.date) === rowCardDate
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return { level: 'certeza', tx: t }
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'provavel', tx: t }
-  for (const t of candidates) if (amtClose(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'possivel', tx: t }
-  return none
-}
-
-// Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (valor
-// ±0,50 + descrição), 1:1 guloso. Níveis: certeza (idêntica), provável (≥0,70), possível
-// (≥0,50). Pré-marca a ação em certeza/provável (Itaú→Ignorar, sistema→Manter); possível só
-// recebe badge. Reusa descSimilarity/normText. Devolve cópias anotadas com _crossLevel.
-function crossMatchConciliacao(soItau, soSistema) {
-  const itauOut = soItau.map(i => ({ ...i }))
-  const sysOut = soSistema.map(s => ({ ...s }))
-  const used = new Set()
-  for (const it of itauOut) {
-    let best = null, bestRank = 0, bestSim = -1
-    for (const s of sysOut) {
-      if (used.has(s.id)) continue
-      if (Math.abs((Number(it.amount) || 0) - (Number(s.amount) || 0)) > 0.50) continue
-      // Compara as descrições SEM o sufixo de parcela (sistema "01/03" vs Itaú "1/3").
-      const sim = descSimilarity(stripParcelaSuffix(it.description), stripParcelaSuffix(s.description))
-      const rank = normalizeDescForMatch(it.description) === normalizeDescForMatch(s.description) ? 3 : sim >= 0.7 ? 2 : sim >= 0.5 ? 1 : 0
-      if (rank === 0) continue
-      if (rank > bestRank || (rank === bestRank && sim > bestSim)) { best = s; bestRank = rank; bestSim = sim }
-    }
-    if (!best) continue
-    used.add(best.id)
-    const level = bestRank === 3 ? 'certeza' : bestRank === 2 ? 'provavel' : 'possivel'
-    it._crossLevel = level; best._crossLevel = level
-    if (level !== 'possivel') { it.acao = 'ignorar'; best.acao = 'manter' }
-  }
-  return { soItau: itauOut, soSistema: sysOut }
 }
 
 // Badge do nível de cruzamento (reconciliação).
@@ -1215,6 +951,9 @@ const TOLERANCIA_VALOR = 0.50
 // Parcela já no banco que corresponde à linha importada: mesma chave de colisão e valor
 // dentro da tolerância. Havendo mais de uma candidata, vence a de menor diferença.
 function matchParcelaExistente(index, row, accountId) {
+  // O índice só tem despesas. Um estorno com sufixo de parcela na descrição casaria com a
+  // parcela que ele estorna e viraria UPDATE dela — em vez de um lançamento novo.
+  if ((row.type || 'expense') !== 'expense') return null
   const k = collisionKeyFromFull(keyOfImportRow(row, accountId))
   const candidatas = k ? index.get(k) : null
   if (!candidatas?.length) return null
@@ -1309,6 +1048,100 @@ function InstallmentControl({ installment, description, onChange }) {
   )
 }
 
+// Diferença tolerada entre o arquivo e o banco. Acima disso a importação perdeu (ou duplicou)
+// lançamento e a fatura NÃO fecha com o extrato.
+const TOLERANCIA_CONFERENCIA = 0.01
+
+// Relatório de conferência pós-importação. Duas checagens independentes:
+//   1) parse   — total que o Itaú declara no cabeçalho do arquivo × soma das linhas lidas;
+//   2) gravação — soma das linhas do arquivo × soma efetivamente gravada no Neon.
+// A segunda é a que pega estorno filtrado como duplicata, colisão de parcela que virou UPDATE
+// e sync que não chegou. Sem ela a fatura fecha errada em silêncio.
+function ConferenciaLinha({ label, valor, sub, tone }) {
+  return (
+    <div className="flex-1 min-w-[8rem]">
+      <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+      <div className={`text-sm font-semibold ${tone || 'text-gray-200'}`}>{valor}</div>
+      {sub && <div className="text-[11px] text-gray-500">{sub}</div>}
+    </div>
+  )
+}
+
+function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
+  const { arquivo, banco, status, erro, totalDeclarado } = conferencia
+  const r2 = (n) => Math.round(n * 100) / 100
+  const diff = banco ? r2(banco.total - arquivo.total) : null
+  const diffParse = totalDeclarado != null ? r2(arquivo.total - totalDeclarado) : null
+  const parseOk = diffParse == null || Math.abs(diffParse) <= TOLERANCIA_CONFERENCIA
+
+  return (
+    <div className={`card space-y-3 border ${
+      status === 'divergente' ? 'border-red-500/40' : status === 'ok' ? 'border-emerald-500/40' : 'border-gray-800'
+    }`}>
+      <div className="flex items-center gap-2">
+        {status === 'ok' && <Check size={18} className="text-emerald-400" />}
+        {status === 'divergente' && <AlertCircle size={18} className="text-red-400" />}
+        <span className="font-medium text-sm">
+          {status === 'pendente' && 'Conferindo a fatura no banco…'}
+          {status === 'ok' && 'Fatura confere com o arquivo'}
+          {status === 'divergente' && 'Fatura NÃO confere com o arquivo'}
+          {status === 'erro' && 'Não foi possível conferir a fatura'}
+        </span>
+        <span className="text-xs text-gray-500">· {faturaMYLabel(conferencia.faturaMonthYear) || conferencia.faturaMonthYear}</span>
+        <div className="ml-auto flex items-center gap-3">
+          <button className="text-xs text-gray-500 hover:text-gray-300" onClick={onReconferir} disabled={status === 'pendente'}>
+            Reconferir
+          </button>
+          <button className="text-xs text-gray-500 hover:text-gray-300" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+
+      {status === 'erro' && <p className="text-xs text-red-400">{erro}</p>}
+
+      <div className="flex flex-wrap gap-4">
+        <ConferenciaLinha
+          label="Total do arquivo"
+          valor={fmt(arquivo.total)}
+          sub={`${arquivo.qtd} lançamento${arquivo.qtd !== 1 ? 's' : ''} · ${fmt(arquivo.despesas)} em despesas − ${fmt(arquivo.estornos)} em ${arquivo.qtdEstornos} estorno${arquivo.qtdEstornos !== 1 ? 's' : ''}`}
+        />
+        <ConferenciaLinha
+          label="Soma no banco"
+          valor={banco ? fmt(banco.total) : '—'}
+          sub={banco
+            ? `${banco.qtd} lançamento${banco.qtd !== 1 ? 's' : ''} · ${fmt(banco.despesas)} em despesas − ${fmt(banco.estornos)} em ${banco.qtdEstornos} estorno${banco.qtdEstornos !== 1 ? 's' : ''}`
+            : 'aguardando o banco…'}
+        />
+        <ConferenciaLinha
+          label="Diferença"
+          valor={diff == null ? '—' : fmt(diff)}
+          tone={diff == null ? '' : Math.abs(diff) > TOLERANCIA_CONFERENCIA ? 'text-red-400' : 'text-emerald-400'}
+          sub={diff == null ? '' : Math.abs(diff) > TOLERANCIA_CONFERENCIA
+            ? (diff < 0 ? 'faltam lançamentos no banco' : 'há lançamentos a mais no banco')
+            : 'dentro da tolerância de R$ 0,01'}
+        />
+      </div>
+
+      {diffParse != null && (
+        <p className={`text-xs ${parseOk ? 'text-gray-500' : 'text-amber-400'}`}>
+          {parseOk
+            ? `Leitura do arquivo conferida: bate com o total de ${fmt(totalDeclarado)} declarado pelo Itaú no cabeçalho.`
+            : `Atenção: o Itaú declara ${fmt(totalDeclarado)} no cabeçalho, mas as linhas lidas somam ${fmt(arquivo.total)} (${fmt(diffParse)} de diferença). Há linha no arquivo que o leitor não interpretou.`}
+        </p>
+      )}
+
+      {status === 'divergente' && banco && (
+        <p className="text-xs text-red-400">
+          {banco.qtd !== arquivo.qtd
+            ? `O banco tem ${banco.qtd} lançamento${banco.qtd !== 1 ? 's' : ''} contra ${arquivo.qtd} do arquivo`
+            : 'A quantidade bate, mas os valores divergem'}
+          {banco.qtdEstornos !== arquivo.qtdEstornos && ` — estornos: ${banco.qtdEstornos} no banco × ${arquivo.qtdEstornos} no arquivo`}
+          . Use a Conciliação de Fatura para localizar a diferença.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups,
@@ -1319,7 +1152,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
     reserveFunctions, settings, updateSettings, data,
-    isFaturaFechada,
+    isFaturaFechada, syncing,
   } = useApp()
 
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
@@ -1361,6 +1194,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
   const [estornoModal, setEstornoModal] = useState(null)
+  // Total que o Itaú declara no cabeçalho do arquivo aberto (null quando o formato não traz).
+  const [totalDeclarado, setTotalDeclarado] = useState(null)
+  // Conferência pós-importação. { accountId, faturaMonthYear, arquivo, totalDeclarado,
+  // banco, status: 'pendente'|'ok'|'divergente'|'erro', erro }
+  const [conferencia, setConferencia] = useState(null)
 
   // ── Modo Conciliação de Fatura ───────────────────────────────────────────
   const [conciliarMode, setConciliarMode] = useState(false)
@@ -1368,6 +1206,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [concSoItau, setConcSoItau] = useState([])      // itens do CSV ausentes no sistema
   const [concSoSistema, setConcSoSistema] = useState([])// lançamentos do sistema ausentes no CSV
   const [concError, setConcError] = useState('')
+  // Totais do arquivo conciliado (todas as linhas), base da conferência pós-conciliação.
+  const [concArquivoTotais, setConcArquivoTotais] = useState(null)
   const [concToast, setConcToast] = useState(null)
   const [concEditTx, setConcEditTx] = useState(null) // lançamento existente em edição (seção Conciliados)
   // Feature "Fatura encerrada": quando ligada, parcelas ausentes (Só no sistema, não-última) são
@@ -1475,6 +1315,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Origem Itaú (CSV ou XLS/XLSX do internet banking): fatura_ref fixa no mês de referência.
       // Dindin e CSV genérico (ITEM 8) calculam a fatura pelo fechamento (isItau=false).
       let isItau = false
+      // Total do cabeçalho do arquivo (só o XLS/XLSX do Itaú traz) — confere o próprio parse.
+      let declarado = null
 
       if (preParsed) {
         // Linhas já convertidas (ex.: CSV genérico após o mapeamento de colunas).
@@ -1508,6 +1350,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const itau = parseItauXLS(rawRows, categories)
         if (itau.rows.length > 0) {
           ;({ cardName, faturaStr, faturaMY, rows: parsed } = itau)
+          declarado = itau.totalDeclarado
           isItau = true
         } else {
           ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
@@ -1699,6 +1542,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const finish = (estornoCat) => {
         const herdados = applyEstornoInheritance(alignedRows, estornoCandidates(transactions, resolvedAccountId))
         const finalRows = estornoCat ? applyEstornoConfig(herdados, estornoCat, grupoD) : herdados
+        setTotalDeclarado(declarado)
+        setConferencia(null)
         setRows(finalRows)
         setCardInfo({ cardName, faturaStr })
         setMatchQueue(pendingMatches)
@@ -1847,19 +1692,29 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // a que já está no banco (a do extrato) — nunca a do CSV/classificação automática, que
     // rebaixava tudo para "D · Despesa" ao confirmar. O usuário ainda reclassifica à mão: o
     // valor editado (`_catEdit` / `_gerEdit`) prevalece sobre o do banco.
+    // Casamento 1:1 — um lançamento do banco só pode ser a duplicata de UMA linha do arquivo.
+    // Uma fatura traz cobranças gêmeas legítimas (a de 08/2026 tem duas "Payservice 5/5" de
+    // R$ 59,60 no mesmo dia); sem consumir o candidato, as duas casavam com o único lançamento
+    // salvo e AS DUAS eram descartadas como duplicata. Mesmo mecanismo do crossMatchConciliacao.
+    const usadosDb = new Set()
     return rows.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
       const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount)
-      if (collisionTx) return {
-        ...r,
-        categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
-        grupoGerencial: r._gerEdit ? r.grupoGerencial : (collisionTx.grupoGerencial || r.grupoGerencial),
-        _reservaFuncaoId: r._gerEdit ? r._reservaFuncaoId : (collisionTx.reservaFuncaoId || null),
-        _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false,
+      if (collisionTx) {
+        usadosDb.add(collisionTx.id)
+        return {
+          ...r,
+          categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
+          grupoGerencial: r._gerEdit ? r.grupoGerencial : (collisionTx.grupoGerencial || r.grupoGerencial),
+          _reservaFuncaoId: r._gerEdit ? r._reservaFuncaoId : (collisionTx.reservaFuncaoId || null),
+          _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false,
+        }
       }
-      // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura.
-      const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, cardTxsByFatura.get(r.faturaMonthYear) || [])
+      // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura ainda livres.
+      const candidatos = (cardTxsByFatura.get(r.faturaMonthYear) || []).filter(t => !usadosDb.has(t.id))
+      const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, candidatos)
+      if (dupTx) usadosDb.add(dupTx.id)
       const isCerteza = dupLevel === 'certeza'
       // Certeza: nunca selecionável. Provável/Possível: desmarcado por padrão, salvo se o
       // usuário forçar. Sem duplicata: segue o `selected` da linha.
@@ -2156,6 +2011,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // que o motor ignora (faturaCicloNoPassado). Os editados já passam por ensureGerencialState
       // via updateTransaction; este laço cobre também as parcelas futuras recém-criadas.
       gerencialTxIds.forEach(id => ensureGerencialState(id))
+      iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
       setEditingImport(null)
       setResult(toImport.length)
       setRows([])
@@ -2310,6 +2166,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (s) pending.push({ schedule: s, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate } })
     })
 
+    // Conferência: o arquivo diz quanto a fatura vale; o banco tem que dizer o mesmo.
+    iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
+
     if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(totalProcessed); setRows([]); setCollisionSkip(new Set()); return }
     setResult(totalProcessed)
     setRows([])
@@ -2354,6 +2213,51 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     else if (action === 'never') addRecurringMatchException(cur.tx.payee || cur.tx.description)
     setScheduleMatchQueue(q => q.slice(1))
   }
+
+  // ── Conferência pós-importação ────────────────────────────────────────────
+  // Total que a fatura selecionada precisa ter no banco depois da importação: TODAS as linhas
+  // do arquivo ancoradas neste mês — as importadas agora, as que já existiam (duplicatas) e as
+  // atualizadas por colisão. Parcelas de faturas futuras ficam de fora: pertencem a outros meses.
+  const arquivoTotais = useMemo(() => computeFileTotals(
+    rows.filter(r => !r._generated && (r.faturaMonthYear || faturaMonthYear) === faturaMonthYear)
+  ), [rows, faturaMonthYear])
+
+  // Abre a conferência. `arquivo`/`declarado` são passados explicitamente porque a chamada
+  // acontece no fim da importação, quando `rows` já foi limpo.
+  const iniciarConferencia = (accountId, faturaMY, arquivo, declarado) => {
+    if (!accountId || !faturaMY || !arquivo || arquivo.qtd === 0) return
+    setConferencia({
+      accountId, faturaMonthYear: faturaMY, arquivo,
+      totalDeclarado: declarado ?? null,
+      banco: null, status: 'pendente', erro: '',
+    })
+  }
+
+  // Consulta o Neon assim que o sync do lote assenta. O sync é debounced (500 ms) e o efeito do
+  // provider roda DEPOIS deste no mesmo commit, então `syncing` ainda pode estar false aqui: o
+  // atraso de 900 ms cobre a janela e é cancelado assim que `syncing` sobe. Offline (sync não
+  // roda) o timer dispara mesmo assim e a conferência acusa a diferença — que é a verdade.
+  useEffect(() => {
+    if (!conferencia || conferencia.status !== 'pendente' || syncing) return
+    let cancelado = false
+    const timer = setTimeout(() => {
+      fetchFaturaConferencia(conferencia.accountId, conferencia.faturaMonthYear)
+        .then(banco => {
+          if (cancelado) return
+          const diff = Math.abs(banco.total - conferencia.arquivo.total)
+          setConferencia(c => (c && c.status === 'pendente'
+            ? { ...c, banco, status: diff > TOLERANCIA_CONFERENCIA ? 'divergente' : 'ok' }
+            : c))
+        })
+        .catch(err => {
+          if (cancelado) return
+          setConferencia(c => (c && c.status === 'pendente'
+            ? { ...c, status: 'erro', erro: err?.message || 'Falha ao consultar o banco.' }
+            : c))
+        })
+    }, 900)
+    return () => { cancelado = true; clearTimeout(timer) }
+  }, [conferencia, syncing])
 
   const found = resolvedRows.length
   const dups = resolvedRows.filter(r => r._isDuplicate).length
@@ -2473,9 +2377,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Detecta o formato pelo tipo de arquivo: XLS/XLSX (internet banking) ou CSV do Itaú.
       const isXls = /\.xlsx?$/i.test(file.name)
       let csvRows
+      let declarado = null
       if (isXls) {
         const aoa = await parseFile(file)
-        csvRows = parseItauXLS(aoa, categories).rows
+        const itau = parseItauXLS(aoa, categories)
+        csvRows = itau.rows
+        declarado = itau.totalDeclarado
         if (csvRows.length === 0) {
           setConcError('Nenhum lançamento encontrado no XLS/XLSX. Verifique se é a fatura exportada pelo internet banking do Itaú.')
           return
@@ -2553,6 +2460,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         setConcSoSistema(cross.soSistema)
         setFaturaEncerrada(false)
         setConciliarMode(true)
+        // A conciliação recebe o arquivo INTEIRO: todas as linhas pertencem à fatura escolhida.
+        setTotalDeclarado(declarado)
+        setConcArquivoTotais(computeFileTotals(classificados))
+        setConferencia(null)
         setRows([])
         setResult(null)
       }
@@ -2788,6 +2699,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     const totalFinal = concTotais.sistema
     setConcToast(`Fatura conciliada. Total: ${fmt(totalFinal)}`)
+    // Conferência: a conciliação também precisa terminar com o banco batendo com o arquivo.
+    iniciarConferencia(selectedAccount, faturaMonthYear, concArquivoTotais, totalDeclarado)
     exitConciliacao()
   }
 
@@ -3298,6 +3211,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           onRegister={() => resolveScheduleMatch('register')}
           onKeep={() => resolveScheduleMatch('keep')}
           onNeverAsk={() => resolveScheduleMatch('never')}
+        />
+      )}
+
+      {/* Conferência pós-importação: arquivo × Neon. Fica visível até o usuário fechar. */}
+      {conferencia && (
+        <ConferenciaFaturaCard
+          conferencia={conferencia}
+          onReconferir={() => setConferencia(c => (c ? { ...c, banco: null, status: 'pendente', erro: '' } : c))}
+          onClose={() => setConferencia(null)}
         />
       )}
 

@@ -723,6 +723,10 @@ export function AppProvider({ children }) {
   const [initialized, setInitialized] = useState(false)
   const [dbStatus, setDbStatus] = useState('connecting')
   const [syncError, setSyncError] = useState(null) // mensagem visível quando um sync falha
+  // true entre uma alteração de `data` e a confirmação do Neon. Quem precisa LER o banco logo
+  // depois de escrever (conferência de fatura) espera este flag baixar — o sync é debounced,
+  // então uma leitura imediata pegaria o estado anterior.
+  const [syncing, setSyncing] = useState(false)
   const [activeProfileId, setActiveProfileId] = useState(null) // session-only, not persisted
   const prevDataRef = useRef(null)
   const syncTimerRef = useRef(null)
@@ -852,6 +856,7 @@ export function AppProvider({ children }) {
 
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
     syncTimerRef.current = setTimeout(async () => {
+      setSyncing(true)
       // Se full sync pedido (reconexão ou seed vazio), reseta prev para forçar push total
       if (fullSyncRef.current) {
         fullSyncRef.current = false
@@ -859,7 +864,7 @@ export function AppProvider({ children }) {
       }
 
       const prev = prevDataRef.current
-      if (!prev) return
+      if (!prev) { setSyncing(false); return }
 
       const tasks = []
 
@@ -900,6 +905,7 @@ export function AppProvider({ children }) {
 
       if (tasks.length === 0) {
         prevDataRef.current = data
+        setSyncing(false)
         return
       }
       try {
@@ -913,6 +919,8 @@ export function AppProvider({ children }) {
         console.error('[sync] falha ao sincronizar com o Neon:', err?.message || err)
         setDbStatus('local')
         setSyncError('Erro ao sincronizar dados com o servidor. Suas alterações estão salvas localmente e serão reenviadas automaticamente.')
+      } finally {
+        setSyncing(false)
       }
     }, 500)
 
@@ -5064,6 +5072,7 @@ export function AppProvider({ children }) {
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
       dbStatus,
       syncError,
+      syncing,
       dismissSyncError: () => setSyncError(null),
       getFinancialPeriod,
       getAccountSaldos,

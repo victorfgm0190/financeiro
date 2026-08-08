@@ -53,6 +53,13 @@ export async function fetchReserveFunctionTransactions(functionId, startDate, en
   return apiPost('/api/reserve-function-transactions', { functionId, startDate, endDate })
 }
 
+// Conferência de uma fatura de cartão direto no Neon: soma o que está gravado para
+// (cartão, fatura). Retorna { despesas, qtdDespesas, estornos, qtdEstornos, total, qtd }.
+// Usada na validação pós-importação, que compara este total com o do arquivo importado.
+export async function fetchFaturaConferencia(accountId, faturaMonthYear) {
+  return apiPost('/api/fatura-conferencia', { accountId, faturaMonthYear })
+}
+
 // Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
 export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId } = {}) {
   return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
