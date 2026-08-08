@@ -1,7 +1,7 @@
 // Helpers de parcelamento compartilhados entre a importação de fatura (ImportPanel)
 // e o "Editar Lançamento" (TransactionForm). Fonte única — antes viviam duplicados
 // dentro do ImportPanel.
-import { detectInstallment, normalizeInstallmentBase } from './installments.js'
+import { detectInstallment, normalizeInstallmentBase, installmentKey } from './installments.js'
 
 // serie_id: elo único de todas as parcelas de uma mesma compra. Gerado UMA vez na parcela
 // base/origem e propagado às filhas — nunca alterado depois. À vista → null.
@@ -184,4 +184,33 @@ export function buildSeries(tx, transactions, account, financialStartDay = 1) {
     })
   }
   return { base: prefix, total, siblings, missing }
+}
+
+// Ordinal de cada parcela entre as GÊMEAS do arquivo: linhas com a MESMA identidade de chave
+// (conta, base, num/total, centavos, mês da série) recebem 1, 2, 3… na ordem do extrato. Uma
+// fatura traz cobranças legitimamente idênticas — a de 08/2026 tem duas "Payservice 5/5" de
+// R$ 59,60 no mesmo dia — e sem o ordinal as duas geram a mesma installment_key: o índice único
+// (e o dedup de reconcileInstallmentKeys) deixa passar só a primeira, e a segunda vira UPDATE
+// dela em vez de um lançamento novo.
+//
+// A ordem do arquivo é a âncora de estabilidade: numa reimportação o Itaú lista as mesmas linhas
+// na mesma ordem, então a 1ª gêmea reencontra a #1 gravada e a 2ª reencontra a #2 — nenhuma das
+// duas vira lançamento extra. Só a 2ª em diante recebe ordinal; a 1ª fica sem, mantendo as
+// chaves já gravadas intactas.
+// `faturaMY` sobrepõe a fatura da linha — a conciliação trabalha com itens crus do arquivo,
+// que ainda não têm faturaMonthYear, e grava todos no mês de referência selecionado.
+export function assignInstallmentOccurrences(rows, accountId, faturaMY) {
+  const vistos = new Map()
+  return rows.map(row => {
+    if (!row._installment || (row.type || 'expense') !== 'expense') return row
+    const base = installmentKey({
+      accountId, description: row.description,
+      installmentNum: row._installment.num, installmentTotal: row._installment.total,
+      amount: row.amount, faturaMonthYear: faturaMY || row.faturaMonthYear, date: row.date,
+    })
+    if (!base) return row
+    const n = (vistos.get(base) || 0) + 1
+    vistos.set(base, n)
+    return n > 1 ? { ...row, _installmentOccurrence: n } : row
+  })
 }

@@ -15,7 +15,7 @@ import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from 
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, computeDupMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -618,6 +618,9 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
     reservaFuncaoId: row._reservaFuncaoId || null,
     installmentNum: row._installment?.num || null,
     installmentTotal: row._installment?.total || null,
+    // Ordinal entre gêmeas (2ª em diante) — sem ele a installment_key sai igual à da 1ª e o
+    // índice único absorve esta linha na outra.
+    installmentOccurrence: row._installmentOccurrence || null,
     serieId: row._serieId || null,
     _fromImport: true,
   }
@@ -903,6 +906,7 @@ function keyOfExistingTx(tx) {
     accountId: tx.accountId, description: tx.description,
     installmentNum: num, installmentTotal: total,
     amount: tx.amount, faturaMonthYear: tx.faturaMonthYear, date: tx.date,
+    installmentOccurrence: tx.installmentOccurrence,
   })
 }
 // installment_key PROSPECTIVA de uma linha de importação (o que txToRow gravaria no insert).
@@ -912,6 +916,7 @@ function keyOfImportRow(row, accountId) {
     accountId, description: row.description,
     installmentNum: row._installment.num, installmentTotal: row._installment.total,
     amount: row.amount, faturaMonthYear: row.faturaMonthYear, date: row.date,
+    installmentOccurrence: row._installmentOccurrence,
   })
 }
 // Chave da SÉRIE de parcelas = installment_key SEM o número da parcela
@@ -950,7 +955,10 @@ const TOLERANCIA_VALOR = 0.50
 
 // Parcela já no banco que corresponde à linha importada: mesma chave de colisão e valor
 // dentro da tolerância. Havendo mais de uma candidata, vence a de menor diferença.
-function matchParcelaExistente(index, row, accountId) {
+// `usados` são os lançamentos já casados por outra linha deste mesmo arquivo: um lançamento
+// do banco só pode ser a colisão de UMA linha. Sem esse consumo, duas gêmeas casavam com a
+// mesma parcela salva e as duas viravam UPDATE dela — a segunda sumia.
+function matchParcelaExistente(index, row, accountId, usados) {
   // O índice só tem despesas. Um estorno com sufixo de parcela na descrição casaria com a
   // parcela que ele estorna e viraria UPDATE dela — em vez de um lançamento novo.
   if ((row.type || 'expense') !== 'expense') return null
@@ -960,6 +968,7 @@ function matchParcelaExistente(index, row, accountId) {
   let melhor = null
   let menorDiff = Infinity
   for (const t of candidatas) {
+    if (usados?.has(t.id)) continue
     const diff = Math.abs((Number(t.amount) || 0) - (Number(row.amount) || 0))
     if (diff <= TOLERANCIA_VALOR && diff < menorDiff) { melhor = t; menorDiff = diff }
   }
@@ -1692,15 +1701,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // a que já está no banco (a do extrato) — nunca a do CSV/classificação automática, que
     // rebaixava tudo para "D · Despesa" ao confirmar. O usuário ainda reclassifica à mão: o
     // valor editado (`_catEdit` / `_gerEdit`) prevalece sobre o do banco.
-    // Casamento 1:1 — um lançamento do banco só pode ser a duplicata de UMA linha do arquivo.
-    // Uma fatura traz cobranças gêmeas legítimas (a de 08/2026 tem duas "Payservice 5/5" de
-    // R$ 59,60 no mesmo dia); sem consumir o candidato, as duas casavam com o único lançamento
-    // salvo e AS DUAS eram descartadas como duplicata. Mesmo mecanismo do crossMatchConciliacao.
+    // Gêmeas legítimas — a fatura de 08/2026 traz duas "Payservice 5/5" de R$ 59,60 no mesmo
+    // dia. O ordinal entra ANTES do casamento: cada gêmea passa a ter chave de colisão própria
+    // (#2, #3…), então procura a SUA parcela no banco em vez de as duas disputarem a mesma.
+    const comOcorrencia = assignInstallmentOccurrences(rows, selectedAccount)
+    // Casamento 1:1 — um lançamento do banco só pode casar com UMA linha do arquivo. Vale para
+    // os dois caminhos (colisão por chave e duplicata por valor+descrição): sem consumir o
+    // candidato, as duas gêmeas casavam com o único lançamento salvo e a segunda era descartada.
     const usadosDb = new Set()
-    return rows.map(row => {
+    return comOcorrencia.map(row => {
       const r = { ...row, accountId: selectedAccount }
       // Colisão por installment_key → atualizar o existente (não inserir, não pular).
-      const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount)
+      const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount, usadosDb)
       if (collisionTx) {
         usadosDb.add(collisionTx.id)
         return {
@@ -2436,7 +2448,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // match guloso 1:1 com o sistema e popula as seções da conciliação.
       const finishConc = (estornoCat) => {
         const herdados = applyEstornoInheritance(csvClassified, estornoCandidates(transactions, selectedAccount))
-        const classificados = estornoCat ? applyEstornoConfig(herdados, estornoCat, grupoD) : herdados
+        const comEstorno = estornoCat ? applyEstornoConfig(herdados, estornoCat, grupoD) : herdados
+        // Gêmeas legítimas do arquivo recebem o ordinal aqui também: sem ele as duas gravariam
+        // a mesma installment_key e a segunda seria absorvida pela primeira no índice único.
+        const classificados = assignInstallmentOccurrences(comEstorno, selectedAccount, faturaMonthYear)
         const usedSys = new Set()
         const matched = []
         const soItau = []
@@ -2544,6 +2559,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       reservaFuncaoId: isExpense ? (item._reservaFuncaoId || null) : null,
       installmentNum: item._installment?.num || null,
       installmentTotal: item._installment?.total || null,
+      installmentOccurrence: item._installmentOccurrence || null,
       serieId: item._serieId || null,
       faturaMonthYear: faturaMonthYear || null,
       faturaRef: faturaRefFromMY(faturaMonthYear),

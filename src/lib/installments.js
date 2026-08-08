@@ -37,16 +37,25 @@ function ymFromAny(date) {
 
 // installment_key — chave única de uma parcela. FONTE ÚNICA da fórmula, reusada pelo
 // backfill (scripts/backfill-installments.mjs) e por txToRow (inserções novas):
-//   account_id | base_normalizada | num/total | valor_em_centavos | serie_inicio
+//   account_id | base_normalizada | num/total | valor_em_centavos | serie_inicio[#ocorrência]
 // serie_inicio = fatura_month_year − (num − 1) meses (fallback: YYYY-MM da date).
 // Diferencia séries paralelas de mesmo preço/total que começam em meses distintos.
 // Retorna null quando num/total não estão preenchidos (não entra no índice parcial).
-export function installmentKey({ accountId, description, installmentNum, installmentTotal, amount, faturaMonthYear, date }) {
+//
+// `installmentOccurrence` distingue GÊMEAS LEGÍTIMAS: a mesma fatura pode trazer duas cobranças
+// idênticas em tudo — a de 08/2026 tem duas "Payservice 5/5" de R$ 59,60 no mesmo dia. Sem isto
+// as duas produzem a MESMA chave, e o índice uq_lancamentos_installment (mais o dedup de
+// reconcileInstallmentKeys) deixa só uma entrar: a segunda vira UPDATE da primeira e some.
+// A 1ª ocorrência não leva sufixo — as chaves já gravadas seguem byte a byte iguais, sem
+// backfill nem churn no índice único. Só a 2ª em diante ganha "#2", "#3"…
+export function installmentKey({ accountId, description, installmentNum, installmentTotal, amount, faturaMonthYear, date, installmentOccurrence }) {
   if (installmentNum == null || installmentTotal == null) return null
   const det = detectInstallment(description || '')
   const base = normalizeInstallmentBase(det ? det.base : (description || ''))
   const cents = Math.round((Number(amount) || 0) * 100)
   const ym = faturaMonthYear || ymFromAny(date)
   const serieInicio = ym ? addMonthsYM(ym, -((Number(installmentNum) || 1) - 1)) : 'sem-fatura'
-  return `${accountId}|${base}|${installmentNum}/${installmentTotal}|${cents}|${serieInicio}`
+  const occ = Number(installmentOccurrence) || 1
+  const sufixo = occ > 1 ? `#${occ}` : ''
+  return `${accountId}|${base}|${installmentNum}/${installmentTotal}|${cents}|${serieInicio}${sufixo}`
 }

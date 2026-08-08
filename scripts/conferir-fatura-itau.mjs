@@ -10,9 +10,14 @@
 import fs from 'node:fs'
 import * as XLSX from 'xlsx'
 import { parseItauXLS, computeFileTotals } from '../src/lib/parsers/itauFatura.js'
+import { assignInstallmentOccurrences } from '../src/lib/parcelas.js'
+import { installmentKey, detectInstallment } from '../src/lib/installments.js'
 
 const [, , file, ...flags] = process.argv
 const detalhe = flags.includes('--detalhe')
+// Conta fictícia: a conferência do arquivo não depende de qual cartão é — só precisa de um
+// account_id constante para que as chaves de parcela sejam comparáveis entre si.
+const CONTA = 'conta'
 
 if (!file) {
   console.error('Uso: node scripts/conferir-fatura-itau.mjs "caminho/da/fatura.xlsx" [--detalhe]')
@@ -49,13 +54,44 @@ if (totalDeclarado != null) {
   console.log('  (o cabeçalho não traz o total declarado — conferência do parse indisponível)')
 }
 
+// Conferência das chaves de parcela: duas linhas com a MESMA installment_key não cabem no
+// banco (índice único uq_lancamentos_installment) — a segunda vira UPDATE da primeira e o valor
+// dela some da fatura. O ordinal de gêmeas resolve isso; aqui verificamos que resolveu mesmo.
+const comOcorrencia = assignInstallmentOccurrences(rows.map(r => ({
+  ...r, _installment: detectInstallment(r.description), faturaMonthYear: faturaMY,
+})), CONTA, faturaMY)
+
+const porChave = new Map()
+for (const r of comOcorrencia) {
+  if (!r._installment) continue
+  const k = installmentKey({
+    accountId: CONTA, description: r.description,
+    installmentNum: r._installment.num, installmentTotal: r._installment.total,
+    amount: r.amount, faturaMonthYear: faturaMY,
+    installmentOccurrence: r._installmentOccurrence,
+  })
+  if (!porChave.has(k)) porChave.set(k, [])
+  porChave.get(k).push(r)
+}
+const colisoes = [...porChave.values()].filter(g => g.length > 1)
+const gemeas = comOcorrencia.filter(r => r._installmentOccurrence)
+
+console.log(`\n  Parcelas               ${String(porChave.size).padStart(4)} chaves únicas`)
+if (gemeas.length) {
+  console.log(`  Gêmeas legítimas       ${String(gemeas.length).padStart(4)} (recebem ordinal #2, #3…)`)
+  for (const g of gemeas) console.log(`    #${g._installmentOccurrence}  ${g.date}  ${brl(g.amount).padStart(12)}  ${g.description}`)
+}
+if (colisoes.length) {
+  console.log(`\n  *** ${colisoes.length} COLISÃO(ÕES) DE CHAVE — estas linhas se perderiam na gravação:`)
+  for (const g of colisoes) console.log(`    x${g.length}  ${g[0].date}  ${brl(g[0].amount)}  ${g[0].description}`)
+}
+
 if (detalhe) {
   const estornos = rows.filter(r => r.type === 'income')
   console.log(`\n  Estornos (${estornos.length}):`)
   for (const e of estornos) console.log(`    ${e.date}  ${brl(e.amount).padStart(12)}  ${e.description}`)
-  const parcelas = rows.filter(r => /\s\d{1,2}\/\d{1,2}$/.test(r.description))
-  console.log(`\n  Parceladas: ${parcelas.length}`)
 }
 console.log()
 
-process.exit(totalDeclarado != null && Math.abs(diff) > 0.01 ? 1 : 0)
+const totalDivergente = totalDeclarado != null && Math.abs(diff) > 0.01
+process.exit(totalDivergente || colisoes.length > 0 ? 1 : 0)

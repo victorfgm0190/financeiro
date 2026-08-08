@@ -21,6 +21,11 @@ export default async function handler(req, res) {
     // calculada em txToRow. Índice parcial protege contra importação duplicada.
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_key TEXT`)
     await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL`)
+    // Ordinal da parcela entre GÊMEAS legítimas — cobranças idênticas em conta, descrição,
+    // parcela, valor e mês na mesma fatura (ex.: duas "Payservice 5/5" de R$ 59,60 no mesmo
+    // dia). Entra na installment_key a partir da 2ª (#2, #3…), para que a segunda não seja
+    // absorvida pela primeira no índice único. null/1 = ocorrência única (chave sem sufixo).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS installment_occurrence INTEGER`)
     // serie_id: elo direto entre todas as parcelas de uma mesma compra (gerado uma vez na
     // parcela base e propagado às filhas). Substitui a dependência do installment_key derivado
     // para achar as irmãs. null em compras à vista e em parcelados legados (fallback: installment_key).
