@@ -21,6 +21,7 @@ import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
+import { pagarParcela } from '../../lib/bemApi'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -236,7 +237,22 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount } = useApp()
+  // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
+  // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
+  // ele o modal deixa de registrar a transferência conta→dívida e passa a baixar a parcela pelo
+  // endpoint, que cria DOIS lançamentos — principal e juros, cada um na categoria parametrizada
+  // do bem — e amortiza bem e dívida. Sem o elo nada muda: o modal continua como sempre foi.
+  const parcelaFin = useMemo(() => {
+    if (schedule.tipoComponente !== 'financiamento' || !schedule.financingInstallmentId) return null
+    const principal = Number(schedule.principalValue) || 0
+    const juros = Number(schedule.jurosValue) || 0
+    // Total pelo desdobramento, não por schedule.amount: é a soma que o endpoint vai ratear, e
+    // exibir um total que não bate com as duas linhas seria pior que não exibir nada.
+    const total = Math.round((principal + juros) * 100) / 100
+    if (total <= 0) return null
+    return { parcelaId: schedule.financingInstallmentId, principal, juros, total }
+  }, [schedule.tipoComponente, schedule.financingInstallmentId, schedule.principalValue, schedule.jurosValue])
   // Detalhamento por função do resgate (Etapa B). Quando presente, a transferência é
   // registrada por função (registerScheduleOccurrence) e o valor total não é editável.
   const reservaDetalhe = useMemo(() => {
@@ -290,10 +306,57 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   const [trfDate, setTrfDate] = useState(nextDate || today)
   const [trfNotes, setTrfNotes] = useState(schedule.notes || '')
 
+  const [finAccountId, setFinAccountId] = useState(schedule.accountId || '')
+  const [finDate, setFinDate] = useState(nextDate || today)
+  const [finLoading, setFinLoading] = useState(false)
+  const [finErro, setFinErro] = useState(null)
+
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
     accounts.find(a => a.isMain && a.type !== 'credit') ||
     accounts.find(a => a.type === 'checking')
+
+  // Baixa a parcela pelo endpoint e espelha o resultado no estado do app. Os dois lançamentos
+  // entram com o id que o backend JÁ gravou (addTransaction respeita id de fora): assim o upsert
+  // do sync casa na linha existente em vez de criar uma segunda, e o saldo da conta de origem
+  // muda na hora em vez de só no próximo full-load.
+  const handleConfirmFinanciamento = async () => {
+    if (!finAccountId) { setFinErro('Escolha a conta de origem.'); return }
+    setFinLoading(true)
+    setFinErro(null)
+    try {
+      const r = await pagarParcela(parcelaFin.parcelaId, {
+        valor_pago: parcelaFin.total,
+        data_pagamento: finDate,
+        conta_origem_id: finAccountId,
+        debitar_origem: true,
+      })
+      for (const l of r.lancamentos_criados || []) {
+        addTransaction({
+          id: l.id,
+          type: 'expense',
+          accountId: finAccountId,
+          amount: l.valor,
+          date: l.data || finDate,
+          categoryId: l.categoria_id || '',
+          description: l.descricao,
+          scheduleId: schedule.id,
+          origin: ORIGIN.PAGAMENTO_DIVIDA,
+        })
+      }
+      // Bem e dívida são asset/liability: o saldo deles é do backend, o app só espelha (mesma
+      // regra do BemDetail). Sem isto o Patrimônio só mostraria a amortização após recarregar.
+      for (const c of [r.saldos_atualizados?.bem, r.saldos_atualizados?.divida]) {
+        if (c?.id) updateAccount(c.id, { balance: c.saldo_novo })
+      }
+      markScheduleRegistered(schedule.id, nextDate || today)
+      onClose()
+    } catch (err) {
+      setFinErro(err.message)
+    } finally {
+      setFinLoading(false)
+    }
+  }
 
   const handleConfirm = () => {
     const regDate = nextDate || today
@@ -371,7 +434,9 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
           <div>
-            <h3 className="font-semibold text-gray-100">Registrar Agendamento</h3>
+            <h3 className="font-semibold text-gray-100">
+              {parcelaFin ? 'Pagar Parcela de Financiamento' : 'Registrar Agendamento'}
+            </h3>
             <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]">{schedule.description}</p>
             {(schedule.faturaRef || schedule.overrides?._gerencial?.faturaRef) && (
               <p className="text-xs text-indigo-400 mt-0.5">Fatura: {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}</p>
@@ -382,20 +447,66 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
           </button>
         </div>
 
-        <div className="flex border-b border-gray-800 shrink-0">
-          {['pagamento', 'recebimento', 'transferencia'].map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                tab === t ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
+        {!parcelaFin && (
+          <div className="flex border-b border-gray-800 shrink-0">
+            {['pagamento', 'recebimento', 'transferencia'].map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                  tab === t ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          {tab === 'pagamento' && (
+          {parcelaFin && (
+            <>
+              <div className="rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2.5">
+                <p className="text-xs text-gray-400 mb-1.5">Desdobramento da parcela</p>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Principal</span>
+                    <span className="text-gray-200">{fmt(parcelaFin.principal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400">Juros</span>
+                    <span className="text-gray-200">{fmt(parcelaFin.juros)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
+                  <span className="text-xs font-semibold text-gray-300">Total</span>
+                  <span className="text-xs font-bold text-gray-100">{fmt(parcelaFin.total)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Serão criados dois lançamentos na mesma data e na mesma conta de origem, cada um
+                na categoria parametrizada do bem (prestação e taxa de financiamento).
+              </p>
+              <div>
+                <label className="label">Banco de</label>
+                {/* Só conta corrente/poupança: os dois lançamentos são criados pelo backend, que
+                    não sabe montar gasto de cartão (fatura, dívida do cartão). É o mesmo conjunto
+                    que /api/financiamento/criar aceita como conta de origem. */}
+                <select className="input" value={finAccountId} onChange={e => setFinAccountId(e.target.value)}>
+                  <AccountOptions
+                    accounts={accounts}
+                    accountGroups={accountGroups}
+                    filter={a => !['credit', 'asset', 'liability', 'gerencial'].includes(a.type)}
+                  />
+                </select>
+              </div>
+              <div>
+                <label className="label">Data</label>
+                <DateInput className="input" value={finDate} onChange={e => setFinDate(e.target.value)} />
+              </div>
+              {finErro && <p className="text-xs text-despesa">{finErro}</p>}
+            </>
+          )}
+
+          {!parcelaFin && tab === 'pagamento' && (
             <>
               <div>
                 <label className="label">Banco de</label>
@@ -433,7 +544,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
             </>
           )}
 
-          {tab === 'recebimento' && (
+          {!parcelaFin && tab === 'recebimento' && (
             <>
               <div>
                 <label className="label">Banco para</label>
@@ -464,7 +575,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
             </>
           )}
 
-          {tab === 'transferencia' && (
+          {!parcelaFin && tab === 'transferencia' && (
             <>
               {hasDetalhe && (
                 <div className="rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2.5">
@@ -521,10 +632,21 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         </div>
 
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
-          <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={handleConfirm}>
-            <CheckCircle size={14} /> Confirmar {TAB_LABELS[tab]}
-          </button>
+          <button className="btn-secondary flex-1" onClick={onClose} disabled={finLoading}>Cancelar</button>
+          {parcelaFin ? (
+            <button
+              className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-60"
+              onClick={handleConfirmFinanciamento}
+              disabled={finLoading}
+            >
+              {finLoading ? <Hourglass size={14} className="animate-pulse" /> : <CheckCircle size={14} />}
+              {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
+            </button>
+          ) : (
+            <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={handleConfirm}>
+              <CheckCircle size={14} /> Confirmar {TAB_LABELS[tab]}
+            </button>
+          )}
         </div>
       </div>
     </div>

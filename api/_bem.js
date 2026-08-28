@@ -126,6 +126,18 @@ async function runSchemaStatements(query) {
   await query(`CREATE INDEX IF NOT EXISTS idx_lancamentos_bem_id ON lancamentos (bem_id) WHERE bem_id IS NOT NULL`)
   await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS financing_installment_id TEXT`)
 
+  // Desdobramento principal/juros do agendamento de parcela. Guardados NO agendamento (e não
+  // só na parcela) porque quem paga pela tela de Contas a Pagar só tem o agendamento em mãos:
+  // sem isso o modal precisaria buscar o financiamento inteiro só para exibir a quebra.
+  // `tipo_componente = 'financiamento'` é o marcador que liga esse modo no PayModal.
+  for (const [col, type] of [
+    ['principal_value', 'NUMERIC'],
+    ['juros_value', 'NUMERIC'],
+    ['tipo_componente', 'TEXT'],
+  ]) {
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS ${col} ${type}`)
+  }
+
   await query(`
     CREATE TABLE IF NOT EXISTS financing (
       id TEXT PRIMARY KEY,
@@ -149,6 +161,9 @@ async function runSchemaStatements(query) {
     ['juros_por_parcela', 'NUMERIC DEFAULT 0'], ['banco', 'TEXT'],
     ['status', "TEXT DEFAULT 'open'"], ['conta_divida_id', 'TEXT'],
     ['conta_origem_id', 'TEXT'], ['data_primeira_parcela', 'DATE'],
+    // Conta (banco) favorecida do financiamento — quem RECEBE as parcelas. `banco` continua
+    // sendo o texto livre exibido; este é o vínculo com contas.id, editável pela aba Parcelas.
+    ['banco_favorecido_id', 'TEXT'],
   ]) {
     await query(`ALTER TABLE financing ADD COLUMN IF NOT EXISTS ${col} ${type}`)
   }
@@ -175,9 +190,32 @@ async function runSchemaStatements(query) {
   for (const [col, type] of [
     ['desvio_juros', 'NUMERIC NOT NULL DEFAULT 0'], ['schedule_id', 'TEXT'],
     ['data_pagamento', 'DATE'], ['status', "TEXT DEFAULT 'open'"],
+    // Quanto ainda falta pagar da parcela: nasce igual ao total provisionado e vai a zero na
+    // quitação. Coluna materializada (e não só derivada na leitura) porque é ela que o
+    // relatório de parcelas lê direto do banco.
+    ['saldo_restante', 'NUMERIC'],
   ]) {
     await query(`ALTER TABLE financing_installments ADD COLUMN IF NOT EXISTS ${col} ${type}`)
   }
+  // Parcelas gravadas antes da coluna ficam NULL — o backfill as alinha ao que já foi pago.
+  await query(`
+    UPDATE financing_installments
+       SET saldo_restante = ROUND(GREATEST(COALESCE(total_provisioned, 0) - COALESCE(total_pago, 0), 0)::numeric, 2)
+     WHERE saldo_restante IS NULL`)
+  // Agendamentos de parcela criados ANTES do desdobramento existir ficam sem principal/juros e
+  // sem o marcador — e aí a tela de Contas a Pagar os trataria como transferência comum. O
+  // backfill os alinha à parcela que cada um representa, então um financiamento já provisionado
+  // passa a desdobrar sem precisar ser refeito.
+  await query(`
+    UPDATE agendamentos a
+       SET principal_value = fi.principal_provisioned,
+           juros_value     = fi.juros_provisioned,
+           tipo_componente = 'financiamento'
+      FROM financing_installments fi
+     WHERE a.financing_installment_id = fi.id
+       AND (a.tipo_componente IS DISTINCT FROM 'financiamento'
+            OR a.principal_value IS NULL
+            OR a.juros_value IS NULL)`)
   await query(`CREATE INDEX IF NOT EXISTS idx_fin_inst_financing ON financing_installments (financing_id)`)
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fin_inst_numero ON financing_installments (financing_id, numero_parcela)`)
 
@@ -239,6 +277,7 @@ const COLUNAS_ID_TEXT = [
   ['financing', 'bem_id'],
   ['financing', 'conta_divida_id'],
   ['financing', 'conta_origem_id'],
+  ['financing', 'banco_favorecido_id'],
   ['financing_installments', 'id'],
   ['financing_installments', 'financing_id'],
   ['financing_installments', 'schedule_id'],
@@ -326,21 +365,25 @@ export function montarProvisao({ valorPrincipal, numParcelas, valorParcela, data
 // ---------------------------------------------------------------------------
 
 // Cria um lançamento já categorizado e vinculado ao bem.
-// `account_id` fica null de propósito: o saldo das contas é movido explicitamente pelo endpoint
+// `account_id` fica null POR PADRÃO: o saldo das contas é movido explicitamente pelo endpoint
 // que chama isto, e o loop de saldo do app ignora contas null — sem isso o valor entraria duas
 // vezes (mesmo padrão das sombras de reserva/patrimônio).
+//
+// `accountId` só é preenchido quando NÃO existe transferência espelhando a saída do dinheiro —
+// é o caso da baixa pela tela de Contas a Pagar, onde o desdobramento principal/juros SUBSTITUI
+// a transferência do agendamento e portanto precisa debitar a conta de origem ele mesmo.
 export async function criarLancamentoCategorizado(q, {
   categoriaId, valor, descricao, bemId, data, tipo = 'expense', origin = 'pagamento_divida',
-  grupoGerencial = null, notes = null,
+  grupoGerencial = null, notes = null, accountId = null,
 }) {
   const id = genId('tx_bem')
   await q(
     `INSERT INTO lancamentos
        (id, type, account_id, amount, date, description, category_id, bem_id, origin,
         grupo_gerencial, notes, reconciled)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, FALSE)`,
-    [id, tipo, round2(valor), data, descricao, categoriaId || null, bemId || null, origin,
-      grupoGerencial, notes],
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, FALSE)`,
+    [id, tipo, accountId || null, round2(valor), data, descricao, categoriaId || null,
+      bemId || null, origin, grupoGerencial, notes],
   )
   return id
 }
@@ -360,13 +403,18 @@ export async function criarAgendamentosParcelas(q, {
       `INSERT INTO agendamentos
          (id, description, transaction_type, account_id, to_account_id, amount, category_id,
           frequency, start_date, next_occurrence, occurrence_type, installments,
-          auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides)
+          auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides,
+          principal_value, juros_value, tipo_componente)
        VALUES ($1, $2, 'transfer', $3, $4, $5, $6, 'once', $7, $8, 'continuous', NULL,
-               FALSE, FALSE, 'financiamento_parcela', $9, '[]', '[]', '{}')`,
+               FALSE, FALSE, 'financiamento_parcela', $9, '[]', '[]', '{}',
+               $10, $11, 'financiamento')`,
       // start_date é TEXT e next_occurrence é DATE: a mesma data precisa ir em dois parâmetros
       // distintos, senão o Postgres tenta deduzir um único tipo para o placeholder e falha.
       [id, `${descricaoBase} ${p.numero}/${numParcelas}`, contaOrigemId, contaDestinoId,
-        round2(valorParcela), categoriaPrestacaoId, p.data_vencimento, p.data_vencimento, p.id],
+        round2(valorParcela), categoriaPrestacaoId, p.data_vencimento, p.data_vencimento, p.id,
+        // Desdobramento da PARCELA, não do financiamento: a última absorve o resíduo do
+        // arredondamento, então os dois números variam entre parcelas.
+        round2(num(p.principal_provisioned)), round2(num(p.juros_provisioned))],
     )
     ids.push(id)
   }
@@ -441,6 +489,7 @@ export const SELECT_PARCELAS = `
   SELECT id, financing_id, numero_parcela,
          principal_provisioned, juros_provisioned, total_provisioned,
          principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
+         saldo_restante,
          to_char(data_vencimento::date, 'YYYY-MM-DD') AS data_vencimento,
          to_char(data_pagamento::date,  'YYYY-MM-DD') AS data_pagamento
     FROM financing_installments`
@@ -456,11 +505,26 @@ export function serializarParcela(p) {
     juros_pago: num(p.juros_pago),
     total_pago: num(p.total_pago),
     desvio_juros: num(p.desvio_juros),
+    // Coluna materializada, mas o fallback derivado cobre a parcela criada antes dela existir
+    // (o backfill do DDL só roda quando ensureBemSchema é chamado).
+    saldo_restante: p.saldo_restante == null
+      ? round2(Math.max(0, num(p.total_provisioned) - num(p.total_pago)))
+      : num(p.saldo_restante),
     status: p.status,
     data_vencimento: p.data_vencimento,
     data_pagamento: p.data_pagamento,
     schedule_id: p.schedule_id ?? null,
   }
+}
+
+// Nome da conta favorecida junto do id. Sai como spread no payload do financiamento porque os
+// dois campos andam sempre juntos — a UI precisa do id para o select e do nome para o rótulo, e
+// buscá-los em dois lugares diferentes já produziu telas mostrando o id cru.
+export async function withFavorecido(q, fin) {
+  const id = fin?.banco_favorecido_id || null
+  if (!id) return { banco_favorecido_id: null, banco_favorecido_nome: null }
+  const [c] = await q(`SELECT name FROM contas WHERE id = $1`, [id])
+  return { banco_favorecido_id: id, banco_favorecido_nome: c?.name ?? null }
 }
 
 export const fail = (res, status, error) => res.status(status).json({ success: false, error })

@@ -23,7 +23,9 @@ const COLUNAS_ESPERADAS = {
     'valor_pago_manual', 'patrimonio_use_method',
   ],
   lancamentos: ['bem_id'],
-  agendamentos: ['financing_installment_id'],
+  agendamentos: ['financing_installment_id', 'principal_value', 'juros_value', 'tipo_componente'],
+  financing: ['banco_favorecido_id'],
+  financing_installments: ['saldo_restante'],
 }
 
 const TABELAS_ESPERADAS = ['financing', 'financing_installments', 'bem_movimentacoes']
@@ -36,6 +38,7 @@ const COLUNAS_TEXT_OBRIGATORIO = new Set([
   'contas.categoria_perda_bem_id', 'contas.categoria_ganho_bem_id',
   'contas.categoria_prestacao_id', 'contas.categoria_taxa_finan_id',
   'lancamentos.bem_id', 'agendamentos.financing_installment_id',
+  'financing.banco_favorecido_id',
 ])
 
 async function inspecionar() {

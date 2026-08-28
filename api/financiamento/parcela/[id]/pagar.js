@@ -3,6 +3,7 @@ import { requireAuth } from '../../../_auth.js'
 import {
   getRouteId, num, round2, hoje, isIsoDate, fail,
   calcularRateio, criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
+  ensureBemSchema,
 } from '../../../_bem.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
@@ -15,12 +16,26 @@ import {
 // A conta de origem não é debitada aqui de propósito: o agendamento da parcela é uma
 // transferência conta corrente → conta de dívida e é ela que move o dinheiro da conta corrente.
 // Debitar nos dois lugares contaria a saída duas vezes.
+//
+// `debitar_origem: true` inverte essa premissa e existe para a baixa feita pela tela de Contas a
+// Pagar: lá o desdobramento principal/juros SUBSTITUI a transferência do agendamento (ela nunca
+// é registrada), então são estes dois lançamentos que precisam sair da conta de origem — e é por
+// isso que eles nascem com `account_id` preenchido nesse modo.
+//
+// O saldo da conta de ORIGEM não é escrito aqui nem nesse modo: para conta corrente o saldo é
+// derivado dos lançamentos pelo próprio app (AppContext.recalcularSaldo), que reescreve
+// contas.balance a partir da lista de lançamentos. Um UPDATE aqui seria contado duas vezes assim
+// que o app recalculasse. Bem e dívida são type asset/liability, ficam fora desse recálculo — o
+// saldo deles é do backend e continua sendo escrito abaixo.
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
+    // `saldo_restante` é coluna nova — garantir o schema antes de escrever nela.
+    await ensureBemSchema()
+
     const body = await parseBody(req)
     const parcelaId = getRouteId(req, 1) || body.parcela_id
     if (!parcelaId) return fail(res, 400, 'parcela_id é obrigatório')
@@ -54,9 +69,18 @@ export default async function handler(req, res) {
     const [divida] = await query(`SELECT * FROM contas WHERE id = $1`, [fin.conta_divida_id])
     if (!divida) return fail(res, 404, `conta de dívida ${fin.conta_divida_id} não encontrada`)
 
+    // Continua sendo só validação, como sempre foi — o id passa a ser guardado porque em
+    // `debitar_origem` ele vira o account_id dos dois lançamentos.
+    let origem = null
     if (body.conta_origem_id) {
-      const [origem] = await query(`SELECT id FROM contas WHERE id = $1`, [body.conta_origem_id])
-      if (!origem) return fail(res, 404, `conta de origem ${body.conta_origem_id} não encontrada`)
+      const [c] = await query(`SELECT id FROM contas WHERE id = $1`, [body.conta_origem_id])
+      if (!c) return fail(res, 404, `conta de origem ${body.conta_origem_id} não encontrada`)
+      origem = c
+    }
+
+    const debitarOrigem = body.debitar_origem === true
+    if (debitarOrigem && !origem) {
+      return fail(res, 400, 'debitar_origem exige conta_origem_id')
     }
 
     const catPrestacao = bem.categoria_prestacao_id
@@ -78,11 +102,18 @@ export default async function handler(req, res) {
     const deltaPrincipal = round2(rateio.principalPago - principalAntes)
     const deltaJuros = round2(rateio.jurosPago - jurosAntes)
     const totalNovo = round2(rateio.principalPago + rateio.jurosPago)
-    const statusNovo = totalNovo >= round2(num(parcela.total_provisioned)) ? 'paid' : 'partial'
+    const totalPrevisto = round2(num(parcela.total_provisioned))
+    const statusNovo = totalNovo >= totalPrevisto ? 'paid' : 'partial'
+    // Quanto ainda falta: zero na quitação, o que sobra do total no pagamento parcial. Nunca
+    // negativo — um pagamento a maior quita a parcela, não gera saldo credor aqui.
+    const saldoRestanteNovo = round2(Math.max(0, totalPrevisto - totalNovo))
 
     const resultado = await withTransaction(async (q) => {
       const descricaoBase = `Parcela ${parcela.numero_parcela}/${num(fin.num_parcelas)} - ${bem.name}`
       const lancamentos = []
+
+      // null fora do modo Contas a Pagar — ver o comentário de cabeçalho.
+      const accountId = debitarOrigem ? origem.id : null
 
       if (deltaPrincipal > 0) {
         const id = await criarLancamentoCategorizado(q, {
@@ -93,9 +124,11 @@ export default async function handler(req, res) {
           data: dataPagamento,
           tipo: 'expense',
           origin: 'pagamento_divida',
+          accountId,
         })
         lancamentos.push({
           id, categoria_id: catPrestacao, valor: deltaPrincipal, descricao: descricaoBase,
+          componente: 'principal',
         })
       }
       if (deltaJuros > 0) {
@@ -108,8 +141,11 @@ export default async function handler(req, res) {
           data: dataPagamento,
           tipo: 'expense',
           origin: 'pagamento_divida',
+          accountId,
         })
-        lancamentos.push({ id, categoria_id: catTaxa, valor: deltaJuros, descricao: desc })
+        lancamentos.push({
+          id, categoria_id: catTaxa, valor: deltaJuros, descricao: desc, componente: 'juros',
+        })
       }
 
       const saldoBemAnterior = num(bem.balance)
@@ -123,10 +159,10 @@ export default async function handler(req, res) {
       await q(
         `UPDATE financing_installments SET
            principal_pago = $2, juros_pago = $3, total_pago = $4,
-           desvio_juros = $5, data_pagamento = $6, status = $7
+           desvio_juros = $5, data_pagamento = $6, status = $7, saldo_restante = $8
          WHERE id = $1`,
         [parcelaId, rateio.principalPago, rateio.jurosPago, totalNovo,
-          rateio.desvioJuros, dataPagamento, statusNovo],
+          rateio.desvioJuros, dataPagamento, statusNovo, saldoRestanteNovo],
       )
 
       // Agendamento da parcela: marca a ocorrência como registrada quando a parcela fecha, para
@@ -189,10 +225,11 @@ export default async function handler(req, res) {
         status: statusNovo,
         principal_provisioned: principalPrev,
         juros_provisioned: jurosPrev,
-        total_provisioned: num(parcela.total_provisioned),
+        total_provisioned: totalPrevisto,
         principal_pago: rateio.principalPago,
         juros_pago: rateio.jurosPago,
         total_pago: totalNovo,
+        saldo_restante: saldoRestanteNovo,
         desvio_juros: rateio.desvioJuros,
         data_vencimento: parcela.venc_iso,
         data_pagamento: dataPagamento,
@@ -209,12 +246,19 @@ export default async function handler(req, res) {
         juros_neste_pagamento: deltaJuros,
         juros_em_falta: rateio.desvioJuros,
       },
+      // `account_id`/`data`/`componente` vão junto para a tela de Contas a Pagar poder espelhar
+      // estes lançamentos no estado do app com o MESMO id (o upsert do sync então casa na linha
+      // que já existe, em vez de criar uma segunda). Sem espelhar, o saldo da conta corrente só
+      // mudaria no próximo full-load.
       lancamentos_criados: resultado.lancamentos.map(l => ({
         id: l.id,
         categoria_id: l.categoria_id,
         categoria_nome: nomeCat[l.categoria_id] ?? null,
         valor: l.valor,
         descricao: l.descricao,
+        componente: l.componente ?? null,
+        account_id: debitarOrigem ? origem.id : null,
+        data: dataPagamento,
       })),
       movimentacao_id: resultado.movimentacaoId,
       financiamento: { id: fin.id, status: resultado.statusFin },

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2, Settings2, Building2 } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { fmtData, statusParcela, ESTILO_STATUS } from './bemUtils'
 
@@ -14,6 +14,11 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
   const estilo = ESTILO_STATUS[status]
   const Icone = ICONE[status]
   const podePagar = parcela.status !== 'paid'
+  // Fallback derivado para a parcela gravada antes da coluna existir (o backend faz o mesmo em
+  // serializarParcela — repetido aqui porque a lista também vem de respostas antigas em cache).
+  const saldo = parcela.saldo_restante != null
+    ? parcela.saldo_restante
+    : Math.max(0, (parcela.total_provisioned || 0) - (parcela.total_pago || 0))
 
   return (
     <div className={`rounded-xl border p-3 ${estilo.borda} ${estilo.fundo}`}>
@@ -28,7 +33,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
 
       <p className="text-xs text-gray-500 mt-1">Vence: {fmtData(parcela.data_vencimento)}</p>
 
-      <div className="grid grid-cols-3 gap-2 mt-2.5 text-xs">
+      <div className="grid grid-cols-4 gap-2 mt-2.5 text-xs">
         <div>
           <p className="text-gray-600">Principal</p>
           <p className="text-gray-300">{fmt(parcela.principal_provisioned)}</p>
@@ -40,6 +45,13 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
         <div>
           <p className="text-gray-600">Total</p>
           <p className="text-gray-200 font-medium">{fmt(parcela.total_provisioned)}</p>
+        </div>
+        <div>
+          <p className="text-gray-600">Saldo Restante</p>
+          {/* Zerado = quitada; num pagamento parcial é o que ainda falta daquela parcela. */}
+          <p className={saldo > 0 ? 'text-amber-400 font-medium' : 'text-teal-400 font-medium'}>
+            {fmt(saldo)}
+          </p>
         </div>
       </div>
 
@@ -81,6 +93,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
 
 export default function BemParcelasTab({
   financiamento, parcelas, page, totalPages, totalParcelas, loading, onPage, onPagar,
+  onEditarFavorecido,
 }) {
   if (!financiamento) {
     return (
@@ -96,8 +109,26 @@ export default function BemParcelasTab({
   const total = financiamento.num_parcelas || totalParcelas || 0
   const pct = total > 0 ? (pagas / total) * 100 : 0
 
+  const favorecido = financiamento.banco_favorecido_nome || financiamento.banco
+
   return (
     <div className="space-y-4">
+      <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-gray-600">Banco favorecido</p>
+          <p className="text-sm text-gray-200 flex items-center gap-1.5 mt-0.5 truncate">
+            <Building2 size={13} className="text-gray-500 shrink-0" />
+            {favorecido || <span className="text-gray-500">Nenhum banco vinculado</span>}
+          </p>
+        </div>
+        <button
+          className="btn-secondary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5"
+          onClick={onEditarFavorecido}
+        >
+          <Settings2 size={13} /> Editar Favorecido
+        </button>
+      </div>
+
       <div className="card">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-gray-300 font-medium">
@@ -114,8 +145,10 @@ export default function BemParcelasTab({
             <p className="text-gray-200">{fmt(financiamento.realizado?.total)}</p>
           </div>
           <div>
-            <p className="text-gray-600">Restante</p>
-            <p className="text-gray-200">{fmt(financiamento.analise?.total_restante)}</p>
+            <p className="text-gray-600">Saldo Restante</p>
+            <p className="text-gray-200">
+              {fmt(financiamento.analise?.saldo_restante ?? financiamento.analise?.total_restante)}
+            </p>
           </div>
           <div>
             <p className="text-gray-600">Valor Total</p>

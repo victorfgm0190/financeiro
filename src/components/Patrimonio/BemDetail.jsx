@@ -15,6 +15,7 @@ import FinanciamentoModal from './FinanciamentoModal'
 import PagarParcelaModal from './PagarParcelaModal'
 import RegistrarEntradaModal from './RegistrarEntradaModal'
 import ParametrizarBemModal from './ParametrizarBemModal'
+import EditarFavorecidoModal from './EditarFavorecidoModal'
 import { transferenciasElegiveisEntrada } from './bemUtils'
 
 const ABAS = [
@@ -53,7 +54,7 @@ export default function BemDetail({ conta, onClose }) {
   const [confirmandoEstorno, setConfirmandoEstorno] = useState(false)
   const [estornando, setEstornando] = useState(false)
 
-  const [modal, setModal] = useState(null) // 'financiamento' | 'entrada' | 'parametrizar' | { parcela }
+  const [modal, setModal] = useState(null) // 'financiamento' | 'entrada' | 'parametrizar' | 'favorecido' | { parcela }
 
   const avisar = useCallback((mensagem, variante = 'success') => {
     setToast({ mensagem, variante })
@@ -253,6 +254,27 @@ export default function BemDetail({ conta, onClose }) {
     await recarregarTudo()
   }
 
+  // O banco favorecido é do FINANCIAMENTO (tabela financing), não da conta — por isso o estado
+  // atualizado vem do endpoint e é aplicado sobre `financiamento`, sem passar pelo sync do app.
+  const aposFavorecido = async (resposta) => {
+    setModal(null)
+    const nova = resposta.conta_criada
+    // Mesma razão do addAccount da conta de dívida em aposFinanciamento: a conta nasceu no
+    // backend com id próprio e sem espelhar aqui só apareceria no próximo full-load.
+    if (nova?.id && !accountsRef.current.some(a => a.id === nova.id)) {
+      addAccount({
+        id: nova.id, name: nova.name, type: nova.type, balance: nova.balance,
+        creditDebt: 0, creditMonthBill: 0,
+      })
+    }
+    setFinanciamento(atual => (atual ? { ...atual, ...resposta.financiamento } : atual))
+    avisar(
+      resposta.financiamento.banco_favorecido_nome
+        ? `Favorecido atualizado para ${resposta.financiamento.banco_favorecido_nome}.`
+        : 'Favorecido desvinculado.',
+    )
+  }
+
   const aposPagamento = async (resposta) => {
     setModal(null)
     sincronizarSaldo(resposta.saldos_atualizados?.bem?.id, resposta.saldos_atualizados?.bem?.saldo_novo)
@@ -404,6 +426,7 @@ export default function BemDetail({ conta, onClose }) {
                 loading={loadingParcelas}
                 onPage={setPaginaParcelas}
                 onPagar={(parcela) => setModal({ parcela })}
+                onEditarFavorecido={() => setModal('favorecido')}
               />
             )}
 
@@ -433,6 +456,18 @@ export default function BemDetail({ conta, onClose }) {
             contasCorrentes={contasCorrentes}
             onCancel={() => setModal(null)}
             onSuccess={aposFinanciamento}
+            onErro={(m) => avisar(m, 'error')}
+          />
+        )}
+      </Modal>
+
+      <Modal open={modal === 'favorecido'} onClose={() => setModal(null)} title="Editar Favorecido">
+        {modal === 'favorecido' && financiamento && (
+          <EditarFavorecidoModal
+            financiamento={financiamento}
+            contas={accounts}
+            onCancel={() => setModal(null)}
+            onSuccess={aposFavorecido}
             onErro={(m) => avisar(m, 'error')}
           />
         )}

@@ -2,7 +2,7 @@ import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
   genId, num, round2, isIsoDate, fail,
-  montarProvisao, criarAgendamentosParcelas, ACCOUNT_TYPE_DIVIDA, explicarErro,
+  montarProvisao, criarAgendamentosParcelas, ACCOUNT_TYPE_DIVIDA, explicarErro, ensureBemSchema,
 } from '../_bem.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
@@ -14,6 +14,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
   try {
+    // O INSERT das parcelas grava `saldo_restante` e o dos agendamentos grava o desdobramento
+    // principal/juros — colunas novas. Sem garantir o schema aqui, um banco que ainda não
+    // passou por /api/load derrubaria a criação inteira com "column does not exist".
+    await ensureBemSchema()
+
     const body = await parseBody(req)
     const {
       bem_id, valor_principal, num_parcelas, valor_parcela, banco,
@@ -107,11 +112,12 @@ export default async function handler(req, res) {
       for (const p of provisao.parcelas) {
         const id = genId('fip')
         await q(
+          // saldo_restante nasce igual ao total da parcela: nada foi pago ainda.
           `INSERT INTO financing_installments
              (id, financing_id, numero_parcela, principal_provisioned, juros_provisioned,
               total_provisioned, principal_pago, juros_pago, total_pago, desvio_juros,
-              data_vencimento, status)
-           VALUES ($1,$2,$3,$4,$5,$6,0,0,0,0,$7,'open')`,
+              data_vencimento, status, saldo_restante)
+           VALUES ($1,$2,$3,$4,$5,$6,0,0,0,0,$7,'open',$6)`,
           [id, financingId, p.numero, p.principal_provisioned, p.juros_provisioned,
             p.total_provisioned, p.data_vencimento],
         )

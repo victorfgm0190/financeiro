@@ -1196,7 +1196,11 @@ export function AppProvider({ children }) {
     // _fromImport: a importação gera as contas a pagar uma vez no fim (com importId);
     // não disparar o recálculo por lançamento aqui para não quebrar esse vínculo.
     const { _fromImport, ...txClean } = tx
-    const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+    // Id de fora ganha do gerado — mesma regra (e mesmo motivo) do addAccount: lançamentos que o
+    // backend já gravou (o desdobramento principal/juros de POST /api/financiamento/parcela/[id]/
+    // pagar) precisam entrar no estado com o id que JÁ existe no banco, senão o upsert do sync
+    // cria uma segunda linha e o valor conta duas vezes. Nenhum formulário manda id.
+    const id = txClean.id || 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     // Guarda: não grava função de reserva quando o grupo do lançamento não comporta função.
     const newTx = sanitizeReservaFuncao(
       { ...txClean, id, amount: Number(txClean.amount), origin: txClean.origin || ORIGIN.MANUAL, createdAt: new Date().toISOString() },

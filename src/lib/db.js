@@ -459,6 +459,15 @@ export const rowToSchedule = (r) => ({
   nextOccurrence: toDateStr(r.next_occurrence),
   // Fase 1: null/ausente → []. pg devolve JSONB já parseado (array JS).
   sourceExpenseIds: Array.isArray(r.source_expense_ids) ? r.source_expense_ids : [],
+  // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
+  // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
+  // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada
+  // sync do app apagar o vínculo. Aqui são só leitura — é o que a tela de Contas a Pagar usa
+  // para exibir a quebra e baixar a parcela pelo endpoint certo.
+  financingInstallmentId: r.financing_installment_id || null,
+  tipoComponente: r.tipo_componente || null,
+  principalValue: r.principal_value != null ? Number(r.principal_value) : null,
+  jurosValue: r.juros_value != null ? Number(r.juros_value) : null,
 })
 
 // ─── Funções de reserva ───────────────────────────────────────────────────────

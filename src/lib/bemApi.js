@@ -44,6 +44,7 @@ async function request(url, options = {}) {
 }
 
 const post = (url, body) => request(url, { method: 'POST', body: JSON.stringify(body) })
+const patch = (url, body) => request(url, { method: 'PATCH', body: JSON.stringify(body) })
 const enc = encodeURIComponent
 
 export const criarBem = (payload) => post('/api/bem/criar', payload)
@@ -71,3 +72,7 @@ export const getParcelas = (financiamentoId, { page = 1, limit = 20 } = {}) =>
 
 export const pagarParcela = (parcelaId, payload) =>
   post(`/api/financiamento/parcela/${enc(parcelaId)}/pagar`, payload)
+
+// Troca o banco favorecido (quem RECEBE as parcelas). `banco_favorecido_id: null` desvincula.
+export const atualizarFavorecido = (financiamentoId, payload) =>
+  patch(`/api/financiamento/${enc(financiamentoId)}`, payload)
