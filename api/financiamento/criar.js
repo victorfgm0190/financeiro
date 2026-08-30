@@ -67,9 +67,7 @@ export default async function handler(req, res) {
       contaOrigem = c.id
     }
 
-    // Banco favorecido é opcional na criação (a aba Parcelas troca depois pelo PATCH). Quando
-    // vem, o NOME da conta vira o favorecido das parcelas; sem ele, cai no texto livre `banco`,
-    // que é o que a UI já exibe — assim o agendamento nunca nasce sem favorecido.
+    // Banco favorecido é opcional na criação (a aba Parcelas troca depois pelo PATCH).
     let favorecidoId = null
     let favorecidoNome = null
     if (banco_favorecido_id) {
@@ -78,7 +76,11 @@ export default async function handler(req, res) {
       favorecidoId = c.id
       favorecidoNome = c.name
     }
-    if (!favorecidoNome) favorecidoNome = (banco && String(banco).trim()) || null
+    // MESMA regra do PATCH: o texto exibido é o digitado e, quando nada foi digitado, o nome da
+    // conta favorecida. Divergir daqui faria o financiamento nascer com `banco` vazio na tela
+    // enquanto as parcelas já mostram o favorecido, e o primeiro PATCH "corrigiria" sozinho um
+    // campo que o usuário nunca tocou. É esse texto que vira o favorecido das parcelas.
+    const bancoTexto = (banco && String(banco).trim()) || favorecidoNome || null
 
     const valorPrincipal = round2(num(valor_principal))
     const valorParcela = round2(num(valor_parcela))
@@ -107,7 +109,7 @@ export default async function handler(req, res) {
          VALUES ($1, $2, $3, $4, $4, $5)
          RETURNING id, name, type, balance`,
         [contaDividaId, `Contas a Pagar - Fin. ${bem.name}`, ACCOUNT_TYPE_DIVIDA,
-          round2(-provisao.valorTotal), `Financiamento ${banco || ''} — ${bem.name}`.trim()],
+          round2(-provisao.valorTotal), `Financiamento ${bancoTexto || ''} — ${bem.name}`.trim()],
       )
 
       await q(
@@ -118,7 +120,7 @@ export default async function handler(req, res) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11,$12,$13,$14)`,
         [financingId, bem_id, valorPrincipal, provisao.jurosTotais, provisao.valorTotal,
           nParcelas, valorParcela, provisao.principalPorParcela, provisao.jurosPorParcela,
-          banco || null, contaDividaId, contaOrigem, String(data_primeira_parcela).slice(0, 10),
+          bancoTexto, contaDividaId, contaOrigem, String(data_primeira_parcela).slice(0, 10),
           favorecidoId],
       )
 
@@ -146,7 +148,7 @@ export default async function handler(req, res) {
         descricaoBase: `Parcela`,
         numParcelas: nParcelas,
         categoriaPrestacaoId: bem.categoria_prestacao_id || null,
-        payee: favorecidoNome,
+        payee: bancoTexto,
       })
       // Descrição final inclui o nome do bem; feita aqui para não repetir a string por parcela.
       for (let i = 0; i < scheduleIds.length; i++) {
@@ -176,9 +178,9 @@ export default async function handler(req, res) {
         valor_parcela: valorParcela,
         principal_por_parcela: provisao.principalPorParcela,
         juros_por_parcela: provisao.jurosPorParcela,
-        banco: banco || null,
+        banco: bancoTexto,
         banco_favorecido_id: favorecidoId,
-        banco_favorecido_nome: favorecidoId ? favorecidoNome : null,
+        banco_favorecido_nome: favorecidoNome,
         status: 'open',
         conta_divida_id: contaDividaId,
         conta_origem_id: contaOrigem,

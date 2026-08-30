@@ -94,3 +94,16 @@ export const ESTILO_STATUS = {
   vencida: { label: 'VENCIDA', texto: 'text-despesa', fundo: 'bg-red-500/10', borda: 'border-red-500/20' },
   aberta: { label: 'ABERTA', texto: 'text-gray-400', fundo: 'bg-gray-800/60', borda: 'border-gray-800' },
 }
+
+// Contas que podem ser BANCO FAVORECIDO de um financiamento — quem recebe as parcelas. Bem e
+// dívida ficam de fora (não recebem de ninguém), assim como as gerenciais, que são espelho
+// contábil e não banco. Mesma regra do TIPOS_BANCO validado no PATCH /api/financiamento/[id];
+// vive aqui porque os dois modais (criar financiamento e trocar favorecido) precisam dela.
+export const TIPOS_FAVORECIDO = ['checking', 'savings', 'credit']
+
+export function contasFavorecidasElegiveis(contas, { contaDividaId = null, bemId = null } = {}) {
+  return (contas || [])
+    .filter(c => TIPOS_FAVORECIDO.includes(c.type) && !c.isGerencial)
+    .filter(c => c.id !== contaDividaId && c.id !== bemId)
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+}

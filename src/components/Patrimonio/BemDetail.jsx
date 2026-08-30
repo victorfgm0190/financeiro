@@ -469,6 +469,7 @@ export default function BemDetail({ conta, onClose }) {
           <FinanciamentoModal
             bem={bem}
             contasCorrentes={contasCorrentes}
+            contas={accounts}
             onCancel={() => setModal(null)}
             onSuccess={aposFinanciamento}
             onErro={(m) => avisar(m, 'error')}

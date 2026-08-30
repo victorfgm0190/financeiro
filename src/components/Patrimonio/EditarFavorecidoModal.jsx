@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Loader2, Plus, Building2 } from 'lucide-react'
 import { atualizarFavorecido } from '../../lib/bemApi'
+import { contasFavorecidasElegiveis } from './bemUtils'
 
 // Escolhe o BANCO FAVORECIDO do financiamento — quem recebe as parcelas. Grava
 // `financing.banco_favorecido_id` e, junto, o texto `financing.banco` que a UI exibe; o backend
@@ -11,10 +12,6 @@ import { atualizarFavorecido } from '../../lib/bemApi'
 // do lado do React e só então mandar o id esbarraria no sync debounced, e o PATCH não acharia a
 // conta ainda.
 
-// Contas que podem receber uma parcela. Bem e dívida ficam de fora (não recebem de ninguém),
-// assim como as contas gerenciais, que são espelho contábil e não banco.
-const TIPOS_ELEGIVEIS = ['checking', 'savings', 'credit']
-
 export default function EditarFavorecidoModal({
   financiamento, contas, onCancel, onSuccess, onErro,
 }) {
@@ -24,11 +21,10 @@ export default function EditarFavorecidoModal({
   const [tipoNovo, setTipoNovo] = useState('checking')
   const [loading, setLoading] = useState(false)
 
-  const elegiveis = useMemo(() => contas
-    .filter(c => TIPOS_ELEGIVEIS.includes(c.type) && !c.isGerencial)
-    .filter(c => c.id !== financiamento.conta_divida_id && c.id !== financiamento.bem_id)
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
-  [contas, financiamento.conta_divida_id, financiamento.bem_id])
+  const elegiveis = useMemo(() => contasFavorecidasElegiveis(contas, {
+    contaDividaId: financiamento.conta_divida_id,
+    bemId: financiamento.bem_id,
+  }), [contas, financiamento.conta_divida_id, financiamento.bem_id])
 
   const podeEnviar = !loading && (modo === 'novo' ? nomeNovo.trim().length > 0 : true)
 

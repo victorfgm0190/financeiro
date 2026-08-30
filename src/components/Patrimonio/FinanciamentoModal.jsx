@@ -3,17 +3,18 @@ import { Loader2 } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import DateInput from '../shared/DateInput'
 import { criarFinanciamento } from '../../lib/bemApi'
-import { hojeIso, round2 } from './bemUtils'
+import { hojeIso, round2, contasFavorecidasElegiveis } from './bemUtils'
 
 const BANCOS = ['Safra', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'BV', 'Votorantim']
 
-export default function FinanciamentoModal({ bem, contasCorrentes, onCancel, onSuccess, onErro }) {
+export default function FinanciamentoModal({ bem, contasCorrentes, contas = [], onCancel, onSuccess, onErro }) {
   const restante = Math.max(0, round2((bem.valor_nota_fiscal || 0) - (bem.saldo || 0)))
   const [form, setForm] = useState({
     valor_principal: String(restante || ''),
     num_parcelas: '60',
     valor_parcela: '',
     banco: '',
+    banco_favorecido_id: '',
     data_primeira_parcela: hojeIso(),
     conta_origem_id: contasCorrentes.find(c => c.contaCorrentePrincipal)?.id
       || contasCorrentes.find(c => c.isMain)?.id
@@ -23,6 +24,12 @@ export default function FinanciamentoModal({ bem, contasCorrentes, onCancel, onS
   const [loading, setLoading] = useState(false)
 
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }))
+
+  // A conta de dívida só nasce no POST, então aqui só há o próprio bem a excluir.
+  const favorecidosElegiveis = useMemo(
+    () => contasFavorecidasElegiveis(contas, { bemId: bem.id }),
+    [contas, bem.id],
+  )
 
   const preview = useMemo(() => {
     const principal = Number(form.valor_principal)
@@ -54,6 +61,7 @@ export default function FinanciamentoModal({ bem, contasCorrentes, onCancel, onS
         num_parcelas: Number(form.num_parcelas),
         valor_parcela: Number(form.valor_parcela),
         banco: form.banco || null,
+        banco_favorecido_id: form.banco_favorecido_id || null,
         data_primeira_parcela: form.data_primeira_parcela,
         conta_origem_id: form.conta_origem_id || null,
       })
@@ -110,6 +118,21 @@ export default function FinanciamentoModal({ bem, contasCorrentes, onCancel, onS
           <datalist id="bancos-financiamento">
             {BANCOS.map(b => <option key={b} value={b} />)}
           </datalist>
+        </div>
+        <div>
+          <label className="label">Banco favorecido (conta)</label>
+          <select
+            className="input"
+            value={form.banco_favorecido_id}
+            onChange={e => set('banco_favorecido_id', e.target.value)}
+          >
+            <option value="">Nenhum — usar só o texto acima</option>
+            {favorecidosElegiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Quem RECEBE as parcelas. O nome da conta vira o favorecido dos agendamentos; sem
+            conta, vale o texto do campo Banco. Dá para trocar depois na aba Parcelas.
+          </p>
         </div>
         <div>
           <label className="label">1ª Parcela vence em *</label>
