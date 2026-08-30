@@ -394,7 +394,7 @@ export async function criarLancamentoCategorizado(q, {
 // [id]/pagar, e deixar o motor registrar sozinho duplicaria o lançamento e o saldo.
 export async function criarAgendamentosParcelas(q, {
   parcelas, contaOrigemId, contaDestinoId, valorParcela, descricaoBase, numParcelas,
-  categoriaPrestacaoId = null,
+  categoriaPrestacaoId = null, payee = null,
 }) {
   const ids = []
   for (const p of parcelas) {
@@ -404,21 +404,45 @@ export async function criarAgendamentosParcelas(q, {
          (id, description, transaction_type, account_id, to_account_id, amount, category_id,
           frequency, start_date, next_occurrence, occurrence_type, installments,
           auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides,
-          principal_value, juros_value, tipo_componente)
+          principal_value, juros_value, tipo_componente, payee)
        VALUES ($1, $2, 'transfer', $3, $4, $5, $6, 'once', $7, $8, 'continuous', NULL,
                FALSE, FALSE, 'financiamento_parcela', $9, '[]', '[]', '{}',
-               $10, $11, 'financiamento')`,
+               $10, $11, 'financiamento', $12)`,
       // start_date é TEXT e next_occurrence é DATE: a mesma data precisa ir em dois parâmetros
       // distintos, senão o Postgres tenta deduzir um único tipo para o placeholder e falha.
       [id, `${descricaoBase} ${p.numero}/${numParcelas}`, contaOrigemId, contaDestinoId,
         round2(valorParcela), categoriaPrestacaoId, p.data_vencimento, p.data_vencimento, p.id,
         // Desdobramento da PARCELA, não do financiamento: a última absorve o resíduo do
         // arredondamento, então os dois números variam entre parcelas.
-        round2(num(p.principal_provisioned)), round2(num(p.juros_provisioned))],
+        round2(num(p.principal_provisioned)), round2(num(p.juros_provisioned)),
+        // `payee` é o favorecido exibido em Contas a Pagar / Agendamentos. Nasce aqui para o
+        // agendamento não aparecer sem favorecido até alguém trocar o banco pela aba Parcelas.
+        payee || null],
     )
     ids.push(id)
   }
   return ids
+}
+
+// Propaga o favorecido do financiamento para os agendamentos de TODAS as suas parcelas.
+// `payee` já é coluna de `agendamentos` (nasceu com a tabela) e — ao contrário de
+// financing_installment_id/tipo_componente — ESTÁ em scheduleToRow, o mapper de escrita do sync.
+// Consequência: escrever só aqui não basta. O próximo syncSection('agendamentos', ...) faz upsert
+// de todos os agendamentos a partir do estado do app e devolveria o payee antigo. Por isso o
+// endpoint que chama isto devolve os ids afetados, para o app espelhar a mudança em memória.
+// Inclui parcelas já pagas de propósito: o favorecido é descritivo e um histórico com dois
+// favorecidos diferentes para o mesmo financiamento confundiria mais do que ajudaria.
+export async function sincronizarFavorecidoAgendamentos(q, financingId, payee) {
+  const rows = await q(
+    `UPDATE agendamentos
+        SET payee = $1
+      WHERE financing_installment_id IN (
+              SELECT id FROM financing_installments WHERE financing_id = $2
+            )
+      RETURNING id`,
+    [payee || null, financingId],
+  )
+  return rows.map(r => r.id)
 }
 
 export async function registrarMovimentacao(q, {

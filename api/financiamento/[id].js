@@ -2,7 +2,7 @@ import { query, parseBody } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
   getRouteId, genId, num, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
-  ensureBemSchema, withFavorecido,
+  ensureBemSchema, withFavorecido, sincronizarFavorecidoAgendamentos,
 } from '../_bem.js'
 
 // GET   /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
@@ -164,6 +164,11 @@ async function patch(req, res) {
       [id, favorecidoId, bancoTexto],
     )
 
+    // Propaga para os agendamentos das parcelas. O favorecido exibido segue o MESMO texto que a
+    // UI mostra (`bancoTexto`), e não o nome cru da conta: desvincular o favorecido mantendo o
+    // texto livre "Safra" deve deixar as parcelas com "Safra", não em branco.
+    const agendamentosAtualizados = await sincronizarFavorecidoAgendamentos(query, id, bancoTexto)
+
     // A conta "Contas a Pagar - Fin. <bem>" é a face visível do financiamento no Patrimônio —
     // é a descrição dela que mostra a quem a dívida é devida.
     if (fin.conta_divida_id) {
@@ -182,6 +187,11 @@ async function patch(req, res) {
         banco_favorecido_id: favorecidoId,
         banco_favorecido_nome: favorecido?.name ?? null,
       },
+      // Ids dos agendamentos que mudaram de favorecido, com o valor novo. O app PRECISA espelhar
+      // isto no estado: `payee` está em scheduleToRow, então o próximo syncSection('agendamentos')
+      // reescreveria o favorecido antigo por cima do que acabou de ser gravado aqui.
+      agendamentos_atualizados: agendamentosAtualizados,
+      agendamentos_payee: bancoTexto,
       conta_criada: contaCriada && !contaCriada.ja_existia ? {
         id: contaCriada.id,
         name: contaCriada.name,

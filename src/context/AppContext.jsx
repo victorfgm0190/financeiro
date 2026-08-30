@@ -2055,6 +2055,19 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.map(s => s.id === id ? { ...s, ...changes } : s) }))
   }, [update])
 
+  // Aplica um mesmo favorecido a vários agendamentos de uma vez. Existe para espelhar o que
+  // PATCH /api/financiamento/[id] acabou de gravar nas parcelas: `payee` está em scheduleToRow,
+  // então sem espelhar aqui o próximo syncSection('agendamentos') mandaria o favorecido ANTIGO
+  // do estado e desfaria a troca no banco. Um único update() para não disparar 60 renders.
+  const updateSchedulesPayee = useCallback((ids, payee) => {
+    const alvo = new Set(ids || [])
+    if (alvo.size === 0) return
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => (alvo.has(s.id) ? { ...s, payee: payee || '' } : s)),
+    }))
+  }, [update])
+
   // Alterna a flag visual "Confirmado / A Confirmar" do agendamento.
   const toggleScheduleConfirmado = useCallback((id) => {
     update(d => ({ ...d, schedules: d.schedules.map(s => s.id === id ? { ...s, confirmado: !s.confirmado } : s) }))
@@ -5049,7 +5062,7 @@ export function AppProvider({ children }) {
       addCategory, updateCategory, deleteCategory,
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
-      addSchedule, updateSchedule, deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
+      addSchedule, updateSchedule, updateSchedulesPayee, deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
       efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,

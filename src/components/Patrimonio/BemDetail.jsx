@@ -29,7 +29,7 @@ const POR_PAGINA = 20
 export default function BemDetail({ conta, onClose }) {
   const {
     accounts, categories, profileTransactions, payees,
-    addAccount, updateAccount, updateTransaction, addPayee,
+    addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee,
   } = useApp()
 
   const [bem, setBem] = useState(null)
@@ -268,10 +268,25 @@ export default function BemDetail({ conta, onClose }) {
       })
     }
     setFinanciamento(atual => (atual ? { ...atual, ...resposta.financiamento } : atual))
+
+    // O endpoint já gravou o favorecido nos agendamentos das parcelas; espelhar aqui é
+    // OBRIGATÓRIO, não cosmético: `payee` está em scheduleToRow, então o próximo sync mandaria o
+    // valor antigo do estado e desfaria a troca no banco.
+    const idsAgendamentos = resposta.agendamentos_atualizados || []
+    updateSchedulesPayee(idsAgendamentos, resposta.agendamentos_payee)
+    // O favorecido novo entra na lista do autocomplete como qualquer outro.
+    if (resposta.agendamentos_payee && !payees.includes(resposta.agendamentos_payee)) {
+      addPayee(resposta.agendamentos_payee)
+    }
+
+    const nomeExibido = resposta.financiamento.banco_favorecido_nome
+    const sufixoParcelas = idsAgendamentos.length
+      ? ` ${idsAgendamentos.length} parcela(s) atualizada(s).`
+      : ''
     avisar(
-      resposta.financiamento.banco_favorecido_nome
-        ? `Favorecido atualizado para ${resposta.financiamento.banco_favorecido_nome}.`
-        : 'Favorecido desvinculado.',
+      (nomeExibido
+        ? `Favorecido atualizado para ${nomeExibido}.`
+        : 'Favorecido desvinculado.') + sufixoParcelas,
     )
   }
 

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const body = await parseBody(req)
     const {
       bem_id, valor_principal, num_parcelas, valor_parcela, banco,
-      data_primeira_parcela, conta_origem_id,
+      data_primeira_parcela, conta_origem_id, banco_favorecido_id,
     } = body
 
     if (!bem_id) return fail(res, 400, 'bem_id é obrigatório')
@@ -67,6 +67,19 @@ export default async function handler(req, res) {
       contaOrigem = c.id
     }
 
+    // Banco favorecido é opcional na criação (a aba Parcelas troca depois pelo PATCH). Quando
+    // vem, o NOME da conta vira o favorecido das parcelas; sem ele, cai no texto livre `banco`,
+    // que é o que a UI já exibe — assim o agendamento nunca nasce sem favorecido.
+    let favorecidoId = null
+    let favorecidoNome = null
+    if (banco_favorecido_id) {
+      const [c] = await query(`SELECT id, name FROM contas WHERE id = $1`, [banco_favorecido_id])
+      if (!c) return fail(res, 404, `conta favorecida ${banco_favorecido_id} não encontrada`)
+      favorecidoId = c.id
+      favorecidoNome = c.name
+    }
+    if (!favorecidoNome) favorecidoNome = (banco && String(banco).trim()) || null
+
     const valorPrincipal = round2(num(valor_principal))
     const valorParcela = round2(num(valor_parcela))
     const provisao = montarProvisao({
@@ -101,11 +114,12 @@ export default async function handler(req, res) {
         `INSERT INTO financing
            (id, bem_id, valor_principal, juros_totais, valor_total, num_parcelas, valor_parcela,
             principal_por_parcela, juros_por_parcela, banco, status, conta_divida_id,
-            conta_origem_id, data_primeira_parcela)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11,$12,$13)`,
+            conta_origem_id, data_primeira_parcela, banco_favorecido_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open',$11,$12,$13,$14)`,
         [financingId, bem_id, valorPrincipal, provisao.jurosTotais, provisao.valorTotal,
           nParcelas, valorParcela, provisao.principalPorParcela, provisao.jurosPorParcela,
-          banco || null, contaDividaId, contaOrigem, String(data_primeira_parcela).slice(0, 10)],
+          banco || null, contaDividaId, contaOrigem, String(data_primeira_parcela).slice(0, 10),
+          favorecidoId],
       )
 
       const parcelas = []
@@ -132,6 +146,7 @@ export default async function handler(req, res) {
         descricaoBase: `Parcela`,
         numParcelas: nParcelas,
         categoriaPrestacaoId: bem.categoria_prestacao_id || null,
+        payee: favorecidoNome,
       })
       // Descrição final inclui o nome do bem; feita aqui para não repetir a string por parcela.
       for (let i = 0; i < scheduleIds.length; i++) {
@@ -162,6 +177,8 @@ export default async function handler(req, res) {
         principal_por_parcela: provisao.principalPorParcela,
         juros_por_parcela: provisao.jurosPorParcela,
         banco: banco || null,
+        banco_favorecido_id: favorecidoId,
+        banco_favorecido_nome: favorecidoId ? favorecidoNome : null,
         status: 'open',
         conta_divida_id: contaDividaId,
         conta_origem_id: contaOrigem,
