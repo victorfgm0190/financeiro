@@ -22,6 +22,7 @@ import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
 import { pagarParcela } from '../../lib/bemApi'
+import ToastShared from '../shared/Toast'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -1948,6 +1949,10 @@ export default function SchedulePanel() {
     activeProfileId, settings,
   } = useApp()
 
+  // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
+  // no financiamento inteiro, e isso precisa ficar visível para quem editou só uma parcela.
+  const [avisoForm, setAvisoForm] = useState(null)
+
   const provisoesPendentes = useMemo(() => getProvisoesPendentes(), [getProvisoesPendentes])
   const faturasProvisao = useMemo(() => getFaturasProvisaoGerencial(), [getFaturasProvisaoGerencial])
   const [showExecutarGer, setShowExecutarGer] = useState(false)
@@ -2458,8 +2463,20 @@ export default function SchedulePanel() {
       )}
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditSchedule(null) }} title={editSchedule ? 'Editar Agendamento' : 'Novo Agendamento'} size="lg">
-        <ScheduleForm initial={editSchedule} onClose={() => { setShowForm(false); setEditSchedule(null) }} />
+        <ScheduleForm
+          initial={editSchedule}
+          onClose={() => { setShowForm(false); setEditSchedule(null) }}
+          onAviso={(mensagem, variante = 'success') => setAvisoForm({ mensagem, variante })}
+        />
       </Modal>
+
+      {avisoForm && (
+        <ToastShared
+          message={avisoForm.mensagem}
+          variant={avisoForm.variante}
+          onClose={() => setAvisoForm(null)}
+        />
+      )}
 
       <Modal open={showProvisaoForm} onClose={() => { setShowProvisaoForm(false); setEditProvisao(null) }} title={editProvisao ? 'Editar Provisão de Despesa' : 'Lançar Provisão de Despesa'}>
         <ProvisaoForm initial={editProvisao} onClose={() => { setShowProvisaoForm(false); setEditProvisao(null) }} />

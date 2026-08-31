@@ -36,6 +36,11 @@ export default async function handler(req, res) {
     if (!Number.isFinite(Number(valor_parcela)) || Number(valor_parcela) <= 0) {
       return fail(res, 400, 'valor_parcela deve ser um número maior que zero')
     }
+    // Obrigatório: é este texto que vira o favorecido (`payee`) de todas as parcelas. Deixar
+    // passar vazio geraria 60 agendamentos sem favorecido, descobertos só em Contas a Pagar.
+    if (!banco || !String(banco).trim()) {
+      return fail(res, 400, 'banco (favorecido) é obrigatório')
+    }
     if (!isIsoDate(data_primeira_parcela)) {
       return fail(res, 400, 'data_primeira_parcela deve estar no formato YYYY-MM-DD')
     }

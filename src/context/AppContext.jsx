@@ -21,6 +21,7 @@ import { installmentKey } from '../lib/installments'
 import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
+import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
@@ -2067,6 +2068,25 @@ export function AppProvider({ children }) {
       schedules: d.schedules.map(s => (alvo.has(s.id) ? { ...s, payee: payee || '' } : s)),
     }))
   }, [update])
+
+  // Grava o favorecido de UM agendamento. Se ele for parcela de financiamento, a mudança vale
+  // para o financiamento INTEIRO (e para as outras parcelas), pelo endpoint que faz as duas
+  // escritas na mesma transação — deixar uma parcela divergir daria um financiamento com dois
+  // favorecidos, e a próxima troca pela aba Parcelas apagaria a divergência sem avisar.
+  // Devolve quantos agendamentos mudaram, para quem chamou poder avisar o usuário.
+  const salvarFavorecidoDoAgendamento = useCallback(async (scheduleId, novoPayee) => {
+    const sched = dataRef.current.schedules.find(s => s.id === scheduleId)
+    if (!sched?.financingInstallmentId) {
+      updateSchedule(scheduleId, { payee: novoPayee || '' })
+      return { sincronizado: false, total: 1 }
+    }
+    const resposta = await sincronizarFavorecidoDeParcela(sched.financingInstallmentId, novoPayee)
+    const ids = resposta.agendamentos_atualizados || []
+    // Espelha as OUTRAS parcelas também: o endpoint já as gravou, mas sem isto o próximo
+    // syncSection('agendamentos') mandaria o payee antigo do estado por cima do banco.
+    updateSchedulesPayee(ids, resposta.agendamentos_payee)
+    return { sincronizado: true, total: ids.length }
+  }, [updateSchedule, updateSchedulesPayee])
 
   // Alterna a flag visual "Confirmado / A Confirmar" do agendamento.
   const toggleScheduleConfirmado = useCallback((id) => {
@@ -5062,7 +5082,8 @@ export function AppProvider({ children }) {
       addCategory, updateCategory, deleteCategory,
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
-      addSchedule, updateSchedule, updateSchedulesPayee, deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
+      addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
+      deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
       efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,
       addBudget, updateBudget, deleteBudget,

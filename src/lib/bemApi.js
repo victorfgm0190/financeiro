@@ -76,3 +76,9 @@ export const pagarParcela = (parcelaId, payload) =>
 // Troca o banco favorecido (quem RECEBE as parcelas). `banco_favorecido_id: null` desvincula.
 export const atualizarFavorecido = (financiamentoId, payload) =>
   patch(`/api/financiamento/${enc(financiamentoId)}`, payload)
+
+// Lado inverso: edita o favorecido a partir de UMA parcela e propaga para o financiamento e
+// para todas as outras parcelas. Devolve os ids dos agendamentos afetados, que o app precisa
+// espelhar no estado (`payee` está em scheduleToRow — ver AppContext).
+export const sincronizarFavorecidoDeParcela = (parcelaId, payee) =>
+  patch(`/api/financiamento/parcela/${enc(parcelaId)}/favorecido`, { payee })

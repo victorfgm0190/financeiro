@@ -7,7 +7,9 @@ import { hojeIso, round2, contasFavorecidasElegiveis } from './bemUtils'
 
 const BANCOS = ['Safra', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'BV', 'Votorantim']
 
-export default function FinanciamentoModal({ bem, contasCorrentes, contas = [], onCancel, onSuccess, onErro }) {
+export default function FinanciamentoModal({
+  bem, contasCorrentes, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
+}) {
   const restante = Math.max(0, round2((bem.valor_nota_fiscal || 0) - (bem.saldo || 0)))
   const [form, setForm] = useState({
     valor_principal: String(restante || ''),
@@ -22,6 +24,7 @@ export default function FinanciamentoModal({ bem, contasCorrentes, contas = [], 
       || '',
   })
   const [loading, setLoading] = useState(false)
+  const [tocouFavorecido, setTocouFavorecido] = useState(false)
 
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }))
 
@@ -48,7 +51,18 @@ export default function FinanciamentoModal({ bem, contasCorrentes, contas = [], 
     }
   }, [form.valor_principal, form.num_parcelas, form.valor_parcela])
 
-  const podeEnviar = preview && !preview.invalido && form.data_primeira_parcela && !loading
+  // O favorecido é obrigatório: é ele que vira o `payee` das parcelas, e um financiamento cujas
+  // 60 parcelas nascem sem favorecido só é descoberto lá na frente, na tela de Contas a Pagar.
+  const favorecidoVazio = !form.banco.trim()
+  const podeEnviar = preview && !preview.invalido && form.data_primeira_parcela
+    && !favorecidoVazio && !loading
+
+  // BANCOS primeiro (os mais prováveis num financiamento), depois os favorecidos que o usuário
+  // já usou em outros lançamentos — sem repetir quem já está na primeira lista.
+  const sugestoesFavorecido = useMemo(() => {
+    const extras = (favorecidos || []).filter(f => f && !BANCOS.includes(f))
+    return [...BANCOS, ...extras.sort((a, b) => a.localeCompare(b, 'pt-BR'))]
+  }, [favorecidos])
 
   const enviar = async (e) => {
     e.preventDefault()
@@ -108,16 +122,21 @@ export default function FinanciamentoModal({ bem, contasCorrentes, contas = [], 
           />
         </div>
         <div>
-          <label className="label">Banco</label>
+          <label className="label">Favorecido *</label>
           <input
-            className="input" list="bancos-financiamento"
+            className="input" list="bancos-financiamento" required
             value={form.banco}
             onChange={e => set('banco', e.target.value)}
+            onBlur={() => setTocouFavorecido(true)}
             placeholder="Ex: Safra"
           />
           <datalist id="bancos-financiamento">
-            {BANCOS.map(b => <option key={b} value={b} />)}
+            {sugestoesFavorecido.map(b => <option key={b} value={b} />)}
           </datalist>
+          {tocouFavorecido && favorecidoVazio
+            ? <p className="text-xs text-red-400 mt-1">Favorecido é obrigatório.</p>
+            : <p className="text-xs text-gray-500 mt-1">Quem recebe as parcelas. Vai para o favorecido dos 
+              agendamentos e pode ser trocado depois na aba Parcelas.</p>}
         </div>
         <div>
           <label className="label">Banco favorecido (conta)</label>

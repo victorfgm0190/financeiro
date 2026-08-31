@@ -178,8 +178,8 @@ function buildCatOpts(categories, type) {
 }
 
 
-export default function ScheduleForm({ initial, onClose }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
+export default function ScheduleForm({ initial, onClose, onAviso }) {
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -330,7 +330,7 @@ export default function ScheduleForm({ initial, onClose }) {
     setEditingOcc(null)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.description || !form.amount || !form.accountId || !form.frequency) return
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
@@ -350,6 +350,21 @@ export default function ScheduleForm({ initial, onClose }) {
     // que não casa com nenhum agendamento — o modal fechava e nada era criado, sem erro.
     let schedId = initial?.id
     if (schedId) {
+      // Parcela de financiamento: trocar o favorecido aqui vale para o financiamento inteiro.
+      // Vai ANTES do updateSchedule para que uma falha do endpoint não deixe o estado local
+      // com um favorecido que o banco não tem — o sync o empurraria depois como se fosse bom.
+      if (initial.financingInstallmentId && (data.payee || '') !== (initial.payee || '')) {
+        try {
+          const r = await salvarFavorecidoDoAgendamento(schedId, data.payee || '')
+          onAviso?.(
+            `Favorecido atualizado para ${data.payee || '(vazio)'}.`
+            + ` ${r.total} parcela(s) e o financiamento atualizados.`,
+          )
+        } catch (err) {
+          onAviso?.(`Não foi possível sincronizar o favorecido: ${err.message}`, 'error')
+          return
+        }
+      }
       updateSchedule(schedId, data)
     } else {
       schedId = addSchedule(data)
