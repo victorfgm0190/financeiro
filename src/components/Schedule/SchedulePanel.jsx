@@ -76,15 +76,30 @@ function seriesKeyOf(s) {
 // É puramente visual: as ações (pagar/pular/estornar) continuam usando nextDate (a ocorrência
 // pendente real).
 function scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, todayStr) {
-  if (!nextDate || (schedule.frequency || 'once') === 'once') return nextDate
+  // Exceção da ocorrência ("Próximas ocorrências" do formulário) manda na data EXIBIDA.
+  //
+  // Ela é guardada em `overrides[dataOriginal].date` e NÃO altera a data original — que é a
+  // chave de registered/skipped e continua sendo o que as ações usam (o `nextDate` deste
+  // arquivo). Sem passar por occEfetiva aqui, mover uma ocorrência de 09/09 para 11/09 gravava
+  // certo, sincronizava certo e não mudava nada na linha: o cabeçalho seguia em 09/09 enquanto
+  // a sub-lista de próximas ocorrências (que já usa occEfetiva) mostrava 11/09.
+  const efetiva = (d) => (d ? occEfetiva(schedule, d).date : d)
+
+  const proxima = efetiva(nextDate)
+  if (!proxima || (schedule.frequency || 'once') === 'once') return proxima
   // Ocorrência pendente EM ATRASO manda: ela é a próxima NÃO PAGA e tem de aparecer com a
   // própria data. Preferir a próxima futura (comportamento anterior) tirava a linha do bucket
   // "Em atraso" — particionado por displayDate — enquanto o pagamento seguia em aberto.
-  if (nextDate < todayStr) return nextDate
+  //
+  // O teste é sobre a data EFETIVA: uma ocorrência vencida que foi adiada para o futuro não
+  // está mais em atraso, e cair no bucket "Em atraso" exibindo uma data futura seria pior que
+  // o bug original.
+  if (proxima < todayStr) return proxima
   // Sem atraso: "Data de Vencimento Atual" do formulário, desde que ela mesma não seja uma data
   // já consumida (nextOccurrence pode ficar para trás de registered/skipped).
-  if (schedule.nextOccurrence && schedule.nextOccurrence >= todayStr) return schedule.nextOccurrence
-  return getNextOccurrences(schedule, 24).find(d => d >= todayStr) || nextDate
+  const ancora = efetiva(schedule.nextOccurrence)
+  if (ancora && ancora >= todayStr) return ancora
+  return efetiva(getNextOccurrences(schedule, 24).find(d => efetiva(d) >= todayStr)) || proxima
 }
 
 // Aglutina a lista de agendamentos em "grupos" de exibição (somente visual — não toca dados):
