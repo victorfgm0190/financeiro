@@ -8,6 +8,7 @@ import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate } from '../shared/utils'
+import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -308,6 +309,10 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   const [trfNotes, setTrfNotes] = useState(schedule.notes || '')
 
   const [finAccountId, setFinAccountId] = useState(schedule.accountId || '')
+  // Quanto vai ser pago AGORA. Nasce na parcela cheia (o caso normal) e é editável para o
+  // pagamento parcial, que o backend já suporta — antes o modal mandava sempre o total e não
+  // havia como registrar um aporte menor por esta tela.
+  const [finValor, setFinValor] = useState(() => (parcelaFin ? String(parcelaFin.total) : ''))
   const [finDate, setFinDate] = useState(nextDate || today)
   const [finLoading, setFinLoading] = useState(false)
   const [finErro, setFinErro] = useState(null)
@@ -317,17 +322,36 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
     accounts.find(a => a.isMain && a.type !== 'credit') ||
     accounts.find(a => a.type === 'checking')
 
+  // Preview do MESMO rateio que o backend aplica: principal primeiro, juros com a sobra, resto
+  // vira desvio. `calcularRateio` é a fórmula compartilhada (src/lib/financiamento.js) — a mesma
+  // que o modal de pagar do Patrimônio usa, para as duas telas nunca preverem coisas diferentes.
+  //
+  // Assume a parcela ainda intocada: o agendamento carrega o desdobramento PROVISIONADO, não o
+  // quanto já foi pago. Numa parcela com aporte parcial anterior o preview fica otimista, mas o
+  // valor gravado não — o servidor recalcula sobre o acumulado real da parcela.
+  const finValorNum = Number(finValor)
+  const finRateio = useMemo(() => {
+    if (!parcelaFin || !(finValorNum > 0)) return null
+    return calcularRateio(finValorNum, parcelaFin.principal, parcelaFin.juros)
+  }, [finValorNum, parcelaFin])
+
+  // Pagar mais que a parcela infla o saldo do bem (o backend soma `valor_pago` cheio nele) sem
+  // ter onde alocar a diferença — o rateio já teria dado principal e juros por quitados.
+  const finExcede = !!parcelaFin && finValorNum > parcelaFin.total + 0.001
+
   // Baixa a parcela pelo endpoint e espelha o resultado no estado do app. Os dois lançamentos
   // entram com o id que o backend JÁ gravou (addTransaction respeita id de fora): assim o upsert
   // do sync casa na linha existente em vez de criar uma segunda, e o saldo da conta de origem
   // muda na hora em vez de só no próximo full-load.
   const handleConfirmFinanciamento = async () => {
     if (!finAccountId) { setFinErro('Escolha a conta de origem.'); return }
+    if (!(finValorNum > 0)) { setFinErro('Informe quanto você vai pagar.'); return }
+    if (finExcede) { setFinErro(`O valor não pode passar de ${fmt(parcelaFin.total)}.`); return }
     setFinLoading(true)
     setFinErro(null)
     try {
       const r = await pagarParcela(parcelaFin.parcelaId, {
-        valor_pago: parcelaFin.total,
+        valor_pago: finValorNum,
         data_pagamento: finDate,
         conta_origem_id: finAccountId,
         debitar_origem: true,
@@ -482,9 +506,49 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
                   <span className="text-xs font-bold text-gray-100">{fmt(parcelaFin.total)}</span>
                 </div>
               </div>
+              <div>
+                <label className="label">Quanto você vai pagar? (R$)</label>
+                <input
+                  className="input" type="number" step="0.01" min="0.01"
+                  max={parcelaFin.total}
+                  value={finValor}
+                  onChange={e => setFinValor(e.target.value)}
+                />
+                {finExcede && (
+                  <p className="text-xs text-despesa mt-1">
+                    Máximo {fmt(parcelaFin.total)} — o que passa disso não teria onde ser alocado.
+                  </p>
+                )}
+              </div>
+
+              {finRateio && !finExcede && (
+                <div className="rounded-lg border border-gray-800 bg-gray-800/40 px-3 py-2.5 text-xs space-y-0.5">
+                  <p className="text-gray-400 mb-1.5">Rateio deste pagamento (principal primeiro)</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Principal neste pagamento</span>
+                    <span className="text-gray-200">{fmt(finRateio.principalPago)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Juros neste pagamento</span>
+                    <span className="text-gray-200">{fmt(finRateio.jurosPago)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Juros em falta</span>
+                    <span className={finRateio.desvioJuros > 0 ? 'text-amber-400' : 'text-gray-200'}>
+                      {fmt(finRateio.desvioJuros)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
+                    <span className="text-gray-400 font-semibold">Total pago na parcela</span>
+                    <span className="text-gray-100 font-bold">{fmt(finValorNum)}</span>
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-gray-500">
-                Serão criados dois lançamentos na mesma data e na mesma conta de origem, cada um
-                na categoria parametrizada do bem (prestação e taxa de financiamento).
+                Serão criados até dois lançamentos na mesma data e na mesma conta de origem, cada
+                um na categoria parametrizada do bem (prestação e taxa de financiamento). Pagando
+                menos que a parcela ela fica parcial e o saldo continua em aberto.
               </p>
               <div>
                 <label className="label">Banco de</label>

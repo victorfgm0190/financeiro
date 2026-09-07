@@ -11,26 +11,10 @@ export function fmtData(iso) {
 
 export const hojeIso = () => new Date().toISOString().slice(0, 10)
 
-export const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100
-
-// Espelha calcularRateio de api/_bem.js: principal primeiro, juros com a sobra, resto vira desvio.
-// Usado só para o preview em tempo real — o valor gravado é sempre o que o backend calcula.
-export function calcularRateio(valorPago, principalProvisioned, jurosProvisioned) {
-  const pago = round2(Number(valorPago) || 0)
-  const principalPrev = round2(Number(principalProvisioned) || 0)
-  const jurosPrev = round2(Number(jurosProvisioned) || 0)
-
-  if (pago >= principalPrev) {
-    const sobra = round2(pago - principalPrev)
-    const jurosPago = Math.min(sobra, jurosPrev)
-    return {
-      principalPago: principalPrev,
-      jurosPago: round2(jurosPago),
-      desvioJuros: round2(jurosPrev - jurosPago),
-    }
-  }
-  return { principalPago: pago, jurosPago: 0, desvioJuros: jurosPrev }
-}
+// Reexportados de src/lib/financiamento.js, onde passaram a morar para a tela de Contas a Pagar
+// poder usar o MESMO rateio sem importar de components/Patrimonio/. Os chamadores daqui seguem
+// funcionando; duas cópias da fórmula é que não podem existir.
+export { round2, calcularRateio } from '../../lib/financiamento'
 
 // Status visual da parcela: 'paid' e 'partial' vêm do backend; 'vencida' é derivado da data.
 export function statusParcela(parcela) {
