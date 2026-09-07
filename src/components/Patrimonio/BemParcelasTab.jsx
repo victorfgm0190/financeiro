@@ -93,7 +93,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
 
 export default function BemParcelasTab({
   financiamento, parcelas, page, totalPages, totalParcelas, loading, onPage, onPagar,
-  onEditarFavorecido, onSepararJuros,
+  onEditarFavorecido, onSepararJuros, separandoJuros = false, temCategoriaTaxa = true,
 }) {
   if (!financiamento) {
     return (
@@ -136,14 +136,21 @@ export default function BemParcelasTab({
           >
             <Settings2 size={13} /> Editar Favorecido
           </button>
-          {/* Só faz sentido para financiamento provisionado ANTES da separação existir. O modal
-              consulta o backend e avisa quando não há nada a separar. */}
+          {/* Divide o agendamento de cada parcela em principal + juros, via rateio. Só serve
+              para financiamento provisionado ANTES de a criação passar a fazer isso sozinha —
+              nas parcelas que já têm rateio o endpoint não mexe. */}
           <button
-            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={onSepararJuros}
-            title="Separa os agendamentos antigos em duas linhas: principal e juros"
+            disabled={separandoJuros || !temCategoriaTaxa}
+            title={temCategoriaTaxa
+              ? 'Divide cada parcela em Principal e Juros, cada um na sua categoria'
+              : 'Parametrize a categoria de Taxa de Financiamento antes'}
           >
-            <Split size={13} /> Separar Juros
+            {separandoJuros
+              ? <Loader2 size={13} className="animate-spin" />
+              : <Split size={13} />}
+            Separar Juros
           </button>
         </div>
       </div>

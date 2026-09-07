@@ -2,7 +2,8 @@ import { query, parseBody, withTransaction } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import {
   genId, num, round2, isIsoDate, fail,
-  montarProvisao, criarAgendamentosParcelas, ACCOUNT_TYPE_DIVIDA, explicarErro, ensureBemSchema,
+  montarProvisao, criarAgendamentosParcelas, criarRateiosParcela, ACCOUNT_TYPE_DIVIDA,
+  explicarErro, ensureBemSchema,
 } from '../_bem.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
@@ -100,14 +101,19 @@ export default async function handler(req, res) {
       return fail(res, 400,
         `valor_parcela × num_parcelas (${provisao.valorTotal}) é menor que valor_principal (${valorPrincipal})`)
     }
-    // Cada parcela nasce com DOIS agendamentos, e o de juros vai na categoria de taxa do bem.
-    // Sem ela parametrizada esse agendamento nasceria sem categoria — que é o problema que a
-    // separação existe para resolver. Barrado aqui, antes da transação, para o usuário receber
-    // 400 com a instrução em vez de um 500 de rollback.
+
+    // O agendamento de cada parcela nasce rateado nas duas categorias do bem. Sem elas o rateio
+    // nasceria sem categoria — que é exatamente o que ele existe para resolver —, então a
+    // criação para aqui, com 400 e a instrução, em vez de gerar 60 agendamentos para consertar
+    // depois. A de taxa só é exigida quando há juros: financiamento sem juros só tem principal.
+    if (!bem.categoria_prestacao_id) {
+      return fail(res, 400,
+        'bem sem categoria de Prestação parametrizada — parametrize o bem antes de criar o financiamento')
+    }
     if (!bem.categoria_taxa_finan_id && provisao.jurosTotais > 0) {
       return fail(res, 400,
         'bem sem categoria de Taxa de Financiamento parametrizada — parametrize o bem antes de '
-        + 'criar o financiamento, senão os agendamentos de juros nascem sem categoria')
+        + 'criar o financiamento, senão os juros das parcelas ficam sem categoria')
     }
 
     const financingId = genId('fin')
@@ -154,36 +160,35 @@ export default async function handler(req, res) {
         parcelas.push({ ...p, id })
       }
 
-      // Dois agendamentos por parcela: principal (transferência p/ a dívida, categoria de
-      // prestação) e juros (despesa, categoria de taxa) — ver a validação lá em cima.
-      const pares = await criarAgendamentosParcelas(q, {
+      const scheduleIds = await criarAgendamentosParcelas(q, {
         parcelas,
         contaOrigemId: contaOrigem,
         contaDestinoId: contaDividaId,
+        valorParcela,
         descricaoBase: `Parcela`,
         numParcelas: nParcelas,
         categoriaPrestacaoId: bem.categoria_prestacao_id || null,
-        categoriaTaxaFinanId: bem.categoria_taxa_finan_id || null,
         payee: bancoTexto,
       })
       // Descrição final inclui o nome do bem; feita aqui para não repetir a string por parcela.
-      const scheduleIds = []
-      for (let i = 0; i < pares.length; i++) {
-        const { principalId, jurosId } = pares[i]
-        const base = `Parcela ${parcelas[i].numero}/${nParcelas} - ${bem.name}`
-        await q(`UPDATE agendamentos SET description = $2 WHERE id = $1`, [principalId, base])
-        scheduleIds.push(principalId)
-        if (jurosId) {
-          await q(
-            `UPDATE agendamentos SET description = $2 WHERE id = $1`,
-            [jurosId, `${base} - Juros`],
-          )
-          scheduleIds.push(jurosId)
-        }
+      for (let i = 0; i < scheduleIds.length; i++) {
         await q(
-          `UPDATE financing_installments SET schedule_id = $2, schedule_juros_id = $3 WHERE id = $1`,
-          [parcelas[i].id, principalId, jurosId],
+          `UPDATE agendamentos SET description = $2 WHERE id = $1`,
+          [scheduleIds[i], `Parcela ${parcelas[i].numero}/${nParcelas} - ${bem.name}`],
         )
+        await q(
+          `UPDATE financing_installments SET schedule_id = $2 WHERE id = $1`,
+          [parcelas[i].id, scheduleIds[i]],
+        )
+        // Principal e juros da PARCELA, não do financiamento: a última absorve o resíduo do
+        // arredondamento, então os dois números variam entre parcelas.
+        await criarRateiosParcela(q, {
+          scheduleId: scheduleIds[i],
+          principal: parcelas[i].principal_provisioned,
+          juros: parcelas[i].juros_provisioned,
+          categoriaPrestacaoId: bem.categoria_prestacao_id,
+          categoriaTaxaFinanId: bem.categoria_taxa_finan_id,
+        })
       }
 
       return { parcelas, scheduleIds, contaDivida }

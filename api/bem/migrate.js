@@ -25,7 +25,7 @@ const COLUNAS_ESPERADAS = {
   lancamentos: ['bem_id'],
   agendamentos: ['financing_installment_id', 'principal_value', 'juros_value', 'tipo_componente'],
   financing: ['banco_favorecido_id'],
-  financing_installments: ['saldo_restante', 'schedule_juros_id'],
+  financing_installments: ['saldo_restante'],
 }
 
 const TABELAS_ESPERADAS = ['financing', 'financing_installments', 'bem_movimentacoes']

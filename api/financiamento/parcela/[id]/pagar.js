@@ -165,15 +165,9 @@ export default async function handler(req, res) {
           rateio.desvioJuros, dataPagamento, statusNovo, saldoRestanteNovo],
       )
 
-      // Agendamentos da parcela: marca a ocorrência como registrada quando a parcela fecha, para
+      // Agendamento da parcela: marca a ocorrência como registrada quando a parcela fecha, para
       // ela sair da lista de pendentes do painel de agendamentos.
-      //
-      // São DOIS ids desde a separação principal/juros, e os dois têm que ser marcados na mesma
-      // baixa: a parcela é atômica no backend (o rateio trabalha sobre o total acumulado dela),
-      // então quitá-la e deixar o agendamento de juros pendente mostraria uma dívida que não
-      // existe mais — e um segundo "Pagar" nela seria recusado com "parcela já está quitada".
-      const agendamentosDaParcela = [parcela.schedule_id, parcela.schedule_juros_id].filter(Boolean)
-      if (statusNovo === 'paid' && agendamentosDaParcela.length > 0) {
+      if (statusNovo === 'paid' && parcela.schedule_id) {
         await q(
           `UPDATE agendamentos
               SET registered = CASE
@@ -181,8 +175,8 @@ export default async function handler(req, res) {
                     ELSE COALESCE(registered, '[]'::jsonb) || to_jsonb($2::text)
                   END,
                   next_occurrence = NULL
-            WHERE id = ANY($1)`,
-          [agendamentosDaParcela, parcela.venc_iso],
+            WHERE id = $1`,
+          [parcela.schedule_id, parcela.venc_iso],
         )
       }
 
@@ -215,7 +209,6 @@ export default async function handler(req, res) {
       return {
         lancamentos, movimentacaoId, statusFin,
         saldoBemAnterior, saldoBemNovo, saldoDividaAnterior, saldoDividaNovo,
-        agendamentosRegistrados: statusNovo === 'paid' ? agendamentosDaParcela : [],
       }
     })
 
@@ -268,11 +261,6 @@ export default async function handler(req, res) {
         data: dataPagamento,
       })),
       movimentacao_id: resultado.movimentacaoId,
-      // Ids dos agendamentos que a baixa marcou como registrados — principal e juros. O app
-      // PRECISA espelhar os dois: `registered` ESTÁ em scheduleToRow, então um sync feito antes
-      // do próximo full-load reenviaria o array antigo e a parcela voltaria a aparecer como
-      // pendente na tela de Contas a Pagar.
-      agendamentos_registrados: resultado.agendamentosRegistrados,
       financiamento: { id: fin.id, status: resultado.statusFin },
       saldos_atualizados: {
         bem: {

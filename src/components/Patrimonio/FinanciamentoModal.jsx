@@ -191,9 +191,9 @@ export default function FinanciamentoModal({
       )}
 
       <p className="text-xs text-gray-600">
-        Serão criadas {form.num_parcelas || 0} parcelas e {(Number(form.num_parcelas) || 0) * 2}{' '}
-        agendamentos: por vencimento, um de principal (transferência para a conta de dívida, na
-        categoria de prestação) e um de juros (despesa, na categoria de taxa de financiamento).
+        Serão criadas {form.num_parcelas || 0} parcelas e {form.num_parcelas || 0} agendamentos de
+        transferência para a conta de dívida, um por vencimento — cada um já rateado em Principal
+        (categoria de prestação) e Juros (categoria de taxa de financiamento).
       </p>
 
       <div className="flex gap-3 pt-1">

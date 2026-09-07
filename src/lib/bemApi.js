@@ -83,10 +83,7 @@ export const atualizarFavorecido = (financiamentoId, payload) =>
 export const sincronizarFavorecidoDeParcela = (parcelaId, payee) =>
   patch(`/api/financiamento/parcela/${enc(parcelaId)}/favorecido`, { payee })
 
-// Separação dos agendamentos antigos (um por parcela, valor cheio) em principal + juros.
-// O GET é read-only: serve para o modal mostrar o "de X para 2X" antes de confirmar.
-export const previewSplitAgendamentos = (bemId) =>
-  request(`/api/financiamento/split-agendamentos${bemId ? `?bem_id=${enc(bemId)}` : ''}`)
-
-export const splitAgendamentos = (payload = {}) =>
-  post('/api/financiamento/split-agendamentos', payload)
+// Popula os rateios (principal + juros) dos agendamentos de um financiamento antigo. Idempotente:
+// parcela que já tem rateio é pulada. Devolve as linhas gravadas para o app espelhar no estado.
+export const popularRateiosParcelas = (payload) =>
+  post('/api/financiamento/parcelas/popular-rateios', payload)

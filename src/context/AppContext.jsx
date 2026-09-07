@@ -1013,6 +1013,22 @@ export function AppProvider({ children }) {
     })
   }, [update])
 
+  // Espelha rateios que o BACKEND acabou de gravar (os das parcelas de financiamento). Só toca
+  // no estado: as linhas já estão no banco, e regravá-las por saveRateiosFor seria uma segunda
+  // escrita do mesmo conteúdo. Sem isto elas só apareceriam no próximo full-load — o usuário
+  // clicaria no botão, veria o toast de sucesso e não veria divisão nenhuma na tela.
+  //
+  // Substitui por lançamento (e não concatena): as linhas que chegam são o conjunto COMPLETO
+  // daquele agendamento, então concatenar duplicaria o que já estivesse no estado.
+  const mergeRateios = useCallback((linhas) => {
+    if (!linhas?.length) return
+    const alvo = new Set(linhas.map(r => r.lancamentoId))
+    update(d => ({
+      ...d,
+      rateios: [...(d.rateios || []).filter(r => !alvo.has(r.lancamentoId)), ...linhas],
+    }))
+  }, [update])
+
   const deleteRateiosFor = useCallback((lancamentoId) => {
     if (!lancamentoId) return
     deleteRateios(lancamentoId).catch(e => console.error('[rateios] delete', e.message))
@@ -5078,7 +5094,7 @@ export function AppProvider({ children }) {
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions, ensureGerencialState,
-      rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
+      rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, mergeRateios,
       addCategory, updateCategory, deleteCategory,
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,

@@ -278,21 +278,3 @@ export function creditBillStatus(card, transactions, schedules, billKey) {
   const totalPago = Math.round(pago * 100) / 100
   return { billKey, billTotal, totalPago, ...classifyFatura(billTotal, totalPago) }
 }
-
-// Agendamento de parcela de financiamento. 'financiamento' é o formato antigo (um agendamento
-// com o valor cheio da parcela); 'financiamento_principal'/'financiamento_juros' são o par que
-// a criação passou a gerar. Os três continuam sendo reconhecidos: enquanto um financiamento não
-// passar pela separação, o que existe no banco é o primeiro.
-export const COMPONENTES_FINANCIAMENTO = new Set([
-  'financiamento', 'financiamento_principal', 'financiamento_juros',
-])
-
-export const ehParcelaFinanciamento = (s) =>
-  !!s?.financingInstallmentId && COMPONENTES_FINANCIAMENTO.has(s?.tipoComponente)
-
-// Rótulo curto do componente, para a listagem distinguir as duas linhas da mesma parcela.
-export function rotuloComponenteFin(tipoComponente) {
-  if (tipoComponente === 'financiamento_principal') return 'Principal'
-  if (tipoComponente === 'financiamento_juros') return 'Juros'
-  return null
-}

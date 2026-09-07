@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react'
 import { Info, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today, fmt, buildAccountSelectOptions, ehParcelaFinanciamento } from '../shared/utils'
+import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -314,10 +314,6 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
   // próxima ocorrência tem valor diferente.
   const nextOccDate = initial?.id ? (getNextOccurrences(initial, 1)[0] || null) : null
-  // Agendamento de parcela de financiamento (principal ou juros): o valor é do financiamento,
-  // não deste formulário — ver a nota no campo Valor.
-  const valorTravadoParcela = ehParcelaFinanciamento(initial)
-
   const nextOccAmount = nextOccDate ? Number(occEfetiva(initial, nextOccDate).amount) : null
   const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(initial?.amount) || 0)
 
@@ -449,7 +445,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         <div>
           <LabelTip tip={TIPS.amount} required>Valor (R$)</LabelTip>
           <input
-            className="input disabled:opacity-60 disabled:cursor-not-allowed"
+            className="input"
             type="number"
             step="0.01"
             min="0.01"
@@ -457,20 +453,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             onChange={e => set('amount', e.target.value)}
             placeholder="0,00"
             required
-            disabled={valorTravadoParcela}
           />
-          {/* O valor de um componente de parcela é derivado do financiamento: quem manda são
-              principal_provisioned/juros_provisioned, e é sobre eles que o rateio da baixa
-              trabalha. Editar só o agendamento faria a previsão discordar da parcela, e a
-              primeira baixa desfaria a edição sem avisar. Para mudar de verdade, é o
-              financiamento que precisa ser refeito. */}
-          {valorTravadoParcela && (
-            <p className="text-xs text-gray-500 mt-1">
-              Definido pelo financiamento — principal e juros vêm da parcela e são baixados
-              juntos.
-            </p>
-          )}
-          {hasNextDiff && !valorTravadoParcela && (
+          {hasNextDiff && (
             <p className="text-xs text-gray-400 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
           )}
         </div>
