@@ -4,6 +4,11 @@ import { ensureBemSchema } from './_bem.js'
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
+  // Estado inteiro do usuário: nunca pode vir de cache. Sem este header a resposta ficava à
+  // mercê do cache do navegador (e de qualquer intermediário), e um reload logo depois de uma
+  // gravação bem-sucedida podia trazer a foto anterior — dado "voltando ao original" sem que
+  // nada tivesse falhado na escrita.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS gerencial_schedule_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_month_year TEXT`)
@@ -386,6 +391,10 @@ export default async function handler(req, res) {
       ])
 
     res.json({
+      // Momento em que ESTA resposta foi montada no servidor. Serve de prova de frescor: se o
+      // app receber um carimbo anterior à última gravação, a resposta veio de cache e não do
+      // banco — que é indistinguível de "o banco não salvou" olhando só para a tela.
+      served_at: new Date().toISOString(),
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
       envs, groups, perfis, imports, grules, rfns, rateios, srfs,

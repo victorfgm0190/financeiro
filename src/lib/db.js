@@ -8,8 +8,13 @@ function onUnauthorized() {
   clearTokenAndRedirect()
 }
 
+// `cache: 'no-store'` é obrigatório aqui. Sem ele o fetch usa o cache HTTP padrão, e como
+// /api/load não mandava header de cache nenhum, o navegador podia servir uma resposta ANTERIOR
+// à última gravação. O efeito é exatamente o bug "salvei, o servidor confirmou, e no F5 voltou
+// ao original": o POST nunca é cacheado (a escrita acontece mesmo), mas o GET do reload traz a
+// foto velha — e o app ainda regrava essa foto velha por cima do localStorage.
 async function apiGet(path) {
-  const res = await fetch(path, { headers: { ...authHeaders() } })
+  const res = await fetch(path, { cache: 'no-store', headers: { ...authHeaders() } })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
     const err = new Error(`GET ${path} → ${res.status}`)
@@ -694,6 +699,13 @@ export const rowToEnvelope = (r) => ({
 export async function loadFromDb(defaultData) {
   try {
     const d = await apiGet('/api/load')
+    // Prova de frescor. `served_at` muito antes de agora = resposta cacheada; nesse caso o que
+    // a tela mostra é uma foto velha do banco, não o que ele tem. Só contadores no log.
+    const idadeSeg = d.served_at ? Math.round((Date.now() - new Date(d.served_at)) / 1000) : null
+    console.log(
+      `[db] /api/load servido ${idadeSeg == null ? '(sem carimbo)' : `há ${idadeSeg}s`}`,
+      `| agendamentos: ${d.scheds?.length ?? 0} | lançamentos: ${d.txs?.length ?? 0}`,
+    )
 
     // Sem dados de usuário (schema novo ou banco vazio) → migra local → Neon
     if (!d.cats || d.cats.length === 0 || !d.accs || d.accs.length === 0) {
