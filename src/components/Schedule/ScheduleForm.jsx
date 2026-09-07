@@ -310,6 +310,35 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   }
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
 
+  // Deslocamento VISUAL da prévia. Quando a primeira ocorrência tem exceção de data (10/09 →
+  // 11/09), as seguintes são exibidas com o mesmo deslocamento — 11/10, 11/11 — que é o que
+  // quem moveu o vencimento espera ver.
+  //
+  // É só exibição, de propósito. As datas ORIGINAIS continuam sendo as chaves de
+  // overrides/skipped (por isso a grade segue iterando `preview`, não as datas exibidas) e
+  // continuam sendo o que `nextOccurrence`, o fluxo de caixa e a baixa usam. Mudar a âncora aqui
+  // deslocaria a série de verdade, e como o submit regrava `nextOccurrence` a cada save isso
+  // aconteceria sem ninguém pedir.
+  // Sem useMemo: `preview` já é recalculado a cada render, então memoizar em cima dele não
+  // pouparia nada — e a conta é uma subtração de datas.
+  const deslocPrevia = (() => {
+    const primeira = preview[0]
+    const ov = primeira ? form.overrides[primeira] : null
+    if (!ov?.date || ov.date === primeira) return 0
+    const ms = new Date(`${ov.date}T12:00:00`) - new Date(`${primeira}T12:00:00`)
+    return Math.round(ms / 86400000)
+  })()
+
+  // Data a EXIBIR numa célula da prévia: exceção própria manda; senão, a original deslocada.
+  const dataExibidaPrevia = (date, i) => {
+    const ov = form.overrides[date]
+    if (ov?.date) return ov.date
+    if (i === 0 || deslocPrevia === 0) return date
+    const d = new Date(`${date}T12:00:00`)
+    d.setDate(d.getDate() + deslocPrevia)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
   // Valor efetivo da próxima ocorrência do agendamento já salvo (respeita override individual).
   // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
   // próxima ocorrência tem valor diferente.
@@ -812,7 +841,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               {preview.map((date, i) => {
                 const override = form.overrides[date]
                 const isSkipped = form.skipped.includes(date)
-                const displayDate = (override?.date || date).split('-').reverse().join('/')
+                const displayDate = dataExibidaPrevia(date, i).split('-').reverse().join('/')
                 const hasCustomAmount = override && !isSkipped && override.amount !== (Number(form.amount) || 0)
 
                 return (
@@ -847,6 +876,17 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 )
               })}
             </div>
+            {/* Sem este aviso a prévia mentiria: ela passa a mostrar 11/10, 11/11, mas o fluxo
+                de caixa, o Painel Geral e a baixa continuam usando as datas originais — a
+                exceção vale só para a ocorrência editada. Quem quer mover a série de verdade
+                tem o campo "Data de Vencimento Atual", que é a âncora. */}
+            {deslocPrevia !== 0 && (
+              <p className="text-xs text-amber-400/80 mt-1.5 leading-relaxed">
+                As datas seguintes aparecem deslocadas junto com a exceção, mas a série continua
+                ancorada na data original — só a ocorrência editada mudou de fato. Para mover o
+                vencimento de todas, use <strong>Data de Vencimento Atual</strong>.
+              </p>
+            )}
           </div>
         )}
 
