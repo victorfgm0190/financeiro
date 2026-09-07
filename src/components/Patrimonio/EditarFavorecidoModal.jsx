@@ -128,14 +128,19 @@ export default function EditarFavorecidoModal({
               )}
           </div>
           <div>
-            <label className="label">Banco favorecido (conta)</label>
+            {/* Rotulado como CONTA, não como "Banco favorecido": com o campo Favorecido logo
+                acima, dois rótulos quase iguais faziam este select parecer uma segunda forma de
+                dizer a mesma coisa — e a diferença (um é texto exibido, o outro é vínculo
+                contábil) desaparecia. */}
+            <label className="label">Conta vinculada</label>
             <select className="input" value={contaId} onChange={e => escolherConta(e.target.value)}>
               <option value="">Nenhuma conta vinculada</option>
               {elegiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <p className="text-xs text-gray-600 mt-1">
-              Opcional — só o vínculo contábil, usado na descrição da conta de dívida. O que as
-              parcelas exibem é o texto acima.
+              Opcional — o vínculo contábil, usado na descrição da conta de dívida. Escolher uma
+              conta preenche o Favorecido com o nome dela; o que as parcelas exibem é sempre o
+              texto acima.
             </p>
           </div>
         </div>
