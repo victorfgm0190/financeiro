@@ -49,7 +49,10 @@ async function upsertChunk(client, table, cols, rows, conflictCol) {
     : `ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ')}`
   const sql = `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ${conflictClause}`
   try {
-    await client.query(sql, params)
+    // rowCount conta inseridas + atualizadas. Devolvido para cima porque um upsert que grava
+    // ZERO linhas era indistinguível de um que gravou todas: os dois terminavam sem erro.
+    const { rowCount } = await client.query(sql, params)
+    return rowCount ?? 0
   } catch (err) {
     // Loga o SQL gerado (sem os valores dos params) para facilitar debug futuro no Vercel.
     console.error('[upsertChunk] SQL falhou:', sql, '| nº params:', params.length, '| erro:', err.message)
@@ -88,8 +91,11 @@ async function reconcileInstallmentKeys(client, rows) {
 
 // Faz upsert de um array de rows numa tabela, em lotes, dentro de uma transação.
 // Os rows já devem estar em snake_case (produzidos pelos *ToRow do frontend).
+// Devolve quantas linhas foram efetivamente gravadas (inseridas + atualizadas). Quem chama usa
+// isso para provar que a escrita aconteceu: antes, uma requisição que não gravava nada terminava
+// exatamente como uma que gravava tudo, e a única forma de descobrir era recarregar o app.
 export async function upsertRows(table, rows, conflictCol = 'id') {
-  if (!rows || rows.length === 0) return
+  if (!rows || rows.length === 0) return 0
   const client = await getPool().connect()
   try {
     if (table === 'lancamentos') {
@@ -99,10 +105,12 @@ export async function upsertRows(table, rows, conflictCol = 'id') {
     const perChunk = Math.max(1, Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_BIND_PARAMS / cols.length)))
 
     await client.query('BEGIN')
+    let gravadas = 0
     for (let i = 0; i < rows.length; i += perChunk) {
-      await upsertChunk(client, table, cols, rows.slice(i, i + perChunk), conflictCol)
+      gravadas += await upsertChunk(client, table, cols, rows.slice(i, i + perChunk), conflictCol)
     }
     await client.query('COMMIT')
+    return gravadas
   } catch (err) {
     try { await client.query('ROLLBACK') } catch { /* ignore */ }
     throw err
@@ -132,8 +140,11 @@ export async function withTransaction(fn) {
 }
 
 export async function deleteRows(table, ids, col = 'id') {
-  if (!ids || ids.length === 0) return
-  await getPool().query(`DELETE FROM ${table} WHERE "${col}" = ANY($1)`, [ids])
+  if (!ids || ids.length === 0) return 0
+  const { rowCount } = await getPool().query(
+    `DELETE FROM ${table} WHERE "${col}" = ANY($1)`, [ids],
+  )
+  return rowCount ?? 0
 }
 
 // Substitui atomicamente TODO o detalhamento (schedule_reserva_funcoes) de UM agendamento:

@@ -893,12 +893,21 @@ export async function syncSection(table, prevItems, currItems, toRow) {
     const prevIds = new Set((prevItems || []).map((i) => i.id))
     const currIds = new Set((currItems || []).map((i) => i.id))
     const toDelete = [...prevIds].filter((id) => !currIds.has(id))
-    await apiPost('/api/sync', {
+    const enviadas = (currItems || []).map(toRow)
+    const r = await apiPost('/api/sync', {
       type: 'section',
       table,
-      upsert: (currItems || []).map(toRow),
+      upsert: enviadas,
       delete: toDelete,
     })
+    // 200 não é prova de escrita. O endpoint devolve quantas linhas gravou; mandar N e gravar 0
+    // é o cenário "salvei, deu OK e sumiu no F5", que antes não deixava rastro nenhum.
+    if (enviadas.length > 0 && r?.written && r.written.upserted === 0) {
+      console.error(
+        `[db] sync ${table}: enviadas ${enviadas.length} linha(s), o servidor gravou 0.`,
+      )
+    }
+    return r
   } catch (err) {
     console.error(`[db] sync ${table}:`, err.message)
     throw err // propaga p/ o chamador não marcar como sincronizado o que falhou
