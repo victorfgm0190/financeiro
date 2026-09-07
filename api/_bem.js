@@ -213,34 +213,19 @@ async function runSchemaStatements(query) {
            tipo_componente = 'financiamento'
       FROM financing_installments fi
      WHERE a.financing_installment_id = fi.id
-       AND (a.tipo_componente IS DISTINCT FROM 'financiamento'
-            OR a.principal_value IS NULL
-            OR a.juros_value IS NULL)`)
+       AND (a.tipo_componente IS NULL
+            OR (a.tipo_componente = 'financiamento'
+                AND (a.principal_value IS NULL OR a.juros_value IS NULL)))`)
 
-  // ── Desfaz a separação em DOIS agendamentos por parcela ────────────────────
-  // Uma versão anterior criava um agendamento de principal e outro de juros. A abordagem foi
-  // trocada pelo RATEIO (um agendamento por parcela, dividido em duas categorias), e o que
-  // aquela versão gravou precisa ser desfeito aqui: um financiamento criado enquanto ela estava
-  // no ar tem uma linha de juros a mais por parcela, e o principal com o valor reduzido — juntos,
-  // eles somam a parcela duas vezes em qualquer previsão.
-  //
-  // Roda no DDL (e não num endpoint de migração) porque o estrago é silencioso e o usuário não
-  // tem como saber que precisa disparar a correção. É idempotente: depois da primeira passada
-  // não existe mais nenhuma linha com esses marcadores.
-  //
-  // ATENÇÃO: o app que estiver aberto com esses agendamentos no estado React vai reenviá-los no
-  // próximo sync (o upsert cobre tudo que está no estado). Depois desta limpeza é preciso
-  // recarregar o app — é o que o aviso do endpoint de rateios diz.
-  await query(`DELETE FROM agendamentos WHERE tipo_componente = 'financiamento_juros'`)
-  await query(`
-    UPDATE agendamentos a
-       SET amount          = fi.total_provisioned,
-           principal_value = fi.principal_provisioned,
-           juros_value     = fi.juros_provisioned,
-           tipo_componente = 'financiamento'
-      FROM financing_installments fi
-     WHERE a.financing_installment_id = fi.id
-       AND a.tipo_componente = 'financiamento_principal'`)
+  // A condição acima era `tipo_componente IS DISTINCT FROM 'financiamento'`, que casa com
+  // QUALQUER outro marcador — inclusive os 'financiamento_principal'/'financiamento_juros' que
+  // uma versão anterior gravava (dois agendamentos por parcela, abordagem trocada pelo rateio).
+  // O efeito era apagar a etiqueta que identificava a duplicata: na primeira chamada a qualquer
+  // endpoint de bem os dois viravam 'financiamento' e o agendamento de juros ficava
+  // indistinguível de uma parcela legítima. Quem limpa a sobra é POST
+  // /api/financiamento/parcelas/popular-rateios, e ele a acha pela ESTRUTURA (dois agendamentos
+  // para a mesma parcela), não pelo marcador — justamente porque o marcador não sobrevive aqui.
+
   await query(`ALTER TABLE financing_installments DROP COLUMN IF EXISTS schedule_juros_id`)
 
   // Rateio de lançamento — criada por api/load.js e api/lancamento-rateios.js. Repetida aqui

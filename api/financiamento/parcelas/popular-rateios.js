@@ -51,41 +51,47 @@ export default async function handler(req, res) {
         `${bem.name} está sem a categoria de Prestação — parametrize o bem antes`)
     }
 
-    // Sobras da abordagem anterior (dois agendamentos por parcela). ensureBemSchema já limpa
-    // isso, mas a limpeza dele é do lado do BANCO e o cache dele roda uma vez por instance —
-    // enquanto o app estiver aberto com esses agendamentos no estado React, o próximo
-    // syncSection('agendamentos') os reinsere, porque o upsert cobre tudo que está no estado.
-    // O resultado é uma parcela aparecendo como duas linhas de novo, agora somando o dobro.
+    // Agendamentos duplicados da abordagem anterior (dois por parcela: principal e juros).
     //
-    // Por isso a limpeza é refeita AQUI e — o que resolve de fato — os ids saem na resposta:
-    // é o app que precisa tirá-los do estado dele, senão eles voltam no sync seguinte.
-    const sobras = await query(
-      `SELECT a.id, a.tipo_componente, fi.total_provisioned,
-              fi.principal_provisioned, fi.juros_provisioned
+    // A busca é ESTRUTURAL, não pelo marcador `tipo_componente`. O backfill de ensureBemSchema
+    // reescreve para 'financiamento' toda linha ligada a uma parcela, então os
+    // 'financiamento_juros' perdem a etiqueta na primeira chamada a qualquer endpoint de bem —
+    // procurar por ela achava zero e era exatamente por isso que a duplicata sobrevivia.
+    //
+    // O que os denuncia: uma parcela tem UM agendamento, e é o que está em
+    // `financing_installments.schedule_id`. Qualquer outro apontando para a mesma parcela é
+    // sobra. `financing_installment_id` só é escrito por api/financiamento/*, então não há
+    // agendamento criado à mão para confundir com duplicata.
+    const duplicados = await query(
+      `SELECT a.id, fi.id AS parcela_id
          FROM agendamentos a
          JOIN financing_installments fi ON fi.id = a.financing_installment_id
         WHERE fi.financing_id = $1
-          AND a.tipo_componente IN ('financiamento_principal', 'financiamento_juros')`,
+          AND fi.schedule_id IS NOT NULL
+          AND a.id <> fi.schedule_id`,
       [fin.id],
     )
-    const aRemover = sobras.filter(s => s.tipo_componente === 'financiamento_juros')
-    const aRestaurar = sobras.filter(s => s.tipo_componente === 'financiamento_principal')
 
-    if (sobras.length > 0) {
+    let aRemover = []
+    let aRestaurar = []
+    if (duplicados.length > 0) {
+      const parcelasAfetadas = [...new Set(duplicados.map(d => d.parcela_id))]
       await withTransaction(async (q) => {
-        if (aRemover.length > 0) {
-          await q(`DELETE FROM agendamentos WHERE id = ANY($1)`, [aRemover.map(s => s.id)])
-        }
-        for (const s of aRestaurar) {
-          await q(
-            `UPDATE agendamentos
-                SET amount = $2, principal_value = $3, juros_value = $4,
-                    tipo_componente = 'financiamento'
-              WHERE id = $1`,
-            [s.id, s.total_provisioned, s.principal_provisioned, s.juros_provisioned],
-          )
-        }
+        await q(`DELETE FROM agendamentos WHERE id = ANY($1)`, [duplicados.map(d => d.id)])
+        // O agendamento que fica teve o valor reduzido ao principal quando a parcela foi
+        // separada; volta a ser a parcela inteira, que é o que o rateio vai dividir.
+        aRestaurar = await q(
+          `UPDATE agendamentos a
+              SET amount = fi.total_provisioned
+             FROM financing_installments fi
+            WHERE fi.id = ANY($1)
+              AND a.id = fi.schedule_id
+              AND a.amount IS DISTINCT FROM fi.total_provisioned
+          RETURNING a.id, a.amount`,
+          [parcelasAfetadas],
+        )
       })
+      aRemover = duplicados.map(d => d.id)
     }
 
     const parcelas = await query(
@@ -192,9 +198,9 @@ export default async function handler(req, res) {
       // Sobras da abordagem de dois agendamentos. O app PRECISA aplicar as duas listas no
       // estado: enquanto esses agendamentos estiverem lá, o sync os reinsere no banco e a
       // parcela volta a aparecer como duas linhas.
-      agendamentos_removidos: aRemover.map(s => s.id),
+      agendamentos_removidos: aRemover,
       agendamentos_restaurados: aRestaurar.map(s => ({
-        id: s.id, amount: round2(num(s.total_provisioned)),
+        id: s.id, amount: round2(num(s.amount)),
       })),
       mensagem: sucessos > 0
         ? `${sucessos} parcela(s) atualizada(s) com Principal + Juros`
