@@ -542,6 +542,116 @@ export async function categoriasInexistentes(q, ids) {
 }
 
 // Payload padrão de um bem (usado por GET /api/bem/[id] e pelas respostas de criação).
+// Composição do bem: de onde saiu cada real já investido nele e quanto ainda é dívida.
+//
+// Tudo DERIVADO, nada de coluna nova. Os números já existem:
+//   • valor de contrato    → contas.valor_nota_fiscal
+//   • dinheiro de entrada  → bem_movimentacoes tipo 'entrada_venda'
+//   • bem dado na troca    → bem_movimentacoes tipo 'entrada_trade_in' (com perda_ganho)
+//   • principal amortizado → financing_installments.principal_pago
+// Guardar esses totais em colunas seria uma segunda fonte para a mesma verdade, que passaria a
+// divergir no primeiro estorno — e o estorno já mexe nas movimentações e nas parcelas, que são
+// a fonte. Derivar aqui também faz o número andar sozinho a cada baixa de parcela, sem nenhum
+// UPDATE novo no caminho do pagamento.
+//
+// JUROS NÃO ENTRAM no valor pago: eles são custo do crédito, não investimento no bem. Já saem
+// como despesa na categoria de taxa (ver pagar.js). Por isso o valor pago aqui NÃO é o
+// `contas.balance` do bem, que acumula a parcela cheia.
+export async function montarComposicaoBem(q, conta, fin) {
+  const movs = await q(
+    `SELECT tipo, valor, perda_ganho, descricao, bem_origem_id, saldo_origem_anterior,
+            to_char(data::date, 'YYYY-MM-DD') AS data_iso
+       FROM bem_movimentacoes
+      WHERE bem_id = $1
+      ORDER BY data, created_at`,
+    [conta.id],
+  )
+
+  const somar = (tipo, campo) => round2(movs
+    .filter(m => m.tipo === tipo)
+    .reduce((s, m) => s + num(m[campo]), 0))
+
+  const dinheiro = somar('entrada_venda', 'valor')
+  const bensTroca = somar('entrada_trade_in', 'valor')
+  const perdaGanhoTroca = somar('entrada_trade_in', 'perda_ganho')
+
+  const trocas = movs.filter(m => m.tipo === 'entrada_trade_in').map(m => ({
+    bem_origem_id: m.bem_origem_id ?? null,
+    descricao: m.descricao ?? null,
+    data: m.data_iso,
+    valor_troca: round2(num(m.valor)),
+    // Quanto o bem antigo valia: o endpoint de entrada calcula perda_ganho como
+    // (valor negociado − nota fiscal do antigo), então a nota fiscal volta pela inversa.
+    valia_antes: round2(num(m.valor) - num(m.perda_ganho)),
+    perda_ganho: round2(num(m.perda_ganho)),
+  }))
+
+  const entradasDinheiro = movs.filter(m => m.tipo === 'entrada_venda').map(m => ({
+    descricao: m.descricao ?? null,
+    data: m.data_iso,
+    valor: round2(num(m.valor)),
+  }))
+
+  let parcelas = {
+    num_parcelas: 0, pagas: 0, principal_previsto: 0, principal_pago: 0, juros_pago: 0,
+  }
+  if (fin?.id) {
+    const [agg] = await q(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'paid')::int AS pagas,
+              COALESCE(SUM(principal_provisioned), 0) AS principal_previsto,
+              COALESCE(SUM(principal_pago), 0) AS principal_pago,
+              COALESCE(SUM(juros_pago), 0) AS juros_pago
+         FROM financing_installments WHERE financing_id = $1`,
+      [fin.id],
+    )
+    parcelas = {
+      num_parcelas: num(agg.total),
+      pagas: num(agg.pagas),
+      principal_previsto: round2(num(agg.principal_previsto)),
+      principal_pago: round2(num(agg.principal_pago)),
+      juros_pago: round2(num(agg.juros_pago)),
+    }
+  }
+
+  const pagoTotal = round2(dinheiro + bensTroca + parcelas.principal_pago)
+  // Saldo devedor pelo PRINCIPAL que falta amortizar, não pelo total_restante das parcelas: o
+  // que ainda se deve de capital não inclui os juros das parcelas que nem venceram.
+  const saldoDevedor = round2(Math.max(0, parcelas.principal_previsto - parcelas.principal_pago))
+
+  return {
+    valor_contrato: num(conta.valor_nota_fiscal),
+    pago: {
+      dinheiro,
+      dinheiro_detalhe: entradasDinheiro,
+      bens_troca: bensTroca,
+      bens_troca_detalhe: trocas,
+      parcelas_principal: parcelas.principal_pago,
+      total: pagoTotal,
+    },
+    financiamento: {
+      valor_principal: fin ? num(fin.valor_principal) : 0,
+      saldo_devedor: saldoDevedor,
+      principal_pago: parcelas.principal_pago,
+      juros_pago: parcelas.juros_pago,
+      num_parcelas: parcelas.num_parcelas,
+      parcelas_pagas: parcelas.pagas,
+    },
+    // Equity = o que já foi investido no bem menos o que ainda se deve dele.
+    //
+    // A perda de capital da troca NÃO é subtraída aqui: ela já está embutida. O bem antigo
+    // entrou por quanto foi negociado (`bens_troca`), não por quanto valia — a diferença virou
+    // lançamento de despesa na categoria de perda, no momento da entrada, e já reduziu o
+    // patrimônio ali. Subtraí-la de novo a contaria duas vezes. Sai como informativo.
+    patrimonio: {
+      investido: pagoTotal,
+      divida: saldoDevedor,
+      equity: round2(pagoTotal - saldoDevedor),
+      perda_ganho_troca: perdaGanhoTroca,
+    },
+  }
+}
+
 export function serializarBem(conta, categoriasById = {}) {
   const cat = (id) => (id ? { id, nome: categoriasById[id]?.name ?? null } : null)
   return {

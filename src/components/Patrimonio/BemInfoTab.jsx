@@ -2,6 +2,7 @@ import { Landmark, AlertTriangle, Wallet, Tag } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { fmtData } from './bemUtils'
 import PatrimonioEditavel from './PatrimonioEditavel'
+import BemComposicao from './BemComposicao'
 
 function Linha({ label, children, destaque }) {
   return (
@@ -47,6 +48,8 @@ export default function BemInfoTab({
         {bem.foi_vendido && <Linha label="Data da Venda">{fmtData(bem.data_venda)}</Linha>}
         {bem.descricao && <Linha label="Descrição">{bem.descricao}</Linha>}
       </div>
+
+      <BemComposicao composicao={bem.composicao} />
 
       {onSalvarValores && (
         <PatrimonioEditavel

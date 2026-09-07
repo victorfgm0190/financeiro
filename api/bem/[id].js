@@ -1,6 +1,8 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-import { getRouteId, num, fail, serializarBem, explicarErro } from '../_bem.js'
+import {
+  getRouteId, num, fail, serializarBem, explicarErro, montarComposicaoBem,
+} from '../_bem.js'
 
 // GET /api/bem/[id] — bem com saldo atual, categorias parametrizadas, status de venda e o
 // financiamento vinculado (null se ainda não houver).
@@ -29,10 +31,14 @@ export default async function handler(req, res) {
       `SELECT * FROM financing WHERE bem_id = $1 ORDER BY created_at DESC LIMIT 1`, [id],
     )
 
+    // Derivada das movimentações e das parcelas a cada leitura — ver montarComposicaoBem.
+    const composicao = await montarComposicaoBem(query, conta, fin)
+
     return res.json({
       success: true,
       bem: {
         ...serializarBem(conta, catsById),
+        composicao,
         financiamento: fin ? {
           id: fin.id,
           valor_principal: num(fin.valor_principal),

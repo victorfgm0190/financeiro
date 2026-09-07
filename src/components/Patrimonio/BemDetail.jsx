@@ -176,7 +176,15 @@ export default function BemDetail({ conta, onClose }) {
   // sync não carrega essas chaves, espelhar não corre risco de sobrescrever o banco.
   const salvarValores = useCallback(async (payload) => {
     const r = await atualizarValoresBem(conta.id, payload)
-    setBem(atual => (atual ? { ...atual, ...r.bem } : atual))
+    setBem(atual => (atual ? {
+      ...atual,
+      ...r.bem,
+      // `composicao` não vem neste endpoint (ele só grava valores), e o spread a preservaria
+      // intacta — inclusive o valor de contrato antigo, que é justamente o que a edição muda.
+      composicao: atual.composicao
+        ? { ...atual.composicao, valor_contrato: r.valores.valor_nota_fiscal }
+        : atual.composicao,
+    } : atual))
     updateAccount(conta.id, {
       valorNotaFiscal: r.valores.valor_nota_fiscal,
       valorPagoManual: r.valores.valor_pago_manual,
