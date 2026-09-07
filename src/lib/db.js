@@ -1,6 +1,66 @@
 import { installmentKey } from './installments.js'
 import { authHeaders, clearTokenAndRedirect } from './api.js'
 
+// ─── Diagnóstico: o que foi GRAVADO vs o que é LIDO ──────────────────────────
+// Guarda as linhas que o último sync mudou e, no carregamento seguinte, compara com o que o
+// banco devolveu para os MESMOS ids. Atravessa o F5 de propósito: é o único jeito de separar
+// "o app mandou errado", "o banco não gravou" e "o banco gravou e a leitura traz outra coisa"
+// olhando só o console. Remover quando o bug de persistência estiver fechado.
+const DEBUG_SYNC_KEY = 'finup_debug_ultimo_sync'
+
+// table do sync → chave correspondente no payload do /api/load.
+const LOAD_KEY_POR_TABELA = {
+  agendamentos: 'scheds', lancamentos: 'txs', contas: 'accs', categorias: 'cats',
+  reservas_funcoes: 'gers', envelopes: 'envs', orcamento: 'buds', perfis: 'perfis',
+}
+
+// Comparação tolerante ao que o driver do pg devolve: DATE vira ISO completo, NUMERIC vira
+// string, JSONB vira objeto. Sem isso o diagnóstico acusaria divergência em tudo.
+const normValor = (v) => {
+  if (v === null || v === undefined) return ''
+  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  if (typeof v === 'object') return JSON.stringify(v)
+  const s = String(v)
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
+  const n = Number(s)
+  return Number.isFinite(n) && s.trim() !== '' ? String(n) : s
+}
+
+function registrarSyncParaConferencia(table, alteradas) {
+  if (alteradas.length === 0) return
+  console.log(`[db] sync ${table}: ${alteradas.length} linha(s) ALTERADA(S) nesta rodada`, alteradas.slice(0, 3))
+  try {
+    localStorage.setItem(DEBUG_SYNC_KEY, JSON.stringify({
+      table, at: new Date().toISOString(), rows: alteradas.slice(0, 5),
+    }))
+  } catch { /* storage cheio/indisponível — o diagnóstico é opcional */ }
+}
+
+function conferirUltimoSync(d) {
+  let reg
+  try { reg = JSON.parse(localStorage.getItem(DEBUG_SYNC_KEY) || 'null') } catch { return }
+  if (!reg?.rows?.length) return
+  const chave = LOAD_KEY_POR_TABELA[reg.table]
+  if (!chave || !Array.isArray(d[chave])) return
+
+  const doBanco = new Map(d[chave].map(r => [r.id, r]))
+  for (const enviada of reg.rows) {
+    const lida = doBanco.get(enviada.id)
+    if (!lida) {
+      console.error(`[db] CONFERÊNCIA ${reg.table}/${enviada.id}: enviada em ${reg.at}, mas o /api/load NÃO devolveu esta linha`)
+      continue
+    }
+    const difs = Object.keys(enviada)
+      .filter(k => normValor(enviada[k]) !== normValor(lida[k]))
+      .map(k => ({ campo: k, enviado: enviada[k], no_banco: lida[k] }))
+    if (difs.length === 0) {
+      console.log(`[db] CONFERÊNCIA ${reg.table}/${enviada.id}: OK — o banco tem o que foi enviado em ${reg.at}`)
+    } else {
+      console.error(`[db] CONFERÊNCIA ${reg.table}/${enviada.id}: DIVERGE do que foi enviado em ${reg.at}`, difs)
+    }
+  }
+}
+
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
 // 401 → sessão inválida/expirada: limpa o token e volta ao login (uma vez).
@@ -701,11 +761,18 @@ export async function loadFromDb(defaultData) {
     const d = await apiGet('/api/load')
     // Prova de frescor. `served_at` muito antes de agora = resposta cacheada; nesse caso o que
     // a tela mostra é uma foto velha do banco, não o que ele tem. Só contadores no log.
+    // Idade da resposta. Alguns segundos de diferença (inclusive NEGATIVA) são só desvio entre
+    // o relógio do servidor e o do navegador — a resposta está fresca. Cache seria um número
+    // grande e positivo.
     const idadeSeg = d.served_at ? Math.round((Date.now() - new Date(d.served_at)) / 1000) : null
+    const frescor = idadeSeg == null ? '(sem carimbo)'
+      : Math.abs(idadeSeg) <= 10 ? `FRESCA (${idadeSeg}s de desvio de relógio)`
+      : `POSSÍVEL CACHE — montada há ${idadeSeg}s`
     console.log(
-      `[db] /api/load servido ${idadeSeg == null ? '(sem carimbo)' : `há ${idadeSeg}s`}`,
+      `[db] /api/load ${frescor}`,
       `| agendamentos: ${d.scheds?.length ?? 0} | lançamentos: ${d.txs?.length ?? 0}`,
     )
+    conferirUltimoSync(d)
 
     // Sem dados de usuário (schema novo ou banco vazio) → migra local → Neon
     if (!d.cats || d.cats.length === 0 || !d.accs || d.accs.length === 0) {
@@ -906,6 +973,13 @@ export async function syncSection(table, prevItems, currItems, toRow) {
     const currIds = new Set((currItems || []).map((i) => i.id))
     const toDelete = [...prevIds].filter((id) => !currIds.has(id))
     const enviadas = (currItems || []).map(toRow)
+    // Quais linhas de fato MUDARAM nesta rodada. Se a edição do usuário não aparecer aqui, ela
+    // nunca chegou ao sync — o problema é anterior à rede.
+    const anteriores = new Map((prevItems || []).map(i => [i.id, JSON.stringify(toRow(i))]))
+    registrarSyncParaConferencia(
+      table,
+      enviadas.filter(r => anteriores.get(r.id) !== JSON.stringify(r)),
+    )
     const r = await apiPost('/api/sync', {
       type: 'section',
       table,
