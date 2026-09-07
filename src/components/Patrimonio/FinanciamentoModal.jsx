@@ -3,9 +3,9 @@ import { Loader2 } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import DateInput from '../shared/DateInput'
 import { criarFinanciamento } from '../../lib/bemApi'
-import { hojeIso, round2, contasFavorecidasElegiveis } from './bemUtils'
-
-const BANCOS = ['Safra', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'BV', 'Votorantim']
+import {
+  hojeIso, round2, contasFavorecidasElegiveis, sugestoesFavorecido,
+} from './bemUtils'
 
 export default function FinanciamentoModal({
   bem, contasCorrentes, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
@@ -57,12 +57,13 @@ export default function FinanciamentoModal({
   const podeEnviar = preview && !preview.invalido && form.data_primeira_parcela
     && !favorecidoVazio && !loading
 
-  // BANCOS primeiro (os mais prováveis num financiamento), depois os favorecidos que o usuário
-  // já usou em outros lançamentos — sem repetir quem já está na primeira lista.
-  const sugestoesFavorecido = useMemo(() => {
-    const extras = (favorecidos || []).filter(f => f && !BANCOS.includes(f))
-    return [...BANCOS, ...extras.sort((a, b) => a.localeCompare(b, 'pt-BR'))]
-  }, [favorecidos])
+  // Mesma lista do modal de trocar favorecido (a regra vive em bemUtils): é o mesmo campo, em
+  // duas telas — sugestões diferentes aqui e lá fariam o usuário achar que os dois são coisas
+  // distintas.
+  const sugestoes = useMemo(
+    () => sugestoesFavorecido(favorecidos, favorecidosElegiveis),
+    [favorecidos, favorecidosElegiveis],
+  )
 
   const enviar = async (e) => {
     e.preventDefault()
@@ -131,7 +132,7 @@ export default function FinanciamentoModal({
             placeholder="Ex: Safra"
           />
           <datalist id="bancos-financiamento">
-            {sugestoesFavorecido.map(b => <option key={b} value={b} />)}
+            {sugestoes.map(b => <option key={b} value={b} />)}
           </datalist>
           {tocouFavorecido && favorecidoVazio
             ? <p className="text-xs text-red-400 mt-1">Favorecido é obrigatório.</p>

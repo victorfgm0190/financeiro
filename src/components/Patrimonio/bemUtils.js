@@ -107,3 +107,35 @@ export function contasFavorecidasElegiveis(contas, { contaDividaId = null, bemId
     .filter(c => c.id !== contaDividaId && c.id !== bemId)
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 }
+
+// Bancos mais prováveis num financiamento. Vivem aqui porque os DOIS modais (criar financiamento
+// e trocar favorecido) oferecem a mesma lista — enquanto a lista era local do FinanciamentoModal,
+// o mesmo campo sugeria coisas diferentes dependendo da tela em que o usuário estava.
+export const BANCOS_SUGERIDOS = [
+  'Safra', 'Itaú', 'Bradesco', 'Santander', 'Banco do Brasil', 'Caixa', 'BV', 'Votorantim',
+]
+
+// Sugestões do campo Favorecido: os bancos acima primeiro (os mais prováveis), depois os
+// favorecidos que o usuário já cadastrou/usou e os nomes das contas elegíveis, sem repetir quem
+// já apareceu. `contas` entra porque escolher a conta vinculada e digitar o texto são caminhos
+// diferentes para o mesmo favorecido — quem só quer o texto não deveria ter que redigitá-lo.
+export function sugestoesFavorecido(favorecidos = [], contas = []) {
+  const vistos = new Set(BANCOS_SUGERIDOS)
+  const extras = []
+  for (const nome of [...(favorecidos || []), ...(contas || []).map(c => c?.name)]) {
+    const limpo = (nome || '').trim()
+    if (!limpo || vistos.has(limpo)) continue
+    vistos.add(limpo)
+    extras.push(limpo)
+  }
+  return [...BANCOS_SUGERIDOS, ...extras.sort((a, b) => a.localeCompare(b, 'pt-BR'))]
+}
+
+// O favorecido a EXIBIR é `banco` (o texto), não o nome da conta vinculada: é `banco` que o
+// backend propaga para o `payee` das N parcelas. Os dois normalmente coincidem, mas podem
+// divergir de propósito (texto "Safra" com a conta "BANCO SAFRA" vinculada) — e aí mostrar o
+// nome da conta faria a aba Parcelas anunciar um favorecido que os agendamentos não têm.
+// O fallback cobre o financiamento antigo, gravado só com a conta.
+export function textoFavorecido(fin) {
+  return fin?.banco || fin?.banco_favorecido_nome || null
+}

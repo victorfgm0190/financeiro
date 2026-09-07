@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2, Settings2, Building2 } from 'lucide-react'
 import { fmt } from '../shared/utils'
-import { fmtData, statusParcela, ESTILO_STATUS } from './bemUtils'
+import { fmtData, statusParcela, ESTILO_STATUS, textoFavorecido } from './bemUtils'
 
 const ICONE = {
   paga: CheckCircle2,
@@ -109,17 +109,25 @@ export default function BemParcelasTab({
   const total = financiamento.num_parcelas || totalParcelas || 0
   const pct = total > 0 ? (pagas / total) * 100 : 0
 
-  const favorecido = financiamento.banco_favorecido_nome || financiamento.banco
+  // O texto (`banco`) e não o nome da conta: é ele que o backend gravou no `payee` das N
+  // parcelas, então é ele que esta tela tem que anunciar. A conta vinculada aparece embaixo
+  // quando difere — as duas informações existem, e escondê-las uma atrás da outra já produziu
+  // uma aba dizendo "Safra" com as parcelas em "BANCO SAFRA".
+  const favorecido = textoFavorecido(financiamento)
+  const contaVinculada = financiamento.banco_favorecido_nome
 
   return (
     <div className="space-y-4">
       <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-gray-600">Banco favorecido</p>
+          <p className="text-xs text-gray-600">Favorecido das parcelas</p>
           <p className="text-sm text-gray-200 flex items-center gap-1.5 mt-0.5 truncate">
             <Building2 size={13} className="text-gray-500 shrink-0" />
-            {favorecido || <span className="text-gray-500">Nenhum banco vinculado</span>}
+            {favorecido || <span className="text-gray-500">Nenhum favorecido definido</span>}
           </p>
+          {contaVinculada && contaVinculada !== favorecido && (
+            <p className="text-xs text-gray-600 mt-0.5 truncate">Conta vinculada: {contaVinculada}</p>
+          )}
         </div>
         <button
           className="btn-secondary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5"

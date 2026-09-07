@@ -279,7 +279,9 @@ export default function BemDetail({ conta, onClose }) {
       addPayee(resposta.agendamentos_payee)
     }
 
-    const nomeExibido = resposta.financiamento.banco_favorecido_nome
+    // O texto propagado às parcelas — não o nome da conta: o favorecido pode ser só texto, sem
+    // conta vinculada, e nesse caso anunciar "desvinculado" seria mentira.
+    const nomeExibido = resposta.agendamentos_payee || resposta.financiamento.banco
     const sufixoParcelas = idsAgendamentos.length
       ? ` ${idsAgendamentos.length} parcela(s) atualizada(s).`
       : ''
@@ -483,6 +485,7 @@ export default function BemDetail({ conta, onClose }) {
           <EditarFavorecidoModal
             financiamento={financiamento}
             contas={accounts}
+            favorecidos={favorecidosOrdenados}
             onCancel={() => setModal(null)}
             onSuccess={aposFavorecido}
             onErro={(m) => avisar(m, 'error')}
