@@ -457,6 +457,40 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           {hasNextDiff && (
             <p className="text-xs text-gray-400 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
           )}
+          {/* Divisão do valor em categorias. Mesmo padrão da listagem (SchedulePanel).
+              Fica AQUI, colada no valor, e não junto do editor de rateio, porque o editor
+              inteiro está atrás de `transactionType !== 'transfer'` — e a parcela de
+              financiamento é uma transferência (conta corrente → conta de dívida). Era por isso
+              que o modal dela mostrava só o total: a divisão existia e não tinha onde aparecer. */}
+          {rateioRows.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-gray-500">Divisão</p>
+              <ul className="mt-1 space-y-0.5">
+                {rateioRows.map((r, i) => {
+                  const catRateio = categories.find(c => c.id === r.categoriaId)
+                  return (
+                    <li key={i} className="text-[11px] text-gray-500 flex items-center gap-1">
+                      <span className="text-gray-600">{i === rateioRows.length - 1 ? '└' : '├'}</span>
+                      <span className="truncate flex-1">
+                        {r.descricao || catRateio?.name || 'Rateio'}
+                        {catRateio ? ` · ${catRateio.icon} ${catRateio.name}` : ''}
+                      </span>
+                      <span className="text-gray-400 font-medium">{fmt(r.valor)}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+              {form.transactionType === 'transfer' && (
+                // Somente leitura de propósito: o submit só grava rateio quando não é
+                // transferência, então um campo editável aqui seria descartado no Salvar. Na
+                // parcela de financiamento os valores vêm do próprio financiamento (principal e
+                // juros da parcela) — editá-los à mão faria a previsão discordar da parcela.
+                <p className="text-[11px] text-gray-600 mt-1.5">
+                  Somente leitura — vem do financiamento da parcela.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Conta Destino (apenas para transferências) */}
