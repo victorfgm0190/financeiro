@@ -70,14 +70,22 @@ export default function BemComposicao({ composicao }) {
           </div>
         ))}
 
-        <Linha label="Parcelas (só principal)">{fmt(pago.parcelas_principal)}</Linha>
+        <Linha label="Parcelas (principal)">{fmt(pago.parcelas_principal)}</Linha>
+        {/* Fora do total de propósito — a linha existe para responder "quanto já custou o
+            crédito", não para compor o investimento. Por isso vem depois do principal e em
+            cinza, e não some quando é zero: zero aqui também é informação. */}
+        <Linha label="Parcelas (juros)" destaque="text-gray-500">
+          {fmt(financiamento.juros_pago)}
+        </Linha>
 
         <div className="mt-2 pt-2 border-t border-gray-700">
-          <Linha label="TOTAL PAGO" destaque="text-teal-400 font-semibold">{fmt(pago.total)}</Linha>
+          <Linha label="TOTAL INVESTIDO" destaque="text-teal-400 font-semibold">
+            {fmt(pago.total)}
+          </Linha>
         </div>
         <p className="text-xs text-gray-600 mt-2">
-          Juros não entram: são custo do crédito, lançados na categoria de taxa. Já foram pagos{' '}
-          {fmt(financiamento.juros_pago)} de juros.
+          Dinheiro, bens e principal das parcelas. Os juros ficam fora: são custo do crédito, não
+          investimento no bem, e já saem como despesa na categoria de taxa.
         </p>
       </div>
 
