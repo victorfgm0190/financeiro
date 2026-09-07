@@ -213,6 +213,19 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   })
   const grpD = gerencialGroups.find(g => g.number === 'D')
 
+  // Âncora da série tal como está no banco (data ORIGINAL da ocorrência). Vazia num agendamento
+  // novo; num já salvo sem âncora explícita, a primeira ocorrência futura.
+  const ancoraSalva = initial?.nextOccurrence
+    || (initial?.id ? (getNextOccurrences(initial, 24).find(d => d >= today()) || '') : '')
+  // O que o campo MOSTRA: a mesma âncora com a exceção da ocorrência aplicada. Com a ocorrência
+  // de 10/09 movida para 13/09, a âncora salva continua 10/09 e o campo exibe 13/09 — que é a
+  // data em que a parcela realmente cai, e a que a tela inicial já mostrava.
+  const ancoraExibida = (ancoraSalva && initial) ? occEfetiva(initial, ancoraSalva).date : ancoraSalva
+  // Só o que o usuário digitar aqui re-ancora a série. Sem esta flag, reabrir o formulário e
+  // salvar qualquer outro campo gravaria a data EXIBIDA como âncora nova (o submit faz
+  // `data = { ...form }`) e deslocaria a série inteira sem ninguém pedir.
+  const [ancoraTocada, setAncoraTocada] = useState(false)
+
   const [form, setForm] = useState(() => ({
     description: initial?.description || '',
     transactionType: initial?.transactionType || 'expense',
@@ -226,10 +239,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     costCenter: initial?.costCenter || '',
     frequency: initial?.frequency || '',
     startDate: initial?.startDate || today(),
-    // Data de Vencimento Atual: re-ancora a série. Usa o valor salvo; senão, a próxima
-    // ocorrência futura do agendamento em edição (vazio para um agendamento novo).
-    nextOccurrence: initial?.nextOccurrence
-      || (initial?.id ? (getNextOccurrences(initial, 24).find(d => d >= today()) || '') : ''),
+    // Data de Vencimento Atual: re-ancora a série. O campo EXIBE a data efetiva (com a exceção
+    // aplicada, quando existe) — ver `ancoraExibida`. A âncora realmente salva é `ancoraSalva`,
+    // e só substitui a atual se este campo for editado à mão.
+    nextOccurrence: ancoraExibida,
     occurrenceType: initial?.occurrenceType || 'continuous',
     installments: initial?.installments ?? 0,
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
@@ -304,6 +317,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
   const previewSchedule = {
     ...form,
+    // A prévia é gerada a partir da âncora SALVA, não da exibida. As datas que ela produz são as
+    // ORIGINAIS — chaves de overrides/skipped e do que o fluxo de caixa usa. Gerar a partir da
+    // data efetiva (13/09) produziria células keyed em 13/09, 13/10…, e a exceção criada ao
+    // clicar numa delas nunca seria encontrada pela série, que continua ancorada em 10/09.
+    nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
     amount: Number(form.amount) || 0,
     registered: [],
     skipped: [],
@@ -368,6 +386,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     const data = {
       ...form,
+      // A âncora só muda se o campo foi editado. Ele EXIBE a data efetiva (com a exceção), e
+      // salvar isso de volta re-ancoraria a série a cada save de qualquer outro campo.
+      nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
       amount: Number(form.amount),
       accountType: selectedAccount?.type,
       installments: Number(form.installments),
@@ -679,7 +700,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             <DateInput
               className="input"
               value={form.nextOccurrence || ''}
-              onChange={e => set('nextOccurrence', e.target.value)}
+              onChange={e => { set('nextOccurrence', e.target.value); setAncoraTocada(true) }}
             />
             <p className="text-[11px] text-gray-500 mt-1">
               Próxima ocorrência. Altere o dia (ex.: 20 → 30) para mudar as próximas; a Data de Início é preservada.
