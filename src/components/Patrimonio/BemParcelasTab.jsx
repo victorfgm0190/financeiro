@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2, Settings2, Building2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle2, Clock, AlertTriangle, Loader2, Settings2, Building2, Split } from 'lucide-react'
 import { fmt } from '../shared/utils'
 import { fmtData, statusParcela, ESTILO_STATUS, textoFavorecido } from './bemUtils'
 
@@ -93,7 +93,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
 
 export default function BemParcelasTab({
   financiamento, parcelas, page, totalPages, totalParcelas, loading, onPage, onPagar,
-  onEditarFavorecido,
+  onEditarFavorecido, onSepararJuros,
 }) {
   if (!financiamento) {
     return (
@@ -129,12 +129,23 @@ export default function BemParcelasTab({
             <p className="text-xs text-gray-600 mt-0.5 truncate">Conta vinculada: {contaVinculada}</p>
           )}
         </div>
-        <button
-          className="btn-secondary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5"
-          onClick={onEditarFavorecido}
-        >
-          <Settings2 size={13} /> Editar Favorecido
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button
+            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+            onClick={onEditarFavorecido}
+          >
+            <Settings2 size={13} /> Editar Favorecido
+          </button>
+          {/* Só faz sentido para financiamento provisionado ANTES da separação existir. O modal
+              consulta o backend e avisa quando não há nada a separar. */}
+          <button
+            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+            onClick={onSepararJuros}
+            title="Separa os agendamentos antigos em duas linhas: principal e juros"
+          >
+            <Split size={13} /> Separar Juros
+          </button>
+        </div>
       </div>
 
       <div className="card">

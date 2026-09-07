@@ -100,6 +100,15 @@ export default async function handler(req, res) {
       return fail(res, 400,
         `valor_parcela × num_parcelas (${provisao.valorTotal}) é menor que valor_principal (${valorPrincipal})`)
     }
+    // Cada parcela nasce com DOIS agendamentos, e o de juros vai na categoria de taxa do bem.
+    // Sem ela parametrizada esse agendamento nasceria sem categoria — que é o problema que a
+    // separação existe para resolver. Barrado aqui, antes da transação, para o usuário receber
+    // 400 com a instrução em vez de um 500 de rollback.
+    if (!bem.categoria_taxa_finan_id && provisao.jurosTotais > 0) {
+      return fail(res, 400,
+        'bem sem categoria de Taxa de Financiamento parametrizada — parametrize o bem antes de '
+        + 'criar o financiamento, senão os agendamentos de juros nascem sem categoria')
+    }
 
     const financingId = genId('fin')
     const contaDividaId = genId('acc_divida')
@@ -145,25 +154,35 @@ export default async function handler(req, res) {
         parcelas.push({ ...p, id })
       }
 
-      const scheduleIds = await criarAgendamentosParcelas(q, {
+      // Dois agendamentos por parcela: principal (transferência p/ a dívida, categoria de
+      // prestação) e juros (despesa, categoria de taxa) — ver a validação lá em cima.
+      const pares = await criarAgendamentosParcelas(q, {
         parcelas,
         contaOrigemId: contaOrigem,
         contaDestinoId: contaDividaId,
-        valorParcela,
         descricaoBase: `Parcela`,
         numParcelas: nParcelas,
         categoriaPrestacaoId: bem.categoria_prestacao_id || null,
+        categoriaTaxaFinanId: bem.categoria_taxa_finan_id || null,
         payee: bancoTexto,
       })
       // Descrição final inclui o nome do bem; feita aqui para não repetir a string por parcela.
-      for (let i = 0; i < scheduleIds.length; i++) {
+      const scheduleIds = []
+      for (let i = 0; i < pares.length; i++) {
+        const { principalId, jurosId } = pares[i]
+        const base = `Parcela ${parcelas[i].numero}/${nParcelas} - ${bem.name}`
+        await q(`UPDATE agendamentos SET description = $2 WHERE id = $1`, [principalId, base])
+        scheduleIds.push(principalId)
+        if (jurosId) {
+          await q(
+            `UPDATE agendamentos SET description = $2 WHERE id = $1`,
+            [jurosId, `${base} - Juros`],
+          )
+          scheduleIds.push(jurosId)
+        }
         await q(
-          `UPDATE agendamentos SET description = $2 WHERE id = $1`,
-          [scheduleIds[i], `Parcela ${parcelas[i].numero}/${nParcelas} - ${bem.name}`],
-        )
-        await q(
-          `UPDATE financing_installments SET schedule_id = $2 WHERE id = $1`,
-          [parcelas[i].id, scheduleIds[i]],
+          `UPDATE financing_installments SET schedule_id = $2, schedule_juros_id = $3 WHERE id = $1`,
+          [parcelas[i].id, principalId, jurosId],
         )
       }
 

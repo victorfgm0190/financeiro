@@ -16,6 +16,7 @@ import PagarParcelaModal from './PagarParcelaModal'
 import RegistrarEntradaModal from './RegistrarEntradaModal'
 import ParametrizarBemModal from './ParametrizarBemModal'
 import EditarFavorecidoModal from './EditarFavorecidoModal'
+import MigrarJurosModal from './MigrarJurosModal'
 import { transferenciasElegiveisEntrada } from './bemUtils'
 
 const ABAS = [
@@ -29,7 +30,7 @@ const POR_PAGINA = 20
 export default function BemDetail({ conta, onClose }) {
   const {
     accounts, categories, profileTransactions, payees,
-    addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee,
+    addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, updateSchedule,
   } = useApp()
 
   const [bem, setBem] = useState(null)
@@ -292,6 +293,35 @@ export default function BemDetail({ conta, onClose }) {
     )
   }
 
+  // O endpoint reescreveu o valor dos agendamentos que viraram "principal" e criou os de juros.
+  // Espelhar os PRINCIPAIS aqui é obrigatório, não cosmético: `amount` e `category_id` estão em
+  // scheduleToRow, então o primeiro sync depois disto reenviaria o valor cheio da parcela por
+  // cima do principal — e a previsão passaria a contar os juros duas vezes, uma no principal
+  // inflado e outra na linha nova.
+  //
+  // Os de JUROS não dá para espelhar: nasceram no backend e o estado do app não os conhece.
+  // Eles entram no próximo full-load — daí o pedido de recarregar, mesmo padrão da criação do
+  // financiamento.
+  const aposSepararJuros = async (resposta) => {
+    setModal(null)
+    for (const s of resposta.principais_atualizados || []) {
+      updateSchedule(s.id, { amount: s.amount, categoryId: s.category_id || '' })
+    }
+
+    const falhas = resposta.erros?.length || 0
+    if (resposta.sucessos === 0 && falhas === 0) {
+      avisar('Nenhum agendamento a separar neste bem.')
+      return
+    }
+    avisar(
+      `${resposta.sucessos} agendamento(s) convertido(s) em ${resposta.agendamentos_resultantes} `
+      + 'com Principal + Juros. Recarregue o app para ver as linhas de juros nas outras telas.'
+      + (falhas ? ` ${falhas} não puderam ser separados.` : ''),
+      falhas ? 'error' : 'success',
+    )
+    if (financiamento?.id) await carregarParcelas(financiamento.id, paginaParcelas)
+  }
+
   const aposPagamento = async (resposta) => {
     setModal(null)
     sincronizarSaldo(resposta.saldos_atualizados?.bem?.id, resposta.saldos_atualizados?.bem?.saldo_novo)
@@ -444,6 +474,7 @@ export default function BemDetail({ conta, onClose }) {
                 onPage={setPaginaParcelas}
                 onPagar={(parcela) => setModal({ parcela })}
                 onEditarFavorecido={() => setModal('favorecido')}
+                onSepararJuros={() => setModal('juros')}
               />
             )}
 
@@ -488,6 +519,17 @@ export default function BemDetail({ conta, onClose }) {
             favorecidos={favorecidosOrdenados}
             onCancel={() => setModal(null)}
             onSuccess={aposFavorecido}
+            onErro={(m) => avisar(m, 'error')}
+          />
+        )}
+      </Modal>
+
+      <Modal open={modal === 'juros'} onClose={() => setModal(null)} title="Separar Principal e Juros">
+        {modal === 'juros' && bem && (
+          <MigrarJurosModal
+            bem={bem}
+            onCancel={() => setModal(null)}
+            onSuccess={aposSepararJuros}
             onErro={(m) => avisar(m, 'error')}
           />
         )}

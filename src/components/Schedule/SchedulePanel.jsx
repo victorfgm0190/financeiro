@@ -7,7 +7,7 @@ import {
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtDate, ehParcelaFinanciamento, rotuloComponenteFin } from '../shared/utils'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -238,22 +238,31 @@ function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
 }
 
 function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules } = useApp()
   // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
   // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
   // ele o modal deixa de registrar a transferência conta→dívida e passa a baixar a parcela pelo
   // endpoint, que cria DOIS lançamentos — principal e juros, cada um na categoria parametrizada
   // do bem — e amortiza bem e dívida. Sem o elo nada muda: o modal continua como sempre foi.
+  //
+  // A soma percorre TODOS os agendamentos da mesma parcela, não só o clicado. Depois da
+  // separação são dois (principal e juros) e a baixa continua sendo atômica no backend: o
+  // rateio de pagar.js trabalha sobre o total acumulado da parcela, então mandar só a metade
+  // clicada quitaria a parcela pela metade e deixaria o irmão pendente. No formato antigo há um
+  // agendamento só, que já carrega os dois valores — a mesma soma dá o mesmo resultado.
   const parcelaFin = useMemo(() => {
-    if (schedule.tipoComponente !== 'financiamento' || !schedule.financingInstallmentId) return null
-    const principal = Number(schedule.principalValue) || 0
-    const juros = Number(schedule.jurosValue) || 0
+    const parcelaId = schedule.financingInstallmentId
+    if (!ehParcelaFinanciamento(schedule)) return null
+    const irmaos = (schedules || []).filter(s => s.financingInstallmentId === parcelaId)
+    const soma = (campo) => irmaos.reduce((acc, s) => acc + (Number(s[campo]) || 0), 0)
+    const principal = Math.round(soma('principalValue') * 100) / 100
+    const juros = Math.round(soma('jurosValue') * 100) / 100
     // Total pelo desdobramento, não por schedule.amount: é a soma que o endpoint vai ratear, e
     // exibir um total que não bate com as duas linhas seria pior que não exibir nada.
     const total = Math.round((principal + juros) * 100) / 100
     if (total <= 0) return null
-    return { parcelaId: schedule.financingInstallmentId, principal, juros, total }
-  }, [schedule.tipoComponente, schedule.financingInstallmentId, schedule.principalValue, schedule.jurosValue])
+    return { parcelaId, principal, juros, total, agendamentoIds: irmaos.map(s => s.id) }
+  }, [schedule, schedules])
   // Detalhamento por função do resgate (Etapa B). Quando presente, a transferência é
   // registrada por função (registerScheduleOccurrence) e o valor total não é editável.
   const reservaDetalhe = useMemo(() => {
@@ -350,7 +359,14 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       for (const c of [r.saldos_atualizados?.bem, r.saldos_atualizados?.divida]) {
         if (c?.id) updateAccount(c.id, { balance: c.saldo_novo })
       }
-      markScheduleRegistered(schedule.id, nextDate || today)
+      // Os DOIS agendamentos da parcela — o backend acabou de marcar os dois como registrados, e
+      // `registered` ESTÁ em scheduleToRow: sem espelhar o irmão, o próximo sync reenviaria o
+      // array antigo dele e a linha de juros voltaria a aparecer como pendente sobre uma parcela
+      // já quitada. A lista do backend manda; os irmãos do estado são o fallback.
+      const registrados = r.agendamentos_registrados?.length
+        ? r.agendamentos_registrados
+        : (parcelaFin.agendamentoIds || [schedule.id])
+      for (const id of registrados) markScheduleRegistered(id, nextDate || today)
       onClose()
     } catch (err) {
       setFinErro(err.message)
@@ -932,6 +948,17 @@ function ScheduleRow({
               >
                 <List size={10} /> Ver gastos
               </button>
+            )}
+            {/* Principal e juros são dois agendamentos da MESMA parcela. As descrições já
+                diferem (a de juros termina em "- Juros"), mas o selo é o que deixa o par óbvio
+                numa lista longa — e o title explica por que baixar um baixa os dois. */}
+            {rotuloComponenteFin(schedule.tipoComponente) && (
+              <span
+                className="text-xs bg-teal-500/15 text-teal-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium"
+                title="Componente da parcela de financiamento. Principal e juros são dois agendamentos da mesma parcela e são baixados juntos."
+              >
+                {rotuloComponenteFin(schedule.tipoComponente)}
+              </span>
             )}
             {isInstallment && (
               <span className="text-xs bg-gray-700/60 text-gray-400 px-1 py-0.5 rounded whitespace-nowrap">

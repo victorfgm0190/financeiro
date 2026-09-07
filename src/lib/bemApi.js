@@ -82,3 +82,11 @@ export const atualizarFavorecido = (financiamentoId, payload) =>
 // espelhar no estado (`payee` está em scheduleToRow — ver AppContext).
 export const sincronizarFavorecidoDeParcela = (parcelaId, payee) =>
   patch(`/api/financiamento/parcela/${enc(parcelaId)}/favorecido`, { payee })
+
+// Separação dos agendamentos antigos (um por parcela, valor cheio) em principal + juros.
+// O GET é read-only: serve para o modal mostrar o "de X para 2X" antes de confirmar.
+export const previewSplitAgendamentos = (bemId) =>
+  request(`/api/financiamento/split-agendamentos${bemId ? `?bem_id=${enc(bemId)}` : ''}`)
+
+export const splitAgendamentos = (payload = {}) =>
+  post('/api/financiamento/split-agendamentos', payload)

@@ -194,6 +194,10 @@ async function runSchemaStatements(query) {
     // quitação. Coluna materializada (e não só derivada na leitura) porque é ela que o
     // relatório de parcelas lê direto do banco.
     ['saldo_restante', 'NUMERIC'],
+    // Segundo agendamento da parcela: o de JUROS. `schedule_id` continua sendo o do PRINCIPAL,
+    // e não vira uma lista, porque tudo que já lê essa coluna (pagar.js, serializarParcela)
+    // espera um id só — trocar o tipo dela quebraria os dois para ganhar simetria de nome.
+    ['schedule_juros_id', 'TEXT'],
   ]) {
     await query(`ALTER TABLE financing_installments ADD COLUMN IF NOT EXISTS ${col} ${type}`)
   }
@@ -206,6 +210,12 @@ async function runSchemaStatements(query) {
   // sem o marcador — e aí a tela de Contas a Pagar os trataria como transferência comum. O
   // backfill os alinha à parcela que cada um representa, então um financiamento já provisionado
   // passa a desdobrar sem precisar ser refeito.
+  //
+  // O filtro precisa ignorar os agendamentos JÁ SEPARADOS em principal/juros. A condição
+  // anterior era `tipo_componente IS DISTINCT FROM 'financiamento'`, que casa com
+  // 'financiamento_principal' e 'financiamento_juros': cada cold start reescreveria os dois
+  // com o valor cheio da parcela e os retaggearia como agendamento único, desfazendo a
+  // separação sem deixar rastro.
   await query(`
     UPDATE agendamentos a
        SET principal_value = fi.principal_provisioned,
@@ -213,9 +223,9 @@ async function runSchemaStatements(query) {
            tipo_componente = 'financiamento'
       FROM financing_installments fi
      WHERE a.financing_installment_id = fi.id
-       AND (a.tipo_componente IS DISTINCT FROM 'financiamento'
-            OR a.principal_value IS NULL
-            OR a.juros_value IS NULL)`)
+       AND (a.tipo_componente IS NULL
+            OR (a.tipo_componente = 'financiamento'
+                AND (a.principal_value IS NULL OR a.juros_value IS NULL)))`)
   await query(`CREATE INDEX IF NOT EXISTS idx_fin_inst_financing ON financing_installments (financing_id)`)
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fin_inst_numero ON financing_installments (financing_id, numero_parcela)`)
 
@@ -281,6 +291,7 @@ const COLUNAS_ID_TEXT = [
   ['financing_installments', 'id'],
   ['financing_installments', 'financing_id'],
   ['financing_installments', 'schedule_id'],
+  ['financing_installments', 'schedule_juros_id'],
   ['bem_movimentacoes', 'id'],
   ['bem_movimentacoes', 'bem_id'],
   ['bem_movimentacoes', 'bem_origem_id'],
@@ -388,40 +399,103 @@ export async function criarLancamentoCategorizado(q, {
   return id
 }
 
-// Cria um agendamento 'once' por parcela (o motor de agendamentos gera um por ocorrência para
-// séries datadas — mesmo padrão dos agendamentos de fatura).
+// Marcadores de `agendamentos.tipo_componente`. 'financiamento' é o formato ANTIGO — um
+// agendamento só, com o valor cheio da parcela e o desdobramento guardado nas colunas. Continua
+// sendo lido em todo lugar: enquanto um financiamento não passar pela migração, é o que existe.
+export const COMPONENTE_FIN_UNICO = 'financiamento'
+export const COMPONENTE_FIN_PRINCIPAL = 'financiamento_principal'
+export const COMPONENTE_FIN_JUROS = 'financiamento_juros'
+export const COMPONENTES_FIN = [
+  COMPONENTE_FIN_UNICO, COMPONENTE_FIN_PRINCIPAL, COMPONENTE_FIN_JUROS,
+]
+
+// Insere UM agendamento de parcela. Sai como helper porque a criação do financiamento e a
+// migração dos existentes precisam produzir linhas idênticas — quando isso era um INSERT só,
+// dentro do laço, qualquer coluna nova teria que ser lembrada nos dois lugares.
+//
 // `auto_register = false` é obrigatório: quem baixa a parcela é POST /api/financiamento/parcela/
 // [id]/pagar, e deixar o motor registrar sozinho duplicaria o lançamento e o saldo.
-export async function criarAgendamentosParcelas(q, {
-  parcelas, contaOrigemId, contaDestinoId, valorParcela, descricaoBase, numParcelas,
-  categoriaPrestacaoId = null, payee = null,
+async function inserirAgendamentoParcela(q, {
+  id, descricao, transactionType, contaOrigemId, contaDestinoId, valor, categoriaId,
+  dataVencimento, parcelaId, principalValue, jurosValue, componente, payee,
 }) {
-  const ids = []
+  await q(
+    `INSERT INTO agendamentos
+       (id, description, transaction_type, account_id, to_account_id, amount, category_id,
+        frequency, start_date, next_occurrence, occurrence_type, installments,
+        auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides,
+        principal_value, juros_value, tipo_componente, payee)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'once', $8, $9, 'continuous', NULL,
+             FALSE, FALSE, 'financiamento_parcela', $10, '[]', '[]', '{}',
+             $11, $12, $13, $14)`,
+    // start_date é TEXT e next_occurrence é DATE: a mesma data precisa ir em dois parâmetros
+    // distintos, senão o Postgres tenta deduzir um único tipo para o placeholder e falha.
+    [id, descricao, transactionType, contaOrigemId, contaDestinoId || null, round2(valor),
+      categoriaId || null, dataVencimento, dataVencimento, parcelaId,
+      round2(principalValue), round2(jurosValue), componente, payee || null],
+  )
+  return id
+}
+
+// Cria os agendamentos 'once' de uma parcela: DOIS por parcela, um de principal e um de juros.
+//
+// Por que dois, e por que com tipos de transação diferentes:
+//   • PRINCIPAL — `transfer` conta corrente → conta de dívida, categoria de prestação. É
+//     amortização: sai da conta corrente e abate a dívida, não é custo.
+//   • JUROS — `expense` na conta corrente, categoria de taxa de financiamento. É custo: não
+//     abate dívida nenhuma. Fazer dele uma segunda transferência jogaria os juros no passivo e
+//     eles nunca apareceriam como despesa em nenhum relatório.
+// É exatamente o par de lançamentos que a baixa já produz hoje (ver pagar.js) — a diferença é
+// que agora a PREVISÃO mostra os dois desde o provisionamento.
+//
+// Quando o financiamento não tem juros (juros_provisioned = 0) a parcela continua com UM
+// agendamento: uma linha de R$ 0,00 na tela de Contas a Pagar não informa nada.
+//
+// Devolve um par por parcela — quem chama grava os dois ids em financing_installments.
+export async function criarAgendamentosParcelas(q, {
+  parcelas, contaOrigemId, contaDestinoId, descricaoBase, numParcelas,
+  categoriaPrestacaoId = null, categoriaTaxaFinanId = null, payee = null,
+}) {
+  const pares = []
   for (const p of parcelas) {
-    const id = genId('sch_fin')
-    await q(
-      `INSERT INTO agendamentos
-         (id, description, transaction_type, account_id, to_account_id, amount, category_id,
-          frequency, start_date, next_occurrence, occurrence_type, installments,
-          auto_register, confirmado, tipo, financing_installment_id, registered, skipped, overrides,
-          principal_value, juros_value, tipo_componente, payee)
-       VALUES ($1, $2, 'transfer', $3, $4, $5, $6, 'once', $7, $8, 'continuous', NULL,
-               FALSE, FALSE, 'financiamento_parcela', $9, '[]', '[]', '{}',
-               $10, $11, 'financiamento', $12)`,
-      // start_date é TEXT e next_occurrence é DATE: a mesma data precisa ir em dois parâmetros
-      // distintos, senão o Postgres tenta deduzir um único tipo para o placeholder e falha.
-      [id, `${descricaoBase} ${p.numero}/${numParcelas}`, contaOrigemId, contaDestinoId,
-        round2(valorParcela), categoriaPrestacaoId, p.data_vencimento, p.data_vencimento, p.id,
-        // Desdobramento da PARCELA, não do financiamento: a última absorve o resíduo do
-        // arredondamento, então os dois números variam entre parcelas.
-        round2(num(p.principal_provisioned)), round2(num(p.juros_provisioned)),
-        // `payee` é o favorecido exibido em Contas a Pagar / Agendamentos. Nasce aqui para o
-        // agendamento não aparecer sem favorecido até alguém trocar o banco pela aba Parcelas.
-        payee || null],
-    )
-    ids.push(id)
+    const principal = round2(num(p.principal_provisioned))
+    const juros = round2(num(p.juros_provisioned))
+    const sufixo = `${p.numero}/${numParcelas}`
+    const comum = {
+      contaOrigemId, dataVencimento: p.data_vencimento, parcelaId: p.id, payee,
+    }
+
+    const principalId = await inserirAgendamentoParcela(q, {
+      ...comum,
+      id: genId('sch_fin'),
+      descricao: `${descricaoBase} ${sufixo}`,
+      transactionType: 'transfer',
+      contaDestinoId,
+      valor: principal,
+      categoriaId: categoriaPrestacaoId,
+      principalValue: principal,
+      jurosValue: 0,
+      componente: COMPONENTE_FIN_PRINCIPAL,
+    })
+
+    const jurosId = juros > 0
+      ? await inserirAgendamentoParcela(q, {
+        ...comum,
+        id: genId('sch_fin_j'),
+        descricao: `${descricaoBase} ${sufixo} - Juros`,
+        transactionType: 'expense',
+        contaDestinoId: null,
+        valor: juros,
+        categoriaId: categoriaTaxaFinanId,
+        principalValue: 0,
+        jurosValue: juros,
+        componente: COMPONENTE_FIN_JUROS,
+      })
+      : null
+
+    pares.push({ parcelaId: p.id, principalId, jurosId })
   }
-  return ids
+  return pares
 }
 
 // Propaga o favorecido do financiamento para os agendamentos de TODAS as suas parcelas.
@@ -513,7 +587,7 @@ export const SELECT_PARCELAS = `
   SELECT id, financing_id, numero_parcela,
          principal_provisioned, juros_provisioned, total_provisioned,
          principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
-         saldo_restante,
+         schedule_juros_id, saldo_restante,
          to_char(data_vencimento::date, 'YYYY-MM-DD') AS data_vencimento,
          to_char(data_pagamento::date,  'YYYY-MM-DD') AS data_pagamento
     FROM financing_installments`
@@ -538,6 +612,7 @@ export function serializarParcela(p) {
     data_vencimento: p.data_vencimento,
     data_pagamento: p.data_pagamento,
     schedule_id: p.schedule_id ?? null,
+    schedule_juros_id: p.schedule_juros_id ?? null,
   }
 }
 
