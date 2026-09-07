@@ -51,6 +51,43 @@ export default async function handler(req, res) {
         `${bem.name} está sem a categoria de Prestação — parametrize o bem antes`)
     }
 
+    // Sobras da abordagem anterior (dois agendamentos por parcela). ensureBemSchema já limpa
+    // isso, mas a limpeza dele é do lado do BANCO e o cache dele roda uma vez por instance —
+    // enquanto o app estiver aberto com esses agendamentos no estado React, o próximo
+    // syncSection('agendamentos') os reinsere, porque o upsert cobre tudo que está no estado.
+    // O resultado é uma parcela aparecendo como duas linhas de novo, agora somando o dobro.
+    //
+    // Por isso a limpeza é refeita AQUI e — o que resolve de fato — os ids saem na resposta:
+    // é o app que precisa tirá-los do estado dele, senão eles voltam no sync seguinte.
+    const sobras = await query(
+      `SELECT a.id, a.tipo_componente, fi.total_provisioned,
+              fi.principal_provisioned, fi.juros_provisioned
+         FROM agendamentos a
+         JOIN financing_installments fi ON fi.id = a.financing_installment_id
+        WHERE fi.financing_id = $1
+          AND a.tipo_componente IN ('financiamento_principal', 'financiamento_juros')`,
+      [fin.id],
+    )
+    const aRemover = sobras.filter(s => s.tipo_componente === 'financiamento_juros')
+    const aRestaurar = sobras.filter(s => s.tipo_componente === 'financiamento_principal')
+
+    if (sobras.length > 0) {
+      await withTransaction(async (q) => {
+        if (aRemover.length > 0) {
+          await q(`DELETE FROM agendamentos WHERE id = ANY($1)`, [aRemover.map(s => s.id)])
+        }
+        for (const s of aRestaurar) {
+          await q(
+            `UPDATE agendamentos
+                SET amount = $2, principal_value = $3, juros_value = $4,
+                    tipo_componente = 'financiamento'
+              WHERE id = $1`,
+            [s.id, s.total_provisioned, s.principal_provisioned, s.juros_provisioned],
+          )
+        }
+      })
+    }
+
     const parcelas = await query(
       `SELECT id, numero_parcela, schedule_id, principal_provisioned, juros_provisioned
          FROM financing_installments
@@ -152,6 +189,13 @@ export default async function handler(req, res) {
       ja_tinham: jaTinham,
       erros,
       rateios: rateiosCriados,
+      // Sobras da abordagem de dois agendamentos. O app PRECISA aplicar as duas listas no
+      // estado: enquanto esses agendamentos estiverem lá, o sync os reinsere no banco e a
+      // parcela volta a aparecer como duas linhas.
+      agendamentos_removidos: aRemover.map(s => s.id),
+      agendamentos_restaurados: aRestaurar.map(s => ({
+        id: s.id, amount: round2(num(s.total_provisioned)),
+      })),
       mensagem: sucessos > 0
         ? `${sucessos} parcela(s) atualizada(s) com Principal + Juros`
         : 'Nenhuma parcela precisava de rateio',

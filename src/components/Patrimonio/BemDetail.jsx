@@ -31,6 +31,7 @@ export default function BemDetail({ conta, onClose }) {
   const {
     accounts, categories, profileTransactions, payees,
     addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, mergeRateios,
+    deleteSchedule, updateSchedule,
   } = useApp()
 
   const [bem, setBem] = useState(null)
@@ -306,9 +307,21 @@ export default function BemDetail({ conta, onClose }) {
       // toast de sucesso e nenhuma divisão na tela de Agendamentos.
       mergeRateios(r.rateios || [])
 
+      // Sobras da abordagem de dois agendamentos por parcela. Tirar do estado é o que impede o
+      // sync de reinseri-las no banco — o backend já as apagou, mas o upsert do app cobre tudo
+      // que está no estado, então sem isto a parcela reaparece como duas linhas.
+      const removidos = r.agendamentos_removidos || []
+      for (const id of removidos) deleteSchedule(id)
+      for (const s of r.agendamentos_restaurados || []) {
+        updateSchedule(s.id, { amount: s.amount })
+      }
+
       const falhas = r.erros?.length || 0
       const partes = [r.mensagem]
       if (r.ja_tinham > 0) partes.push(`${r.ja_tinham} já tinha(m) rateio.`)
+      if (removidos.length > 0) {
+        partes.push(`${removidos.length} agendamento(s) duplicado(s) removido(s).`)
+      }
       if (falhas > 0) partes.push(`${falhas} falhou(ram).`)
       avisar(partes.join(' '), falhas > 0 ? 'error' : 'success')
 
