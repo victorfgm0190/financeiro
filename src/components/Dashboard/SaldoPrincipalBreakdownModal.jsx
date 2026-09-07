@@ -80,8 +80,15 @@ export default function SaldoPrincipalBreakdownModal() {
         {b.finalCiclo.agendamentos.length > 0 ? (
           <>
             <p className="text-xs text-gray-500 pt-1">+ Agendamentos pendentes até {ddmm(b.cycleEnd)}:</p>
+            {/* Uma linha por ocorrência, em ordem cronológica (ordenadas em collectSched).
+                `ddmm` formata a partir da string; new Date(iso) voltaria um dia no fuso daqui. */}
             {b.finalCiclo.agendamentos.map((it, i) => (
-              <Row key={i} indent label={`• ${it.description}${it.count > 1 ? ` (${it.count}×)` : ''}`} value={it.amount} />
+              <Row
+                key={i}
+                indent
+                label={`• ${ddmm(it.date)} ${it.description} (${it.occurrenceNumber}/${it.totalOccurrences})`}
+                value={it.amount}
+              />
             ))}
           </>
         ) : (
@@ -144,7 +151,12 @@ export default function SaldoPrincipalBreakdownModal() {
             <>
               <p className="text-xs text-gray-500 pt-1">+ Agendamentos pendentes até {ddmm(b.calendarEnd)}:</p>
               {b.finalCalendario.agendamentos.map((it, i) => (
-                <Row key={i} indent label={`• ${it.description}${it.count > 1 ? ` (${it.count}×)` : ''}`} value={it.amount} />
+                <Row
+                  key={i}
+                  indent
+                  label={`• ${ddmm(it.date)} ${it.description} (${it.occurrenceNumber}/${it.totalOccurrences})`}
+                  value={it.amount}
+                />
               ))}
             </>
           ) : (

@@ -2789,20 +2789,41 @@ export function AppProvider({ children }) {
         if (!fromAcc && !toAcc) continue
         const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= endStr)
         if (occs.length === 0) continue
-        // Soma o valor EFETIVO de cada ocorrência (respeita overrides[dataOriginal].amount) —
-        // antes multiplicava um valor único por contagem, ignorando overrides por ocorrência.
-        let amount = 0
+        // Uma entrada POR OCORRÊNCIA, cada uma com a sua data e o seu valor EFETIVO (respeita
+        // overrides[dataOriginal].amount). Antes as ocorrências eram somadas numa linha só, com
+        // um "(3×)" no rótulo — e aí a lista não tinha como ser ordenada por dia, porque uma
+        // linha representava três dias diferentes.
+        //
+        // O valor sai de occEfetiva, não de uma divisão do total pelo número de ocorrências:
+        // ratear daria número errado em toda série com override em alguma parcela.
+        const doAgendamento = []
+        let bruto = 0
         for (const dt of occs) {
           const val = occEfetiva(s, dt).amount
-          if (s.transactionType === 'income' && fromAcc) amount += val
-          else if (s.transactionType === 'expense' && fromAcc) amount -= val
-          else if (s.transactionType === 'transfer') amount += (toAcc ? val : 0) - (fromAcc ? val : 0)
+          let v = 0
+          if (s.transactionType === 'income' && fromAcc) v = val
+          else if (s.transactionType === 'expense' && fromAcc) v = -val
+          else if (s.transactionType === 'transfer') v = (toAcc ? val : 0) - (fromAcc ? val : 0)
+          if (v === 0) continue
+          bruto += v
+          doAgendamento.push({ description: s.description || '(agendamento)', amount: rb(v), date: dt })
         }
-        amount = rb(amount)
-        if (amount === 0) continue
-        items.push({ description: s.description || '(agendamento)', amount, count: occs.length })
-        total += amount
+        if (doAgendamento.length === 0) continue
+        // (X/N) contado sobre o que É EXIBIDO: ocorrência de valor nulo não entra na lista, e
+        // incluí-la no denominador deixaria a série com um número que ninguém vê.
+        doAgendamento.forEach((it, i) => {
+          it.occurrenceNumber = i + 1
+          it.totalOccurrences = doAgendamento.length
+        })
+        items.push(...doAgendamento)
+        // `total` continua sendo rb() da soma BRUTA do agendamento inteiro, como antes.
+        // Arredondar ocorrência a ocorrência e somar mudaria centavos no Saldo Final Ciclo —
+        // que o card do Painel Geral também exibe. Aqui só a apresentação muda.
+        total += rb(bruto)
       }
+      // Cronológica. 'YYYY-MM-DD' ordena lexicograficamente; new Date(iso) interpretaria como
+      // UTC e voltaria um dia no fuso do Brasil, bagunçando a ordem na virada do mês.
+      items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
       return { items, total: rb(total) }
     }
     const schedCiclo = collectSched(cycleEndStr)
