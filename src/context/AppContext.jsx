@@ -2150,8 +2150,19 @@ export function AppProvider({ children }) {
         // da frequência (ex.: semanal efetivada em 15/06 → próxima ocorrência 22/06). O
         // lançamento real vira um agendamento NORMAL separado (criado abaixo). Limpa o
         // provisao_efetivada_until legado (o modelo agora avança a própria startDate).
+        //
+        // `nextOccurrence` TEM que avançar junto: computeOccurrences ancora a série em
+        // `nextOccurrence || startDate` (occurrences.js:76), então uma provisão que já tinha
+        // âncora gravada — qualquer uma editada pelo formulário de agendamento, ou que teve uma
+        // ocorrência registrada — ignorava o novo startDate e voltava a listar desde a data já
+        // efetivada. Mexer só no startDate não avançava nada.
         const proximaInicio = advanceByFrequency(date, s.frequency || 'weekly')
-        return { ...s, startDate: proximaInicio, provisaoEfetivadaUntil: null }
+        return {
+          ...s,
+          startDate: proximaInicio,
+          nextOccurrence: proximaInicio,
+          provisaoEfetivadaUntil: null,
+        }
       })
 
       // Provisão recorrente: cria o agendamento NORMAL de despesa (is_provisao=false) com
