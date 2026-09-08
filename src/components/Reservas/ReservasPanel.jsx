@@ -951,6 +951,38 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio }) {
   )
 }
 
+// Modal de detalhamento de UMA célula do Fluxo Futuro: as ocorrências agendadas que somam o
+// Dep (entradas) ou o Res (saídas) daquela função naquele mês.
+//
+// Reusa MovFuturosSecao — é a mesma tabela do modal de Movimentos Futuros do Resumo, só que
+// recortada por mês. Os itens já vêm prontos de computeScheduledByFunction (depItems/resItems),
+// que os coleta justamente para isto; nada é buscado no servidor.
+function FluxoCelulaModal({ detalhe, onClose }) {
+  const { fnName, tipo, mesLabel, items, total } = detalhe
+  const entradas = tipo === 'deps'
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`${entradas ? 'Entradas' : 'Saídas'} previstas — ${fnName} · ${mesLabel}`}
+      size="lg"
+    >
+      <div className="space-y-5">
+        <MovFuturosSecao
+          titulo={entradas ? 'Entradas previstas' : 'Saídas previstas'}
+          cor={entradas ? 'text-blue-600' : 'text-orange-600'}
+          items={items}
+          total={total}
+          vazio={entradas ? 'Nenhuma entrada prevista neste mês' : 'Nenhuma saída prevista neste mês'}
+        />
+        <div className="flex justify-end">
+          <button type="button" className="btn-secondary text-xs py-1.5 px-5" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // Modal "Movimentos Futuros": entradas e saídas previstas (próximos 12 meses) de uma função.
 function MovFuturosModal({ fn, data, onClose }) {
   const deps = data?.deps || []
@@ -1441,6 +1473,10 @@ function futureMovimentosByFunction(linked, accounts, schedules, scheduleReserva
 function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedules, scheduleReservaFuncoes, getNextOccurrences }) {
   const linked = functions.filter(f => f.accountId)
   const round2 = (n) => Math.round(n * 100) / 100
+  // Célula (função × mês × Dep/Res) cujo detalhamento está aberto. Declarado aqui em cima
+  // porque o componente tem `return` antecipado quando não há função vinculada — um useState
+  // depois dele quebraria a ordem dos hooks entre renders.
+  const [detalhe, setDetalhe] = useState(null)
 
   // Janela deslizante de 12 meses a partir do mês ANTERIOR ao atual.
   const windowMonths = useMemo(() => {
@@ -1533,6 +1569,29 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   const alertCount = projections.filter(p => p.hasAlert).length
   const visibleMonths = [mobilePage, mobilePage + 1, mobilePage + 2]
 
+  // Ocorrências que somam aquela célula. `depItems`/`resItems` já vêm de
+  // computeScheduledByFunction com a data de cada ocorrência — aqui só recorta pelo mês da
+  // coluna, usando o MESMO winIndexOf que montou os totais, para lista e total não divergirem.
+  const abrirCelula = (f, mi, tipo) => {
+    const sched = scheduledByFunction[f.id]
+    const brutos = (tipo === 'deps' ? sched?.depItems : sched?.resItems) || []
+    const items = brutos
+      .filter(it => winIndexOf(it.date) === mi)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    const wm = windowMonths[mi]
+    setDetalhe({
+      fnName: f.name,
+      tipo,
+      mesLabel: `${wm.label}/${wm.year}`,
+      items,
+      total: items.reduce((t, x) => round2(t + (Number(x.amount) || 0)), 0),
+    })
+  }
+
+  // O mês de índice 0 é o ANTERIOR ao atual, e computeScheduledByFunction só coleta ocorrências
+  // de idx >= 1 — abrir a célula dele mostraria lista vazia com um total diferente de zero.
+  const celulaClicavel = (mi, valor) => mi >= 1 && valor > 0
+
   return (
     <div className="space-y-4">
       {/* KPI bar */}
@@ -1607,12 +1666,34 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                     <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1.5">
                       {d.label}{d.isYearStart || mi === 0 ? ` ${yy(d.year)}` : ''}
                     </p>
-                    <p className={`text-xs ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
-                      ↓ {d.dep > 0 ? fmt(d.dep) : '—'}
-                    </p>
-                    <p className={`text-xs ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
-                      ↑ {d.res > 0 ? fmt(d.res) : '—'}
-                    </p>
+                    {celulaClicavel(mi, d.dep) ? (
+                      <button
+                        type="button"
+                        onClick={() => abrirCelula(f, mi, 'deps')}
+                        title="Ver os agendamentos que compõem este valor"
+                        className="text-xs text-blue-600 hover:underline cursor-pointer block text-left"
+                      >
+                        ↓ {fmt(d.dep)}
+                      </button>
+                    ) : (
+                      <p className={`text-xs ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
+                        ↓ {d.dep > 0 ? fmt(d.dep) : '—'}
+                      </p>
+                    )}
+                    {celulaClicavel(mi, d.res) ? (
+                      <button
+                        type="button"
+                        onClick={() => abrirCelula(f, mi, 'ress')}
+                        title="Ver os agendamentos que compõem este valor"
+                        className="text-xs text-orange-600 hover:underline cursor-pointer block text-left"
+                      >
+                        ↑ {fmt(d.res)}
+                      </button>
+                    ) : (
+                      <p className={`text-xs ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
+                        ↑ {d.res > 0 ? fmt(d.res) : '—'}
+                      </p>
+                    )}
                     {d.prov > 0 && (
                       <p className="text-[11px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
                         ↑ ~{fmt(d.prov)}
@@ -1679,10 +1760,28 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                   {monthly.map((d, mi) => (
                     <Fragment key={mi}>
                       <td className={`px-2 py-2 text-right ${d.isYearStart ? 'border-l-2 border-l-emerald-700' : 'border-l border-gray-800'} ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
-                        {d.dep > 0 ? fmt(d.dep) : '—'}
+                        {celulaClicavel(mi, d.dep) ? (
+                          <button
+                            type="button"
+                            onClick={() => abrirCelula(f, mi, 'deps')}
+                            title="Ver os agendamentos que compõem este valor"
+                            className="hover:underline cursor-pointer"
+                          >
+                            {fmt(d.dep)}
+                          </button>
+                        ) : (d.dep > 0 ? fmt(d.dep) : '—')}
                       </td>
                       <td className={`px-2 py-2 text-right ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
-                        {d.res > 0 ? fmt(d.res) : '—'}
+                        {celulaClicavel(mi, d.res) ? (
+                          <button
+                            type="button"
+                            onClick={() => abrirCelula(f, mi, 'ress')}
+                            title="Ver os agendamentos que compõem este valor"
+                            className="hover:underline cursor-pointer"
+                          >
+                            {fmt(d.res)}
+                          </button>
+                        ) : (d.res > 0 ? fmt(d.res) : '—')}
                         {d.prov > 0 && (
                           <span className="block text-[10px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
                             ~{fmt(d.prov)}
@@ -1700,6 +1799,8 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
           </table>
         </div>
       </div>
+
+      {detalhe && <FluxoCelulaModal detalhe={detalhe} onClose={() => setDetalhe(null)} />}
     </div>
   )
 }
