@@ -231,19 +231,53 @@ function WizardSteps({ step }) {
   )
 }
 
-function generateMonthOptions() {
-  const opts = []
+// Rótulo "Setembro/2026" de um 'YYYY-MM'.
+function mesLabel(value) {
+  const [y, m] = value.split('-')
+  const label = new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+// Meses oferecidos no "Mês de Referência", POR CARTÃO:
+//   • começa 24 meses atrás;
+//   • vai até o mês da última fatura com lançamento neste cartão (parcelamento longo estende a
+//     lista), com piso de 3 meses à frente para o cartão sem movimento;
+//   • pula as faturas FECHADAS, que não aceitam importação.
+//
+// Sem cartão escolhido devolve lista vazia: os meses dependem do cartão, e oferecer uma lista
+// genérica que muda sozinha depois da escolha confunde mais do que ajuda.
+//
+// A fatura de cada lançamento sai de `faturaMonthYear` quando existe e, senão, de calcFatura —
+// a MESMA regra que o resto do painel usa para agrupar por fatura.
+function generateMonthOptions(card, transactions, isFaturaFechada) {
+  if (!card?.id) return []
   const now = new Date()
-  for (let i = 24; i >= -3; i--) {
+  const closingDay = card.closingDay || 14
+
+  let maxMY = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  for (const tx of (transactions || [])) {
+    if (tx.accountId !== card.id && tx.toAccountId !== card.id) continue
+    const my = tx.faturaMonthYear || calcFatura(tx.date, closingDay)
+    if (my && my > maxMY) maxMY = my // 'YYYY-MM' compara lexicograficamente
+  }
+  const piso = new Date(now.getFullYear(), now.getMonth() + 3, 1)
+  const fimMY = maxMY > `${piso.getFullYear()}-${String(piso.getMonth() + 1).padStart(2, '0')}`
+    ? maxMY
+    : `${piso.getFullYear()}-${String(piso.getMonth() + 1).padStart(2, '0')}`
+
+  const opts = []
+  // i decrescente ⇒ datas CRESCENTES (24 meses atrás → futuro). O limite superior é o `break`
+  // em fimMY, não o fim do laço.
+  for (let i = 24; i >= -60; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-    opts.push({ value, label: label.charAt(0).toUpperCase() + label.slice(1) })
+    if (value > fimMY) break
+    if (isFaturaFechada?.(card.id, value)) continue
+    opts.push({ value, label: mesLabel(value) })
   }
   return opts
 }
-
-const MONTH_OPTIONS = generateMonthOptions()
 
 function SummaryBar({ found, toImport, duplicates, ignored = 0 }) {
   return (
@@ -1246,6 +1280,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
+
+  // Meses do cartão selecionado. Memoizado porque varre todos os lançamentos e a tabela de
+  // preview renderiza um select por linha — recalcular a cada linha custaria caro.
+  const monthOptions = useMemo(
+    () => generateMonthOptions(selectedAcc, transactions, isFaturaFechada),
+    [selectedAcc, transactions, isFaturaFechada],
+  )
+  // A lista esconde faturas fechadas; se o valor JÁ escolhido for uma delas (reedição de uma
+  // importação antiga, linha vinda do arquivo), ele entra na lista mesmo assim. Sem isso o
+  // select ficaria em branco e a primeira interação apagaria a fatura sem ninguém perceber.
+  const monthOptionsCom = (valor) => (
+    valor && !monthOptions.some(o => o.value === valor)
+      ? [{ value: valor, label: `${mesLabel(valor)} (fatura fechada)` }, ...monthOptions]
+      : monthOptions
+  )
 
   // Data de SISTEMA (date) que uma linha de importação vai gravar. Vive no escopo do componente
   // porque a PRÉVIA e a GRAVAÇÃO precisam da mesma resposta — quando a prévia calculava a data
@@ -3267,7 +3316,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <label className="label">Mês de Referência</label>
               <select className="input" value={faturaMonthYear} onChange={e => setFaturaMonthYear(e.target.value)}>
                 <option value="">Selecione...</option>
-                {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
@@ -3330,7 +3379,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 <label className="label">Mês de Referência</label>
                 <select className="input" value={faturaMonthYear} onChange={e => handleFaturaMonthYearChange(e.target.value)}>
                   <option value="">Selecione...</option>
-                  {MONTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {monthOptionsCom(faturaMonthYear).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div className="flex items-end gap-4 pb-1">
@@ -3474,7 +3523,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           onChange={e => updateRow(row._id, { faturaMonthYear: e.target.value })}
                         >
                           <option value="">—</option>
-                          {MONTH_OPTIONS.map(o => (
+                          {monthOptionsCom(row.faturaMonthYear).map(o => (
                             <option key={o.value} value={o.value}>{o.value.split('-').reverse().join('/')}</option>
                           ))}
                         </select>
