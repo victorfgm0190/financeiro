@@ -239,39 +239,58 @@ function mesLabel(value) {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-// Meses oferecidos no "Mês de Referência", POR CARTÃO:
+// 'YYYY-MM' de uma Date.
+const myOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+// Última fatura com lançamento entre TODOS os cartões de crédito — não só o selecionado.
+// É o que faz o dropdown alcançar o mesmo horizonte em qualquer cartão: um parcelamento longo
+// no Itaú estende também a lista do BB, que de outro modo pararia antes.
+//
+// O cartão de cada lançamento é procurado nos DOIS lados: `accountId` (gasto) e `toAccountId`
+// (pagamento/transferência recebida). Um `find` por qualquer um dos lados devolveria a conta
+// corrente numa transferência e descartaria a linha por não ser 'credit'.
+//
+// Map em vez de accounts.find() dentro do laço: isto varre a lista inteira de lançamentos, e
+// uma busca linear por linha ficaria quadrática.
+function findGlobalMaxMonth(transactions, accounts) {
+  const cartoes = new Map((accounts || []).filter(a => a.type === 'credit').map(a => [a.id, a]))
+  if (cartoes.size === 0) return null
+  let maxMY = null
+  for (const tx of (transactions || [])) {
+    const card = cartoes.get(tx.accountId) || cartoes.get(tx.toAccountId)
+    if (!card) continue
+    const my = tx.faturaMonthYear || calcFatura(tx.date, card.closingDay || 14)
+    if (my && (!maxMY || my > maxMY)) maxMY = my // 'YYYY-MM' compara lexicograficamente
+  }
+  return maxMY
+}
+
+// Meses oferecidos no "Mês de Referência":
 //   • começa 24 meses atrás;
-//   • vai até o mês da última fatura com lançamento neste cartão (parcelamento longo estende a
-//     lista), com piso de 3 meses à frente para o cartão sem movimento;
-//   • pula as faturas FECHADAS, que não aceitam importação.
+//   • vai até UM mês além da última fatura com lançamento em QUALQUER cartão — a margem é onde
+//     se importa a fatura que ainda não tem gasto nenhum;
+//   • piso de 3 meses à frente, para quando não há lançamento em cartão nenhum;
+//   • pula as faturas FECHADAS DO CARTÃO SELECIONADO, que não aceitam importação.
+//
+// O horizonte é global e o filtro de fechadas é local, de propósito: o alcance da lista não
+// deve mudar conforme o cartão, mas o que já está fechado é por cartão.
 //
 // Sem cartão escolhido devolve lista vazia: os meses dependem do cartão, e oferecer uma lista
 // genérica que muda sozinha depois da escolha confunde mais do que ajuda.
-//
-// A fatura de cada lançamento sai de `faturaMonthYear` quando existe e, senão, de calcFatura —
-// a MESMA regra que o resto do painel usa para agrupar por fatura.
-function generateMonthOptions(card, transactions, isFaturaFechada) {
+function generateMonthOptions(card, transactions, isFaturaFechada, accounts) {
   if (!card?.id) return []
   const now = new Date()
-  const closingDay = card.closingDay || 14
 
-  let maxMY = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  for (const tx of (transactions || [])) {
-    if (tx.accountId !== card.id && tx.toAccountId !== card.id) continue
-    const my = tx.faturaMonthYear || calcFatura(tx.date, closingDay)
-    if (my && my > maxMY) maxMY = my // 'YYYY-MM' compara lexicograficamente
-  }
-  const piso = new Date(now.getFullYear(), now.getMonth() + 3, 1)
-  const fimMY = maxMY > `${piso.getFullYear()}-${String(piso.getMonth() + 1).padStart(2, '0')}`
-    ? maxMY
-    : `${piso.getFullYear()}-${String(piso.getMonth() + 1).padStart(2, '0')}`
+  const maxGlobal = findGlobalMaxMonth(transactions, accounts)
+  const teto = maxGlobal ? addMonthToFatura(maxGlobal, 1) : null
+  const piso = myOf(new Date(now.getFullYear(), now.getMonth() + 3, 1))
+  const fimMY = teto && teto > piso ? teto : piso
 
   const opts = []
   // i decrescente ⇒ datas CRESCENTES (24 meses atrás → futuro). O limite superior é o `break`
   // em fimMY, não o fim do laço.
   for (let i = 24; i >= -60; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const value = myOf(new Date(now.getFullYear(), now.getMonth() - i, 1))
     if (value > fimMY) break
     if (isFaturaFechada?.(card.id, value)) continue
     opts.push({ value, label: mesLabel(value) })
@@ -1284,8 +1303,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Meses do cartão selecionado. Memoizado porque varre todos os lançamentos e a tabela de
   // preview renderiza um select por linha — recalcular a cada linha custaria caro.
   const monthOptions = useMemo(
-    () => generateMonthOptions(selectedAcc, transactions, isFaturaFechada),
-    [selectedAcc, transactions, isFaturaFechada],
+    () => generateMonthOptions(selectedAcc, transactions, isFaturaFechada, accounts),
+    [selectedAcc, transactions, isFaturaFechada, accounts],
   )
   // A lista esconde faturas fechadas; se o valor JÁ escolhido for uma delas (reedição de uma
   // importação antiga, linha vinda do arquivo), ele entra na lista mesmo assim. Sem isso o
