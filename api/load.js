@@ -213,6 +213,33 @@ export default async function handler(req, res) {
     )`)
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_data ON reserve_period_snapshots (data_fim DESC)`)
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_function ON reserve_period_snapshots (function_id)`)
+    // Razão DIÁRIO das funções de reserva: uma linha por função por dia, com a movimentação
+    // do dia e o saldo acumulado/atualizado ao FIM daquele dia. É o histórico que permite
+    // uma virada retroativa saber qual era o Saldo Atualizado numa data passada — sem ele
+    // só existe o valor de hoje. Escrito pelo cliente (ver src/lib/reserveDailyLedger.js):
+    // a fórmula do rateio depende do saldo real da conta, que o servidor não conhece.
+    // Chave (function_id, snapshot_date): account_id NÃO entra na chave — se a função troca
+    // de conta, o dia continua tendo uma única linha, senão a leitura duplicaria a função.
+    await query(`CREATE TABLE IF NOT EXISTS reserve_daily_ledger (
+      function_id TEXT NOT NULL,
+      snapshot_date DATE NOT NULL,
+      account_id TEXT,
+      periodo_id TEXT,
+      entrada_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+      saida_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+      ajuste_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+      saldo_acumulado NUMERIC(14,2) NOT NULL DEFAULT 0,
+      saldo_atualizado NUMERIC(14,2) NOT NULL DEFAULT 0,
+      saldo_real_conta NUMERIC(14,2),
+      fator_rateio NUMERIC(12,8),
+      divergencia NUMERIC(14,2),
+      divergencia_pct NUMERIC(9,4),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      PRIMARY KEY (function_id, snapshot_date)
+    )`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_ledger_date ON reserve_daily_ledger (snapshot_date DESC)`)
+    await query(`CREATE INDEX IF NOT EXISTS idx_reserve_ledger_account ON reserve_daily_ledger (account_id, snapshot_date DESC)`)
     // Staging de importação histórica (Dindin): linhas ficam aqui para revisão antes
     // de virarem lançamentos. status: pendente | confirmado | ignorado.
     await query(`CREATE TABLE IF NOT EXISTS importacoes_pendentes (

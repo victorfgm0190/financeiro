@@ -120,6 +120,29 @@ export async function createReserveSnapshots(snapshots) {
   return apiPost('/api/reserve-snapshots', { snapshots })
 }
 
+// Razão diário das funções de reserva (uma linha por função por dia).
+export async function fetchReserveLedgerMonths() {
+  return apiGet('/api/reserve-daily-ledger?months=1')
+}
+// Última data ESTRITAMENTE anterior a `date` + as linhas dela: { date, rows }.
+export async function fetchReserveLedgerBefore(date) {
+  return apiGet(`/api/reserve-daily-ledger?before=${encodeURIComponent(date)}`)
+}
+export async function fetchReserveLedgerSummary() {
+  return apiGet('/api/reserve-daily-ledger')
+}
+// Grava em lotes: uma janela cheia de backfill passa de 1 MB num POST só.
+const LEDGER_POST_CHUNK = 1500
+export async function createReserveLedgerRows(rows) {
+  if (!rows || rows.length === 0) return { ok: true, upserted: 0 }
+  let upserted = 0
+  for (let i = 0; i < rows.length; i += LEDGER_POST_CHUNK) {
+    const r = await apiPost('/api/reserve-daily-ledger', { rows: rows.slice(i, i + LEDGER_POST_CHUNK) })
+    upserted += r?.upserted || 0
+  }
+  return { ok: true, upserted }
+}
+
 // Ajustes por função: { id, function_id, data, valor, observacao }.
 export async function fetchReserveAdjustments() {
   return apiGet('/api/reserve-adjustments')

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, Fragment } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, Fragment } from 'react'
 import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
   ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare, List,
@@ -6,11 +6,13 @@ import {
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
-import { fetchReserveFunctionTransactions } from '../../lib/db'
+import { fetchReserveFunctionTransactions, fetchReserveLedgerMonths, fetchReserveLedgerBefore } from '../../lib/db'
+import { reserveMovOf, activePeriodByFunction } from '../../lib/reserveDailyLedger'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
+import ViradaModal from './ViradaModal'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -1325,38 +1327,6 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
   )
 }
 
-// ── Modal "Virar Saldo" com data de início (Parte 7) ────────────────────────
-function VirarSaldoModal({ defaultDate, onConfirm, onClose }) {
-  const [data, setData] = useState(defaultDate)
-  const [saving, setSaving] = useState(false)
-  const confirm = async () => {
-    if (!data) return
-    setSaving(true)
-    try { await onConfirm(data) } finally { setSaving(false) }
-  }
-  return (
-    <Modal open onClose={onClose} title="Virar Saldo" size="sm">
-      <div className="space-y-4">
-        <p className="text-sm text-gray-300">Informe a data de início do novo período:</p>
-        <div>
-          <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data de início</label>
-          <input type="date" value={data} onChange={e => setData(e.target.value)} className="input w-full text-sm" />
-        </div>
-        <p className="text-xs text-gray-600 leading-relaxed">
-          O Saldo Atualizado de cada função vira o Saldo Inicial de um novo período a partir desta data.
-          Nada é sobrescrito — o histórico anterior é preservado.
-        </p>
-        <div className="flex gap-3 pt-1">
-          <button type="button" className="btn-secondary flex-1" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button type="button" className="btn-primary flex-1 bg-emerald-700 hover:bg-emerald-600" onClick={confirm} disabled={saving}>
-            {saving ? 'Virando…' : 'Confirmar Virada'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
-
 // ── Fluxo Futuro: janela + projeção de dep/res/prov por função (lógica compartilhada) ──
 // Extraídos para serem reusados tanto pelo FluxoTab quanto pelo Resumo (colunas Mov. Futuros /
 // Saldo Futuro) — fonte única, sem duplicar o cálculo.
@@ -1918,6 +1888,7 @@ export default function ReservasPanel() {
     // Histórico no banco (fonte da verdade): períodos de saldo inicial + ajustes + snapshots.
     reservePeriods, reserveAdjustments, reserveSnapshots, addReservePeriod, deleteReservePeriod,
     addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment, addReserveSnapshots,
+    writeReserveDailyLedger,
   } = useApp()
   const { functions, accountBalances, addFunction, updateFunction, deleteFunction, setAccountBalance } = useReservas()
   const [tab, setTab] = useState('contas')
@@ -1928,6 +1899,23 @@ export default function ReservasPanel() {
   // ids dos períodos criados na última virada (undo em sessão — o banco é a fonte da verdade,
   // não há mais snapshot em localStorage). Vazio → botão "Desfazer" oculto.
   const [lastViradaIds, setLastViradaIds] = useState([])
+
+  // O writer do razão diário é recriado sempre que `data` muda. Guardá-lo num ref mantém
+  // loadLedgerMonths com identidade estável: sem isso, criar um período no meio de uma
+  // sequência de viradas mudaria a prop do ViradaModal e reiniciaria o assistente.
+  const writeLedgerRef = useRef(writeReserveDailyLedger)
+  useEffect(() => { writeLedgerRef.current = writeReserveDailyLedger }, [writeReserveDailyLedger])
+
+  // Antes de abrir o assistente, garante que o razão diário cobre até hoje — assim a
+  // detecção de múltiplos meses e o corte "última data anterior" enxergam o dia corrente.
+  const loadLedgerMonths = useCallback(async () => {
+    try { await writeLedgerRef.current() } catch { /* segue com o razão que já existe */ }
+    const r = await fetchReserveLedgerMonths()
+    return r?.months || []
+  }, [])
+
+  // "Desfazer" cobre a sequência inteira do assistente: zera ao abrir, acumula a cada virada.
+  const openVirada = () => { setLastViradaIds([]); setVirarModal(true) }
 
   // Saldo = Saldo Inicial + Entradas − Saídas + Ajuste (ajuste do período, pode ser ±).
   const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0)) * 100) / 100
@@ -1940,21 +1928,12 @@ export default function ReservasPanel() {
   const _now = new Date()
   const currentMonthKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`
   const todayStr = localDateStr(_now)
-  const tomorrowStr = localDateStr(new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() + 1))
 
   // Período ativo de cada função = registro de data_inicio MAIS RECENTE (independente de ser
   // hoje/passado/futuro). Assim uma virada feita agora (data_inicio = amanhã) já passa a valer
   // imediatamente: as Entradas/Saídas filtram a partir dessa data (ficam vazias até surgirem
   // novos lançamentos), sem mostrar o histórico do período fechado. functionId → período.
-  const activePeriodByFn = useMemo(() => {
-    const m = {}
-    for (const p of (reservePeriods || [])) {
-      if (!p.data_inicio) continue
-      const cur = m[p.function_id]
-      if (!cur || p.data_inicio > cur.data_inicio) m[p.function_id] = p
-    }
-    return m
-  }, [reservePeriods])
+  const activePeriodByFn = useMemo(() => activePeriodByFunction(reservePeriods), [reservePeriods])
 
   // Ajustes agrupados por função (todos; o filtro por período ativo é aplicado no cálculo).
   const adjustmentsByFn = useMemo(() => {
@@ -1995,15 +1974,11 @@ export default function ReservasPanel() {
       if (!slot) return
       const b = boundsOf[tx.reservaFuncaoId]
       if (tx.date < b.start || tx.date > b.end) return
-      // Entrada: receita NA conta da reserva, ou transferência ENTRANDO nela.
-      // Saída: transferência SAINDO da conta da reserva (resgate). Despesa de cartão é só
-      // provisão/justificativa — NÃO é movimento de reserva, não entra em entradas/saídas.
-      const reservaAccId = reservaAccOf[tx.reservaFuncaoId]
-      if (tx.type === 'income' && tx.accountId === reservaAccId) slot.entradas += tx.amount
-      else if (tx.type === 'transfer') {
-        if (tx.toAccountId === reservaAccId) slot.entradas += tx.amount
-        else if (tx.accountId === reservaAccId) slot.saidas += tx.amount
-      }
+      // Regra em reserveMovOf (src/lib/reserveDailyLedger.js) — fonte única, compartilhada
+      // com o razão diário para os dois nunca divergirem.
+      const { entrada, saida } = reserveMovOf(tx, reservaAccOf[tx.reservaFuncaoId])
+      slot.entradas += entrada
+      slot.saidas += saida
     })
     Object.values(m).forEach(s => {
       s.entradas = Math.round(s.entradas * 100) / 100
@@ -2076,47 +2051,101 @@ export default function ReservasPanel() {
     [effectiveFunctions, accounts, schedules, scheduleReservaFuncoes, getNextOccurrences],
   )
 
-  // Virar Saldo: para cada função, cria um NOVO período iniciando na data escolhida, com
-  // saldo_inicial = Saldo Atualizado atual. Não sobrescreve reserve_functions nem grava em
-  // localStorage — o banco é a fonte da verdade. Guarda os ids criados para o "Desfazer".
-  const handleVirar = async (dataInicio) => {
-    const criados = []
-    try {
-      // data_fim do período que se encerra = véspera do início do novo período.
-      const [y, m, d] = dataInicio.split('-').map(Number)
-      const dataFim = localDateStr(new Date(y, m - 1, d - 1))
+  // Totais de uma função no intervalo [inicio, fim] — usados no snapshot de uma virada
+  // RETROATIVA, onde f.entradas/f.saidas/f.ajuste (que vão do início do período até HOJE)
+  // incluiriam movimentos posteriores ao fechamento e o snapshot ficaria maior que o saldo.
+  const r2 = (n) => Math.round(n * 100) / 100
+  const totaisAte = (fnId, inicio, fim) => {
+    const fn = effectiveFunctions.find(f => f.id === fnId)
+    if (!fn) return { entradas: 0, saidas: 0, ajuste: 0 }
+    let entradas = 0
+    let saidas = 0
+    for (const tx of transactions) {
+      if (tx.reservaFuncaoId !== fnId || !tx.date) continue
+      if (tx.date < inicio || tx.date > fim) continue
+      const mov = reserveMovOf(tx, fn.accountId || null)
+      entradas += mov.entrada
+      saidas += mov.saida
+    }
+    const adjs = adjustmentsByFn[fnId] || []
+    const ajuste = adjs.reduce((s, a) => (a.data >= inicio && a.data <= fim ? s + (Number(a.valor) || 0) : s), 0)
+    return { entradas: r2(entradas), saidas: r2(saidas), ajuste: r2(ajuste) }
+  }
 
-      // Snapshot do estado atual de cada função (período que fecha) — ANTES de criar os períodos.
-      const snapshots = effectiveFunctions.map(f => ({
+  // Virar Saldo: para cada função, cria um NOVO período iniciando na data de CORTE, com
+  // saldo_inicial = Saldo Atualizado do ÚLTIMO dia ANTERIOR ao corte registrado no razão
+  // diário (corte 14/08 → fechamento de 13/08). Sem razão anterior ao corte, cai no Saldo
+  // Atualizado de hoje — o comportamento antigo. Não sobrescreve reserve_functions nem grava
+  // em localStorage: o banco é a fonte da verdade. Guarda os ids criados para o "Desfazer".
+  // Retorna o resumo que o ViradaModal exibe antes de perguntar pela próxima virada.
+  const handleVirar = async (dataCorte) => {
+    // 1. Razão diário: última data ESTRITAMENTE anterior ao corte.
+    let ledgerDate = null
+    const ledgerByFn = {}
+    try {
+      const r = await fetchReserveLedgerBefore(dataCorte)
+      ledgerDate = r?.date || null
+      for (const row of (r?.rows || [])) ledgerByFn[row.function_id] = row
+    } catch { /* razão indisponível → fallback no saldo de hoje */ }
+    const fallback = !ledgerDate
+
+    // data_fim do período que se encerra = o dia do razão usado, ou a véspera do corte.
+    const [y, m, d] = dataCorte.split('-').map(Number)
+    const dataFim = ledgerDate || localDateStr(new Date(y, m - 1, d - 1))
+
+    const saldoInicialDe = (f) => {
+      const row = ledgerByFn[f.id]
+      if (row) return Number(row.saldo_atualizado) || 0
+      return saldosAtualizados[f.id] ?? computeSaldo(f)
+    }
+
+    // 2. Snapshot do período que fecha — ANTES de criar os novos períodos.
+    const snapshots = effectiveFunctions.map(f => {
+      const inicio = activePeriodByFn[f.id]?.data_inicio ?? '0001-01-01'
+      const row = ledgerByFn[f.id]
+      const tot = row ? totaisAte(f.id, inicio, dataFim) : { entradas: f.entradas, saidas: f.saidas, ajuste: f.ajuste }
+      return {
         id: newId('snap'),
         periodo_id: activePeriodByFn[f.id]?.id ?? 'legacy',
-        data_inicio: activePeriodByFn[f.id]?.data_inicio ?? '0001-01-01',
+        data_inicio: inicio,
         data_fim: dataFim,
         function_id: f.id,
         function_name: f.name,
         saldo_inicial: f.saldoInicial,
-        entradas: f.entradas,
-        saidas: f.saidas,
-        ajuste: f.ajuste,
-        saldo: computeSaldo(f),
-        saldo_atualizado: saldosAtualizados[f.id] ?? computeSaldo(f),
-      }))
-      await addReserveSnapshots(snapshots)
-
-      for (const f of effectiveFunctions) {
-        const periodoId = newId('rp')
-        await addReservePeriod({
-          id: periodoId,
-          function_id: f.id,
-          data_inicio: dataInicio,
-          saldo_inicial: saldosAtualizados[f.id] ?? computeSaldo(f),
-        })
-        criados.push(periodoId) // ids dos períodos criados → usados pelo "Desfazer"
+        entradas: tot.entradas,
+        saidas: tot.saidas,
+        ajuste: tot.ajuste,
+        saldo: row ? (Number(row.saldo_acumulado) || 0) : computeSaldo(f),
+        saldo_atualizado: saldoInicialDe(f),
       }
-      setLastViradaIds(criados)
-    } finally {
-      setVirarModal(false)
+    })
+    await addReserveSnapshots(snapshots)
+
+    // 3. Novo período por função, começando NA data de corte (e não no dia seguinte: senão
+    //    os lançamentos do próprio dia do corte não cairiam em período nenhum).
+    const criados = []
+    const novosPeriodos = []
+    for (const f of effectiveFunctions) {
+      const periodo = {
+        id: newId('rp'),
+        function_id: f.id,
+        data_inicio: dataCorte,
+        saldo_inicial: saldoInicialDe(f),
+      }
+      await addReservePeriod(periodo)
+      criados.push(periodo.id) // ids dos períodos criados → usados pelo "Desfazer"
+      novosPeriodos.push(periodo)
     }
+    setLastViradaIds(prev => [...prev, ...criados])
+
+    // 4. Reescreve o razão a partir do novo período: do corte em diante o saldo passa a
+    //    acumular sobre o saldo inicial recém-criado, então as linhas antigas ficaram velhas.
+    //    Os dias ANTERIORES ao corte não são tocados — são o registro do período fechado.
+    try {
+      await writeReserveDailyLedger({ periods: [...reservePeriods, ...novosPeriodos] })
+    } catch { /* razão é histórico auxiliar: não derruba a virada */ }
+
+    return { dataCorte, ledgerDate, fallback, count: effectiveFunctions.length }
   }
 
   // Desfazer a última virada: remove os períodos criados nela (sessão atual).
@@ -2196,7 +2225,7 @@ export default function ReservasPanel() {
           onAddAdjustment={addReserveAdjustment}
           onUpdateAdjustment={updateReserveAdjustment}
           onDeleteAdjustment={deleteReserveAdjustment}
-          onVirar={() => setVirarModal(true)}
+          onVirar={openVirada}
           onUndo={handleUndoVirada}
           onReorder={reorderReserveFunctions}
         />
@@ -2240,9 +2269,11 @@ export default function ReservasPanel() {
       </Modal>
 
       {virarModal && (
-        <VirarSaldoModal
-          defaultDate={tomorrowStr}
-          onConfirm={handleVirar}
+        <ViradaModal
+          defaultDate={todayStr}
+          todayStr={todayStr}
+          loadMonths={loadLedgerMonths}
+          onVirar={handleVirar}
           onClose={() => setVirarModal(false)}
         />
       )}

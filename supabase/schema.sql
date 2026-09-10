@@ -751,3 +751,33 @@ ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS source_expense_ids JSONB DEFAU
 --   a.overrides->'_sourceTxIds',
 --   '[]'::jsonb)
 -- WHERE a.tipo = 'resgate_reserva';
+
+-- ============================================================
+-- Razão DIÁRIO das funções de reserva
+-- Uma linha por função por dia: movimentação do dia + saldo acumulado e Saldo
+-- Atualizado ao FIM daquele dia. É o histórico que permite uma virada retroativa
+-- saber qual era o Saldo Atualizado numa data passada.
+-- Escrito pelo cliente (src/lib/reserveDailyLedger.js): a fórmula do rateio depende
+-- do saldo real da conta, que o servidor não conhece.
+-- A DDL viva é a de api/load.js — esta cópia existe só para documentação.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS reserve_daily_ledger (
+  function_id TEXT NOT NULL,
+  snapshot_date DATE NOT NULL,
+  account_id TEXT,
+  periodo_id TEXT,
+  entrada_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+  saida_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+  ajuste_dia NUMERIC(14,2) NOT NULL DEFAULT 0,
+  saldo_acumulado NUMERIC(14,2) NOT NULL DEFAULT 0,
+  saldo_atualizado NUMERIC(14,2) NOT NULL DEFAULT 0,
+  saldo_real_conta NUMERIC(14,2),
+  fator_rateio NUMERIC(12,8),
+  divergencia NUMERIC(14,2),
+  divergencia_pct NUMERIC(9,4),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (function_id, snapshot_date)
+);
+CREATE INDEX IF NOT EXISTS idx_reserve_ledger_date ON reserve_daily_ledger (snapshot_date DESC);
+CREATE INDEX IF NOT EXISTS idx_reserve_ledger_account ON reserve_daily_ledger (account_id, snapshot_date DESC);

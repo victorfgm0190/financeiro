@@ -12,7 +12,9 @@ import {
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
   fetchReserveSnapshots, createReserveSnapshots,
+  createReserveLedgerRows,
 } from '../lib/db'
+import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken } from '../lib/api'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
@@ -752,6 +754,7 @@ export function AppProvider({ children }) {
   const [reservePeriods, setReservePeriods] = useState([])
   const [reserveAdjustments, setReserveAdjustments] = useState([])
   const [reserveSnapshots, setReserveSnapshots] = useState([])
+  const [reserveHistoryLoaded, setReserveHistoryLoaded] = useState(false)
 
   // Carrega os históricos no mount (paralelo ao load principal). Falha silenciosa
   // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
@@ -767,6 +770,7 @@ export function AppProvider({ children }) {
       setReservePeriods(p?.periods || [])
       setReserveAdjustments(a?.adjustments || [])
       setReserveSnapshots(s?.snapshots || [])
+      setReserveHistoryLoaded(true)
     })
     return () => { cancelled = true }
   }, [])
@@ -3002,6 +3006,43 @@ export function AppProvider({ children }) {
     setReserveSnapshots(prev => [...prev, ...snapshots])
   }, [])
 
+  // ── Reservas: razão diário (uma linha por função por dia) ────────────────────
+  // Regrava a janela inteira — o upsert por (function_id, snapshot_date) torna a operação
+  // idempotente, e recalcular o passado é o que corrige o razão depois de um lançamento
+  // retroativo. Roda uma vez por dia no mount e sob demanda antes de uma virada.
+  // O cálculo vive no cliente porque depende de regras que o servidor não tem: a janela do
+  // período ativo, a classificação de movimento de reserva e o saldo real da conta (que
+  // pode vir do override em localStorage). Ver src/lib/reserveDailyLedger.js.
+  // `periods` permite passar uma lista já com os períodos recém-criados: logo após uma
+  // virada o state ainda não reflete a inserção, e o razão precisa ser reescrito com ela.
+  const writeReserveDailyLedger = useCallback(async ({ periods } = {}) => {
+    if (!data?.reserveFunctions?.length) return { ok: true, upserted: 0 }
+    let accountBalances = {}
+    try { accountBalances = JSON.parse(localStorage.getItem('finup_reserve_balances') || '{}') } catch { /* sem override local */ }
+    const { rows } = buildDailyLedgerRows({
+      functions: data.reserveFunctions,
+      periods: periods || reservePeriods,
+      adjustments: reserveAdjustments,
+      transactions: data.transactions || [],
+      accounts: data.accounts || [],
+      accountBalances,
+    })
+    return createReserveLedgerRows(rows)
+  }, [data, reservePeriods, reserveAdjustments])
+
+  // Uma gravação por dia: a chave em localStorage evita reescrever a janela a cada F5.
+  const ledgerRunRef = useRef(false)
+  useEffect(() => {
+    if (dbStatus !== 'connected' || !reserveHistoryLoaded || ledgerRunRef.current) return
+    const hoje = ledgerDateStr(new Date())
+    ledgerRunRef.current = true
+    if (localStorage.getItem('finup_reserve_ledger_day') === hoje) return
+    writeReserveDailyLedger()
+      .then(() => localStorage.setItem('finup_reserve_ledger_day', hoje))
+      // Falha silenciosa: o razão é histórico auxiliar, não pode derrubar o carregamento.
+      .catch(err => console.warn('[reserve-daily-ledger]', err.message))
+  }, [dbStatus, reserveHistoryLoaded, writeReserveDailyLedger])
+
   // ── Gerencial Groups ─────────────────────────────────────────────────────────
   const addGerencialGroup = useCallback((group) => {
     update(d => {
@@ -5119,6 +5160,7 @@ export function AppProvider({ children }) {
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addReserveSnapshots,
+      writeReserveDailyLedger,
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
