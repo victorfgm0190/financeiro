@@ -128,8 +128,9 @@ export async function fetchReserveLedgerMonths() {
 export async function fetchReserveLedgerBefore(date) {
   return apiGet(`/api/reserve-daily-ledger?before=${encodeURIComponent(date)}`)
 }
-export async function fetchReserveLedgerSummary() {
-  return apiGet('/api/reserve-daily-ledger')
+// Resumo + linhas dos últimos `days` dias com registro, já com function_name do join.
+export async function fetchReserveLedgerSummary(days) {
+  return apiGet(`/api/reserve-daily-ledger${days ? `?days=${days}` : ''}`)
 }
 // Grava em lotes: uma janela cheia de backfill passa de 1 MB num POST só.
 const LEDGER_POST_CHUNK = 1500

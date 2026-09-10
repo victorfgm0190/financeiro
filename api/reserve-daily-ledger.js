@@ -72,14 +72,38 @@ export default async function handler(req, res) {
         return res.json({ date, rows })
       }
 
+      // Sem parâmetros: resumo + as linhas dos últimos `days` dias COM registro (default 60,
+      // teto 400 = a janela que o razão cobre). O corte é por dias distintos existentes, não
+      // por data corrida: um intervalo sem gravação não come a janela.
       const [summary] = await query(
         `SELECT to_char(MIN(snapshot_date), 'YYYY-MM-DD') AS min_date,
                 to_char(MAX(snapshot_date), 'YYYY-MM-DD') AS max_date,
                 COUNT(DISTINCT snapshot_date)::int AS days,
-                COUNT(*)::int AS rows
+                COUNT(*)::int AS total_rows
            FROM reserve_daily_ledger`,
       )
-      return res.json(summary || { min_date: null, max_date: null, days: 0, rows: 0 })
+      const wanted = Math.min(Math.max(parseInt(qp(req, 'days'), 10) || 60, 1), 400)
+      const rows = await query(
+        `SELECT l.function_id,
+                to_char(l.snapshot_date, 'YYYY-MM-DD') AS snapshot_date,
+                l.account_id, l.periodo_id,
+                l.entrada_dia, l.saida_dia, l.ajuste_dia,
+                l.saldo_acumulado, l.saldo_atualizado,
+                l.saldo_real_conta, l.fator_rateio, l.divergencia, l.divergencia_pct,
+                f.name AS function_name
+           FROM reserve_daily_ledger l
+           LEFT JOIN reserve_functions f ON f.id = l.function_id
+          WHERE l.snapshot_date >= (
+                  SELECT MIN(d) FROM (
+                    SELECT DISTINCT snapshot_date AS d
+                      FROM reserve_daily_ledger
+                     ORDER BY d DESC
+                     LIMIT $1
+                  ) recentes)
+          ORDER BY l.snapshot_date DESC, f.ordem, f.name`,
+        [wanted],
+      )
+      return res.json({ ...(summary || { min_date: null, max_date: null, days: 0, total_rows: 0 }), rows })
     }
 
     if (req.method === 'POST') {

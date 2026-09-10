@@ -13,6 +13,7 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
 import ViradaModal from './ViradaModal'
+import RazaoDiarioTab from './RazaoDiarioTab'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -1776,7 +1777,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
 }
 
 // ── Tab 3: Histórico (snapshots das viradas) ────────────────────────────────
-function HistoricoTab({ snapshots }) {
+function HistoricoTab({ snapshots, selFim, onSelFim }) {
   const num = (v) => Number(v) || 0
   const ajCor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-500'
   const iniLabel = (d) => d && d !== '0001-01-01' ? fmtDate(d) : '(início)'
@@ -1796,7 +1797,6 @@ function HistoricoTab({ snapshots }) {
       .sort((a, b) => b.dataFim.localeCompare(a.dataFim)) // mais recente primeiro
   }, [snapshots])
 
-  const [selFim, setSelFim] = useState(null)
   const sel = groups.find(g => g.dataFim === selFim) || groups[0] || null
 
   if (!snapshots || snapshots.length === 0) {
@@ -1825,7 +1825,7 @@ function HistoricoTab({ snapshots }) {
         <select
           className="input py-1.5 text-xs max-w-[280px]"
           value={sel?.dataFim || ''}
-          onChange={e => setSelFim(e.target.value)}
+          onChange={e => onSelFim(e.target.value)}
         >
           {groups.map(g => (
             <option key={g.dataFim} value={g.dataFim}>{iniLabel(g.dataInicio)} → {fmtDate(g.dataFim)}</option>
@@ -1896,6 +1896,9 @@ export default function ReservasPanel() {
   const [editFn, setEditFn] = useState(null)
   const [virarModal, setVirarModal] = useState(false)  // modal "Virar Saldo" (pede data de início)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  // Período selecionado na aba Histórico. Vive aqui porque o link "Ver período" do Razão
+  // Diário troca de aba E de período na mesma ação.
+  const [histFim, setHistFim] = useState(null)
   // ids dos períodos criados na última virada (undo em sessão — o banco é a fonte da verdade,
   // não há mais snapshot em localStorage). Vazio → botão "Desfazer" oculto.
   const [lastViradaIds, setLastViradaIds] = useState([])
@@ -2175,6 +2178,7 @@ export default function ReservasPanel() {
           { id: 'contas', label: 'Contas Reserva' },
           { id: 'resumo', label: 'Resumo' },
           { id: 'fluxo', label: 'Fluxo Futuro' },
+          { id: 'razao', label: 'Razão Diário' },
           { id: 'historico', label: 'Histórico' },
         ].map(t => (
           <button
@@ -2243,8 +2247,16 @@ export default function ReservasPanel() {
         />
       )}
 
+      {tab === 'razao' && (
+        <RazaoDiarioTab
+          functions={effectiveFunctions}
+          snapshots={reserveSnapshots}
+          onVerPeriodo={dataFim => { setHistFim(dataFim); setTab('historico') }}
+        />
+      )}
+
       {tab === 'historico' && (
-        <HistoricoTab snapshots={reserveSnapshots} />
+        <HistoricoTab snapshots={reserveSnapshots} selFim={histFim} onSelFim={setHistFim} />
       )}
 
       <Modal
