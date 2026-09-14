@@ -474,9 +474,18 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 }
 
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
-  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled } = useApp()
+  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
+
+  // KPIs de saldo do cabeçalho. Vêm da MESMA engine do card de conta (getAccountSaldos), para
+  // que "Saldo Atual" aqui e lá nunca divirjam: saldoHoje é recalculado a cada render, enquanto
+  // account.balance é valor gravado que só se atualiza quando recalcularSaldo roda. Cartão/bem/
+  // passivo não têm saldo de ciclo (applicable: false) e continuam usando account.balance.
+  const saldos = useMemo(() => getAccountSaldos(account), [getAccountSaldos, account])
+  const saldoAtualKpi = saldos?.applicable ? saldos.saldoHoje : (account.balance || 0)
+  const saldoFuturoKpi = saldos?.applicable ? saldos.saldoFuturo : 0
+  const hasFuturoKpi = Math.abs(saldoFuturoKpi) >= 0.005
   useScrollScope(`accounts:extrato:${accountProp.id}`)
 
   const now = new Date()
@@ -1116,11 +1125,20 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           </div>
 
           {/* KPIs (compactos) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+          <div className={`grid grid-cols-1 gap-1.5 ${hasFuturoKpi ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
             <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
               <p className="text-[10px] text-gray-400 uppercase tracking-wide">Saldo Atual</p>
-              <p className={`text-xl font-bold ${(account.balance || 0) >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(account.balance || 0)}</p>
+              <p className={`text-xl font-bold ${saldoAtualKpi >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAtualKpi)}</p>
             </div>
+            {hasFuturoKpi && (
+              <div
+                className="rounded-lg border border-gray-800 bg-surface px-3 py-2"
+                title="Lançamentos já efetivados com data posterior a hoje. Somado ao Saldo Atual, dá o saldo depois que todos entrarem."
+              >
+                <p className="text-[10px] text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
+                <p className={`text-xl font-bold ${saldoFuturoKpi >= 0 ? 'text-sky-400' : 'text-orange-600'}`}>{fmt(saldoFuturoKpi)}</p>
+              </div>
+            )}
             <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
               <div className="flex items-center gap-1.5 text-blue-600"><ArrowDownCircle size={12} /><p className="text-[10px] text-gray-400 uppercase tracking-wide">Entradas</p></div>
               <p className="text-xl font-bold text-blue-600">{fmt(totals.entrada)}</p>

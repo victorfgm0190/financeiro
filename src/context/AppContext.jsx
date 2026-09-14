@@ -2608,11 +2608,12 @@ export function AppProvider({ children }) {
     const startDay = data.settings.financialMonthStartDay || 1
     const base = rb(account.initialBalance ?? 0)
 
-    // Transações efetivadas com date <= dateStr (mesma convenção de sinais de recalcularSaldo).
-    const txDeltaUpTo = (dateStr) => {
+    // Delta das transações efetivadas da conta cuja data satisfaz `inRange`
+    // (mesma convenção de sinais de recalcularSaldo).
+    const txDeltaWhere = (inRange) => {
       let acc = 0
       for (const tx of data.transactions) {
-        if (!tx.date || tx.date > dateStr) continue
+        if (!tx.date || !inRange(tx.date)) continue
         if (tx.type === 'income' && tx.accountId === account.id) acc += tx.amount
         else if (tx.type === 'expense' && tx.accountId === account.id && tx.accountType !== 'credit') acc -= tx.amount
         else if (tx.type === 'transfer') {
@@ -2622,6 +2623,8 @@ export function AppProvider({ children }) {
       }
       return acc
     }
+    const txDeltaUpTo = (dateStr) => txDeltaWhere(d => d <= dateStr)
+    const txDeltaAfter = (dateStr) => txDeltaWhere(d => d > dateStr)
 
     // Agendamentos pendentes (ocorrências não registradas/puladas) DENTRO do ciclo, no
     // intervalo [início do ciclo, dateStr] — inclui os pendentes EM ATRASO (data <= hoje),
@@ -2673,15 +2676,19 @@ export function AppProvider({ children }) {
     }
 
     const saldoAtual = rb(base + txDeltaUpTo(cycleEndStr))
-    // Quebra do saldoAtual em "já aconteceu" vs "ainda vai acontecer", DENTRO do ciclo:
+    // Quebra em "já aconteceu" vs "ainda vai acontecer":
     //   saldoHoje   = abertura + transações com date <= hoje.
-    //   saldoFuturo = o restante do ciclo (transações já lançadas com hoje < date <= fim do ciclo).
-    // Por construção saldoHoje + saldoFuturo == saldoAtual, então exibir os dois lado a lado no
-    // card não conta nenhum lançamento duas vezes. Agendamentos pendentes NÃO entram aqui —
-    // continuam somando só em saldoFinalCiclo.
+    //   saldoFuturo = delta de TODAS as transações já lançadas com date > hoje.
+    // saldoFuturo NÃO é recortado pelo fim do ciclo. A versão anterior recortava, e isso
+    // zerava o valor justamente quando hoje era o último dia do ciclo (com
+    // financialMonthStartDay = D, o dia D-1 fecha o ciclo → cycleEnd == hoje → futuro == 0),
+    // além de esconder tudo que cai no ciclo seguinte. Como o par exibido é
+    // (saldoHoje, saldoFuturo) e o corte é a MESMA data, não há sobreposição: cada lançamento
+    // entra em exatamente um dos dois. Agendamentos pendentes não entram em nenhum — continuam
+    // somando só em saldoFinalCiclo.
     const todayStr = toStr(referenceDate)
     const saldoHoje = rb(base + txDeltaUpTo(todayStr))
-    const saldoFuturo = rb(saldoAtual - saldoHoje)
+    const saldoFuturo = rb(txDeltaAfter(todayStr))
     const saldoFinalCiclo = rb(saldoAtual + schedDeltaUpTo(cycleEndStr))
     const saldoProjetado = rb(saldoFinalCiclo - envelopesRestante)
     const isCustom = mode === 'custom'

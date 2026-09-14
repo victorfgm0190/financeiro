@@ -274,9 +274,9 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     () => isChecking ? getAccountSaldos(account) : null,
     [isChecking, account, getAccountSaldos]
   )
-  // "Saldo Futuro": transações JÁ LANÇADAS com data depois de hoje, ainda dentro do ciclo.
-  // Sai como bloco próprio logo abaixo do Saldo Atual (que agora é só até hoje); os dois
-  // somados dão exatamente o antigo saldoAtual do ciclo, sem duplicar nada.
+  // "Saldo Futuro": transações JÁ LANÇADAS com data depois de hoje (sem recorte de ciclo).
+  // Sai como bloco próprio logo abaixo do Saldo Atual, que é só até hoje — mesmo corte de data
+  // nos dois, então nenhum lançamento é contado duas vezes.
   const saldoFuturo = saldos?.applicable ? saldos.saldoFuturo : 0
   const hasFuturo = Math.abs(saldoFuturo) >= 0.005
 
@@ -285,9 +285,11 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   const saldoRows = useMemo(() => {
     if (!saldos?.applicable) return null
     const rows = []
-    // Âncora do dedup: com a linha "Saldo Futuro" visível, hoje + futuro já comunicam o total
-    // do ciclo (saldoAtual), então as linhas seguintes se comparam a ele e não a saldoHoje.
-    let last = Math.abs(saldos.saldoFuturo) >= 0.005 ? saldos.saldoAtual : saldos.saldoHoje
+    // Âncora do dedup: o total já comunicado pelas linhas acima. Com "Saldo Futuro" visível,
+    // isso é hoje + futuro (todos os lançamentos); sem ele, é só o saldo de hoje.
+    let last = Math.abs(saldos.saldoFuturo) >= 0.005
+      ? Math.round((saldos.saldoHoje + saldos.saldoFuturo) * 100) / 100
+      : saldos.saldoHoje
     rows.push({ key: 'atual', label: 'Saldo Atual', val: saldos.saldoHoje, primary: true })
     const push = (key, label, val, cls) => {
       if (val == null) return
