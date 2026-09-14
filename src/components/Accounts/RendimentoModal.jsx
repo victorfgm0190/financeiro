@@ -6,28 +6,31 @@ import { fmt, today } from '../shared/utils'
 import Modal from '../shared/Modal'
 import DateInput from '../shared/DateInput'
 
-// Saldo de referência de UMA conta: o SALDO FUTURO da engine de ciclo — o delta dos lançamentos
-// já efetivados com data > hoje. Cartão não tem saldo futuro (0). Conta sem saldo de ciclo
-// (bem/passivo) cai no balance gravado, mantendo o comportamento anterior: devolver 0 ali faria
-// a diferença virar o novo saldo inteiro.
+// Saldo de referência de UMA conta: o SALDO FUTURO REAL — quanto a conta terá depois que todos
+// os lançamentos já efetivados com data > hoje entrarem. São os mesmos dois números que o card
+// da conta exibe somados: "Saldo Atual" (saldoHoje) + "Saldo Futuro" (saldoFuturo).
 //
-// ATENÇÃO: saldoFuturo é um DELTA, não um saldo — é quanto ainda vai entrar/sair, não quanto a
-// conta terá. Em conta sem lançamento futuro ele vale 0, e aí o rendimento calculado é o novo
-// saldo inteiro. Confira sempre o valor em "Rendimento a lançar" antes de confirmar.
-function saldoFuturoDe(account, getAccountSaldos) {
+// Usa saldoHoje, e NÃO o campo `saldoAtual` da engine, apesar do nome: saldoAtual é o saldo até
+// o fim do CICLO, que já inclui os lançamentos futuros de dentro do ciclo — somá-lo a
+// saldoFuturo contaria essas transações duas vezes. saldoHoje e saldoFuturo cortam na mesma
+// data (hoje) e por isso nunca se sobrepõem.
+//
+// Cartão não tem saldo de ciclo: entra pela dívida negativa. Bem/passivo caem no balance gravado.
+function saldoFuturoRealDe(account, getAccountSaldos) {
   if (!account) return 0
-  if (account.type === 'credit') return 0
+  if (account.type === 'credit') return -(account.creditDebt || 0)
   const s = getAccountSaldos(account)
-  if (s?.applicable) return s.saldoFuturo
+  if (s?.applicable) return Math.round((s.saldoHoje + s.saldoFuturo) * 100) / 100
   return account.balance || 0
 }
 
 // Lançador de rendimento de uma conta. O usuário informa o SALDO NOVO e o sistema lança a
 // DIFERENÇA contra o saldo de referência como receita na categoria configurada.
 //
-// A referência é o SALDO FUTURO (ver saldoFuturoDe) — decisão de produto, reafirmada depois de
-// levantada a ressalva de que ele é um delta e não um saldo. Consequência prática: o novo saldo
-// digitado precisa estar na mesma base do futuro, senão a diferença não é rendimento.
+// A referência é o SALDO FUTURO REAL (ver saldoFuturoRealDe): o saldo de hoje mais tudo que já
+// está lançado com data à frente. O valor digitado em "Novo saldo" precisa estar nessa mesma
+// base — ou seja, o extrato/app consultado já deve refletir os lançamentos futuros —, senão a
+// diferença carrega esses lançamentos pendentes junto e não é só rendimento.
 //
 // Modo 'grupo': o saldo de referência é a soma das contas do mesmo account_group_id — útil
 // quando um investimento é acompanhado pelo total do grupo. A receita, porém, vai SEMPRE na
@@ -41,8 +44,8 @@ export default function RendimentoModal({ account, onClose }) {
     () => isGrupo ? accounts.filter(a => a.accountGroupId === account.accountGroupId) : [account],
     [isGrupo, accounts, account]
   )
-  const saldoFuturo = useMemo(
-    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoFuturoDe(a, getAccountSaldos), 0) * 100) / 100,
+  const saldoFuturoReal = useMemo(
+    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoFuturoRealDe(a, getAccountSaldos), 0) * 100) / 100,
     [contasDoEscopo, getAccountSaldos]
   )
 
@@ -51,7 +54,7 @@ export default function RendimentoModal({ account, onClose }) {
   const [saving, setSaving] = useState(false)
 
   const preenchido = novoSaldo !== '' && !Number.isNaN(Number(novoSaldo))
-  const rendimento = preenchido ? Math.round((Number(novoSaldo) - saldoFuturo) * 100) / 100 : null
+  const rendimento = preenchido ? Math.round((Number(novoSaldo) - saldoFuturoReal) * 100) / 100 : null
   const valido = rendimento != null && rendimento > 0
 
   const handleConfirm = () => {
@@ -78,7 +81,7 @@ export default function RendimentoModal({ account, onClose }) {
           <p className="text-xs text-gray-500 mb-0.5">
             {isGrupo ? 'Saldo futuro do grupo' : 'Saldo futuro da conta'}
           </p>
-          <p className="text-xl font-bold text-gray-100">{fmt(saldoFuturo)}</p>
+          <p className="text-xl font-bold text-gray-100">{fmt(saldoFuturoReal)}</p>
           {isGrupo && (
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
               Soma de {contasDoEscopo.length} conta{contasDoEscopo.length !== 1 ? 's' : ''} do grupo.
