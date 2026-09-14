@@ -530,9 +530,22 @@ function balColor(amount) {
   return 'text-gray-300'
 }
 
-function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
+// Soma o "Saldo Futuro" das contas dadas, lendo o mapa accountId → futuro montado uma única vez
+// no painel. Um grupo agrega VÁRIAS contas distintas — getGroupAccounts filtra por
+// accountGroupId —, então não dá para reaproveitar o futuro de uma conta só: tem de somar conta
+// a conta. O mapa evita reexecutar getAccountSaldos (que varre todas as transações) por grupo.
+function sumSaldoFuturo(accounts, futuroByAccount) {
+  const total = accounts.reduce((sum, a) => sum + (futuroByAccount.get(a.id) || 0), 0)
+  return Math.round(total * 100) / 100
+}
+
+function GroupSection({ group, accounts, futuroByAccount, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
   const [collapsed, setCollapsed] = useState(false)
   const total = calcGroupBalance(accounts)
+  // calcGroupBalance soma account.balance (date <= hoje), mesmo corte de data do saldoFuturo —
+  // então os dois números do cabeçalho não se sobrepõem.
+  const totalFuturo = useMemo(() => sumSaldoFuturo(accounts, futuroByAccount), [accounts, futuroByAccount])
+  const hasFuturo = Math.abs(totalFuturo) >= 0.005
   const typeBadge = group.type === 'financeiro'
     ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
     : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
@@ -554,7 +567,17 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
         <span className="font-semibold text-sm text-gray-100">{group.name}</span>
         {typeBadge}
         <span className="text-xs text-gray-600 ml-2">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
-        <span className={`font-bold text-base ml-auto ${balColor(total)}`}>{fmt(total)}</span>
+        <span className="ml-auto text-right shrink-0">
+          <span className={`block font-bold text-base ${balColor(total)}`}>{fmt(total)}</span>
+          {hasFuturo && (
+            <span
+              className="block text-xs font-semibold text-sky-300"
+              title="Soma dos lançamentos já efetivados das contas do grupo com data posterior a hoje."
+            >
+              Futuro: {fmt(totalFuturo)}
+            </span>
+          )}
+        </span>
       </button>
       {!collapsed && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pl-2 border-l border-gray-800">
@@ -581,7 +604,7 @@ function GroupSection({ group, accounts, onEdit, onDelete, onExtrato, onUpdateVa
 }
 
 export default function AccountsPanel() {
-  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -604,6 +627,26 @@ export default function AccountsPanel() {
   const totalCredit = accounts
     .filter(a => a.type === 'credit')
     .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
+
+  // Futuro por conta, calculado UMA vez e reusado pelo KPI do topo e por cada grupo.
+  // getAccountSaldos varre data.transactions inteira a cada chamada; sem o mapa, o painel faria
+  // uma passada por conta no topo e outra por conta em cada grupo. Cartão/bem/passivo não têm
+  // saldo de ciclo (applicable: false) e entram como 0.
+  const futuroByAccount = useMemo(() => {
+    const m = new Map()
+    for (const a of accounts) {
+      const s = getAccountSaldos(a)
+      m.set(a.id, s?.applicable ? s.saldoFuturo : 0)
+    }
+    return m
+  }, [accounts, getAccountSaldos])
+
+  // KPI "Saldo Futuro": soma dos lançamentos já efetivados com data > hoje, em todas as contas
+  // do perfil. Não é uma parcela de totalAssets — este soma valorPatrimonial (bem entra pelo
+  // valor informado, não pelo saldo), então os dois não fecham por adição. É um número à parte:
+  // quanto ainda vai entrar/sair do que já está lançado.
+  const totalFuturo = useMemo(() => sumSaldoFuturo(accounts, futuroByAccount), [accounts, futuroByAccount])
+  const hasTotalFuturo = Math.abs(totalFuturo) >= 0.005
 
   // Cartão de crédito com vencimento mais próximo (menor nº de dias até o dueDay);
   // empate → maior fatura atual (creditMonthBill). Destacado entre os cards de cartão.
@@ -680,11 +723,17 @@ export default function AccountsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 gap-3 ${hasTotalFuturo ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
           <p className="text-2xl font-bold text-receita mt-1">{fmt(totalAssets)}</p>
         </div>
+        {hasTotalFuturo && (
+          <div className="card" title="Lançamentos já efetivados com data posterior a hoje, somados em todas as contas.">
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
+            <p className={`text-2xl font-bold mt-1 ${totalFuturo >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(totalFuturo)}</p>
+          </div>
+        )}
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
           <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
@@ -726,6 +775,7 @@ export default function AccountsPanel() {
                     key={g.id}
                     group={g}
                     accounts={getGroupAccounts(g.id)}
+                    futuroByAccount={futuroByAccount}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
@@ -751,6 +801,7 @@ export default function AccountsPanel() {
                     key={g.id}
                     group={g}
                     accounts={getGroupAccounts(g.id)}
+                    futuroByAccount={futuroByAccount}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
