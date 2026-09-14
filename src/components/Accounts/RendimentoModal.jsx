@@ -6,19 +6,28 @@ import { fmt, today } from '../shared/utils'
 import Modal from '../shared/Modal'
 import DateInput from '../shared/DateInput'
 
-// Saldo atual de UMA conta, pela mesma regra que o card exibe: contas de liquidez usam o
-// `saldoAtual` da engine de ciclo (initialBalance + lançamentos até hoje); cartão desconta a
-// dívida; patrimoniais usam o balance gravado.
-function saldoAtualDe(account, getAccountSaldos) {
+// Saldo de referência de UMA conta: o SALDO FUTURO da engine de ciclo — o delta dos lançamentos
+// já efetivados com data > hoje. Cartão não tem saldo futuro (0). Conta sem saldo de ciclo
+// (bem/passivo) cai no balance gravado, mantendo o comportamento anterior: devolver 0 ali faria
+// a diferença virar o novo saldo inteiro.
+//
+// ATENÇÃO: saldoFuturo é um DELTA, não um saldo — é quanto ainda vai entrar/sair, não quanto a
+// conta terá. Em conta sem lançamento futuro ele vale 0, e aí o rendimento calculado é o novo
+// saldo inteiro. Confira sempre o valor em "Rendimento a lançar" antes de confirmar.
+function saldoFuturoDe(account, getAccountSaldos) {
   if (!account) return 0
-  if (account.type === 'credit') return -(account.creditDebt || 0)
+  if (account.type === 'credit') return 0
   const s = getAccountSaldos(account)
-  if (s?.applicable) return s.saldoAtual
+  if (s?.applicable) return s.saldoFuturo
   return account.balance || 0
 }
 
-// Lançador de rendimento de uma conta. O usuário informa o SALDO NOVO (o que o banco/app
-// mostra hoje) e o sistema lança a DIFERENÇA como receita na categoria configurada.
+// Lançador de rendimento de uma conta. O usuário informa o SALDO NOVO e o sistema lança a
+// DIFERENÇA contra o saldo de referência como receita na categoria configurada.
+//
+// A referência é o SALDO FUTURO (ver saldoFuturoDe) — decisão de produto, reafirmada depois de
+// levantada a ressalva de que ele é um delta e não um saldo. Consequência prática: o novo saldo
+// digitado precisa estar na mesma base do futuro, senão a diferença não é rendimento.
 //
 // Modo 'grupo': o saldo de referência é a soma das contas do mesmo account_group_id — útil
 // quando um investimento é acompanhado pelo total do grupo. A receita, porém, vai SEMPRE na
@@ -32,8 +41,8 @@ export default function RendimentoModal({ account, onClose }) {
     () => isGrupo ? accounts.filter(a => a.accountGroupId === account.accountGroupId) : [account],
     [isGrupo, accounts, account]
   )
-  const saldoAtual = useMemo(
-    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoAtualDe(a, getAccountSaldos), 0) * 100) / 100,
+  const saldoFuturo = useMemo(
+    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoFuturoDe(a, getAccountSaldos), 0) * 100) / 100,
     [contasDoEscopo, getAccountSaldos]
   )
 
@@ -42,7 +51,7 @@ export default function RendimentoModal({ account, onClose }) {
   const [saving, setSaving] = useState(false)
 
   const preenchido = novoSaldo !== '' && !Number.isNaN(Number(novoSaldo))
-  const rendimento = preenchido ? Math.round((Number(novoSaldo) - saldoAtual) * 100) / 100 : null
+  const rendimento = preenchido ? Math.round((Number(novoSaldo) - saldoFuturo) * 100) / 100 : null
   const valido = rendimento != null && rendimento > 0
 
   const handleConfirm = () => {
@@ -67,9 +76,9 @@ export default function RendimentoModal({ account, onClose }) {
         {/* Saldo de referência (somente leitura) */}
         <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
           <p className="text-xs text-gray-500 mb-0.5">
-            {isGrupo ? 'Saldo atual do grupo' : 'Saldo atual da conta'}
+            {isGrupo ? 'Saldo futuro do grupo' : 'Saldo futuro da conta'}
           </p>
-          <p className="text-xl font-bold text-gray-100">{fmt(saldoAtual)}</p>
+          <p className="text-xl font-bold text-gray-100">{fmt(saldoFuturo)}</p>
           {isGrupo && (
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
               Soma de {contasDoEscopo.length} conta{contasDoEscopo.length !== 1 ? 's' : ''} do grupo.
@@ -108,7 +117,7 @@ export default function RendimentoModal({ account, onClose }) {
                 <AlertTriangle size={15} /> {fmt(rendimento)}
               </p>
               <p className="text-xs text-despesa/80 mt-1">
-                Saldo informado deve ser maior que o saldo atual.
+                Saldo informado deve ser maior que o saldo futuro.
               </p>
             </div>
           )
