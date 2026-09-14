@@ -274,11 +274,14 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     () => isChecking ? getAccountSaldos(account) : null,
     [isChecking, account, getAccountSaldos]
   )
-  // "Saldo Futuro": transações JÁ LANÇADAS com data depois de hoje (sem recorte de ciclo).
-  // Sai como bloco próprio logo abaixo do Saldo Atual, que é só até hoje — mesmo corte de data
-  // nos dois, então nenhum lançamento é contado duas vezes.
-  const saldoFuturo = saldos?.applicable ? saldos.saldoFuturo : 0
-  const hasFuturo = Math.abs(saldoFuturo) >= 0.005
+  // "Saldo Futuro" é exibido como SALDO, não como delta: quanto a conta terá depois que os
+  // lançamentos já efetivados com data > hoje entrarem (saldoHoje + saldoFuturo). O delta
+  // (saldos.saldoFuturo) continua sendo o que decide se a linha aparece — se não há lançamento
+  // à frente, ela só repetiria o Saldo Atual.
+  const hasFuturo = Math.abs(saldos?.applicable ? saldos.saldoFuturo : 0) >= 0.005
+  const saldoFuturoTotal = saldos?.applicable
+    ? Math.round((saldos.saldoHoje + saldos.saldoFuturo) * 100) / 100
+    : 0
 
   // Linhas de saldo a exibir: oculta cada saldo igual ao anterior mostrado; oculta
   // os saldos de calendário no modo 'calendar'.
@@ -454,7 +457,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               {hasFuturo && (
                 <div className="mt-1.5 pt-1.5 border-t border-white/20">
                   <p className="text-xs opacity-70 mb-0.5">Saldo Futuro</p>
-                  <p className="text-base font-semibold text-sky-200">{fmt(saldoFuturo)}</p>
+                  <p className="text-base font-semibold text-sky-200">{fmt(saldoFuturoTotal)}</p>
                 </div>
               )}
               {saldoRows.slice(1).map(r => (
@@ -547,13 +550,18 @@ function sumSaldos(accounts, saldosByAccount) {
     const s = saldosByAccount.get(a.id)
     return s ? { atual: acc.atual + s.atual, futuro: acc.futuro + s.futuro } : acc
   }, { atual: 0, futuro: 0 })
-  return { atual: Math.round(r.atual * 100) / 100, futuro: Math.round(r.futuro * 100) / 100 }
+  const atual = Math.round(r.atual * 100) / 100
+  const futuro = Math.round(r.futuro * 100) / 100
+  // `futuro` é o delta (quanto ainda entra/sai) e serve para decidir se a linha aparece.
+  // `futuroTotal` é o que vai na tela: o saldo depois que esses lançamentos entrarem — mesma
+  // leitura do "Saldo Futuro" do card de conta, para o rótulo significar uma coisa só.
+  return { atual, futuro, futuroTotal: Math.round((atual + futuro) * 100) / 100 }
 }
 
 function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
   const [collapsed, setCollapsed] = useState(false)
-  const { atual: total, futuro: totalFuturo } = useMemo(() => sumSaldos(accounts, saldosByAccount), [accounts, saldosByAccount])
-  const hasFuturo = Math.abs(totalFuturo) >= 0.005
+  const { atual: total, futuro: deltaFuturo, futuroTotal } = useMemo(() => sumSaldos(accounts, saldosByAccount), [accounts, saldosByAccount])
+  const hasFuturo = Math.abs(deltaFuturo) >= 0.005
   const typeBadge = group.type === 'financeiro'
     ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
     : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
@@ -580,9 +588,9 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
           {hasFuturo && (
             <span
               className="block text-xs font-semibold text-sky-300"
-              title="Soma dos lançamentos já efetivados das contas do grupo com data posterior a hoje."
+              title="Saldo do grupo depois que entrarem os lançamentos já efetivados com data posterior a hoje."
             >
-              Futuro: {fmt(totalFuturo)}
+              Futuro: {fmt(futuroTotal)}
             </span>
           )}
         </span>
@@ -738,14 +746,14 @@ export default function AccountsPanel() {
         </div>
         <div
           className="card"
-          title="Soma das contas visíveis: Saldo Atual até hoje, Saldo Futuro são os lançamentos já efetivados com data posterior a hoje. Confere com a soma dos cabeçalhos de grupo."
+          title="Soma das contas visíveis. Saldo Atual: até hoje. Saldo Futuro: como fica depois que entrarem os lançamentos já efetivados com data posterior a hoje. Confere com a soma dos cabeçalhos de grupo."
         >
           <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Atual</p>
           <p className={`text-2xl font-bold mt-1 ${resumo.atual >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(resumo.atual)}</p>
           {hasResumoFuturo && (
             <div className="mt-1.5 pt-1.5 border-t border-gray-800">
               <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
-              <p className={`text-xl font-bold ${resumo.futuro >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(resumo.futuro)}</p>
+              <p className={`text-xl font-bold ${resumo.futuroTotal >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(resumo.futuroTotal)}</p>
             </div>
           )}
         </div>
@@ -849,9 +857,9 @@ export default function AccountsPanel() {
                     {Math.abs(saldosUngrouped.futuro) >= 0.005 && (
                       <span
                         className="block text-xs font-semibold text-sky-300"
-                        title="Soma dos lançamentos já efetivados destas contas com data posterior a hoje."
+                        title="Saldo destas contas depois que entrarem os lançamentos já efetivados com data posterior a hoje."
                       >
-                        Futuro: {fmt(saldosUngrouped.futuro)}
+                        Futuro: {fmt(saldosUngrouped.futuroTotal)}
                       </span>
                     )}
                   </span>
