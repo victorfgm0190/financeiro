@@ -209,16 +209,24 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
     deId = accountId; paraLabel = tx.payee || 'Despesa'
   }
 
+  // Badge de linha com data à frente de hoje. É rótulo de DATA, não de status: toda linha aqui
+  // é transação REAL e efetivada — buildRows só recebe data.transactions, o extrato nunca
+  // injeta ocorrência virtual de agendamento. Antes, quem tinha scheduleId/origin='agendamento'
+  // era rotulado "Agendamento", que se lia como "ocorrência ainda pendente" (o sentido do campo
+  // na tela Agendamentos). Mas scheduleId é só a PROCEDÊNCIA: registerScheduleOccurrence carimba
+  // nele o agendamento que originou a baixa. Essas linhas agora usam o badge "Futuro" e a
+  // procedência vai para o tooltip.
   let badge = null
   if (todayStr && tx.date > todayStr) {
-    if (tx.scheduleId || tx.origin === 'agendamento')
-      badge = { label: 'Agendamento', cls: 'bg-sky-500/20 text-sky-400' }
-    else if (tx.grupoGerencial)
+    if (tx.grupoGerencial)
       badge = { label: 'Gerencial', cls: 'bg-violet-500/20 text-violet-400' }
     else if (tx.reservaAuto)
       badge = { label: 'Reserva', cls: 'bg-reserva/20 text-reserva' }
     else
       badge = { label: 'Futuro', cls: 'bg-gray-500/20 text-gray-400' }
+    badge.title = tx.scheduleId || tx.origin === 'agendamento' || tx.origin === 'agendamento_auto'
+      ? 'Lançamento efetivado, gerado a partir de um agendamento. Já conta no Saldo Futuro.'
+      : 'Lançamento efetivado com data futura. Já conta no Saldo Futuro.'
   }
 
   return (
@@ -247,7 +255,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
           }
           <span className="text-xs text-gray-200 truncate">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
-          {badge && <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
+          {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">
               {tx.faturaRef && (
