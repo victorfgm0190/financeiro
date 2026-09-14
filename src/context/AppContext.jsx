@@ -2673,6 +2673,15 @@ export function AppProvider({ children }) {
     }
 
     const saldoAtual = rb(base + txDeltaUpTo(cycleEndStr))
+    // Quebra do saldoAtual em "já aconteceu" vs "ainda vai acontecer", DENTRO do ciclo:
+    //   saldoHoje   = abertura + transações com date <= hoje.
+    //   saldoFuturo = o restante do ciclo (transações já lançadas com hoje < date <= fim do ciclo).
+    // Por construção saldoHoje + saldoFuturo == saldoAtual, então exibir os dois lado a lado no
+    // card não conta nenhum lançamento duas vezes. Agendamentos pendentes NÃO entram aqui —
+    // continuam somando só em saldoFinalCiclo.
+    const todayStr = toStr(referenceDate)
+    const saldoHoje = rb(base + txDeltaUpTo(todayStr))
+    const saldoFuturo = rb(saldoAtual - saldoHoje)
     const saldoFinalCiclo = rb(saldoAtual + schedDeltaUpTo(cycleEndStr))
     const saldoProjetado = rb(saldoFinalCiclo - envelopesRestante)
     const isCustom = mode === 'custom'
@@ -2681,9 +2690,9 @@ export function AppProvider({ children }) {
 
     return {
       applicable: true, mode,
-      saldoAtual, saldoFinalCiclo, saldoProjetado,
+      saldoAtual, saldoHoje, saldoFuturo, saldoFinalCiclo, saldoProjetado,
       saldoAtualCalendario, saldoFinalCalendario,
-      cycleEnd: cycleEndStr, calendarEnd: calendarEndStr,
+      cycleEnd: cycleEndStr, calendarEnd: calendarEndStr, today: todayStr,
     }
   }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod])
 

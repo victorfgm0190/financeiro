@@ -274,13 +274,21 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     () => isChecking ? getAccountSaldos(account) : null,
     [isChecking, account, getAccountSaldos]
   )
+  // "Saldo Futuro": transações JÁ LANÇADAS com data depois de hoje, ainda dentro do ciclo.
+  // Sai como bloco próprio logo abaixo do Saldo Atual (que agora é só até hoje); os dois
+  // somados dão exatamente o antigo saldoAtual do ciclo, sem duplicar nada.
+  const saldoFuturo = saldos?.applicable ? saldos.saldoFuturo : 0
+  const hasFuturo = Math.abs(saldoFuturo) >= 0.005
+
   // Linhas de saldo a exibir: oculta cada saldo igual ao anterior mostrado; oculta
   // os saldos de calendário no modo 'calendar'.
   const saldoRows = useMemo(() => {
     if (!saldos?.applicable) return null
     const rows = []
-    let last = saldos.saldoAtual
-    rows.push({ key: 'atual', label: 'Saldo Atual', val: saldos.saldoAtual, primary: true })
+    // Âncora do dedup: com a linha "Saldo Futuro" visível, hoje + futuro já comunicam o total
+    // do ciclo (saldoAtual), então as linhas seguintes se comparam a ele e não a saldoHoje.
+    let last = Math.abs(saldos.saldoFuturo) >= 0.005 ? saldos.saldoAtual : saldos.saldoHoje
+    rows.push({ key: 'atual', label: 'Saldo Atual', val: saldos.saldoHoje, primary: true })
     const push = (key, label, val, cls) => {
       if (val == null) return
       if (Math.abs(val - last) < 0.005) return
@@ -441,6 +449,12 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             <>
               <p className="text-xs opacity-70 mb-0.5">Saldo Atual</p>
               <p className="text-xl font-bold">{fmt(saldoRows[0].val)}</p>
+              {hasFuturo && (
+                <div className="mt-1.5 pt-1.5 border-t border-white/20">
+                  <p className="text-xs opacity-70 mb-0.5">Saldo Futuro</p>
+                  <p className="text-base font-semibold text-sky-200">{fmt(saldoFuturo)}</p>
+                </div>
+              )}
               {saldoRows.slice(1).map(r => (
                 <p key={r.key} className={`text-xs mt-0.5 ${r.cls}`}>{r.label}: {fmt(r.val)}</p>
               ))}
