@@ -670,6 +670,7 @@ export default function AccountsPanel() {
     visibleAccounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const ungrouped = visibleAccounts.filter(a => !a.accountGroupId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   // Resumo agregado do topo. Soma sobre as contas VISÍVEIS — o mesmo conjunto que os grupos e a
   // seção "Sem grupo" renderizam —, então o par do topo é exatamente a soma dos cabeçalhos que
@@ -681,7 +682,6 @@ export default function AccountsPanel() {
   const resumo = sumSaldos(visibleAccounts, saldosByAccount)
   const hasResumoFuturo = Math.abs(resumo.futuro) >= 0.005
   const saldosUngrouped = sumSaldos(ungrouped, saldosByAccount)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
   const handleDelete = (account) => setConfirmDelete(account)
