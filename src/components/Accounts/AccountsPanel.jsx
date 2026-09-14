@@ -519,9 +519,16 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
   )
 }
 
-function calcGroupBalance(accounts) {
-  return accounts.reduce((sum, a) =>
-    a.type === 'credit' ? sum - (a.creditDebt || 0) : sum + (a.balance || 0), 0)
+// Saldo "atual" (até hoje) e "futuro" (date > hoje) de UMA conta, na mesma regra que o card
+// dela exibe: cartão entra pela dívida negativa, conta de liquidez pela engine de ciclo,
+// patrimonial pelo balance gravado. Usa saldoHoje em vez de account.balance — os dois têm a
+// MESMA fórmula (initialBalance + lançamentos até hoje), mas balance é valor gravado que só se
+// atualiza quando recalcularSaldo roda, e um total defasado não fecharia com o KPI do topo.
+function saldosDe(account, getAccountSaldos) {
+  if (account.type === 'credit') return { atual: -(account.creditDebt || 0), futuro: 0 }
+  const s = getAccountSaldos(account)
+  if (s?.applicable) return { atual: s.saldoHoje, futuro: s.saldoFuturo }
+  return { atual: account.balance || 0, futuro: 0 }
 }
 
 function balColor(amount) {
@@ -530,21 +537,22 @@ function balColor(amount) {
   return 'text-gray-300'
 }
 
-// Soma o "Saldo Futuro" das contas dadas, lendo o mapa accountId → futuro montado uma única vez
-// no painel. Um grupo agrega VÁRIAS contas distintas — getGroupAccounts filtra por
-// accountGroupId —, então não dá para reaproveitar o futuro de uma conta só: tem de somar conta
-// a conta. O mapa evita reexecutar getAccountSaldos (que varre todas as transações) por grupo.
-function sumSaldoFuturo(accounts, futuroByAccount) {
-  const total = accounts.reduce((sum, a) => sum + (futuroByAccount.get(a.id) || 0), 0)
-  return Math.round(total * 100) / 100
+// Soma atual/futuro das contas dadas, lendo o mapa accountId → saldos montado uma única vez no
+// painel. Um grupo agrega VÁRIAS contas distintas — getGroupAccounts filtra por accountGroupId
+// —, então o total do grupo é conta a conta, não o valor de uma conta só. O mapa evita
+// reexecutar getAccountSaldos (que varre todas as transações) no topo e de novo em cada grupo.
+// Atual e futuro cortam na MESMA data, então as duas somas nunca se sobrepõem.
+function sumSaldos(accounts, saldosByAccount) {
+  const r = accounts.reduce((acc, a) => {
+    const s = saldosByAccount.get(a.id)
+    return s ? { atual: acc.atual + s.atual, futuro: acc.futuro + s.futuro } : acc
+  }, { atual: 0, futuro: 0 })
+  return { atual: Math.round(r.atual * 100) / 100, futuro: Math.round(r.futuro * 100) / 100 }
 }
 
-function GroupSection({ group, accounts, futuroByAccount, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
+function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onExtrato, onUpdateValue, onDropAccount, isDragOver, onDragOverGroup, onDragLeaveGroup, nextDueCardId, nextDueDays }) {
   const [collapsed, setCollapsed] = useState(false)
-  const total = calcGroupBalance(accounts)
-  // calcGroupBalance soma account.balance (date <= hoje), mesmo corte de data do saldoFuturo —
-  // então os dois números do cabeçalho não se sobrepõem.
-  const totalFuturo = useMemo(() => sumSaldoFuturo(accounts, futuroByAccount), [accounts, futuroByAccount])
+  const { atual: total, futuro: totalFuturo } = useMemo(() => sumSaldos(accounts, saldosByAccount), [accounts, saldosByAccount])
   const hasFuturo = Math.abs(totalFuturo) >= 0.005
   const typeBadge = group.type === 'financeiro'
     ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
@@ -628,25 +636,14 @@ export default function AccountsPanel() {
     .filter(a => a.type === 'credit')
     .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
 
-  // Futuro por conta, calculado UMA vez e reusado pelo KPI do topo e por cada grupo.
-  // getAccountSaldos varre data.transactions inteira a cada chamada; sem o mapa, o painel faria
-  // uma passada por conta no topo e outra por conta em cada grupo. Cartão/bem/passivo não têm
-  // saldo de ciclo (applicable: false) e entram como 0.
-  const futuroByAccount = useMemo(() => {
+  // Saldos por conta, calculados UMA vez e reusados pelo KPI do topo, por cada grupo e pela
+  // seção "Sem grupo". getAccountSaldos varre data.transactions inteira a cada chamada; sem o
+  // mapa, o painel faria uma passada por conta no topo e outra por conta em cada grupo.
+  const saldosByAccount = useMemo(() => {
     const m = new Map()
-    for (const a of accounts) {
-      const s = getAccountSaldos(a)
-      m.set(a.id, s?.applicable ? s.saldoFuturo : 0)
-    }
+    for (const a of accounts) m.set(a.id, saldosDe(a, getAccountSaldos))
     return m
   }, [accounts, getAccountSaldos])
-
-  // KPI "Saldo Futuro": soma dos lançamentos já efetivados com data > hoje, em todas as contas
-  // do perfil. Não é uma parcela de totalAssets — este soma valorPatrimonial (bem entra pelo
-  // valor informado, não pelo saldo), então os dois não fecham por adição. É um número à parte:
-  // quanto ainda vai entrar/sair do que já está lançado.
-  const totalFuturo = useMemo(() => sumSaldoFuturo(accounts, futuroByAccount), [accounts, futuroByAccount])
-  const hasTotalFuturo = Math.abs(totalFuturo) >= 0.005
 
   // Cartão de crédito com vencimento mais próximo (menor nº de dias até o dueDay);
   // empate → maior fatura atual (creditMonthBill). Destacado entre os cards de cartão.
@@ -673,6 +670,17 @@ export default function AccountsPanel() {
     visibleAccounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const ungrouped = visibleAccounts.filter(a => !a.accountGroupId)
+
+  // Resumo agregado do topo. Soma sobre as contas VISÍVEIS — o mesmo conjunto que os grupos e a
+  // seção "Sem grupo" renderizam —, então o par do topo é exatamente a soma dos cabeçalhos que
+  // estão na tela. Usar `accounts` aqui faria o topo não fechar no mobile, onde accountsForView
+  // esconde as contas marcadas com hideOnMobile.
+  // Sem useMemo: sumSaldos é só lookup no Map, e o trabalho caro (getAccountSaldos) já está
+  // memoizado em saldosByAccount. Memoizar aqui ainda faria o React Compiler desistir de
+  // otimizar o componente, porque visibleAccounts/ungrouped são derivados inline a cada render.
+  const resumo = sumSaldos(visibleAccounts, saldosByAccount)
+  const hasResumoFuturo = Math.abs(resumo.futuro) >= 0.005
+  const saldosUngrouped = sumSaldos(ungrouped, saldosByAccount)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
@@ -723,17 +731,24 @@ export default function AccountsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className={`grid grid-cols-1 gap-3 ${hasTotalFuturo ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
           <p className="text-2xl font-bold text-receita mt-1">{fmt(totalAssets)}</p>
         </div>
-        {hasTotalFuturo && (
-          <div className="card" title="Lançamentos já efetivados com data posterior a hoje, somados em todas as contas.">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
-            <p className={`text-2xl font-bold mt-1 ${totalFuturo >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(totalFuturo)}</p>
-          </div>
-        )}
+        <div
+          className="card"
+          title="Soma das contas visíveis: Saldo Atual até hoje, Saldo Futuro são os lançamentos já efetivados com data posterior a hoje. Confere com a soma dos cabeçalhos de grupo."
+        >
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Atual</p>
+          <p className={`text-2xl font-bold mt-1 ${resumo.atual >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(resumo.atual)}</p>
+          {hasResumoFuturo && (
+            <div className="mt-1.5 pt-1.5 border-t border-gray-800">
+              <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
+              <p className={`text-xl font-bold ${resumo.futuro >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(resumo.futuro)}</p>
+            </div>
+          )}
+        </div>
         <div className="card">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
           <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
@@ -775,7 +790,7 @@ export default function AccountsPanel() {
                     key={g.id}
                     group={g}
                     accounts={getGroupAccounts(g.id)}
-                    futuroByAccount={futuroByAccount}
+                    saldosByAccount={saldosByAccount}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
@@ -801,7 +816,7 @@ export default function AccountsPanel() {
                     key={g.id}
                     group={g}
                     accounts={getGroupAccounts(g.id)}
-                    futuroByAccount={futuroByAccount}
+                    saldosByAccount={saldosByAccount}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onExtrato={handleExtrato}
@@ -828,7 +843,19 @@ export default function AccountsPanel() {
               <div className="flex items-center gap-2.5 rounded-xl bg-white/5 border border-white/10 py-3 px-4">
                 <span className="font-semibold text-sm text-gray-100">Sem Grupo</span>
                 <span className="text-xs text-gray-600 ml-2">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
-                {ungrouped.length > 0 && <span className={`font-bold text-base ml-auto ${balColor(calcGroupBalance(ungrouped))}`}>{fmt(calcGroupBalance(ungrouped))}</span>}
+                {ungrouped.length > 0 && (
+                  <span className="ml-auto text-right shrink-0">
+                    <span className={`block font-bold text-base ${balColor(saldosUngrouped.atual)}`}>{fmt(saldosUngrouped.atual)}</span>
+                    {Math.abs(saldosUngrouped.futuro) >= 0.005 && (
+                      <span
+                        className="block text-xs font-semibold text-sky-300"
+                        title="Soma dos lançamentos já efetivados destas contas com data posterior a hoje."
+                      >
+                        Futuro: {fmt(saldosUngrouped.futuro)}
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
               {ungrouped.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
