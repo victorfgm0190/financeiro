@@ -3,7 +3,7 @@
 // FINAL CICLO / PROJETADO do Painel Geral, garantindo que ambos calculem do MESMO jeito.
 //
 // Modelo (ancorado no saldo REAL das contas — account.balance):
-//   saldoAnterior = Σ balance − Σ(transações reais com data >= start)   [saldo na véspera de start]
+//   saldoAnterior = Σ balance − Σ(transações reais com data em [start, hoje])  [véspera de start]
 //   saldoFinal    = saldoAnterior + Σ(movimentos do período: transações + agendamentos + envelopes)
 //   PROJETADO     = saldoFinal (já com os envelopes restantes subtraídos)
 //   FINAL CICLO   = saldoFinal + envelopesTotal (mesma projeção SEM subtrair os envelopes)
@@ -96,18 +96,31 @@ export function computeFluxoCaixa({
       if (toIn && !fromIn) return { entrada: amount, saida: 0 }
       if (fromIn && !toIn) return { entrada: 0, saida: amount }
     }
+    // Pagamento de fatura: debita SÓ a conta pagadora (que os chamadores passam em `fromAcc`).
+    // A ponta do cartão abate creditDebt, nunca o balance — por isso NÃO é transferência interna
+    // e não se neutraliza com as duas pontas no conjunto. Mesma convenção de recalcularSaldo /
+    // getAccountSaldos. Sem este ramo o pagamento sumia do fluxo E do estorno do saldo anterior,
+    // que ficava menor exatamente o valor da fatura paga dentro do período.
+    if (type === 'credit_payment') return fromIn ? { entrada: 0, saida: amount } : null
     return null
   }
+
+  // Pontas de um lançamento na convenção "de → para". credit_payment guarda a conta pagadora
+  // em fromAccountId (accountId é o cartão); os demais tipos usam accountId → toAccountId.
+  const legs = (tx) => tx.type === 'credit_payment'
+    ? [tx.fromAccountId, tx.accountId]
+    : [tx.accountId, tx.toAccountId]
 
   // 1. Transações reais dentro do período → "Registrada".
   transactions.forEach(tx => {
     if (tx.date < start || tx.date > end) return
-    if (oculto(tx.accountId, tx.toAccountId)) return
-    const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
+    const [txFrom, txTo] = legs(tx)
+    if (oculto(txFrom, txTo)) return
+    const m = classify(tx.type, txFrom, txTo, tx.amount)
     if (!m) return
     out.push({
       date: tx.date, description: tx.description || '(sem descrição)', type: tx.type,
-      fromAccountId: tx.accountId, toAccountId: tx.toAccountId,
+      fromAccountId: txFrom, toAccountId: txTo,
       categoryId: tx.categoryId || tx.reservaExpenseCategoryId || null,
       reservaFuncaoId: tx.reservaFuncaoId || null,
       entrada: m.entrada, saida: m.saida, status: 'Registrada', real: true, _key: tx.id,
@@ -213,13 +226,24 @@ export function computeFluxoCaixa({
 
   out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
 
-  // saldoAnterior = saldo na véspera de `start`. O balance reflete TODAS as transações reais;
-  // subtraímos o efeito líquido das reais com data >= start. (Ocultos seguem a mesma regra.)
+  // saldoAnterior = saldo na véspera de `start`: parte do balance e estorna o efeito líquido
+  // das transações reais em [start, hoje]. (Ocultos seguem a mesma regra.)
+  //
+  // Lançamentos com data FUTURA (date > hoje) NÃO são estornados: eles não entram em
+  // account.balance (que só soma date <= hoje, igual ao recalcularSaldo), então estorná-los
+  // subtraía indevidamente do saldo anterior — todo crédito já lançado com data futura
+  // (rendimento, resgate, transferência a receber) era descontado da véspera de `start`.
+  // Mesma correção já aplicada a balanceAt no Extrato da Conta (commit 7706427); esta engine,
+  // que alimenta o relatório Fluxo de Caixa por Conta E os KPIs FINAL CICLO / PROJETADO do
+  // Painel Geral, tinha ficado de fora. `hoje` em data local YYYY-MM-DD (mesmo critério).
+  const agora = new Date()
+  const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`
   let efeitoDesdeStart = 0
   transactions.forEach(tx => {
-    if (tx.date < start) return
-    if (oculto(tx.accountId, tx.toAccountId)) return
-    const m = classify(tx.type, tx.accountId, tx.toAccountId, tx.amount)
+    if (tx.date < start || tx.date > hoje) return
+    const [txFrom, txTo] = legs(tx)
+    if (oculto(txFrom, txTo)) return
+    const m = classify(tx.type, txFrom, txTo, tx.amount)
     if (!m) return
     efeitoDesdeStart = round2(efeitoDesdeStart + m.entrada - m.saida)
   })
