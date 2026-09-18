@@ -10,6 +10,7 @@ import DindinImportPanel from './DindinImportPanel'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
+import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 
 const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
 
@@ -101,13 +102,13 @@ export default function SettingsPanel() {
     setFaturaStatus({ running: false, total, done: total, finished: true })
   }
 
+  // Os totais exibidos na barra de progresso saem da MESMA fonte que grava os saldos
+  // (src/lib/saldos.js, via recalcularSaldo) — antes eram uma segunda cópia da fórmula, que
+  // ainda por cima cortava o "hoje" em UTC (toISOString) e divergia do recálculo real à noite.
   const handleRecalcAll = async () => {
-    const eligible = accounts.filter(a =>
-      a.type !== 'credit' && a.type !== 'asset' && a.type !== 'liability'
-    )
+    const eligible = accounts.filter(contaRecalculavel)
     if (eligible.length === 0) return
     saveBalanceSnapshot(eligible.map(a => a.id), 'Recalcular todos os saldos')
-    const today = new Date().toISOString().slice(0, 10)
     const rb = v => Math.round(v * 100) / 100
     let totalBalance = 0
     let totalProjected = 0
@@ -116,31 +117,9 @@ export default function SettingsPanel() {
       const acc = eligible[i]
       await new Promise(r => setTimeout(r, 40))
       recalcularSaldo(acc.id)
-      const initBal = rb(acc.initialBalance ?? 0)
-      let bal = initBal
-      let proj = initBal
-      transactions.forEach(tx => {
-        if (tx.type === 'income' && tx.accountId === acc.id) {
-          proj = rb(proj + tx.amount)
-          if (tx.date <= today) bal = rb(bal + tx.amount)
-        } else if (tx.type === 'expense' && tx.accountId === acc.id && tx.accountType !== 'credit') {
-          proj = rb(proj - tx.amount)
-          if (tx.date <= today) bal = rb(bal - tx.amount)
-        } else if (tx.type === 'transfer') {
-          if (tx.accountId === acc.id) {
-            proj = rb(proj - tx.amount)
-            if (tx.date <= today) bal = rb(bal - tx.amount)
-          } else if (tx.toAccountId === acc.id) {
-            proj = rb(proj + tx.amount)
-            if (tx.date <= today) bal = rb(bal + tx.amount)
-          }
-        } else if (tx.type === 'credit_payment' && tx.fromAccountId === acc.id) {
-          proj = rb(proj - tx.amount)
-          if (tx.date <= today) bal = rb(bal - tx.amount)
-        }
-      })
-      totalBalance = rb(totalBalance + bal)
-      totalProjected = rb(totalProjected + proj)
+      const { balance, projected } = saldosDaConta(acc.id, acc.initialBalance ?? 0, transactions)
+      totalBalance = rb(totalBalance + balance)
+      totalProjected = rb(totalProjected + projected)
       setRecalcStatus({ running: i < eligible.length - 1, total: eligible.length, done: i + 1, totalBalance, totalProjected })
     }
   }

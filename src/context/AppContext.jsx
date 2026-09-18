@@ -23,6 +23,7 @@ import { installmentKey } from '../lib/installments'
 import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
+import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
@@ -736,6 +737,7 @@ export function AppProvider({ children }) {
   const retryTimerRef = useRef(null)
   const fullSyncRef = useRef(false)
   const autoRegisterDoneRef = useRef(false)
+  const recalcSaldosDoneRef = useRef(false)
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
   // (definido mais abaixo); usamos ref p/ contornar a ordem de declaração.
   const recalcFaturaRef = useRef(null)
@@ -1182,6 +1184,53 @@ export function AppProvider({ children }) {
       }, 0)
     }
   }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Recálculo automático dos saldos ao abrir o app ──────────────────────────
+  // Uma vez por sessão, realinha account.balance/projectedBalance com os lançamentos, usando a
+  // MESMA fórmula do botão "Recalcular todos os saldos" (src/lib/saldos.js). Cartões, bens e
+  // financiamentos ficam de fora: o saldo deles não vem de lançamentos (ver TIPOS_SEM_RECALCULO).
+  //
+  // Só roda com dbStatus 'connected'. Antes disso `data` ainda é o cache do localStorage, e
+  // recalcular sobre cache velho gravaria saldo errado no Neon no primeiro sync. Offline o app
+  // segue com os saldos que já tinha.
+  //
+  // O setTimeout(0) espera o React aplicar o auto-registro de agendamentos (efeito acima) —
+  // mesmo recurso que a propagação de rateios usa lá. Sem ele o recálculo leria os lançamentos
+  // sem as ocorrências recém-registradas e gravaria saldo defasado.
+  //
+  // Não grava lastBalanceSnapshot: o snapshot existe para desfazer ajuste de initialBalance, e
+  // o recálculo nunca toca em initialBalance — sobrescrevê-lo a cada abertura só apagaria o
+  // ponto de desfazer do usuário. Quando nada muda, devolve o MESMO objeto: o React descarta o
+  // re-render e o sync debounced não marca `contas` como suja à toa.
+  useEffect(() => {
+    if (!initialized || dbStatus !== 'connected' || recalcSaldosDoneRef.current) return
+    recalcSaldosDoneRef.current = true
+    const timer = setTimeout(() => {
+      try {
+        console.log('🔄 Sincronizando saldos...')
+        const t0 = performance.now()
+        const base = dataRef.current
+        const { accounts, alteradas } = recalcularSaldosDeContas(base.accounts, base.transactions)
+        const ms = Math.round(performance.now() - t0)
+        if (alteradas === 0) {
+          console.log(`✅ Saldos já conferem — ${base.accounts.length} contas verificadas em ${ms}ms`)
+          return
+        }
+        setData(prev => ({
+          ...prev,
+          // Se o estado mudou entre o cálculo e o commit, recalcula sobre o estado novo em vez
+          // de gravar um resultado obsoleto por cima.
+          accounts: (prev.accounts === base.accounts && prev.transactions === base.transactions)
+            ? accounts
+            : recalcularSaldosDeContas(prev.accounts, prev.transactions).accounts,
+        }))
+        console.log(`✅ ${alteradas} de ${base.accounts.length} contas recalculadas em ${ms}ms`)
+      } catch (err) {
+        console.warn('⚠️ Falha ao recalcular saldos, seguindo com os dados carregados', err)
+      }
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [initialized, dbStatus])
 
   // ── Settings ────────────────────────────────────────────────────────────────
   const updateSettings = useCallback((settings) => {
@@ -3158,34 +3207,12 @@ export function AppProvider({ children }) {
     update(d => {
       const account = d.accounts.find(a => a.id === accountId)
       if (!account) return d
-      const today = format(new Date(), 'yyyy-MM-dd')
       const initBal = overrideInitialBalance != null ? rb(overrideInitialBalance) : rb(account.initialBalance ?? 0)
-      let balance = initBal    // lançamentos ≤ hoje
-      let projected = initBal  // todos os lançamentos
-      d.transactions.forEach(tx => {
-        if (tx.type === 'income' && tx.accountId === accountId) {
-          projected = rb(projected + tx.amount)
-          if (tx.date <= today) balance = rb(balance + tx.amount)
-        } else if (tx.type === 'expense' && tx.accountId === accountId && tx.accountType !== 'credit') {
-          projected = rb(projected - tx.amount)
-          if (tx.date <= today) balance = rb(balance - tx.amount)
-        } else if (tx.type === 'transfer') {
-          if (tx.accountId === accountId) {
-            projected = rb(projected - tx.amount)
-            if (tx.date <= today) balance = rb(balance - tx.amount)
-          } else if (tx.toAccountId === accountId) {
-            projected = rb(projected + tx.amount)
-            if (tx.date <= today) balance = rb(balance + tx.amount)
-          }
-        } else if (tx.type === 'credit_payment' && tx.fromAccountId === accountId) {
-          projected = rb(projected - tx.amount)
-          if (tx.date <= today) balance = rb(balance - tx.amount)
-        }
-      })
+      const { balance, projected } = saldosDaConta(accountId, initBal, d.transactions)
       return {
         ...d,
         accounts: d.accounts.map(a => a.id === accountId
-          ? { ...a, balance: rb(balance), projectedBalance: rb(projected), initialBalance: initBal }
+          ? { ...a, balance, projectedBalance: projected, initialBalance: initBal }
           : a
         ),
       }
@@ -3211,34 +3238,12 @@ export function AppProvider({ children }) {
     update(d => {
       const snapshot = d.settings?.lastBalanceSnapshot
       if (!snapshot?.accounts?.length) return d
-      const today = format(new Date(), 'yyyy-MM-dd')
       let accounts = d.accounts
       for (const { id, initialBalance } of snapshot.accounts) {
         const initBal = rb(initialBalance)
-        let balance = initBal
-        let projected = initBal
-        d.transactions.forEach(tx => {
-          if (tx.type === 'income' && tx.accountId === id) {
-            projected = rb(projected + tx.amount)
-            if (tx.date <= today) balance = rb(balance + tx.amount)
-          } else if (tx.type === 'expense' && tx.accountId === id && tx.accountType !== 'credit') {
-            projected = rb(projected - tx.amount)
-            if (tx.date <= today) balance = rb(balance - tx.amount)
-          } else if (tx.type === 'transfer') {
-            if (tx.accountId === id) {
-              projected = rb(projected - tx.amount)
-              if (tx.date <= today) balance = rb(balance - tx.amount)
-            } else if (tx.toAccountId === id) {
-              projected = rb(projected + tx.amount)
-              if (tx.date <= today) balance = rb(balance + tx.amount)
-            }
-          } else if (tx.type === 'credit_payment' && tx.fromAccountId === id) {
-            projected = rb(projected - tx.amount)
-            if (tx.date <= today) balance = rb(balance - tx.amount)
-          }
-        })
+        const { balance, projected } = saldosDaConta(id, initBal, d.transactions)
         accounts = accounts.map(a => a.id === id
-          ? { ...a, initialBalance: initBal, balance: rb(balance), projectedBalance: rb(projected) }
+          ? { ...a, initialBalance: initBal, balance, projectedBalance: projected }
           : a
         )
       }
