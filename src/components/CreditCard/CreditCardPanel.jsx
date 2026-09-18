@@ -457,7 +457,11 @@ export default function CreditCardPanel() {
       // geraria Invalid Date e a fatura nunca casaria — o previsto sumiria da lista.
       const occsNaFatura = getNextOccurrences(s, 24).filter(d => getBillKey(String(d).slice(0, 10), selectedCard) === billKey)
       for (const occ of occsNaFatura) {
-        out.push({ key: `${s.id}_${occ}`, description: s.description, date: occ, amount: Number(s.amount) || 0 })
+        // grupoGerencial vai junto para o totalizador conseguir somar o previsto no token certo.
+        out.push({
+          key: `${s.id}_${occ}`, description: s.description, date: occ,
+          amount: Number(s.amount) || 0, grupoGerencial: s.grupoGerencial || null,
+        })
       }
     }
     return out.sort((a, b) => a.date.localeCompare(b.date))
@@ -859,7 +863,7 @@ export default function CreditCardPanel() {
           </div>
         ) : (
           <>
-            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} showReconciled />
+            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} previstos={agendamentosPrevistos} showReconciled />
 
             {/* Mobile: cards estilo app bancário */}
             <div className="md:hidden">
