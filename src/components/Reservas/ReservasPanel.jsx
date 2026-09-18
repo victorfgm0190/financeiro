@@ -1094,6 +1094,7 @@ function OrigemModal({ origem, onClose }) {
       <ResgateBreakdownModal
         schedule={breakdownSched}
         transactions={transactions}
+        schedules={schedules}
         categories={categories}
         onClose={() => setBreakdownSched(null)}
       />

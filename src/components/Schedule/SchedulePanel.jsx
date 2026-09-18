@@ -884,7 +884,7 @@ function ScheduleRow({
   // lançamentos vinculados ao agendamento (scheduleId), carregados via /api/load no contexto.
   // Pareamento por data mais próxima (consome cada lançamento uma vez); sem lançamento
   // vinculado, usa a data prevista e o valor efetivo da ocorrência (override individual).
-  const { profileTransactions, transactions } = useApp()
+  const { profileTransactions, transactions, schedules: todosSchedules } = useApp()
   const hasHistory = registered.length > 0
   const canExpand = hasFuture || hasHistory
   const paymentHistory = useMemo(() => {
@@ -1282,6 +1282,7 @@ function ScheduleRow({
         <ResgateBreakdownModal
           schedule={schedule}
           transactions={transactions}
+          schedules={todosSchedules}
           categories={categories}
           onClose={() => setShowBreakdown(false)}
         />

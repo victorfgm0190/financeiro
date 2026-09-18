@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   fontePrevistoId, parseFontePrevisto, ehFontePrevista, ehGastoPrevistoDeCartao,
-  previstosDaFatura, faturasDoAgendamento,
+  previstosDaFatura, faturasDoAgendamento, resolverFontePrevista,
 } from './gerencialPrevistos'
 import { isResgatePagoParaGasto } from './resgates'
 import { computeOccurrences } from './occurrences'
@@ -177,5 +177,35 @@ describe('resgate em dobro na transição previsto → lançamento', () => {
 
   it('lançamento avulso (sem scheduleId) não casa com fonte prevista nenhuma', () => {
     expect(isResgatePagoParaGasto('tx_solto', [resgateExecutado], [{ id: 'tx_solto', date: '2026-10-20' }])).toBe(false)
+  })
+})
+
+// A composição do resgate (modal "Ver gastos") precisa reconstruir a linha do previsto a partir
+// só do id guardado em sourceExpenseIds — não há cópia dos dados em lugar nenhum.
+describe('resolverFontePrevista', () => {
+  const sched = agendamento({ id: 'sch_7', amount: 582.66, description: 'Anthropic* Claude Sub', startDate: '2026-10-15' })
+
+  it('reconstrói data, valor e descrição a partir do id', () => {
+    const r = resolverFontePrevista('sch:sch_7@2026-10-15', [sched], getOcc)
+    expect(r).toMatchObject({
+      scheduleId: 'sch_7', date: '2026-10-15', valor: 582.66,
+      description: 'Anthropic* Claude Sub',
+    })
+    expect(r.schedule).toBe(sched)
+  })
+
+  it('usa o valor EFETIVO da ocorrência quando há override', () => {
+    const comOverride = { ...sched, overrides: { '2026-10-15': { amount: 700 } } }
+    const r = resolverFontePrevista('sch:sch_7@2026-10-15', [comOverride], getOcc)
+    expect(r.valor).toBe(700)
+  })
+
+  it('agendamento apagado: a linha sobrevive, marcada como órfã', () => {
+    const r = resolverFontePrevista('sch:sch_7@2026-10-15', [], getOcc)
+    expect(r).toMatchObject({ scheduleId: 'sch_7', date: '2026-10-15', schedule: null, description: null })
+  })
+
+  it('id de lançamento comum devolve null (não é fonte prevista)', () => {
+    expect(resolverFontePrevista('tx_123', [sched], getOcc)).toBeNull()
   })
 })

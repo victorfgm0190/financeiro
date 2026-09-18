@@ -99,3 +99,38 @@ export function faturasDoAgendamento({ schedule, cardId, getOccurrences, faturaD
   }
   return faturas
 }
+
+// Resolve uma fonte prevista ('sch:<agendamento>@<data>') de volta ao agendamento que a originou,
+// para a UI conseguir exibir a composição do resgate. Devolve null se o id não for previsto.
+//
+// O valor é o EFETIVO da ocorrência (occEfetiva), não schedule.amount: um override de valor numa
+// ocorrência específica foi o que entrou no resgate, e é ele que precisa aparecer na tabela para
+// a soma fechar. Como o id guarda a data EFETIVA, procuramos a ocorrência cuja data efetiva casa.
+//
+// `schedule: null` quando o agendamento foi apagado depois de o resgate ser executado — a linha
+// ainda precisa aparecer, senão a soma da tabela deixa de bater com o amount do resgate sem que
+// nada na tela explique a diferença.
+export function resolverFontePrevista(id, schedules = [], getOccurrences, limite = 24) {
+  const parsed = parseFontePrevisto(id)
+  if (!parsed) return null
+  const schedule = (schedules || []).find(s => s.id === parsed.scheduleId) || null
+  let valor = Number(schedule?.amount) || 0
+  if (schedule && typeof getOccurrences === 'function') {
+    for (const original of getOccurrences(schedule, limite)) {
+      const ef = occEfetiva(schedule, String(original).slice(0, 10))
+      if (String(ef.date).slice(0, 10) === parsed.date) {
+        valor = Math.round((Number(ef.amount) || 0) * 100) / 100
+        break
+      }
+    }
+  }
+  return {
+    id,
+    scheduleId: parsed.scheduleId,
+    date: parsed.date,
+    valor,
+    description: schedule?.description || null,
+    categoryId: schedule?.categoryId || null,
+    schedule,
+  }
+}
