@@ -11,6 +11,8 @@ import DateInput from '../shared/DateInput'
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
+const SEM_EXCLUSOES = new Set()
+
 // Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
 function exportSheet(rows, filename) {
   const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -59,6 +61,19 @@ export default function FluxoCaixaPorConta() {
   const [includeSchedules, setIncludeSchedules] = useState(true)
   const [hideReserva, setHideReserva] = useState(false)
   const [hidePatrimonio, setHidePatrimonio] = useState(false)
+  // Linhas DESCONSIDERADAS no cálculo, por _key, junto da assinatura do escopo em que foram
+  // marcadas. Guardar as excluídas (e não as ativas) faz o relatório abrir com tudo marcado sem
+  // inicializar nada, e uma linha nova já nasce ativa. Só simulação visual: nada é gravado — nem
+  // no estado global, nem no banco, nem no localStorage (a seleção salva em SELECAO_STORAGE_KEY
+  // guarda aba/contas/datas, não isto), então recarregar a página volta tudo marcado.
+  const [selExcluidas, setSelExcluidas] = useState(() => ({ escopo: '', keys: SEM_EXCLUSOES }))
+
+  // Só o que AINDA NÃO ACONTECEU entra na simulação. `real` é exatamente o lançamento já
+  // efetivado (status "Registrada"); ele compõe o saldo de verdade da conta e tirá-lo da conta
+  // mostraria um saldo que não existe em lugar nenhum. As demais linhas — "A pagar",
+  // "A receber" e "Projetado" (envelope, resgate de provisão) — são todas projeção e podem ser
+  // ligadas/desligadas.
+  const simulavel = (r) => !r.real
 
   // Salva a seleção sempre que aba/contas/grupo/datas mudarem (inclui a montagem, gravando
   // o estado restaurado ou o padrão). Falhas de localStorage são ignoradas silenciosamente.
@@ -67,6 +82,26 @@ export default function FluxoCaixaPorConta() {
       localStorage.setItem(SELECAO_STORAGE_KEY, JSON.stringify({ visao, selectedAccountIds, groupId, start, end }))
     } catch { /* storage indisponível — ignora */ }
   }, [visao, selectedAccountIds, groupId, start, end])
+
+  // Trocar de visão/contas/grupo/período monta outro conjunto de linhas: manter as exclusões do
+  // conjunto anterior deixaria um filtro invisível mexendo no saldo de uma tela que o usuário
+  // nunca marcou. O descarte é DERIVADO — o estado carrega a assinatura do escopo e a leitura
+  // ignora o que não for do escopo atual. Zerar por useEffect daria o mesmo resultado com um
+  // render a mais (e é o que a regra react-hooks/set-state-in-effect pede para evitar).
+  const escopo = `${visao}|${selectedAccountIds.join(',')}|${groupId}|${start}|${end}`
+  const excluidas = selExcluidas.escopo === escopo ? selExcluidas.keys : SEM_EXCLUSOES
+  const limparExcluidas = () => setSelExcluidas({ escopo, keys: SEM_EXCLUSOES })
+
+  const toggleLinha = (r) => {
+    if (!simulavel(r)) return // registrada: o checkbox já vem disabled, isto é o cinto de segurança
+    setSelExcluidas(prev => {
+      const base = prev.escopo === escopo ? prev.keys : SEM_EXCLUSOES
+      const next = new Set(base)
+      if (next.has(r._key)) next.delete(r._key)
+      else next.add(r._key)
+      return { escopo, keys: next }
+    })
+  }
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const isMobile = useIsMobile()
@@ -109,10 +144,32 @@ export default function FluxoCaixaPorConta() {
     }
   }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions])
 
-  const totalEntrada = round2(rows.reduce((s, r) => s + r.entrada, 0))
-  const totalSaida = round2(rows.reduce((s, r) => s + r.saida, 0))
-  // O acumulador do período parte do saldo anterior C/ AGENDAMENTOS (mesma base da lib).
-  const saldoFinal = rows.length ? rows[rows.length - 1].saldo : saldoAnteriorComAgendamentos
+  // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
+  // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move
+  // o acumulado nem entra nos totais. O acumulador parte do saldo anterior C/ AGENDAMENTOS
+  // (mesma base da lib).
+  //
+  // Os dois saldos anteriores NÃO são refeitos, de propósito: eles são o saldo na véspera da
+  // data inicial, ancorado em account.balance, e nenhuma linha DENTRO do período os compõe.
+  // Desmarcar um lançamento simula o período, não reescreve o que já aconteceu antes dele.
+  const { rowsView, totalEntrada, totalSaida, saldoFinal } = useMemo(() => {
+    let bal = saldoAnteriorComAgendamentos
+    let entrada = 0
+    let saida = 0
+    const view = []
+    for (const r of rows) {
+      // Registrada é sempre ativa, aconteça o que acontecer com o Set.
+      const ativa = r.real || !excluidas.has(r._key)
+      if (!ativa) { view.push({ ...r, ativa, saldo: null }); continue }
+      entrada = round2(entrada + r.entrada)
+      saida = round2(saida + r.saida)
+      bal = round2(bal + r.entrada - r.saida)
+      view.push({ ...r, ativa, saldo: bal })
+    }
+    return { rowsView: view, totalEntrada: entrada, totalSaida: saida, saldoFinal: bal }
+  }, [rows, excluidas, saldoAnteriorComAgendamentos])
+
+  const qtdExcluidas = rowsView.reduce((s, r) => s + (r.ativa ? 0 : 1), 0)
   // Dia imediatamente anterior à data inicial (rótulo do saldo base).
   const prevDayStr = start ? format(addDays(new Date(start + 'T00:00:00'), -1), 'yyyy-MM-dd') : ''
 
@@ -152,14 +209,16 @@ export default function FluxoCaixaPorConta() {
     return ''
   }
 
-  // Exporta EXATAMENTE as linhas visíveis na tabela (já refletem filtros de data, toggles de
-  // ocultar reserva/patrimônio e a visão selecionada). Inclui a linha de Saldo anterior e o Total.
+  // Exporta as linhas que COMPÕEM o total (já refletem filtros de data, toggles de ocultar
+  // reserva/patrimônio, a visão selecionada e as linhas desmarcadas na tabela). As desmarcadas
+  // ficam de fora para a planilha fechar: manter uma linha que não entrou na soma faria a coluna
+  // Saldo pular sem explicação. Inclui as linhas de Saldo anterior e o Total.
   const handleExport = () => {
     const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Categoria', 'Conta Reserva', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
     const aoa = [header]
     aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior realizado', '', '', '', '', '', '', round2(saldoAnteriorRealizado), ''])
     aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior c/ agendamentos', '', '', '', '', '', '', round2(saldoAnteriorComAgendamentos), ''])
-    rows.forEach(r => {
+    rowsView.filter(r => r.ativa).forEach(r => {
       aoa.push([
         fmtDate(r.date),
         r.description,
@@ -318,6 +377,14 @@ export default function FluxoCaixaPorConta() {
               <span className="text-sm text-gray-300 select-none">Ocultar movimentos de patrimônio</span>
             </label>
           </div>
+          {!noSelection && qtdExcluidas > 0 && (
+            <span className="inline-flex items-center gap-2 text-xs text-amber-500/90">
+              {qtdExcluidas} linha{qtdExcluidas !== 1 ? 's' : ''} fora do cálculo
+              <button type="button" onClick={limparExcluidas} className="underline hover:text-amber-400">
+                restaurar todas
+              </button>
+            </span>
+          )}
           {!noSelection && (
             <span className="inline-flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-gray-500">
               <span className="inline-flex items-center gap-1.5">
@@ -375,9 +442,10 @@ export default function FluxoCaixaPorConta() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: 820 }}>
+            <table className="w-full text-sm" style={{ minWidth: 860 }}>
               <thead>
                 <tr className="border-b border-gray-800">
+                  <th className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
                   <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-24">Data</th>
                   <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                   <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Movimentação</th>
@@ -390,6 +458,7 @@ export default function FluxoCaixaPorConta() {
               <tbody>
                 {/* Saldo anterior REALIZADO (só lançamentos registrados/conciliados antes da data inicial) */}
                 <tr className="border-b border-gray-800/40 bg-gray-800/10">
+                  <td className="px-2 py-2" />
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
                   <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior realizado</td>
                   <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorRealizado >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnteriorRealizado)}</td>
@@ -397,32 +466,50 @@ export default function FluxoCaixaPorConta() {
                 </tr>
                 {/* Saldo anterior C/ AGENDAMENTOS (realizado + pendentes/a pagar/provisões antes da data inicial) — base do acumulador */}
                 <tr className="border-b border-gray-800/50 bg-blue-500/5">
+                  <td className="px-2 py-2" />
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
                   <td className="px-3 py-2 text-xs text-blue-300 italic font-medium" colSpan={4}>Saldo anterior c/ agendamentos</td>
                   <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorComAgendamentos >= 0 ? 'text-blue-400' : 'text-orange-600'}`}>{fmt(saldoAnteriorComAgendamentos)}</td>
                   <td className="px-3 py-2" />
                 </tr>
-                {rows.map(r => (
-                  <tr key={r._key} className={`border-b border-gray-800/40 ${r.real ? 'hover:bg-gray-800/20' : 'bg-indigo-500/5 hover:bg-indigo-500/10'}`}>
+                {rowsView.map(r => (
+                  <tr
+                    key={r._key}
+                    className={`border-b border-gray-800/40 ${
+                      !r.ativa ? 'opacity-40' : r.real ? 'hover:bg-gray-800/20' : 'bg-indigo-500/5 hover:bg-indigo-500/10'
+                    }`}
+                  >
+                    <td className="px-2 py-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        checked={r.ativa}
+                        disabled={!simulavel(r)}
+                        onChange={() => toggleLinha(r)}
+                        title={!simulavel(r)
+                          ? 'Lançamento já registrado — faz parte do saldo real e não sai do cálculo'
+                          : r.ativa ? 'Tirar esta linha do cálculo' : 'Voltar a considerar esta linha'}
+                      />
+                    </td>
                     <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(r.date)}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-200 max-w-xs truncate" title={r.description}>{r.description}</td>
+                    <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`} title={r.description}>{r.description}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{movimentacao(r)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>{fmt(r.saldo)}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-gray-600' : r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>{r.ativa ? fmt(r.saldo) : '—'}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={7} className="text-center py-8 text-gray-500 text-sm">Nenhuma movimentação no período.</td></tr>
+                  <tr><td colSpan={8} className="text-center py-8 text-gray-500 text-sm">Nenhuma movimentação no período.</td></tr>
                 )}
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-gray-700 bg-gray-800/20">
-                    <td colSpan={3} className="px-3 py-2.5 text-xs font-semibold text-gray-400">Total</td>
+                    <td colSpan={4} className="px-3 py-2.5 text-xs font-semibold text-gray-400">Total</td>
                     <td className="px-3 py-2.5 text-right text-xs font-bold text-orange-600">{fmt(totalSaida)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{fmt(totalEntrada)}</td>
                     <td className={`px-3 py-2.5 text-right text-xs font-bold ${saldoFinal >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoFinal)}</td>
