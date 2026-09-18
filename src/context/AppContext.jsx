@@ -24,6 +24,8 @@ import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAnd
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
+import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from '../lib/gerencialPrevistos'
+import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
@@ -117,34 +119,9 @@ function cicloFinanceiroAtual(settings, ref = new Date()) {
         end: new Date(ref.getFullYear(), ref.getMonth(), startDay - 1) }
 }
 
-// Detecção ÚNICA de "resgate/devolução já pago" (unifica as variantes que existiam espalhadas).
-// Pago = agendamento registrado/pulado/confirmado OU lançamento executado (transfer com
-// source_schedule_id apontando p/ o slot, caso o agendamento tenha sido removido). Função pura.
-export const isResgatePago = (schedId, schedules, transactions) => {
-  if (!schedId) return false
-  const s = (schedules || []).find(x => x.id === schedId)
-  const regPaid = !!(s && (
-    (s.registered || []).length > 0 ||
-    (s.skipped || []).length > 0 ||
-    s.confirmado === true
-  ))
-  const txPaid = (transactions || []).some(
-    t => t.type === 'transfer' && t.sourceScheduleId === schedId
-  )
-  return regPaid || txPaid
-}
-
-// Fase 2 (base da detecção per-gasto — ainda NÃO ligada na Fase 2; usada na Fase 3): "este GASTO
-// específico já teve seu resgate executado?". Complementa isResgatePago (que checa por id/slot):
-// procura um resgate_reserva EXECUTADO cujo source_expense_ids contém o id do gasto.
-export const isResgatePagoParaGasto = (txId, schedules, transactions) => {
-  if (!txId) return false
-  return (schedules || []).some(s =>
-    s.tipo === 'resgate_reserva' &&
-    (s.sourceExpenseIds || []).includes(txId) &&
-    isResgatePago(s.id, schedules, transactions)
-  )
-}
+// isResgatePago / isResgatePagoParaGasto moraram aqui; foram para src/lib/resgates.js para
+// ficarem testáveis sem carregar o contexto. Reexportados porque TransactionForm os importa daqui.
+export { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 
 const defaultData = {
   settings: {
@@ -2115,15 +2092,50 @@ export function AppProvider({ children }) {
   }, [update])
 
   // ── Schedules ───────────────────────────────────────────────────────────────
+  // Um agendamento de despesa de cartão é um "previsto" do resgate_reserva da fatura em que cai.
+  // Criar/editar/apagar/registrar/pular um deles muda o total daquela fatura, então o motor precisa
+  // rodar — é isto que mantém o resgate sempre em dia, nos dois sentidos (soma ao criar, devolve ao
+  // cancelar). Os agendamentos GERIDOS pelo motor são ignorados: reconciliar a partir deles seria
+  // realimentá-lo com o que ele mesmo acabou de escrever.
+  //
+  // Chamado DEPOIS do update() do CRUD: os updaters do React rodam na ordem em que são enfileirados,
+  // então o motor já enxerga o estado novo. Mesmo padrão de addTransaction.
+  const reconciliarPorAgendamento = useCallback((lista, datasExtras = []) => {
+    const porCartao = new Map()
+    for (const sch of lista) {
+      if (!sch?.accountId) continue
+      const card = dataRef.current.accounts.find(a => a.id === sch.accountId && a.type === 'credit')
+      if (!card) continue
+      const faturas = faturasDoAgendamento({
+        schedule: sch, cardId: card.id,
+        getOccurrences: computeOccurrences,
+        faturaDe: (dia) => faturaMesAnoOf(card, dia, null),
+        datasExtras,
+      })
+      if (faturas.size === 0) continue
+      const acc = porCartao.get(card.id) || new Set()
+      for (const f of faturas) acc.add(f)
+      porCartao.set(card.id, acc)
+    }
+    for (const [cardId, faturas] of porCartao) {
+      reconcileGerencialRef.current?.(cardId, [...faturas])
+    }
+  }, [])
+
   const addSchedule = useCallback((schedule) => {
     const id = 'sch_' + Date.now()
     update(d => ({ ...d, schedules: [...d.schedules, { ...schedule, id, skipped: [], registered: [] }] }))
+    reconciliarPorAgendamento([{ ...schedule, id, skipped: [], registered: [] }])
     return id
-  }, [update])
+  }, [update, reconciliarPorAgendamento])
 
   const updateSchedule = useCallback((id, changes) => {
+    // Antes E depois: editar valor, data ou grupo pode mover o previsto de fatura/origem, e as
+    // DUAS precisam ser recalculadas — só a nova deixaria a antiga com o resgate inflado.
+    const antes = dataRef.current.schedules.find(s => s.id === id) || null
     update(d => ({ ...d, schedules: d.schedules.map(s => s.id === id ? { ...s, ...changes } : s) }))
-  }, [update])
+    if (antes) reconciliarPorAgendamento([antes, { ...antes, ...changes }])
+  }, [update, reconciliarPorAgendamento])
 
   // Aplica um mesmo favorecido a vários agendamentos de uma vez. Existe para espelhar o que
   // PATCH /api/financiamento/[id] acabou de gravar nas parcelas: `payee` está em scheduleToRow,
@@ -2163,8 +2175,10 @@ export function AppProvider({ children }) {
   }, [update])
 
   const deleteSchedule = useCallback((id) => {
+    const antes = dataRef.current.schedules.find(s => s.id === id) || null
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
-  }, [update])
+    if (antes) reconciliarPorAgendamento([antes])
+  }, [update, reconciliarPorAgendamento])
 
   // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.
   // Usado pelos painéis de exclusão para avisar que o resgate vinculado também será removido.
@@ -2476,7 +2490,12 @@ export function AppProvider({ children }) {
         return { ...s, skipped, nextOccurrence }
       }),
     }))
-  }, [update])
+    // Pular uma ocorrência tira o previsto da fatura → o resgate daquela fatura precisa encolher.
+    // A data pulada some de computeOccurrences, por isso vai em datasExtras: sem ela o recálculo
+    // erraria justamente o mês que mudou. (Registrar já reconcilia pelo recalcFaturaRef.)
+    const sch = dataRef.current.schedules.find(x => x.id === scheduleId)
+    if (sch) reconciliarPorAgendamento([sch], [date])
+  }, [update, reconciliarPorAgendamento])
 
   // ── Budgets ─────────────────────────────────────────────────────────────────
   const addBudget = useCallback((budget) => {
@@ -3528,6 +3547,18 @@ export function AppProvider({ children }) {
         faturaMesAnoOf(card, tx.date, tx.faturaMonthYear) === faturaMesAno
       const expenses = d.transactions.filter(belongs)
 
+      // Ocorrências PENDENTES de despesas agendadas deste cartão que caem nesta fatura. Entram no
+      // resgate como fonte de primeira classe (id 'sch:<agendamento>@<data>'), não como um número
+      // solto somado ao amount: assim sourceExpenseIds e o detalhamento continuam fechando com o
+      // amount. computeOccurrences já exclui registradas/puladas, então uma ocorrência efetivada
+      // sai daqui no mesmo instante em que entra como lançamento — o total não pula na transição.
+      const previstos = previstosDaFatura({
+        schedules: d.schedules,
+        cardId, faturaMesAno,
+        getOccurrences: computeOccurrences,
+        faturaDe: (dia) => faturaMesAnoOf(card, dia, null),
+      })
+
       // Projeção de parcela 2..N ainda NÃO confirmada: parcela futura gerada ao importar/criar um
       // parcelamento (criarParcelas, seção "parcelas futuras" da importação, etc.). Sinal ÚNICO e
       // robusto em TODOS os caminhos de criação: é parcela 2..N e NÃO tem date_cartao (a compra real
@@ -3586,6 +3617,26 @@ export function AppProvider({ children }) {
           numberedByAccountSources.get(origem).push({ id: tx.id, valor: amt, reservaFuncaoId: tx.reservaFuncaoId || null })
         }
         // Grupo D / sem grupo → entra apenas no totalGeral (pagamento da fatura)
+      }
+
+      // Valor por fonte (lançamento OU previsto) — as somas por id consultam este mapa em vez de
+      // procurar em d.transactions, que não conhece os ids sintéticos.
+      const valorPorFonte = new Map(expenses.map(tx => [tx.id, Number(tx.amount) || 0]))
+      for (const prev of previstos) {
+        const grupo = d.gerencialGroups?.find(g => g.id === prev.grupoGerencial)
+        // Só grupos NUMERADOS com conta-origem: G tem etapa A (transferência já feita) e D não
+        // reserva nada. Previsto também não entra em totalGeral — o pagamento da fatura é o valor
+        // real da fatura, não a projeção.
+        if (!grupo || typeof grupo.number !== 'number' || grupo.number === 1 || !grupo.defaultAccountId) continue
+        const origem = grupo.defaultAccountId
+        valorPorFonte.set(prev.id, prev.valor)
+        numberedByAccount.set(origem, rb((numberedByAccount.get(origem) || 0) + prev.valor))
+        if (!sourceTxIdsByOrigem.has(origem)) sourceTxIdsByOrigem.set(origem, [])
+        sourceTxIdsByOrigem.get(origem).push(prev.id)
+        if (!numberedByAccountSources.has(origem)) numberedByAccountSources.set(origem, [])
+        numberedByAccountSources.get(origem).push({
+          id: prev.id, valor: prev.valor, reservaFuncaoId: prev.reservaFuncaoId,
+        })
       }
 
       // Estornos da fatura: receitas lançadas no cartão (exceto pagamentos de fatura,
@@ -3756,10 +3807,7 @@ export function AppProvider({ children }) {
           const allSrc = sourceTxIdsByOrigem.get(origem) || []
           const unpaidSrc = allSrc.filter(id => !isResgatePagoParaGasto(id, schedules, d.transactions))
           if (!unpaidSrc.length) continue
-          const somaUnpaid = rb(unpaidSrc.reduce((acc, id) => {
-            const tx = d.transactions.find(t => t.id === id)
-            return acc + (Number(tx?.amount) || 0)
-          }, 0))
+          const somaUnpaid = rb(unpaidSrc.reduce((acc, id) => acc + (valorPorFonte.get(id) || 0), 0))
           if (somaUnpaid <= 0) continue
           const n = execResgateCountByOrigem.get(origem) || 0
           const base = `fsch_${cardId}_${yyyy}${mm}_resgate_reserva_${origem}`
@@ -4061,6 +4109,17 @@ export function AppProvider({ children }) {
           // Inclui faturas que já têm agendamento gerido, p/ detectar fatura zerada → remoção.
           for (const s of nd.schedules) {
             if (managedTipos.has(s.tipo) && s.cardId === card.id && s.faturaMesAno) faturas.add(s.faturaMesAno)
+          }
+          // E as que só têm PREVISTO — nenhum lançamento e nenhum agendamento gerido ainda. Sem
+          // isto, o primeiro agendamento de uma fatura vazia não gerava resgate nenhum: a fatura
+          // simplesmente não entrava na lista de recálculo.
+          for (const s of nd.schedules) {
+            if (!ehGastoPrevistoDeCartao(s, card.id)) continue
+            for (const fmy of faturasDoAgendamento({
+              schedule: s, cardId: card.id,
+              getOccurrences: computeOccurrences,
+              faturaDe: (dia) => faturaMesAnoOf(card, dia, null),
+            })) faturas.add(fmy)
           }
           // Quando há filtro de faturas (gatilho de add/update por lançamento), reconcilia
           // SOMENTE essas faturas — não as demais do cartão (não toca meses não afetados).
