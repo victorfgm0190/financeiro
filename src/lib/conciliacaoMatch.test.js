@@ -103,3 +103,31 @@ describe('descSimilarity / normalizeDescForMatch', () => {
     expect(normalizeDescForMatch('Clínica Higa-ct Lt 1/3')).toBe(normalizeDescForMatch('CLINICA HIGA-CT LT01/03'))
   })
 })
+
+// Regressão: as duplicatas que a conciliação apontava e a importação deixava passar como NOVAS.
+describe('computeDupMatch — paridade com a conciliação', () => {
+  it('casa o lançamento prefixado "Reserva Gerencial - "', () => {
+    const noBanco = {
+      id: 'tx_rg', type: 'expense', amount: 320.15,
+      description: 'Reserva Gerencial - M6 Comercio -Ct On 4/4',
+      date: '2026-08-03', dateCartao: '2026-08-03',
+    }
+    const linha = { type: 'expense', amount: 320.15, description: 'M6 Comercio -Ct On 4/4', _dateCartao: '2026-08-03' }
+    expect(computeDupMatch(linha, [noBanco])).toEqual({ level: 'provavel', tx: noBanco })
+  })
+
+  it('casa a parcela do Itaú ("1/3") com a do sistema ("01/03") — como o crossMatch já fazia', () => {
+    const noBanco = {
+      id: 'tx_9', type: 'expense', amount: 666.34,
+      description: 'CLINICA HIGA-CT LT01/03', date: '2026-07-10', dateCartao: '2026-07-10',
+    }
+    const linha = { type: 'expense', amount: 666.34, description: 'Clinica Higa-ct Lt 1/3', _dateCartao: '2026-07-10' }
+    expect(computeDupMatch(linha, [noBanco]).level).toBe('provavel')
+  })
+
+  it('ignorar o sufixo de parcela não atravessa o tipo nem a tolerância de valor', () => {
+    const estorno = { type: 'income', amount: 149.95, description: 'Aramis 4/4', _dateCartao: '2026-07-10' }
+    const compraParcela = { id: 'tx_p', type: 'expense', amount: 149.95, description: 'Aramis 4/4', dateCartao: '2026-07-10' }
+    expect(computeDupMatch(estorno, [compraParcela]).level).toBeNull()
+  })
+})

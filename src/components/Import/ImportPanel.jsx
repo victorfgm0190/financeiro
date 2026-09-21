@@ -1748,18 +1748,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   }
 
   // Lançamentos do cartão selecionado, agrupados por fatura — candidatos da conciliação.
+  // A fatura de um lançamento é o faturaMonthYear EXPLÍCITO quando existe e, na falta dele, a
+  // derivada da data pelo dia de fechamento — a mesma regra de faturaItensSistema (conciliação),
+  // de txBillKey (CreditCardPanel) e de findGlobalMaxMonth. Agrupar o que não tem o campo sob ''
+  // jogava esses lançamentos num balde que `cardTxsByFatura.get(r.faturaMonthYear)` nunca
+  // consulta: tudo que foi salvo sem fatura explícita (lançamento manual, fluxo gerencial, base
+  // antiga) ficava invisível para computeDupMatch e a linha reaparecia como NOVA na importação,
+  // embora a conciliação — que calcula o fallback — apontasse a duplicata corretamente.
   const cardTxsByFatura = useMemo(() => {
     const m = new Map()
     if (!selectedAccount) return m
+    const closingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
     for (const t of transactions) {
       if (t.accountId !== selectedAccount) continue
       if (t.type !== 'expense' && t.type !== 'income') continue
-      const f = t.faturaMonthYear || ''
+      const f = t.faturaMonthYear || calcFatura(t.date, closingDay)
+      if (!f) continue
       if (!m.has(f)) m.set(f, [])
       m.get(f).push(t)
     }
     return m
-  }, [transactions, selectedAccount])
+  }, [transactions, selectedAccount, accounts])
 
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))

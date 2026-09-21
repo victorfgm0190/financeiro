@@ -60,9 +60,17 @@ export function computeDupMatch(row, candidates) {
   const sameType = (t) => (t.type || 'expense') === rowType
   const amtClose = (t) => sameType(t) && Math.abs((Number(t.amount) || 0) - amt) <= 0.50
   const dateEq = (t) => !!rowCardDate && (t.dateCartao || t.date) === rowCardDate
+  // Similaridade SEM o sufixo de parcela, como no crossMatchConciliacao: o sistema guarda a
+  // parcela colada ("LT01/03") e o Itaú manda "Lt 1/3", e sem tirar o sufixo o Jaccard dessas
+  // duas cai para 0,4 — a importação não via a duplicata que a conciliação via.
+  const simSemParcela = (t) => descSimilarity(stripParcelaSuffix(t.description), stripParcelaSuffix(row.description))
+  // 'certeza' continua exigindo a descrição INTEIRA igual, com o sufixo. Só ela desabilita o
+  // checkbox — um falso positivo aqui descarta um lançamento legítimo sem o usuário poder
+  // reverter. Provável/possível apenas desmarcam por padrão e mostram o badge, então podem
+  // usar o critério mais frouxo: no pior caso o usuário remarca a linha.
   for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return { level: 'certeza', tx: t }
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'provavel', tx: t }
-  for (const t of candidates) if (amtClose(t) && descSimilarity(t.description, row.description) >= 0.7) return { level: 'possivel', tx: t }
+  for (const t of candidates) if (amtClose(t) && dateEq(t) && simSemParcela(t) >= 0.7) return { level: 'provavel', tx: t }
+  for (const t of candidates) if (amtClose(t) && simSemParcela(t) >= 0.7) return { level: 'possivel', tx: t }
   return none
 }
 
