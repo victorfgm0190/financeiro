@@ -61,6 +61,10 @@ export function computeFluxoCaixa({
   schedules = [],
   envelopes = [],
   reserveFunctions = [],
+  // Lançamentos provisórios (simulação) do relatório Fluxo de Caixa por Conta, em snake_case
+  // como vêm de /api/fluxo-provisorios. Default [] de propósito: só o relatório passa esta
+  // lista — os KPIs FINAL CICLO / PROJETADO do Painel Geral chamam sem ela e seguem idênticos.
+  provisorios = [],
   getNextOccurrences,
   includeSchedules = true,
   hideReserva = false,
@@ -223,6 +227,28 @@ export function computeFluxoCaixa({
       }
     })
   }
+
+  // 4. Provisórios: linhas de simulação, mescladas por data como qualquer outra. Não dependem
+  // de includeSchedules (não são agendamento) e ficam de fora do "saldo anterior c/
+  // agendamentos" — um provisório ANTES de `start` simplesmente não é do período, e somá-lo à
+  // base mudaria em silêncio o saldo de partida, que é ancorado no saldo REAL da conta.
+  ;(provisorios || []).forEach(p => {
+    if (!p?.account_id || !p.date || p.date < start || p.date > end) return
+    if (!accountIds.has(p.account_id)) return
+    if (oculto(p.account_id, null)) return
+    const entrada = p.type === 'entrada'
+    const m = classify(entrada ? 'income' : 'expense', p.account_id, null, Number(p.amount) || 0)
+    if (!m) return
+    out.push({
+      date: p.date, description: p.description || '(provisório)',
+      type: entrada ? 'income' : 'expense',
+      fromAccountId: p.account_id, toAccountId: null,
+      categoryId: p.category_id || null, reservaFuncaoId: null,
+      entrada: m.entrada, saida: m.saida,
+      status: 'Provisório', real: false, _provisorio: p,
+      _key: 'prov_' + p.id,
+    })
+  })
 
   out.sort((a, b) => a.date.localeCompare(b.date) || (a.real === b.real ? 0 : a.real ? -1 : 1))
 

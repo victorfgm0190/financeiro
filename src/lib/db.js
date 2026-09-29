@@ -158,6 +158,44 @@ export async function deleteReserveAdjustmentApi(id) {
   return apiDelete(`/api/reserve-adjustments?id=${encodeURIComponent(id)}`)
 }
 
+// ─── Fluxo de Caixa: lançamentos provisórios (simulação) ──────────────────────
+// Escrita direta por operação (mesmo regime dos períodos/ajustes de reserva): NÃO entram no
+// diff-sync do estado global, porque não fazem parte de `data` — só o relatório Fluxo de Caixa
+// por Conta os conhece. Objetos em snake_case, como o endpoint devolve.
+// `amount` vem de uma coluna NUMERIC, que o driver pg entrega como string.
+export const rowToProvisorio = (r) => ({
+  id: r.id,
+  date: String(r.date).slice(0, 10),
+  description: r.description || '',
+  amount: Number(r.amount) || 0,
+  type: r.type === 'entrada' ? 'entrada' : 'saida',
+  account_id: r.account_id || null,
+  category_id: r.category_id || null,
+  created_at: r.created_at,
+})
+
+export async function fetchFluxoProvisorios() {
+  const r = await apiGet('/api/fluxo-provisorios')
+  return (r?.provisorios || []).map(rowToProvisorio)
+}
+export async function createFluxoProvisorio(p) {
+  const r = await apiPost('/api/fluxo-provisorios', p)
+  return rowToProvisorio(r.provisorio)
+}
+export async function updateFluxoProvisorioApi(p) {
+  const r = await apiPut('/api/fluxo-provisorios', p)
+  return rowToProvisorio(r.provisorio)
+}
+export async function deleteFluxoProvisorioApi(id) {
+  return apiDelete(`/api/fluxo-provisorios?id=${encodeURIComponent(id)}`)
+}
+// Efetivar: o backend cria o agendamento único e apaga o provisório na mesma transação.
+// Devolve o agendamento já no formato do app, pronto para espelhar no estado global.
+export async function efetivarFluxoProvisorio(id) {
+  const r = await apiPost('/api/fluxo-provisorios?acao=efetivar', { id })
+  return { id, schedule: r?.schedule ? rowToSchedule(r.schedule) : null }
+}
+
 // Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
 // pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
 // strings (date é TEXT), então convertemos aqui para manter a consistência.

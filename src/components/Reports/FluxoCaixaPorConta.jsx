@@ -1,12 +1,20 @@
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet } from 'lucide-react'
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { computeFluxoCaixa } from '../../lib/fluxoCaixa'
+import {
+  fetchFluxoProvisorios, createFluxoProvisorio, updateFluxoProvisorioApi,
+  deleteFluxoProvisorioApi, efetivarFluxoProvisorio,
+} from '../../lib/db'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
+import Modal from '../shared/Modal'
+import ConfirmDialog from '../shared/ConfirmDialog'
+import Toast from '../shared/Toast'
+import ProvisorioForm from './ProvisorioForm'
 
 const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
@@ -43,7 +51,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getNextOccurrences } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getNextOccurrences, mergeScheduleFromDb } = useApp()
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -67,6 +75,60 @@ export default function FluxoCaixaPorConta() {
   // no estado global, nem no banco, nem no localStorage (a seleção salva em SELECAO_STORAGE_KEY
   // guarda aba/contas/datas, não isto), então recarregar a página volta tudo marcado.
   const [selExcluidas, setSelExcluidas] = useState(() => ({ escopo: '', keys: SEM_EXCLUSOES }))
+
+  // ── Lançamentos provisórios (simulação) ────────────────────────────────────
+  // Vivem em fluxo_provisorios e SÓ neste relatório: não entram no estado global do app
+  // (data/localStorage/diff-sync), então são lidos e gravados direto pelo endpoint.
+  const [provisorios, setProvisorios] = useState([])
+  const [provModal, setProvModal] = useState(null)   // { initial } — null = fechado
+  const [provConfirm, setProvConfirm] = useState(null) // { acao: 'excluir'|'efetivar', prov }
+  const [toast, setToast] = useState(null)           // { message, variant }
+  const avisar = (message, variant = 'success') => setToast({ message, variant })
+
+  useEffect(() => {
+    let vivo = true
+    fetchFluxoProvisorios()
+      .then(lista => { if (vivo) setProvisorios(lista) })
+      // Falha aqui não pode derrubar o relatório: sem provisórios ele é exatamente o de antes.
+      .catch(err => console.error('[FluxoCaixa] provisórios:', err.message))
+    return () => { vivo = false }
+  }, [])
+
+  const salvarProvisorio = useCallback(async (payload) => {
+    if (payload.id) {
+      const atualizado = await updateFluxoProvisorioApi(payload)
+      setProvisorios(lista => lista.map(p => p.id === atualizado.id ? atualizado : p))
+      avisar('Provisório atualizado.')
+    } else {
+      const criado = await createFluxoProvisorio(payload)
+      setProvisorios(lista => [...lista, criado])
+      avisar('Provisório adicionado.')
+    }
+  }, [])
+
+  const excluirProvisorio = useCallback(async (prov) => {
+    try {
+      await deleteFluxoProvisorioApi(prov.id)
+      setProvisorios(lista => lista.filter(p => p.id !== prov.id))
+      avisar('Provisório excluído.')
+    } catch (err) {
+      avisar(err.message || 'Falha ao excluir o provisório.', 'error')
+    }
+  }, [])
+
+  // Efetivar: o backend cria o agendamento único e apaga o provisório na MESMA transação.
+  // Aqui só espelhamos o resultado — o agendamento no estado global (para ele já aparecer como
+  // "A pagar"/"A receber" sem esperar um full-load) e a remoção da linha provisória.
+  const efetivarProvisorio = useCallback(async (prov) => {
+    try {
+      const { schedule } = await efetivarFluxoProvisorio(prov.id)
+      setProvisorios(lista => lista.filter(p => p.id !== prov.id))
+      if (schedule) mergeScheduleFromDb(schedule)
+      avisar('Provisório efetivado como agendamento.')
+    } catch (err) {
+      avisar(err.message || 'Falha ao efetivar o provisório.', 'error')
+    }
+  }, [mergeScheduleFromDb])
 
   // Só o que AINDA NÃO ACONTECEU entra na simulação. `real` é exatamente o lançamento já
   // efetivado (status "Registrada"); ele compõe o saldo de verdade da conta e tirá-lo da conta
@@ -133,7 +195,7 @@ export default function FluxoCaixaPorConta() {
   const { rows, saldoAnteriorRealizado, saldoAnteriorComAgendamentos } = useMemo(() => {
     const r = computeFluxoCaixa({
       accountIds, currentBalance, start, end,
-      transactions, schedules, envelopes, reserveFunctions,
+      transactions, schedules, envelopes, reserveFunctions, provisorios,
       getNextOccurrences, includeSchedules,
       hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
     })
@@ -142,7 +204,7 @@ export default function FluxoCaixaPorConta() {
       saldoAnteriorRealizado: r.saldoAnteriorRealizado,
       saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
     }
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions])
+  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios])
 
   // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
   // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move
@@ -183,8 +245,15 @@ export default function FluxoCaixaPorConta() {
     if (status === 'Registrada') return 'bg-gray-600/30 text-gray-300'
     if (status === 'A receber')  return 'bg-receita/20 text-receita'
     if (status === 'Projetado')  return 'bg-indigo-500/20 text-indigo-400'
+    if (status === 'Provisório') return 'bg-purple-500/20 text-purple-300'
     return 'bg-despesa/20 text-despesa' // A pagar
   }
+
+  // Conta pré-selecionada ao abrir o modal: a única selecionada na visão "Por Conta", senão a
+  // primeira do conjunto em tela — evita abrir o formulário com conta vazia no caso comum.
+  const contaPadraoProv = selectedAccountIds.length === 1
+    ? selectedAccountIds[0]
+    : (selectedAccounts[0]?.id || '')
 
   // Conta De / Conta Para na perspectiva do conjunto selecionado (mesma semântica da coluna
   // "Movimentação" da tabela): transferência → De/Para reais; entrada → vem de externo,
@@ -264,19 +333,29 @@ export default function FluxoCaixaPorConta() {
     <div className="space-y-4">
       {/* Filtros — fixos no topo ao rolar apenas no desktop (md+) */}
       <div className="card space-y-3 md:sticky md:top-0 md:z-20">
-        {/* Visão (toggle) */}
-        <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 w-full sm:w-auto">
-          {VISOES.map(v => (
-            <button
-              key={v.id}
-              onClick={() => setVisao(v.id)}
-              className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                visao === v.id ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
+        {/* Visão (toggle) + criação de provisório */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 w-full sm:w-auto">
+            {VISOES.map(v => (
+              <button
+                key={v.id}
+                onClick={() => setVisao(v.id)}
+                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  visao === v.id ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setProvModal({ initial: null })}
+            className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 sm:ml-auto border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+            title="Adicionar uma entrada/saída de simulação a este fluxo"
+          >
+            <Plus size={13} /> Provisório
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -442,7 +521,7 @@ export default function FluxoCaixaPorConta() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: 860 }}>
+            <table className="w-full text-sm" style={{ minWidth: 920 }}>
               <thead>
                 <tr className="border-b border-gray-800">
                   <th className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
@@ -453,6 +532,9 @@ export default function FluxoCaixaPorConta() {
                   <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium w-28">Depósito</th>
                   <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium w-28">Saldo</th>
                   <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-24">Status</th>
+                  {/* Só as linhas provisórias têm ações — as demais vêm de lançamentos/agendamentos
+                      e se editam nas telas delas. */}
+                  <th className="w-20 px-2 py-2.5" />
                 </tr>
               </thead>
               <tbody>
@@ -462,7 +544,7 @@ export default function FluxoCaixaPorConta() {
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
                   <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior realizado</td>
                   <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorRealizado >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnteriorRealizado)}</td>
-                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" colSpan={2} />
                 </tr>
                 {/* Saldo anterior C/ AGENDAMENTOS (realizado + pendentes/a pagar/provisões antes da data inicial) — base do acumulador */}
                 <tr className="border-b border-gray-800/50 bg-blue-500/5">
@@ -470,13 +552,20 @@ export default function FluxoCaixaPorConta() {
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
                   <td className="px-3 py-2 text-xs text-blue-300 italic font-medium" colSpan={4}>Saldo anterior c/ agendamentos</td>
                   <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorComAgendamentos >= 0 ? 'text-blue-400' : 'text-orange-600'}`}>{fmt(saldoAnteriorComAgendamentos)}</td>
-                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" colSpan={2} />
                 </tr>
                 {rowsView.map(r => (
                   <tr
                     key={r._key}
+                    // Provisório tem cor própria (roxo + borda tracejada à esquerda) para não se
+                    // confundir com o projetado/agendado: ele não existe fora deste relatório.
                     className={`border-b border-gray-800/40 ${
-                      !r.ativa ? 'opacity-40' : r.real ? 'hover:bg-gray-800/20' : 'bg-indigo-500/5 hover:bg-indigo-500/10'
+                      r._provisorio ? 'border-l-2 border-l-purple-500 border-dashed' : ''
+                    } ${
+                      !r.ativa ? 'opacity-40'
+                        : r._provisorio ? 'bg-purple-500/10 hover:bg-purple-500/20'
+                        : r.real ? 'hover:bg-gray-800/20'
+                        : 'bg-indigo-500/5 hover:bg-indigo-500/10'
                     }`}
                   >
                     <td className="px-2 py-2.5 text-center">
@@ -500,10 +589,40 @@ export default function FluxoCaixaPorConta() {
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
+                    <td className="px-2 py-2.5">
+                      {r._provisorio && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setProvModal({ initial: r._provisorio })}
+                            className="p-1 rounded text-gray-500 hover:text-purple-300 hover:bg-purple-500/10"
+                            title="Editar provisório"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setProvConfirm({ acao: 'efetivar', prov: r._provisorio })}
+                            className="p-1 rounded text-gray-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            title="Efetivar: transformar em agendamento"
+                          >
+                            <CheckCircle2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setProvConfirm({ acao: 'excluir', prov: r._provisorio })}
+                            className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                            title="Excluir provisório"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={8} className="text-center py-8 text-gray-500 text-sm">Nenhuma movimentação no período.</td></tr>
+                  <tr><td colSpan={9} className="text-center py-8 text-gray-500 text-sm">Nenhuma movimentação no período.</td></tr>
                 )}
               </tbody>
               {rows.length > 0 && (
@@ -513,7 +632,7 @@ export default function FluxoCaixaPorConta() {
                     <td className="px-3 py-2.5 text-right text-xs font-bold text-orange-600">{fmt(totalSaida)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{fmt(totalEntrada)}</td>
                     <td className={`px-3 py-2.5 text-right text-xs font-bold ${saldoFinal >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoFinal)}</td>
-                    <td />
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               )}
@@ -521,6 +640,40 @@ export default function FluxoCaixaPorConta() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={!!provModal}
+        onClose={() => setProvModal(null)}
+        title={provModal?.initial ? 'Editar Provisório' : 'Novo Lançamento Provisório'}
+      >
+        {provModal && (
+          <ProvisorioForm
+            initial={provModal.initial}
+            contaPadrao={contaPadraoProv}
+            onSalvar={salvarProvisorio}
+            onClose={() => setProvModal(null)}
+          />
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!provConfirm}
+        onClose={() => setProvConfirm(null)}
+        onConfirm={() => {
+          const { acao, prov } = provConfirm
+          if (acao === 'excluir') excluirProvisorio(prov)
+          else efetivarProvisorio(prov)
+        }}
+        danger={provConfirm?.acao === 'excluir'}
+        title={provConfirm?.acao === 'excluir' ? 'Excluir provisório' : 'Efetivar provisório'}
+        confirmLabel={provConfirm?.acao === 'excluir' ? 'Excluir' : 'Efetivar'}
+        message={provConfirm?.acao === 'excluir'
+          ? `Excluir "${provConfirm?.prov?.description}"? A simulação sai do fluxo.`
+          : `Efetivar "${provConfirm?.prov?.description}" (${fmt(provConfirm?.prov?.amount || 0)} em ${fmtDate(provConfirm?.prov?.date || '')})? `
+            + 'Ele vira um agendamento único (Uma vez, sem registro automático) e deixa de ser provisório.'}
+      />
+
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </div>
   )
 }

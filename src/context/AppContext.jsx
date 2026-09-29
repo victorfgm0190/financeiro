@@ -2129,6 +2129,18 @@ export function AppProvider({ children }) {
     return id
   }, [update, reconciliarPorAgendamento])
 
+  // Espelha no estado React um agendamento que o BACKEND acabou de criar — hoje, o "efetivar"
+  // de um lançamento provisório do Fluxo de Caixa (api/fluxo-provisorios). Diferente de
+  // addSchedule, não gera id (usa o do banco) e não dispara reconciliação: o registro nasce
+  // simples ("Uma vez", sem fatura nem função de reserva). Sem este espelho o agendamento só
+  // apareceria no próximo full-load. Idempotente — id já presente é no-op.
+  const mergeScheduleFromDb = useCallback((schedule) => {
+    if (!schedule?.id) return
+    update(d => d.schedules.some(s => s.id === schedule.id)
+      ? d
+      : { ...d, schedules: [...d.schedules, schedule] })
+  }, [update])
+
   const updateSchedule = useCallback((id, changes) => {
     // Antes E depois: editar valor, data ou grupo pode mover o previsto de fatura/origem, e as
     // DUAS precisam ser recalculadas — só a nova deixaria a antiga com o resgate inflado.
@@ -5253,6 +5265,7 @@ export function AppProvider({ children }) {
       categoryGroups,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
+      mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
       efetivarProvisao, getProximaProvisaoOccurrence,
       registerScheduleOccurrence, skipScheduleOccurrence,

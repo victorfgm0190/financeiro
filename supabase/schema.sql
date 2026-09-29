@@ -781,3 +781,26 @@ CREATE TABLE IF NOT EXISTS reserve_daily_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_reserve_ledger_date ON reserve_daily_ledger (snapshot_date DESC);
 CREATE INDEX IF NOT EXISTS idx_reserve_ledger_account ON reserve_daily_ledger (account_id, snapshot_date DESC);
+
+-- ============================================================
+-- Lançamentos PROVISÓRIOS do relatório "Fluxo de Caixa por Conta"
+-- Entradas/saídas de SIMULAÇÃO: entram na projeção do fluxo (saldo acumulado,
+-- totais e Saldo Projetado) e em mais nada. Não são agendamento, não viram
+-- lançamento, não tocam contas.balance nem o recalcularSaldo do app — por isso
+-- moram numa tabela à parte em vez de uma flag em agendamentos.
+-- O usuário pode "efetivar" um provisório: vira agendamento único (agendamentos)
+-- e a linha daqui é apagada, na mesma transação (ver api/fluxo-provisorios.js).
+-- A DDL viva é a de api/fluxo-provisorios.js — esta cópia existe para documentação.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS fluxo_provisorios (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  date TEXT NOT NULL,              -- YYYY-MM-DD (TEXT, igual a lancamentos.date)
+  description TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  type TEXT NOT NULL,              -- 'entrada' | 'saida'
+  account_id TEXT,
+  category_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_date ON fluxo_provisorios (date);
+CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_account ON fluxo_provisorios (account_id);
