@@ -4,7 +4,7 @@
 -- ============================================================================
 
 -- 1) Os dois gastos e todos os campos que decidem numeração, fatura e etapa A.
-SELECT id, description, notes, amount, date, date_cartao, fatura_month_year, fatura_ref,
+SELECT id, description, payee, notes, amount, date, date_cartao, fatura_month_year, fatura_ref,
        installment_num, installment_total, installment_occurrence, installment_key, serie_id,
        origin, parent_tx_id, grupo_gerencial, created_at
   FROM lancamentos
@@ -12,7 +12,7 @@ SELECT id, description, notes, amount, date, date_cartao, fatura_month_year, fat
 
 -- 2) A série inteira de cada compra (mesma descrição-base e valor, no mesmo cartão),
 --    com a etapa A de cada parcela ao lado. Mostra qual numeração está certa por fatura.
-SELECT l.id, l.description, l.notes, l.amount, l.date_cartao, l.date,
+SELECT l.id, l.description, l.payee, l.amount, l.date_cartao, l.date,
        COALESCE(l.fatura_month_year, l.fatura_ref) AS fatura,
        l.installment_num || '/' || l.installment_total AS parcela_colunas,
        l.serie_id, l.origin, l.created_at,
@@ -26,7 +26,9 @@ SELECT l.id, l.description, l.notes, l.amount, l.date_cartao, l.date,
  ORDER BY l.description ~* 'farm', COALESCE(l.fatura_month_year, l.fatura_ref), l.created_at;
 
 -- 3) O que mais foi criado no mesmo lote (mesmo timestamp no id → mesma importação).
-SELECT id, description, amount, date, date_cartao, fatura_month_year, installment_num, installment_total,
+--    Se aparecer um "Jim.com… 1/3" aqui, os 3/3 são as parcelas futuras GERADAS a partir dele
+--    (herdam o payee da linha base) — e a pergunta vira: onde foi parar esse 1/3?
+SELECT id, description, payee, amount, date, date_cartao, fatura_month_year, installment_num, installment_total,
        origin, grupo_gerencial
   FROM lancamentos
  WHERE id LIKE 'tx_1789736376094_%'

@@ -15,8 +15,11 @@
 --   • compra = serie_id, ou cartão | base normalizada | M | centavos | início da série
 --     (fatura − (N−1) meses) | ocorrência (#2… das gêmeas legítimas);
 --   • duplicata = mesma compra + mesmo N exibido + mesmo N REAL. N real = o da
---     descrição original do banco (coluna notes) quando ela traz "N/M" da mesma base;
---     se a original diz outra parcela, é compra nova → NÃO é duplicata;
+--     descrição original do banco, que a importação grava em PAYEE (favorecido — a
+--     linha cinza sob a descrição na fatura), quando ela traz "N/M" da mesma base;
+--     se a original diz outra parcela, é compra nova → NÃO é duplicata. Exceção:
+--     favorecido com N MENOR e mesmo M é herdado da linha que gerou a parcela
+--     futura (importação copia o payee da base) → vale o N exibido;
 --   • a que FICA é a confirmada (com date_cartao) mais antiga; as outras sobram.
 -- ============================================================================
 WITH params AS (
@@ -52,7 +55,7 @@ com_fatura AS (
                'YYYY-MM')
          END AS fatura,
          regexp_match(g.description, (SELECT re FROM padrao)) AS m_desc,
-         regexp_match(COALESCE(g.notes, ''), (SELECT re FROM padrao)) AS m_orig
+         regexp_match(COALESCE(g.payee, ''), (SELECT re FROM padrao)) AS m_orig
     FROM gastos g
 ),
 det AS (
@@ -76,13 +79,14 @@ parcelas AS (
                 ELSE COALESCE(d.description, '') END,
            '^\s+|\s+$', '', 'g'), '\s+', ' ', 'g')) AS base,
          lower(regexp_replace(regexp_replace(
-           regexp_replace(COALESCE(d.notes, ''), (SELECT re FROM padrao), ''),
+           regexp_replace(COALESCE(d.payee, ''), (SELECT re FROM padrao), ''),
            '^\s+|\s+$', '', 'g'), '\s+', ' ', 'g')) AS base_orig
     FROM det d
 ),
 identidade AS (
   SELECT p.*,
          CASE WHEN p.mo IS NOT NULL AND (p.base_orig = '' OR p.base_orig = p.base)
+                   AND NOT (p.mo[1]::int < p.num AND p.mo[2]::int = p.total)
               THEN p.mo[1]::int ELSE p.num END AS num_real,
          p.cartao_id || '|' || p.base || '|' || p.total || '|' || ROUND(p.amount * 100)::bigint || '|' ||
            TO_CHAR((p.fatura || '-01')::date - ((p.num - 1) || ' month')::interval, 'YYYY-MM') ||
@@ -112,7 +116,7 @@ SELECT s.id              AS origem_id_sobra,
        s.amount          AS valor,
        s.date_cartao     AS data_cartao_sobra,
        o.date_cartao     AS data_cartao_fica,
-       s.notes           AS descricao_original,
+       s.payee           AS favorecido_descricao_original,
        s.qtd
   FROM grupos s
   JOIN grupos o ON o.grupo = s.grupo AND o.ordem = 1

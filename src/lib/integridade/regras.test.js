@@ -52,7 +52,7 @@ const devolucaoExecutada = (sch) => ({
 // ── Fixture do bug de 30/09/2026 ─────────────────────────────────────────────
 // Série antiga (compra de junho): Jim.com e Farmácias 1/3 (07), 2/3 (08), 3/3 (09), todas com
 // etapa A e devolução executada. Na Fatura 10/2026 entram dois gastos G REAIS, exibidos como
-// "3/3" — o Jim.com com descrição original do banco "1/3" — sem etapa A nenhuma.
+// "3/3" — o Jim.com com favorecido (linha cinza) "1/3" — sem etapa A nenhuma.
 function fixtureBug() {
   const transactions = []
   const schedules = []
@@ -67,7 +67,7 @@ function fixtureBug() {
   }
   const jimNovo = gasto('tx_1789736376094_z41mpw3eroa', 'Jim.com* 60278703 3/3', 316.68, '2026-10', {
     installmentNum: 3, installmentTotal: 3, date: '2026-09-15', dateCartao: '2026-07-11',
-    notes: 'Jim.com* 60278703 1/3', createdAt: '2026-09-18T12:59:36Z',
+    payee: 'Jim.com* 60278703 1/3', createdAt: '2026-09-18T12:59:36Z',
   })
   const farmNovo = gasto('tx_1789736376094_kvw8u5eevwc', 'Farmacias Sao Joao 3/3', 41.94, '2026-10', {
     installmentNum: 3, installmentTotal: 3, date: '2026-09-15', dateCartao: '2026-07-12',
@@ -110,10 +110,15 @@ describe('Motor de Integridade — bug de 30/09/2026 (Fatura 10/2026 Itaupers)',
     expect(f.encontrado.gastos_sem_etapa_a.map(g => g.id)).toHaveLength(2)
   })
 
-  it('acusa PARCELA_NUMERO_INCOERENTE para o Jim.com (exibido 3/3, banco diz 1/3)', () => {
+  it('acusa PARCELA_NUMERO_INCOERENTE para o Jim.com (exibido 3/3, favorecido 1/3, sem 1/3 na série)', () => {
     expect((r.PARCELA_NUMERO_INCOERENTE || []).map(d => d.origem_id)).toEqual(['tx_1789736376094_z41mpw3eroa'])
-    expect(r.PARCELA_NUMERO_INCOERENTE[0].esperado.parcela).toBe('1/3')
-    expect(r.PARCELA_NUMERO_INCOERENTE[0].encontrado.parcela_exibida).toBe('3/3')
+    const d = r.PARCELA_NUMERO_INCOERENTE[0]
+    expect(d.esperado).toMatchObject({ parcela: '1/3', favorecido: 'Jim.com* 60278703 1/3', fatura_parcela_origem: '08/2026' })
+    expect(d.encontrado).toMatchObject({ parcela_exibida: '3/3', motivos: ['parcela_de_origem_ausente'] })
+  })
+
+  it('marca "projeção" no resumo do gasto', () => {
+    expect(r.GER_ETAPA_A_FALTANDO.every(d => d.encontrado.gasto.projecao === false)).toBe(true)
   })
 
   it('não confunde o 3/3 novo com o 3/3 da série antiga: não é PARCELA_DUPLICADA', () => {
@@ -146,6 +151,29 @@ describe('Motor de Integridade — bug de 30/09/2026 (Fatura 10/2026 Itaupers)',
     expect(r2.GER_ETAPA_A_FALTANDO).toBeUndefined()
     expect(r2.GER_FECHAMENTO_FATURA).toBeUndefined()
     expect(r2.GER_SALDO_SUBCONTA).toBeUndefined()
+  })
+})
+
+describe('PARCELA_NUMERO_INCOERENTE — favorecido herdado', () => {
+  const serie = (n, fmy, extra = {}) => gasto(`tx_s${n}`, `Curso X ${n}/3`, 90, fmy, {
+    installmentNum: n, installmentTotal: 3, grupoGerencial: 'grp_D', payee: 'Curso X 1/3', ...extra,
+  })
+  const d = (txs) => ({ accounts: CONTAS, gerencialGroups: GRUPOS, schedules: [], transactions: txs })
+  const regra = { ...OPC, regras: ['PARCELA_NUMERO_INCOERENTE'] }
+
+  it('parcelas 2/3 e 3/3 geradas de um 1/3 existente não são incoerentes', () => {
+    expect(executarRegras(d([serie(1, '2026-08'), serie(2, '2026-09'), serie(3, '2026-10')]), regra)).toEqual([])
+  })
+  it('sem a parcela 1/3 de origem, a 3/3 com favorecido 1/3 é incoerente', () => {
+    const r = executarRegras(d([serie(3, '2026-10')]), regra)
+    expect(r.map(x => [x.origem_id, x.encontrado.motivos[0]])).toEqual([['tx_s3', 'parcela_de_origem_ausente']])
+  })
+  it('favorecido com número MAIOR que o exibido é sempre incoerente', () => {
+    const r = executarRegras(d([serie(1, '2026-08', { payee: 'Curso X 2/3' })]), regra)
+    expect(r.map(x => x.encontrado.motivos)).toEqual([['descricao_original']])
+  })
+  it('favorecido sem "N/M" (definido por regra de classificação) é ignorado', () => {
+    expect(executarRegras(d([serie(3, '2026-10', { payee: 'Curso X' })]), regra)).toEqual([])
   })
 })
 
@@ -233,10 +261,10 @@ describe('PARCELA_DUPLICADA', () => {
     expect(r.PARCELA_DUPLICADA[0].encontrado).toMatchObject({ parcela: '2/5', faturas: ['09/2026'], ids: ['tx_l1', 'tx_l2'] })
   })
 
-  it('descrição original do banco diz outra parcela → compra nova, não duplicata', () => {
+  it('favorecido (descrição do banco) diz outra parcela → compra nova, não duplicata', () => {
     const d = {
       accounts: CONTAS, gerencialGroups: GRUPOS, schedules: [],
-      transactions: [base(), { ...base(), id: 'tx_l2', notes: 'Loja Y 1/5' }],
+      transactions: [base(), { ...base(), id: 'tx_l2', payee: 'Loja Y 4/5' }],
     }
     expect(executarRegras(d, { ...OPC, regras: ['PARCELA_DUPLICADA'] })).toEqual([])
   })

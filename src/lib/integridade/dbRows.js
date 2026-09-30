@@ -21,6 +21,7 @@ export const txDeLinha = (r) => ({
   dateCartao: dataStr(r.date_cartao),
   description: r.description || '',
   notes: r.notes || '',
+  payee: r.payee || '',
   grupoGerencial: r.grupo_gerencial || null,
   accountType: r.account_type || '',
   scheduleId: r.schedule_id || null,

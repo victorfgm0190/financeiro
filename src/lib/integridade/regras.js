@@ -88,22 +88,28 @@ export const ehProjecao = (tx) =>
   !tx.dateCartao && tx.origin !== ORIGIN.MANUAL
 
 // Parcela de um lançamento: colunas installment_num/total quando existem (manual sem marcador na
-// descrição), senão o "N/M" da descrição. `numOriginal` vem da descrição ORIGINAL do banco,
-// guardada em `notes` (coluna "Descrição original" do Relatório de Fatura) — só vale quando a base
-// de lá é a mesma do lançamento (ou vazia), para uma observação qualquer não virar "parcela".
+// descrição), senão o "N/M" da descrição. `numOriginal` vem da descrição ORIGINAL do banco, que a
+// importação grava em `payee` (favorecido = descrição do extrato quando nenhuma regra de
+// classificação define outro) — é a linha cinza sob a descrição na lista da fatura. Só vale quando a
+// base de lá é a mesma do lançamento (ou vazia): um favorecido "limpo" (ex.: "Jim.com") não vira parcela.
+//
+// Atenção: parcelas FUTURAS geradas na importação herdam o payee da linha que as gerou
+// (ImportPanel, futureParcelas) — um "3/3" gerado a partir de um "1/3" carrega payee "…1/3".
 export function infoParcela(tx) {
   const det = detectInstallment(tx.description || '')
   const num = tx.installmentNum ?? det?.num ?? null
   const total = tx.installmentTotal ?? det?.total ?? null
   if (num == null || total == null) return null
   const base = normalizeInstallmentBase(det ? det.base : tx.description)
-  const orig = detectInstallment(tx.notes || '')
+  const orig = detectInstallment(tx.payee || '')
   const origValida = !!orig && (!orig.base || normalizeInstallmentBase(orig.base) === base)
   return {
     num: Number(num), total: Number(total), base,
     numDescricao: det?.num ?? null, totalDescricao: det?.total ?? null,
     numOriginal: origValida ? orig.num : null, totalOriginal: origValida ? orig.total : null,
-    numReal: origValida ? orig.num : Number(num),
+    // Número REAL para duplicata: o do favorecido, exceto quando ele é menor com o mesmo total —
+    // aí é o payee herdado da linha geradora, não sinal de outra compra.
+    numReal: origValida && !(orig.num < Number(num) && orig.total === Number(total)) ? orig.num : Number(num),
   }
 }
 
@@ -200,6 +206,7 @@ const nomeConta = (ctx, id) => { const a = ctx.contas.get(id); return a ? (a.ape
 const resumoGasto = (g) => ({
   id: g.tx.id, descricao: g.tx.description || '', valor: rb(g.tx.amount),
   data: g.tx.date || null, data_cartao: g.tx.dateCartao || null, fatura: ymParaRef(g.fatura),
+  projecao: ehProjecao(g.tx),
 })
 const resumoEtapa = (e) => ({
   id: e.tx.id, valor: rb(e.tx.amount), fatura_ref: e.tx.faturaRef || null, data: e.tx.date || null,
@@ -419,33 +426,56 @@ const PARCELA_FATURA_INCOERENTE = {
   },
 }
 
+// Descrição original (payee) com OUTRO número de parcela. Um número original MENOR que o exibido é o
+// caso normal de parcela gerada (herdou o payee da linha que a gerou): só é incoerente se essa parcela
+// de origem não existir na mesma compra — foi o que aconteceu com o Jim.com (3/3 com payee 1/3 e
+// nenhum 1/3 na série). Original maior que o exibido, ou total diferente, é sempre incoerente.
 const PARCELA_NUMERO_INCOERENTE = {
   codigo: 'PARCELA_NUMERO_INCOERENTE', lado: 'divergência', severidade: 'aprovar',
-  descricao: 'Número de parcela exibido diferente do número na descrição original do banco (ou das colunas)',
+  descricao: 'Número de parcela exibido diferente do número na descrição original do banco (favorecido) ou das colunas',
   verificar(dados) {
     const ctx = montarContexto(dados)
-    const out = []
-    for (const g of ctx.gastos) {
-      if (!ctx.noEscopo(g.fatura)) continue
-      const p = infoParcela(g.tx)
-      if (!p) continue
-      const motivos = []
-      if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) motivos.push('descricao_original')
-      if (p.numDescricao != null && (p.numDescricao !== p.num || p.totalDescricao !== p.total)) motivos.push('colunas')
-      if (!motivos.length) continue
-      const real = p.numOriginal != null ? `${p.numOriginal}/${p.totalOriginal}` : `${p.num}/${p.total}`
-      const exibido = p.numDescricao != null ? `${p.numDescricao}/${p.totalDescricao}` : `${p.num}/${p.total}`
-      out.push(divergencia(this, {
-        origem_id: g.tx.id, conta_id: g.card.id, fatura_ref: ymParaRef(g.fatura),
-        descricao: `"${g.tx.description || ''}" (${brl(g.tx.amount)}) exibida como ${exibido}, mas o banco diz ${real}`,
-        esperado: { parcela: real, descricao_original: g.tx.notes || null },
-        encontrado: {
-          motivos, parcela_exibida: exibido, colunas: `${p.num}/${p.total}`,
-          descricao: g.tx.description || '', gasto: resumoGasto(g),
-        },
-      }))
+    const numsPorInicio = new Map()
+    for (const compra of comprasParceladas(ctx)) {
+      for (const it of compra.itens) {
+        if (!numsPorInicio.has(it.chaveInicio)) numsPorInicio.set(it.chaveInicio, new Map())
+        numsPorInicio.get(it.chaveInicio).set(it.p.num, it)
+      }
     }
-    return out
+    const out = []
+    for (const compra of comprasParceladas(ctx)) {
+      for (const it of compra.itens) {
+        const g = it
+        const p = it.p
+        if (!ctx.noEscopo(g.fatura)) continue
+        const motivos = []
+        if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) {
+          if (p.totalOriginal !== p.total || p.numOriginal > p.num) motivos.push('descricao_original')
+          else {
+            if (!numsPorInicio.get(it.chaveInicio)?.has(p.numOriginal)) motivos.push('parcela_de_origem_ausente')
+          }
+        }
+        if (p.numDescricao != null && (p.numDescricao !== p.num || p.totalDescricao !== p.total)) motivos.push('colunas')
+        if (!motivos.length) continue
+        const real = p.numOriginal != null ? `${p.numOriginal}/${p.totalOriginal}` : `${p.num}/${p.total}`
+        const exibido = p.numDescricao != null ? `${p.numDescricao}/${p.totalDescricao}` : `${p.num}/${p.total}`
+        const faturaOrigem = p.numOriginal != null ? ymParaRef(addMesesYM(g.fatura, p.numOriginal - p.num)) : null
+        const explicacao = motivos.includes('parcela_de_origem_ausente')
+          ? `, mas o favorecido diz ${real} e não existe a parcela ${real} (fatura ${faturaOrigem}) de onde ela teria sido gerada`
+          : motivos.includes('descricao_original') ? `, mas o favorecido (descrição do banco) diz ${real}`
+            : `, mas as colunas dizem ${p.num}/${p.total}`
+        out.push(divergencia(this, {
+          origem_id: g.tx.id, conta_id: g.card.id, fatura_ref: ymParaRef(g.fatura),
+          descricao: `"${g.tx.description || ''}" (${brl(g.tx.amount)}) exibida como ${exibido}${explicacao}`,
+          esperado: { parcela: real, favorecido: g.tx.payee || null, fatura_parcela_origem: faturaOrigem },
+          encontrado: {
+            motivos, parcela_exibida: exibido, colunas: `${p.num}/${p.total}`,
+            descricao: g.tx.description || '', gasto: resumoGasto(g), projecao: ehProjecao(g.tx),
+          },
+        }))
+      }
+    }
+    return out.sort((a, b) => a.origem_id.localeCompare(b.origem_id))
   },
 }
 

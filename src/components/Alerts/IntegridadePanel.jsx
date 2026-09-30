@@ -37,6 +37,10 @@ function linhasComparacao(esperado, encontrado) {
     })
 }
 
+// Gasto projetado (parcela gerada, sem data do cartão) × gasto importado.
+const ehProjecao = (p) => p.encontrado?.projecao === true || p.encontrado?.gasto?.projecao === true
+const qtdProjecoes = (p) => (p.encontrado?.gastos_sem_etapa_a || []).filter(g => g.projecao).length
+
 // Primeiro id de lançamento que a pendência aponta — a própria origem, ou o gasto citado.
 function lancamentoDa(p, txById) {
   if (txById.has(p.origem_id)) return p.origem_id
@@ -179,6 +183,17 @@ export default function IntegridadePanel({ setActivePage }) {
                 <div key={p.id} className="bg-gray-800/60 rounded-lg p-3 space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <p className="text-sm text-gray-200 flex-1 min-w-0 break-words">{p.descricao}</p>
+                    {ehProjecao(p) && (
+                      <span className="badge shrink-0 bg-sky-500/15 text-sky-400 border border-dashed border-sky-500/40"
+                        title="Parcela projetada (gerada pelo sistema, sem data do cartão) — ainda não confirmada pela importação da fatura">
+                        projeção
+                      </span>
+                    )}
+                    {qtdProjecoes(p) > 0 && (
+                      <span className="badge shrink-0 bg-sky-500/15 text-sky-400 border border-dashed border-sky-500/40">
+                        {qtdProjecoes(p)} projeção(ões)
+                      </span>
+                    )}
                     <span className={`badge shrink-0 ${p.severidade === 'auto' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
                       {p.severidade === 'auto' ? 'automática' : 'requer aprovação'}
                     </span>
