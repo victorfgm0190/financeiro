@@ -216,6 +216,11 @@ export async function varrerIntegridade(opcoes = {}) {
   avisarIntegridade()
   return r
 }
+export async function resolverPendenciaPorAjuste(id, ajuste) {
+  const r = await apiPost('/api/integridade', { action: 'resolver', id, ajuste })
+  avisarIntegridade()
+  return r?.pendencia
+}
 export async function mudarStatusPendencia(id, action) {
   const r = await apiPost('/api/integridade', { action, id })
   avisarIntegridade()

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText, Wrench } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fetchPendenciasIntegridade, varrerIntegridade, mudarStatusPendencia } from '../../lib/db'
 import { REGRAS_POR_CODIGO } from '../../lib/integridade/regras'
+import { podeAjustar } from '../../lib/integridade/ajustes'
+import AjusteIntegridadeModal from './AjusteIntegridadeModal'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import { fmt } from '../shared/utils'
@@ -58,6 +60,7 @@ export default function IntegridadePanel({ setActivePage }) {
   const [resumo, setResumo] = useState(null)
   const [erro, setErro] = useState('')
   const [editTx, setEditTx] = useState(null)
+  const [ajustar, setAjustar] = useState(null) // pendências no modal de ajuste
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
@@ -174,6 +177,12 @@ export default function IntegridadePanel({ setActivePage }) {
               <span className="badge bg-gray-700/60 text-gray-400 font-mono">{regra}</span>
               {def?.lado && <span className={`badge ${LADO_COR[def.lado] || LADO_COR.configuração}`}>{def.lado}</span>}
               <span className="text-xs text-gray-500 ml-auto">{itens.length}</span>
+              {itens.filter(podeAjustar).length > 0 && (
+                <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
+                  onClick={() => setAjustar(itens.filter(podeAjustar))}>
+                  <Wrench size={12} /> Ajustar todas automáticas ({itens.filter(podeAjustar).length})
+                </button>
+              )}
             </div>
             {itens.map(p => {
               const card = accById.get(p.conta_id)
@@ -229,6 +238,12 @@ export default function IntegridadePanel({ setActivePage }) {
                     <pre className="mt-2 text-[11px] text-gray-400 whitespace-pre-wrap break-all">{JSON.stringify({ origem_id: p.origem_id, esperado: p.esperado, encontrado: p.encontrado }, null, 2)}</pre>
                   </details>
                   <div className="flex flex-wrap gap-2 pt-1">
+                    {podeAjustar(p) && (
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
+                        onClick={() => setAjustar([p])}>
+                        <Wrench size={12} /> Ajustar
+                      </button>
+                    )}
                     {lancId && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
                         onClick={() => setEditTx(txById.get(lancId))}>
@@ -260,6 +275,10 @@ export default function IntegridadePanel({ setActivePage }) {
           </div>
         )
       })}
+
+      {ajustar && (
+        <AjusteIntegridadeModal pendencias={ajustar} onClose={() => setAjustar(null)} onConcluido={carregar} />
+      )}
 
       <Modal open={!!editTx} onClose={() => setEditTx(null)} title="Editar Lançamento">
         {editTx && <TransactionForm initial={editTx} onClose={() => setEditTx(null)} />}

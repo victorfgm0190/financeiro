@@ -26,6 +26,8 @@ import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
+import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
+import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
@@ -4926,9 +4928,6 @@ export function AppProvider({ children }) {
         d.accounts.find(a => a.type === 'checking')
       if (!contaPrincipal) return d
 
-      // Dia de início do ciclo financeiro: base das datas das transferências das parcelas 2..N.
-      const financialStartDay = d.settings?.financialMonthStartDay || 1
-
       let accounts = [...d.accounts]
       const newTxs = []
       for (const parcela of d.transactions) {
@@ -4940,59 +4939,19 @@ export function AppProvider({ children }) {
         )
         if (jaProvisionada) continue
 
-        // Data da transferência gerencial (Conta Principal → Ger.):
-        //  • Parcela 1 (ou sem padrão X/N): data original do lançamento (comportamento atual).
-        //  • Parcelas 2..N: dia financeiro do mês ANTERIOR ao mês da fatura_ref da parcela
-        //    (provisão no início do ciclo anterior ao da fatura).
-        // Número da parcela: usa a coluna installment_num quando disponível; cai para o último
-        // "X/N" da descrição (parcelas legadas com sufixo "(i/N)"), pegando a última ocorrência
-        // para não confundir com uma data "5/6" no início da descrição.
-        let instNum = Number(parcela.installmentNum) || null
-        if (!instNum) {
-          const instMatches = [...(parcela.description || '').matchAll(/(\d{1,2})\s*\/\s*\d{1,2}/g)]
-          instNum = instMatches.length ? Number(instMatches[instMatches.length - 1][1]) : 1
-        }
-        let transferDate = parcela.date
-        if (instNum >= 2 && parcela.faturaMonthYear) {
-          const [fy, fm] = parcela.faturaMonthYear.split('-')
-          transferDate = prevMonthScheduleDate(`${fm}/${fy}`, financialStartDay)
-        }
-
-        const card = d.accounts.find(a => a.id === parcela.accountId)
-        const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
-        let subconta = accounts.find(a => a.name === `Ger. ${apelido}`)
-        if (!subconta) {
-          subconta = {
-            id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            name: `Ger. ${apelido}`, type: 'checking', balance: 0,
-            bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
-            fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
-            grupoGerencial: g1.id, accountGroupId: contaPrincipal.accountGroupId || null,
-          }
-          accounts = [...accounts, subconta]
-        }
-        accounts = accounts.map(a => {
-          if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - parcela.amount) }
-          if (a.id === subconta.id) return { ...a, balance: rb((a.balance || 0) + parcela.amount) }
+        // Conta, subconta, data e descrição: núcleo compartilhado com o ajuste do Motor de
+        // Integridade (lib/provisaoGerencial). Aqui segue o id tx_ger_ + ajuste incremental de saldo.
+        const prov = montarProvisaoGerencial({ ...d, accounts }, parcela, {
+          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          origin: ORIGIN.GERENCIAL_AUTO,
+        })
+        if (!prov) continue
+        accounts = prov.accounts.map(a => {
+          if (a.id === prov.tx.accountId) return { ...a, balance: rb((a.balance || 0) - parcela.amount) }
+          if (a.id === prov.tx.toAccountId) return { ...a, balance: rb((a.balance || 0) + parcela.amount) }
           return a
         })
-        newTxs.push({
-          id: 'tx_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          type: 'transfer',
-          accountId: contaPrincipal.id,
-          toAccountId: subconta.id,
-          amount: parcela.amount,
-          date: transferDate,
-          description: `Reserva Gerencial - ${parcela.description}`,
-          grupoGerencial: g1.id,
-          origin: ORIGIN.GERENCIAL_AUTO,
-          parentTxId: parcela.id,
-          // Rastreabilidade: herda cartão/fatura/despesa-origem da parcela que gerou a provisão.
-          cardId: parcela.accountId,
-          faturaRef: resolveFaturaRef(parcela),
-          sourceExpenseId: parcela.id,
-          createdAt: new Date().toISOString(),
-        })
+        newTxs.push(prov.tx)
       }
       if (newTxs.length === 0) return d
       return { ...d, accounts, transactions: [...d.transactions, ...newTxs] }
@@ -5002,6 +4961,31 @@ export function AppProvider({ children }) {
     // sem reconciliação manual, e evita que o sync sobrescreva com saldo incremental defasado.
     for (const cardId of affectedCardIds) reconcileGerencialRef.current?.(cardId)
   }, [update])
+
+  // ── Motor de Integridade: ajuste de pendências 'auto' ─────────────────────────
+  // Aplica os ajustes (lib/integridade/ajustes) num único update, replanejando sobre o estado do
+  // updater (idempotente: id determinístico tx_gerA_<gasto>). Saldo não é mexido no ajuste — as contas
+  // afetadas passam pelo recalcularSaldo depois. Resolve com { aplicados, ignorados, verificacao },
+  // onde verificacao é a regra de cada pendência rodada de novo sobre o estado ajustado.
+  const aplicarAjustesIntegridade = useCallback((pendencias) => {
+    return new Promise(resolve => {
+      let resolved = false
+      update(d => {
+        const r = aplicarAjustes(d, pendencias)
+        if (!resolved) {
+          resolved = true
+          resolve({
+            aplicados: r.aplicados, ignorados: r.ignorados, contasAfetadas: r.contasAfetadas,
+            verificacao: verificarPendencias(r.nd, pendencias),
+          })
+        }
+        return r.aplicados.length ? r.nd : d
+      })
+    }).then(res => {
+      for (const id of res.contasAfetadas) recalcularSaldo(id)
+      return res
+    })
+  }, [update, recalcularSaldo])
 
   // ── Corrigir dados gerenciais: elimina provisões erradas de parcelados e reconstrói agendamentos ──
   const corrigirDadosGerencial = useCallback(() => {
@@ -5284,7 +5268,7 @@ export function AppProvider({ children }) {
       propagarValorParcelas,
       getProvisoesPendentes,
       getFaturasProvisaoGerencial,
-      executarProvisoesGerenciais,
+      executarProvisoesGerenciais, aplicarAjustesIntegridade,
       corrigirDadosGerencial,
       addEnvelope, updateEnvelope, deleteEnvelope,
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,

@@ -8,6 +8,7 @@ import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
 //   POST action=varrer          → roda as regras e grava as divergências { desde?: 'YYYY-MM' | 'todas' }
 //   POST action=ignorar|reabrir → { id } muda o status (resolvida_por = 'usuario')
+//   POST action=resolver        → { id, ajuste } fecha após ajuste verificado no app (resolvida_por = 'motor')
 // Este endpoint SÓ detecta: não cria, altera nem apaga nada em lancamentos/agendamentos/contas.
 
 let schemaPronto = false
@@ -156,6 +157,22 @@ export default async function handler(req, res) {
                 SET status = 'pendente', resolvida_em = NULL, resolvida_por = 'usuario'
               WHERE id = $1 RETURNING *`, [body.id])
         if (!row) return res.status(404).json({ error: 'Pendência não encontrada' })
+        return res.json({ ok: true, pendencia: row })
+      }
+      // Ajuste feito pelo app (aba Integridade): a regra do item foi rodada de novo sobre o estado
+      // ajustado e a divergência sumiu. Grava o log do ajuste em encontrado.ajuste. Só fecha o que
+      // ainda está pendente — nunca reabre nem sobrescreve uma ignorada.
+      if (action === 'resolver') {
+        if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
+        const ajuste = { ...(body.ajuste || {}), em: new Date().toISOString(), por: 'motor' }
+        const [row] = await query(
+          `UPDATE pendencias_integridade
+              SET status = 'resolvida', resolvida_em = now(), resolvida_por = 'motor',
+                  encontrado = COALESCE(encontrado, '{}'::jsonb) || jsonb_build_object('ajuste', $2::jsonb)
+            WHERE id = $1 AND status = 'pendente' RETURNING *`,
+          [body.id, JSON.stringify(ajuste)],
+        )
+        if (!row) return res.status(409).json({ error: 'Pendência não está mais pendente' })
         return res.json({ ok: true, pendencia: row })
       }
       return res.status(400).json({ error: `action inválida: ${action}` })
