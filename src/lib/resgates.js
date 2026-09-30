@@ -1,7 +1,7 @@
 // Detecção de "resgate/devolução já executado". Puras e compartilhadas — vivem aqui (e não no
 // AppContext) para serem testáveis sem carregar o contexto inteiro.
 
-import { fontePrevistoId } from './gerencialPrevistos'
+import { fontePrevistoId } from './gerencialPrevistos.js'
 
 // Pago = agendamento registrado/pulado/confirmado OU lançamento executado (transfer com
 // source_schedule_id apontando p/ o slot, caso o agendamento tenha sido removido).

@@ -11,7 +11,7 @@
 // lançamento com scheduleId + date, e isResgatePagoParaGasto reconstrói esta mesma chave para
 // descobrir que aquele gasto JÁ foi coberto por um resgate executado.
 
-import { occEfetiva } from './fluxoCaixa'
+import { occEfetiva } from './fluxoCaixa.js'
 
 export const PREVISTO_PREFIX = 'sch:'
 

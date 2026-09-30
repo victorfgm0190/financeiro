@@ -8,8 +8,8 @@
 //   PROJETADO     = saldoFinal (já com os envelopes restantes subtraídos)
 //   FINAL CICLO   = saldoFinal + envelopesTotal (mesma projeção SEM subtrair os envelopes)
 
-import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins'
-import { dueDateInMonth } from './fatura'
+import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
+import { dueDateInMonth } from './fatura.js'
 
 const round2 = n => Math.round(n * 100) / 100
 

@@ -804,3 +804,31 @@ CREATE TABLE IF NOT EXISTS fluxo_provisorios (
 );
 CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_date ON fluxo_provisorios (date);
 CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_account ON fluxo_provisorios (account_id);
+
+-- ============================================================
+-- Motor de Integridade — pendências de dados
+-- Cada linha é uma divergência entre o banco e as regras declaradas em
+-- src/lib/integridade/regras.js (falta ou sobra), guardada até ser resolvida.
+-- (regra, origem_id) identifica a divergência: a varredura faz upsert, marca
+-- 'resolvida' (resolvida_por='varredura') o que sumiu e nunca reabre 'ignorada'.
+-- A DDL viva é a de api/integridade.js — esta cópia existe para documentação.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS pendencias_integridade (
+  id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  regra         TEXT NOT NULL,
+  severidade    TEXT NOT NULL CHECK (severidade IN ('auto','aprovar')),
+  origem_id     TEXT NOT NULL,
+  conta_id      TEXT,
+  fatura_ref    TEXT,
+  descricao     TEXT,
+  esperado      JSONB,
+  encontrado    JSONB,
+  status        TEXT NOT NULL DEFAULT 'pendente'
+                CHECK (status IN ('pendente','resolvida','ignorada')),
+  detectada_em  TIMESTAMPTZ DEFAULT now(),
+  verificada_em TIMESTAMPTZ DEFAULT now(),
+  resolvida_em  TIMESTAMPTZ,
+  resolvida_por TEXT,
+  UNIQUE (regra, origem_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pendencias_integridade_status ON pendencias_integridade (status);

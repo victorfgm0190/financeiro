@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { dueDateInMonth } from './lib/fatura'
 import { AppProvider, useApp } from './context/AppContext'
@@ -30,6 +30,7 @@ import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
 import { getToken } from './lib/api'
+import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
 
 function AppContent() {
   const [activePage, setActivePage] = useState('dashboard')
@@ -108,6 +109,19 @@ function AppContent() {
     return creditCount + schedCount
   }, [accounts, schedules, getNextOccurrences])
 
+  // Pendências abertas do Motor de Integridade — somam no mesmo badge de Alertas. Recarrega quando
+  // a aba Integridade varre/ignora/reabre (evento disparado pelos helpers de db.js).
+  const [integridadePendentes, setIntegridadePendentes] = useState(0)
+  useEffect(() => {
+    let vivo = true
+    const atualizar = () => fetchResumoIntegridade()
+      .then(r => { if (vivo) setIntegridadePendentes(Number(r?.pendentes) || 0) })
+      .catch(() => {})
+    atualizar()
+    window.addEventListener(INTEGRIDADE_EVENTO, atualizar)
+    return () => { vivo = false; window.removeEventListener(INTEGRIDADE_EVENTO, atualizar) }
+  }, [])
+
   const financialPeriod = getFinancialPeriod()
 
   const panels = {
@@ -123,13 +137,13 @@ function AppContent() {
     budget:     <BudgetPanel />,
     patrimonio: <PatrimonioPanel />,
     reports: <ReportsPanel />,
-    alerts: <AlertsPanel />,
+    alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-950">
-      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">

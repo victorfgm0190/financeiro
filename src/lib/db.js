@@ -196,6 +196,32 @@ export async function efetivarFluxoProvisorio(id) {
   return { id, schedule: r?.schedule ? rowToSchedule(r.schedule) : null }
 }
 
+// ─── Motor de Integridade (pendências) ────────────────────────────────────────
+// Escrita direta por operação, fora do diff-sync (a tabela não faz parte de `data`).
+// Objetos em snake_case, como o endpoint devolve.
+export const INTEGRIDADE_EVENTO = 'finup:integridade-atualizada'
+const avisarIntegridade = () => {
+  try { window.dispatchEvent(new Event(INTEGRIDADE_EVENTO)) } catch { /* ignore */ }
+}
+export async function fetchPendenciasIntegridade(filtros = {}) {
+  const qs = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v)).toString()
+  const r = await apiGet(`/api/integridade${qs ? `?${qs}` : ''}`)
+  return r?.pendencias || []
+}
+export async function fetchResumoIntegridade() {
+  return apiGet('/api/integridade?resumo=1')
+}
+export async function varrerIntegridade(opcoes = {}) {
+  const r = await apiPost('/api/integridade', { action: 'varrer', ...opcoes })
+  avisarIntegridade()
+  return r
+}
+export async function mudarStatusPendencia(id, action) {
+  const r = await apiPost('/api/integridade', { action, id })
+  avisarIntegridade()
+  return r?.pendencia
+}
+
 // Normaliza um valor de coluna DATE (date_cartao) para string 'YYYY-MM-DD'. O driver
 // pg pode devolver tanto a string quanto um objeto Date — o resto do app trabalha com
 // strings (date é TEXT), então convertemos aqui para manter a consistência.

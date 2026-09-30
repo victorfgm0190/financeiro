@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap } from 'lucide-react'
+import { Bell, CreditCard, Calendar, AlertTriangle, CheckCircle, Zap, ShieldCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import { dueDateInMonth } from '../../lib/fatura'
+import IntegridadePanel from './IntegridadePanel'
 
 function getDueAlerts(accounts) {
   const today = new Date()
@@ -55,7 +56,7 @@ function getScheduleAlerts(schedules, getNextOccurrences) {
   return alerts
 }
 
-export default function AlertsPanel() {
+function VencimentosPanel() {
   const { profileAccounts: accounts, profileSchedules: schedules, getNextOccurrences } = useApp()
   const [notificationsEnabled, setNotificationsEnabled] = useState(Notification?.permission === 'granted')
   const [dismissed, setDismissed] = useState([])
@@ -229,6 +230,28 @@ export default function AlertsPanel() {
           acima X dias antes da próxima ocorrência.
         </p>
       </div>
+    </div>
+  )
+}
+
+export default function AlertsPanel({ setActivePage, integridadePendentes = 0 }) {
+  const [aba, setAba] = useState('vencimentos')
+  const abas = [
+    { id: 'vencimentos', label: 'Vencimentos', icon: Bell, qtd: 0 },
+    { id: 'integridade', label: 'Integridade', icon: ShieldCheck, qtd: integridadePendentes },
+  ]
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {abas.map(({ id, label, icon: Icon, qtd }) => (
+          <button key={id} onClick={() => setAba(id)}
+            className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${aba === id ? 'bg-[#0F6E56] text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+            <Icon size={14} /> {label}
+            {qtd > 0 && <span className="badge bg-red-600 text-white">{qtd}</span>}
+          </button>
+        ))}
+      </div>
+      {aba === 'vencimentos' ? <VencimentosPanel /> : <IntegridadePanel setActivePage={setActivePage} />}
     </div>
   )
 }

@@ -335,8 +335,18 @@ export default function CreditCardPanel() {
   const bankAccounts = useMemo(() => accountsForView(accounts.filter(a => a.type !== 'credit'), isMobile), [accounts, isMobile])
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [selectedCardId, setSelectedCardId] = useState(() => creditCards[0]?.id || '')
+  // "Ir para a fatura" da aba Integridade deixa { cardId, faturaMesAno } em sessionStorage; é lido
+  // (e apagado) uma vez, na montagem.
+  const [faturaInicial] = useState(() => {
+    try {
+      const v = JSON.parse(sessionStorage.getItem('finup:abrirFatura') || 'null')
+      sessionStorage.removeItem('finup:abrirFatura')
+      return v && creditCards.some(c => c.id === v.cardId) ? v : null
+    } catch { return null }
+  })
+  const [selectedCardId, setSelectedCardId] = useState(() => faturaInicial?.cardId || creditCards[0]?.id || '')
   const [billKey, setBillKey] = useState(() => {
+    if (faturaInicial?.faturaMesAno) return faturaInicial.faturaMesAno
     const card = creditCards[0]
     return card ? getBillKey(today(), card) : ''
   })
