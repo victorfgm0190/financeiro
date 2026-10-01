@@ -461,8 +461,12 @@ const PARCELA_FATURA_INCOERENTE = {
 
 // Descrição original (payee) com OUTRO número de parcela. Um número original MENOR que o exibido é o
 // caso normal de parcela gerada (herdou o payee da linha que a gerou): só é incoerente se essa parcela
-// de origem não existir na mesma compra — foi o que aconteceu com o Jim.com (3/3 com payee 1/3 e
-// nenhum 1/3 na série). Original maior que o exibido, ou total diferente, é sempre incoerente.
+// de origem não existir na mesma compra E a série tiver buraco logo antes da parcela avaliada — foi
+// o que aconteceu com o Jim.com (3/3 com payee 1/3, sem 1/3 nem 2/3 na série). Se a parcela anterior
+// imediata (N-1) existe na mesma compra (mesma base, mesmo valor, fatura imediatamente anterior — a
+// identidade chaveInicio garante os três), a série é coerente e a origem sumida é só histórico
+// (limpeza de duplicatas, descrição diferente): não é pendência. Original maior que o exibido, ou
+// total diferente, é sempre incoerente.
 const PARCELA_NUMERO_INCOERENTE = {
   codigo: 'PARCELA_NUMERO_INCOERENTE', lado: 'divergência', severidade: 'aprovar',
   descricao: 'Número de parcela exibido diferente do número na descrição original do banco (favorecido) ou das colunas',
@@ -485,7 +489,8 @@ const PARCELA_NUMERO_INCOERENTE = {
         if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) {
           if (p.totalOriginal !== p.total || p.numOriginal > p.num) motivos.push('descricao_original')
           else {
-            if (!numsPorInicio.get(it.chaveInicio)?.has(p.numOriginal)) motivos.push('parcela_de_origem_ausente')
+            const serie = numsPorInicio.get(it.chaveInicio)
+            if (!serie?.has(p.numOriginal) && !serie?.has(p.num - 1)) motivos.push('parcela_de_origem_ausente')
           }
         }
         if (p.numDescricao != null && (p.numDescricao !== p.num || p.totalDescricao !== p.total)) motivos.push('colunas')
