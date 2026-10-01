@@ -125,16 +125,18 @@ const CTX = Symbol('ctxIntegridade')
 //
 // Faturas fechadas (botão "Fechar Fatura" — dados.faturasFechadas, ou settings.faturasFechadas do
 // estado do app; critério em lib/faturasFechadas) NÃO são avaliadas: nenhuma regra gera pendência
-// para gasto, etapa A, resgate ou agendamento delas. Exceções:
-//   • GER_SALDO_SUBCONTA continua somando tudo (o saldo carrega o histórico); a pendência vai para
-//     a fatura ABERTA mais antiga do cartão.
-//   • Regras de série/parcela usam as parcelas de faturas fechadas só como REFERÊNCIA para avaliar
-//     as abertas — nunca geram pendência sobre a parcela fechada.
+// para gasto, etapa A, resgate ou agendamento delas. Para GER_SALDO_SUBCONTA fatura fechada conta
+// como liquidada (fora do esperado). Regras de série/parcela usam as parcelas de faturas fechadas só
+// como REFERÊNCIA para avaliar as abertas — nunca geram pendência sobre a parcela fechada.
+//
+// dados.marcosSaldo: marcos de saldo aceitos por subconta Ger. (tabela marcos_saldo_gerencial) —
+// ver GER_SALDO_SUBCONTA.
 export function montarContexto(dados, opcoes = {}) {
   if (dados?.[CTX]) return dados
   const hoje = opcoes.hoje || hojeSP()
   const desde = opcoes.desde === undefined ? addMesesYM(hoje.slice(0, 7), -3) : opcoes.desde
   const faturasFechadas = dados?.faturasFechadas || dados?.settings?.faturasFechadas || {}
+  const marcosSaldo = dados?.marcosSaldo || []
   const transactions = dados?.transactions || []
   const accounts = dados?.accounts || []
   const schedules = dados?.schedules || []
@@ -222,7 +224,7 @@ export function montarContexto(dados, opcoes = {}) {
     [CTX]: true, hoje, desde, transactions, accounts, schedules, gerencialGroups,
     grupos, contas, cartoes, txById, subcontaIds, subcontaDoCartao, contaPrincipal, classeDoTx,
     gastos, gastoById, etapas, etapasPorGasto, gastosPorFatura, noEscopo, faturaAberta,
-    faturasFechadas, fechada, avalia, faturaAbertaMaisAntiga,
+    faturasFechadas, fechada, avalia, faturaAbertaMaisAntiga, marcosSaldo,
   }
   return ctx
 }
@@ -672,55 +674,82 @@ const GER_FECHAMENTO_FATURA = {
   },
 }
 
+// Último marco de saldo da subconta (maior data; empate → criado por último).
+export function ultimoMarco(marcos, contaId) {
+  let m = null
+  for (const x of marcos || []) {
+    if (x.contaId !== contaId) continue
+    if (!m || x.data > m.data || (x.data === m.data && String(x.criadoEm || '') > String(m.criadoEm || ''))) m = x
+  }
+  return m
+}
+
+// Saldo da subconta derivado das transferências (mesmo cálculo do passo B do Reconciliar Gerenciais).
+function saldoDaSubconta(ctx, sub) {
+  let saldo = 0
+  for (const t of ctx.transactions) {
+    if (t.type !== 'transfer') continue
+    if (t.toAccountId === sub.id) saldo += Number(t.amount) || 0
+    if (t.accountId === sub.id) saldo -= Number(t.amount) || 0
+  }
+  return rb(saldo)
+}
+
+// Esperado das faturas: Σ gastos G provisionados (têm etapa A ou a fatura já abriu) das faturas
+// AINDA NÃO LIQUIDADAS. Liquidada = fechada (botão "Fechar Fatura") OU com devolução gerencial já
+// executada — nesses dois casos a fatura inteira sai do esperado.
+export function esperadoDasFaturas(ctx, card) {
+  const porFatura = new Map()
+  for (const g of ctx.gastos) {
+    if (g.card.id !== card.id || g.classe !== 'G') continue
+    const provisionado = (ctx.etapasPorGasto.get(g.tx.id) || []).length > 0 || ctx.faturaAberta(g.fatura, card)
+    if (!provisionado) continue
+    if (!porFatura.has(g.fatura)) porFatura.set(g.fatura, [])
+    porFatura.get(g.fatura).push(g)
+  }
+  let total = 0
+  const detalhe = []
+  for (const [ym, gs] of [...porFatura].sort()) {
+    if (ctx.fechada(card.id, ym)) continue
+    if (devolucoesDaFatura(ctx, card.id, ym).some(d => d.executada)) continue
+    const v = rb(gs.reduce((s, g) => s + (Number(g.tx.amount) || 0), 0))
+    if (!v) continue
+    detalhe.push({ fatura: ymParaRef(ym), valor: v, gastos: gs.length })
+    total += v
+  }
+  return { total: rb(total), detalhe }
+}
+
+// Saldo da subconta Ger. × esperado.
+//   Sem marco: esperado = Σ gastos G provisionados das faturas abertas e não devolvidas.
+//   Com marco (marcos_saldo_gerencial — "Aceitar saldo atual como correto"): o marco guarda o saldo
+//   aceito e a diferença aceita (saldo − esperado das faturas naquele momento). Esperado = saldo do
+//   marco + o que as faturas abertas movimentaram depois dele = esperado das faturas de agora +
+//   diferença aceita. A diferença histórica zera; qualquer diferença NOVA volta a ser pendência.
+// Nunca corrige: diferença de saldo não gera transferência automática (só o marco, que é registro).
 const GER_SALDO_SUBCONTA = {
   codigo: 'GER_SALDO_SUBCONTA', lado: 'fechamento', severidade: 'aprovar',
-  descricao: 'Saldo da subconta Ger.<apelido> = Σ gastos G provisionados das faturas ainda não devolvidas',
+  descricao: 'Saldo da subconta Ger.<apelido> = Σ gastos G provisionados das faturas abertas ainda não devolvidas (a partir do último marco de saldo)',
   verificar(dados) {
     const ctx = montarContexto(dados)
     const out = []
     for (const card of ctx.cartoes.values()) {
       const sub = ctx.subcontaDoCartao(card)
       if (!sub) continue
-      // Saldo derivado das transferências (mesmo cálculo do passo B do Reconciliar Gerenciais).
-      let saldo = 0
-      for (const t of ctx.transactions) {
-        if (t.type !== 'transfer') continue
-        if (t.toAccountId === sub.id) saldo += Number(t.amount) || 0
-        if (t.accountId === sub.id) saldo -= Number(t.amount) || 0
-      }
-      saldo = rb(saldo)
-      // Esperado por fatura: gastos G que deveriam estar provisionados (têm etapa A ou a fatura já
-      // abriu), menos o que a devolução EXECUTADA já levou de volta (os ids que ela cobre).
-      const porFatura = new Map()
-      for (const g of ctx.gastos) {
-        if (g.card.id !== card.id || g.classe !== 'G') continue
-        const provisionado = (ctx.etapasPorGasto.get(g.tx.id) || []).length > 0 || ctx.faturaAberta(g.fatura, card)
-        if (!provisionado) continue
-        if (!porFatura.has(g.fatura)) porFatura.set(g.fatura, [])
-        porFatura.get(g.fatura).push(g)
-      }
-      let esperado = 0
-      const detalhe = []
-      for (const [ym, gs] of [...porFatura].sort()) {
-        const execs = devolucoesDaFatura(ctx, card.id, ym).filter(d => d.executada)
-        let pendentes = gs
-        if (execs.length) {
-          const cobertos = new Set(execs.flatMap(d => d.s.sourceExpenseIds || []))
-          // Devolução executada legada, sem ids: considera a fatura inteira devolvida.
-          pendentes = cobertos.size ? gs.filter(g => !cobertos.has(g.tx.id)) : []
-        }
-        const v = rb(pendentes.reduce((s, g) => s + (Number(g.tx.amount) || 0), 0))
-        if (v) detalhe.push({ fatura: ymParaRef(ym), valor: v, devolucao_executada: execs.length > 0 })
-        esperado += v
-      }
-      esperado = rb(esperado)
+      const saldo = saldoDaSubconta(ctx, sub)
+      const faturas = esperadoDasFaturas(ctx, card)
+      const marco = ultimoMarco(ctx.marcosSaldo, sub.id)
+      const aceita = marco ? rb(marco.diferencaAceita) : 0
+      const esperado = rb(faturas.total + aceita)
       if (!difere(saldo, esperado)) continue
-      // O saldo inclui faturas fechadas; a pendência fica no presente (fatura aberta mais antiga).
       out.push(divergencia(this, {
         origem_id: sub.id, conta_id: card.id, fatura_ref: ymParaRef(ctx.faturaAbertaMaisAntiga(card)),
         descricao: `Subconta ${sub.name}: saldo ${brl(saldo)} × esperado ${brl(esperado)} (diferença ${brl(saldo - esperado)})`,
-        esperado: { saldo: esperado, por_fatura: detalhe },
-        encontrado: { saldo, saldo_gravado: rb(sub.balance), diferenca: rb(saldo - esperado) },
+        esperado: {
+          saldo: esperado, faturas_abertas: faturas.total, por_fatura: faturas.detalhe,
+          marco: marco ? { id: marco.id || null, data: marco.data, saldo: rb(marco.saldo), diferenca_aceita: aceita } : null,
+        },
+        encontrado: { saldo, saldo_gravado: rb(sub.balance), diferenca: rb(saldo - esperado), subconta_id: sub.id, subconta: sub.name },
       }))
     }
     return out

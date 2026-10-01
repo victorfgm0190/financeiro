@@ -90,11 +90,24 @@ export const grupoDeLinha = (r) => ({
   defaultAccountId: r.default_account_id || null,
 })
 
-export function dadosDeLinhas({ lancamentos = [], contas = [], agendamentos = [], grupos = [] }) {
+// marcos_saldo_gerencial → marco de saldo aceito de uma subconta Ger.
+export const marcoDeLinha = (r) => ({
+  id: r.id,
+  contaId: r.conta_id,
+  data: dataStr(r.data),
+  saldo: Number(r.saldo) || 0,
+  diferencaAceita: r.diferenca_aceita == null ? null : Number(r.diferenca_aceita),
+  motivo: r.motivo || '',
+  criadoPor: r.criado_por || null,
+  criadoEm: r.criado_em instanceof Date ? r.criado_em.toISOString() : (r.criado_em || null),
+})
+
+export function dadosDeLinhas({ lancamentos = [], contas = [], agendamentos = [], grupos = [], marcos = [] }) {
   return {
     transactions: lancamentos.map(txDeLinha),
     accounts: contas.map(contaDeLinha),
     schedules: agendamentos.map(agendamentoDeLinha),
     gerencialGroups: grupos.map(grupoDeLinha),
+    marcosSaldo: marcos.map(marcoDeLinha),
   }
 }

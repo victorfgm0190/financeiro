@@ -32,7 +32,9 @@ async function apiPost(path, body) {
   })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
-    const err = new Error(`POST ${path} → ${res.status}`)
+    let detalhe = ''
+    try { detalhe = (await res.json())?.error || '' } catch { /* corpo não-JSON */ }
+    const err = new Error(`POST ${path} → ${res.status}${detalhe ? `: ${detalhe}` : ''}`)
     err.status = res.status
     throw err
   }
@@ -220,6 +222,12 @@ export async function resolverPendenciaPorAjuste(id, ajuste) {
   const r = await apiPost('/api/integridade', { action: 'resolver', id, ajuste })
   avisarIntegridade()
   return r?.pendencia
+}
+// GER_SALDO_SUBCONTA: grava o marco de saldo e resolve a pendência. Não cria lançamento nem mexe em saldo.
+export async function aceitarSaldoPendencia(id, motivo) {
+  const r = await apiPost('/api/integridade', { action: 'aceitar_saldo', id, motivo })
+  avisarIntegridade()
+  return r
 }
 export async function mudarStatusPendencia(id, action) {
   const r = await apiPost('/api/integridade', { action, id })

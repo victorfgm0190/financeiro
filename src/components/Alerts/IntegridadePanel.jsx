@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText, Wrench, Lock } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText, Wrench, Lock, BadgeCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fetchPendenciasIntegridade, varrerIntegridade, mudarStatusPendencia } from '../../lib/db'
 import { REGRAS_POR_CODIGO } from '../../lib/integridade/regras'
 import { podeAjustar } from '../../lib/integridade/ajustes'
 import AjusteIntegridadeModal from './AjusteIntegridadeModal'
+import AceitarSaldoModal from './AceitarSaldoModal'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 import { fmt } from '../shared/utils'
@@ -61,6 +62,7 @@ export default function IntegridadePanel({ setActivePage }) {
   const [erro, setErro] = useState('')
   const [editTx, setEditTx] = useState(null)
   const [ajustar, setAjustar] = useState(null) // pendências no modal de ajuste
+  const [aceitarSaldo, setAceitarSaldo] = useState(null) // pendência GER_SALDO_SUBCONTA no modal de marco
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
@@ -251,6 +253,13 @@ export default function IntegridadePanel({ setActivePage }) {
                         <Wrench size={12} /> Ajustar
                       </button>
                     )}
+                    {p.regra === 'GER_SALDO_SUBCONTA' && p.status === 'pendente' && (
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                        title="Grava um marco de saldo da subconta. Não cria lançamento e não altera saldo."
+                        onClick={() => setAceitarSaldo(p)}>
+                        <BadgeCheck size={12} /> Aceitar saldo atual como correto
+                      </button>
+                    )}
                     {lancId && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
                         onClick={() => setEditTx(txById.get(lancId))}>
@@ -285,6 +294,10 @@ export default function IntegridadePanel({ setActivePage }) {
 
       {ajustar && (
         <AjusteIntegridadeModal pendencias={ajustar} onClose={() => setAjustar(null)} onConcluido={carregar} />
+      )}
+
+      {aceitarSaldo && (
+        <AceitarSaldoModal pendencia={aceitarSaldo} onClose={() => setAceitarSaldo(null)} onConcluido={carregar} />
       )}
 
       <Modal open={!!editTx} onClose={() => setEditTx(null)} title="Editar Lançamento">

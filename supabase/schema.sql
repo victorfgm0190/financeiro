@@ -832,3 +832,19 @@ CREATE TABLE IF NOT EXISTS pendencias_integridade (
   UNIQUE (regra, origem_id)
 );
 CREATE INDEX IF NOT EXISTS idx_pendencias_integridade_status ON pendencias_integridade (status);
+
+-- Marco de saldo por subconta gerencial ("Aceitar saldo atual como correto" na aba Integridade).
+-- GER_SALDO_SUBCONTA passa a esperar: saldo do último marco + o que as faturas abertas movimentaram
+-- depois dele (= esperado das faturas + diferenca_aceita). Só registro: nenhum lançamento é criado.
+-- Criada à mão no Neon (a API não cria esta tabela).
+CREATE TABLE IF NOT EXISTS marcos_saldo_gerencial (
+  id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  conta_id         TEXT NOT NULL,
+  data             TEXT NOT NULL,
+  saldo            NUMERIC NOT NULL,
+  diferenca_aceita NUMERIC,
+  motivo           TEXT NOT NULL,
+  criado_por       TEXT,
+  criado_em        TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_marcos_saldo_gerencial_conta ON marcos_saldo_gerencial (conta_id, data);

@@ -84,18 +84,6 @@ describe('Faturas fechadas não são avaliadas', () => {
     expect(t3.find(p => p.id === alvo.id)).toMatchObject({ status: 'ignorada', resolvida_por: 'usuario' })
   })
 
-  it('GER_SALDO_SUBCONTA continua detectando diferença vinda de fatura fechada, na fatura aberta mais antiga', () => {
-    const so10 = porRegra(executarRegras(comFechadas(fixtureBug(), fechadas('2026-10')), OPC))
-    expect(so10.GER_SALDO_SUBCONTA).toHaveLength(1)
-    expect(so10.GER_SALDO_SUBCONTA[0].encontrado.diferenca).toBe(-358.62)
-    expect(so10.GER_SALDO_SUBCONTA[0].fatura_ref).toBe('07/2026')
-
-    const todas = porRegra(executarRegras(comFechadas(fixtureBug(), fechadas('2026-07', '2026-08', '2026-09', '2026-10')), OPC))
-    expect(Object.keys(todas)).toEqual(['GER_SALDO_SUBCONTA'])
-    expect(todas.GER_SALDO_SUBCONTA[0].encontrado.diferenca).toBe(-358.62)
-    expect(todas.GER_SALDO_SUBCONTA[0].fatura_ref).toBe('11/2026')
-  })
-
   it('GER_SALDO_SUBCONTA não é arquivada quando a fatura que ela apontava fecha (muda para a próxima aberta)', () => {
     const dados = fixtureBug()
     const t1 = varrer([], dados, fechadas('2026-10')).tabela

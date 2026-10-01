@@ -11,6 +11,8 @@
 //   pendente de fatura fechada    → ignorada, resolvida_por = 'fatura_fechada' (histórico mantido)
 //   ignorada por 'fatura_fechada' cuja fatura foi reaberta → volta a ser avaliada: reabre se a
 //                                   divergência existe, resolve (varredura) se não existe mais
+// Regras sem janela (GER_SALDO_SUBCONTA) não pertencem a uma fatura — a fatura_ref é só onde a
+// pendência aparece: nunca são arquivadas por fechamento; se a regra não as gera mais, resolvem.
 //
 // Só é resolvida a pendência que a varredura de fato reavaliou: regra executada E fatura dentro do
 // escopo (`desde`). Uma varredura restrita não "resolve" o que nem olhou.
@@ -59,7 +61,7 @@ export function planejarVarredura(existentes, divergencias, escopo = {}, opcoes 
   const arquivar = []
   for (const p of existentes || []) {
     if (atuais.has(chave(p))) continue
-    const fechada = deFaturaFechada(p, faturasFechadas)
+    const fechada = !REGRAS_SEM_JANELA.has(p.regra) && deFaturaFechada(p, faturasFechadas)
     if (p.status === 'pendente' && fechada) { arquivar.push(p.id); continue }
     if (p.status !== 'pendente' && !(arquivadaPorFechamento(p) && !fechada)) continue
     if (!dentroDoEscopo(p, escopo)) continue
