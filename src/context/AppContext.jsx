@@ -28,6 +28,7 @@ import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
+import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
@@ -4052,10 +4053,10 @@ export function AppProvider({ children }) {
   // ── Fatura fechada/aberta (cardId + faturaMonthYear 'YYYY-MM') ─────────────────
   // Persistido em settings.faturasFechadas = { '<cardId>_<YYYY-MM>': true }. Fatura fechada
   // bloqueia novos lançamentos e importação; lançamentos existentes seguem editáveis.
-  const faturaFechadaKey = (cardId, faturaMonthYear) => `${cardId}_${faturaMonthYear}`
+  // Mesmo critério do Motor de Integridade (lib/faturasFechadas).
+  const faturaFechadaKey = chaveFaturaFechada
   const isFaturaFechada = useCallback(
-    (cardId, faturaMonthYear) =>
-      !!(cardId && faturaMonthYear && data.settings?.faturasFechadas?.[faturaFechadaKey(cardId, faturaMonthYear)] === true),
+    (cardId, faturaMonthYear) => faturaEstaFechada(data.settings?.faturasFechadas, cardId, faturaMonthYear),
     [data.settings]
   )
   // Fecha a fatura e recalcula seus agendamentos (mesmo efeito do "Atualizar").

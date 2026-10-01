@@ -22,6 +22,7 @@ import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from
 import { computeOccurrences } from '../occurrences.js'
 import { computeFaturaRef } from '../fatura.js'
 import { faturaToDate } from '../parcelas.js'
+import { faturaEstaFechada } from '../faturasFechadas.js'
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -119,11 +120,21 @@ const CTX = Symbol('ctxIntegridade')
 
 // opcoes.hoje: 'YYYY-MM-DD' (default: hoje em São Paulo).
 // opcoes.desde: 'YYYY-MM' — faturas anteriores ficam fora (default: 3 meses antes do mês de hoje;
-// null = todas). Regras sem fatura (configuração, saldo da subconta) sempre rodam.
+// null = todas). É só limite de segurança de desempenho: quem tira o histórico da avaliação é o
+// filtro de faturas FECHADAS. Regras sem fatura (configuração, saldo da subconta) sempre rodam.
+//
+// Faturas fechadas (botão "Fechar Fatura" — dados.faturasFechadas, ou settings.faturasFechadas do
+// estado do app; critério em lib/faturasFechadas) NÃO são avaliadas: nenhuma regra gera pendência
+// para gasto, etapa A, resgate ou agendamento delas. Exceções:
+//   • GER_SALDO_SUBCONTA continua somando tudo (o saldo carrega o histórico); a pendência vai para
+//     a fatura ABERTA mais antiga do cartão.
+//   • Regras de série/parcela usam as parcelas de faturas fechadas só como REFERÊNCIA para avaliar
+//     as abertas — nunca geram pendência sobre a parcela fechada.
 export function montarContexto(dados, opcoes = {}) {
   if (dados?.[CTX]) return dados
   const hoje = opcoes.hoje || hojeSP()
   const desde = opcoes.desde === undefined ? addMesesYM(hoje.slice(0, 7), -3) : opcoes.desde
+  const faturasFechadas = dados?.faturasFechadas || dados?.settings?.faturasFechadas || {}
   const transactions = dados?.transactions || []
   const accounts = dados?.accounts || []
   const schedules = dados?.schedules || []
@@ -182,6 +193,9 @@ export function montarContexto(dados, opcoes = {}) {
 
   const noEscopo = (ym) => !desde || (!!ym && ym >= desde)
   const faturaAberta = (ym, card) => aberturaFatura(ym, card) <= hoje
+  const fechada = (cardId, ym) => faturaEstaFechada(faturasFechadas, cardId, ym)
+  // Avaliável = dentro da janela e não fechada.
+  const avalia = (cardId, ym) => noEscopo(ym) && !fechada(cardId, ym)
 
   // Gastos por cartão+fatura.
   const gastosPorFatura = new Map()
@@ -191,10 +205,24 @@ export function montarContexto(dados, opcoes = {}) {
     gastosPorFatura.get(k).push(g)
   }
 
+  // Fatura ABERTA (não fechada) mais antiga do cartão, entre as que têm gasto e a fatura de hoje.
+  // Se todas estiverem fechadas, a primeira depois delas que não esteja.
+  const faturaAbertaMaisAntiga = (card) => {
+    const faturas = new Set([faturaDoDia(card, hoje)])
+    for (const g of gastos) if (g.card.id === card.id) faturas.add(g.fatura)
+    const ord = [...faturas].filter(Boolean).sort()
+    const aberta = ord.find(ym => !fechada(card.id, ym))
+    if (aberta) return aberta
+    let ym = addMesesYM(ord[ord.length - 1], 1)
+    while (fechada(card.id, ym)) ym = addMesesYM(ym, 1)
+    return ym
+  }
+
   const ctx = {
     [CTX]: true, hoje, desde, transactions, accounts, schedules, gerencialGroups,
     grupos, contas, cartoes, txById, subcontaIds, subcontaDoCartao, contaPrincipal, classeDoTx,
     gastos, gastoById, etapas, etapasPorGasto, gastosPorFatura, noEscopo, faturaAberta,
+    faturasFechadas, fechada, avalia, faturaAbertaMaisAntiga,
   }
   return ctx
 }
@@ -258,7 +286,7 @@ const GER_ETAPA_A_FALTANDO = {
     const ctx = montarContexto(dados)
     const out = []
     for (const g of ctx.gastos) {
-      if (g.classe !== 'G' || !ctx.noEscopo(g.fatura) || !ctx.faturaAberta(g.fatura, g.card)) continue
+      if (g.classe !== 'G' || !ctx.avalia(g.card.id, g.fatura) || !ctx.faturaAberta(g.fatura, g.card)) continue
       if ((ctx.etapasPorGasto.get(g.tx.id) || []).length > 0) continue
       const p = infoParcela(g.tx)
       // Só informativo: irmãs da mesma descrição/valor que TÊM etapa A. É exatamente o que NÃO pode
@@ -294,7 +322,7 @@ const GER_ETAPA_A_VALOR = {
     const ctx = montarContexto(dados)
     const out = []
     for (const g of ctx.gastos) {
-      if (g.classe !== 'G' || !ctx.noEscopo(g.fatura)) continue
+      if (g.classe !== 'G' || !ctx.avalia(g.card.id, g.fatura)) continue
       const ets = ctx.etapasPorGasto.get(g.tx.id) || []
       if (ets.length !== 1) continue
       const e = ets[0]
@@ -321,7 +349,7 @@ const GER_ETAPA_A_ORFA = {
     const out = []
     for (const e of ctx.etapas) {
       const ym = refParaYM(e.tx.faturaRef) || String(e.tx.date || '').slice(0, 7)
-      if (!ctx.noEscopo(ym)) continue
+      if (!ctx.noEscopo(ym) || ctx.fechada(e.tx.cardId, ym)) continue
       if (e.gastoId && ctx.gastoById.has(e.gastoId)) continue
       const alvo = e.gastoId ? ctx.txById.get(e.gastoId) : null
       const motivo = !e.gastoId ? 'sem vínculo' : !alvo ? 'gasto não existe' : 'origem não é despesa de cartão'
@@ -343,7 +371,7 @@ const GER_ETAPA_A_DUPLICADA = {
     const ctx = montarContexto(dados)
     const out = []
     for (const g of ctx.gastos) {
-      if (!ctx.noEscopo(g.fatura)) continue
+      if (!ctx.avalia(g.card.id, g.fatura)) continue
       const ets = ctx.etapasPorGasto.get(g.tx.id) || []
       if (ets.length < 2) continue
       const soma = ets.reduce((s, e) => s + (Number(e.tx.amount) || 0), 0)
@@ -375,14 +403,17 @@ const PARCELA_DUPLICADA = {
       }
       for (const itens of grupos.values()) {
         if (itens.length < 2) continue
-        // O "original" é o confirmado (tem data do extrato) mais antigo; os demais são a sobra.
+        // O "original" é o de fatura fechada (referência) e, depois, o confirmado (tem data do
+        // extrato) mais antigo; os demais são a sobra. Sobra em fatura fechada não vira pendência.
+        const fech = (i) => (ctx.fechada(i.card.id, i.fatura) ? 1 : 0)
         const ord = [...itens].sort((a, b) =>
+          fech(b) - fech(a) ||
           (b.tx.dateCartao ? 1 : 0) - (a.tx.dateCartao ? 1 : 0) ||
           String(a.tx.createdAt || '').localeCompare(String(b.tx.createdAt || '')) ||
           String(a.tx.id).localeCompare(String(b.tx.id)))
         const [original, ...sobras] = ord
-        if (!ctx.noEscopo(original.fatura)) continue
         for (const s of sobras) {
+          if (!ctx.avalia(s.card.id, s.fatura)) continue
           out.push(divergencia(this, {
             origem_id: s.tx.id, conta_id: s.card.id, fatura_ref: ymParaRef(s.fatura),
             descricao: `Parcela ${s.p.num}/${s.p.total} de "${s.tx.description || ''}" (${brl(s.tx.amount)}) está duplicada na fatura ${ymParaRef(s.fatura)}`,
@@ -413,7 +444,7 @@ const PARCELA_FATURA_INCOERENTE = {
       for (const it of compra.itens) if (!porNum.has(it.p.num)) porNum.set(it.p.num, it)
       for (const it of compra.itens) {
         const ant = porNum.get(it.p.num - 1)
-        if (!ant || it.fatura > ant.fatura || !ctx.noEscopo(it.fatura)) continue
+        if (!ant || it.fatura > ant.fatura || !ctx.avalia(it.card.id, it.fatura)) continue
         out.push(divergencia(this, {
           origem_id: it.tx.id, conta_id: it.card.id, fatura_ref: ymParaRef(it.fatura),
           descricao: `Parcela ${it.p.num}/${it.p.total} de "${it.tx.description || ''}" está na fatura ${ymParaRef(it.fatura)}, que não vem depois da ${ymParaRef(ant.fatura)} da parcela ${ant.p.num}`,
@@ -447,7 +478,7 @@ const PARCELA_NUMERO_INCOERENTE = {
       for (const it of compra.itens) {
         const g = it
         const p = it.p
-        if (!ctx.noEscopo(g.fatura)) continue
+        if (!ctx.avalia(g.card.id, g.fatura)) continue
         const motivos = []
         if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) {
           if (p.totalOriginal !== p.total || p.numOriginal > p.num) motivos.push('descricao_original')
@@ -501,7 +532,7 @@ const SERIE_PARCELAS_INCOMPLETA = {
         if (presentes.has(k)) continue
         const faturaK = addMesesYM(ref.fatura, k - ref.p.num)
         if (faturaK < (primeiraFatura.get(ref.card.id) || faturaK)) continue
-        if (!ctx.noEscopo(faturaK)) continue
+        if (!ctx.avalia(ref.card.id, faturaK)) continue
         faltando.push({ parcela: `${k}/${total}`, fatura: ymParaRef(faturaK) })
       }
       if (!faltando.length) continue
@@ -534,10 +565,12 @@ const SERIE_PARCELAS_REPETIDA = {
       }
       for (const [num, itens] of porNum) {
         const faturas = [...new Set(itens.map(i => i.fatura))].sort()
-        if (faturas.length < 2 || !faturas.some(f => ctx.noEscopo(f))) continue
+        // Faturas fechadas só como referência: a pendência é sobre a(s) aberta(s).
+        const abertas = faturas.filter(f => ctx.avalia(itens[0].card.id, f))
+        if (faturas.length < 2 || !abertas.length) continue
         const ids = itens.map(i => i.tx.id).sort()
         out.push(divergencia(this, {
-          origem_id: `${compra.chave}|${num}`, conta_id: itens[0].card.id, fatura_ref: ymParaRef(faturas[faturas.length - 1]),
+          origem_id: `${compra.chave}|${num}`, conta_id: itens[0].card.id, fatura_ref: ymParaRef(abertas[abertas.length - 1]),
           descricao: `Parcela ${num}/${itens[0].p.total} de "${itens[0].p.base}" aparece nas faturas ${faturas.map(ymParaRef).join(', ')}`,
           esperado: { parcela: `${num}/${itens[0].p.total}`, faturas: 1 },
           encontrado: { parcela: `${num}/${itens[0].p.total}`, faturas: faturas.map(ymParaRef), ids },
@@ -555,13 +588,21 @@ const SERIE_GRUPO_DIVERGENTE = {
     const ctx = montarContexto(dados)
     const out = []
     for (const compra of comprasParceladas(ctx)) {
-      if (!compra.itens.some(i => ctx.noEscopo(i.fatura))) continue
-      const grupos = new Set(compra.itens.map(i => i.tx.grupoGerencial || null))
-      if (grupos.size < 2) continue
+      // Parcelas de fatura fechada são referência: diverge se as abertas discordam entre si ou do
+      // grupo (único) das fechadas.
+      const abertas = compra.itens.filter(i => ctx.avalia(i.card.id, i.fatura))
+      if (!abertas.length) continue
+      const grupoDe = (i) => i.tx.grupoGerencial || null
+      const gruposAbertas = new Set(abertas.map(grupoDe))
+      const gruposFechadas = new Set(compra.itens.filter(i => ctx.fechada(i.card.id, i.fatura)).map(grupoDe))
+      const divergeDaReferencia = gruposFechadas.size === 1 && [...gruposAbertas].some(g => !gruposFechadas.has(g))
+      if (gruposAbertas.size < 2 && !divergeDaReferencia) continue
+      const grupos = new Set(compra.itens.map(grupoDe))
       const alias = (id) => { const g = ctx.grupos.get(id); return g ? (g.alias || g.name || String(g.number)) : (id || 'sem grupo') }
       const itens = [...compra.itens].sort((a, b) => a.p.num - b.p.num)
+      const ultimaAberta = abertas.reduce((m, i) => (i.fatura > m.fatura ? i : m))
       out.push(divergencia(this, {
-        origem_id: compra.chave, conta_id: itens[0].card.id, fatura_ref: ymParaRef(itens[itens.length - 1].fatura),
+        origem_id: compra.chave, conta_id: itens[0].card.id, fatura_ref: ymParaRef(ultimaAberta.fatura),
         descricao: `"${itens[0].p.base}" (${brl(itens[0].tx.amount)}) tem parcelas nos grupos ${[...grupos].map(alias).join(', ')}`,
         esperado: { grupos: 1 },
         encontrado: { parcelas: itens.map(i => ({ parcela: `${i.p.num}/${i.p.total}`, fatura: ymParaRef(i.fatura), grupo: alias(i.tx.grupoGerencial), id: i.tx.id })) },
@@ -597,7 +638,7 @@ const GER_FECHAMENTO_FATURA = {
     for (const chave of [...chaves].sort()) {
       const [cardId, ym] = chave.split('|')
       const card = ctx.cartoes.get(cardId)
-      if (!ctx.noEscopo(ym) || !ctx.faturaAberta(ym, card)) continue
+      if (!ctx.avalia(cardId, ym) || !ctx.faturaAberta(ym, card)) continue
       const gastosG = (ctx.gastosPorFatura.get(chave) || []).filter(g => g.classe === 'G')
       const idsG = new Set(gastosG.map(g => g.tx.id))
       const etapasF = new Map()
@@ -674,8 +715,9 @@ const GER_SALDO_SUBCONTA = {
       }
       esperado = rb(esperado)
       if (!difere(saldo, esperado)) continue
+      // O saldo inclui faturas fechadas; a pendência fica no presente (fatura aberta mais antiga).
       out.push(divergencia(this, {
-        origem_id: sub.id, conta_id: card.id, fatura_ref: null,
+        origem_id: sub.id, conta_id: card.id, fatura_ref: ymParaRef(ctx.faturaAbertaMaisAntiga(card)),
         descricao: `Subconta ${sub.name}: saldo ${brl(saldo)} × esperado ${brl(esperado)} (diferença ${brl(saldo - esperado)})`,
         esperado: { saldo: esperado, por_fatura: detalhe },
         encontrado: { saldo, saldo_gravado: rb(sub.balance), diferenca: rb(saldo - esperado) },
@@ -707,7 +749,7 @@ function fontesNumeradas(ctx) {
       for (const ym of faturasDoAgendamento({ schedule: s, cardId: card.id, getOccurrences: computeOccurrences, faturaDe: (d) => faturaDoDia(card, d) })) faturas.add(ym)
     }
     for (const ym of faturas) {
-      if (!ctx.noEscopo(ym)) continue
+      if (!ctx.avalia(card.id, ym)) continue
       for (const prev of previstosDaFatura({ schedules: ctx.schedules, cardId: card.id, faturaMesAno: ym, getOccurrences: computeOccurrences, faturaDe: (d) => faturaDoDia(card, d) })) {
         const grupo = ctx.grupos.get(prev.grupoGerencial)
         if (classeDoGrupo(grupo) !== 'NUM' || !grupo.defaultAccountId) continue
@@ -737,7 +779,7 @@ const NUM_RESGATE_FALTANDO = {
     for (const [k, fs] of [...fontesNumeradas(ctx)].sort((a, b) => a[0].localeCompare(b[0]))) {
       const [cardId, ym, origem] = k.split('|')
       const card = ctx.cartoes.get(cardId)
-      if (!ctx.noEscopo(ym) || !ctx.faturaAberta(ym, card)) continue
+      if (!ctx.avalia(cardId, ym) || !ctx.faturaAberta(ym, card)) continue
       const soma = rb(fs.reduce((s, f) => s + f.valor, 0))
       if (!(soma > 0) || resgatesDe(ctx, card, ym, origem).length) continue
       out.push(divergencia(this, {
@@ -760,7 +802,7 @@ const NUM_RESGATE_VALOR = {
     for (const [k, fs] of [...fontesNumeradas(ctx)].sort((a, b) => a[0].localeCompare(b[0]))) {
       const [cardId, ym, origem] = k.split('|')
       const card = ctx.cartoes.get(cardId)
-      if (!ctx.noEscopo(ym)) continue
+      if (!ctx.avalia(cardId, ym)) continue
       const resgates = resgatesDe(ctx, card, ym, origem)
       if (!resgates.length) continue // NUM_RESGATE_FALTANDO
       const pendentes = resgates.filter(s => !isResgatePago(s.id, ctx.schedules, ctx.transactions))
@@ -791,7 +833,7 @@ const NUM_RESGATE_ORFAO = {
     const fontes = fontesNumeradas(ctx)
     const out = []
     for (const s of ctx.schedules) {
-      if (s.tipo !== 'resgate_reserva' || !s.cardId || !s.faturaMesAno || !ctx.noEscopo(s.faturaMesAno)) continue
+      if (s.tipo !== 'resgate_reserva' || !s.cardId || !s.faturaMesAno || !ctx.avalia(s.cardId, s.faturaMesAno)) continue
       if (isResgatePago(s.id, ctx.schedules, ctx.transactions)) continue
       const fs = fontes.get(`${s.cardId}|${s.faturaMesAno}|${s.accountId}`) || []
       if (fs.some(f => f.valor > 0)) continue
@@ -814,7 +856,7 @@ const NUM_SEM_CONTA_ORIGEM = {
     const out = []
     for (const grupo of ctx.gerencialGroups) {
       if (classeDoGrupo(grupo) !== 'NUM' || grupo.defaultAccountId) continue
-      const gs = ctx.gastos.filter(g => g.tx.grupoGerencial === grupo.id && ctx.noEscopo(g.fatura))
+      const gs = ctx.gastos.filter(g => g.tx.grupoGerencial === grupo.id && ctx.avalia(g.card.id, g.fatura))
       if (!gs.length) continue
       const soma = rb(gs.reduce((s, g) => s + (Number(g.tx.amount) || 0), 0))
       out.push(divergencia(this, {
@@ -835,7 +877,7 @@ function etapaEmGrupoErrado(regra, classes, rotulo) {
       const ctx = montarContexto(dados)
       const out = []
       for (const g of ctx.gastos) {
-        if (!classes.has(g.classe) || !ctx.noEscopo(g.fatura)) continue
+        if (!classes.has(g.classe) || !ctx.avalia(g.card.id, g.fatura)) continue
         const ets = ctx.etapasPorGasto.get(g.tx.id) || []
         if (!ets.length) continue
         const soma = rb(ets.reduce((s, e) => s + (Number(e.tx.amount) || 0), 0))
@@ -871,7 +913,7 @@ const GRUPO_INEXISTENTE = {
       if (!tx.grupoGerencial || ctx.grupos.has(tx.grupoGerencial)) continue
       const g = ctx.gastoById.get(tx.id)
       const ym = g ? g.fatura : String(tx.date || '').slice(0, 7)
-      if (!ctx.noEscopo(ym)) continue
+      if (!ctx.noEscopo(ym) || (g && ctx.fechada(g.card.id, g.fatura))) continue
       out.push(divergencia(this, {
         origem_id: tx.id, conta_id: g?.card.id || tx.accountId || null, fatura_ref: g ? ymParaRef(g.fatura) : null,
         descricao: `"${tx.description || tx.id}" (${brl(tx.amount)}) aponta para o grupo inexistente "${tx.grupoGerencial}"`,
@@ -896,7 +938,7 @@ const CADEIA_INCOMPLETA = {
     const ctx = montarContexto(dados)
     const out = []
     for (const g of ctx.gastos) {
-      if (!ctx.noEscopo(g.fatura) || !ctx.faturaAberta(g.fatura, g.card) || ehProjecao(g.tx)) continue
+      if (!ctx.avalia(g.card.id, g.fatura) || !ctx.faturaAberta(g.fatura, g.card) || ehProjecao(g.tx)) continue
       let agendas
       let passo
       if (g.classe === 'G') {
@@ -935,6 +977,10 @@ export const REGRAS = [
 ]
 
 export const REGRAS_POR_CODIGO = Object.fromEntries(REGRAS.map(r => [r.codigo, r]))
+
+// Regras avaliadas sempre por inteiro (fora da janela `desde`): a fatura_ref delas é só onde a
+// pendência é exibida (a fatura aberta mais antiga), não o recorte avaliado.
+export const REGRAS_SEM_JANELA = new Set(['GER_SALDO_SUBCONTA'])
 
 // Roda as regras (todas, ou só `opcoes.regras`) sobre um único contexto. Saída ordenada e sem
 // carimbo de tempo: a mesma base produz exatamente a mesma lista (idempotência da varredura).

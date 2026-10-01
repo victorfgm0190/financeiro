@@ -309,7 +309,11 @@ describe('Varredura', () => {
   it('varredura restrita não resolve o que ficou fora do escopo', () => {
     const t1 = aplicarPlano([], planejarVarredura([], executarRegras(fixtureBug(), OPC), {}), 't1')
     const plano = planejarVarredura(t1, [], { faturas: ['2026-09'] })
-    expect(plano.resolver.every(id => t1.find(p => p.id === id).fatura_ref === '09/2026' || !t1.find(p => p.id === id).fatura_ref)).toBe(true)
+    // GER_SALDO_SUBCONTA é avaliada inteira: a fatura_ref dela é só onde a pendência aparece.
+    expect(plano.resolver.every(id => {
+      const p = t1.find(x => x.id === id)
+      return p.fatura_ref === '09/2026' || !p.fatura_ref || p.regra === 'GER_SALDO_SUBCONTA'
+    })).toBe(true)
     expect(plano.resolver).not.toContain('GER_ETAPA_A_FALTANDO|tx_1789736376094_z41mpw3eroa')
   })
 })

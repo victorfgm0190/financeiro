@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText, Wrench } from 'lucide-react'
+import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, CreditCard, FileText, Wrench, Lock } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fetchPendenciasIntegridade, varrerIntegridade, mudarStatusPendencia } from '../../lib/db'
 import { REGRAS_POR_CODIGO } from '../../lib/integridade/regras'
@@ -132,6 +132,9 @@ export default function IntegridadePanel({ setActivePage }) {
           <p className="text-xs text-gray-500 mt-0.5">
             Compara fatura, etapas A, subcontas Ger. e resgates com as regras. Só detecta — nada é corrigido aqui.
           </p>
+          <p className="text-[11px] text-gray-600 mt-0.5 flex items-center gap-1">
+            <Lock size={10} /> Faturas fechadas não são avaliadas
+          </p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={varrer} disabled={varrendo}>
           {varrendo ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -146,6 +149,7 @@ export default function IntegridadePanel({ setActivePage }) {
           <span className="text-gray-300">{resumo.mantidas} mantida(s)</span> ·{' '}
           <span className="text-emerald-400">{resumo.resolvidas} resolvida(s)</span>
           {resumo.ignoradas > 0 && <> · {resumo.ignoradas} ignorada(s) ainda presentes</>}
+          {resumo.arquivadas > 0 && <> · {resumo.arquivadas} ignorada(s) por fatura fechada</>}
         </div>
       )}
 
@@ -210,6 +214,9 @@ export default function IntegridadePanel({ setActivePage }) {
                   <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                     {card && <span className="flex items-center gap-1"><CreditCard size={11} />{card.apelido || card.name}</span>}
                     {p.fatura_ref && <span>Fatura {p.fatura_ref}</span>}
+                    {p.status === 'ignorada' && p.resolvida_por === 'fatura_fechada' && (
+                      <span className="flex items-center gap-1"><Lock size={11} />fatura fechada</span>
+                    )}
                   </div>
                   {linhas.length > 0 && (
                     <div className="overflow-x-auto">

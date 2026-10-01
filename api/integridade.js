@@ -1,12 +1,14 @@
 import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { executarRegras, hojeSP, addMesesYM } from '../src/lib/integridade/regras.js'
-import { planejarVarredura } from '../src/lib/integridade/motor.js'
+import { planejarVarredura, POR_FATURA_FECHADA } from '../src/lib/integridade/motor.js'
 import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 
 // Motor de Integridade — pendências de dados (ver src/lib/integridade/regras.js).
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
 //   POST action=varrer          → roda as regras e grava as divergências { desde?: 'YYYY-MM' | 'todas' }
+//                                 Faturas fechadas (configuracoes.faturas_fechadas) não são avaliadas;
+//                                 as pendências delas viram 'ignorada' (resolvida_por = 'fatura_fechada').
 //   POST action=ignorar|reabrir → { id } muda o status (resolvida_por = 'usuario')
 //   POST action=resolver        → { id, ajuste } fecha após ajuste verificado no app (resolvida_por = 'motor')
 // Este endpoint SÓ detecta: não cria, altera nem apaga nada em lancamentos/agendamentos/contas.
@@ -45,7 +47,11 @@ const COLS = ['regra', 'severidade', 'origem_id', 'conta_id', 'fatura_ref', 'des
 const CHUNK = 400
 
 // Um único upsert cobre nova / mantida / reaberta / ignorada: a pendência resolvida que reaparece
-// volta a pendente (detectada_em nova); a ignorada continua ignorada.
+// volta a pendente (detectada_em nova); a ignorada continua ignorada — exceto a ignorada por
+// fatura fechada: as regras não geram divergência de fatura fechada, então se ela voltou a fatura
+// foi reaberta e a pendência volta a valer.
+const REABRE = `(pendencias_integridade.status = 'resolvida' OR
+  (pendencias_integridade.status = 'ignorada' AND pendencias_integridade.resolvida_por = '${POR_FATURA_FECHADA}'))`
 async function gravar(q, linhas) {
   for (let i = 0; i < linhas.length; i += CHUNK) {
     const lote = linhas.slice(i, i + CHUNK)
@@ -63,10 +69,10 @@ async function gravar(q, linhas) {
          esperado      = EXCLUDED.esperado,
          encontrado    = EXCLUDED.encontrado,
          verificada_em = now(),
-         detectada_em  = CASE WHEN pendencias_integridade.status = 'resolvida' THEN now() ELSE pendencias_integridade.detectada_em END,
-         resolvida_em  = CASE WHEN pendencias_integridade.status = 'resolvida' THEN NULL ELSE pendencias_integridade.resolvida_em END,
-         resolvida_por = CASE WHEN pendencias_integridade.status = 'resolvida' THEN NULL ELSE pendencias_integridade.resolvida_por END,
-         status        = CASE WHEN pendencias_integridade.status = 'resolvida' THEN 'pendente' ELSE pendencias_integridade.status END`,
+         detectada_em  = CASE WHEN ${REABRE} THEN now() ELSE pendencias_integridade.detectada_em END,
+         resolvida_em  = CASE WHEN ${REABRE} THEN NULL ELSE pendencias_integridade.resolvida_em END,
+         resolvida_por = CASE WHEN ${REABRE} THEN NULL ELSE pendencias_integridade.resolvida_por END,
+         status        = CASE WHEN ${REABRE} THEN 'pendente' ELSE pendencias_integridade.status END`,
       params,
     )
   }
@@ -74,27 +80,42 @@ async function gravar(q, linhas) {
 
 async function varrer(body) {
   const hoje = hojeSP()
+  // A janela de 3 meses é só limite de segurança de desempenho: o histórico sai da avaliação pelo
+  // filtro de faturas fechadas.
   const desde = body?.desde === 'todas' ? null
     : (/^\d{4}-\d{2}$/.test(body?.desde || '') ? body.desde : addMesesYM(hoje.slice(0, 7), -3))
 
-  const [lancamentos, contas, agendamentos, grupos] = await Promise.all([
+  const [lancamentos, contas, agendamentos, grupos, [cfg]] = await Promise.all([
     query('SELECT * FROM lancamentos'),
     query('SELECT * FROM contas'),
     query('SELECT * FROM agendamentos'),
     query('SELECT * FROM reservas_funcoes'),
+    query('SELECT faturas_fechadas FROM configuracoes WHERE id = 1'),
   ])
-  const divergencias = executarRegras(dadosDeLinhas({ lancamentos, contas, agendamentos, grupos }), { hoje, desde })
+  // Mesmo dado do botão "Fechar Fatura" (settings.faturasFechadas no app).
+  const faturasFechadas = cfg?.faturas_fechadas || {}
+  const divergencias = executarRegras(
+    { ...dadosDeLinhas({ lancamentos, contas, agendamentos, grupos }), faturasFechadas }, { hoje, desde })
 
   return withTransaction(async (q) => {
-    const existentes = await q('SELECT id, regra, origem_id, conta_id, fatura_ref, status FROM pendencias_integridade')
-    const plano = planejarVarredura(existentes, divergencias, { desde })
+    const existentes = await q('SELECT id, regra, origem_id, conta_id, fatura_ref, status, resolvida_por FROM pendencias_integridade')
+    const plano = planejarVarredura(existentes, divergencias, { desde }, { faturasFechadas })
     await gravar(q, plano.gravar)
     if (plano.resolver.length) {
       await q(
         `UPDATE pendencias_integridade
             SET status = 'resolvida', resolvida_em = now(), resolvida_por = 'varredura'
+          WHERE id = ANY($1)
+            AND (status = 'pendente' OR (status = 'ignorada' AND resolvida_por = $2))`,
+        [plano.resolver, POR_FATURA_FECHADA],
+      )
+    }
+    if (plano.arquivar.length) {
+      await q(
+        `UPDATE pendencias_integridade
+            SET status = 'ignorada', resolvida_em = now(), resolvida_por = $2
           WHERE id = ANY($1) AND status = 'pendente'`,
-        [plano.resolver],
+        [plano.arquivar, POR_FATURA_FECHADA],
       )
     }
     const porRegra = {}
@@ -105,6 +126,7 @@ async function varrer(body) {
       mantidas: plano.resumo.mantidas,
       resolvidas: plano.resumo.resolvidas,
       ignoradas: plano.resumo.ignoradas,
+      arquivadas: plano.resumo.arquivadas,
       total_divergencias: divergencias.length,
       por_regra: porRegra,
     }

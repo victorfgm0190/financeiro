@@ -32,6 +32,7 @@ export function planejarAjuste(d, pendencia, opcoes = {}) {
   const g = ctx.gastoById.get(pendencia.origem_id)
   if (!g) return { ok: false, motivo: 'O gasto não existe mais (ou deixou de ser despesa de cartão).' }
   if (g.classe !== 'G') return { ok: false, motivo: 'O gasto não é mais do Grupo G.' }
+  if (ctx.fechada(g.card.id, g.fatura)) return { ok: false, motivo: `A fatura ${ymParaRef(g.fatura)} está fechada — faturas fechadas não são avaliadas.` }
   const etapas = ctx.etapasPorGasto.get(g.tx.id) || []
   const fatura = ymParaRef(g.fatura)
 
