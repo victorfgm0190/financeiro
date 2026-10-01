@@ -127,8 +127,11 @@ export default function AjusteIntegridadeModal({ pendencias, todas = false, onCl
                     <p className="text-gray-300">{p.descricao}</p>
                     {(p.esperado?.opcoes || []).map(o => (
                       <button key={o.id} type="button" onClick={() => setEscolhas(e => ({ ...e, [p.id]: o.id }))}
-                        className={`w-full text-left px-2 py-1.5 rounded border ${escolhas[p.id] === o.id ? 'border-[#0F6E56] bg-[#0F6E56]/20 text-gray-100' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}>
-                        {o.rotulo}
+                        className={`w-full text-left px-2 py-1.5 rounded border flex items-start gap-2 ${escolhas[p.id] === o.id
+                          ? 'border-[#0F6E56] bg-[#0F6E56]/20 text-gray-100'
+                          : o.recomendada ? 'border-emerald-600/60 bg-emerald-500/5 text-gray-100 hover:border-emerald-500' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}>
+                        <span className="flex-1">{o.rotulo}</span>
+                        {o.recomendada && <span className="badge shrink-0 bg-emerald-500/15 text-emerald-400">mais provável</span>}
                       </button>
                     ))}
                   </div>

@@ -51,6 +51,9 @@ function descricaoComNumero(description, num, total) {
   return description.replace(det.matchStr, `${String(num).padStart(largura, '0')}/${total}`)
 }
 
+// Únicos campos que religar pode mudar (installment_key é derivada deles no txToRow).
+const CAMPOS_VINCULO = ['serieId', 'installmentNum', 'installmentTotal']
+
 function planejarReligar(d, pendencia, opcoes) {
   const tx = d.transactions.find(t => t.id === pendencia.origem_id)
   if (!tx) return { ok: false, motivo: 'O lançamento não existe mais.' }
@@ -64,9 +67,18 @@ function planejarReligar(d, pendencia, opcoes) {
   if (!escolhida) {
     return { ok: false, motivo: pendencia.opcao ? 'A opção escolhida não vale mais (a série mudou).' : 'Escolha uma das opções.' }
   }
+  // Em fatura FECHADA a correção mexe só nos campos de vínculo (serie_id, installment_num/total e,
+  // derivada deles, installment_key) — condição da aprovação de 01/10/2026 para avaliar fechada
+  // nesta regra. Em fatura aberta o "N/M" da descrição acompanha o número religado.
+  const fechada = ctx.fechada(v.item.card.id, v.item.fatura)
   const novo = {
     ...tx, serieId: escolhida.serie_id, installmentNum: escolhida.num, installmentTotal: escolhida.total,
-    description: descricaoComNumero(tx.description, escolhida.num, escolhida.total),
+    ...(fechada ? {} : { description: descricaoComNumero(tx.description, escolhida.num, escolhida.total) }),
+  }
+  const mexidos = Object.keys(novo).filter(k => novo[k] !== tx[k])
+  const permitidos = fechada ? CAMPOS_VINCULO : [...CAMPOS_VINCULO, 'description']
+  if (mexidos.some(k => !permitidos.includes(k))) {
+    return { ok: false, motivo: `Correção recusada: mexeria em ${mexidos.join(', ')}.` }
   }
   const chave = chaveDoTx(novo)
   const ocupante = chave && d.transactions.find(t => t.id !== tx.id && chaveDoTx(t) === chave)

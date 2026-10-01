@@ -365,20 +365,21 @@ export function opcoesDeVinculo(ctx, txId) {
   const v = seriesDoContexto(ctx).vinculos.get(txId)
   if (!v) return null
   const { item: u, candidatas } = v
-  const opcoes = []
-  for (const c of candidatas) {
-    const s = c.compra
-    opcoes.push({
-      id: `posicao:${s.serieId}`, por: 'posicao', serie_id: s.serieId, num: c.k, total: s.total,
-      rotulo: `Religar como ${c.k}/${s.total} da série ${s.serieId}, pela posição na fatura ${ymParaRef(u.fatura)}`,
-    })
-    if (c.conflito && !s.nums.has(u.p.num)) {
-      opcoes.push({
-        id: `descricao:${s.serieId}`, por: 'descricao', serie_id: s.serieId, num: u.p.num, total: s.total,
-        rotulo: `Manter como ${u.p.num}/${s.total} (número da descrição) e religar à série ${s.serieId}`,
-      })
-    }
-  }
+  // A posição pela fatura vem SEMPRE antes e, com uma única série, é a recomendada: a fatura é
+  // gravada pela importação, o "N/M" da descrição é o que costuma vir errado (caso Aramis).
+  const posicoes = candidatas.map(c => ({
+    id: `posicao:${c.compra.serieId}`, por: 'posicao', serie_id: c.compra.serieId, num: c.k, total: c.compra.total,
+    recomendada: candidatas.length === 1,
+    rotulo: `Religar como ${c.k}/${c.compra.total} (pela posição na fatura ${ymParaRef(u.fatura)}) — série ${c.compra.serieId}`,
+  }))
+  const descricoes = candidatas
+    .filter(c => c.conflito && !c.compra.nums.has(u.p.num))
+    .map(c => ({
+      id: `descricao:${c.compra.serieId}`, por: 'descricao', serie_id: c.compra.serieId, num: u.p.num, total: c.compra.total,
+      recomendada: false,
+      rotulo: `Manter como ${u.p.num}/${c.compra.total} (número da descrição) e religar à série ${c.compra.serieId}`,
+    }))
+  const opcoes = [...posicoes, ...descricoes]
   const automatica = candidatas.length === 1 && !candidatas[0].conflito
   return { ...v, opcoes, automatica }
 }

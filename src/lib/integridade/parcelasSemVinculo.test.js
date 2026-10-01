@@ -70,6 +70,8 @@ describe('Séries agrupadas por serie_id (o vínculo perdido não vira "falta")'
       [`posicao:${S_ARA}`, '2/4'], [`descricao:${S_ARA}`, '1/4'],
     ])
     expect(p.esperado.opcoes[0].rotulo).toContain('pela posição na fatura 08/2026')
+    // A posição pela fatura é a primeira e a recomendada (destacada no modal).
+    expect(p.esperado.opcoes.map(o => o.recomendada)).toEqual([true, false])
     expect(p.encontrado.motivo).toBe('a descrição diz 1/4, mas pela fatura é a 2/4')
   })
 
@@ -148,6 +150,44 @@ describe('Corrigir — religar a parcela', () => {
     const { nd, contasAfetadas } = corrigir(d)
     const [antes, depois] = [d, nd].map(x => x.transactions.find(t => t.id === BIA_2))
     for (const k of ['amount', 'date', 'faturaMonthYear', 'accountId', 'dateCartao', 'grupoGerencial']) expect(depois[k]).toBe(antes[k])
+    expect(contasAfetadas).toEqual([])
+    expect(nd.accounts).toBe(d.accounts)
+  })
+})
+
+describe('Fatura fechada: só PARCELA_SEM_VINCULO avalia, e a correção só mexe no vínculo', () => {
+  const FECHADA_08 = { faturasFechadas: { 'acc_itaupers_2026-08': true } }
+  const corrigir = (d, opcao) => aplicarAjustes(d, pendencias(d).filter(p => p.regra === 'PARCELA_SEM_VINCULO').map(p => (opcao ? { ...p, opcao } : p)))
+  const VINCULO = ['serieId', 'installmentNum', 'installmentTotal']
+  const mudou = (antes, depois) => Object.keys({ ...antes, ...depois }).filter(k => antes[k] !== depois[k]).sort()
+
+  it('parcela sem vínculo em fatura fechada aparece porque a série tem parcela aberta — e nenhuma outra regra a avalia', () => {
+    const d = dados([...aramis(), ...amazon()], FECHADA_08)
+    const r = deSerie(d)
+    expect(r.map(x => [x.regra, x.origem_id]).sort()).toEqual([['PARCELA_SEM_VINCULO', AMZ_1], ['PARCELA_SEM_VINCULO', ARA_1]].sort())
+    expect(executarRegras(d, OPC).filter(x => x.fatura_ref === '08/2026' && x.regra !== 'PARCELA_SEM_VINCULO')).toEqual([])
+  })
+
+  it('série toda em faturas fechadas: não é avaliada', () => {
+    const d = dados(biashoes(), { faturasFechadas: Object.fromEntries(['07', '08', '09', '10'].map(m => [`acc_itaupers_2026-${m}`, true])) })
+    expect(deSerie(d)).toEqual([])
+  })
+
+  it('Aramis religado como 2/4 em fatura fechada: muda só serie_id e installment_num/total (descrição fica)', () => {
+    const d = dados(aramis(), FECHADA_08)
+    const { nd, aplicados } = corrigir(d, `posicao:${S_ARA}`)
+    expect(aplicados).toHaveLength(1)
+    const [antes, depois] = [d, nd].map(x => x.transactions.find(t => t.id === ARA_1))
+    expect(mudou(antes, depois)).toEqual(VINCULO.sort())
+    expect(depois.description).toBe('Aramis 1/4')
+    expect(chaveDe(depois)).toBe('acc_itaupers|aramis|2/4|22450|2026-07')
+  })
+
+  it('Amazon 1/6 em fatura fechada: idem — valor, data, fatura, grupo e saldo intactos', () => {
+    const d = dados(amazon(), FECHADA_08)
+    const { nd, contasAfetadas } = corrigir(d)
+    const [antes, depois] = [d, nd].map(x => x.transactions.find(t => t.id === AMZ_1))
+    expect(mudou(antes, depois)).toEqual(VINCULO.sort())
     expect(contasAfetadas).toEqual([])
     expect(nd.accounts).toBe(d.accounts)
   })
