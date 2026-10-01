@@ -1,6 +1,10 @@
 // Correção ("Corrigir" / "Corrigir todas") de pendências do Motor de Integridade.
 //
 // Só estas regras têm correção por enquanto:
+//   SERIE_NUMERACAO_INCOERENTE → renumera a cadeia pela posição nas faturas e religa todas as
+//                          parcelas na mesma serie_id. Muda SÓ o "N/M" da descrição,
+//                          installment_num/total e serie_id (installment_key deriva deles) — vale
+//                          também em fatura fechada.
 //   PARCELA_SEM_VINCULO  → religa a parcela à série: serie_id, installment_num/total e o "N/M" da
 //                          descrição (installment_key deriva deles no txToRow, no mesmo padrão das
 //                          irmãs). Não mexe em valor, data, fatura nem saldo. 'auto' com uma opção;
@@ -9,26 +13,27 @@
 //                          (lib/provisaoGerencial), id determinístico tx_gerA_<gasto>.
 //   GER_ETAPA_A_VALOR    → alinha valor e fatura da etapa A existente ao gasto.
 //
-// "Corrigir todas" aplica na ordem de ORDEM_CORRECAO: primeiro religa parcelas (as séries passam a
-// ser avaliadas já religadas), depois as etapas A.
+// "Corrigir todas" aplica na ordem de ORDEM_CORRECAO: primeiro renumera/religa parcelas (as séries
+// passam a ser avaliadas já corrigidas), depois as etapas A.
 //
 // Tudo puro: planeja sobre o estado atual (preview do modal) e aplica sobre o estado do updater —
 // o plano é refeito ali, então clicar 2× (ou o React rodar o updater 2×) não duplica nada.
 // Saldo NÃO é tocado aqui: quem aplica chama recalcularSaldo nas contas afetadas.
 
-import { montarContexto, executarRegras, ymParaRef, rb, opcoesDeVinculo } from './regras.js'
+import { montarContexto, executarRegras, ymParaRef, rb, opcoesDeVinculo, cadeiaPorChave, opcoesDeRenumeracao, mesPorExtenso } from './regras.js'
 import { montarProvisaoGerencial } from '../provisaoGerencial.js'
 import { ORIGIN } from '../origins.js'
 import { detectInstallment, installmentKey } from '../installments.js'
 
-export const ORDEM_CORRECAO = ['PARCELA_SEM_VINCULO', 'GER_ETAPA_A_FALTANDO', 'GER_ETAPA_A_VALOR']
+export const ORDEM_CORRECAO = ['SERIE_NUMERACAO_INCOERENTE', 'PARCELA_SEM_VINCULO', 'GER_ETAPA_A_FALTANDO', 'GER_ETAPA_A_VALOR']
 export const REGRAS_AJUSTAVEIS = new Set(ORDEM_CORRECAO)
 
 const opcoesDa = (p) => p?.esperado?.opcoes || []
-// Botão "Corrigir" no item: automática, ou PARCELA_SEM_VINCULO com opções para escolher.
+// Botão "Corrigir" no item: automática, ou de série com opções para escolher.
+const COM_OPCOES = new Set(['PARCELA_SEM_VINCULO', 'SERIE_NUMERACAO_INCOERENTE'])
 export const podeAjustar = (p) =>
   !!p && p.status === 'pendente' && REGRAS_AJUSTAVEIS.has(p.regra) &&
-  (p.severidade === 'auto' || (p.regra === 'PARCELA_SEM_VINCULO' && opcoesDa(p).length > 0))
+  (p.severidade === 'auto' || (COM_OPCOES.has(p.regra) && opcoesDa(p).length > 0))
 // Entra no "Corrigir todas": só as automáticas.
 export const podeCorrigirSozinho = (p) => podeAjustar(p) && p.severidade === 'auto'
 export const precisaEscolher = (p) => podeAjustar(p) && p.severidade !== 'auto'
@@ -53,6 +58,66 @@ function descricaoComNumero(description, num, total) {
 
 // Únicos campos que religar pode mudar (installment_key é derivada deles no txToRow).
 const CAMPOS_VINCULO = ['serieId', 'installmentNum', 'installmentTotal']
+// Renumerar: os de vínculo + o "N/M" da descrição. Nunca valor, data, fatura, grupo, categoria,
+// favorecido nem saldo — nem em fatura fechada.
+const CAMPOS_RENUMERAR = [...CAMPOS_VINCULO, 'description']
+
+// serie_id que a cadeia inteira passa a usar: a que a maioria já tem; sem nenhuma, uma nova
+// determinística (o plano é refeito na aplicação e precisa dar o mesmo id).
+function serieDaCadeia(itens) {
+  const n = new Map()
+  for (const i of itens) if (i.tx.serieId) n.set(i.tx.serieId, (n.get(i.tx.serieId) || 0) + 1)
+  const [melhor] = [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  return melhor ? melhor[0] : `serie_renum_${String(itens[0].tx.id).replace(/^tx_/, '')}`
+}
+
+function planejarRenumeracao(d, pendencia, opcoes) {
+  const ctx = montarContexto(d, { desde: null, ...opcoes })
+  const cadeia = cadeiaPorChave(ctx, pendencia.origem_id)
+  if (!cadeia) return { ok: false, motivo: 'A numeração da série já está coerente (ou a série mudou).' }
+  const ops = opcoesDeRenumeracao(cadeia)
+  const escolhida = pendencia.opcao ? ops.find(o => o.id === pendencia.opcao) : (cadeia.automatica ? ops[0] : null)
+  if (!escolhida) {
+    return { ok: false, motivo: pendencia.opcao ? 'A opção escolhida não vale mais (a série mudou).' : 'Escolha uma das numerações.' }
+  }
+  const serieId = serieDaCadeia(cadeia.itens)
+  const ids = new Set(cadeia.itens.map(i => i.tx.id))
+  const txs = []
+  const linhas = []
+  for (const [j, i] of cadeia.itens.entries()) {
+    const tx = d.transactions.find(t => t.id === i.tx.id)
+    const num = escolhida.parcelas[j].num
+    const novo = {
+      ...tx, serieId, installmentNum: num, installmentTotal: cadeia.total,
+      description: descricaoComNumero(tx.description, num, cadeia.total),
+    }
+    const mexidos = Object.keys(novo).filter(k => novo[k] !== tx[k])
+    if (mexidos.some(k => !CAMPOS_RENUMERAR.includes(k))) {
+      return { ok: false, motivo: `Correção recusada: mexeria em ${mexidos.join(', ')} de ${tx.id}.` }
+    }
+    const nome = detectInstallment(tx.description || '')?.base || tx.description
+    const de = `${i.p.num}/${cadeia.total}`
+    const para = `${num}/${cadeia.total}`
+    linhas.push(`${mesPorExtenso(i.fatura)} ${nome} ${de === para ? `${de} (mantém o número)` : `${de} → ${para}`}` +
+      (tx.serieId === serieId ? '' : ' · religar'))
+    if (mexidos.length) txs.push(novo)
+  }
+  if (!txs.length) return { ok: false, motivo: 'Nada a mudar: a série já está com essa numeração.' }
+  const chaves = new Map()
+  for (const t of txs) {
+    const k = chaveDoTx(t)
+    const ocupante = d.transactions.find(o => !ids.has(o.id) && chaveDoTx(o) === k) || chaves.get(k)
+    if (ocupante) {
+      return { ok: false, motivo: `A chave ${k} já pertence ao lançamento ${ocupante.id} (índice uq_lancamentos_installment) — nada foi gravado.` }
+    }
+    chaves.set(k, t)
+  }
+  return {
+    ok: true, acao: 'renumerar', regra: pendencia.regra, pendenciaId: pendencia.id, gastoId: txs[0].id,
+    tx: txs[0], txs, accounts: d.accounts, valor: 0, semEfeitoEmSaldo: true,
+    texto: [...linhas, `Todas na série ${serieId}`].join('\n'),
+  }
+}
 
 function planejarReligar(d, pendencia, opcoes) {
   const tx = d.transactions.find(t => t.id === pendencia.origem_id)
@@ -106,6 +171,7 @@ const conta = (d, id) => {
 export function planejarAjuste(d, pendencia, opcoes = {}) {
   if (!REGRAS_AJUSTAVEIS.has(pendencia?.regra)) return { ok: false, motivo: 'Regra sem ajuste automático nesta versão.' }
   if (pendencia.regra === 'PARCELA_SEM_VINCULO') return planejarReligar(d, pendencia, opcoes)
+  if (pendencia.regra === 'SERIE_NUMERACAO_INCOERENTE') return planejarRenumeracao(d, pendencia, opcoes)
   const ctx = montarContexto(d, { desde: null, ...opcoes })
   const g = ctx.gastoById.get(pendencia.origem_id)
   if (!g) return { ok: false, motivo: 'O gasto não existe mais (ou deixou de ser despesa de cartão).' }
@@ -153,9 +219,10 @@ export function aplicarAjustes(d, pendencias, opcoes = {}) {
   for (const p of pendencias) {
     const plano = planejarAjuste(nd, p, opcoes)
     if (!plano.ok) { ignorados.push({ pendenciaId: p.id, origem_id: p.origem_id, motivo: plano.motivo }); continue }
+    const novos = new Map((plano.txs || [plano.tx]).map(t => [t.id, t]))
     const transactions = plano.acao === 'criar'
       ? [...nd.transactions, plano.tx]
-      : nd.transactions.map(t => t.id === plano.tx.id ? plano.tx : t)
+      : nd.transactions.map(t => novos.get(t.id) || t)
     nd = { ...nd, accounts: plano.accounts, transactions }
     // Religar parcela não muda valor nem conta: nenhum saldo a recalcular.
     if (!plano.semEfeitoEmSaldo) {

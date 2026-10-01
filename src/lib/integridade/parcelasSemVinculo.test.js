@@ -11,9 +11,9 @@ import { OPC, GRUPOS, CONTAS, gasto } from './fixtures'
 // e três parcelas da fatura 08/2026 perderam installment_num/total/key e serie_id.
 const S_AMZ = 'serie_1784640547057_bzl3so34'
 const S_BIA = 'serie_1783911754890_acyz9s50'
-const S_ARA = 'serie_1784640547057_aramis00'
+const S_CNF = 'serie_1784640547057_conflito'
 const AMZ_1 = 'tx_1784640943583_m87u1zig35c'
-const ARA_1 = 'tx_1784640943583_eobomoe2w36'
+const CNF_1 = 'tx_conflito_2'
 const BIA_2 = 'tx_1783913338190_zhm4gul0qeh'
 
 const FATURAS = ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12', '2027-01']
@@ -34,11 +34,12 @@ const biashoes = () => [
   parcela('tx_bia_3', 'Biashoes Mod-ct Ou', 3, 4, 132.5, '2026-09', S_BIA),
   parcela('tx_bia_4', 'Biashoes Mod-ct Ou', 4, 4, 132.5, '2026-10', S_BIA),
 ]
-// Aramis: 3/4 e 4/4 na série; a linha da 08/2026 diz "1/4", mas pela fatura ela é a 2/4.
-const aramis = () => [
-  semVinculo(ARA_1, 'Aramis', 1, 4, 224.5, '2026-08'),
-  parcela('tx_ara_3', 'Aramis', 3, 4, 224.5, '2026-09', S_ARA),
-  parcela('tx_ara_4', 'Aramis', 4, 4, 224.5, '2026-10', S_ARA),
+// Conflito descrição × posição SEM cadeia de faturas consecutivas (não é caso de renumeração): a
+// série só tem a 4/4 (10/2026, início 07/2026); a linha de 07/2026 diz "2/4", mas pela posição é a 1/4.
+// (O Aramis real — 1/4, 3/4, 4/4 em 08/09/10 — agora é SERIE_NUMERACAO_INCOERENTE, ver renumeracao.test.js.)
+const conflito = () => [
+  semVinculo(CNF_1, 'Loja Conflito', 2, 4, 50, '2026-07'),
+  parcela('tx_cnf_4', 'Loja Conflito', 4, 4, 50, '2026-10', S_CNF),
 ]
 const dados = (transactions, extra = {}) => ({ transactions, schedules: [], accounts: CONTAS, gerencialGroups: GRUPOS, ...extra })
 
@@ -63,16 +64,16 @@ describe('Séries agrupadas por serie_id (o vínculo perdido não vira "falta")'
     expect(r.map(x => [x.regra, x.origem_id, x.severidade])).toEqual([['PARCELA_SEM_VINCULO', BIA_2, 'auto']])
   })
 
-  it('Aramis: PARCELA_SEM_VINCULO aprovar com as duas opções', () => {
-    const [p] = deSerie(dados(aramis()))
-    expect(p).toMatchObject({ regra: 'PARCELA_SEM_VINCULO', origem_id: ARA_1, severidade: 'aprovar' })
+  it('conflito descrição × posição: PARCELA_SEM_VINCULO aprovar com as duas opções', () => {
+    const [p] = deSerie(dados(conflito())).filter(x => x.regra === 'PARCELA_SEM_VINCULO')
+    expect(p).toMatchObject({ regra: 'PARCELA_SEM_VINCULO', origem_id: CNF_1, severidade: 'aprovar' })
     expect(p.esperado.opcoes.map(o => [o.id, `${o.num}/${o.total}`])).toEqual([
-      [`posicao:${S_ARA}`, '2/4'], [`descricao:${S_ARA}`, '1/4'],
+      [`posicao:${S_CNF}`, '1/4'], [`descricao:${S_CNF}`, '2/4'],
     ])
-    expect(p.esperado.opcoes[0].rotulo).toContain('pela posição na fatura 08/2026')
+    expect(p.esperado.opcoes[0].rotulo).toContain('pela posição na fatura 07/2026')
     // A posição pela fatura é a primeira e a recomendada (destacada no modal).
     expect(p.esperado.opcoes.map(o => o.recomendada)).toEqual([true, false])
-    expect(p.encontrado.motivo).toBe('a descrição diz 1/4, mas pela fatura é a 2/4')
+    expect(p.encontrado.motivo).toBe('a descrição diz 2/4, mas pela fatura é a 1/4')
   })
 
   it('sem série candidata: só informativo, sem opção', () => {
@@ -114,25 +115,19 @@ describe('Corrigir — religar a parcela', () => {
     expect(deSerie(nd)).toEqual([])
   })
 
-  it('Aramis: sem escolha não grava; escolhida a "2/4", a série fica completa a partir de 08/2026', () => {
-    const d = dados(aramis())
+  it('conflito: sem escolha não grava; escolhida a posição, religa como 1/4', () => {
+    const d = dados(conflito())
     expect(corrigir(d).ignorados.map(i => i.motivo)).toEqual(['Escolha uma das opções.'])
 
-    const { nd } = corrigir(d, `posicao:${S_ARA}`)
-    const tx = nd.transactions.find(t => t.id === ARA_1)
-    expect(tx).toMatchObject({ serieId: S_ARA, installmentNum: 2, installmentTotal: 4, description: 'Aramis 2/4', payee: 'Aramis 1/4' })
-    // 2/4 (08) → 3/4 (09) → 4/4 (10): nenhuma pendência de série. A 1/4 (07/2026) é anterior à
-    // primeira fatura com dado deste cartão — fora da conta, como em qualquer série.
-    expect(deSerie(nd)).toEqual([])
-    // Com outro gasto em 07 (o app já acompanhava), a única falta seria a 1/4 de 07.
-    const com07 = { ...nd, transactions: [...nd.transactions, gasto('tx_jul', 'Padaria', 10, '2026-07', { grupoGerencial: 'grp_D' })] }
-    const faltas = deSerie(com07).map(x => [x.regra, x.esperado.faltando?.map(f => `${f.parcela}@${f.fatura}`)])
-    expect(faltas).toEqual([['SERIE_PARCELAS_INCOMPLETA', ['1/4@07/2026']]])
+    const { nd } = corrigir(d, `posicao:${S_CNF}`)
+    const tx = nd.transactions.find(t => t.id === CNF_1)
+    expect(tx).toMatchObject({ serieId: S_CNF, installmentNum: 1, installmentTotal: 4, description: 'Loja Conflito 1/4', payee: 'Loja Conflito 2/4' })
+    expect(chaveDe(tx)).toBe('acc_itaupers|loja conflito|1/4|5000|2026-07')
   })
 
-  it('Aramis: a opção "manter como 1/4" religa com o número da descrição', () => {
-    const { nd } = corrigir(dados(aramis()), `descricao:${S_ARA}`)
-    expect(nd.transactions.find(t => t.id === ARA_1)).toMatchObject({ serieId: S_ARA, installmentNum: 1, description: 'Aramis 1/4' })
+  it('conflito: a opção "manter como 2/4" religa com o número da descrição', () => {
+    const { nd } = corrigir(dados(conflito()), `descricao:${S_CNF}`)
+    expect(nd.transactions.find(t => t.id === CNF_1)).toMatchObject({ serieId: S_CNF, installmentNum: 2, description: 'Loja Conflito 2/4' })
   })
 
   it('conflito com o índice único: não grava e diz o motivo', () => {
@@ -156,16 +151,16 @@ describe('Corrigir — religar a parcela', () => {
 })
 
 describe('Fatura fechada: só PARCELA_SEM_VINCULO avalia, e a correção só mexe no vínculo', () => {
-  const FECHADA_08 = { faturasFechadas: { 'acc_itaupers_2026-08': true } }
+  const FECHADA_08 = { faturasFechadas: { 'acc_itaupers_2026-07': true, 'acc_itaupers_2026-08': true } }
   const corrigir = (d, opcao) => aplicarAjustes(d, pendencias(d).filter(p => p.regra === 'PARCELA_SEM_VINCULO').map(p => (opcao ? { ...p, opcao } : p)))
   const VINCULO = ['serieId', 'installmentNum', 'installmentTotal']
   const mudou = (antes, depois) => Object.keys({ ...antes, ...depois }).filter(k => antes[k] !== depois[k]).sort()
 
   it('parcela sem vínculo em fatura fechada aparece porque a série tem parcela aberta — e nenhuma outra regra a avalia', () => {
-    const d = dados([...aramis(), ...amazon()], FECHADA_08)
-    const r = deSerie(d)
-    expect(r.map(x => [x.regra, x.origem_id]).sort()).toEqual([['PARCELA_SEM_VINCULO', AMZ_1], ['PARCELA_SEM_VINCULO', ARA_1]].sort())
-    expect(executarRegras(d, OPC).filter(x => x.fatura_ref === '08/2026' && x.regra !== 'PARCELA_SEM_VINCULO')).toEqual([])
+    const d = dados([...conflito(), ...amazon()], FECHADA_08)
+    const r = deSerie(d).filter(x => x.regra === 'PARCELA_SEM_VINCULO')
+    expect(r.map(x => [x.regra, x.origem_id]).sort()).toEqual([['PARCELA_SEM_VINCULO', AMZ_1], ['PARCELA_SEM_VINCULO', CNF_1]].sort())
+    expect(executarRegras(d, OPC).filter(x => ['07/2026', '08/2026'].includes(x.fatura_ref) && x.regra !== 'PARCELA_SEM_VINCULO')).toEqual([])
   })
 
   it('série toda em faturas fechadas: não é avaliada', () => {
@@ -173,14 +168,14 @@ describe('Fatura fechada: só PARCELA_SEM_VINCULO avalia, e a correção só mex
     expect(deSerie(d)).toEqual([])
   })
 
-  it('Aramis religado como 2/4 em fatura fechada: muda só serie_id e installment_num/total (descrição fica)', () => {
-    const d = dados(aramis(), FECHADA_08)
-    const { nd, aplicados } = corrigir(d, `posicao:${S_ARA}`)
+  it('religado pela posição em fatura fechada: muda só serie_id e installment_num/total (descrição fica)', () => {
+    const d = dados(conflito(), FECHADA_08)
+    const { nd, aplicados } = corrigir(d, `posicao:${S_CNF}`)
     expect(aplicados).toHaveLength(1)
-    const [antes, depois] = [d, nd].map(x => x.transactions.find(t => t.id === ARA_1))
+    const [antes, depois] = [d, nd].map(x => x.transactions.find(t => t.id === CNF_1))
     expect(mudou(antes, depois)).toEqual(VINCULO.sort())
-    expect(depois.description).toBe('Aramis 1/4')
-    expect(chaveDe(depois)).toBe('acc_itaupers|aramis|2/4|22450|2026-07')
+    expect(depois.description).toBe('Loja Conflito 2/4')
+    expect(chaveDe(depois)).toBe('acc_itaupers|loja conflito|1/4|5000|2026-07')
   })
 
   it('Amazon 1/6 em fatura fechada: idem — valor, data, fatura, grupo e saldo intactos', () => {
@@ -194,8 +189,9 @@ describe('Fatura fechada: só PARCELA_SEM_VINCULO avalia, e a correção só mex
 })
 
 describe('Corrigir todas', () => {
-  // As três compras no Grupo G: além de religar, a correção cria as etapas A que faltam.
-  const tudoG = () => dados([...amazon(), ...biashoes(), ...aramis()].map(t => ({ ...t, grupoGerencial: 'grp_1' })))
+  // As três compras no Grupo G: além de religar, a correção cria as etapas A que faltam. O conflito
+  // (aprovar) não entra no "Corrigir todas".
+  const tudoG = () => dados([...amazon(), ...biashoes(), ...conflito()].map(t => ({ ...t, grupoGerencial: 'grp_1' })))
   const corrigirTodas = (d) => aplicarAjustes(d, ordenarParaCorrecao(pendencias(d).filter(podeCorrigirSozinho)))
 
   it('religa as parcelas ANTES das etapas A', () => {
@@ -226,7 +222,7 @@ describe('Corrigir todas', () => {
     const { nd } = corrigirTodas(d)
     const t2 = aplicarPlano(t1, planejarVarredura(t1, executarRegras(nd, OPC), {}), 't2')
     const sem = t2.filter(p => p.regra === 'PARCELA_SEM_VINCULO')
-    expect(sem.filter(p => p.status === 'pendente').map(p => p.origem_id)).toEqual([ARA_1])
+    expect(sem.filter(p => p.status === 'pendente').map(p => p.origem_id)).toEqual([CNF_1])
     expect(sem.filter(p => p.status === 'resolvida').map(p => p.origem_id).sort()).toEqual([AMZ_1, BIA_2].sort())
   })
 })

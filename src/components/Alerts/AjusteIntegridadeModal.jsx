@@ -136,7 +136,7 @@ export default function AjusteIntegridadeModal({ pendencias, todas = false, onCl
                     ))}
                   </div>
                 )}
-                {plano?.ok && <span className="font-mono break-all">{plano.texto}</span>}
+                {plano?.ok && <span className="font-mono break-all whitespace-pre-line">{plano.texto}</span>}
                 {plano && !plano.ok && <><span className="text-gray-400">{p.descricao}</span><br />Sem ação: {plano.motivo}</>}
               </li>
             ))}
@@ -171,7 +171,7 @@ export default function AjusteIntegridadeModal({ pendencias, todas = false, onCl
                 ? <CheckCircle size={14} className="text-emerald-400 shrink-0 mt-0.5" />
                 : <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />}
               <div className="text-gray-300 min-w-0 break-words">
-                {r.aplicado ? <p className="font-mono break-all">{r.aplicado.texto}</p> : <p>Nenhuma alteração: {r.ignorado?.motivo}</p>}
+                {r.aplicado ? <p className="font-mono break-all whitespace-pre-line">{r.aplicado.texto}</p> : <p>Nenhuma alteração: {r.ignorado?.motivo}</p>}
                 {r.resolvida && r.gravada && <p className="text-emerald-400 mt-1">Divergência sumiu — pendência resolvida pelo motor.</p>}
                 {r.resolvida && !r.gravada && <p className="text-amber-400 mt-1">Divergência sumiu, mas não foi possível marcar a pendência ({r.falha}). A próxima varredura resolve.</p>}
                 {!r.resolvida && <p className="text-amber-400 mt-1">Continua pendente: {r.motivo}</p>}

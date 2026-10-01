@@ -293,6 +293,109 @@ function moda(lista) {
   return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]
 }
 
+// ─── Numeração pela posição nas faturas ─────────────────────────────────────
+//
+// Família = mesmo cartão + base + total + valor. Dentro dela, CADEIA = parcelas em faturas
+// consecutivas (uma por fatura), cortada em salto de mês, fatura com duas parcelas da família (gêmeas
+// ou duplicata — outras regras) ou número que DESCE (nova compra). Cadeia mais longa que o total
+// não tem numeração válida e fica para as outras regras (ex.: 1/3, 2/3, 2/3, 3/3 é repetição real).
+// Numeração candidata: cada parcela como âncora (num da âncora ± meses até ela), válida se todas as
+// parcelas ficam em 1..M. Custo = parcelas cujo número muda. Custo mínimo 0 → cadeia coerente.
+// Custo > 0 → a numeração está errada (ex.: 1/3, 3/3, 3/3 em 08/09/10 → 1/3, 2/3, 3/3).
+// Uma única numeração de custo mínimo → 'auto'; empate → 'aprovar' com as opções (a de âncora mais
+// recente primeiro). Casos reais (Itaupers, 01/10/2026): Farmácias São João e Jim.com 3x (setembro
+// "3/3" é a 2/3), M6 e Aramis 4x (agosto "1/4" é a 2/4).
+function cadeiasDoContexto(ctx) {
+  if (ctx.cadeias) return ctx.cadeias
+  const familias = new Map()
+  for (const g of ctx.gastos) {
+    const p = infoParcelaOuFavorecido(g.tx)
+    if (!p) continue
+    const k = `${g.card.id}|${p.base}|${p.total}|${centavos(g.tx)}`
+    if (!familias.has(k)) familias.set(k, [])
+    familias.get(k).push({ ...g, p })
+  }
+  const cadeias = []
+  const avaliar = (itens) => {
+    if (itens.length < 2) return
+    const total = itens[0].p.total
+    const porInicio = new Map()
+    for (const a of itens) {
+      const nums = itens.map(i => a.p.num + mesesEntre(a.fatura, i.fatura))
+      if (nums.some(n => n < 1 || n > total)) continue
+      const custo = itens.filter((i, j) => i.p.num !== nums[j]).length
+      const cur = porInicio.get(nums[0])
+      if (!cur) porInicio.set(nums[0], { nums, custo, ancora: a })
+      else if (a.fatura > cur.ancora.fatura) cur.ancora = a
+    }
+    const opcoes = [...porInicio.values()].sort((x, y) => x.custo - y.custo || y.ancora.fatura.localeCompare(x.ancora.fatura))
+    if (!opcoes.length || opcoes[0].custo === 0) return
+    const automatica = opcoes.filter(o => o.custo === opcoes[0].custo).length === 1
+    const [card, base, , cents] = [itens[0].card.id, itens[0].p.base, total, centavos(itens[0].tx)]
+    cadeias.push({
+      chave: `cadeia:${card}|${base}|${total}|${cents}|${itens[0].fatura}`,
+      itens, total, opcoes, automatica,
+    })
+  }
+  for (const itens of familias.values()) {
+    const porFatura = new Map()
+    for (const i of itens) {
+      if (!porFatura.has(i.fatura)) porFatura.set(i.fatura, [])
+      porFatura.get(i.fatura).push(i)
+    }
+    let atual = []
+    const fechar = () => { avaliar(atual); atual = [] }
+    for (const f of [...porFatura.keys()].sort()) {
+      const doMes = porFatura.get(f)
+      if (doMes.length > 1) { fechar(); continue }
+      const it = doMes[0]
+      const ant = atual[atual.length - 1]
+      if (ant && (mesesEntre(ant.fatura, f) !== 1 || it.p.num < ant.p.num)) fechar()
+      atual.push(it)
+    }
+    fechar()
+  }
+  ctx.cadeias = { cadeias, porTx: new Map(cadeias.flatMap(c => c.itens.map(i => [i.tx.id, c]))) }
+  return ctx.cadeias
+}
+
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+export const mesPorExtenso = (ym) => `${MESES[Number(ym.slice(5, 7)) - 1]}/${ym.slice(0, 4)}`
+
+// Opções de renumeração de uma cadeia: [{ id, rotulo, recomendada, custo, parcelas: [{ id, fatura,
+// de, para }] }]. A primeira é a de menor custo (e âncora mais recente).
+export function opcoesDeRenumeracao(cadeia) {
+  return cadeia.opcoes.map((o, idx) => ({
+    id: `inicio:${o.nums[0]}`,
+    recomendada: idx === 0,
+    custo: o.custo,
+    ancora: { id: o.ancora.tx.id, fatura: ymParaRef(o.ancora.fatura), parcela: `${o.ancora.p.num}/${cadeia.total}` },
+    rotulo: `${o.nums.map(n => `${n}/${cadeia.total}`).join(', ')} (âncora: ${o.ancora.p.num}/${cadeia.total} em ${mesPorExtenso(o.ancora.fatura)}; ${o.custo} parcela(s) renumerada(s))`,
+    parcelas: cadeia.itens.map((i, j) => ({
+      id: i.tx.id, fatura: ymParaRef(i.fatura), descricao: i.tx.description || '',
+      de: `${i.p.num}/${cadeia.total}`, para: `${o.nums[j]}/${cadeia.total}`, num: o.nums[j], serie_id: i.tx.serieId || null,
+    })),
+  }))
+}
+export const cadeiaDoTx = (ctx, txId) => cadeiasDoContexto(ctx).porTx.get(txId) || null
+export const cadeiaPorChave = (ctx, chave) => cadeiasDoContexto(ctx).cadeias.find(c => c.chave === chave) || null
+
+// Problema real da cadeia, em palavras: "duas parcelas 3/3 e sem 2/3", "1/4 fora da sequência e sem 2/4".
+function problemaDaCadeia(cadeia) {
+  const t = cadeia.total
+  const certa = cadeia.opcoes[0].nums
+  const qtd = new Map()
+  for (const i of cadeia.itens) qtd.set(i.p.num, (qtd.get(i.p.num) || 0) + 1)
+  const extenso = (n) => (n === 2 ? 'duas' : n === 3 ? 'três' : String(n))
+  const partes = []
+  for (const [n, c] of [...qtd].sort((a, b) => a[0] - b[0])) if (c > 1) partes.push(`${extenso(c)} parcelas ${n}/${t}`)
+  const fora = [...qtd.keys()].filter(n => qtd.get(n) === 1 && !certa.includes(n)).sort((a, b) => a - b)
+  if (fora.length) partes.push(`${fora.map(n => `${n}/${t}`).join(', ')} fora da sequência`)
+  const sem = certa.filter(n => !qtd.has(n))
+  if (sem.length) partes.push(`sem ${sem.map(n => `${n}/${t}`).join(', ')}`)
+  return partes.length > 1 ? `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}` : (partes[0] || 'numeração fora da sequência')
+}
+
 // Séries de parcelas, montadas UMA vez por contexto e usadas por todas as regras de série.
 //
 // O elo de uma compra é lancamentos.serie_id — installment_key traz o "N/M" e identifica a PARCELA,
@@ -302,11 +405,15 @@ function moda(lista) {
 // anexado em memória nessa posição (só para avaliação — o banco só muda pelo "Corrigir" do
 // PARCELA_SEM_VINCULO); se a posição já está ocupada pelo MESMO número, é anexado como possível
 // duplicata. Sem candidata, cai no agrupamento legado pela identidade da installment_key.
+// Parcelas de uma cadeia com numeração errada ficam de fora: a pendência delas é uma só
+// (SERIE_NUMERACAO_INCOERENTE); repetida/incompleta/sem vínculo seriam a mesma causa repetida.
 function seriesDoContexto(ctx) {
   if (ctx.series) return ctx.series
+  const naCadeia = cadeiasDoContexto(ctx).porTx
   const compras = new Map()
   const soltos = []
   for (const g of ctx.gastos) {
+    if (naCadeia.has(g.tx.id)) continue
     if (g.tx.serieId) {
       const p = infoParcela(g.tx)
       if (!p) continue
@@ -592,13 +699,23 @@ const PARCELA_NUMERO_INCOERENTE = {
         if (it.anexado || !ctx.avalia(g.card.id, g.fatura)) continue
         const motivos = []
         if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) {
-          if (p.totalOriginal !== p.total || p.numOriginal > p.num) motivos.push('descricao_original')
+          // Série com serie_id e irmã na mesma posição de início: o elo gravado e a posição nas faturas
+          // valem mais que o número do favorecido — herdado da linha geradora ou o próprio número
+          // errado que o banco mandou e a renumeração corrigiu (Farmácias: favorecido "3/3" na 2/3).
+          const irmaCoerente = compra.porSerieId && compra.itens.some(o => o !== it && !o.anexado && o.chaveInicio === it.chaveInicio)
+          if (p.totalOriginal !== p.total) motivos.push('descricao_original')
+          else if (irmaCoerente) { /* coerente pela série */ } else if (p.numOriginal > p.num) motivos.push('descricao_original')
           else {
             const serie = numsPorInicio.get(it.chaveInicio)
-            // Série com serie_id e irmã na mesma posição de início: o elo gravado vale mais que o
-            // favorecido herdado (ex.: Aramis religado como 2/4 com favorecido "1/4").
-            const irmaCoerente = compra.porSerieId && compra.itens.some(o => o !== it && !o.anexado && o.chaveInicio === it.chaveInicio)
-            if (!serie?.has(p.numOriginal) && !serie?.has(p.num - 1) && !irmaCoerente) motivos.push('parcela_de_origem_ausente')
+            if (!serie?.has(p.numOriginal) && !serie?.has(p.num - 1)) {
+              // A parcela de origem pode EXISTIR, só sem vínculo com esta série (outra serie_id ou
+              // nenhuma): aí o problema não é "não existe".
+              const faturaOrigemYM = addMesesYM(g.fatura, p.numOriginal - p.num)
+              const existe = ctx.gastos.some(o => o.tx.id !== g.tx.id && o.card.id === g.card.id &&
+                o.fatura === faturaOrigemYM && centavos(o.tx) === centavos(g.tx) &&
+                infoParcelaOuFavorecido(o.tx)?.base === p.base && infoParcelaOuFavorecido(o.tx)?.num === p.numOriginal)
+              motivos.push(existe ? 'parcela_de_origem_fora_da_serie' : 'parcela_de_origem_ausente')
+            }
           }
         }
         if (p.numDescricao != null && (p.numDescricao !== p.num || p.totalDescricao !== p.total)) motivos.push('colunas')
@@ -608,6 +725,8 @@ const PARCELA_NUMERO_INCOERENTE = {
         const faturaOrigem = p.numOriginal != null ? ymParaRef(addMesesYM(g.fatura, p.numOriginal - p.num)) : null
         const explicacao = motivos.includes('parcela_de_origem_ausente')
           ? `, mas o favorecido diz ${real} e não existe a parcela ${real} (fatura ${faturaOrigem}) de onde ela teria sido gerada`
+          : motivos.includes('parcela_de_origem_fora_da_serie')
+            ? `, mas o favorecido diz ${real}: a parcela ${real} existe na fatura ${faturaOrigem}, porém fora desta série (sem o mesmo serie_id)`
           : motivos.includes('descricao_original') ? `, mas o favorecido (descrição do banco) diz ${real}`
             : `, mas as colunas dizem ${p.num}/${p.total}`
         out.push(divergencia(this, {
@@ -622,6 +741,37 @@ const PARCELA_NUMERO_INCOERENTE = {
       }
     }
     return out.sort((a, b) => a.origem_id.localeCompare(b.origem_id))
+  },
+}
+
+// Série com número repetido ou fora da sequência das faturas. Uma pendência por cadeia, com a
+// renumeração pela posição (ver cadeiasDoContexto) e a religação de todas na mesma serie_id.
+const SERIE_NUMERACAO_INCOERENTE = {
+  codigo: 'SERIE_NUMERACAO_INCOERENTE', lado: 'divergência', severidade: 'aprovar',
+  descricao: 'Compra parcelada com número repetido ou fora da sequência das faturas — renumerar pela posição',
+  verificar(dados) {
+    const ctx = montarContexto(dados)
+    const out = []
+    for (const c of cadeiasDoContexto(ctx).cadeias) {
+      if (!c.itens.some(i => ctx.avalia(i.card.id, i.fatura))) continue
+      const opcoes = opcoesDeRenumeracao(c)
+      const ref = c.itens[c.itens.length - 1]
+      const certa = opcoes[0]
+      const mudam = certa.parcelas.filter(x => x.de !== x.para)
+      out.push(divergencia(this, {
+        severidade: c.automatica ? 'auto' : 'aprovar',
+        origem_id: c.chave, conta_id: ref.card.id, fatura_ref: ymParaRef(ref.fatura),
+        descricao: `"${ref.p.base}" ${c.total}x de ${brl(ref.tx.amount)}: série com ${problemaDaCadeia(c)} — ` +
+          (c.automatica
+            ? `pela posição nas faturas ${mudam.map(x => `${x.fatura} é ${x.para}`).join(', ')}`
+            : 'mais de uma numeração possível'),
+        esperado: { numeracao: certa.parcelas.map(x => x.para), opcoes },
+        encontrado: {
+          parcelas: c.itens.map(i => ({ id: i.tx.id, fatura: ymParaRef(i.fatura), parcela: `${i.p.num}/${c.total}`, serie_id: i.tx.serieId || null })),
+        },
+      }))
+    }
+    return out
   },
 }
 
@@ -1155,7 +1305,7 @@ const CADEIA_INCOMPLETA = {
 
 export const REGRAS = [
   GER_ETAPA_A_FALTANDO, GER_ETAPA_A_VALOR, GER_ETAPA_A_ORFA, GER_ETAPA_A_DUPLICADA,
-  PARCELA_SEM_VINCULO, PARCELA_DUPLICADA, PARCELA_FATURA_INCOERENTE, PARCELA_NUMERO_INCOERENTE,
+  SERIE_NUMERACAO_INCOERENTE, PARCELA_SEM_VINCULO, PARCELA_DUPLICADA, PARCELA_FATURA_INCOERENTE, PARCELA_NUMERO_INCOERENTE,
   SERIE_PARCELAS_INCOMPLETA, SERIE_PARCELAS_REPETIDA, SERIE_GRUPO_DIVERGENTE,
   GER_FECHAMENTO_FATURA, GER_SALDO_SUBCONTA,
   NUM_RESGATE_FALTANDO, NUM_RESGATE_VALOR, NUM_RESGATE_ORFAO, NUM_SEM_CONTA_ORIGEM,
