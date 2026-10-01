@@ -3,7 +3,7 @@ import { ShieldCheck, RefreshCw, Loader2, ExternalLink, EyeOff, RotateCcw, Credi
 import { useApp } from '../../context/AppContext'
 import { fetchPendenciasIntegridade, varrerIntegridade, mudarStatusPendencia } from '../../lib/db'
 import { REGRAS_POR_CODIGO } from '../../lib/integridade/regras'
-import { podeAjustar } from '../../lib/integridade/ajustes'
+import { podeAjustar, podeCorrigirSozinho } from '../../lib/integridade/ajustes'
 import AjusteIntegridadeModal from './AjusteIntegridadeModal'
 import AceitarSaldoModal from './AceitarSaldoModal'
 import Modal from '../shared/Modal'
@@ -61,7 +61,7 @@ export default function IntegridadePanel({ setActivePage }) {
   const [resumo, setResumo] = useState(null)
   const [erro, setErro] = useState('')
   const [editTx, setEditTx] = useState(null)
-  const [ajustar, setAjustar] = useState(null) // pendências no modal de ajuste
+  const [ajustar, setAjustar] = useState(null) // { pendencias, todas } no modal de correção
   const [aceitarSaldo, setAceitarSaldo] = useState(null) // pendência GER_SALDO_SUBCONTA no modal de marco
 
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
@@ -117,6 +117,8 @@ export default function IntegridadePanel({ setActivePage }) {
     setActivePage?.('credit')
   }
 
+  const corrigiveis = useMemo(() => pendencias.filter(podeCorrigirSozinho), [pendencias])
+
   const porRegra = useMemo(() => {
     const m = new Map()
     for (const p of pendencias) {
@@ -155,13 +157,20 @@ export default function IntegridadePanel({ setActivePage }) {
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {STATUS.map(s => (
           <button key={s.id} onClick={() => trocarStatus(s.id)}
             className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${status === s.id ? 'bg-[#0F6E56] text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
             {s.label}
           </button>
         ))}
+        {status === 'pendente' && corrigiveis.length > 0 && (
+          <button className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
+            title="Aplica todas as correções automáticas (religar parcelas, depois etapas A) e varre de novo"
+            onClick={() => setAjustar({ pendencias: corrigiveis, todas: true })}>
+            <Wrench size={12} /> Corrigir todas ({corrigiveis.length})
+          </button>
+        )}
       </div>
 
       {erro && <div className="card border border-red-500/40 text-sm text-red-400">{erro}</div>}
@@ -183,10 +192,10 @@ export default function IntegridadePanel({ setActivePage }) {
               <span className="badge bg-gray-700/60 text-gray-400 font-mono">{regra}</span>
               {def?.lado && <span className={`badge ${LADO_COR[def.lado] || LADO_COR.configuração}`}>{def.lado}</span>}
               <span className="text-xs text-gray-500 ml-auto">{itens.length}</span>
-              {itens.filter(podeAjustar).length > 0 && (
-                <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
-                  onClick={() => setAjustar(itens.filter(podeAjustar))}>
-                  <Wrench size={12} /> Ajustar todas automáticas ({itens.filter(podeAjustar).length})
+              {itens.filter(podeCorrigirSozinho).length > 1 && (
+                <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                  onClick={() => setAjustar({ pendencias: itens.filter(podeCorrigirSozinho) })}>
+                  <Wrench size={12} /> Corrigir as automáticas desta regra ({itens.filter(podeCorrigirSozinho).length})
                 </button>
               )}
             </div>
@@ -249,8 +258,8 @@ export default function IntegridadePanel({ setActivePage }) {
                   <div className="flex flex-wrap gap-2 pt-1">
                     {podeAjustar(p) && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
-                        onClick={() => setAjustar([p])}>
-                        <Wrench size={12} /> Ajustar
+                        onClick={() => setAjustar({ pendencias: [p] })}>
+                        <Wrench size={12} /> Corrigir
                       </button>
                     )}
                     {p.regra === 'GER_SALDO_SUBCONTA' && p.status === 'pendente' && (
@@ -293,7 +302,7 @@ export default function IntegridadePanel({ setActivePage }) {
       })}
 
       {ajustar && (
-        <AjusteIntegridadeModal pendencias={ajustar} onClose={() => setAjustar(null)} onConcluido={carregar} />
+        <AjusteIntegridadeModal pendencias={ajustar.pendencias} todas={!!ajustar.todas} onClose={() => setAjustar(null)} onConcluido={carregar} />
       )}
 
       {aceitarSaldo && (

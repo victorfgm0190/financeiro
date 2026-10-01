@@ -59,8 +59,10 @@ describe('Motor de Integridade — bug de 30/09/2026 (Fatura 10/2026 Itaupers)',
   it('nenhuma outra regra dispara na fixture', () => {
     expect(Object.keys(r).sort()).toEqual([
       'GER_ETAPA_A_FALTANDO', 'GER_FECHAMENTO_FATURA', 'GER_SALDO_SUBCONTA',
-      'PARCELA_NUMERO_INCOERENTE', 'SERIE_PARCELAS_INCOMPLETA',
+      'PARCELA_NUMERO_INCOERENTE', 'PARCELA_SEM_VINCULO', 'SERIE_PARCELAS_INCOMPLETA',
     ])
+    // As séries da fixture são legadas (sem serie_id em nenhuma parcela): só informativo, sem opção.
+    expect(r.PARCELA_SEM_VINCULO.every(d => d.severidade === 'aprovar' && d.esperado.opcoes.length === 0)).toBe(true)
   })
 
   it('com as etapas A criadas, tudo fecha', () => {

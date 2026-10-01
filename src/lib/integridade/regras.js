@@ -259,24 +259,128 @@ function divergencia(regra, campos) {
 
 // ─── Séries de parcelas ─────────────────────────────────────────────────────
 
-// Compra parcelada: serie_id quando existe (elo direto gravado na importação); senão a mesma
-// identidade da installment_key sem o número — cartão | base | total | centavos | início da série
-// (fatura − (num − 1)) | ocorrência (gêmeas legítimas). Duas parcelas com o mesmo número nessa
-// segunda identidade caem, por construção, na MESMA fatura.
-function comprasParceladas(ctx) {
-  const porCompra = new Map()
-  for (const g of ctx.gastos) {
-    const p = infoParcela(g.tx)
-    if (!p) continue
-    const cents = Math.round((Number(g.tx.amount) || 0) * 100)
-    const occ = Number(g.tx.installmentOccurrence) > 1 ? `#${g.tx.installmentOccurrence}` : ''
-    const inicio = addMesesYM(g.fatura, -(p.num - 1))
-    const chaveInicio = `${g.card.id}|${p.base}|${p.total}|${cents}|${inicio}${occ}`
-    const chave = g.tx.serieId ? `serie:${g.tx.serieId}` : `compra:${chaveInicio}`
-    if (!porCompra.has(chave)) porCompra.set(chave, { chave, porSerieId: !!g.tx.serieId, itens: [] })
-    porCompra.get(chave).itens.push({ ...g, p, chaveInicio })
+// Parcela pelo favorecido quando a descrição não traz "N/M" (ex.: descrição limpa "Amazon
+// Marketplace", favorecido "Amazon Marketplace 1/6"). Só vale se a base do favorecido for a própria
+// descrição — um favorecido de OUTRA loja não transforma o lançamento em parcela.
+export function infoParcelaOuFavorecido(tx) {
+  const p = infoParcela(tx)
+  if (p) return p
+  const orig = detectInstallment(tx.payee || '')
+  if (!orig) return null
+  const base = normalizeInstallmentBase(tx.description)
+  if (!base || normalizeInstallmentBase(orig.base) !== base) return null
+  return {
+    num: orig.num, total: orig.total, base, numDescricao: null, totalDescricao: null,
+    numOriginal: orig.num, totalOriginal: orig.total, numReal: orig.num, viaFavorecido: true,
   }
-  return [...porCompra.values()]
+}
+
+const centavos = (tx) => Math.round((Number(tx.amount) || 0) * 100)
+const mesesEntre = (a, b) => {
+  const [ya, ma] = a.split('-').map(Number)
+  const [yb, mb] = b.split('-').map(Number)
+  return (yb - ya) * 12 + (mb - ma)
+}
+// Identidade da installment_key sem o número: cartão | base | total | centavos | início da série
+// (fatura − (num − 1)) | ocorrência (gêmeas legítimas).
+function chaveInicioDe(g, p) {
+  const occ = Number(g.tx.installmentOccurrence) > 1 ? `#${g.tx.installmentOccurrence}` : ''
+  return `${g.card.id}|${p.base}|${p.total}|${centavos(g.tx)}|${addMesesYM(g.fatura, -(p.num - 1))}${occ}`
+}
+function moda(lista) {
+  const n = new Map()
+  for (const x of lista) n.set(x, (n.get(x) || 0) + 1)
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]
+}
+
+// Séries de parcelas, montadas UMA vez por contexto e usadas por todas as regras de série.
+//
+// O elo de uma compra é lancamentos.serie_id — installment_key traz o "N/M" e identifica a PARCELA,
+// não a compra. Primeiro agrupa por serie_id. Depois, cada lançamento parcelado SEM serie_id é
+// casado com as séries candidatas: mesmo cartão + base + valor + total, com a posição pela fatura
+// (fatura − início da série + 1) caindo num BURACO da série. Com exatamente uma candidata ele é
+// anexado em memória nessa posição (só para avaliação — o banco só muda pelo "Corrigir" do
+// PARCELA_SEM_VINCULO); se a posição já está ocupada pelo MESMO número, é anexado como possível
+// duplicata. Sem candidata, cai no agrupamento legado pela identidade da installment_key.
+function seriesDoContexto(ctx) {
+  if (ctx.series) return ctx.series
+  const compras = new Map()
+  const soltos = []
+  for (const g of ctx.gastos) {
+    if (g.tx.serieId) {
+      const p = infoParcela(g.tx)
+      if (!p) continue
+      const chave = `serie:${g.tx.serieId}`
+      if (!compras.has(chave)) compras.set(chave, { chave, serieId: g.tx.serieId, porSerieId: true, itens: [] })
+      compras.get(chave).itens.push({ ...g, p, chaveInicio: chaveInicioDe(g, p) })
+    } else {
+      const p = infoParcelaOuFavorecido(g.tx)
+      if (p) soltos.push({ ...g, p })
+    }
+  }
+  const series = [...compras.values()]
+  for (const c of series) {
+    const ref = c.itens[0]
+    Object.assign(c, {
+      cardId: ref.card.id, base: ref.p.base, total: ref.p.total, cents: centavos(ref.tx),
+      inicio: moda(c.itens.map(i => addMesesYM(i.fatura, -(i.p.num - 1)))),
+      nums: new Set(c.itens.map(i => i.p.num)),
+    })
+  }
+
+  const vinculos = new Map()
+  for (const u of soltos) {
+    const candidatas = []
+    const duplicataDe = []
+    for (const c of series) {
+      if (c.cardId !== u.card.id || c.base !== u.p.base || c.total !== u.p.total || c.cents !== centavos(u.tx)) continue
+      const k = mesesEntre(c.inicio, u.fatura) + 1
+      if (k < 1 || k > c.total) continue
+      if (!c.nums.has(k)) candidatas.push({ compra: c, k, conflito: k !== u.p.num })
+      else if (k === u.p.num) duplicataDe.push(c)
+    }
+    vinculos.set(u.tx.id, { item: u, candidatas, duplicataDe })
+    const alvo = candidatas.length === 1 ? candidatas[0]
+      : (!candidatas.length && duplicataDe.length === 1 ? { compra: duplicataDe[0], k: u.p.num } : null)
+    if (alvo) {
+      const p = { ...u.p, num: alvo.k }
+      alvo.compra.itens.push({ ...u, p, chaveInicio: chaveInicioDe(u, p), anexado: true })
+    } else if (!u.p.viaFavorecido) {
+      const chaveInicio = chaveInicioDe(u, u.p)
+      const chave = `compra:${chaveInicio}`
+      if (!compras.has(chave)) compras.set(chave, { chave, porSerieId: false, itens: [] })
+      compras.get(chave).itens.push({ ...u, chaveInicio })
+    }
+  }
+  ctx.series = { compras: [...compras.values()], vinculos }
+  return ctx.series
+}
+
+const comprasParceladas = (ctx) => seriesDoContexto(ctx).compras
+
+// Opções de religação de um lançamento sem serie_id (para a pendência e para o "Corrigir").
+//   posição: o número pela fatura (encaixa no buraco com fatura coerente com as irmãs);
+//   descrição: o número do "N/M" da descrição, quando ele diverge da posição e também é buraco.
+export function opcoesDeVinculo(ctx, txId) {
+  const v = seriesDoContexto(ctx).vinculos.get(txId)
+  if (!v) return null
+  const { item: u, candidatas } = v
+  const opcoes = []
+  for (const c of candidatas) {
+    const s = c.compra
+    opcoes.push({
+      id: `posicao:${s.serieId}`, por: 'posicao', serie_id: s.serieId, num: c.k, total: s.total,
+      rotulo: `Religar como ${c.k}/${s.total} da série ${s.serieId}, pela posição na fatura ${ymParaRef(u.fatura)}`,
+    })
+    if (c.conflito && !s.nums.has(u.p.num)) {
+      opcoes.push({
+        id: `descricao:${s.serieId}`, por: 'descricao', serie_id: s.serieId, num: u.p.num, total: s.total,
+        rotulo: `Manter como ${u.p.num}/${s.total} (número da descrição) e religar à série ${s.serieId}`,
+      })
+    }
+  }
+  const automatica = candidatas.length === 1 && !candidatas[0].conflito
+  return { ...v, opcoes, automatica }
 }
 
 // ─── Regras ─────────────────────────────────────────────────────────────────
@@ -484,13 +588,16 @@ const PARCELA_NUMERO_INCOERENTE = {
       for (const it of compra.itens) {
         const g = it
         const p = it.p
-        if (!ctx.avalia(g.card.id, g.fatura)) continue
+        if (it.anexado || !ctx.avalia(g.card.id, g.fatura)) continue
         const motivos = []
         if (p.numOriginal != null && (p.numOriginal !== p.num || p.totalOriginal !== p.total)) {
           if (p.totalOriginal !== p.total || p.numOriginal > p.num) motivos.push('descricao_original')
           else {
             const serie = numsPorInicio.get(it.chaveInicio)
-            if (!serie?.has(p.numOriginal) && !serie?.has(p.num - 1)) motivos.push('parcela_de_origem_ausente')
+            // Série com serie_id e irmã na mesma posição de início: o elo gravado vale mais que o
+            // favorecido herdado (ex.: Aramis religado como 2/4 com favorecido "1/4").
+            const irmaCoerente = compra.porSerieId && compra.itens.some(o => o !== it && !o.anexado && o.chaveInicio === it.chaveInicio)
+            if (!serie?.has(p.numOriginal) && !serie?.has(p.num - 1) && !irmaCoerente) motivos.push('parcela_de_origem_ausente')
           }
         }
         if (p.numDescricao != null && (p.numDescricao !== p.num || p.totalDescricao !== p.total)) motivos.push('colunas')
@@ -514,6 +621,50 @@ const PARCELA_NUMERO_INCOERENTE = {
       }
     }
     return out.sort((a, b) => a.origem_id.localeCompare(b.origem_id))
+  },
+}
+
+// Lançamento parcelado ("N/M" na descrição ou no favorecido) sem serie_id. Com uma única série
+// candidata e posição pela fatura = número da descrição → 'auto' (religar). Mais de uma candidata ou
+// número da descrição ≠ posição → 'aprovar' com as opções. Sem candidata → só informativo.
+// Avaliado também em fatura FECHADA quando a série candidata tem parcela em fatura aberta: o
+// vínculo perdido é o que faz a série aberta parecer incompleta, e religar não mexe em valor,
+// data, fatura nem saldo.
+const PARCELA_SEM_VINCULO = {
+  codigo: 'PARCELA_SEM_VINCULO', lado: 'falta', severidade: 'aprovar',
+  descricao: 'Parcela ("N/M") sem serie_id — sem vínculo com as irmãs da compra',
+  verificar(dados) {
+    const ctx = montarContexto(dados)
+    const out = []
+    for (const txId of seriesDoContexto(ctx).vinculos.keys()) {
+      const v = opcoesDeVinculo(ctx, txId)
+      const u = v.item
+      const serieAberta = v.candidatas.some(c => c.compra.itens.some(i => ctx.avalia(i.card.id, i.fatura)))
+      if (!ctx.avalia(u.card.id, u.fatura) && !serieAberta) continue
+      const parcela = `${u.p.num}/${u.p.total}`
+      const motivo = v.automatica ? null
+        : v.candidatas.length > 1 ? 'mais de uma série candidata'
+          : v.candidatas.length === 1 ? `a descrição diz ${parcela}, mas pela fatura é a ${v.candidatas[0].k}/${u.p.total}`
+            : v.duplicataDe.length ? 'a série já tem essa parcela (possível duplicata)'
+              : 'nenhuma série candidata'
+      out.push(divergencia(this, {
+        severidade: v.automatica ? 'auto' : 'aprovar',
+        origem_id: u.tx.id, conta_id: u.card.id, fatura_ref: ymParaRef(u.fatura),
+        descricao: `"${u.tx.description || ''}" (${brl(u.tx.amount)}) na fatura ${ymParaRef(u.fatura)} está sem vínculo de série` +
+          (v.automatica ? ` — encaixa como ${parcela} da série ${v.candidatas[0].compra.serieId}` : ` — ${motivo}`),
+        esperado: { serie_id: v.automatica ? v.candidatas[0].compra.serieId : null, parcela: v.automatica ? parcela : null, opcoes: v.opcoes },
+        encontrado: {
+          serie_id: null, parcela_descricao: parcela, motivo, gasto: resumoGasto(u),
+          via_favorecido: !!u.p.viaFavorecido,
+          series: v.candidatas.map(c => ({
+            serie_id: c.compra.serieId, posicao: `${c.k}/${c.compra.total}`,
+            presentes: [...c.compra.nums].sort((a, b) => a - b).map(n => `${n}/${c.compra.total}`),
+          })),
+          duplicata_de: v.duplicataDe.map(c => c.serieId),
+        },
+      }))
+    }
+    return out
   },
 }
 
@@ -1003,7 +1154,7 @@ const CADEIA_INCOMPLETA = {
 
 export const REGRAS = [
   GER_ETAPA_A_FALTANDO, GER_ETAPA_A_VALOR, GER_ETAPA_A_ORFA, GER_ETAPA_A_DUPLICADA,
-  PARCELA_DUPLICADA, PARCELA_FATURA_INCOERENTE, PARCELA_NUMERO_INCOERENTE,
+  PARCELA_SEM_VINCULO, PARCELA_DUPLICADA, PARCELA_FATURA_INCOERENTE, PARCELA_NUMERO_INCOERENTE,
   SERIE_PARCELAS_INCOMPLETA, SERIE_PARCELAS_REPETIDA, SERIE_GRUPO_DIVERGENTE,
   GER_FECHAMENTO_FATURA, GER_SALDO_SUBCONTA,
   NUM_RESGATE_FALTANDO, NUM_RESGATE_VALOR, NUM_RESGATE_ORFAO, NUM_SEM_CONTA_ORIGEM,

@@ -442,6 +442,9 @@ export const txToRow = (tx) => ({
   categoria_cnpj_id: tx.categoriaCnpjId || null,
   categoria_cpf_id: tx.categoriaCpfId || null,
   created_at: tx.createdAt || new Date().toISOString(),
+  // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
+  // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
+  _limpar_parcela: !!tx._limparParcela,
 })
 
 export const rowToTx = (r) => ({

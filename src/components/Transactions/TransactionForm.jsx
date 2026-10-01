@@ -419,9 +419,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       // preserva o valor existente (ex.: etapa A tx_gerA_* já traz faturaRef própria).
       faturaRef: showFaturaRef ? ((form.faturaRef || '').trim() || null) : (initial?.faturaRef ?? null),
       dateCartao: form.dateCartao || null,
-      installmentNum,
-      installmentTotal,
-      serieId,
+      // Campos de parcela só na CRIAÇÃO. Na edição eles saíam null (isParcelado/decidedInst só valem
+      // para lançamento novo) e o updateTransaction gravava installment_num/total, serie_id e,
+      // por derivação, installment_key = NULL — o vínculo da série se perdia ao salvar qualquer
+      // edição. Mudança de parcela na edição é feita pelo card "Parcela N de M" (confirmInstEdit/clearInst).
+      ...(initial?.id ? {} : { installmentNum, installmentTotal, serieId }),
       // Transferência com função de reserva selecionada (origem/destino reserva c/ >1 função).
       // Despesa com "Pago com reserva?" ativo (cartão grupo numerado OU conta corrente): função
       // escolhida no select. Em edição, preserva o valor existente (ex.: cartão importado).
@@ -789,7 +791,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     onToast?.(`Marcado como parcela ${num}/${total}.`)
   }
   const clearInst = () => {
-    updateTransaction(initial.id, { installmentNum: null, installmentTotal: null })
+    // _limparParcela: a única limpeza de parcela intencional — libera a proteção do upsert
+    // (api/_db.js), que não deixa um NULL sobrescrever campos de parcela já gravados.
+    updateTransaction(initial.id, { installmentNum: null, installmentTotal: null, _limparParcela: true })
     setInstOverride(null)
     setEditInst(false)
     onToast?.('Marcado como à vista.')

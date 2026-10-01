@@ -24,15 +24,48 @@ export async function query(sql, params = []) {
 const MAX_BIND_PARAMS = 60000
 const MAX_CHUNK_ROWS = 500
 
-// Executa um único INSERT ... ON CONFLICT para um lote de rows homogêneas (mesmas colunas).
-async function upsertChunk(client, table, cols, rows, conflictCol) {
-  // Guardas: rows/cols vazios geram VALUES vazio → "syntax error at end of input".
-  if (!rows || rows.length === 0 || !cols || cols.length === 0) return
+// Campos de parcela de lancamentos que um UPDATE nunca pode apagar. O sync manda TODAS as linhas a
+// cada gravação (syncSection), então qualquer cópia do lançamento sem esses campos — um formulário
+// de edição que os devolvia null, uma aba com estado antigo — zerava o vínculo da série no banco.
+// Com a proteção, NULL vindo do app mantém o valor gravado; valor novo não-nulo continua valendo.
+// A limpeza intencional ("Marcar como à vista") manda _limpar_parcela = true e grava o NULL.
+export const CAMPOS_PARCELA_PROTEGIDOS = ['installment_num', 'installment_total', 'installment_key', 'serie_id']
+export const FLAG_LIMPAR_PARCELA = '_limpar_parcela'
 
+// SQL do upsert de um lote. `preservarSeNulo`: colunas cujo valor gravado vence um NULL de entrada.
+export function montarUpsertSql(table, cols, nRows, conflictCol, preservarSeNulo = []) {
   let idx = 1
-  const values = rows
-    .map(() => `(${cols.map(() => `$${idx++}`).join(', ')})`)
-    .join(', ')
+  const values = Array.from({ length: nRows }, () => `(${cols.map(() => `$${idx++}`).join(', ')})`).join(', ')
+  // Quando cols só tem a coluna de conflito, o SET fica vazio ("DO UPDATE SET " sem nada
+  // depois) → "syntax error at end of input". Nesse caso não há o que atualizar: DO NOTHING.
+  const updateCols = cols.filter(c => c !== conflictCol)
+  const preservar = new Set(preservarSeNulo)
+  const set = (c) => preservar.has(c)
+    ? `"${c}" = COALESCE(EXCLUDED."${c}", ${table}."${c}")`
+    : `"${c}" = EXCLUDED."${c}"`
+  const conflictClause = updateCols.length === 0
+    ? `ON CONFLICT ("${conflictCol}") DO NOTHING`
+    : `ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateCols.map(set).join(', ')}`
+  return `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ${conflictClause}`
+}
+
+// Separa as linhas de lancamentos em protegidas × limpeza intencional e tira a flag (não é coluna).
+export function separarLimpezaDeParcela(rows) {
+  const protegidas = []
+  const limpar = []
+  for (const r of rows) {
+    if (!(FLAG_LIMPAR_PARCELA in r)) { protegidas.push(r); continue }
+    const { [FLAG_LIMPAR_PARCELA]: flag, ...resto } = r
+    ;(flag ? limpar : protegidas).push(resto)
+  }
+  return { protegidas, limpar }
+}
+
+// Executa um único INSERT ... ON CONFLICT para um lote de rows homogêneas (mesmas colunas).
+async function upsertChunk(client, table, cols, rows, conflictCol, preservarSeNulo = []) {
+  // Guardas: rows/cols vazios geram VALUES vazio → "syntax error at end of input".
+  if (!rows || rows.length === 0 || !cols || cols.length === 0) return 0
+
   const params = rows.flatMap(row =>
     cols.map(c => {
       const v = row[c]
@@ -41,13 +74,7 @@ async function upsertChunk(client, table, cols, rows, conflictCol) {
       return v
     })
   )
-  // Quando cols só tem a coluna de conflito, o SET fica vazio ("DO UPDATE SET " sem nada
-  // depois) → "syntax error at end of input". Nesse caso não há o que atualizar: DO NOTHING.
-  const updateCols = cols.filter(c => c !== conflictCol)
-  const conflictClause = updateCols.length === 0
-    ? `ON CONFLICT ("${conflictCol}") DO NOTHING`
-    : `ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ')}`
-  const sql = `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ${conflictClause}`
+  const sql = montarUpsertSql(table, cols, rows.length, conflictCol, preservarSeNulo)
   try {
     // rowCount conta inseridas + atualizadas. Devolvido para cima porque um upsert que grava
     // ZERO linhas era indistinguível de um que gravou todas: os dois terminavam sem erro.
@@ -98,16 +125,25 @@ export async function upsertRows(table, rows, conflictCol = 'id') {
   if (!rows || rows.length === 0) return 0
   const client = await getPool().connect()
   try {
+    // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
+    let lotes = [[rows, []]]
     if (table === 'lancamentos') {
-      rows = await reconcileInstallmentKeys(client, rows)
+      const { protegidas, limpar } = separarLimpezaDeParcela(rows)
+      lotes = [
+        [await reconcileInstallmentKeys(client, protegidas), CAMPOS_PARCELA_PROTEGIDOS],
+        [await reconcileInstallmentKeys(client, limpar), []],
+      ]
     }
-    const cols = Object.keys(rows[0])
-    const perChunk = Math.max(1, Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_BIND_PARAMS / cols.length)))
 
     await client.query('BEGIN')
     let gravadas = 0
-    for (let i = 0; i < rows.length; i += perChunk) {
-      gravadas += await upsertChunk(client, table, cols, rows.slice(i, i + perChunk), conflictCol)
+    for (const [lote, preservar] of lotes) {
+      if (!lote.length) continue
+      const cols = Object.keys(lote[0])
+      const perChunk = Math.max(1, Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_BIND_PARAMS / cols.length)))
+      for (let i = 0; i < lote.length; i += perChunk) {
+        gravadas += await upsertChunk(client, table, cols, lote.slice(i, i + perChunk), conflictCol, preservar)
+      }
     }
     await client.query('COMMIT')
     return gravadas

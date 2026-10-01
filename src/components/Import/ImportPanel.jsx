@@ -984,6 +984,29 @@ function serieKeyFromFull(fullKey) {
 }
 function serieKeyOfExistingTx(tx) { return serieKeyFromFull(keyOfExistingTx(tx)) }
 
+// serie_id das séries já gravadas no cartão, pela chave da série (installment_key sem o número).
+function serieIdsDoCartao(transactions, accountId) {
+  const m = new Map()
+  for (const t of transactions || []) {
+    if (t.accountId !== accountId || t.type !== 'expense' || !t.serieId) continue
+    const sk = serieKeyOfExistingTx(t)
+    if (sk && !m.has(sk)) m.set(sk, t.serieId)
+  }
+  return m
+}
+// serie_id de uma linha parcelada da conciliação: o da série já gravada (mesma chave de série) ou um
+// novo. Sem isto as parcelas importadas pela conciliação (1/N e as futuras geradas) nasciam sem
+// serie_id — fora do elo da série.
+function serieIdDaLinhaConciliacao(indice, accountId, row, faturaMY) {
+  const inst = detectInstallment(row.description)
+  if (!inst || (row.type || 'expense') !== 'expense') return null
+  const sk = serieKeyFromFull(installmentKey({
+    accountId, description: row.description, installmentNum: inst.num, installmentTotal: inst.total,
+    amount: row.amount, faturaMonthYear: faturaMY,
+  }))
+  return (sk && indice.get(sk)) || newSerieId()
+}
+
 // Chave de COLISÃO = installment_key SEM o componente de centavos
 // (accountId | base | num/total | serie_inicio).
 //
@@ -1503,8 +1526,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const grupoFromSerie = serieInfo?.grupo || null
         // serie_id da linha: junta a série já existente (usa o serie_id dela) ou gera um novo
         // para uma compra parcelada NOVA. Série legada existente sem serie_id → null (fallback).
+        // Série legada já gravada SEM serie_id também ganha um: as irmãs antigas aparecem no Motor de
+        // Integridade (PARCELA_SEM_VINCULO) e são religadas a ele pelo "Corrigir".
         const serieIdRow = isParcelado
-          ? (serieInfo ? (serieInfo.serieId || null) : newSerieId())
+          ? (serieInfo?.serieId || newSerieId())
           : null
         // Prioridade: regra de descrição > série (parcela irmã) > default da categoria > D.
         const catDefaultGrupo = categoryId ? (categories.find(c => c.id === categoryId)?.defaultGerencialGroup || null) : null
@@ -2492,6 +2517,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // Classifica cada item do CSV (categoria/gerencial/favorecido) p/ o caso de importação.
       const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
       let idCtr = 0
+      const seriesDoCartao = serieIdsDoCartao(transactions, selectedAccount)
       const csvClassified = csvRows.map(row => {
         const rowDay = new Date(row.date + 'T00:00:00').getDate()
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
@@ -2510,6 +2536,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           grupoGerencial: grupo,
           _reservaFuncaoId: reservaFuncaoFromRule,
           _installment: detectInstallment(row.description) || null,
+          _serieId: serieIdDaLinhaConciliacao(seriesDoCartao, selectedAccount, row, faturaMonthYear),
           _dateCartao: row.date,
           acao: 'importar',
         }
