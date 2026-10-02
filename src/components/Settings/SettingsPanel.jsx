@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
@@ -7,6 +7,7 @@ import { fmt } from '../shared/utils'
 import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
+import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig, abaDe } from '../../lib/configRota'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
@@ -30,6 +31,18 @@ function maskDoc(raw, type) {
 }
 
 export default function SettingsPanel() {
+  const [rota, setRota] = useState(() => parseConfigHash(window.location.hash))
+  useEffect(() => {
+    const h = configHash(rota.aba, rota.secao)
+    if (window.location.hash !== h) window.history.replaceState(null, '', h)
+  }, [rota])
+  useEffect(() => {
+    const onHash = () => { if (ehHashConfig(window.location.hash)) setRota(parseConfigHash(window.location.hash)) }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  const irPara = (abaId, secaoId = '') => setRota(parseConfigHash(configHash(abaId, secaoId)))
+
   const {
     settings, updateSettings,
     categories, addCategory, updateCategory, deleteCategory,
@@ -461,9 +474,72 @@ export default function SettingsPanel() {
     return nums.length > 0 ? Math.max(...nums) + 1 : 2
   })()
 
+  const abaAtual = abaDe(rota.aba)
+  const secao = rota.secao
+  const secaoAtual = abaAtual.secoes.find(s => s.id === secao) || abaAtual.secoes[0]
+  const temSubmenu = abaAtual.secoes.length > 1
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Cabeçalho: título, breadcrumb e abas. Aba/seção ativas vivem no hash (#config/aba/seção). */}
+      <div>
+        <h1 className="text-lg font-semibold text-gray-100">Configurações</h1>
+        <nav aria-label="Você está em" className="text-xs text-gray-500 mt-0.5 flex items-center gap-1 flex-wrap">
+          <span>Configurações</span>
+          <ChevronRight size={12} />
+          <span className={abaAtual.perigo ? 'text-red-400' : 'text-gray-400'}>{abaAtual.label}</span>
+          {temSubmenu && (
+            <>
+              <ChevronRight size={12} />
+              <span className="text-gray-300">{secaoAtual.label}</span>
+            </>
+          )}
+        </nav>
+      </div>
+
+      <div role="tablist" className="flex overflow-x-auto border-b border-gray-800 -mx-4 px-4 md:mx-0 md:px-0">
+        {CONFIG_ABAS.map(a => {
+          const ativa = a.id === abaAtual.id
+          const cor = a.perigo
+            ? (ativa ? 'text-red-400 border-red-500' : 'text-red-400/70 border-transparent hover:text-red-400')
+            : (ativa ? 'text-gray-100 border-emerald-500' : 'text-gray-400 border-transparent hover:text-gray-200')
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="tab"
+              aria-selected={ativa}
+              onClick={() => irPara(a.id)}
+              className={`shrink-0 min-h-[44px] px-4 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${cor}`}
+            >
+              {a.label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className={temSubmenu ? 'flex flex-col md:flex-row gap-4 md:items-start' : ''}>
+        {temSubmenu && (
+          <nav className="bg-surface border border-gray-800 rounded-xl p-2 w-full md:w-56 md:shrink-0 flex flex-row flex-wrap md:flex-col gap-1">
+            {abaAtual.secoes.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => irPara(abaAtual.id, s.id)}
+                aria-current={s.id === secao ? 'page' : undefined}
+                className={`min-h-[44px] px-3 rounded-lg text-sm text-left flex items-center gap-2 transition-colors ${
+                  s.id === secao ? 'bg-[#12302a] text-emerald-300' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                }`}
+              >
+                {s.label}
+                {s.novo && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">novo</span>}
+              </button>
+            ))}
+          </nav>
+        )}
+        <div className="flex-1 min-w-0 w-full space-y-6">
       {/* Período Financeiro */}
+      {secao === 'periodo' && (
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-1">Período Financeiro</h2>
         <p className="text-xs text-gray-500 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
@@ -520,8 +596,10 @@ export default function SettingsPanel() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Estornos de Cartão */}
+      {secao === 'estornos' && (
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-1">Estornos de Cartão</h2>
         <p className="text-xs text-gray-500 mb-4">
@@ -553,8 +631,10 @@ export default function SettingsPanel() {
           </div>
         )}
       </div>
+      )}
 
       {/* Perfis CPF / CNPJ */}
+      {secao === 'perfis' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-300">Perfis CPF / CNPJ</h2>
@@ -562,6 +642,7 @@ export default function SettingsPanel() {
             <Plus size={12} /> Novo Perfil
           </button>
         </div>
+        <p className="text-xs text-gray-500 -mt-2 mb-4">Perfis CPF / CNPJ que separam contas, lançamentos e relatórios.</p>
 
         {profiles.length === 0 && !showProfileForm && (
           <p className="text-xs text-gray-600 italic">Nenhum perfil cadastrado. Adicione um perfil para ativar o filtro na barra superior.</p>
@@ -662,13 +743,16 @@ export default function SettingsPanel() {
           />
         )}
       </div>
+      )}
 
       {/* Categorias e Grupos */}
+      {secao === 'categorias' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-300">Categorias ({categories.length})</h2>
           <span className="text-xs text-gray-500">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
         </div>
+        <p className="text-xs text-gray-500 -mt-2 mb-4">Categorias de receita e despesa, organizadas em grupos.</p>
 
         {/* Criar grupo (só nome) */}
         <form onSubmit={handleAddGroup} className="flex gap-2 mb-4">
@@ -766,10 +850,13 @@ export default function SettingsPanel() {
         </form>
         <p className="text-[11px] text-gray-600 mt-1.5">O campo <span className="text-gray-400">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
       </div>
+      )}
 
       {/* Regras de Classificação */}
+      {secao === 'classificacao' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Regras de Classificação ({classificationRules.length})</h2>
+        <h2 className="text-sm font-semibold text-gray-300 mb-1">Regras de Classificação ({classificationRules.length})</h2>
+        <p className="text-xs text-gray-500 mb-4">Categoria, favorecido e grupo aplicados automaticamente pela descrição do lançamento.</p>
         <div className="space-y-2 mb-4">
           {classificationRules.length === 0 && (
             <p className="text-xs text-gray-500">Nenhuma regra. Regras são criadas automaticamente ao classificar importações.</p>
@@ -802,8 +889,10 @@ export default function SettingsPanel() {
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
       </div>
+      )}
 
       {/* Regras de Grupo Gerencial */}
+      {secao === 'grupo-gerencial' && (
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-1">Regras de Grupo Gerencial ({gerencialRules.length})</h2>
         <p className="text-xs text-gray-500 mb-4">Testadas em ordem — a primeira que bater é aplicada na importação de fatura.</p>
@@ -919,10 +1008,13 @@ export default function SettingsPanel() {
           </div>
         </form>
       </div>
+      )}
 
       {/* Centros de Custo */}
+      {secao === 'centros-custo' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Centros de Custo</h2>
+        <h2 className="text-sm font-semibold text-gray-300 mb-1">Centros de Custo</h2>
+        <p className="text-xs text-gray-500 mb-4">Rótulos livres para separar lançamentos por finalidade.</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {costCenters.map(cc => (
             <span key={cc} className="badge bg-gray-800 text-gray-300 px-3 py-1 text-xs">{cc}</span>
@@ -938,8 +1030,10 @@ export default function SettingsPanel() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Grupos de Contas */}
+      {secao === 'grupos-contas' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -1136,8 +1230,10 @@ export default function SettingsPanel() {
           />
         )}
       </div>
+      )}
 
       {/* Controle Gerencial de Cartão */}
+      {secao === 'controle-gerencial' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -1256,13 +1352,16 @@ export default function SettingsPanel() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Backup */}
+      {secao === 'backup' && (
       <div className="card space-y-4">
         <div className="flex items-center gap-2">
           <ShieldCheck size={15} className="text-emerald-400" />
           <h2 className="text-sm font-semibold text-gray-300">Backup de Dados</h2>
         </div>
+        <p className="text-xs text-gray-500 -mt-3">Exporte ou restaure todos os dados do app.</p>
 
         {/* Status */}
         {(() => {
@@ -1327,11 +1426,15 @@ export default function SettingsPanel() {
           Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
         </p>
       </div>
+      )}
 
       {/* Importação histórica Dindin */}
+      {secao === 'importacao' && (
       <DindinImportPanel />
+      )}
 
       {/* Manutenção */}
+      {secao === 'manutencao' && (
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
           <RefreshCw size={14} className="text-gray-500" /> Manutenção
@@ -1466,7 +1569,11 @@ export default function SettingsPanel() {
               {ajusteGrupoId && !(accountGroups || []).find(g => g.id === ajusteGrupoId)?.anchorAccountId && (
                 <p className="text-xs text-amber-400 flex items-center gap-1.5">
                   <AlertTriangle size={12} />
-                  Este grupo não tem conta âncora definida. Configure em Configurações → Grupos de Contas antes de prosseguir.
+                  <span>
+                    Este grupo não tem conta âncora definida. Configure em{' '}
+                    <a href="#config/cadastros/grupos-contas" className="underline hover:text-amber-300">Configurações → Grupos de Contas</a>{' '}
+                    antes de prosseguir.
+                  </span>
                 </p>
               )}
 
@@ -1571,14 +1678,30 @@ export default function SettingsPanel() {
           )}
         </div>
       </div>
+      )}
 
       {/* Zona de Perigo */}
+      {secao === 'zona-perigo' && (
       <div className="card border border-red-900/40">
         <h2 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
           <AlertTriangle size={14} /> Zona de Perigo
         </h2>
         <p className="text-xs text-gray-500 mb-3">Apagar todos os dados do aplicativo. Esta ação é irreversível.</p>
         <button className="btn-danger" onClick={() => setConfirmReset(true)}>Apagar Todos os Dados</button>
+      </div>
+      )}
+
+      {secao === 'favorecidos' && (
+        <div className="card">
+          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
+            Favorecidos
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">novo</span>
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">Cadastro dos favorecidos usados em lançamentos e agendamentos.</p>
+          <p className="text-sm text-gray-400">Em breve.</p>
+        </div>
+      )}
+        </div>
       </div>
 
       <ConfirmDialog

@@ -25,6 +25,7 @@ import BudgetPanel from './components/Budget/BudgetPanel'
 import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
 import SettingsPanel from './components/Settings/SettingsPanel'
+import { ehHashConfig } from './lib/configRota'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
@@ -33,7 +34,13 @@ import { getToken } from './lib/api'
 import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
 
 function AppContent() {
-  const [activePage, setActivePage] = useState('dashboard')
+  // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
+  const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : 'dashboard'))
+  useEffect(() => {
+    const onHash = () => { if (ehHashConfig(window.location.hash)) setActivePage('settings') }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -52,6 +59,10 @@ function AppContent() {
   const navigate = useCallback((page) => {
     if (page !== activePage) saveScrollNow(mainRef, scrollScope ?? activePage)
     setScrollScope(null)
+    // Saindo de Configurações, o hash dela sai da URL — senão o reload voltaria para lá.
+    if (page !== 'settings' && ehHashConfig(window.location.hash)) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
     setActivePage(page)
   }, [activePage, scrollScope])
   const scrollCtx = useMemo(() => ({

@@ -264,6 +264,7 @@ export default function DindinImportPanel() {
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
+      <p className="text-xs text-gray-500 -mt-3">Importação histórica dos lançamentos exportados do Dindin.</p>
 
       {/* Sub-tabs Conta Corrente | Cartões */}
       <div className="flex items-center gap-1 border-b border-gray-800">
