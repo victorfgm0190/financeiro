@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assignInstallmentOccurrences } from './parcelas'
+import { assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie } from './parcelas'
 import { installmentKey } from './installments'
 
 const ACC = 'acc_1780091925522'
@@ -75,5 +75,40 @@ describe('assignInstallmentOccurrences', () => {
 
   it('devolve lista vazia sem quebrar', () => {
     expect(assignInstallmentOccurrences([], ACC)).toEqual([])
+  })
+})
+
+describe('inferirSerieParcela / findParcelaDaSerie — "Yelumseg Parc7"', () => {
+  const acc = 'acc_itaupers'
+  const serie = [
+    { id: 'y6', accountId: acc, type: 'expense', description: 'Yelumseg Parc6', amount: 205.61, installmentNum: 6, installmentTotal: 12, faturaMonthYear: '2026-09', serieId: 'serie_y', categoryId: 'cat_seguro', payee: 'Yelumseg', grupoGerencial: 'grp_3' },
+    { id: 'y11', accountId: acc, type: 'expense', description: 'Yelumseg 11/12', amount: 205.61, installmentNum: 11, installmentTotal: 12, faturaMonthYear: '2027-02', serieId: 'serie_y' },
+    { id: 'y12', accountId: acc, type: 'expense', description: 'Yelumseg 12/12', amount: 205.61, installmentNum: 12, installmentTotal: 12, faturaMonthYear: '2027-03', serieId: 'serie_y' },
+  ]
+
+  it('infere o total 12 e a série da 6/12', () => {
+    const r = inferirSerieParcela({ base: 'Yelumseg', num: 7, amount: 205.61, accountId: acc }, serie)
+    expect(r.total).toBe(12)
+    expect(r.anchor.serieId).toBe('serie_y')
+    expect(r.anchor.id).toBe('y6') // irmã mais próxima do número 7
+  })
+
+  it('não infere com valor fora da tolerância de R$ 0,05, outro cartão ou descrição diferente', () => {
+    expect(inferirSerieParcela({ base: 'Yelumseg', num: 7, amount: 205.70, accountId: acc }, serie)).toBeNull()
+    expect(inferirSerieParcela({ base: 'Yelumseg', num: 7, amount: 205.61, accountId: 'outro' }, serie)).toBeNull()
+    expect(inferirSerieParcela({ base: 'Posto Shell', num: 7, amount: 205.61, accountId: acc }, serie)).toBeNull()
+  })
+
+  it('prefere a série em andamento à encerrada de mesmo valor', () => {
+    const antiga = { id: 'old6', accountId: acc, type: 'expense', description: 'Yelumseg Parc6', amount: 205.61, installmentNum: 6, installmentTotal: 12, faturaMonthYear: '2025-09', serieId: 'serie_old' }
+    const r = inferirSerieParcela({ base: 'Yelumseg', num: 7, amount: 205.61, accountId: acc }, [antiga, ...serie])
+    expect(r.anchor.serieId).toBe('serie_y')
+  })
+
+  it('acha a 7/12 já gerada da série (vira colisão, não lançamento novo)', () => {
+    const y7 = { id: 'y7', accountId: acc, type: 'expense', description: 'Yelumseg 07/12', amount: 205.61, installmentNum: 7, installmentTotal: 12, faturaMonthYear: '2026-10', serieId: 'serie_y' }
+    expect(findParcelaDaSerie(serie[0], 7, 205.61, [...serie, y7])?.id).toBe('y7')
+    expect(findParcelaDaSerie(serie[0], 7, 205.61, serie)).toBeNull()
+    expect(findParcelaDaSerie(serie[0], 7, 205.61, [...serie, y7], new Set(['y7']))).toBeNull()
   })
 })

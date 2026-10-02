@@ -21,6 +21,7 @@ import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleD
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { desfazerBaixa } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
@@ -1468,11 +1469,18 @@ export function AppProvider({ children }) {
         return true
       })
 
+      // Reabre as ocorrências de agendamento que este lote baixou (registered + next_occurrence).
+      let schedules = d.schedules
+      for (const b of imp.scheduleBaixas || []) {
+        schedules = schedules.map(s => s.id === b.scheduleId ? desfazerBaixa(s, b.occurrenceDate) : s)
+      }
+
       return {
         ...d,
         accounts,
         transactions,
         payables,
+        schedules,
         cardImports: (d.cardImports || []).filter(i => i.id !== importId),
       }
     })

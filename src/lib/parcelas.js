@@ -2,6 +2,7 @@
 // e o "Editar Lançamento" (TransactionForm). Fonte única — antes viviam duplicados
 // dentro do ImportPanel.
 import { detectInstallment, normalizeInstallmentBase, installmentKey } from './installments.js'
+import { descSimilarity, stripParcelaSuffix } from './conciliacaoMatch.js'
 
 // serie_id: elo único de todas as parcelas de uma mesma compra. Gerado UMA vez na parcela
 // base/origem e propagado às filhas — nunca alterado depois. À vista → null.
@@ -213,4 +214,49 @@ export function assignInstallmentOccurrences(rows, accountId, faturaMY) {
     vistos.set(base, n)
     return n > 1 ? { ...row, _installmentOccurrence: n } : row
   })
+}
+
+// Série já gravada no cartão de uma parcela que chegou SEM o total ("Yelumseg Parc7"): mesma
+// conta, despesa com installment_total preenchido, valor ±R$ 0,05 e base da descrição igual ou
+// parecida (≥ 0,7, sem o sufixo de parcela de nenhum dos lados). `total`, quando a linha traz,
+// restringe às séries desse tamanho. Entre séries candidatas vence a mais parecida e, no empate,
+// a que começou por último — uma série encerrada do ano anterior com o mesmo valor perde para a
+// que está em andamento. Devolve { total, anchor } (anchor = irmã mais próxima do número) ou null.
+export function inferirSerieParcela({ base, num, total = null, amount, accountId }, transactions) {
+  const baseLimpa = stripParcelaSuffix(base)
+  let best = null
+  for (const t of transactions || []) {
+    if (t.accountId !== accountId || (t.type || 'expense') !== 'expense') continue
+    const tTotal = Number(t.installmentTotal) || 0
+    const tNum = Number(t.installmentNum) || 0
+    if (tTotal < 2 || !tNum || num > tTotal) continue
+    if (total != null && tTotal !== total) continue
+    if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.05) continue
+    const sim = descSimilarity(stripParcelaSuffix(t.description), baseLimpa)
+    if (sim < 0.7) continue
+    const cand = { t, sim, inicio: serieInicioOf(t), dist: Math.abs(tNum - num) }
+    if (!best
+      || cand.sim > best.sim
+      || (cand.sim === best.sim && cand.inicio > best.inicio)
+      || (cand.sim === best.sim && cand.inicio === best.inicio && cand.dist < best.dist)) best = cand
+  }
+  return best ? { total: Number(best.t.installmentTotal), anchor: best.t } : null
+}
+
+// Parcela `num` da série de `anchor` já gravada (gerada antes ou importada noutra fatura): mesmo
+// serie_id quando a âncora tem; senão mesma conta + total + início de série + base parecida.
+// `usados` = lançamentos já casados por outra linha do arquivo (1:1).
+export function findParcelaDaSerie(anchor, num, amount, transactions, usados) {
+  if (!anchor) return null
+  const total = Number(anchor.installmentTotal)
+  const inicio = serieInicioOf(anchor)
+  const baseAnchor = stripParcelaSuffix(anchor.description)
+  return (transactions || []).find(t => {
+    if (usados?.has(t.id)) return false
+    if (t.accountId !== anchor.accountId || (t.type || 'expense') !== 'expense') return false
+    if (Number(t.installmentNum) !== num || Number(t.installmentTotal) !== total) return false
+    if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.50) return false
+    if (anchor.serieId && t.serieId) return t.serieId === anchor.serieId
+    return serieInicioOf(t) === inicio && descSimilarity(stripParcelaSuffix(t.description), baseAnchor) >= 0.7
+  }) || null
 }

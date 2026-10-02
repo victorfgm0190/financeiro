@@ -882,6 +882,7 @@ export const importToRow = (i) => ({
   filename: i.filename || '',
   account_id: i.accountId || '',
   tx_ids: i.txIds || [],
+  schedule_baixas: i.scheduleBaixas || [],
 })
 
 export const rowToImport = (r) => ({
@@ -892,6 +893,7 @@ export const rowToImport = (r) => ({
   filename: r.filename || '',
   accountId: r.account_id || '',
   txIds: r.tx_ids || [],
+  scheduleBaixas: r.schedule_baixas || [],
 })
 
 // ─── Account Mapping (De-Para Dindin → Finup) ────────────────────────────────

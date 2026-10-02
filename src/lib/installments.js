@@ -16,6 +16,32 @@ export function detectInstallment(description) {
   }
 }
 
+// Parcela escrita por extenso na descrição: "Parc7", "Parc 07", "PARC 3/10", "Parcela 2 de 5". O
+// Itaú manda alguns parcelados assim, com a coluna Parcelamento vazia — sem isto a linha entrava
+// como à vista. O total é opcional ("Yelumseg Parc7" não traz): quem chama infere da série gravada.
+const PARC_TOKEN_RE = /\bParc(?:ela)?\.?\s*0*(\d{1,2})(?:\s*(?:de|\/)\s*0*(\d{1,2}))?\b/i
+
+export function detectParcelaToken(description) {
+  const s = description || ''
+  const m = s.match(PARC_TOKEN_RE)
+  if (!m) return null
+  const num = parseInt(m[1], 10)
+  const total = m[2] ? parseInt(m[2], 10) : null
+  if (num < 1) return null
+  if (total != null && (total < 2 || num > total)) return null
+  return {
+    num, total,
+    base: (s.slice(0, m.index) + s.slice(m.index + m[0].length)).trim().replace(/\s+/g, ' '),
+    matchStr: m[0],
+  }
+}
+
+// Detector completo da importação: "N/Total" primeiro (formato já gravado em todo o banco, base
+// idêntica à da installment_key), depois a forma por extenso. total pode vir null.
+export function detectParcela(description) {
+  return detectInstallment(description) || detectParcelaToken(description)
+}
+
 // Base normalizada da série (para casar parcelas irmãs e compor a installment_key).
 export function normalizeInstallmentBase(base) {
   return (base || '').toLowerCase().trim().replace(/\s+/g, ' ')

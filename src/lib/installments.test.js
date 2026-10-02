@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { installmentKey, detectInstallment } from './installments'
+import { installmentKey, detectInstallment, detectParcela } from './installments'
 
 // As duas "Payservice 5/5" de R$ 59,60 de 21/03/2026 que a fatura 08/2026 traz — cobranças
 // legítimas e idênticas em tudo. É o caso que fazia a segunda sumir na importação.
@@ -55,5 +55,34 @@ describe('detectInstallment', () => {
     expect(detectInstallment('Posto Shangri-la')).toBeNull()
     expect(detectInstallment('Compra 5/3')).toBeNull()   // num > total
     expect(detectInstallment('Data 21/03')).toBeNull()   // total 3 < num 21
+  })
+})
+
+describe('detectParcela (parcela por extenso)', () => {
+  it('"Yelumseg Parc7" → parcela 7 sem total (inferido da série)', () => {
+    expect(detectParcela('Yelumseg Parc7')).toMatchObject({ num: 7, total: null, base: 'Yelumseg' })
+  })
+
+  it('"Yelumseg Parc 07" → zero à esquerda e espaço', () => {
+    expect(detectParcela('Yelumseg Parc 07')).toMatchObject({ num: 7, total: null, base: 'Yelumseg' })
+  })
+
+  it('"ABC PARC 3/10" → 3 de 10', () => {
+    expect(detectParcela('ABC PARC 3/10')).toMatchObject({ num: 3, total: 10 })
+  })
+
+  it('"Parcela 2 de 5" → 2 de 5', () => {
+    expect(detectParcela('Parcela 2 de 5')).toMatchObject({ num: 2, total: 5 })
+    expect(detectParcela('Loja X Parcela 2 de 5')).toMatchObject({ num: 2, total: 5, base: 'Loja X' })
+  })
+
+  it('não confunde palavra que começa com "Parc" nem aceita número inválido', () => {
+    expect(detectParcela('Parceria Escola')).toBeNull()
+    expect(detectParcela('Loja Parc0')).toBeNull()
+    expect(detectParcela('Loja Parcela 6 de 5')).toBeNull()
+  })
+
+  it('N/Total continua com a base de sempre (a da installment_key)', () => {
+    expect(detectParcela('Payservice 5/5')).toMatchObject({ num: 5, total: 5, base: 'Payservice' })
   })
 })

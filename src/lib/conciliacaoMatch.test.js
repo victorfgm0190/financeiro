@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeDupMatch, crossMatchConciliacao, descSimilarity, normalizeDescForMatch } from './conciliacaoMatch'
+import { computeDupMatch, crossMatchConciliacao, descSimilarity, normalizeDescForMatch, stripParcelaSuffix } from './conciliacaoMatch'
 
 // A compra e o estorno dela, como chegam numa fatura do Itaú: mesma descrição, mesmo valor,
 // tipos opostos. É a assinatura de um estorno — e era exatamente o que fazia o casamento por
@@ -129,5 +129,33 @@ describe('computeDupMatch — paridade com a conciliação', () => {
     const estorno = { type: 'income', amount: 149.95, description: 'Aramis 4/4', _dateCartao: '2026-07-10' }
     const compraParcela = { id: 'tx_p', type: 'expense', amount: 149.95, description: 'Aramis 4/4', dateCartao: '2026-07-10' }
     expect(computeDupMatch(estorno, [compraParcela]).level).toBeNull()
+  })
+})
+
+describe('stripParcelaSuffix — parcela por extenso', () => {
+  it('"Yelumseg Parc6" e "Yelumseg Parc7" têm a mesma base', () => {
+    expect(stripParcelaSuffix('Yelumseg Parc6')).toBe('Yelumseg')
+    expect(stripParcelaSuffix('Yelumseg Parc 07')).toBe('Yelumseg')
+    expect(stripParcelaSuffix('ABC PARC 3/10')).toBe('ABC')
+    expect(stripParcelaSuffix('Loja Parcela 2 de 5')).toBe('Loja')
+  })
+
+  it('mantém o comportamento para N/Total e para descrição sem parcela', () => {
+    expect(stripParcelaSuffix('CLINICA HIGA-CT LT01/03')).toBe('CLINICA HIGA-CT LT')
+    expect(stripParcelaSuffix('Parceria Escola')).toBe('Parceria Escola')
+  })
+
+  it('computeDupMatch vê a "Parc7" como a mesma compra da irmã gravada', () => {
+    const banco = [{ id: 't7', type: 'expense', description: 'Yelumseg Parc6', amount: 205.61, date: '2026-09-30' }]
+    const row = { type: 'expense', description: 'Yelumseg Parc7', amount: 205.61, _dateCartao: '2026-09-30' }
+    expect(computeDupMatch(row, banco).level).toBe('provavel')
+  })
+
+  it('crossMatchConciliacao casa "Parc7" do Itaú com "Parc7" já gravada', () => {
+    const { soItau } = crossMatchConciliacao(
+      [{ type: 'expense', description: 'YELUMSEG PARC 07', amount: 205.61 }],
+      [{ id: 's1', type: 'expense', description: 'Yelumseg Parc7', amount: 205.61 }],
+    )
+    expect(soItau[0]._crossLevel).toBe('certeza')
   })
 })

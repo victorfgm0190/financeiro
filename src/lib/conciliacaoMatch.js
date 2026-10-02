@@ -27,10 +27,13 @@ export function descSimilarity(a, b) {
 
 // Remove o sufixo de PARCELA do final da descrição (1–2 dígitos / 1–2 dígitos, com ou sem
 // espaços antes). Cobre o lado do sistema ("CLINICA HIGA-CT LT01/03", "CEU INFANTIL-CT   01/06")
-// e o do Itaú já convertido ("Clinica Higa-ct Lt 1/3"). Sem o padrão no final, não altera nada
-// (lançamentos sem parcela ficam intactos).
+// e o do Itaú já convertido ("Clinica Higa-ct Lt 1/3"). Também a forma por extenso ("Parc7",
+// "Parc 07", "PARC 3/10", "Parcela 2 de 5"), para "Yelumseg Parc6" e "Yelumseg Parc7" terem a
+// mesma base. Sem o padrão no final, não altera nada (lançamentos sem parcela ficam intactos).
 export function stripParcelaSuffix(s) {
-  return String(s || '').replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
+  return String(s || '')
+    .replace(/\s*\bParc(?:ela)?\.?\s*\d{1,2}(?:\s*(?:de|\/)\s*\d{1,2})?\s*$/i, '')
+    .replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
 }
 // Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela e aplica a
 // normalização de texto existente (sem acento, maiúsculas, espaços colapsados). Assim o lançamento
