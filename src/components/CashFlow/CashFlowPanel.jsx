@@ -30,7 +30,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function CashFlowPanel({ setActivePage }) {
-  const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getNextOccurrences, envelopes, accountGroups } = useApp()
+  const { profileAccounts, profileTransactions, profileSchedules, schedules: allSchedules, getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups } = useApp()
   const accounts = profileAccounts
   const isMobile = useIsMobile()
   const transactions = profileTransactions

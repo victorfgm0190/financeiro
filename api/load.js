@@ -117,6 +117,9 @@ export default async function handler(req, res) {
     // Chain ID: lançamento que originou o agendamento (resgate avulso "Será pago com reserva").
     // 1:1 — agregados de fatura (fsch_*) usam overrides._sourceTxIds (N:1) em vez desta coluna.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS source_tx_id TEXT`)
+    // Metadados das baixas: { "<data da ocorrência>": { tipo, lancamento_id, import_id } }.
+    // `registered` continua sendo a lista de datas baixadas; isto só descreve COMO cada uma foi.
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS registered_meta JSONB NOT NULL DEFAULT '{}'::jsonb`)
     // Ocorrências de agendamento baixadas por uma importação de fatura
     // ([{ scheduleId, occurrenceDate, txId }]) — o estorno da importação as reabre.
     await query(`ALTER TABLE card_imports ADD COLUMN IF NOT EXISTS schedule_baixas JSONB NOT NULL DEFAULT '[]'::jsonb`)

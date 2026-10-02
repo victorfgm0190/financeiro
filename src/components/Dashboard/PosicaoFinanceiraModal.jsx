@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 
 export default function PosicaoFinanceiraModal() {
-  const { accounts, schedules, getNextOccurrences } = useApp()
+  const { accounts, schedules, getOccurrencesProjecao: getNextOccurrences } = useApp()
   const [expanded, setExpanded] = useState({})
 
   const today = new Date().toISOString().split('T')[0]

@@ -30,10 +30,14 @@ export function descSimilarity(a, b) {
 // e o do Itaú já convertido ("Clinica Higa-ct Lt 1/3"). Também a forma por extenso ("Parc7",
 // "Parc 07", "PARC 3/10", "Parcela 2 de 5"), para "Yelumseg Parc6" e "Yelumseg Parc7" terem a
 // mesma base. Sem o padrão no final, não altera nada (lançamentos sem parcela ficam intactos).
+// O "ParcN" sai antes e depois do N/Total: as parcelas geradas pela importação antiga ficaram
+// "Yelumseg Parc2 11/12" (sufixo colado na descrição do mês) e precisam da mesma base "Yelumseg".
+const PARC_SUFIXO_RE = /\s*\bParc(?:ela)?\.?\s*\d{1,2}(?:\s*(?:de|\/)\s*\d{1,2})?\s*$/i
 export function stripParcelaSuffix(s) {
   return String(s || '')
-    .replace(/\s*\bParc(?:ela)?\.?\s*\d{1,2}(?:\s*(?:de|\/)\s*\d{1,2})?\s*$/i, '')
+    .replace(PARC_SUFIXO_RE, '')
     .replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
+    .replace(PARC_SUFIXO_RE, '')
 }
 // Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela e aplica a
 // normalização de texto existente (sem acento, maiúsculas, espaços colapsados). Assim o lançamento

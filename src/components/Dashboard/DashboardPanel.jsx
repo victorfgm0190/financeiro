@@ -67,7 +67,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus } = useApp()
   const accounts = profileAccounts
   // Enquanto a API não respondeu, os valores exibidos vêm do cache local (sessão anterior) e
   // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.

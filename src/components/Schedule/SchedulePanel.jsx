@@ -12,6 +12,7 @@ import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -411,7 +412,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
-      markScheduleRegistered(schedule.id, regDate)
+      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
@@ -438,7 +439,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
-      markScheduleRegistered(schedule.id, regDate)
+      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
@@ -860,6 +861,11 @@ function ScheduleRow({
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
   const totalDone = registered.length + skipped.length
+  // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (mesmo cartão, valor e
+  // fatura). Só sinaliza — o agendamento não muda até o usuário baixar.
+  const { coberturaCartao, baixarComoJaNoCartao } = useApp()
+  const cobertas = coberturaCartao?.get(schedule.id)
+  const nCobertas = cobertas?.size || 0
   const isInstallment = schedule.occurrenceType === 'installment'
 
   // Data exibida na coluna e usada no badge "em atraso": casa com o campo "Data de Vencimento
@@ -1140,6 +1146,23 @@ function ScheduleRow({
               >
                 <Hourglass size={12} /> Efetivar Provisão
               </button>
+            )}
+            {nCobertas > 0 && (
+              <>
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 whitespace-nowrap"
+                  title={`Já lançado no cartão: ${[...cobertas.keys()].map(d => fmtDate(d)).join(', ')}. Fica fora do fluxo e dos previstos.`}
+                >
+                  Duplicado – já no cartão{nCobertas > 1 ? ` (${nCobertas})` : ''}
+                </span>
+                <button
+                  onClick={() => { const n = baixarComoJaNoCartao(schedule.id); if (n) onToast?.(`${n} ocorrência${n !== 1 ? 's' : ''} baixada${n !== 1 ? 's' : ''} como já no cartão`) }}
+                  title="Marca as ocorrências cobertas como baixadas (tipo 'já no cartão'), apontando o lançamento do cartão — não cria lançamento"
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors font-medium"
+                >
+                  <CheckCircle size={12} /> Baixar como já no cartão
+                </button>
+              </>
             )}
             {nextDate && (
               <>

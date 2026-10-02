@@ -260,3 +260,38 @@ export function findParcelaDaSerie(anchor, num, amount, transactions, usados) {
     return serieInicioOf(t) === inicio && descSimilarity(stripParcelaSuffix(t.description), baseAnchor) >= 0.7
   }) || null
 }
+
+// Fatura (YYYY-MM) gravada de um lançamento; sem ela, o mês da data (aproximação suficiente
+// para parcela, que sempre nasce com fatura).
+const faturaDe = (t) => t.faturaMonthYear || (typeof t.date === 'string' ? t.date.slice(0, 7) : '')
+const baseParecida = (descA, baseB) => {
+  const a = stripParcelaSuffix(descA), b = stripParcelaSuffix(baseB)
+  return a.trim().toLowerCase() === b.trim().toLowerCase() || descSimilarity(a, b) >= 0.7
+}
+
+// Parcela futura já gravada que equivale à que se vai gerar: mesmo serie_id e número, OU mesma
+// conta + base da descrição + valor ±R$ 0,05 + num/total + fatura. Sem esta segunda via, cada
+// importação mensal de "Yelumseg ParcN" gerava de novo as parcelas seguintes ("Parc2 11/12",
+// "Parc3 11/12"…): a base com o "ParcN" do mês nunca batia com a da importação anterior.
+export function findParcelaEquivalente({ accountId, base, amount, num, total, faturaMonthYear, serieId }, transactions) {
+  return (transactions || []).find(t => {
+    if (t.accountId !== accountId || (t.type || 'expense') !== 'expense') return false
+    if (Number(t.installmentNum) !== num || Number(t.installmentTotal) !== total) return false
+    if (serieId && t.serieId === serieId) return true
+    if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.05) return false
+    return faturaDe(t) === faturaMonthYear && baseParecida(t.description, base)
+  }) || null
+}
+
+// Todos os lançamentos gravados da série (inclusive cópias duplicadas): mesmo serie_id, ou mesma
+// conta + total + início da série + valor ±R$ 0,05 + base parecida. Usado para gravar o serie_id
+// em quem ainda não tem.
+export function membrosDaSerie({ accountId, base, total, amount, serieInicio, serieId }, transactions) {
+  return (transactions || []).filter(t => {
+    if (serieId && t.serieId === serieId) return true
+    if (t.accountId !== accountId || (t.type || 'expense') !== 'expense') return false
+    if (Number(t.installmentTotal) !== total || !Number(t.installmentNum)) return false
+    if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.05) return false
+    return serieInicioOf(t) === serieInicio && baseParecida(t.description, base)
+  })
+}

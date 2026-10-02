@@ -21,7 +21,7 @@ import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleD
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
-import { desfazerBaixa } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
@@ -1469,11 +1469,16 @@ export function AppProvider({ children }) {
         return true
       })
 
-      // Reabre as ocorrências de agendamento que este lote baixou (registered + next_occurrence).
-      let schedules = d.schedules
-      for (const b of imp.scheduleBaixas || []) {
-        schedules = schedules.map(s => s.id === b.scheduleId ? desfazerBaixa(s, b.occurrenceDate) : s)
-      }
+      // Reabre as ocorrências de agendamento que este lote baixou (registered, registered_meta e
+      // next_occurrence): as marcadas com o import_id no meta e, para lotes anteriores ao meta, a
+      // lista guardada no próprio histórico da importação.
+      const schedules = d.schedules.map(s => {
+        const datas = new Set(baixasDaImportacao(s, importId))
+        for (const b of imp.scheduleBaixas || []) if (b.scheduleId === s.id) datas.add(b.occurrenceDate)
+        let out = s
+        for (const date of datas) out = desfazerBaixa(out, date)
+        return out
+      })
 
       return {
         ...d,
@@ -2665,6 +2670,20 @@ export function AppProvider({ children }) {
 
   // ── Schedule Occurrences ─────────────────────────────────────────────────────
   const getNextOccurrences = useCallback((schedule, count = 12) => computeOccurrences(schedule, count), [])
+
+  // Regra C: ocorrências pendentes de agendamento de cartão que um lançamento do cartão já cobre
+  // (mesmo cartão, valor ±R$ 0,05, mesma fatura). Map(scheduleId → Map(data → id do lançamento)).
+  const coberturaCartao = useMemo(
+    () => mapaCobertura({ schedules: data.schedules, transactions: data.transactions, accounts: data.accounts }),
+    [data.schedules, data.transactions, data.accounts],
+  )
+  // Ocorrências para PROJEÇÃO (fluxos, previstos da fatura, Fluxo Futuro): getNextOccurrences sem
+  // as cobertas pelo cartão. As telas de ação (Agendamentos, Pagar, alertas) seguem no
+  // getNextOccurrences — a ocorrência coberta continua pendente até alguém baixá-la.
+  const getOccurrencesProjecao = useCallback(
+    (schedule, count = 12) => ocorrenciasProjetadas(schedule, count, coberturaCartao),
+    [coberturaCartao],
+  )
 
   // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
   // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
@@ -4386,15 +4405,34 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
-  // Marca a ocorrência do agendamento como cumprida SEM criar nova transação
-  const markScheduleRegistered = useCallback((scheduleId, date) => {
+  // Marca a ocorrência do agendamento como cumprida SEM criar nova transação. `meta` (opcional)
+  // vai para registered_meta[date] = { tipo, lancamento_id, import_id } — descreve a baixa sem
+  // mudar o formato de `registered`, que segue sendo o que computeOccurrences lê.
+  const markScheduleRegistered = useCallback((scheduleId, date, meta = null) => {
     update(d => ({
       ...d,
-      schedules: d.schedules.map(s =>
-        s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []).filter(d => d !== date), date]) : s
-      ),
+      schedules: d.schedules.map(s => s.id === scheduleId ? aplicarBaixa(s, date, meta) : s),
     }))
   }, [update])
+
+  // Regra C: baixa como "já no cartão" todas as ocorrências pendentes deste agendamento que um
+  // lançamento do cartão já cobre. Só por ação do usuário — o índice sozinho nunca altera nada.
+  const baixarComoJaNoCartao = useCallback((scheduleId) => {
+    const cobertas = coberturaCartao.get(scheduleId)
+    if (!cobertas?.size) return 0
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => {
+        if (s.id !== scheduleId) return s
+        let out = s
+        for (const [date, txId] of cobertas) {
+          out = aplicarBaixa(out, date, { tipo: TIPO_BAIXA.JA_NO_CARTAO, lancamento_id: txId, import_id: null })
+        }
+        return out
+      }),
+    }))
+    return cobertas.size
+  }, [update, coberturaCartao])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
   // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na
@@ -5293,6 +5331,9 @@ export function AppProvider({ children }) {
       getFluxoCaixaPrincipal,
       getSaldoPrincipalBreakdown,
       getNextOccurrences,
+      getOccurrencesProjecao,
+      coberturaCartao,
+      baixarComoJaNoCartao,
       classifyByRules,
       learnClassification,
     }}>

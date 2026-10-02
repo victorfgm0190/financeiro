@@ -176,7 +176,7 @@ export default function CreditCardPanel() {
     profileSchedules: schedules,
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
-    reconciliarGerencial, revisarMovimentosFatura, getNextOccurrences,
+    reconciliarGerencial, revisarMovimentosFatura, getOccurrencesProjecao: getNextOccurrences,
     isFaturaFechada, fecharFatura, abrirFatura,
   } = useApp()
   const isMobile = useIsMobile()

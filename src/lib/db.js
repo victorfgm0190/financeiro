@@ -509,6 +509,8 @@ export const scheduleToRow = (s) => ({
   occurrence_type: s.occurrenceType || 'continuous',
   installments: s.installments || null,
   registered: s.registered || [],
+  // { "<data>": { tipo, lancamento_id, import_id } } — como cada ocorrência foi baixada.
+  registered_meta: s.registeredMeta || {},
   skipped: s.skipped || [],
   remind_days_before: s.remindDaysBefore ?? 3,
   auto_register: s.autoRegister ?? true,
@@ -549,6 +551,7 @@ export const rowToSchedule = (r) => ({
   occurrenceType: r.occurrence_type || 'continuous',
   installments: r.installments,
   registered: r.registered || [],
+  registeredMeta: r.registered_meta || {},
   skipped: r.skipped || [],
   remindDaysBefore: r.remind_days_before ?? 3,
   autoRegister: r.auto_register ?? true,

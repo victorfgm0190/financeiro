@@ -15,8 +15,8 @@ import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from 
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, computeDupMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie } from '../../lib/parcelas'
-import { candidatosBaixa, atribuirBaixas, baixaKey } from '../../lib/scheduleBaixa'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie } from '../../lib/parcelas'
+import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -1879,24 +1879,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     (r._dbTx && !r._collisionTx && r._dbTx.grupoGerencial) ? { ...r, grupoGerencial: r._dbTx.grupoGerencial } : r
   ), [resolvedRows])
 
-  // Baixa automática de agendamento: cada linha NOVA (sem duplicata nem colisão) procura a
-  // ocorrência pendente de um agendamento do mesmo cartão — valor ±R$ 0,05, ±10 dias da data do
-  // cartão ou da data de sistema. Map(rowId → { candidatos, escolhido, ativa }); o usuário troca o
-  // candidato (_baixaEscolha) ou desmarca (_baixaOff) na prévia.
-  const baixasPorLinha = useMemo(() => {
-    if (editingImport || !selectedAccount) return new Map()
-    const linhas = []
-    for (const r of resolvedRows) {
-      if (r._generated || r._isDuplicate || r._collisionTx) continue
-      const candidatos = candidatosBaixa({
-        description: r.description, payee: r.payee, amount: r.amount, type: r.type,
-        datas: [r._dateCartao, r.date],
-      }, schedules, selectedAccount)
-      if (candidatos.length > 0) linhas.push({ id: r._id, candidatos, escolha: r._baixaEscolha, desligada: r._baixaOff })
-    }
-    return atribuirBaixas(linhas)
-  }, [resolvedRows, schedules, selectedAccount, editingImport])
-
   // Parcelas FUTURAS dos parcelados que serão importados (seção secundária, informativa).
   // Já existentes no banco → exibidas com a classificação atual (não são alteradas);
   // ausentes → herdam a categoria/gerencial da parcela importada e são criadas na confirmação.
@@ -1918,9 +1900,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (!row.selected || row._isDuplicate) continue
       const inst = row._installment
       if (!inst || inst.num >= inst.total) continue
-      // Linha que baixa um agendamento: as próximas cobranças já são as ocorrências dele.
-      // Projetar as parcelas seguintes contaria cada mês duas vezes (agendamento + projeção).
-      if (baixasPorLinha.get(row._id)?.ativa) continue
       const base = inst.base.toLowerCase().trim()
       // Override manual sem N/M na descrição (matchStr null): a futura recebe o sufixo " N/M".
       const numWidth = inst.matchStr ? inst.matchStr.split('/')[0].length : String(inst.total).length
@@ -1932,14 +1911,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // Parcela futura (k > 1): data de sistema = dia financialStartDay do mês anterior à fatura.
         const futDate = installmentSystemDate(futFatura, k, faturaToDate(futFatura, dueDay) || `${futFatura}-01`, financialStartDay)
         const futNumStr = String(k).padStart(numWidth, '0')
-        // Por extenso ("Yelumseg Parc7"): a futura fica "Yelumseg 8/12", sem o "Parc7" da base.
+        // Sem N/Total na descrição (por extenso ou override manual): a futura fica "Yelumseg 8/12",
+        // sem o "Parc7" do mês — a forma antiga, "Yelumseg Parc7 8/12", mudava de base a cada mês.
         const futDesc = inst.matchStr
           ? row.description.replace(inst.matchStr, `${futNumStr}/${inst.total}`)
-          : inst._porExtenso
-            ? `${inst.base} ${futNumStr}/${inst.total}`
-            : `${row.description} ${futNumStr}/${inst.total}`
+          : `${stripParcelaSuffix(row.description).trim() || row.description} ${futNumStr}/${inst.total}`
+        // Já gravada? Pela descrição N/Total, pela série da irmã (série inferida) ou pela
+        // equivalência conta + base + valor + num/total + fatura — esta última é a que impede
+        // gerar de novo a cada importação mensal de "ParcN" (as cópias "Parc2 11/12", "Parc3 11/12"…).
         const existing = findExistingParcela(inst, k, row.amount, selectedAccount, transactions)
           || (row._serieAnchor?.accountId === selectedAccount ? findParcelaDaSerie(row._serieAnchor, k, row.amount, transactions) : null)
+          || findParcelaEquivalente({
+            accountId: selectedAccount, base: inst.base, amount: row.amount, num: k, total: inst.total,
+            faturaMonthYear: futFatura, serieId: row._serieId,
+          }, transactions)
         out.push({
           _id: `fut_${row._id}_${k}`, parentId: row._id,
           date: futDate, faturaMonthYear: futFatura, description: futDesc, amount: row.amount,
@@ -1952,13 +1937,44 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           // serie_id herdado da parcela base (elo da série); já existente preserva o próprio.
           _serieId: existing ? (existing.serieId || null) : (row._serieId || null),
           _exists: !!existing,
+          _existingId: existing?.id || null,
         })
       }
     }
     return out
     // editingImport mantido nas deps: o React Compiler exige o array idêntico (preserve-
     // manual-memoization); o corpo não o usa mais, daí o aviso benigno de dep desnecessária.
-  }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD, financialStartDay, baixasPorLinha])
+  }, [resolvedRows, transactions, selectedAccount, selectedAcc, editingImport, defaultGrupoD, financialStartDay])
+
+  // Baixa de agendamento na importação (lib/scheduleBaixa). Casa pelo PRINCÍPIO: cartão, valor
+  // ±R$ 0,05 e fatura da linha. Regra A: linha já no cartão (colisão / duplicata certa) baixa a
+  // ocorrência como "ja_no_cartao" apontando o lançamento existente. Regra B: linha nova baixa
+  // como "importado" e cada parcela futura da série cobre a ocorrência da sua fatura
+  // ("coberta_parcela"). O usuário troca o candidato (_baixaEscolha) ou desmarca (_baixaOff).
+  const baixasPorLinha = useMemo(() => {
+    if (editingImport || !selectedAcc) return new Map()
+    const closingDay = selectedAcc.closingDay || 14
+    const linhas = []
+    for (const r of resolvedRows) {
+      if (r._generated || (r.type || 'expense') !== 'expense') continue
+      const existente = r._collisionTx || (r._isDuplicate ? r._dbTx : null)
+      // Linha nova só concorre se for mesmo entrar (desmarcada / duplicata provável não importa).
+      if (!existente && !r.selected) continue
+      linhas.push({
+        id: r._id, description: r.description, payee: r.payee, amount: r.amount, type: r.type,
+        faturaMonthYear: existente ? faturaDoLancamento(existente, closingDay) : r.faturaMonthYear,
+        existenteId: existente?.id || null,
+        escolha: r._baixaEscolha, desligada: r._baixaOff,
+      })
+    }
+    const futuras = futureParcelas.map(fp => ({
+      id: fp._id, parentId: fp.parentId, faturaMonthYear: fp.faturaMonthYear, amount: fp.amount, existenteId: fp._existingId,
+    }))
+    return planejarBaixas({
+      linhas, futuras, schedules, transactions,
+      card: { id: selectedAcc.id, closingDay },
+    })
+  }, [resolvedRows, futureParcelas, schedules, transactions, selectedAcc, editingImport])
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
 
@@ -2221,9 +2237,30 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (!prev || amt > prev.amount) byOrigem.set(origem, { funcId: reservaFuncaoId, amount: amt })
     }
 
-    // Ocorrências de agendamento baixadas por este lote — guardadas no histórico da importação
-    // para o estorno reabri-las.
+    // Ocorrências de agendamento baixadas por este lote. O import_id vai no registered_meta de cada
+    // uma (o estorno reabre por ele) e a lista também fica no histórico da importação.
+    const importId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
     const scheduleBaixas = []
+    const rowTxId = new Map() // linha → lançamento criado
+    const futTxId = new Map() // parcela futura → lançamento criado
+
+    // Item 0 — serie_id. A série reconhecida usa o serie_id que algum membro gravado já tenha; senão
+    // o da linha. Os membros ainda sem serie_id recebem-no pelo fluxo normal de update (abaixo).
+    const serieAlvo = new Map()     // linha → serie_id
+    const serieBackfill = new Map() // lançamento gravado → serie_id
+    for (const row of resolvedRows) {
+      const inst = row._installment
+      if (!inst || (row.type || 'expense') !== 'expense') continue
+      const entra = toImport.includes(row) || (row._collisionTx && !collisionSkip.has(row._id))
+      if (!entra) continue
+      const membros = membrosDaSerie({
+        accountId: selectedAccount, base: inst.base, total: inst.total, amount: row.amount,
+        serieInicio: addMonthToFatura(row.faturaMonthYear, -(inst.num - 1)), serieId: row._serieId,
+      }, transactions)
+      const alvo = membros.find(t => t.serieId)?.serieId || row._serieId || newSerieId()
+      serieAlvo.set(row._id, alvo)
+      for (const t of membros) if (!t.serieId && !serieBackfill.has(t.id)) serieBackfill.set(t.id, alvo)
+    }
 
     // 2. Criar as transações das linhas importadas (à vista / parcela corrente).
     toImport.forEach(row => {
@@ -2231,8 +2268,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const isExpense = (row.type || 'expense') === 'expense'
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       const baixa = baixasPorLinha.get(row._id)
-      const sched = baixa?.ativa ? schedules.find(s => s.id === baixa.escolhido.scheduleId) : null
-      let tx = buildTransactionFromRow(row, { accountId: selectedAccount, defaultGrupoD, saveDate })
+      const sched = (baixa?.ativa && baixa.tipo === TIPO_BAIXA.IMPORTADO)
+        ? schedules.find(s => s.id === baixa.escolhido.scheduleId) : null
+      let tx = buildTransactionFromRow(
+        serieAlvo.has(row._id) ? { ...row, _serieId: serieAlvo.get(row._id) } : row,
+        { accountId: selectedAccount, defaultGrupoD, saveDate },
+      )
       if (sched) {
         // O favorecido da linha é, por padrão, a própria descrição do extrato — nesse caso vale o
         // do agendamento. Categoria idem quando a linha veio sem.
@@ -2246,12 +2287,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (tx.payee && !payees.includes(tx.payee)) addPayee(tx.payee)
       const txId = addTransaction(tx)
       txIds.push(txId)
-      // Mesmo caminho do botão "Pagar" do agendamento (PayModal): o lançamento leva o scheduleId
-      // e markScheduleRegistered marca a ocorrência e avança next_occurrence.
-      if (sched && txId) {
-        markScheduleRegistered(sched.id, baixa.escolhido.occurrenceDate)
-        scheduleBaixas.push({ scheduleId: sched.id, occurrenceDate: baixa.escolhido.occurrenceDate, txId })
-      }
+      if (txId) rowTxId.set(row._id, txId)
       if (txId && isExpense && row.grupoGerencial && row.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(txId)
       // Rateio: grava os rateios desta linha para o lançamento recém-criado.
       if (txId && row._rateios?.length > 0) saveRateiosFor(txId, row._rateios)
@@ -2284,8 +2320,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const fpDate = fp.date
       addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
-      const fId = addTransaction(buildInstallmentFromRow(fp, { accountId: selectedAccount, defaultGrupoD }))
-      if (fId) txIds.push(fId)
+      const fpSerie = serieAlvo.has(fp.parentId) ? { ...fp, _serieId: serieAlvo.get(fp.parentId) } : fp
+      const fId = addTransaction(buildInstallmentFromRow(fpSerie, { accountId: selectedAccount, defaultGrupoD }))
+      if (fId) { txIds.push(fId); futTxId.set(fp._id, fId) }
       if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
       // PARTE 2: parcela futura herda o mesmo rateio da parcela principal (parent).
       const parentRow = resolvedRows.find(r => r._id === fp.parentId)
@@ -2307,6 +2344,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       updateTransaction(tx.id, {
         date: saveDate,
         dateCartao: row._dateCartao || tx.dateCartao || null,
+        // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
+        description: row.description || tx.description,
+        serieId: tx.serieId || serieAlvo.get(row._id) || null,
         categoryId: row.categoryId || null,
         grupoGerencial: row.grupoGerencial || null,
         faturaMonthYear: row.faturaMonthYear || null,
@@ -2315,12 +2355,35 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       })
       if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
       if (row.grupoGerencial) registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
+      serieBackfill.delete(tx.id)
     })
 
-    if (toImport.length > 0) {
+    // Backfill do serie_id nos membros já gravados da série (inclusive cópias antigas).
+    for (const [id, serieId] of serieBackfill) updateTransaction(id, { serieId })
+
+    // Baixas de agendamento (regras A e B): mesmo caminho do "Pagar" (markScheduleRegistered),
+    // mais o registered_meta. Tipos diferentes de "pago" não criam lançamento — apontam um.
+    const baixar = (scheduleId, occurrenceDate, tipo, lancamentoId) => {
+      markScheduleRegistered(scheduleId, occurrenceDate, { tipo, lancamento_id: lancamentoId, import_id: importId })
+      scheduleBaixas.push({ scheduleId, occurrenceDate, txId: lancamentoId, tipo })
+    }
+    for (const row of resolvedRows) {
+      const b = baixasPorLinha.get(row._id)
+      if (!b?.ativa) continue
+      const { scheduleId, occurrenceDate } = b.escolhido
+      if (b.tipo === TIPO_BAIXA.JA_NO_CARTAO) { baixar(scheduleId, occurrenceDate, b.tipo, b.existenteId); continue }
+      const txId = rowTxId.get(row._id)
+      if (!txId) continue
+      baixar(scheduleId, occurrenceDate, TIPO_BAIXA.IMPORTADO, txId)
+      for (const c of b.coberturas) {
+        const lancamentoId = c.existenteId || futTxId.get(c.parcelaId)
+        if (lancamentoId) baixar(c.scheduleId, c.occurrenceDate, TIPO_BAIXA.COBERTA_PARCELA, lancamentoId)
+      }
+    }
+
+    if (toImport.length > 0 || scheduleBaixas.length > 0) {
       const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
-      const importId = 'imp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
       // Não geramos mais contas_a_pagar legadas de fatura; os agendamentos acumulativos
       // (tipo='pagamento_fatura') são reconstruídos no loop de recalcularAgendamentosFatura abaixo.
       addCardImport({
@@ -3437,7 +3500,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <Check size={20} />
           <span className="font-medium">{result} lançamento{result !== 1 ? 's' : ''} importado{result !== 1 ? 's' : ''} com sucesso.</span>
           {baixasResult > 0 && (
-            <span className="text-sm text-emerald-300/80">{baixasResult} agendamento{baixasResult !== 1 ? 's' : ''} baixado{baixasResult !== 1 ? 's' : ''}</span>
+            <span className="text-sm text-emerald-300/80">{baixasResult} ocorrência{baixasResult !== 1 ? 's' : ''} de agendamento baixada{baixasResult !== 1 ? 's' : ''}</span>
           )}
           <button className="ml-auto text-xs text-gray-500 hover:text-gray-300" onClick={() => { setResult(null); setBaixasResult(0) }}>Importar outro</button>
         </div>
@@ -3678,7 +3741,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           <InstallmentControl
                             installment={row._installment}
                             description={row.description}
-                            onChange={inst => updateRow(row._id, { _installment: inst })}
+                            onChange={inst => updateRow(row._id, { _installment: inst, _serieId: inst ? (row._serieId || newSerieId()) : null })}
                           />
                         </div>
                       </td>
@@ -3808,14 +3871,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           const baixa = baixasPorLinha.get(row._id)
                           if (!baixa) return null
                           const c = baixa.escolhido
+                          const jaNoCartao = baixa.tipo === TIPO_BAIXA.JA_NO_CARTAO
                           return (
                             <div className="mt-1 space-y-1">
-                              <label className="flex items-center gap-1 cursor-pointer" title="Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar). Desmarque para importar como lançamento avulso.">
+                              <label className="flex items-center gap-1 cursor-pointer" title={jaNoCartao
+                                ? 'O lançamento já está no cartão: ao confirmar, a ocorrência do agendamento é baixada apontando para ele, sem criar nada.'
+                                : 'Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar) e as parcelas futuras da série quitam as ocorrências das faturas delas. Desmarque para importar como lançamento avulso.'}>
                                 <input type="checkbox" className="accent-[#0F6E56] w-3 h-3 shrink-0"
                                   checked={baixa.ativa} disabled={!c}
                                   onChange={e => updateRow(row._id, { _baixaOff: !e.target.checked })} />
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 truncate max-w-[14rem]">
-                                  Baixa agendamento: {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 truncate max-w-[16rem]">
+                                  {jaNoCartao ? 'Já no cartão – baixa agendamento ' : 'Baixa agendamento: '}
+                                  {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
+                                  {!jaNoCartao && baixa.ativa && baixa.coberturas.length > 0 && ` + cobre ${baixa.coberturas.length} ocorrência${baixa.coberturas.length !== 1 ? 's' : ''} futura${baixa.coberturas.length !== 1 ? 's' : ''}`}
                                 </span>
                               </label>
                               {baixa.candidatos.length > 1 && (

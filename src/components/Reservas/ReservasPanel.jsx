@@ -1885,7 +1885,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
 export default function ReservasPanel() {
   const {
     profileAccounts: accounts, profileTransactions: transactions, categories, profileSchedules: schedules,
-    scheduleReservaFuncoes, getFinancialPeriod, getNextOccurrences, reorderReserveFunctions,
+    scheduleReservaFuncoes, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, reorderReserveFunctions,
     // Histórico no banco (fonte da verdade): períodos de saldo inicial + ajustes + snapshots.
     reservePeriods, reserveAdjustments, reserveSnapshots, addReservePeriod, deleteReservePeriod,
     addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment, addReserveSnapshots,
