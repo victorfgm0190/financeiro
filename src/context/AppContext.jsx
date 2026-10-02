@@ -5,7 +5,7 @@ import {
   syncSection, syncAccounts, syncPayees, syncSettings,
   accountToRow, txToRow, scheduleToRow, categoryToRow,
   budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
-  importToRow, gerencialRuleToRow, reserveFunctionToRow,
+  importToRow, gerencialRuleToRow, reserveFunctionToRow, favorecidoAliasToRow,
   saveRateios, deleteRateios,
   syncScheduleReservaFuncoes,
   bulkUpdateTransactionsApi,
@@ -21,6 +21,7 @@ import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleD
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
@@ -87,6 +88,7 @@ const EMPTY_PREV = {
   budgets: [], classificationRules: [], gerencialGroups: [], gerencialRules: [],
   payables: [], payees: [], envelopes: [], accountGroups: [],
   profiles: [], cardImports: [], reserveFunctions: [], scheduleReservaFuncoes: [],
+  favorecidoAliases: [],
   settings: {}, costCenters: [],
 }
 
@@ -426,6 +428,8 @@ const defaultData = {
   reserveFunctions: [],
   rateios: [],
   scheduleReservaFuncoes: [],
+  // Padrão de descrição → favorecido, gravado ao renomear/mesclar com "usar nas próximas importações".
+  favorecidoAliases: [],
 }
 
 // Gera lançamentos automáticos de reserva (accountId: null, reservaAuto: true) e de
@@ -790,6 +794,7 @@ export function AppProvider({ children }) {
           reserveFunctions: result.data.reserveFunctions ?? [],
           rateios: result.data.rateios ?? [],
           scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
+          favorecidoAliases: result.data.favorecidoAliases ?? [],
         }
 
         // Migração: funções de reserva do localStorage → Neon.
@@ -886,6 +891,8 @@ export function AppProvider({ children }) {
         tasks.push(syncSection('card_imports', prev.cardImports || [], data.cardImports || [], importToRow))
       if (prev.reserveFunctions !== data.reserveFunctions)
         tasks.push(syncSection('reserve_functions', prev.reserveFunctions || [], data.reserveFunctions || [], reserveFunctionToRow))
+      if (prev.favorecidoAliases !== data.favorecidoAliases)
+        tasks.push(syncSection('favorecido_alias', prev.favorecidoAliases || [], data.favorecidoAliases || [], favorecidoAliasToRow))
       if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
         tasks.push(syncScheduleReservaFuncoes(prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || []))
       if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
@@ -2606,6 +2613,38 @@ export function AppProvider({ children }) {
       if (d.payees.includes(name)) return d
       return { ...d, payees: [...d.payees, name] }
     })
+  }, [update])
+
+  // Vários de uma vez (sincronização do cadastro com os nomes em uso): um update só, e o
+  // syncPayees manda apenas os nomes novos para /api/sync.
+  const addPayees = useCallback((names) => {
+    const novos = [...new Set((names || []).map(nomeFavorecido).filter(Boolean))]
+    if (novos.length === 0) return
+    update(d => {
+      const atuais = new Set((d.payees || []).map(nomeFavorecido))
+      const faltam = novos.filter(n => !atuais.has(n))
+      return faltam.length ? { ...d, payees: [...d.payees, ...faltam] } : d
+    })
+  }, [update])
+
+  // Renomear / mesclar favorecidos (lib/favorecidos#aplicarRenomeacao): payee nos lançamentos,
+  // agendamentos e regras escolhidos, cadastro e alias — num único update(). O sync grava só as
+  // linhas que mudaram, e como o estado já tem o nome novo, uma aba aberta não desfaz a troca.
+  const renomearFavorecidos = useCallback(({ para, ids, nomesAntigos, alias }) => {
+    update(d => aplicarRenomeacao(d, {
+      para, ids, nomesAntigos, alias,
+      novoAliasId: () => 'alias_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    }))
+  }, [update])
+
+  // Campos de lançamento que não mexem em saldo nem em fatura (serie_id), em lote e sem o
+  // recálculo por lançamento do updateTransaction. `changesById` = Map(id → changes).
+  const atualizarCamposLancamentos = useCallback((changesById) => {
+    if (!changesById?.size) return
+    update(d => ({
+      ...d,
+      transactions: d.transactions.map(t => (changesById.has(t.id) ? { ...t, ...changesById.get(t.id) } : t)),
+    }))
   }, [update])
 
   // ── Cost Centers ─────────────────────────────────────────────────────────────
@@ -5322,6 +5361,7 @@ export function AppProvider({ children }) {
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
+      addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,
       syncing,

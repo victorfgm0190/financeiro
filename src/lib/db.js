@@ -857,6 +857,7 @@ export async function loadFromDb(defaultData) {
         reserveFunctions: d.rfns?.map(rowToReserveFunction) || [],
         rateios: d.rateios?.map(rowToRateio) || [],
         scheduleReservaFuncoes: d.srfs?.map(rowToScheduleReservaFuncao) || [],
+        favorecidoAliases: d.aliases?.map(rowToFavorecidoAlias) || [],
       },
     }
   } catch (err) {
@@ -874,6 +875,20 @@ export async function seedDefaults(defaultData) {
     syncSettings(defaultData.settings, defaultData.costCenters),
   ])
 }
+
+// ─── Alias de favorecido (padrão de descrição → favorecido na importação) ─────
+
+export const favorecidoAliasToRow = (a) => ({
+  id: a.id,
+  padrao: a.padrao,
+  favorecido: a.favorecido,
+})
+
+export const rowToFavorecidoAlias = (r) => ({
+  id: r.id,
+  padrao: r.padrao || '',
+  favorecido: r.favorecido || '',
+})
 
 // ─── Card Imports (histórico de importações) ─────────────────────────────────
 
@@ -1209,6 +1224,7 @@ export async function restoreFullBackup(backup, accountMapping) {
     syncSection('perfis', prev.profiles, d.profiles || [], perfilToRow),
     syncSection('card_imports', prev.cardImports, d.cardImports || [], importToRow),
     syncSection('reserve_functions', prev.reserveFunctions, d.reserveFunctions || [], reserveFunctionToRow),
+    syncSection('favorecido_alias', prev.favorecidoAliases || [], d.favorecidoAliases || [], favorecidoAliasToRow),
     syncSettings(d.settings || {}, d.costCenters || []),
   ])
 

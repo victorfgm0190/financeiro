@@ -117,6 +117,13 @@ export default async function handler(req, res) {
     // Chain ID: lançamento que originou o agendamento (resgate avulso "Será pago com reserva").
     // 1:1 — agregados de fatura (fsch_*) usam overrides._sourceTxIds (N:1) em vez desta coluna.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS source_tx_id TEXT`)
+    // Alias de favorecido: descrição base de um lançamento importado → favorecido a usar.
+    await query(`CREATE TABLE IF NOT EXISTS favorecido_alias (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      padrao TEXT NOT NULL,
+      favorecido TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )`)
     // Metadados das baixas: { "<data da ocorrência>": { tipo, lancamento_id, import_id } }.
     // `registered` continua sendo a lista de datas baixadas; isto só descreve COMO cada uma foi.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS registered_meta JSONB NOT NULL DEFAULT '{}'::jsonb`)
@@ -401,7 +408,7 @@ export default async function handler(req, res) {
       console.error('[api/load] ensureBemSchema:', err.message)
     }
 
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs] =
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -421,6 +428,7 @@ export default async function handler(req, res) {
         query('SELECT * FROM reserve_functions ORDER BY ordem, name'),
         query('SELECT * FROM lancamento_rateios'),
         query('SELECT * FROM schedule_reserva_funcoes'),
+        query('SELECT * FROM favorecido_alias ORDER BY created_at'),
       ])
 
     res.json({
@@ -430,7 +438,7 @@ export default async function handler(req, res) {
       served_at: new Date().toISOString(),
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis, imports, grules, rfns, rateios, srfs,
+      envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases,
     })
   } catch (err) {
     const isTableMissing =

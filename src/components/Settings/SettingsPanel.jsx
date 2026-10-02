@@ -7,6 +7,7 @@ import { fmt } from '../shared/utils'
 import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
+import FavorecidosPanel from './FavorecidosPanel'
 import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig, abaDe } from '../../lib/configRota'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
@@ -1691,16 +1692,7 @@ export default function SettingsPanel() {
       </div>
       )}
 
-      {secao === 'favorecidos' && (
-        <div className="card">
-          <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
-            Favorecidos
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">novo</span>
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">Cadastro dos favorecidos usados em lançamentos e agendamentos.</p>
-          <p className="text-sm text-gray-400">Em breve.</p>
-        </div>
-      )}
+      {secao === 'favorecidos' && <FavorecidosPanel />}
         </div>
       </div>
 

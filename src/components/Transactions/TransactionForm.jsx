@@ -10,6 +10,7 @@ import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
@@ -147,6 +148,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // (usa initial); null = à vista; { num, total } = parcelado aplicado localmente (feedback
   // imediato, já que o prop `initial` não se atualiza após updateTransaction).
   const [instOverride, setInstOverride] = useState(undefined)
+  const [renomearFav, setRenomearFav] = useState(false)
   const [editInst, setEditInst] = useState(false)
   const [instInput, setInstInput] = useState('')
   const effInstNum = instOverride !== undefined ? (instOverride?.num ?? null) : (initial?.installmentNum ?? null)
@@ -1296,13 +1298,33 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           </div>
 
           <div>
-            <label className="label">Favorecido</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="label">Favorecido</label>
+              {initial?.id && (initial.payee || '').trim() && (
+                <button type="button" onClick={() => setRenomearFav(true)}
+                  className="text-[11px] text-gray-400 hover:text-gray-200 min-h-[32px] px-1"
+                  title="Troca este favorecido em todos os lançamentos, agendamentos e regras (com prévia)">
+                  Renomear em todos
+                </button>
+              )}
+            </div>
             <FavorecidoAutocomplete
               value={form.payee}
               onChange={onPayeeChange}
               suggestions={sortedPayees}
             />
           </div>
+          {renomearFav && (
+            <RenomearFavorecidoModal
+              open
+              onClose={() => setRenomearFav(false)}
+              nomeBase={initial.payee}
+              titulo="Renomear favorecido em todos"
+              // O formulário aberto segue com o nome antigo: sem isto, salvar depois devolveria o
+              // favorecido antigo a este lançamento. Só o favorecido — a descrição não acompanha.
+              onAplicado={({ para }) => set('payee', para)}
+            />
+          )}
 
           <div>
             <label className="label">Centro de Custo</label>
@@ -1366,7 +1388,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   </button>
                 </div>
                 {parcelaSeries
-                  ? <span className="text-xs text-gray-500">{parcelaSeries.siblings.length}/{parcelaSeries.total} no histórico</span>
+                  ? <span className="text-xs text-gray-500">{parcelaSeries.presentes}/{parcelaSeries.total} no histórico</span>
                   : (
                     <button type="button" onClick={openInstEditor} className="text-xs text-amber-400 hover:text-amber-300">
                       Marcar como parcelado
@@ -1391,8 +1413,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <button type="button" className="btn-secondary w-full text-sm" onClick={() => setStep('gerar-parcelas')}>
                   Gerar parcelas futuras ({parcelaSeries.missing.length} faltando)
                 </button>
-              ) : (
+              ) : parcelaSeries.completa ? (
                 <p className="text-xs text-gray-600">Série completa — nenhuma parcela faltando.</p>
+              ) : (
+                <p className="text-xs text-amber-500/80">
+                  {parcelaSeries.total - parcelaSeries.presentes} parcela{parcelaSeries.total - parcelaSeries.presentes !== 1 ? 's' : ''} fora do histórico.
+                </p>
               )}
             </>
           )}

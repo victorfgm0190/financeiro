@@ -108,7 +108,9 @@ export function buildSiblingDescription(anchorDesc, anchorNum, k, total) {
     return anchorDesc.replace(det.matchStr, `${String(k).padStart(numWidth, '0')}/${total}`)
   }
   const m = (anchorDesc || '').match(/(\d+)\/(\d+)(\s*)$/)
-  if (!m) return anchorDesc || ''
+  // Sem N/M (parcela por extenso "Yelumseg Parc7" ou marcação manual): base + " k/total". Devolver
+  // a própria descrição fazia a parcela faltante parecer já existente.
+  if (!m) return `${stripParcelaSuffix(anchorDesc || '').trim() || (anchorDesc || '')} ${k}/${total}`
   const code = m[1]
   const newCode = String(Number(code) + (k - anchorNum)).padStart(code.length, '0')
   return anchorDesc.slice(0, m.index) + newCode + '/' + m[2] + m[3]
@@ -141,13 +143,18 @@ export function buildSeries(tx, transactions, account, financialStartDay = 1) {
   const prefix = installmentPrefix(tx.description)
   const serieInicio = serieInicioOf(tx)
 
+  // Irmã = mesmo serie_id, OU mesmo prefixo antes do "N/M" e mesmo início de série, OU membro pelo
+  // critério de série (cartão + base sem sufixo de parcela + valor + total). O último é o que junta
+  // "Yelumseg Parc7" com "Yelumseg Parc6" e "Yelumseg 8/12" — sem ele o card via só a própria parcela.
+  const refSerie = { accountId, base: tx.description, total, amount: tx.amount, serieInicio }
   const siblings = transactions
     .filter(t =>
       t.accountId === accountId &&
       t.installmentNum != null &&
-      (Number(t.installmentTotal) || null) === total &&
-      installmentPrefix(t.description) === prefix &&
-      serieInicioOf(t) === serieInicio)
+      (Number(t.installmentTotal) || null) === total && (
+        (tx.serieId && t.serieId === tx.serieId) ||
+        (installmentPrefix(t.description) === prefix && serieInicioOf(t) === serieInicio) ||
+        ehMembroDaSerie(t, refSerie)))
     .map(t => ({ ...t, _num: Number(t.installmentNum) }))
   // Garante a própria parcela na lista (o array pode estar desatualizado em alguns fluxos).
   if (!siblings.some(s => s.id === tx.id)) siblings.push({ ...tx, _num: myNum })
@@ -184,7 +191,10 @@ export function buildSeries(tx, transactions, account, financialStartDay = 1) {
       reservaFuncaoId: anchor.reservaFuncaoId || null,
     })
   }
-  return { base: prefix, total, siblings, missing }
+  // Completa = todas as N parcelas no histórico. `missing` vazio não basta: uma faltante pode ter
+  // ficado de fora pela guarda de descrição acima.
+  const presentes = [...presentNums].filter(n => n >= 1 && n <= total).length
+  return { base: prefix, total, siblings, missing, presentes, completa: presentes >= total }
 }
 
 // Ordinal de cada parcela entre as GÊMEAS do arquivo: linhas com a MESMA identidade de chave
@@ -283,15 +293,42 @@ export function findParcelaEquivalente({ accountId, base, amount, num, total, fa
   }) || null
 }
 
-// Todos os lançamentos gravados da série (inclusive cópias duplicadas): mesmo serie_id, ou mesma
-// conta + total + início da série + valor ±R$ 0,05 + base parecida. Usado para gravar o serie_id
-// em quem ainda não tem.
-export function membrosDaSerie({ accountId, base, total, amount, serieInicio, serieId }, transactions) {
-  return (transactions || []).filter(t => {
-    if (serieId && t.serieId === serieId) return true
-    if (t.accountId !== accountId || (t.type || 'expense') !== 'expense') return false
-    if (Number(t.installmentTotal) !== total || !Number(t.installmentNum)) return false
-    if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.05) return false
-    return serieInicioOf(t) === serieInicio && baseParecida(t.description, base)
-  })
+const mesesEntre = (a, b) => {
+  const [ya, ma] = String(a).split('-').map(Number)
+  const [yb, mb] = String(b).split('-').map(Number)
+  return (yb * 12 + mb) - (ya * 12 + ma)
+}
+
+// Folga no início da série (fatura − (num − 1)). Parcela antiga sem fatura_month_year cai no mês
+// da data — o anterior à fatura — e o início exato deixava essas irmãs de fora do backfill (o bug
+// da "Yelumseg Parc7" sozinha na série). A renovação do ano seguinte, com mesmo valor e total,
+// começa 12 meses depois e continua separada.
+export const SERIE_INICIO_TOLERANCIA = 2
+
+// Membro de uma série sem depender do serie_id: mesmo cartão, base da descrição (sem sufixo de
+// parcela), valor ±R$ 0,05 e installment_total, com o início da série dentro da folga.
+export function ehMembroDaSerie(t, { accountId, base, total, amount, serieInicio }) {
+  if (t.accountId !== accountId || (t.type || 'expense') !== 'expense') return false
+  if (Number(t.installmentTotal) !== Number(total) || !Number(t.installmentNum)) return false
+  if (Math.abs((Number(t.amount) || 0) - (Number(amount) || 0)) > 0.05) return false
+  if (!baseParecida(t.description, base)) return false
+  const ini = serieInicioOf(t)
+  if (!serieInicio || serieInicio === 'sem-fatura' || ini === 'sem-fatura') return true
+  return Math.abs(mesesEntre(ini, serieInicio)) <= SERIE_INICIO_TOLERANCIA
+}
+
+// Todos os lançamentos gravados da série (inclusive cópias duplicadas): mesmo serie_id, ou membro
+// pelo critério acima. Usado para gravar o MESMO serie_id em todos.
+export function membrosDaSerie(ref, transactions) {
+  return (transactions || []).filter(t => (ref.serieId && t.serieId === ref.serieId) || ehMembroDaSerie(t, ref))
+}
+
+// serie_id que a série inteira deve ter: o mais frequente entre os membros (empate → o primeiro
+// visto). null quando nenhum membro tem.
+export function serieIdDominante(membros) {
+  const cont = new Map()
+  for (const t of membros || []) if (t.serieId) cont.set(t.serieId, (cont.get(t.serieId) || 0) + 1)
+  let melhor = null, n = 0
+  for (const [id, c] of cont) if (c > n) { melhor = id; n = c }
+  return melhor
 }

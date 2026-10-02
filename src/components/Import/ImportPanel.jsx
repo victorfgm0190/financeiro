@@ -15,8 +15,9 @@ import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from 
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, computeDupMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
-import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie } from '../../lib/parcelas'
+import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
+import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
@@ -1238,8 +1239,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     payees, addPayee,
     rateiosByLancamento, saveRateiosFor,
     reserveFunctions, settings, updateSettings, data,
-    isFaturaFechada, syncing,
+    isFaturaFechada, syncing, atualizarCamposLancamentos,
   } = useApp()
+  const favorecidoAliases = data?.favorecidoAliases || []
 
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
   // (provisão no dia financialMonthStartDay do mês anterior à fatura da parcela).
@@ -1488,8 +1490,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           if (t.accountId !== resolvedAccountId || t.type !== 'expense' || t.accountType !== 'credit') continue
           const sk = serieKeyOfExistingTx(t)
           if (!sk) continue
-          const cur = serieInfoByKey.get(sk) || { serieId: null, grupo: null }
+          const cur = serieInfoByKey.get(sk) || { serieId: null, grupo: null, payee: null }
           if (!cur.serieId && t.serieId) cur.serieId = t.serieId
+          if (!cur.payee && t.payee) cur.payee = t.payee
           if (!cur.grupo && t.grupoGerencial && t.grupoGerencial !== grupoD) cur.grupo = t.grupoGerencial
           serieInfoByKey.set(sk, cur)
         }
@@ -1517,9 +1520,6 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const classified = classifyByRules(row.description, { dayOfMonth: rowDay, amountApprox: row.amount })
         const movCat = categories.find(c => c.name.toLowerCase() === row.movimentacao.toLowerCase())
         const categoryId = anchor?.categoryId || classified?.categoryId || movCat?.id || ''
-        // Favorecido: irmã da série > regra de classificação > favorecido já vindo do parser > o
-        // próprio lançamento (descrição/estabelecimento, ex.: CSV Itaú e XLS de cartão).
-        const payee = anchor?.payee || classified?.payee || row.payee || row.description || ''
         const faturaParc1 = calcFatura(row.date, resolvedClosingDay)
         // Para parcelados X/N com X > 1: fatura = fatura da parcela 1 + (X-1) meses. Série
         // inferida: a fatura sai da irmã gravada — a data do "ParcN" é a da cobrança, não a da compra.
@@ -1542,6 +1542,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // Herança de grupo: parcela cuja série já tem grupo != D no banco herda esse grupo.
         // Só quando não há regra de descrição (regra explícita prevalece).
         const grupoFromSerie = serieInfo?.grupo || null
+        // Favorecido (lib/favorecidos): regra de classificação > alias de importação > série já
+        // gravada > favorecido do arquivo (Dindin) > descrição base, sem o sufixo de parcela —
+        // "Yelumseg Parc7" entra como "Yelumseg", não como um favorecido novo a cada mês.
+        const payeeSerie = anchor?.payee || serieInfo?.payee || null
+        const payee = favorecidoDaImportacao({
+          descricao: row.description, regra: classified?.payee, aliases: favorecidoAliases,
+          serie: payeeSerie, arquivo: row.payee,
+        })
+        // Só a descrição base sobrou: a baixa de agendamento pode usar o favorecido dele.
+        const payeePadrao = !classified?.payee && !payeeSerie && !row.payee
+          && !favorecidoPorAlias(row.description, favorecidoAliases)
         // serie_id da linha: junta a série já existente (usa o serie_id dela) ou gera um novo
         // para uma compra parcelada NOVA. Série legada existente sem serie_id → null (fallback).
         // Série legada já gravada SEM serie_id também ganha um: as irmãs antigas aparecem no Motor de
@@ -1566,6 +1577,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           _reservaFuncaoId: reservaFuncaoFromRule, _serieId: serieIdRow,
           // Irmã gravada da série inferida — resolvedRows procura nela a parcela já existente.
           _serieAnchor: anchor,
+          _payeePadrao: payeePadrao,
           faturaMonthYear: baseFatura, _origDay: rowDay,
           // Data original do extrato (preservada; `date` será corrigida p/ o mês de referência).
           _dateCartao: row.date,
@@ -2257,9 +2269,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         accountId: selectedAccount, base: inst.base, total: inst.total, amount: row.amount,
         serieInicio: addMonthToFatura(row.faturaMonthYear, -(inst.num - 1)), serieId: row._serieId,
       }, transactions)
-      const alvo = membros.find(t => t.serieId)?.serieId || row._serieId || newSerieId()
+      // O serie_id mais frequente entre os membros vence; TODOS os membros passam a tê-lo (inclusive
+      // os que tinham outro) — senão a série fica partida e o card "Parcela N de M" mostra metade.
+      const alvo = serieIdDominante(membros) || row._serieId || newSerieId()
       serieAlvo.set(row._id, alvo)
-      for (const t of membros) if (!t.serieId && !serieBackfill.has(t.id)) serieBackfill.set(t.id, alvo)
+      for (const t of membros) if (t.serieId !== alvo && !serieBackfill.has(t.id)) serieBackfill.set(t.id, alvo)
     }
 
     // 2. Criar as transações das linhas importadas (à vista / parcela corrente).
@@ -2277,7 +2291,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (sched) {
         // O favorecido da linha é, por padrão, a própria descrição do extrato — nesse caso vale o
         // do agendamento. Categoria idem quando a linha veio sem.
-        const semFavorecido = !row.payee || row.payee === row.description
+        const semFavorecido = row._payeePadrao || !row.payee || row.payee === row.description
         tx = {
           ...tx, scheduleId: sched.id,
           categoryId: row.categoryId || sched.categoryId || '',
@@ -2346,7 +2360,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         dateCartao: row._dateCartao || tx.dateCartao || null,
         // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
         description: row.description || tx.description,
-        serieId: tx.serieId || serieAlvo.get(row._id) || null,
+        serieId: serieAlvo.get(row._id) || tx.serieId || null,
         categoryId: row.categoryId || null,
         grupoGerencial: row.grupoGerencial || null,
         faturaMonthYear: row.faturaMonthYear || null,
@@ -2359,7 +2373,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     })
 
     // Backfill do serie_id nos membros já gravados da série (inclusive cópias antigas).
-    for (const [id, serieId] of serieBackfill) updateTransaction(id, { serieId })
+    // Um único update: serie_id não mexe em saldo nem em fatura, então não precisa do recálculo
+    // que o updateTransaction dispara por lançamento.
+    if (serieBackfill.size > 0) atualizarCamposLancamentos(new Map([...serieBackfill].map(([id, serieId]) => [id, { serieId }])))
 
     // Baixas de agendamento (regras A e B): mesmo caminho do "Pagar" (markScheduleRegistered),
     // mais o registered_meta. Tipos diferentes de "pago" não criam lançamento — apontam um.
@@ -2679,7 +2695,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           ...row,
           _id: `conc_${idCtr++}`,
           categoryId: classified?.categoryId || row.categoryId || '',
-          payee: classified?.payee || row.payee || row.description || '',
+          payee: favorecidoDaImportacao({
+            descricao: row.description, regra: classified?.payee, aliases: favorecidoAliases, arquivo: row.payee,
+          }),
           grupoGerencial: grupo,
           _reservaFuncaoId: reservaFuncaoFromRule,
           _installment: detectInstallment(row.description) || null,

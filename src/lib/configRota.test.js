@@ -51,7 +51,7 @@ describe('nenhuma seção sumiu da tela Configurações', () => {
 
   it('toda seção do menu tem um bloco renderizado no painel', () => {
     for (const a of CONFIG_ABAS) for (const s of a.secoes) {
-      expect(painel, `seção ${a.id}/${s.id}`).toContain(`secao === '${s.id}' && (`)
+      expect(painel, `seção ${a.id}/${s.id}`).toContain(`secao === '${s.id}' &&`)
     }
   })
 
