@@ -181,8 +181,9 @@ function AppContent() {
 // localStorage renderiza o Login; com token, monta o app normalmente (o AppProvider só então
 // dispara o carregamento de dados, já com o header Authorization).
 function PrivateRoute({ children }) {
-  const [token, setToken] = useState(() => getToken())
-  if (!token) return <Login onSuccess={() => setToken(getToken())} />
+  // Lido uma vez ao montar: o login salva o token e recarrega a página, então a sessão vem daqui.
+  const [token] = useState(() => getToken())
+  if (!token) return <Login />
   return children
 }
 
