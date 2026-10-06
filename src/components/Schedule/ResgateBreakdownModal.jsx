@@ -1,50 +1,18 @@
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
-import { ehFontePrevista, resolverFontePrevista } from '../../lib/gerencialPrevistos'
+import { composicaoResgate } from '../../lib/resgateComposicao'
 import { computeOccurrences } from '../../lib/occurrences'
-
-const round2 = n => Math.round(n * 100) / 100
 
 // Fase 4 — Composição do resgate: lista as fontes que compõem um agendamento resgate_reserva,
 // via schedule.sourceExpenseIds. Duas espécies de fonte, na MESMA tabela:
 //   • lançamento de cartão já efetivado (id comum) — resolvido em transactions;
 //   • despesa agendada ainda pendente (id 'sch:<agendamento>@<data>') — resolvida em schedules.
 // Sem a segunda, a tabela somava só os realizados e fechava abaixo do amount do resgate, sem nada
-// na tela explicando a diferença. Somente leitura; não altera nenhum estado.
+// na tela explicando a diferença. Somente leitura; não altera nenhum estado. A montagem da lista e a
+// validação da soma ficam em lib/resgateComposicao (testável sem React).
 export default function ResgateBreakdownModal({ schedule, transactions, schedules, categories, onClose }) {
-  const fontes = schedule?.sourceExpenseIds || []
-  const txById = new Map((transactions || []).map(t => [t.id, t]))
-
-  const realizados = fontes
-    .filter(id => !ehFontePrevista(id))
-    .map(id => txById.get(id))
-    .filter(Boolean)
-    .map(t => ({
-      key: t.id, date: t.date, description: t.description || '—',
-      categoryId: t.categoryId, valor: Number(t.amount) || 0, previsto: false, orfao: false,
-    }))
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-
-  // Previstos depois dos realizados (o que já aconteceu primeiro), cada bloco em ordem de data.
-  const previstos = fontes
-    .filter(ehFontePrevista)
-    .map(id => resolverFontePrevista(id, schedules, computeOccurrences))
-    .filter(Boolean)
-    .map(p => ({
-      key: p.id, date: p.date,
-      // Agendamento apagado depois de o resgate ser executado: a linha fica, dizendo o que é.
-      description: p.description || '(agendamento removido)',
-      categoryId: p.categoryId, valor: p.valor, previsto: true, orfao: !p.schedule,
-    }))
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-
-  const gastos = [...realizados, ...previstos]
-  const total = round2(gastos.reduce((s, g) => s + g.valor, 0))
-  const qtdPrevistos = previstos.length
-  // O total da tabela TEM que fechar com o amount do resgate — é o invariante per-gasto. Quando não
-  // fecha, o número aparece em vez de a diferença passar batida.
-  const amountResgate = round2(Number(schedule?.amount) || 0)
-  const diferenca = round2(total - amountResgate)
+  const { gastos, total, amountResgate, diferenca, fecha, qtdPrevistos, semFontes } =
+    composicaoResgate(schedule, transactions, schedules, computeOccurrences)
   const catName = (id) => {
     const c = (categories || []).find(x => x.id === id)
     return c ? `${c.icon || ''} ${c.name}`.trim() : '—'
@@ -61,7 +29,9 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
           )}
         </div>
 
-        {gastos.length === 0 ? (
+        {semFontes ? (
+          <p className="text-sm text-gray-500 py-8 text-center">Resgate sem composição detalhada.</p>
+        ) : gastos.length === 0 ? (
           <p className="text-sm text-gray-500 py-8 text-center">Nenhum gasto rastreado para este resgate.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -107,7 +77,7 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
                   </td>
                   <td className="px-2 py-2.5 text-right font-bold text-blue-500 whitespace-nowrap">{fmt(total)}</td>
                 </tr>
-                {Math.abs(diferenca) > 0.005 && (
+                {!fecha && (
                   <tr>
                     <td className="px-2 pb-2 text-[11px] text-orange-500" colSpan={4}>
                       Não fecha com o valor do resgate ({fmt(amountResgate)}): diferença de {fmt(diferenca)}.

@@ -12,6 +12,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
+import { itemSaidaFluxo, itemAbreComposicao } from '../../lib/resgateComposicao'
 import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
 
@@ -915,7 +916,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
 }
 
 // Seção (tabela) do modal de Movimentos Futuros — Entradas ou Saídas previstas.
-function MovFuturosSecao({ titulo, cor, items, total, vazio }) {
+// Com `onAbrirResgate`, as linhas de resgate de cartão (item.resgateScheduleId) ficam clicáveis e
+// abrem a composição per-gasto; as demais seguem só texto.
+function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
   return (
     <div>
       <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${cor}`}>{titulo}</p>
@@ -932,13 +935,35 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((it, i) => (
-                <tr key={i} className="border-b border-gray-800/40">
-                  <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
-                  <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={it.label}>{it.label}</td>
-                  <td className={`px-3 py-2 text-xs text-right font-medium whitespace-nowrap ${cor}`}>{fmt(it.amount)}</td>
-                </tr>
-              ))}
+              {items.map((it, i) => {
+                const clicavel = !!onAbrirResgate && itemAbreComposicao(it)
+                return (
+                  <tr
+                    key={i}
+                    className={`border-b border-gray-800/40 ${clicavel ? 'group cursor-pointer hover:bg-gray-800/30 transition-colors' : ''}`}
+                    {...(clicavel ? {
+                      role: 'button',
+                      tabIndex: 0,
+                      title: 'Ver os gastos que compõem este resgate',
+                      onClick: () => onAbrirResgate(it),
+                      onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrirResgate(it) } },
+                    } : {})}
+                  >
+                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
+                    {clicavel ? (
+                      <td className="px-3 py-2 text-xs text-gray-300 max-w-xs">
+                        <span className="flex items-center gap-1">
+                          <span className="truncate group-hover:underline underline-offset-2">{it.label}</span>
+                          <ChevronRight size={12} className="shrink-0 text-gray-500 group-hover:text-gray-300" />
+                        </span>
+                      </td>
+                    ) : (
+                      <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={it.label}>{it.label}</td>
+                    )}
+                    <td className={`px-3 py-2 text-xs text-right font-medium whitespace-nowrap ${cor}`}>{fmt(it.amount)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-700 bg-gray-800/20">
@@ -960,13 +985,23 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio }) {
 // Reusa MovFuturosSecao — é a mesma tabela do modal de Movimentos Futuros do Resumo, só que
 // recortada por mês. Os itens já vêm prontos de computeScheduledByFunction (depItems/resItems),
 // que os coleta justamente para isto; nada é buscado no servidor.
+//
+// Linha de resgate de cartão → ResgateBreakdownModal empilhado por cima. Enquanto ele está aberto,
+// o Escape (que os dois Modals escutam) não fecha este: fechar a composição volta para cá.
 function FluxoCelulaModal({ detalhe, onClose }) {
   const { fnName, tipo, mesLabel, items, total } = detalhe
   const entradas = tipo === 'deps'
+  const { transactions, schedules, categories } = useApp()
+  const [resgateSched, setResgateSched] = useState(null)
+  const abrirResgate = (it) => {
+    const s = (schedules || []).find(x => x.id === it.resgateScheduleId)
+    if (s) setResgateSched(s)
+  }
   return (
+    <>
     <Modal
       open
-      onClose={onClose}
+      onClose={resgateSched ? () => {} : onClose}
       title={`${entradas ? 'Entradas' : 'Saídas'} previstas — ${fnName} · ${mesLabel}`}
       size="lg"
     >
@@ -977,12 +1012,23 @@ function FluxoCelulaModal({ detalhe, onClose }) {
           items={items}
           total={total}
           vazio={entradas ? 'Nenhuma entrada prevista neste mês' : 'Nenhuma saída prevista neste mês'}
+          onAbrirResgate={entradas ? undefined : abrirResgate}
         />
         <div className="flex justify-end">
           <button type="button" className="btn-secondary text-xs py-1.5 px-5" onClick={onClose}>Fechar</button>
         </div>
       </div>
     </Modal>
+    {resgateSched && (
+      <ResgateBreakdownModal
+        schedule={resgateSched}
+        transactions={transactions}
+        schedules={schedules}
+        categories={categories}
+        onClose={() => setResgateSched(null)}
+      />
+    )}
+    </>
   )
 }
 
@@ -1378,7 +1424,7 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
     // Itens individuais (ocorrências) para o modal de detalhamento. Coletados só para os meses
     // FUTUROS (idx >= 1; idx 0 é o mês anterior/referência) — casam com o total dos arrays.
     const depItems = []  // { date, label, amount }
-    const resItems = []  // { date, label, amount } (resgates reais + provisões)
+    const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
     for (const p of provisoes) {
       if (p.reservaFuncaoId !== f.id) continue
       const amt = Number(p.amount) || 0
@@ -1413,7 +1459,7 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
           if (idx >= 1) depItems.push({ date: dateStr, label: s.description || 'Depósito', amount: amt })
         } else {
           ress[idx] = round2(ress[idx] + amt)
-          if (idx >= 1) resItems.push({ date: dateStr, label: s.description || 'Resgate', amount: amt })
+          if (idx >= 1) resItems.push(itemSaidaFluxo(s, dateStr, amt))
         }
       }
     }
