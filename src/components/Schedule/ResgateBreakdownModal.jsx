@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
 import { composicaoResgate } from '../../lib/resgateComposicao'
@@ -10,9 +11,15 @@ import { computeOccurrences } from '../../lib/occurrences'
 // Sem a segunda, a tabela somava só os realizados e fechava abaixo do amount do resgate, sem nada
 // na tela explicando a diferença. Somente leitura; não altera nenhum estado. A montagem da lista e a
 // validação da soma ficam em lib/resgateComposicao (testável sem React).
-export default function ResgateBreakdownModal({ schedule, transactions, schedules, categories, onClose }) {
+//
+// `recorte` (só pelo Fluxo Futuro) = { functionId, functionName, mesLabel, valor, det }: abre só com
+// os gastos da parte daquela função, validando contra o valor da linha; o toggle "Ver fatura
+// inteira" volta à visão completa (amount total). Sem `recorte` (SchedulePanel/Origem) = completa.
+export default function ResgateBreakdownModal({ schedule, transactions, schedules, categories, recorte, onClose }) {
+  const [faturaInteira, setFaturaInteira] = useState(false)
+  const recorteAtivo = recorte && !faturaInteira ? recorte : null
   const { gastos, total, amountResgate, diferenca, fecha, qtdPrevistos, semFontes } =
-    composicaoResgate(schedule, transactions, schedules, computeOccurrences)
+    composicaoResgate(schedule, transactions, schedules, computeOccurrences, recorteAtivo)
   const catName = (id) => {
     const c = (categories || []).find(x => x.id === id)
     return c ? `${c.icon || ''} ${c.name}`.trim() : '—'
@@ -20,7 +27,12 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
   const faturaRef = schedule?.faturaRef || schedule?.overrides?._gerencial?.faturaRef
 
   return (
-    <Modal open onClose={onClose} title="Composição do Resgate" size="lg">
+    <Modal
+      open
+      onClose={onClose}
+      title={recorte ? `Composição do Resgate — ${recorte.functionName} · ${recorte.mesLabel}` : 'Composição do Resgate'}
+      size="lg"
+    >
       <div className="space-y-4">
         <div className="text-xs text-gray-400">
           <span className="text-gray-300 font-medium">{schedule?.description || 'Resgate Reserva'}</span>
@@ -28,6 +40,23 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
             <span className="ml-2 bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-medium">Fatura {faturaRef}</span>
           )}
         </div>
+
+        {recorte && !semFontes && (
+          <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500">
+            <span>
+              {faturaInteira
+                ? `Fatura inteira — todas as funções (${fmt(Number(schedule?.amount) || 0)})`
+                : `Só a parte de ${recorte.functionName} (${fmt(Number(recorte.valor) || 0)})`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setFaturaInteira(v => !v)}
+              className="text-blue-500 hover:underline underline-offset-2 whitespace-nowrap"
+            >
+              {faturaInteira ? `Só ${recorte.functionName}` : 'Ver fatura inteira'}
+            </button>
+          </div>
+        )}
 
         {semFontes ? (
           <p className="text-sm text-gray-500 py-8 text-center">Resgate sem composição detalhada.</p>
@@ -80,7 +109,7 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
                 {!fecha && (
                   <tr>
                     <td className="px-2 pb-2 text-[11px] text-orange-500" colSpan={4}>
-                      Não fecha com o valor do resgate ({fmt(amountResgate)}): diferença de {fmt(diferenca)}.
+                      Não fecha com o valor {recorteAtivo ? 'da linha' : 'do resgate'} ({fmt(amountResgate)}): diferença de {fmt(diferenca)}.
                     </td>
                   </tr>
                 )}

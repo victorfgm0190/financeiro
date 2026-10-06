@@ -12,7 +12,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
-import { itemSaidaFluxo, itemAbreComposicao } from '../../lib/resgateComposicao'
+import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao } from '../../lib/resgateComposicao'
 import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
 
@@ -988,14 +988,17 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
 //
 // Linha de resgate de cartão → ResgateBreakdownModal empilhado por cima. Enquanto ele está aberto,
 // o Escape (que os dois Modals escutam) não fecha este: fechar a composição volta para cá.
+// A composição abre RECORTADA pela parte desta função (a linha é só a parte dela num resgate
+// rateado), validando contra o valor da linha; "Ver fatura inteira" volta à visão completa.
 function FluxoCelulaModal({ detalhe, onClose }) {
   const { fnName, tipo, mesLabel, items, total } = detalhe
   const entradas = tipo === 'deps'
-  const { transactions, schedules, categories } = useApp()
-  const [resgateSched, setResgateSched] = useState(null)
+  const { transactions, schedules, categories, scheduleReservaFuncoes } = useApp()
+  const [resgate, setResgate] = useState(null) // { schedule, item }
+  const resgateSched = resgate?.schedule
   const abrirResgate = (it) => {
     const s = (schedules || []).find(x => x.id === it.resgateScheduleId)
-    if (s) setResgateSched(s)
+    if (s) setResgate({ schedule: s, item: it })
   }
   return (
     <>
@@ -1025,7 +1028,14 @@ function FluxoCelulaModal({ detalhe, onClose }) {
         transactions={transactions}
         schedules={schedules}
         categories={categories}
-        onClose={() => setResgateSched(null)}
+        recorte={{
+          functionId: resgate.item.functionId,
+          functionName: fnName,
+          mesLabel,
+          valor: resgate.item.amount,
+          det: (scheduleReservaFuncoes || []).filter(srf => srf.scheduleId === resgateSched.id),
+        }}
+        onClose={() => setResgate(null)}
       />
     )}
     </>
@@ -1442,13 +1452,8 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
       const isDep = !!accById.get(s.toAccountId)?.isReserva
       const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
       if (!isDep && !isRes) continue
-      const det = detBySchedule.get(s.id)
-      let amt = 0
-      if (det && det.length > 0) {
-        amt = det.reduce((sum, srf) => srf.reservaFuncaoId === f.id ? round2(sum + (Number(srf.valor) || 0)) : sum, 0)
-      } else if (s.reservaFuncaoId === f.id) {
-        amt = s.amount || 0
-      }
+      // Regra de rateio por função em parteDaFuncao — a mesma que a composição do resgate usa.
+      const amt = parteDaFuncao(s, detBySchedule.get(s.id), f.id).valor
       if (!amt) continue
       for (const dateStr of getNextOccurrences(s, 140)) {
         if (dateStr < winStart || dateStr > winEnd) continue
@@ -1459,7 +1464,7 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
           if (idx >= 1) depItems.push({ date: dateStr, label: s.description || 'Depósito', amount: amt })
         } else {
           ress[idx] = round2(ress[idx] + amt)
-          if (idx >= 1) resItems.push(itemSaidaFluxo(s, dateStr, amt))
+          if (idx >= 1) resItems.push(itemSaidaFluxo(s, dateStr, amt, f.id))
         }
       }
     }
