@@ -674,15 +674,15 @@ export default function CreditCardPanel() {
         <div className="flex items-center gap-3 shrink-0 ml-auto">
           <button
             onClick={() => { saveScroll(); setShowExtrato(true) }}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
           >
-            <FileText size={12} /> Extrato
+            <FileText size={13} /> Extrato
           </button>
           <button
             onClick={() => { saveScroll(); setShowRelatorio(true) }}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
           >
-            <FileBarChart size={12} /> Relatório
+            <FileBarChart size={13} /> Relatório
           </button>
         </div>
       </div>
