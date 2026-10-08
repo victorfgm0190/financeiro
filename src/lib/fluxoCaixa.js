@@ -49,6 +49,24 @@ export function occEfetiva(schedule, dataOriginal) {
   }
 }
 
+// Rateio do agendamento reescalado para o valor da ocorrência registrada. As linhas são
+// gravadas contra o valor BASE; com override de valor na ocorrência (ou valor digitado no
+// modal), copiá-las como estão faria o rateio não fechar com o lançamento. Proporcional por
+// linha, resíduo de arredondamento na última. Soma igual (ou zero) → devolve as linhas intactas.
+export function escalarRateios(rateios, total) {
+  const soma = Math.round(rateios.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100
+  const alvo = Math.round((Number(total) || 0) * 100) / 100
+  if (rateios.length === 0 || soma === 0 || soma === alvo) return rateios
+  let acumulado = 0
+  return rateios.map((r, i) => {
+    const valor = i === rateios.length - 1
+      ? Math.round((alvo - acumulado) * 100) / 100
+      : Math.round((Number(r.valor) || 0) * alvo / soma * 100) / 100
+    acumulado = Math.round((acumulado + valor) * 100) / 100
+    return { ...r, valor }
+  })
+}
+
 // Computa as linhas e os saldos do fluxo de caixa de `accountIds` no período [start, end].
 // Devolve { rows, saldoAnterior, saldoFinal, saldoFinalSemEnvelopes, totalEntrada, totalSaida,
 // envelopesTotal }. saldoFinal = PROJETADO (com envelopes); saldoFinalSemEnvelopes = FINAL CICLO.

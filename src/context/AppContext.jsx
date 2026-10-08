@@ -24,7 +24,7 @@ import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAnd
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
-import { computeFluxoCaixa, occEfetiva } from '../lib/fluxoCaixa'
+import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -1095,10 +1095,13 @@ export function AppProvider({ children }) {
         for (const date of pending) {
           changed = true
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+          // Valor EFETIVO da ocorrência (override da prévia "Próximas ocorrências"); sem override
+          // é o valor base. Vale para o lançamento, os saldos, as sombras de reserva e o rateio.
+          const occAmount = Number(occEfetiva(schedule, date).amount) || 0
           if (schedRateios.length > 0) {
             collectedRateios.set(`${schedule.id}|${date}`, {
               txId,
-              rateios: schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
+              rateios: escalarRateios(schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })), occAmount),
             })
           }
           const newTx = {
@@ -1108,7 +1111,7 @@ export function AppProvider({ children }) {
             accountType: schedule.accountType || null,
             toAccountId: schedule.toAccountId || null,
             fromAccountId: null,
-            amount: Number(schedule.amount),
+            amount: occAmount,
             categoryId: schedule.categoryId || null,
             description: schedule.description,
             payee: schedule.payee || null,
@@ -1121,27 +1124,27 @@ export function AppProvider({ children }) {
           }
           if (schedule.transactionType === 'income') {
             accounts = accounts.map(a => a.id === schedule.accountId
-              ? { ...a, balance: rb(a.balance + Number(schedule.amount)) } : a)
+              ? { ...a, balance: rb(a.balance + occAmount) } : a)
           } else if (schedule.transactionType === 'expense') {
             if (schedule.accountType === 'credit') {
               accounts = accounts.map(a => a.id === schedule.accountId ? {
                 ...a,
-                creditDebt: (a.creditDebt || 0) + Number(schedule.amount),
-                creditMonthBill: (a.creditMonthBill || 0) + Number(schedule.amount),
+                creditDebt: (a.creditDebt || 0) + occAmount,
+                creditMonthBill: (a.creditMonthBill || 0) + occAmount,
               } : a)
             } else {
               accounts = accounts.map(a => a.id === schedule.accountId
-                ? { ...a, balance: rb(a.balance - Number(schedule.amount)) } : a)
+                ? { ...a, balance: rb(a.balance - occAmount) } : a)
             }
           } else if (schedule.transactionType === 'transfer') {
             accounts = accounts.map(a => {
-              if (a.id === schedule.accountId) return { ...a, balance: rb(a.balance - Number(schedule.amount)) }
-              if (a.id === schedule.toAccountId) return { ...a, balance: rb(a.balance + Number(schedule.amount)) }
+              if (a.id === schedule.accountId) return { ...a, balance: rb(a.balance - occAmount) }
+              if (a.id === schedule.toAccountId) return { ...a, balance: rb(a.balance + occAmount) }
               return a
             })
           }
           const autoTxs = buildReservaAutoTxs(
-            { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: schedule.amount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId, reservaFuncaoId: schedule.reservaFuncaoId },
+            { type: schedule.transactionType, accountId: schedule.accountId, toAccountId: schedule.toAccountId, amount: occAmount, date, reservaExpenseCategoryId: schedule.reservaExpenseCategoryId, reservaFuncaoId: schedule.reservaFuncaoId },
             accounts,
             txId,
             prev.reserveFunctions
@@ -2421,7 +2424,8 @@ export function AppProvider({ children }) {
         accountId: schedule.accountId,
         accountType: schedule.accountType,
         toAccountId: schedule.toAccountId,
-        amount: schedule.amount,
+        // Valor EFETIVO da ocorrência baixada (override da prévia), não o valor base.
+        amount: Number(occEfetiva(schedule, occurrenceDate).amount) || 0,
         categoryId: schedule.categoryId,
         description: schedule.description,
         payee: schedule.payee,
@@ -2496,7 +2500,9 @@ export function AppProvider({ children }) {
     // PARTE 1: propaga o rateio do agendamento para o lançamento recém-criado.
     const schedRateios = (dataRef.current.rateios || []).filter(r => r.lancamentoId === scheduleId)
     if (schedRateios.length > 0) {
-      saveRateiosFor(newTxId, schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })))
+      const schedRat = dataRef.current.schedules.find(s => s.id === scheduleId)
+      const linhas = schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao }))
+      saveRateiosFor(newTxId, schedRat ? escalarRateios(linhas, occEfetiva(schedRat, occurrenceDate).amount) : linhas)
     }
     // Despesa registrada em cartão de crédito: recalcula os agendamentos da fatura afetada
     // (pagamento_fatura etc.) — o novo lançamento entra no total da fatura. Mesma via usada pelo

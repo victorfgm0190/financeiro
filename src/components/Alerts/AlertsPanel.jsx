@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import { dueDateInMonth } from '../../lib/fatura'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import IntegridadePanel from './IntegridadePanel'
 
 function getDueAlerts(accounts) {
@@ -50,7 +51,7 @@ function getScheduleAlerts(schedules, getNextOccurrences) {
       schedule,
       dueDate,
       daysUntilDue,
-      amount: schedule.amount,
+      amount: occEfetiva(schedule, nextOccs[0]).amount,
     })
   }
   return alerts

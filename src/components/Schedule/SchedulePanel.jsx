@@ -11,7 +11,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
-import { occEfetiva } from '../../lib/fluxoCaixa'
+import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -303,25 +303,32 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
 
   const [tab, setTab] = useState(initialTab)
 
+  // Valor e data EFETIVOS da ocorrência a registrar: o override da "Prévia das próximas
+  // ocorrências" (overrides[nextDate]) manda; sem ele, o valor base. Antes os campos nasciam em
+  // schedule.amount e ignoravam a edição por ocorrência que a lista já exibia.
+  const occ = nextDate ? occEfetiva(schedule, nextDate) : { date: today, amount: schedule.amount }
+  const occAmount = occ.amount != null ? String(occ.amount) : ''
+  const occDate = occ.date || today
+
   const [payAccountId, setPayAccountId] = useState(schedule.accountId || '')
   const [payPayee, setPayPayee] = useState(schedule.payee || '')
-  const [payAmount, setPayAmount] = useState(schedule.amount?.toString() || '')
-  const [payDate, setPayDate] = useState(nextDate || today)
+  const [payAmount, setPayAmount] = useState(occAmount)
+  const [payDate, setPayDate] = useState(occDate)
   const [payCategoryId, setPayCategoryId] = useState(schedule.categoryId || '')
   const [payGrupo, setPayGrupo] = useState(schedule.grupoGerencial || '')
   const [payNotes, setPayNotes] = useState(schedule.notes || '')
 
   const [recAccountId, setRecAccountId] = useState(schedule.accountId || '')
   const [recPayee, setRecPayee] = useState(schedule.payee || '')
-  const [recAmount, setRecAmount] = useState(schedule.amount?.toString() || '')
-  const [recDate, setRecDate] = useState(nextDate || today)
+  const [recAmount, setRecAmount] = useState(occAmount)
+  const [recDate, setRecDate] = useState(occDate)
   const [recCategoryId, setRecCategoryId] = useState(schedule.categoryId || '')
   const [recNotes, setRecNotes] = useState(schedule.notes || '')
 
   const [trfFromId, setTrfFromId] = useState(schedule.accountId || '')
   const [trfToId, setTrfToId] = useState(schedule.toAccountId || '')
-  const [trfAmount, setTrfAmount] = useState(schedule.amount?.toString() || '')
-  const [trfDate, setTrfDate] = useState(nextDate || today)
+  const [trfAmount, setTrfAmount] = useState(occAmount)
+  const [trfDate, setTrfDate] = useState(occDate)
   const [trfNotes, setTrfNotes] = useState(schedule.notes || '')
 
   const [finAccountId, setFinAccountId] = useState(schedule.accountId || '')
@@ -413,7 +420,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
-      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, escalarRateios(scheduleRateios, amount))
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
         if (grupo && grupo.number !== 'D') {
@@ -432,19 +439,20 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       }
     } else if (tab === 'recebimento') {
       if (recPayee && !payees.includes(recPayee)) addPayee(recPayee)
+      const amount = parseFloat(recAmount) || 0
       const txId = addTransaction({
         type: 'income', accountId: recAccountId, payee: recPayee,
-        amount: parseFloat(recAmount) || 0, date: recDate,
+        amount, date: recDate,
         categoryId: recCategoryId, description: schedule.description, notes: recNotes,
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
-      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, scheduleRateios)
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, escalarRateios(scheduleRateios, amount))
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
       // e marca a ocorrência. Não usa o valor/contas do formulário (fixos pelo detalhamento).
-      registerScheduleOccurrence(schedule.id, trfDate)
+      registerScheduleOccurrence(schedule.id, trfDate, regDate)
     } else {
       // Resgate/depósito sem detalhamento: prioriza a função do próprio agendamento
       // (resgate_reserva carrega reservaFuncaoId desde a criação). Sem ela, se a conta de
@@ -1423,7 +1431,9 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
 
 function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const total = selectedRows.reduce((sum, r) => sum + (r.schedule.amount || 0), 0)
+  // Valor EFETIVO da ocorrência pendente de cada linha (override da prévia), o mesmo que será lançado.
+  const valorDe = (r) => Number(r.nextDate ? occEfetiva(r.schedule, r.nextDate).amount : r.schedule.amount) || 0
+  const total = selectedRows.reduce((sum, r) => sum + valorDe(r), 0)
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1466,7 +1476,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                       {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
                     </p>
                   </div>
-                  <span className={`text-xs font-bold shrink-0 ${valueColor}`}>{fmt(schedule.amount)}</span>
+                  <span className={`text-xs font-bold shrink-0 ${valueColor}`}>{fmt(valorDe({ schedule, nextDate }))}</span>
                 </div>
               )
             })}
@@ -1629,17 +1639,18 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const registerWithGerencial = (schedule, occurrenceDate, txDate) => {
     registerScheduleOccurrence(schedule.id, txDate, occurrenceDate)
     if (!schedule.grupoGerencial) return
+    const amount = Number(occEfetiva(schedule, occurrenceDate).amount) || 0
     const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
     if (!grupo || grupo.number === 'D') return
     if (grupo.number === 1) {
       const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)
       if (schedule.accountId && contaReserva) {
-        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount: schedule.amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
+        addTransaction({ type: 'transfer', accountId: schedule.accountId, toAccountId: contaReserva.id, amount, date: txDate, description: `Reserva ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
       }
     } else {
       const contaResgate = accounts.find(a => a.id === grupo.defaultAccountId)
       if (contaResgate && contaPrincipal) {
-        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount: schedule.amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
+        addTransaction({ type: 'transfer', accountId: contaResgate.id, toAccountId: contaPrincipal.id, amount, date: txDate, description: `Resgate ${grupo.name}`, grupoGerencial: grupo.id, origin: ORIGIN.AGENDAMENTO })
       }
     }
   }

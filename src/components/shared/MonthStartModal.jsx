@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { X, CheckCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { ORIGIN } from '../../lib/origins'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import { fmt, fmtDate } from './utils'
 
 const SESSION_KEY = 'monthStartModalDismissed'
@@ -59,7 +60,7 @@ export default function MonthStartModal() {
         type: 'transfer',
         accountId: sch.accountId,
         toAccountId: sch.toAccountId,
-        amount: sch.amount,
+        amount: Number(occEfetiva(sch, nextDate).amount) || 0,
         date: todayStr,
         description: sch.description,
         origin: ORIGIN.AGENDAMENTO,
@@ -82,7 +83,10 @@ export default function MonthStartModal() {
   const monthLabel  = today.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
   const selectedTotal = pendingSchedules
     .filter(s => selectedSet.has(s.id))
-    .reduce((sum, s) => sum + (s.amount || 0), 0)
+    .reduce((sum, s) => {
+      const d = getNextOccurrences(s, 1)[0]
+      return sum + (Number(d ? occEfetiva(s, d).amount : s.amount) || 0)
+    }, 0)
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -133,7 +137,7 @@ export default function MonthStartModal() {
                     {nextDate && <span className="ml-2 text-gray-600">· {fmtDate(nextDate)}</span>}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-purple-400 shrink-0">{fmt(sch.amount)}</span>
+                <span className="text-sm font-bold text-purple-400 shrink-0">{fmt(nextDate ? occEfetiva(sch, nextDate).amount : sch.amount)}</span>
               </div>
             )
           })}

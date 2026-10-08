@@ -10,6 +10,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 
@@ -251,19 +252,21 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         .filter(date => date > todayStr && date <= periodStr.end)
       if (nexts.length === 0) continue
 
-      for (const _date of nexts) {
+      for (const occDate of nexts) {
+        // Valor EFETIVO da ocorrência (override da prévia), não o valor base.
+        const occAmount = Number(occEfetiva(schedule, occDate).amount) || 0
         if (schedule.transactionType === 'income' && fromPrincipal) {
-          pendingIncome += schedule.amount
+          pendingIncome += occAmount
           pendingCount++
         } else if (schedule.transactionType === 'expense' && fromPrincipal) {
-          pendingExpense += schedule.amount
+          pendingExpense += occAmount
           pendingCount++
         } else if (schedule.transactionType === 'transfer') {
           if (fromPrincipal && !toPrincipal) {
-            pendingExpense += schedule.amount
+            pendingExpense += occAmount
             pendingCount++
           } else if (!fromPrincipal && toPrincipal) {
-            pendingIncome += schedule.amount
+            pendingIncome += occAmount
             pendingCount++
           }
         }
@@ -677,7 +680,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                       </div>
                     </div>
                     <span className={`text-xs font-bold shrink-0 ml-2 ${schedule.transactionType === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
-                      {fmt(schedule.amount)}
+                      {fmt(occEfetiva(schedule, date).amount)}
                     </span>
                   </div>
                 )
