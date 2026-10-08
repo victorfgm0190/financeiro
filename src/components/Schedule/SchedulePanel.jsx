@@ -13,6 +13,7 @@ import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
+import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -307,7 +308,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   // ocorrências" (overrides[nextDate]) manda; sem ele, o valor base. Antes os campos nasciam em
   // schedule.amount e ignoravam a edição por ocorrência que a lista já exibia.
   const occ = nextDate ? occEfetiva(schedule, nextDate) : { date: today, amount: schedule.amount }
-  const occAmount = occ.amount != null ? String(occ.amount) : ''
+  const occAmount = valorParaInput(occ.amount)
   const occDate = occ.date || today
 
   const [payAccountId, setPayAccountId] = useState(schedule.accountId || '')
@@ -409,7 +410,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
   const handleConfirm = () => {
     const regDate = nextDate || today
     if (tab === 'pagamento') {
-      const amount = parseFloat(payAmount) || 0
+      const amount = parseValorBR(payAmount) || 0
       if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
       const txId = addTransaction({
         type: 'expense', accountId: payAccountId, payee: payPayee,
@@ -439,7 +440,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       }
     } else if (tab === 'recebimento') {
       if (recPayee && !payees.includes(recPayee)) addPayee(recPayee)
-      const amount = parseFloat(recAmount) || 0
+      const amount = parseValorBR(recAmount) || 0
       const txId = addTransaction({
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount, date: recDate,
@@ -464,7 +465,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       const autoFuncId = resvFuncs.length === 1 ? resvFuncs[0].id : null
       addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,
-        amount: parseFloat(trfAmount) || 0, date: trfDate,
+        amount: parseValorBR(trfAmount) || 0, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
         scheduleId: schedule.id,
@@ -609,7 +610,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className="input" type="number" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                <input className="input" type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
               </div>
               <div>
                 <label className="label">Data</label>
@@ -647,7 +648,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className="input" type="number" step="0.01" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                <input className="input" type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
               </div>
               <div>
                 <label className="label">Data</label>
@@ -700,9 +701,9 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
                 <input
                   className="input"
-                  type="number"
-                  step="0.01"
-                  value={hasDetalhe ? detalheTotal : trfAmount}
+                  type="text"
+                  inputMode="decimal"
+                  value={hasDetalhe ? valorParaInput(detalheTotal) : trfAmount}
                   onChange={e => setTrfAmount(e.target.value)}
                   disabled={hasDetalhe}
                   readOnly={hasDetalhe}
@@ -1428,14 +1429,6 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
     </div>
   )
 }
-
-// Valor digitado em formato BR ("341,7", "1.234,56"). Sem vírgula, o ponto é decimal ("341.7").
-const parseValorBR = (s) => {
-  const t = String(s ?? '').trim().replace(/\s|R\$/g, '')
-  if (!t) return NaN
-  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t)
-}
-const valorParaInput = (v) => (Number(v) || 0).toFixed(2).replace('.', ',')
 
 function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   const { scheduleReservaFuncoes } = useApp()
