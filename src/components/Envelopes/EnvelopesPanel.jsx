@@ -163,9 +163,9 @@ function EnvelopeCard({ envelope, spent, onClick }) {
   const nCats = envelope.categoryIds?.length || 0
 
   return (
-    <button className="card text-left w-full hover:bg-gray-800/80 transition-colors group" onClick={onClick}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0 pr-12">
+    <button className="text-left w-full" onClick={onClick}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-200 truncate">{envelope.name}</p>
           <p className="text-xs mt-0.5 text-gray-500">{nCats} categoria{nCats !== 1 ? 's' : ''}</p>
         </div>
@@ -415,39 +415,38 @@ export default function EnvelopesPanel() {
       {envelopes.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {envelopeData.map(({ env, spent }) => (
-            <div key={env.id} className="relative">
-              <EnvelopeCard
-                envelope={env}
-                spent={spent}
-                onClick={() => setDetailId(env.id)}
-              />
-              {/* action buttons */}
-              <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div key={env.id} className="card group hover:bg-gray-800/80 transition-colors">
+              {/* action buttons — linha própria no topo, acima do nome e do Limite */}
+              <div className="flex justify-end gap-1.5 mb-1.5">
                 <button
-                  className="p-1.5 rounded-md hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
                   onClick={e => { e.stopPropagation(); openEdit(env) }}
                   title="Editar envelope"
+                  aria-label="Editar"
                 >
-                  <Edit2 size={12} />
+                  <Edit2 size={13} />
                 </button>
                 <button
-                  className="p-1.5 rounded-md hover:bg-red-900/40 text-gray-500 hover:text-red-400 transition-colors"
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15 transition-colors"
                   onClick={e => {
                     e.stopPropagation()
                     if (window.confirm(`Excluir envelope "${env.name}"?`)) deleteEnvelope(env.id)
                   }}
                   title="Excluir envelope"
+                  aria-label="Excluir"
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 </button>
               </div>
+              <EnvelopeCard
+                envelope={env}
+                spent={spent}
+                onClick={() => setDetailId(env.id)}
+              />
             </div>
           ))}
         </div>
       )}
-
-      {/* Hover trick: make buttons always visible on touch */}
-      <style>{`.relative:hover .opacity-0 { opacity: 1 }`}</style>
 
       {/* Form modal */}
       <Modal
