@@ -93,6 +93,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
         type="button"
         onClick={openPopover}
         title="Duplicar lançamento"
+        aria-label="Duplicar"
         className={className || 'p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors'}
       >
         <Copy size={iconSize} />

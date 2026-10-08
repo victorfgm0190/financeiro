@@ -298,19 +298,21 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(tx) }}
               title="Editar lançamento"
-              className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+              aria-label="Editar"
+              className="btn-amber w-[26px] h-[26px] p-0 justify-center"
             >
               <Edit2 size={14} />
             </button>
           )}
           {onDuplicate && !tx.reservaAuto && (
-            <DuplicateButton onConfirm={(date) => onDuplicate(tx, date)} sourceTx={tx} iconSize={14} />
+            <DuplicateButton onConfirm={(date) => onDuplicate(tx, date)} sourceTx={tx} iconSize={14} className="btn-amber w-[26px] h-[26px] p-0 justify-center" />
           )}
           {onReverse && !tx.reservaAuto && (
             <button
               onClick={(e) => { e.stopPropagation(); onReverse(tx) }}
               title="Estornar lançamento"
-              className="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+              aria-label="Estornar"
+              className="btn-amber w-[26px] h-[26px] p-0 justify-center"
             >
               <Undo2 size={14} />
             </button>
@@ -319,7 +321,8 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(tx) }}
               title="Excluir lançamento"
-              className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+              aria-label="Excluir"
+              className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
             >
               <Trash2 size={14} />
             </button>
@@ -392,7 +395,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
               <button
                 onClick={(e) => { e.stopPropagation(); onDeleteGroup(row) }}
                 title="Excluir grupo netizado (todas as transferências)"
-                className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                aria-label="Excluir"
+                className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
               >
                 <Trash2 size={14} />
               </button>
@@ -441,7 +445,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                   <button
                     onClick={() => onEditTx(tx)}
                     title="Editar transferência"
-                    className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded transition-colors"
+                    aria-label="Editar"
+                    className="btn-amber w-[25px] h-[25px] p-0 justify-center"
                   >
                     <Edit2 size={13} />
                   </button>
@@ -450,7 +455,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                   <button
                     onClick={() => onReverseTx(tx)}
                     title="Estornar transferência"
-                    className="p-1.5 text-gray-500 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+                    aria-label="Estornar"
+                    className="btn-amber w-[25px] h-[25px] p-0 justify-center"
                   >
                     <Undo2 size={13} />
                   </button>
@@ -459,7 +465,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                   <button
                     onClick={() => onDeleteTx(tx)}
                     title="Excluir transferência"
-                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                    aria-label="Excluir"
+                    className="btn-amber w-[25px] h-[25px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
                   >
                     <Trash2 size={13} />
                   </button>
