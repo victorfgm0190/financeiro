@@ -1136,13 +1136,13 @@ function ScheduleRow({
         </td>
 
         {/* Ações */}
-        <td className="px-3 py-3 whitespace-nowrap">
-          <div className="flex items-center gap-1">
+        <td className="px-3 py-3 whitespace-nowrap align-middle">
+          <div className="flex items-center justify-end gap-1.5 flex-nowrap min-w-[296px]">
             {isProvisaoPendente && (
               <button
                 onClick={() => setShowEfetivar(true)}
                 title="Efetivar Provisão — informar valor e data reais"
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors font-medium"
+                className="flex items-center gap-1 h-7 px-2.5 text-xs bg-amber-500/20 text-amber-400 rounded-md hover:bg-amber-500/30 transition-colors font-medium"
               >
                 <Hourglass size={12} /> Efetivar Provisão
               </button>
@@ -1158,7 +1158,7 @@ function ScheduleRow({
                 <button
                   onClick={() => { const n = baixarComoJaNoCartao(schedule.id); if (n) onToast?.(`${n} ocorrência${n !== 1 ? 's' : ''} baixada${n !== 1 ? 's' : ''} como já no cartão`) }}
                   title="Marca as ocorrências cobertas como baixadas (tipo 'já no cartão'), apontando o lançamento do cartão — não cria lançamento"
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors font-medium"
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-amber-500/20 text-amber-400 rounded-md hover:bg-amber-500/30 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> Baixar como já no cartão
                 </button>
@@ -1169,31 +1169,31 @@ function ScheduleRow({
                 <button
                   onClick={() => setShowPay(true)}
                   title="Pagar"
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/20 text-blue-600 rounded hover:bg-blue-500/30 transition-colors font-medium"
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-blue-500/20 text-blue-600 rounded-md hover:bg-blue-500/30 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> Pagar
                 </button>
                 <button
                   onClick={() => setShowEstornar(true)}
                   title="Estornar"
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/15 text-orange-600 rounded hover:bg-orange-500/25 transition-colors font-medium"
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-orange-500/15 text-orange-600 rounded-md hover:bg-orange-500/25 transition-colors font-medium"
                 >
                   <RotateCcw size={12} /> Estornar
                 </button>
                 <button
                   onClick={handlePular}
                   title={isRecorrente ? 'Pular esta ocorrência (avança para a próxima)' : 'Pular (cancela o agendamento único)'}
-                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-500/15 text-gray-300 rounded hover:bg-gray-500/25 transition-colors font-medium"
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-gray-500/15 text-gray-300 rounded-md hover:bg-gray-500/25 transition-colors font-medium"
                 >
                   <SkipForward size={12} /> Pular
                 </button>
               </>
             )}
-            <button onClick={() => onEditSchedule(schedule)} className="p-1.5 text-gray-600 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
-              <Edit2 size={12} />
+            <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-7 h-7 p-0 justify-center" title="Editar agendamento" aria-label="Editar">
+              <Edit2 size={13} />
             </button>
-            <button onClick={() => setShowExcluir(true)} className="p-1.5 text-gray-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors">
-              <Trash2 size={12} />
+            <button onClick={() => setShowExcluir(true)} className="btn-amber w-7 h-7 p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15" title="Excluir agendamento" aria-label="Excluir">
+              <Trash2 size={13} />
             </button>
           </div>
         </td>
@@ -1781,7 +1781,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap">Frequência</th>
-                <th className="px-3 py-2.5 text-xs text-gray-400 font-medium">Ações</th>
+                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Ações</th>
               </tr>
             </thead>
             <tbody>
