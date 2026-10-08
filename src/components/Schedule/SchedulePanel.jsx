@@ -1429,11 +1429,53 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
   )
 }
 
+// Valor digitado em formato BR ("341,7", "1.234,56"). Sem vírgula, o ponto é decimal ("341.7").
+const parseValorBR = (s) => {
+  const t = String(s ?? '').trim().replace(/\s|R\$/g, '')
+  if (!t) return NaN
+  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t)
+}
+const valorParaInput = (v) => (Number(v) || 0).toFixed(2).replace('.', ',')
+
 function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
+  const { scheduleReservaFuncoes } = useApp()
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  // Valor EFETIVO da ocorrência pendente de cada linha (override da prévia), o mesmo que será lançado.
+  // Valor EFETIVO da ocorrência pendente de cada linha (override da prévia) — valor inicial do input.
   const valorDe = (r) => Number(r.nextDate ? occEfetiva(r.schedule, r.nextDate).amount : r.schedule.amount) || 0
-  const total = selectedRows.reduce((sum, r) => sum + valorDe(r), 0)
+  // Resgate com detalhamento por função: o valor vem das linhas do detalhamento (igual ao
+  // registro individual, que também não deixa editá-lo).
+  const comDetalhe = useMemo(
+    () => new Set((scheduleReservaFuncoes || []).map(srf => srf.scheduleId)),
+    [scheduleReservaFuncoes]
+  )
+  // Por linha: valor (texto) e data; dataEditada = o usuário mexeu na data daquela linha, e a
+  // data geral do topo deixa de sobrescrevê-la.
+  const [itens, setItens] = useState(() => Object.fromEntries(selectedRows.map(r => [
+    r.schedule.id, { valor: valorParaInput(valorDe(r)), date: format(new Date(), 'yyyy-MM-dd'), dataEditada: false },
+  ])))
+  const setItem = (id, patch) => setItens(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  const onDataGeral = (v) => {
+    setDate(v)
+    setItens(prev => Object.fromEntries(Object.entries(prev).map(([id, it]) => [id, it.dataEditada ? it : { ...it, date: v }])))
+  }
+
+  const valorItem = (r) => (comDetalhe.has(r.schedule.id) ? valorDe(r) : parseValorBR(itens[r.schedule.id]?.valor))
+  const invalido = (r) => {
+    const v = valorItem(r)
+    return !(Number.isFinite(v) && v > 0) || !itens[r.schedule.id]?.date
+  }
+  const algumInvalido = selectedRows.some(invalido)
+  const total = selectedRows.reduce((sum, r) => sum + (Number.isFinite(valorItem(r)) ? valorItem(r) : 0), 0)
+
+  const confirmar = () => {
+    if (algumInvalido) return
+    onConfirm(selectedRows.map(r => ({
+      scheduleId: r.schedule.id,
+      // Detalhado: null → registerScheduleOccurrence usa o detalhamento.
+      amount: comDetalhe.has(r.schedule.id) ? null : Math.round(valorItem(r) * 100) / 100,
+      date: itens[r.schedule.id].date,
+    })))
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1457,26 +1499,67 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
             <DateInput
               className="input"
               value={date}
-              onChange={e => setDate(e.target.value)}
+              onChange={e => onDataGeral(e.target.value)}
             />
+            <p className="text-[11px] text-gray-600 mt-1">Aplicada a todos os itens cuja data não foi alterada individualmente.</p>
           </div>
 
           {/* List of selected items */}
           <div className="rounded-lg border border-gray-800 overflow-hidden">
-            {selectedRows.map(({ schedule, nextDate }) => {
+            {selectedRows.map((r) => {
+              const { schedule, nextDate } = r
               const acc = accounts.find(a => a.id === schedule.accountId)
               const valueColor = schedule.transactionType === 'income' ? 'text-blue-400'
                 : schedule.transactionType === 'transfer' ? 'text-purple-400'
                 : 'text-orange-500'
+              const it = itens[schedule.id]
+              const detalhado = comDetalhe.has(schedule.id)
+              const ruim = invalido(r)
               return (
-                <div key={schedule.id} className="flex items-center justify-between px-3 py-2.5 border-b border-gray-800/80 last:border-0 hover:bg-gray-800/30">
-                  <div className="min-w-0 flex-1 mr-3">
-                    <p className="text-xs font-medium text-gray-200 truncate">{schedule.description}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
-                    </p>
+                <div
+                  key={schedule.id}
+                  className={`px-3 py-2.5 border-b border-gray-800/80 last:border-0 space-y-2 ${ruim ? 'bg-red-500/10 border-l-2 border-l-red-500' : 'hover:bg-gray-800/30'}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-gray-200 truncate">{schedule.description}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
+                      </p>
+                    </div>
+                    {detalhado ? (
+                      <span className={`text-xs font-bold shrink-0 ${valueColor}`} title="Valor definido pelo detalhamento por função">
+                        {fmt(valorDe(r))}
+                      </span>
+                    ) : (
+                      <div className="relative shrink-0 w-28">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">R$</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          className={`input !py-1 !pl-7 !pr-2 text-xs text-right font-bold ${valueColor} ${ruim ? '!border-red-500' : ''}`}
+                          value={it?.valor ?? ''}
+                          onChange={e => setItem(schedule.id, { valor: e.target.value })}
+                          onBlur={() => {
+                            const v = parseValorBR(it?.valor)
+                            if (Number.isFinite(v) && v > 0) setItem(schedule.id, { valor: valorParaInput(v) })
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+                          aria-label={`Valor de ${schedule.description}`}
+                        />
+                      </div>
+                    )}
                   </div>
-                  <span className={`text-xs font-bold shrink-0 ${valueColor}`}>{fmt(valorDe({ schedule, nextDate }))}</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`text-[11px] ${ruim ? 'text-red-400' : 'text-gray-600'}`}>
+                      {ruim ? (it?.date ? 'Informe um valor maior que zero.' : 'Informe a data.') : detalhado ? 'Valor do detalhamento por função' : 'Data do lançamento'}
+                    </span>
+                    <DateInput
+                      className="input !py-1 !px-2 text-xs w-36 shrink-0"
+                      value={it?.date || ''}
+                      onChange={e => setItem(schedule.id, { date: e.target.value, dataEditada: true })}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -1493,8 +1576,9 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
         <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
-            className="btn-primary flex-1 flex items-center justify-center gap-2"
-            onClick={() => onConfirm(date)}
+            className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
+            disabled={algumInvalido}
+            onClick={confirmar}
           >
             <CheckCircle size={14} /> Confirmar Registro
           </button>
@@ -1636,10 +1720,10 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // occurrenceDate = ocorrência a baixar (nextDate); txDate = data dos lançamentos criados.
   // Registrar a ocorrência em nextDate (e não em txDate) é o que faz o agendamento avançar —
   // mesmo comportamento do pagamento individual (PayModal usa regDate = nextDate).
-  const registerWithGerencial = (schedule, occurrenceDate, txDate) => {
-    registerScheduleOccurrence(schedule.id, txDate, occurrenceDate)
+  const registerWithGerencial = (schedule, occurrenceDate, txDate, amountArg = null) => {
+    registerScheduleOccurrence(schedule.id, txDate, occurrenceDate, amountArg)
     if (!schedule.grupoGerencial) return
-    const amount = Number(occEfetiva(schedule, occurrenceDate).amount) || 0
+    const amount = amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0)
     const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
     if (!grupo || grupo.number === 'D') return
     if (grupo.number === 1) {
@@ -1655,9 +1739,15 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     }
   }
 
-  const handleBatchRegister = (date) => {
+  // itens: [{ scheduleId, amount, date }] — valor e data por linha, editados no modal.
+  const handleBatchRegister = (itens) => {
     const count = selectedRows.length
-    selectedRows.forEach(({ schedule, nextDate }) => registerWithGerencial(schedule, nextDate || date, date))
+    const porId = new Map(itens.map(it => [it.scheduleId, it]))
+    selectedRows.forEach(({ schedule, nextDate }) => {
+      const it = porId.get(schedule.id)
+      if (!it) return
+      registerWithGerencial(schedule, nextDate || it.date, it.date, it.amount)
+    })
     cancelSelection()
     setShowBatchRegister(false)
     showToastMsg(`${count} lançamento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''} com sucesso`)

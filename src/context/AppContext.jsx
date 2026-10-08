@@ -2353,7 +2353,10 @@ export function AppProvider({ children }) {
   // mesmo lançando numa data diferente — usado pelo pagamento em lote.
   // `date` null/vazio → data EFETIVA da ocorrência (override da prévia). registered sempre leva
   // a chave ORIGINAL (occurrenceDate).
-  const registerScheduleOccurrence = useCallback((scheduleId, dateArg, occurrenceDate = dateArg) => {
+  // `amountArg` = valor editado no registro, só desta ocorrência (o valor-base do agendamento não
+  // muda). Ausente → valor EFETIVO da ocorrência. Ignorado no resgate com detalhamento por função,
+  // cujo valor é fixado pelas linhas do detalhamento.
+  const registerScheduleOccurrence = useCallback((scheduleId, dateArg, occurrenceDate = dateArg, amountArg = null) => {
     const schedAtual = dataRef.current.schedules.find(s => s.id === scheduleId)
     const date = dateArg || (schedAtual ? occEfetiva(schedAtual, occurrenceDate).date : occurrenceDate)
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -2431,7 +2434,7 @@ export function AppProvider({ children }) {
         accountType: schedule.accountType,
         toAccountId: schedule.toAccountId,
         // Valor EFETIVO da ocorrência baixada (override da prévia), não o valor base.
-        amount: Number(occEfetiva(schedule, occurrenceDate).amount) || 0,
+        amount: amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0),
         categoryId: schedule.categoryId,
         description: schedule.description,
         payee: schedule.payee,
@@ -2508,7 +2511,7 @@ export function AppProvider({ children }) {
     if (schedRateios.length > 0) {
       const schedRat = dataRef.current.schedules.find(s => s.id === scheduleId)
       const linhas = schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao }))
-      saveRateiosFor(newTxId, schedRat ? escalarRateios(linhas, occEfetiva(schedRat, occurrenceDate).amount) : linhas)
+      saveRateiosFor(newTxId, schedRat ? escalarRateios(linhas, amountArg != null ? Number(amountArg) : occEfetiva(schedRat, occurrenceDate).amount) : linhas)
     }
     // Despesa registrada em cartão de crédito: recalcula os agendamentos da fatura afetada
     // (pagamento_fatura etc.) — o novo lançamento entra no total da fatura. Mesma via usada pelo
