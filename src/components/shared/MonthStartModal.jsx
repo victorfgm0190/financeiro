@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { X, CheckCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { ORIGIN } from '../../lib/origins'
+import { executarTransferenciasInicioMes } from '../../lib/autoRegistro'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { fmt, fmtDate } from './utils'
 
@@ -11,7 +11,7 @@ const SESSION_KEY = 'monthStartModalDismissed'
 export default function MonthStartModal() {
   const {
     schedules, accounts, settings,
-    getNextOccurrences, addTransaction, registerScheduleOccurrence,
+    getNextOccurrences, registerScheduleOccurrence,
   } = useApp()
 
   const [dismissed, setDismissed] = useState(() => !!sessionStorage.getItem(SESSION_KEY))
@@ -19,7 +19,6 @@ export default function MonthStartModal() {
 
   const today        = new Date()
   const financialStartDay = settings?.financialMonthStartDay || 1
-  const todayStr     = format(today, 'yyyy-MM-dd')
   const currentMonth = format(today, 'yyyy-MM')
   const isAfterStart = today.getDate() >= financialStartDay
 
@@ -52,20 +51,7 @@ export default function MonthStartModal() {
   }
 
   const executeSchedules = (list) => {
-    list.forEach(sch => {
-      const nextDate = getNextOccurrences(sch, 1)[0]
-      if (!nextDate) return
-      registerScheduleOccurrence(sch.id, nextDate)
-      addTransaction({
-        type: 'transfer',
-        accountId: sch.accountId,
-        toAccountId: sch.toAccountId,
-        amount: Number(occEfetiva(sch, nextDate).amount) || 0,
-        date: todayStr,
-        description: sch.description,
-        origin: ORIGIN.AGENDAMENTO,
-      })
-    })
+    executarTransferenciasInicioMes(list, { getNextOccurrences, registerScheduleOccurrence })
     handleDismiss()
   }
 

@@ -20,11 +20,12 @@ import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
-import { computePendingUpTo, advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
+import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
 import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
+import { ocorrenciasVencidas } from '../lib/autoRegistro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -1088,18 +1089,19 @@ export function AppProvider({ children }) {
 
       for (const schedule of prev.schedules) {
         if (!schedule.autoRegister) continue
-        const pending = computePendingUpTo(schedule, todayStr)
+        // Vencimento pela data EFETIVA (override da prévia): ocorrência adiada espera a nova data,
+        // antecipada dispara antes. Lançamento na data efetiva; registered na chave ORIGINAL.
+        const pending = ocorrenciasVencidas(schedule, todayStr)
         if (pending.length === 0) continue
         const schedRateios = (prev.rateios || []).filter(r => r.lancamentoId === schedule.id)
 
-        for (const date of pending) {
+        for (const { occurrenceDate, date, amount: occAmount } of pending) {
           changed = true
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
-          // Valor EFETIVO da ocorrência (override da prévia "Próximas ocorrências"); sem override
-          // é o valor base. Vale para o lançamento, os saldos, as sombras de reserva e o rateio.
-          const occAmount = Number(occEfetiva(schedule, date).amount) || 0
+          // occAmount = valor EFETIVO da ocorrência (sem override, o valor base). Vale para o
+          // lançamento, os saldos, as sombras de reserva e o rateio.
           if (schedRateios.length > 0) {
-            collectedRateios.set(`${schedule.id}|${date}`, {
+            collectedRateios.set(`${schedule.id}|${occurrenceDate}`, {
               txId,
               rateios: escalarRateios(schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })), occAmount),
             })
@@ -1159,7 +1161,7 @@ export function AppProvider({ children }) {
           // de escrita de `registered` que não avançava a âncora — o auto-registro deixava
           // next_occurrence NULL/obsoleto e a "Data de Vencimento Atual" do formulário em branco.
           schedules = schedules.map(s => s.id === schedule.id
-            ? registerAndAdvance(s, [...(s.registered || []), date]) : s)
+            ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s)
         }
       }
 
@@ -2349,7 +2351,11 @@ export function AppProvider({ children }) {
   // `date` = data do lançamento criado. `occurrenceDate` = data da OCORRÊNCIA do agendamento
   // a registrar (default = date). Decouplá-las permite baixar a ocorrência correta (nextDate)
   // mesmo lançando numa data diferente — usado pelo pagamento em lote.
-  const registerScheduleOccurrence = useCallback((scheduleId, date, occurrenceDate = date) => {
+  // `date` null/vazio → data EFETIVA da ocorrência (override da prévia). registered sempre leva
+  // a chave ORIGINAL (occurrenceDate).
+  const registerScheduleOccurrence = useCallback((scheduleId, dateArg, occurrenceDate = dateArg) => {
+    const schedAtual = dataRef.current.schedules.find(s => s.id === scheduleId)
+    const date = dateArg || (schedAtual ? occEfetiva(schedAtual, occurrenceDate).date : occurrenceDate)
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
       const schedule = d.schedules.find(s => s.id === scheduleId)
