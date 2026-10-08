@@ -984,7 +984,7 @@ function ScheduleRow({
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 max-w-[200px] ${canExpand ? 'cursor-pointer' : ''}`}
+          className={`px-3 py-3 w-full max-w-0 overflow-hidden ${canExpand ? 'cursor-pointer' : ''}`}
           onClick={canExpand ? toggleExpand : undefined}
         >
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1114,7 +1114,7 @@ function ScheduleRow({
         {/* Categoria */}
         <td className="px-3 py-3 hidden md:table-cell">
           {cat
-            ? <span className="text-xs text-gray-400">{cat.icon} {cat.name}</span>
+            ? <span className="text-xs text-gray-400 whitespace-nowrap">{cat.icon} {cat.name}</span>
             : <span className="text-gray-700 text-xs">—</span>}
         </td>
 
@@ -1131,13 +1131,15 @@ function ScheduleRow({
         </td>
 
         {/* Frequência */}
-        <td className="px-3 py-3 whitespace-nowrap hidden sm:table-cell">
+        <td className="px-3 py-3 w-px whitespace-nowrap hidden sm:table-cell">
           <span className="text-xs text-gray-500">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
         </td>
 
         {/* Ações */}
-        <td className="px-3 py-3 whitespace-nowrap align-middle">
-          <div className="flex items-center justify-end gap-1.5 flex-nowrap min-w-[296px]">
+        <td className="px-3 py-3 w-px whitespace-nowrap align-middle">
+          <div className="flex flex-col items-end gap-1.5">
+          {(isProvisaoPendente || nCobertas > 0) && (
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {isProvisaoPendente && (
               <button
                 onClick={() => setShowEfetivar(true)}
@@ -1164,28 +1166,34 @@ function ScheduleRow({
                 </button>
               </>
             )}
+          </div>
+          )}
+          <div className="flex items-center justify-end gap-1.5 flex-nowrap">
             {nextDate && (
               <>
                 <button
                   onClick={() => setShowPay(true)}
                   title="Pagar"
-                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-blue-500/20 text-blue-600 rounded-md hover:bg-blue-500/30 transition-colors font-medium"
+                  aria-label="Pagar"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-blue-500/20 text-blue-600 rounded-md hover:bg-blue-500/30 transition-colors font-medium"
                 >
-                  <CheckCircle size={12} /> Pagar
+                  <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
                 </button>
                 <button
                   onClick={() => setShowEstornar(true)}
                   title="Estornar"
-                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-orange-500/15 text-orange-600 rounded-md hover:bg-orange-500/25 transition-colors font-medium"
+                  aria-label="Estornar"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-orange-500/15 text-orange-600 rounded-md hover:bg-orange-500/25 transition-colors font-medium"
                 >
-                  <RotateCcw size={12} /> Estornar
+                  <RotateCcw size={12} /> <span className="hidden 2xl:inline">Estornar</span>
                 </button>
                 <button
                   onClick={handlePular}
                   title={isRecorrente ? 'Pular esta ocorrência (avança para a próxima)' : 'Pular (cancela o agendamento único)'}
-                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-gray-500/15 text-gray-300 rounded-md hover:bg-gray-500/25 transition-colors font-medium"
+                  aria-label="Pular"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-gray-500/15 text-gray-300 rounded-md hover:bg-gray-500/25 transition-colors font-medium"
                 >
-                  <SkipForward size={12} /> Pular
+                  <SkipForward size={12} /> <span className="hidden 2xl:inline">Pular</span>
                 </button>
               </>
             )}
@@ -1195,6 +1203,7 @@ function ScheduleRow({
             <button onClick={() => setShowExcluir(true)} className="btn-amber w-7 h-7 p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
             </button>
+          </div>
           </div>
         </td>
       </tr>
@@ -1775,13 +1784,13 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                   </th>
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full">Descrição</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Movimentação</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap">Frequência</th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Ações</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap w-px">Frequência</th>
+                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap w-px">Ações</th>
               </tr>
             </thead>
             <tbody>
