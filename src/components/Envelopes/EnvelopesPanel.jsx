@@ -419,7 +419,7 @@ export default function EnvelopesPanel() {
               {/* action buttons — linha própria no topo, acima do nome e do Limite */}
               <div className="flex justify-end gap-1.5 mb-1.5">
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
+                  className="btn-amber w-7 h-7 p-0 justify-center"
                   onClick={e => { e.stopPropagation(); openEdit(env) }}
                   title="Editar envelope"
                   aria-label="Editar"
@@ -427,7 +427,7 @@ export default function EnvelopesPanel() {
                   <Edit2 size={13} />
                 </button>
                 <button
-                  className="w-7 h-7 rounded-md flex items-center justify-center text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15 transition-colors"
+                  className="btn-amber w-7 h-7 p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
                   onClick={e => {
                     e.stopPropagation()
                     if (window.confirm(`Excluir envelope "${env.name}"?`)) deleteEnvelope(env.id)

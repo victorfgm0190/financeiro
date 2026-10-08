@@ -1753,7 +1753,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           <div className="flex justify-end px-3 pt-2.5 pb-0">
             <button
               onClick={() => setSelectionMode(true)}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
+              className="btn-amber"
             >
               <MousePointer2 size={13} /> Selecionar
             </button>

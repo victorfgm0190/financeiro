@@ -52,6 +52,11 @@
   .btn-secondary {
     @apply bg-gray-800 hover:bg-gray-700 text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors text-sm;
   }
+  /* Botão secundário amarelo (contraste no tema escuro). Utilities sobrescrevem:
+     ex. ícone quadrado com "w-7 h-7 p-0", ou hover vermelho em ação destrutiva. */
+  .btn-amber {
+    @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors;
+  }
   .btn-danger {
     @apply text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm;
     background-color: #A32D2D;
