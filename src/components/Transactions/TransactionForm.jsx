@@ -84,7 +84,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
-    reserveFunctions, settings,
+    reserveFunctions, settings, findLinkedResgate,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -106,6 +106,13 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       || ''
   })
 
+  // Edição de despesa "Será pago com reserva": o vínculo vem de reservaContaId; lançamentos
+  // anteriores a essa coluna só têm o agendamento de resgate avulso (source_tx_id) — usa-o de fallback.
+  const [initialResgate] = useState(() => (initial?.id ? findLinkedResgate(initial.id) : null))
+  const initialReservaContaId = initial?.type === 'expense'
+    ? (initial.reservaContaId || initialResgate?.accountId || '')
+    : ''
+
   const [form, setForm] = useState({
     type: initial?.type || 'expense',
     accountId: initial?.accountId || accounts[0]?.id || '',
@@ -121,7 +128,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
     faturaMonthYear: initial?.faturaMonthYear || '',
     faturaRef: initial?.faturaRef || '',
-    reservaFuncaoId: initial?.reservaFuncaoId || '',
+    reservaFuncaoId: initial?.reservaFuncaoId || (initialReservaContaId ? (initialResgate?.reservaFuncaoId || '') : ''),
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
     repeat: false,
@@ -129,8 +136,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     repeatOccurrenceType: 'continuous',
     repeatInstallments: 2,
     repeatRemindDaysBefore: 0,
-    useReserva: false,
-    reservaAccountId: '',
+    useReserva: !!initialReservaContaId,
+    reservaAccountId: initialReservaContaId,
     reservaExpenseCategoryId: '',
     installments: 1,
   })
@@ -138,6 +145,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const [step, setStep] = useState('form')
   const [resgateInfo, setResgateInfo] = useState(null)
   const [resgateDate, setResgateDate] = useState(() => today())
+  const [resgateToDelete, setResgateToDelete] = useState(null)
   const [scheduleMatch, setScheduleMatch] = useState(null)
   const [debtCtx, setDebtCtx] = useState(null)
   // Item 2: "N/Total" detectado na descrição sem "Parcelado" marcado → guarda a parcela
@@ -235,7 +243,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const showFuncaoReservaSelect = reservaGroupFuncs.length > 1
 
   const isMobile = useIsMobile()
-  const reservaAccounts = useMemo(() => accounts.filter(a => a.isReserva && a.active !== false && (!isMobile || !a.hideOnMobile)), [accounts, isMobile])
+  // A reserva já vinculada ao lançamento em edição entra na lista mesmo se inativa/oculta no
+  // mobile — senão o select não a mostraria e salvar apagaria o vínculo.
+  const reservaAccounts = useMemo(
+    () => accounts.filter(a => a.isReserva && (a.id === initialReservaContaId || (a.active !== false && (!isMobile || !a.hideOnMobile)))),
+    [accounts, isMobile, initialReservaContaId]
+  )
   // Funções da conta de reserva escolhida em "Será pago com reserva" (despesa de conta corrente).
   const reservaContaFuncs = useMemo(
     () => form.reservaAccountId ? (reserveFunctions || []).filter(f => f.accountId === form.reservaAccountId) : [],
@@ -435,11 +448,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
             ? (form.reservaFuncaoId || null)
             : (form.useReserva ? (form.reservaFuncaoId || null) : null)),
       // "Será pago com reserva" em despesa de conta corrente: guarda a conta de reserva escolhida
-      // (par de reservaFuncaoId). Não cria transferência aqui — só registra o vínculo. Em edição
-      // preserva o valor existente (o formulário de edição não reexibe a seção de reserva).
-      reservaContaId: initial?.id
-        ? (initial.reservaContaId || null)
-        : ((form.type === 'expense' && form.useReserva && !reservaFuncaoMode) ? (form.reservaAccountId || null) : null),
+      // (par de reservaFuncaoId). Não cria transferência aqui — só registra o vínculo. Desligar o
+      // toggle na edição remove o vínculo.
+      reservaContaId: (form.type === 'expense' && form.useReserva && !reservaFuncaoMode) ? (form.reservaAccountId || null) : null,
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
     }
 
@@ -560,10 +571,61 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         }
       }
 
+      // Agendamento de resgate avulso vinculado (source_tx_id): atualizado no lugar (mesmo id — as
+      // ocorrências sch:<id>@<data> do resgate continuam válidas), nunca duplicado.
+      const linkedSch = findLinkedResgate(initial.id)
+      let reservaStep = null
+      if (txData.reservaContaId) {
+        const reservaAcc = accounts.find(a => a.id === txData.reservaContaId)
+        const func = reserveFunctions.find(f => f.id === txData.reservaFuncaoId)
+        if (linkedSch) {
+          const newAmt = Number(form.amount)
+          const changed = linkedSch.accountId !== txData.reservaContaId
+            || (linkedSch.reservaFuncaoId || null) !== (txData.reservaFuncaoId || null)
+            || Math.abs((linkedSch.amount || 0) - newAmt) > 0.005
+          if (changed) {
+            if (isResgatePago(linkedSch.id, schedules, transactions)) {
+              onToast?.('O resgate vinculado já foi executado — o agendamento não foi alterado.')
+            } else {
+              // Override da ocorrência (valor editado na prévia) venceria o valor base — acompanha.
+              const ov = linkedSch.overrides?.[linkedSch.startDate]
+              updateSchedule(linkedSch.id, {
+                accountId: txData.reservaContaId,
+                reservaFuncaoId: txData.reservaFuncaoId || null,
+                amount: newAmt,
+                description: `Resgate Reserva - ${func?.name || reservaAcc?.apelido || reservaAcc?.name || ''}`,
+                ...(ov && ov.amount != null
+                  ? { overrides: { ...linkedSch.overrides, [linkedSch.startDate]: { ...ov, amount: newAmt } } }
+                  : {}),
+              })
+              onToast?.('Agendamento de resgate atualizado.')
+            }
+          }
+        } else if (reservaAcc) {
+          setResgateInfo({
+            contaResgate: reservaAcc,
+            funcaoId: txData.reservaFuncaoId || null,
+            funcaoNome: func?.name || '',
+            amount: Number(form.amount),
+            sourceTxId: initial.id,
+          })
+          setResgateDate(form.date || today())
+          reservaStep = 'resgate'
+        }
+      } else if (linkedSch && !isResgatePago(linkedSch.id, schedules, transactions)) {
+        setResgateToDelete(linkedSch)
+        reservaStep = 'resgate-delete'
+      }
+
       // Parcelado: oferecer propagação do novo valor para as parcelas seguintes da cadeia
       const amountChangedNow = Math.abs(Number(form.amount) - initial.amount) > 0.005
       if (amountChangedNow && subsequentParcelas.length > 0) {
         setStep('propagate-parcelas')
+        return
+      }
+
+      if (reservaStep) {
+        setStep(reservaStep)
         return
       }
 
@@ -971,6 +1033,35 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           <button className="btn-secondary flex-1" onClick={() => setStep('form')}>Cancelar</button>
           <button className="btn-primary flex-1" onClick={confirmarGerarParcelas}>
             Confirmar e gerar {missing.length}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (step === 'resgate-delete' && resgateToDelete) {
+    const linkedSch = resgateToDelete
+    return (
+      <div className="space-y-5 py-2">
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-full bg-indigo-500/15 flex items-center justify-center mx-auto">
+            <PiggyBank size={22} className="text-indigo-400" />
+          </div>
+          <h3 className="font-semibold text-gray-100">Excluir agendamento de resgate?</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            A despesa não está mais vinculada a uma reserva. Deseja excluir o agendamento{' '}
+            <span className="text-white font-semibold">{linkedSch.description}</span> de{' '}
+            <span className="text-white font-semibold">{fmt(linkedSch.amount)}</span> em{' '}
+            <span className="text-white font-semibold">{fmtDate(linkedSch.startDate)}</span>?
+          </p>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button className="btn-secondary flex-1" onClick={onClose}>Manter</button>
+          <button
+            className="btn-danger flex-1"
+            onClick={() => { deleteSchedule(linkedSch.id); onToast?.('Agendamento de resgate excluído.'); onClose() }}
+          >
+            Excluir Agendamento
           </button>
         </div>
       </div>
@@ -1430,7 +1521,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observações adicionais..." />
       </div>
 
-      {form.type === 'expense' && !initial?.id && reservaAccounts.length > 0 && !reservaFuncaoMode && (
+      {form.type === 'expense' && reservaAccounts.length > 0 && !reservaFuncaoMode && (
         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
@@ -1516,8 +1607,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 )}
                 {form.reservaAccountId && (
                   <p className="text-xs text-indigo-400 leading-relaxed">
-                    A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o
-                    resgate desta reserva para a conta principal.
+                    {initialResgate
+                      ? 'A despesa registra o vínculo com a reserva. O agendamento de resgate vinculado será atualizado ao salvar.'
+                      : 'A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o resgate desta reserva para a conta principal.'}
                   </p>
                 )}
               </div>
