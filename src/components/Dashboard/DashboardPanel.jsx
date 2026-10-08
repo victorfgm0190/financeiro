@@ -11,6 +11,7 @@ import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovim
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 
@@ -197,8 +198,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Upcoming & overdue schedules (next 7 days + overdue)
   const upcomingSchedules = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]
-    const in7 = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+    const today = hojeStr()
+    const in7 = hojeStr(new Date(Date.now() + 7 * 86400000))
     const items = []
     schedules.forEach(s => {
       const nexts = getNextOccurrences(s, 2)
@@ -238,7 +239,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     )
     if (principalIds.size === 0) return null
 
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = hojeStr()
     let pendingIncome = 0
     let pendingExpense = 0
     let pendingCount = 0
@@ -299,7 +300,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     }
   }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = hojeStr()
 
   // Last tx date per fluxo account (single pass, both sides of transfers)
   const lastTxByFluxoAccount = useMemo(() => {

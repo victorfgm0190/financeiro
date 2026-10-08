@@ -1,7 +1,17 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import { hojeStr } from '../../lib/saldos'
+
+const rb = v => Math.round(v * 100) / 100
+
+// Dias entre duas datas 'yyyy-mm-dd' (só a data — UTC nos dois lados, sem fuso nem hora).
+const diasEntre = (de, ate) => {
+  const [y1, m1, d1] = de.split('-').map(Number)
+  const [y2, m2, d2] = ate.split('-').map(Number)
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000)
+}
 
 // 'yyyy-mm-dd' → 'dd/MM'
 const ddmm = (s) => {
@@ -52,6 +62,16 @@ export default function SaldoPrincipalBreakdownModal() {
   const { getSaldoPrincipalBreakdown } = useApp()
   const b = getSaldoPrincipalBreakdown()
 
+  // Saldo Final Ciclo: a lista de pendentes do breakdown é só particionada por data. Data de
+  // hoje não é atraso. O subtotal dos pendentes fecha por diferença com o total do breakdown —
+  // os itens vêm arredondados um a um e o total é arredondado por agendamento, então somar os
+  // itens poderia divergir em centavos do Saldo Final Ciclo, que não pode mudar.
+  const hoje = hojeStr()
+  const atrasados = b.finalCiclo.agendamentos.filter(it => it.date < hoje)
+  const pendentes = b.finalCiclo.agendamentos.filter(it => it.date >= hoje)
+  const subtotalAtraso = rb(atrasados.reduce((s, it) => s + it.amount, 0))
+  const subtotalPendentes = rb(b.finalCiclo.total - b.finalCiclo.saldoAtual - subtotalAtraso)
+
   return (
     <div className="space-y-3">
       {/* 1. Saldo Atual Ciclo */}
@@ -77,12 +97,37 @@ export default function SaldoPrincipalBreakdownModal() {
       {/* 2. Saldo Final Ciclo */}
       <Section title="Saldo Final Ciclo">
         <Row label="Saldo Atual Ciclo" value={b.finalCiclo.saldoAtual} muted />
-        {b.finalCiclo.agendamentos.length > 0 ? (
+        {atrasados.length > 0 && (
+          <div className="mt-1 rounded-r bg-red-500/10 border-l-2 border-red-500 py-1.5 pr-2 space-y-1">
+            <div className="flex items-baseline justify-between gap-3 pl-2">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-red-400 min-w-0">
+                <AlertTriangle size={13} className="shrink-0 self-center" />
+                + Lançamentos em atraso (pendentes antes de {ddmm(hoje)})
+              </span>
+              <span className="text-sm font-bold text-red-400 tabular-nums whitespace-nowrap">{fmt(subtotalAtraso)}</span>
+            </div>
+            {atrasados.map((it, i) => {
+              const dias = diasEntre(it.date, hoje)
+              return (
+                <Row
+                  key={i}
+                  indent
+                  label={`• ${ddmm(it.date)} ${it.description} (${it.occurrenceNumber}/${it.totalOccurrences}) · ${dias} dia${dias !== 1 ? 's' : ''}`}
+                  value={it.amount}
+                />
+              )
+            })}
+          </div>
+        )}
+        {pendentes.length > 0 ? (
           <>
-            <p className="text-xs text-gray-500 pt-1">+ Agendamentos pendentes até {ddmm(b.cycleEnd)}:</p>
+            <div className="flex items-baseline justify-between gap-3 pt-1">
+              <span className="text-xs text-gray-500">+ Lançamentos pendentes até {ddmm(b.cycleEnd)}</span>
+              <Val v={subtotalPendentes} />
+            </div>
             {/* Uma linha por ocorrência, em ordem cronológica (ordenadas em collectSched).
                 `ddmm` formata a partir da string; new Date(iso) voltaria um dia no fuso daqui. */}
-            {b.finalCiclo.agendamentos.map((it, i) => (
+            {pendentes.map((it, i) => (
               <Row
                 key={i}
                 indent
@@ -92,7 +137,7 @@ export default function SaldoPrincipalBreakdownModal() {
             ))}
           </>
         ) : (
-          <p className="text-xs text-gray-600 pt-1">Sem agendamentos pendentes até {ddmm(b.cycleEnd)}.</p>
+          <p className="text-xs text-gray-600 pt-1">Sem lançamentos pendentes até {ddmm(b.cycleEnd)}.</p>
         )}
         <Divider />
         <div className="flex items-baseline justify-between gap-3">
