@@ -184,9 +184,9 @@ function txDelta(tx, accountId) {
   return 0
 }
 
-function AccountName({ id, accounts, fallback = '—' }) {
+function accountLabel(id, accounts, fallback = '—') {
   const acc = accounts.find(a => a.id === id)
-  return <span>{acc ? (acc.apelido || acc.name) : fallback}</span>
+  return acc ? (acc.apelido || acc.name) : fallback
 }
 
 // Badge clicável de reconciliação para a coluna "R" (design quadrado compartilhado).
@@ -208,6 +208,9 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   } else {
     deId = accountId; paraLabel = tx.payee || 'Despesa'
   }
+  const historico = tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
+  const deText = deId ? accountLabel(deId, accounts) : deLabel
+  const paraText = paraId ? accountLabel(paraId, accounts) : paraLabel
 
   // Badge de linha com data à frente de hoje. É rótulo de DATA, não de status: toda linha aqui
   // é transação REAL e efetivada — buildRows só recebe data.transactions, o extrato nunca
@@ -245,7 +248,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           />
         </td>
       )}
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{fmtDate(tx.date)}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
       <td className="px-3 py-1.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           {isTransfer
@@ -254,7 +257,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               ? <ArrowDownCircle size={12} className="text-blue-600 shrink-0" />
               : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
           }
-          <span className="text-xs text-gray-200 truncate">{tx.description || (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')}</span>
+          <span className="text-xs text-gray-200 truncate" title={historico}>{historico}</span>
           {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">
@@ -277,13 +280,9 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           )}
         </div>
       </td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{tx.payee || ''}</td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">
-        {deId ? <AccountName id={deId} accounts={accounts} /> : deLabel}
-      </td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate">
-        {paraId ? <AccountName id={paraId} accounts={accounts} /> : paraLabel}
-      </td>
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={tx.payee || undefined}>{tx.payee || ''}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={deText || undefined}>{deText}</td>
+      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={paraText || undefined}>{paraText}</td>
       <td className="px-3 py-1.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
         {isIn ? fmt(Math.abs(delta)) : ''}
       </td>
@@ -354,11 +353,11 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         onClick={() => setOpen(v => !v)}
       >
         {selectMode && <td className="px-2 py-1.5" title="Transferências não são alteráveis em lote" />}
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{fmtDate(row.date)}</td>
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={fmtDate(row.date) || undefined}>{fmtDate(row.date)}</td>
         <td className="px-3 py-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
             <ArrowLeftRight size={12} className="text-indigo-400 shrink-0" />
-            <span className="text-xs text-gray-200 truncate">Transf. líquida</span>
+            <span className="text-xs text-gray-200 truncate" title="Transf. líquida">Transf. líquida</span>
             <span className="text-xs text-indigo-400 ml-1 shrink-0">({txs.length} mov.)</span>
             {row.caIncoming && (
               <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
@@ -373,8 +372,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
           </div>
         </td>
         <td />
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? otherName : thisName}</td>
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate">{isIn ? thisName : otherName}</td>
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={isIn ? otherName : thisName}>{isIn ? otherName : thisName}</td>
+        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={isIn ? thisName : otherName}>{isIn ? thisName : otherName}</td>
         {/* Transferência netizada = movimento neutro → valor em cinza (paleta: transferência = cinza),
             independente da direção. Fica na coluna Entrada/Saída por alinhamento, mas sem a cor
             receita/despesa (azul/laranja). */}
@@ -413,19 +412,21 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         const isInSub = delta > 0
         const fromAcc = accounts.find(a => a.id === tx.accountId)
         const toAcc = accounts.find(a => a.id === tx.toAccountId)
+        const fromName = fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'
+        const toName = toAcc ? (toAcc.apelido || toAcc.name) : '—'
         return (
           <tr key={tx.id} className="border-b border-gray-800/30 bg-indigo-500/5">
             {selectMode && <td className="px-2 py-1.5" />}
-            <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 truncate">{fmtDate(tx.date)}</td>
-            <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic truncate">
+            <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
+            <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic truncate" title={tx.description || 'Transferência'}>
               {tx.description || 'Transferência'}
             </td>
             <td />
-            <td className="px-3 py-1.5 text-xs text-gray-500 truncate">
-              {fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'}
+            <td className="px-3 py-1.5 text-xs text-gray-500 truncate" title={fromAcc ? fromName : undefined}>
+              {fromName}
             </td>
-            <td className="px-3 py-1.5 text-xs text-gray-500 truncate">
-              {toAcc ? (toAcc.apelido || toAcc.name) : '—'}
+            <td className="px-3 py-1.5 text-xs text-gray-500 truncate" title={toAcc ? toName : undefined}>
+              {toName}
             </td>
             <td className="px-3 py-1.5 text-right text-xs text-gray-400/70 whitespace-nowrap">
               {isInSub ? fmt(Math.abs(delta)) : ''}
@@ -1002,7 +1003,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const colGroup = (
     <colgroup>
       {selectMode && <col style={{ width: '36px' }} />}
-      <col style={{ width: '84px' }} />
+      <col style={{ width: '92px' }} />
       <col />
       <col style={{ width: '64px' }} />
       <col style={{ width: '82px' }} />
@@ -1169,9 +1170,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 )}
                 <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Favorecido</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta De</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden">Conta Para</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Favorecido">Favorecido</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Conta De">Conta De</th>
+                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Conta Para">Conta Para</th>
                 <th className="text-right px-3 py-1 text-xs text-blue-600 font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
                 </th>
