@@ -407,10 +407,19 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
     }
   }
 
+  // Valor da aba ativa. Resgate com detalhamento não usa o campo (valor vem das funções).
+  const usaDetalhe = tab === 'transferencia' && hasDetalhe
+  const valorAba = tab === 'pagamento' ? parseValorBR(payAmount)
+    : tab === 'recebimento' ? parseValorBR(recAmount)
+    : parseValorBR(trfAmount)
+  const valorOk = usaDetalhe || (Number.isFinite(valorAba) && valorAba > 0)
+
   const handleConfirm = () => {
+    // Guarda além do botão desabilitado: parse falho nunca vira lançamento de R$ 0.
+    if (!valorOk) return
     const regDate = nextDate || today
     if (tab === 'pagamento') {
-      const amount = parseValorBR(payAmount) || 0
+      const amount = valorAba
       if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
       const txId = addTransaction({
         type: 'expense', accountId: payAccountId, payee: payPayee,
@@ -440,7 +449,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       }
     } else if (tab === 'recebimento') {
       if (recPayee && !payees.includes(recPayee)) addPayee(recPayee)
-      const amount = parseValorBR(recAmount) || 0
+      const amount = valorAba
       const txId = addTransaction({
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount, date: recDate,
@@ -465,7 +474,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
       const autoFuncId = resvFuncs.length === 1 ? resvFuncs[0].id : null
       addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,
-        amount: parseValorBR(trfAmount) || 0, date: trfDate,
+        amount: valorAba, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
         scheduleId: schedule.id,
@@ -610,7 +619,8 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className="input" type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                <input className={`input ${valorOk ? '' : '!border-red-500'}`} type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -648,7 +658,8 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className="input" type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                <input className={`input ${valorOk ? '' : '!border-red-500'}`} type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -700,7 +711,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               <div>
                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
                 <input
-                  className="input"
+                  className={`input ${valorOk ? '' : '!border-red-500'}`}
                   type="text"
                   inputMode="decimal"
                   value={hasDetalhe ? valorParaInput(detalheTotal) : trfAmount}
@@ -708,6 +719,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
                   disabled={hasDetalhe}
                   readOnly={hasDetalhe}
                 />
+                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -733,7 +745,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
             </button>
           ) : (
-            <button className="btn-primary flex-1 flex items-center justify-center gap-2" onClick={handleConfirm}>
+            <button className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk} onClick={handleConfirm}>
               <CheckCircle size={14} /> Confirmar {TAB_LABELS[tab]}
             </button>
           )}
