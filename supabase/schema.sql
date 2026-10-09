@@ -848,3 +848,9 @@ CREATE TABLE IF NOT EXISTS marcos_saldo_gerencial (
   criado_em        TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_marcos_saldo_gerencial_conta ON marcos_saldo_gerencial (conta_id, data);
+
+-- Categorias por perfil: perfis (perfis.id, TEXT) em que a categoria existe.
+-- NULL ou vazio = todos os perfis (comportamento de todas as categorias existentes).
+-- Só filtra as listas de escolha de categoria; relatórios/KPIs/saldos não usam.
+-- Também criada pela API em api/load.js (ADD COLUMN IF NOT EXISTS).
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS perfil_ids TEXT[];

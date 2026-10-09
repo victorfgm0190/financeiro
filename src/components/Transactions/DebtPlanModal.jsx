@@ -219,6 +219,7 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         </label>
         <CategorySelect
           categories={categories}
+          perfilId={account?.profileId || undefined}
           type="expense"
           value={form.interestCategoryId}
           onChange={e => set('interestCategoryId', e.target.value)}

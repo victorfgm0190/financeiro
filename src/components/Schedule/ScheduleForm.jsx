@@ -9,6 +9,7 @@ import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
+import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -179,7 +180,7 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId } = useApp()
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -304,8 +305,17 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const isMobile = useIsMobile()
   const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
   const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
-  const categoryOpts = useMemo(() => buildCatOpts(categories, form.transactionType === 'transfer' ? null : form.transactionType), [categories, form.transactionType])
-  const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
+  // Categorias por perfil: o da conta do agendamento (se tiver perfil), senão o chip do topo. As
+  // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
+  const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
+  const categoriasDoPerfil = useMemo(
+    () => filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]),
+    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId]
+  )
+  const categoriaForaDoPerfil = !!form.categoryId
+    && !categoriaDisponivelParaPerfil(categories.find(c => c.id === form.categoryId), perfilCategorias)
+  const categoryOpts = useMemo(() => buildCatOpts(categoriasDoPerfil, form.transactionType === 'transfer' ? null : form.transactionType), [categoriasDoPerfil, form.transactionType])
+  const expenseCatOpts = useMemo(() => buildCatOpts(categoriasDoPerfil, 'expense'), [categoriasDoPerfil])
 
   const sortedPayees = useMemo(() => {
     const counts = {}
@@ -434,6 +444,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           <RateioModal
             total={Number(form.amount) || rateioTotal || 0}
             categories={categories}
+            perfilId={perfilCategorias}
             categoryType={form.transactionType === 'income' ? 'income' : form.transactionType === 'expense' ? 'expense' : null}
             initial={rateioRows}
             onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
@@ -649,6 +660,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     ungroupedLast
                     ungroupedLabel="Sem grupo"
                   />
+                  {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
                 </div>
               )}
               <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">

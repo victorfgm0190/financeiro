@@ -628,7 +628,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Categoria</label>
-                <CategorySelect categories={categories} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
+                <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === payAccountId)?.profileId || undefined} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
               </div>
               <div>
                 <label className="label">Classificação Gerencial</label>
@@ -667,7 +667,7 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
               </div>
               <div>
                 <label className="label">Categoria</label>
-                <CategorySelect categories={categories} type="income" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)} />
+                <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === recAccountId)?.profileId || undefined} type="income" value={recCategoryId} onChange={e => setRecCategoryId(e.target.value)} />
               </div>
               <div>
                 <label className="label">Anotações</label>

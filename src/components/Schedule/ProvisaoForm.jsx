@@ -3,6 +3,7 @@ import { Info } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
+import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 
 // Mesmas frequências do ScheduleForm.
 const FREQUENCIES = [
@@ -24,7 +25,7 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences } = useApp()
+  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId } = useApp()
 
   // Conta principal (Itaú Principal): a provisão é uma despesa futura debitada da conta
   // principal — aparece no Fluxo de Caixa Principal como despesa "Uma vez".
@@ -35,11 +36,14 @@ export default function ProvisaoForm({ initial, onClose }) {
     accounts[0] || null,
   [accounts])
 
+  // Categorias por perfil: o da conta principal (onde a provisão cai), senão o chip do topo; a
+  // categoria já gravada continua na lista.
+  const perfilCategorias = perfilParaCategorias(accounts, contaPrincipal?.id, activeProfileId)
   const expenseCatOpts = useMemo(() =>
-    categories
+    filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId])
       .filter(c => c.type === 'expense' || c.type === 'both')
       .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null })),
-  [categories])
+  [categories, perfilCategorias, initial?.categoryId])
 
   // TODAS as funções de reserva de TODAS as contas (cada função pertence a uma conta via
   // accountId). Formato "Nome (apelido)"; ordenado por conta e depois por nome da função.

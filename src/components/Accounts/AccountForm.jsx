@@ -513,6 +513,7 @@ export default function AccountForm({ initial, onClose }) {
                     <label className="label">Categoria vinculada</label>
                     <CategorySelect
                       categories={categories}
+                      perfilId={form.profileId || undefined}
                       type="expense"
                       value={form.reservaCategoryId || ''}
                       onChange={e => set('reservaCategoryId', e.target.value || null)}
@@ -534,6 +535,7 @@ export default function AccountForm({ initial, onClose }) {
                   <label className="label">Categoria vinculada *</label>
                   <CategorySelect
                     categories={categories}
+                    perfilId={form.profileId || undefined}
                     type="expense"
                     value={form.patrimonioCategoryId || ''}
                     onChange={e => { set('patrimonioCategoryId', e.target.value || null); setVinculoError(false) }}
@@ -574,6 +576,7 @@ export default function AccountForm({ initial, onClose }) {
               <label className="label">Categoria do Investimento *</label>
               <CategorySelect
                 categories={categories}
+                perfilId={form.profileId || undefined}
                 type="expense"
                 value={form.investmentCategoryId || ''}
                 onChange={e => { set('investmentCategoryId', e.target.value || null); setInvestError(false) }}
@@ -597,6 +600,7 @@ export default function AccountForm({ initial, onClose }) {
           <label className="label">Categoria de Rendimento</label>
           <CategorySelect
             categories={categories}
+            perfilId={form.profileId || undefined}
             type="income"
             value={form.rendimentoCategoriaId || ''}
             onChange={e => set('rendimentoCategoriaId', e.target.value || null)}

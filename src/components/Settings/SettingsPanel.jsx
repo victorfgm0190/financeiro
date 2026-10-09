@@ -12,6 +12,8 @@ import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig, abaDe } from '.
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
+import PerfisMultiSelect from './PerfisMultiSelect'
+import { categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
 import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 
 const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
@@ -70,7 +72,9 @@ export default function SettingsPanel() {
   const [startDay, setStartDay] = useState(settings.financialMonthStartDay || 1)
   const [monthMode, setMonthMode] = useState(settings.financialMonthMode || 'custom')
   const [saved, setSaved] = useState(false)
-  const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '' })
+  const [newCategory, setNewCategory] = useState({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '', perfilIds: [] })
+  // Conferência: "Mostrar categorias de" um perfil ('' = todas). Só filtra a lista desta tela.
+  const [filtroPerfilCat, setFiltroPerfilCat] = useState('')
   const [newGroupName, setNewGroupName] = useState('')
   const [editingCatGroup, setEditingCatGroup] = useState(null)   // nome do grupo de categoria em edição
   const [catGroupDraft, setCatGroupDraft] = useState('')         // rascunho do rename
@@ -272,7 +276,7 @@ export default function SettingsPanel() {
     e.preventDefault()
     if (!newCategory.name.trim() || !newCategory.group.trim()) return // Grupo é obrigatório
     addCategory(newCategory)
-    setNewCategory({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '' })
+    setNewCategory({ name: '', type: 'expense', color: '#6366f1', icon: '📌', group: '', perfilIds: [] })
   }
 
   const handleAddGroup = (e) => {
@@ -296,11 +300,12 @@ export default function SettingsPanel() {
   }
 
   // Categorias agrupadas para exibição: grupos (ordenados) + "Sem grupo" ao final.
+  const catsVisiveis = categories.filter(c => categoriaDisponivelParaPerfil(c, filtroPerfilCat))
   const catsByGroup = categoryGroups.map(g => ({
     group: g,
-    cats: categories.filter(c => c.group === g),
-  }))
-  const ungroupedCats = categories.filter(c => !c.group)
+    cats: catsVisiveis.filter(c => c.group === g),
+  })).filter(({ cats }) => !filtroPerfilCat || cats.length > 0)
+  const ungroupedCats = catsVisiveis.filter(c => !c.group)
 
   // Linha de categoria com reclassificação de grupo (só muda o vínculo — nenhum
   // lançamento ou saldo é alterado), conta de investimento e exclusão.
@@ -314,6 +319,12 @@ export default function SettingsPanel() {
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        <PerfisMultiSelect
+          value={cat.perfilIds}
+          onChange={ids => updateCategory(cat.id, { perfilIds: ids })}
+          profiles={profiles}
+          className="max-w-[150px]"
+        />
         <select
           className="input w-auto text-xs py-1 max-w-[140px]"
           title="Grupo da categoria — reclassifica para outro grupo (não altera lançamentos)"
@@ -766,6 +777,17 @@ export default function SettingsPanel() {
           <button type="submit" className="btn-secondary flex items-center gap-1 shrink-0"><Plus size={13} /> Grupo</button>
         </form>
 
+        {profiles.length > 0 && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-gray-500">Mostrar categorias de:</span>
+            <select className="input w-auto text-xs py-1" value={filtroPerfilCat} onChange={e => setFiltroPerfilCat(e.target.value)}>
+              <option value="">Todos os perfis</option>
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {filtroPerfilCat && <span className="text-[11px] text-gray-600">inclui as categorias de todos os perfis</span>}
+          </div>
+        )}
+
         {/* Lista de grupos com categorias aninhadas */}
         <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
           {catsByGroup.map(({ group, cats }) => (
@@ -828,7 +850,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
-        <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <input className="input col-span-2 sm:col-span-1" placeholder="Nome" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
           <input
             className="input"
@@ -847,6 +869,12 @@ export default function SettingsPanel() {
             <option value="both">Ambos</option>
           </select>
           <input className="input" placeholder="Emoji" value={newCategory.icon} onChange={e => setNewCategory(f => ({ ...f, icon: e.target.value }))} maxLength={2} />
+          <PerfisMultiSelect
+            value={newCategory.perfilIds}
+            onChange={ids => setNewCategory(f => ({ ...f, perfilIds: ids }))}
+            profiles={profiles}
+            className="!w-full !py-2 !text-sm"
+          />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
         <p className="text-[11px] text-gray-600 mt-1.5">O campo <span className="text-gray-400">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>

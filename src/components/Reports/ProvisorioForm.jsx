@@ -5,13 +5,14 @@ import { today } from '../shared/utils'
 import AccountOptions from '../shared/AccountOptions'
 import SearchableSelect from '../shared/SearchableSelect'
 import DateInput from '../shared/DateInput'
+import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 
 // Formulário do lançamento PROVISÓRIO do Fluxo de Caixa por Conta: uma entrada/saída de
 // simulação gravada em fluxo_provisorios (tabela à parte — não é agendamento nem lançamento).
 // Com `initial`, abre em modo edição. `onSalvar` recebe o payload em snake_case, já validado,
 // no formato que /api/fluxo-provisorios espera.
 export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose }) {
-  const { profileAccounts: accounts, accountGroups, categories } = useApp()
+  const { profileAccounts: accounts, accountGroups, categories, activeProfileId } = useApp()
 
   const [form, setForm] = useState({
     date: initial?.date || today(),
@@ -28,10 +29,12 @@ export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose
   // Categoria é opcional e segue o tipo escolhido ('both' serve aos dois).
   const catOpts = useMemo(() => {
     const alvo = form.type === 'entrada' ? 'income' : 'expense'
-    return (categories || [])
+    // Categorias por perfil: o da conta escolhida, senão o chip do topo; a já gravada fica.
+    const perfil = perfilParaCategorias(accounts, form.account_id, activeProfileId)
+    return filtrarCategoriasPorPerfil(categories, perfil, [form.category_id])
       .filter(c => c.type === alvo || c.type === 'both')
       .map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
-  }, [categories, form.type])
+  }, [categories, form.type, accounts, form.account_id, form.category_id, activeProfileId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

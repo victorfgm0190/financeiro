@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
-import { montarUpsertSql, separarLimpezaDeParcela, CAMPOS_PARCELA_PROTEGIDOS } from './_db.js'
-import { txToRow } from '../src/lib/db.js'
+import { montarUpsertSql, separarLimpezaDeParcela, CAMPOS_PARCELA_PROTEGIDOS, serializarParam } from './_db.js'
+import { txToRow, categoryToRow, rowToCategory } from '../src/lib/db.js'
 
 // O upsert de lancamentos executado num Postgres de verdade (PGlite, em memória): NULL vindo do app
 // não apaga os 4 campos de parcela — e SÓ eles. Qualquer outra coluna recebe o NULL normalmente.
@@ -36,8 +36,15 @@ beforeEach(async () => {
   db = new PGlite()
   await db.exec(`CREATE TABLE lancamentos (${COLS.map(c => `"${c}" ${tipo(c)}${c === 'id' ? ' PRIMARY KEY' : ''}`).join(', ')})`)
   await db.exec('CREATE UNIQUE INDEX uq_lancamentos_installment ON lancamentos (installment_key) WHERE installment_key IS NOT NULL')
+  await db.exec(`CREATE TABLE categorias (
+    id TEXT PRIMARY KEY, name TEXT, type TEXT, color TEXT, icon TEXT, category_group TEXT,
+    investment_account_id TEXT, gera_espelho BOOLEAN, conta_espelho_id TEXT,
+    default_gerencial_group TEXT, perfil_ids TEXT[]
+  )`)
   await upsert(cheio)
-})
+// A 1ª instância do PGlite carrega o WASM; com a suíte inteira rodando em paralelo isso passa dos
+// 10s padrão e o 1º teste falhava por timeout do hook, não por erro.
+}, 30000)
 
 describe('upsert de lancamentos no Postgres (PGlite)', () => {
   it('a linha cheia grava os campos de parcela e a chave', async () => {
@@ -75,5 +82,45 @@ describe('upsert de lancamentos no Postgres (PGlite)', () => {
     for (const c of COLS.filter(c => c !== 'id' && !CAMPOS_PARCELA_PROTEGIDOS.includes(c))) {
       expect(sql).toContain(`"${c}" = EXCLUDED."${c}"`)
     }
+  })
+})
+
+// categorias.perfil_ids é TEXT[]: o upsert genérico manda array (não JSON) para essa coluna, e as
+// demais colunas de categorias continuam como antes.
+async function upsertCat(cat) {
+  const row = categoryToRow(cat)
+  const cols = Object.keys(row)
+  await db.query(montarUpsertSql('categorias', cols, 1, 'id'), cols.map(c => serializarParam('categorias', c, row[c])))
+  return rowToCategory((await db.query('SELECT * FROM categorias WHERE id = $1', [cat.id])).rows[0])
+}
+const catBase = { id: 'cat_x', name: 'Refeição', type: 'expense', icon: '🍽', group: 'Alimentação' }
+
+describe('categorias.perfil_ids no Postgres (PGlite)', () => {
+  it('sem perfis grava NULL e lê como [] (todos os perfis)', async () => {
+    expect((await upsertCat({ ...catBase, perfilIds: [] })).perfilIds).toEqual([])
+    expect((await db.query('SELECT perfil_ids FROM categorias')).rows[0].perfil_ids).toBeNull()
+  })
+
+  it('grava e lê 1 e vários perfis', async () => {
+    expect((await upsertCat({ ...catBase, perfilIds: ['perf_pj'] })).perfilIds).toEqual(['perf_pj'])
+    expect((await upsertCat({ ...catBase, perfilIds: ['perf_pf', 'perf_pj'] })).perfilIds).toEqual(['perf_pf', 'perf_pj'])
+  })
+
+  it('desmarcar todos volta para NULL', async () => {
+    await upsertCat({ ...catBase, perfilIds: ['perf_pj'] })
+    expect((await upsertCat({ ...catBase, perfilIds: [] })).perfilIds).toEqual([])
+  })
+
+  it('categoria antiga (sem o campo no app) continua valendo para todos', async () => {
+    const c = await upsertCat(catBase)
+    expect(c.perfilIds).toEqual([])
+    expect(c).toMatchObject({ name: 'Refeição', group: 'Alimentação' })
+  })
+
+  it('serializarParam: só o TEXT[] declarado vai como array; o resto continua JSON', () => {
+    expect(serializarParam('categorias', 'perfil_ids', ['a'])).toEqual(['a'])
+    expect(serializarParam('agendamentos', 'registered', ['2026-10-01'])).toBe('["2026-10-01"]')
+    expect(serializarParam('categorias', 'name', 'x')).toBe('x')
+    expect(serializarParam('categorias', 'perfil_ids', null)).toBeNull()
   })
 })

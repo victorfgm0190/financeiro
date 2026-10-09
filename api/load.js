@@ -312,6 +312,9 @@ export default async function handler(req, res) {
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS conta_espelho_id TEXT`)
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS default_gerencial_group TEXT`)
+    // Perfis (perfis.id) em que a categoria existe. NULL/vazio = todos — categorias existentes
+    // não mudam de comportamento. Só filtra listas de escolha; relatórios não leem.
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS perfil_ids TEXT[]`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]'`)

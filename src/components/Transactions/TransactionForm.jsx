@@ -7,6 +7,7 @@ import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
 import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
+import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -97,7 +98,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
-    reserveFunctions, settings, findLinkedResgate, profiles,
+    reserveFunctions, settings, findLinkedResgate, profiles, activeProfileId,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -340,8 +341,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const toIsPj = (profiles || []).find(p => p.id === toProfileId)?.type === 'pj'
   const sentidoCnpj = fromIsPj || !toIsPj ? 'saida' : 'entrada'
   const sentidoCpf = sentidoCnpj === 'saida' ? 'entrada' : 'saida'
-  const catOptsCnpj = useMemo(() => buildCatOptsPorSentido(categories, sentidoCnpj), [categories, sentidoCnpj])
-  const catOptsCpf = useMemo(() => buildCatOptsPorSentido(categories, sentidoCpf), [categories, sentidoCpf])
+  // Cada dropdown filtra pelo SEU perfil (independe do chip do topo).
+  const perfilCnpjId = sentidoCnpj === 'saida' ? fromProfileId : toProfileId
+  const perfilCpfId = sentidoCnpj === 'saida' ? toProfileId : fromProfileId
+  const catOptsCnpj = useMemo(
+    () => buildCatOptsPorSentido(filtrarCategoriasPorPerfil(categories, perfilCnpjId, [form.categoriaCnpjId]), sentidoCnpj),
+    [categories, perfilCnpjId, form.categoriaCnpjId, sentidoCnpj]
+  )
+  const catOptsCpf = useMemo(
+    () => buildCatOptsPorSentido(filtrarCategoriasPorPerfil(categories, perfilCpfId, [form.categoriaCpfId]), sentidoCpf),
+    [categories, perfilCpfId, form.categoriaCpfId, sentidoCpf]
+  )
 
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
@@ -351,8 +361,17 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // Options for SearchableSelect fields
   const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
   const destAccountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { excludeId: form.accountId, isMobile }), [accounts, accountGroups, form.accountId, isMobile])
-  const categoryOpts = useMemo(() => buildCatOpts(categories, form.type === 'transfer' ? null : form.type), [categories, form.type])
-  const expenseCatOpts = useMemo(() => buildCatOpts(categories, 'expense'), [categories])
+  // Categorias por perfil: o da conta escolhida (se tiver perfil), senão o chip do topo. As
+  // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
+  const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
+  const categoriasDoPerfil = useMemo(
+    () => filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]),
+    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId]
+  )
+  const categoriaForaDoPerfil = !!form.categoryId
+    && !categoriaDisponivelParaPerfil(categories.find(c => c.id === form.categoryId), perfilCategorias)
+  const categoryOpts = useMemo(() => buildCatOpts(categoriasDoPerfil, form.type === 'transfer' ? null : form.type), [categoriasDoPerfil, form.type])
+  const expenseCatOpts = useMemo(() => buildCatOpts(categoriasDoPerfil, 'expense'), [categoriasDoPerfil])
 
   // Fatura de referência: 5 meses padrão + o valor atual (ex.: fatura antiga em edição)
   // caso não esteja no intervalo, para não perdê-lo no select.
@@ -1130,6 +1149,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         <RateioModal
           total={Number(form.amount) || rateioTotal || 0}
           categories={categories}
+          perfilId={perfilCategorias}
           categoryType={form.type === 'income' ? 'income' : form.type === 'expense' ? 'expense' : null}
           initial={rateioRows}
           onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
@@ -1312,6 +1332,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   ungroupedLast
                   ungroupedLabel="Sem grupo"
                 />
+                {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
               </div>
               <div>
                 <label className="label">Favorecido</label>
@@ -1403,6 +1424,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                     ungroupedLast
                     ungroupedLabel="Sem grupo"
                   />
+                  {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
                 </div>
               )}
               <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">

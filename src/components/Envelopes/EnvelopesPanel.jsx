@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '../../lib/origins'
 import { dueDateInMonth } from '../../lib/fatura'
+import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 
@@ -65,7 +66,11 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
     setCategoryIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
   }
 
-  const expCats     = categories.filter(c => c.type === 'expense' || c.type === 'both')
+  // Categorias por perfil: o da conta do envelope (se tiver perfil), senão o chip do topo; as já
+  // vinculadas ao envelope continuam na lista.
+  const { activeProfileId } = useApp()
+  const perfilCategorias = perfilParaCategorias(accounts, accountId, activeProfileId)
+  const expCats     = filtrarCategoriasPorPerfil(categories.filter(c => c.type === 'expense' || c.type === 'both'), perfilCategorias, categoryIds)
   const nonCreditAc = accounts.filter(a => a.type !== 'credit')
 
   // Categorias agrupadas para exibição: grupos ordenados (pt-BR) e "Sem grupo" ao final.

@@ -61,19 +61,24 @@ export function separarLimpezaDeParcela(rows) {
   return { protegidas, limpar }
 }
 
+// Colunas Postgres ARRAY (TEXT[]) por tabela. O resto dos arrays/objetos do app mora em JSONB e
+// vai como JSON; um TEXT[] recebendo '["a"]' quebraria ("malformed array literal") — esses vão
+// como array JS, que o driver pg serializa no formato de array do Postgres.
+export const COLUNAS_TEXT_ARRAY = { categorias: ['perfil_ids'] }
+
+export function serializarParam(table, col, v) {
+  if (v === null || v === undefined) return null
+  if (Array.isArray(v) && COLUNAS_TEXT_ARRAY[table]?.includes(col)) return v.map(String)
+  if (Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return JSON.stringify(v)
+  return v
+}
+
 // Executa um único INSERT ... ON CONFLICT para um lote de rows homogêneas (mesmas colunas).
 async function upsertChunk(client, table, cols, rows, conflictCol, preservarSeNulo = []) {
   // Guardas: rows/cols vazios geram VALUES vazio → "syntax error at end of input".
   if (!rows || rows.length === 0 || !cols || cols.length === 0) return 0
 
-  const params = rows.flatMap(row =>
-    cols.map(c => {
-      const v = row[c]
-      if (v === null || v === undefined) return null
-      if (Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return JSON.stringify(v)
-      return v
-    })
-  )
+  const params = rows.flatMap(row => cols.map(c => serializarParam(table, c, row[c])))
   const sql = montarUpsertSql(table, cols, rows.length, conflictCol, preservarSeNulo)
   try {
     // rowCount conta inseridas + atualizadas. Devolvido para cima porque um upsert que grava

@@ -17,7 +17,7 @@ const round2 = n => Math.round(n * 100) / 100
 
 // Modal de rateio: divide o `total` do lançamento em várias categorias.
 // onSave(rateios) recebe [{ categoriaId, valor, descricao }]; onDeleteAll() limpa tudo.
-export default function RateioModal({ total = 0, categories = [], categoryType = null, initial = [], onSave, onDeleteAll, onClose }) {
+export default function RateioModal({ total = 0, categories = [], categoryType = null, initial = [], onSave, onDeleteAll, onClose, perfilId }) {
   const [rows, setRows] = useState(() => (initial.length > 0 ? initial.map(mkRow) : [mkRow(), mkRow()]))
 
   const setRow = (k, patch) => setRows(rs => rs.map(r => r._k === k ? { ...r, ...patch } : r))
@@ -52,6 +52,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
               <div className="flex-1 min-w-0">
                 <CategorySelect
                   categories={categories}
+                  perfilId={perfilId}
                   type={categoryType}
                   className="input text-xs w-full"
                   value={r.categoriaId}

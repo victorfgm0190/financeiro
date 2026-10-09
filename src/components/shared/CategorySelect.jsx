@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
+import { useApp } from '../../context/AppContext'
+import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
 
 const GROUP_ORDER = [
   'Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Educação',
@@ -198,8 +200,11 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
 
 // ── Public component ───────────────────────────────────────────────────────────
 
+// Categorias por perfil: `perfilId` ausente (undefined) = perfil do chip do topo; null explícito =
+// sem filtro (ex.: telas de configuração que listam tudo). A categoria já selecionada (`value`)
+// fica sempre na lista, mesmo sendo de outro perfil — editar não apaga nem troca o que foi gravado.
 export default function CategorySelect({
-  categories,
+  categories: categoriesProp,
   value,
   onChange,
   type,
@@ -207,17 +212,33 @@ export default function CategorySelect({
   placeholder = 'Sem categoria',
   required = false,
   searchable = false,
+  perfilId,
 }) {
+  const { activeProfileId } = useApp()
+  const perfil = perfilId === undefined ? activeProfileId : perfilId
+  const categories = useMemo(
+    () => filtrarCategoriasPorPerfil(categoriesProp, perfil, value ? [value] : []),
+    [categoriesProp, perfil, value]
+  )
+  const selecionada = value ? categoriesProp?.find(c => c.id === value) : null
+  const deOutroPerfil = !!selecionada && !categoriaDisponivelParaPerfil(selecionada, perfil)
+  const aviso = deOutroPerfil && (
+    <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>
+  )
+
   if (searchable) {
     return (
-      <SearchableDropdown
-        categories={categories}
-        type={type}
-        value={value}
-        onChange={onChange}
-        className={className}
-        placeholder={placeholder}
-      />
+      <>
+        <SearchableDropdown
+          categories={categories}
+          type={type}
+          value={value}
+          onChange={onChange}
+          className={className}
+          placeholder={placeholder}
+        />
+        {aviso}
+      </>
     )
   }
 
@@ -225,6 +246,7 @@ export default function CategorySelect({
   const hasGroups = sortedGroups.length > 0
 
   return (
+    <>
     <select className={className} value={value} onChange={onChange} required={required}>
       <option value="">{placeholder}</option>
       {sortedGroups.map(groupName => (
@@ -240,5 +262,7 @@ export default function CategorySelect({
         ungrouped.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)
       )}
     </select>
+    {aviso}
+    </>
   )
 }

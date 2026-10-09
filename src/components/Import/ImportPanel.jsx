@@ -805,7 +805,7 @@ function alignInstallmentsToFatura(rows, fatura, dueDay) {
 
 // AJUSTE 2: modal "Preencher em Lote" — aplica categoria + gerencial aos itens cuja
 // descrição contém o texto informado.
-function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onApply, onClose }) {
+function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onApply, onClose, perfilId }) {
   const [contains, setContains] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [grupoGerencial, setGrupoGerencial] = useState(sortedGrupos[0]?.id || '')
@@ -838,6 +838,7 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
             <label className="label">Categoria</label>
             <CategorySelect
               categories={categories}
+              perfilId={perfilId}
               className="input"
               value={categoryId}
               onChange={e => setCategoryId(e.target.value)}
@@ -1327,6 +1328,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
   const creditAccounts = accounts.filter(a => a.type === 'credit')
   const selectedAcc = accounts.find(a => a.id === selectedAccount)
+  // Categorias por perfil: o do cartão importado (undefined → chip do topo no CategorySelect).
+  const perfilCategorias = selectedAcc?.profileId || undefined
 
   // Meses do cartão selecionado. Memoizado porque varre todos os lançamentos e a tabela de
   // preview renderiza um select por linha — recalcular a cada linha custaria caro.
@@ -3175,6 +3178,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       <td className="px-3 py-2">
                         <CategorySelect
                           categories={categories}
+                          perfilId={perfilCategorias}
                           className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                           value={item.categoryId}
                           onChange={e => setItauField(item._id, { categoryId: e.target.value })}
@@ -3381,6 +3385,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {showBatchFill && (
         <BatchFillModal
           categories={categories}
+          perfilId={perfilCategorias}
           sortedGrupos={sortedGrupos}
           reserveFuncsForGroup={reserveFuncsForGroup}
           onApply={applyBatchFill}
@@ -3401,6 +3406,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         <RateioModal
           total={Number(rateioRow.amount) || 0}
           categories={categories}
+          perfilId={perfilCategorias}
           categoryType={rateioRow.type === 'income' ? 'income' : 'expense'}
           initial={rateioRow._rateios || []}
           onSave={rs => { updateRow(rateioRow._id, { _rateios: rs }); setRateioRow(null) }}
@@ -3779,6 +3785,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           ) : (
                             <CategorySelect
                               categories={categories}
+                              perfilId={perfilCategorias}
                               className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
                               value={row.categoryId}
                               onChange={e => {
