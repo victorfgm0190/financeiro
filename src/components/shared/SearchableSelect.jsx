@@ -62,6 +62,9 @@ export default function SearchableSelect({
   ungroupedLabel = null,   // rótulo da seção de itens sem grupo (mostrado só se houver grupos)
   preserveGroupOrder = false, // usa a ordem dos grupos como vêm em `options` (ex.: Grupos de Contas)
                               // em vez da ordenação por GROUP_ORDER (categorias).
+  sections = null,            // [{ key, label }] — blocos de topo, na ordem dada, casados por `option.section`
+                              // (opção sem seção conhecida cai no último). Dentro de cada bloco, o
+                              // agrupamento por `group` é o de sempre.
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -82,28 +85,40 @@ export default function SearchableSelect({
   }, [options, search])
 
   // Build flat items list for keyboard nav + grouped structure for rendering
-  const { allItems, ungrouped, groupedMap, sortedGroupNames } = useMemo(() => {
-    const groupedMap = {}
-    const ungrouped = []
-    for (const opt of filtered) {
-      if (opt.group) {
-        if (!groupedMap[opt.group]) groupedMap[opt.group] = []
-        groupedMap[opt.group].push(opt)
-      } else {
-        ungrouped.push(opt)
-      }
-    }
-    const sortedGroupNames = preserveGroupOrder ? Object.keys(groupedMap) : sortGroups(Object.keys(groupedMap))
+  const { allItems, blocks } = useMemo(() => {
+    const secList = sections?.length ? sections : [{ key: null, label: null }]
+    const known = new Set(secList.map(s => s.key))
+    const lastKey = secList[secList.length - 1].key
+    const sectionOf = (opt) => (sections?.length ? (known.has(opt.section) ? opt.section : lastKey) : null)
 
+    const blocks = secList.map(sec => {
+      const groupedMap = {}
+      const ungrouped = []
+      for (const opt of filtered) {
+        if (sectionOf(opt) !== sec.key) continue
+        if (opt.group) {
+          if (!groupedMap[opt.group]) groupedMap[opt.group] = []
+          groupedMap[opt.group].push(opt)
+        } else {
+          ungrouped.push(opt)
+        }
+      }
+      const sortedGroupNames = preserveGroupOrder ? Object.keys(groupedMap) : sortGroups(Object.keys(groupedMap))
+      return { key: sec.key, label: sec.label, groupedMap, ungrouped, sortedGroupNames }
+    }).filter(b => b.ungrouped.length > 0 || b.sortedGroupNames.length > 0)
+
+    // Ordem de navegação por teclado = ordem de renderização.
     const allItems = []
     if (!required) allItems.push({ id: '', label: placeholder })
-    const pushUngrouped = () => { for (const opt of ungrouped) allItems.push(opt) }
-    const pushGrouped = () => { for (const g of sortedGroupNames) for (const opt of groupedMap[g]) allItems.push(opt) }
-    // ungroupedLast: grupos primeiro, "sem grupo" no final (ordem de navegação por teclado coerente).
-    if (ungroupedLast) { pushGrouped(); pushUngrouped() } else { pushUngrouped(); pushGrouped() }
+    for (const b of blocks) {
+      const pushUngrouped = () => { for (const opt of b.ungrouped) allItems.push(opt) }
+      const pushGrouped = () => { for (const g of b.sortedGroupNames) for (const opt of b.groupedMap[g]) allItems.push(opt) }
+      // ungroupedLast: grupos primeiro, "sem grupo" no final.
+      if (ungroupedLast) { pushGrouped(); pushUngrouped() } else { pushUngrouped(); pushGrouped() }
+    }
 
-    return { allItems, ungrouped, groupedMap, sortedGroupNames }
-  }, [filtered, required, placeholder, ungroupedLast, preserveGroupOrder])
+    return { allItems, blocks }
+  }, [filtered, required, placeholder, ungroupedLast, preserveGroupOrder, sections])
 
   const idxMap = useMemo(() => {
     const m = {}
@@ -250,7 +265,7 @@ export default function SearchableSelect({
               </button>
             )}
 
-            {(() => {
+            {blocks.map(({ key: secKey, label: secLabel, ungrouped, groupedMap, sortedGroupNames }) => {
               const ungroupedBlock = ungrouped.length > 0 && (
                 <div key="__ungrouped">
                   {ungroupedLabel && sortedGroupNames.length > 0 && (
@@ -289,10 +304,19 @@ export default function SearchableSelect({
                   ))}
                 </div>
               ))
-              return ungroupedLast
-                ? <>{groupedBlock}{ungroupedBlock}</>
-                : <>{ungroupedBlock}{groupedBlock}</>
-            })()}
+              return (
+                <div key={secKey ?? '__all'}>
+                  {secLabel && (
+                    <p className="px-3 pt-2.5 pb-1 mt-1 border-t border-gray-700 text-[11px] font-bold tracking-wider text-gray-300 bg-gray-800/60">
+                      {secLabel}
+                    </p>
+                  )}
+                  {ungroupedLast
+                    ? <>{groupedBlock}{ungroupedBlock}</>
+                    : <>{ungroupedBlock}{groupedBlock}</>}
+                </div>
+              )
+            })}
           </div>
         </div>,
         document.body

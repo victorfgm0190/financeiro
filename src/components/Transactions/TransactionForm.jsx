@@ -76,6 +76,19 @@ function buildCatOpts(categories, type) {
     .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null }))
 }
 
+// Transferência entre perfis: no perfil de onde o dinheiro SAI é despesa, no que ENTRA é receita.
+// Só ordena (seções do SearchableSelect) — a lista de categorias e o que se grava não mudam.
+const SECOES_SAIDA = [{ key: 'expense', label: 'DESPESAS (saída)' }, { key: 'income', label: 'RECEITAS (entrada)' }]
+const SECOES_ENTRADA = [SECOES_SAIDA[1], SECOES_SAIDA[0]]
+function buildCatOptsPorSentido(categories, sentido) {
+  const primeiro = sentido === 'saida' ? 'expense' : 'income'
+  return categories.map(c => ({
+    id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null,
+    // 'both' (despesa e receita) fica no bloco do sentido.
+    section: c.type === 'both' ? primeiro : (c.type === 'income' ? 'income' : 'expense'),
+  }))
+}
+
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
@@ -84,7 +97,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
-    reserveFunctions, settings, findLinkedResgate,
+    reserveFunctions, settings, findLinkedResgate, profiles,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -321,6 +334,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const fromProfileId = transferFromAcc?.profileId || null
   const toProfileId = transferToAcc?.profileId || null
   const isInterProfileTransfer = form.type === 'transfer' && !!fromProfileId && !!toProfileId && fromProfileId !== toProfileId
+  // Sentido de cada visão (perfil 'pj' = CNPJ, mesma regra dos Relatórios). Origem PJ → o CNPJ é
+  // a saída; senão o CNPJ é o destino (entrada). O CPF é sempre o lado oposto.
+  const fromIsPj = (profiles || []).find(p => p.id === fromProfileId)?.type === 'pj'
+  const toIsPj = (profiles || []).find(p => p.id === toProfileId)?.type === 'pj'
+  const sentidoCnpj = fromIsPj || !toIsPj ? 'saida' : 'entrada'
+  const sentidoCpf = sentidoCnpj === 'saida' ? 'entrada' : 'saida'
+  const catOptsCnpj = useMemo(() => buildCatOptsPorSentido(categories, sentidoCnpj), [categories, sentidoCnpj])
+  const catOptsCpf = useMemo(() => buildCatOptsPorSentido(categories, sentidoCpf), [categories, sentidoCpf])
 
   const contaPrincipal =
     accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
@@ -1315,7 +1336,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <div>
                   <label className="label">Categoria no CNPJ</label>
                   <SearchableSelect
-                    options={categoryOpts}
+                    options={catOptsCnpj}
+                    sections={sentidoCnpj === 'saida' ? SECOES_SAIDA : SECOES_ENTRADA}
                     value={form.categoriaCnpjId}
                     onChange={id => set('categoriaCnpjId', id)}
                     placeholder="Sem categoria"
@@ -1326,7 +1348,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <div>
                   <label className="label">Categoria no CPF</label>
                   <SearchableSelect
-                    options={categoryOpts}
+                    options={catOptsCpf}
+                    sections={sentidoCpf === 'saida' ? SECOES_SAIDA : SECOES_ENTRADA}
                     value={form.categoriaCpfId}
                     onChange={id => set('categoriaCpfId', id)}
                     placeholder="Sem categoria"
