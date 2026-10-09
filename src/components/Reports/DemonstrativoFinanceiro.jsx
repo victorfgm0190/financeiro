@@ -5,6 +5,7 @@ import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsRepor
 import { isPatrimonioOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
+import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/categoriasPerfil'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -544,9 +545,19 @@ export default function DemonstrativoFinanceiro() {
   const [applied, setApplied] = useState(null)
 
   // ── Item lists for multi-selects ──────────────────────────────────────────
+  // Categorias por perfil: com perfil no topo, só as do perfil + as de "todos". Exceção: categoria
+  // com lançamento no período escolhido (lançamentos já recortados pelo perfil) ou já marcada no
+  // filtro continua na lista. Só a lista de opções — buildReport e os totais não mudam.
+  const catFrom = fromDraft || applied?.from || ''
+  const catTo = toDraft || applied?.to || ''
+  const catsMantidas = useMemo(
+    () => [...categoriasComMovimento(reportTransactions, catFrom, catTo), ...selectedCatsDraft],
+    [reportTransactions, catFrom, catTo, selectedCatsDraft]
+  )
   const catItems = useMemo(() =>
-    categories.map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
-  , [categories])
+    filtrarCategoriasPorPerfil(categories, activeProfile?.id || null, catsMantidas)
+      .map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
+  , [categories, activeProfile, catsMantidas])
 
   // Contas agrupadas e ORDENADAS pela ordem dos Grupos de Contas (Configurações), depois
   // pela ordem interna das contas. `group` = nome do grupo; `groupOrder` = posição do grupo

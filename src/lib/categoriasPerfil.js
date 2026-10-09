@@ -17,6 +17,20 @@ export function filtrarCategoriasPorPerfil(categories, perfilId, manterIds = [])
   return (categories || []).filter(c => manter.has(c.id) || categoriaDisponivelParaPerfil(c, perfilId))
 }
 
+// Ids de categoria com movimento no período [from, to] ('YYYY-MM-DD', inclusivo) na lista de
+// lançamentos dada (já recortada pelo perfil exibido). Usado como `manterIds` em listas de FILTRO
+// de relatório: categoria de outro perfil com lançamento no período não pode sumir do filtro.
+export function categoriasComMovimento(transactions, from, to) {
+  const ids = new Set()
+  for (const tx of transactions || []) {
+    if (!tx.categoryId || !tx.date) continue
+    if (from && tx.date < from) continue
+    if (to && tx.date > to) continue
+    ids.add(tx.categoryId)
+  }
+  return [...ids]
+}
+
 // Perfil que governa a escolha de categoria: o da conta (quando ela tem perfil); senão o chip
 // do topo (null = "Tudo").
 export function perfilParaCategorias(accounts, accountId, activeProfileId) {

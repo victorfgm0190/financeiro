@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  categoriaDisponivelParaPerfil, filtrarCategoriasPorPerfil, perfilParaCategorias, rotuloPerfis,
+  categoriaDisponivelParaPerfil, filtrarCategoriasPorPerfil, perfilParaCategorias, rotuloPerfis, categoriasComMovimento,
 } from './categoriasPerfil'
 
 const PF = 'perf_pf'
@@ -84,5 +84,40 @@ describe('rotuloPerfis', () => {
     expect(rotuloPerfis([], profiles)).toBe('Todos')
     expect(rotuloPerfis([PJ], profiles)).toBe('Lumen Tech')
     expect(rotuloPerfis([PF, PJ], profiles)).toBe('2 perfis')
+  })
+})
+
+describe('filtro de categorias do Demonstrativo (movimento no período)', () => {
+  const cats = [
+    { id: 'todos', perfilIds: null },
+    { id: 'so_pf', perfilIds: [PF] },
+    { id: 'so_pj', perfilIds: [PJ] },
+  ]
+  const txs = [
+    { id: 't1', date: '2026-10-05', categoryId: 'so_pj' },
+    { id: 't2', date: '2026-08-01', categoryId: 'so_pf' },
+    { id: 't3', date: '2026-10-06', categoryId: null },
+  ]
+  const ids = (l) => l.map(c => c.id)
+
+  it('categoriasComMovimento respeita o período (inclusivo) e ignora sem categoria', () => {
+    expect(categoriasComMovimento(txs, '2026-10-01', '2026-10-31')).toEqual(['so_pj'])
+    expect(categoriasComMovimento(txs, '2026-10-05', '2026-10-05')).toEqual(['so_pj'])
+    expect(categoriasComMovimento(txs, '2026-07-01', '2026-10-31').sort()).toEqual(['so_pf', 'so_pj'])
+    expect(categoriasComMovimento(txs, '', '').sort()).toEqual(['so_pf', 'so_pj'])
+  })
+
+  it('categoria de outro perfil COM movimento no período continua visível', () => {
+    const mantidas = categoriasComMovimento(txs, '2026-10-01', '2026-10-31')
+    expect(ids(filtrarCategoriasPorPerfil(cats, PF, mantidas))).toEqual(['todos', 'so_pf', 'so_pj'])
+  })
+
+  it('categoria de outro perfil SEM movimento no período some', () => {
+    const mantidas = categoriasComMovimento(txs, '2026-10-01', '2026-10-31')
+    expect(ids(filtrarCategoriasPorPerfil(cats, PJ, mantidas))).toEqual(['todos', 'so_pj'])
+  })
+
+  it('"Tudo" (sem perfil) mostra todas', () => {
+    expect(ids(filtrarCategoriasPorPerfil(cats, null, []))).toEqual(['todos', 'so_pf', 'so_pj'])
   })
 })
