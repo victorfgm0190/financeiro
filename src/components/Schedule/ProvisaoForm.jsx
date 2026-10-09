@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { today } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Mesmas frequências do ScheduleForm.
 const FREQUENCIES = [
@@ -25,7 +26,7 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId } = useApp()
+  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder } = useApp()
 
   // Conta principal (Itaú Principal): a provisão é uma despesa futura debitada da conta
   // principal — aparece no Fluxo de Caixa Principal como despesa "Uma vez".
@@ -40,10 +41,10 @@ export default function ProvisaoForm({ initial, onClose }) {
   // categoria já gravada continua na lista.
   const perfilCategorias = perfilParaCategorias(accounts, contaPrincipal?.id, activeProfileId)
   const expenseCatOpts = useMemo(() =>
-    filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId])
+    ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId]), categoryGroupOrder)
       .filter(c => c.type === 'expense' || c.type === 'both')
       .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null })),
-  [categories, perfilCategorias, initial?.categoryId])
+  [categories, perfilCategorias, initial?.categoryId, categoryGroupOrder])
 
   // TODAS as funções de reserva de TODAS as contas (cada função pertence a uma conta via
   // accountId). Formato "Nome (apelido)"; ordenado por conta e depois por nome da função.
@@ -257,6 +258,7 @@ export default function ProvisaoForm({ initial, onClose }) {
         <label className="label">Categoria</label>
         <SearchableSelect
           options={expenseCatOpts}
+          preserveGroupOrder
           value={form.categoryId}
           onChange={id => set('categoryId', id)}
           placeholder="Sem categoria"

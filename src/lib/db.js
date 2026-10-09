@@ -658,6 +658,8 @@ export const categoryToRow = (c) => ({
   default_gerencial_group: c.defaultGerencialGroup || null,
   // Perfis em que a categoria existe; vazio = todos (grava NULL).
   perfil_ids: Array.isArray(c.perfilIds) && c.perfilIds.length > 0 ? c.perfilIds : null,
+  // Ordem manual dentro do grupo; null = sem ordem manual (fim do grupo, alfabética).
+  sort_order: Number.isInteger(c.sortOrder) ? c.sortOrder : null,
 })
 
 export const rowToCategory = (r) => ({
@@ -672,6 +674,7 @@ export const rowToCategory = (r) => ({
   contaEspelhoId: r.conta_espelho_id || null,
   defaultGerencialGroup: r.default_gerencial_group || null,
   perfilIds: Array.isArray(r.perfil_ids) ? r.perfil_ids : [],
+  sortOrder: r.sort_order != null ? Number(r.sort_order) : null,
 })
 
 export const budgetToRow = (b) => ({
@@ -835,6 +838,7 @@ export async function loadFromDb(defaultData) {
               currency: d.cfg.currency ?? 'BRL',
               recurringMatchExceptions: d.cfg.recurring_match_exceptions ?? [],
               categoryGroups: d.cfg.category_groups ?? [],
+              categoryGroupsOrdemManual: !!d.cfg.category_groups_ordem_manual,
               lastBalanceSnapshot: d.cfg.balance_snapshot || null,
               estornoCartaoEnabled: d.cfg.estorno_cartao_enabled ?? null,
               estornoCartaoCategoryId: d.cfg.estorno_cartao_category_id ?? null,
@@ -1165,6 +1169,7 @@ export async function syncSettings(settings, costCenters) {
         cost_centers: costCenters ?? [],
         recurring_match_exceptions: settings.recurringMatchExceptions ?? [],
         category_groups: settings.categoryGroups ?? [],
+        category_groups_ordem_manual: !!settings.categoryGroupsOrdemManual,
         balance_snapshot: settings.lastBalanceSnapshot || null,
         estorno_cartao_enabled: settings.estornoCartaoEnabled ?? null,
         estorno_cartao_category_id: settings.estornoCartaoCategoryId ?? null,

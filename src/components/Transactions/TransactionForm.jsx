@@ -8,6 +8,7 @@ import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
 import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
@@ -98,7 +99,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
-    reserveFunctions, settings, findLinkedResgate, profiles, activeProfileId,
+    reserveFunctions, settings, findLinkedResgate, profiles, activeProfileId, categoryGroupOrder,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -345,12 +346,12 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const perfilCnpjId = sentidoCnpj === 'saida' ? fromProfileId : toProfileId
   const perfilCpfId = sentidoCnpj === 'saida' ? toProfileId : fromProfileId
   const catOptsCnpj = useMemo(
-    () => buildCatOptsPorSentido(filtrarCategoriasPorPerfil(categories, perfilCnpjId, [form.categoriaCnpjId]), sentidoCnpj),
-    [categories, perfilCnpjId, form.categoriaCnpjId, sentidoCnpj]
+    () => buildCatOptsPorSentido(ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCnpjId, [form.categoriaCnpjId]), categoryGroupOrder), sentidoCnpj),
+    [categories, perfilCnpjId, form.categoriaCnpjId, sentidoCnpj, categoryGroupOrder]
   )
   const catOptsCpf = useMemo(
-    () => buildCatOptsPorSentido(filtrarCategoriasPorPerfil(categories, perfilCpfId, [form.categoriaCpfId]), sentidoCpf),
-    [categories, perfilCpfId, form.categoriaCpfId, sentidoCpf]
+    () => buildCatOptsPorSentido(ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCpfId, [form.categoriaCpfId]), categoryGroupOrder), sentidoCpf),
+    [categories, perfilCpfId, form.categoriaCpfId, sentidoCpf, categoryGroupOrder]
   )
 
   const contaPrincipal =
@@ -365,8 +366,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
   const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
   const categoriasDoPerfil = useMemo(
-    () => filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]),
-    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId]
+    () => ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]), categoryGroupOrder),
+    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId, categoryGroupOrder]
   )
   const categoriaForaDoPerfil = !!form.categoryId
     && !categoriaDisponivelParaPerfil(categories.find(c => c.id === form.categoryId), perfilCategorias)
@@ -1267,6 +1268,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   o padrão da reserva é só uma dica; o usuário pode alterar ou limpar. */}
               <SearchableSelect
                 options={expenseCatOpts}
+                preserveGroupOrder
                 value={form.reservaExpenseCategoryId}
                 onChange={id => set('reservaExpenseCategoryId', id)}
                 placeholder={reservaLinkedCat ? `${reservaLinkedCat.icon} ${reservaLinkedCat.name} (padrão da reserva)` : '🏦 Reservas Gerais (padrão)'}
@@ -1307,6 +1309,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
               <label className="label">Categoria</label>
               <SearchableSelect
                 options={expenseCatOpts}
+                preserveGroupOrder
                 value={form.categoryId}
                 onChange={onCategoryChange}
                 placeholder="Sem categoria"
@@ -1326,6 +1329,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <label className="label">Categoria</label>
                 <SearchableSelect
                   options={categoryOpts}
+                  preserveGroupOrder
                   value={form.categoryId}
                   onChange={onCategoryChange}
                   placeholder="Sem categoria"
@@ -1358,6 +1362,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   <label className="label">Categoria no CNPJ</label>
                   <SearchableSelect
                     options={catOptsCnpj}
+                    preserveGroupOrder
                     sections={sentidoCnpj === 'saida' ? SECOES_SAIDA : SECOES_ENTRADA}
                     value={form.categoriaCnpjId}
                     onChange={id => set('categoriaCnpjId', id)}
@@ -1370,6 +1375,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                   <label className="label">Categoria no CPF</label>
                   <SearchableSelect
                     options={catOptsCpf}
+                    preserveGroupOrder
                     sections={sentidoCpf === 'saida' ? SECOES_SAIDA : SECOES_ENTRADA}
                     value={form.categoriaCpfId}
                     onChange={id => set('categoriaCpfId', id)}
@@ -1418,6 +1424,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
                 <div className="flex-1 min-w-0">
                   <SearchableSelect
                     options={categoryOpts}
+                    preserveGroupOrder
                     value={form.categoryId}
                     onChange={onCategoryChange}
                     placeholder="Sem categoria"

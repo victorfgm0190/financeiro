@@ -33,6 +33,7 @@ import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
+import { ordenarGrupos, ordemGruposSalva, reordenarNoGrupo, ordemAoTrocarDeGrupo, compararNoGrupo } from '../lib/ordemCategorias'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
@@ -137,6 +138,7 @@ const defaultData = {
     currency: 'BRL',
     recurringMatchExceptions: [],
     categoryGroups: [], // rótulos de grupos de categoria (inclui grupos vazios criados manualmente)
+    categoryGroupsOrdemManual: false, // true = a ordem de categoryGroups é a ordem manual dos grupos
     // Estornos de cartão: quando enabled === true, aplica a categoria estornoCartaoCategoryId
     // (+ grupo D) aos estornos na importação/conciliação. null = ainda não configurado (dispara
     // o modal na primeira importação com estorno); false = não perguntar mais.
@@ -2076,6 +2078,19 @@ export function AppProvider({ children }) {
         const group = (changes.group || '').trim() || null
         next = { ...changes, group }
         settings = ensureCategoryGroup(d.settings, group)
+        // Ordem manual: a categoria vai para o FIM do grupo novo (ordemAoTrocarDeGrupo numera o
+        // destino inteiro para que "fim" exista mesmo num grupo que ainda não tinha ordem).
+        const atual = d.categories.find(c => c.id === id)
+        if (atual && (atual.group || null) !== group) {
+          const novaOrdem = ordemAoTrocarDeGrupo(d.categories.filter(c => (c.group || null) === group), id)
+          return {
+            ...d, settings,
+            categories: d.categories.map(c => {
+              if (c.id === id) return { ...c, ...next, sortOrder: novaOrdem.get(id) }
+              return novaOrdem.has(c.id) ? { ...c, sortOrder: novaOrdem.get(c.id) } : c
+            }),
+          }
+        }
       }
       return { ...d, settings, categories: d.categories.map(c => c.id === id ? { ...c, ...next } : c) }
     })
@@ -2117,6 +2132,48 @@ export function AppProvider({ children }) {
       if (d.categories.some(c => c.group === n)) return d // bloqueado: tem categorias
       return { ...d, settings: { ...d.settings, categoryGroups: (d.settings.categoryGroups || []).filter(g => g !== n) } }
     })
+  }, [update])
+
+  // ── Ordenação manual (Configurações → Categorias) ────────────────────────────
+  // Grupos: a ordem manual é o próprio array settings.categoryGroups + a flag
+  // categoryGroupsOrdemManual. `orderedNames` = TODOS os grupos exibidos, na nova ordem.
+  const reorderCategoryGroups = useCallback((orderedNames) => {
+    update(d => ({
+      ...d,
+      settings: { ...d.settings, categoryGroups: [...new Set(orderedNames.filter(Boolean))], categoryGroupsOrdemManual: true },
+    }))
+  }, [update])
+
+  // Categoria: move para `toIndex` dentro do seu grupo (índice na lista COMPLETA do grupo — o
+  // filtro por perfil da tela não pode embaralhar categorias ocultas). Renumera o grupo inteiro.
+  const reorderCategoryInGroup = useCallback((id, toIndex) => {
+    update(d => {
+      const cat = d.categories.find(c => c.id === id)
+      if (!cat) return d
+      const doGrupo = d.categories.filter(c => (c.group || null) === (cat.group || null))
+      const ordem = reordenarNoGrupo(doGrupo, id, toIndex)
+      return { ...d, categories: d.categories.map(c => ordem.has(c.id) ? { ...c, sortOrder: ordem.get(c.id) } : c) }
+    })
+  }, [update])
+
+  const moveCategory = useCallback((id, direction) => {
+    const cat = dataRef.current.categories.find(c => c.id === id)
+    if (!cat) return
+    const doGrupo = dataRef.current.categories.filter(c => (c.group || null) === (cat.group || null)).sort(compararNoGrupo)
+    const idx = doGrupo.findIndex(c => c.id === id)
+    const alvo = direction === 'up' ? idx - 1 : idx + 1
+    if (alvo < 0 || alvo >= doGrupo.length) return
+    reorderCategoryInGroup(id, alvo)
+  }, [reorderCategoryInGroup])
+
+  // "Padrão": volta à ordem anterior à ordenação manual (grupos GROUP_ORDER/alfabética,
+  // categorias alfabéticas). Os rótulos de grupo são mantidos.
+  const resetCategoryOrder = useCallback(() => {
+    update(d => ({
+      ...d,
+      settings: { ...d.settings, categoryGroupsOrdemManual: false },
+      categories: d.categories.map(c => (c.sortOrder != null ? { ...c, sortOrder: null } : c)),
+    }))
   }, [update])
 
   // ── Schedules ───────────────────────────────────────────────────────────────
@@ -5288,12 +5345,13 @@ export function AppProvider({ children }) {
 
   // Lista unificada de grupos de categoria: rótulos persistidos (settings.categoryGroups,
   // inclui grupos vazios) ∪ grupos efetivamente usados nas categorias (compat. com dados
-  // legados/importados). Ordenada alfabeticamente (pt-BR).
+  // legados/importados). Na ordem manual salva; sem ela, a padrão (GROUP_ORDER/alfabética).
+  const categoryGroupOrder = useMemo(() => ordemGruposSalva(data.settings), [data.settings])
   const categoryGroups = useMemo(() => {
     const set = new Set((data.settings?.categoryGroups || []).filter(Boolean))
     for (const c of data.categories) if (c.group) set.add(c.group)
-    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  }, [data.settings?.categoryGroups, data.categories])
+    return ordenarGrupos([...set], categoryGroupOrder)
+  }, [data.settings?.categoryGroups, data.categories, categoryGroupOrder])
 
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
@@ -5347,8 +5405,9 @@ export function AppProvider({ children }) {
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions, ensureGerencialState,
       rateios: data.rateios, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, mergeRateios,
       addCategory, updateCategory, deleteCategory,
-      categoryGroups,
+      categoryGroups, categoryGroupOrder,
       addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
+      reorderCategoryGroups, reorderCategoryInGroup, moveCategory, resetCategoryOrder,
       addSchedule, updateSchedule, updateSchedulesPayee, salvarFavorecidoDoAgendamento,
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,

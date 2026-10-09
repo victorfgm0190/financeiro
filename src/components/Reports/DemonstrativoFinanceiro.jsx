@@ -6,6 +6,7 @@ import { isPatrimonioOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -502,7 +503,7 @@ function TxRow({ tx, indent }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function DemonstrativoFinanceiro() {
-  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles } = useApp()
+  const { profileReportTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, reserveFunctions, activeProfile, profiles, categoryGroupOrder } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
   const aplicSet = useMemo(() => aplicacaoAccountIds(accounts), [accounts])
@@ -554,10 +555,17 @@ export default function DemonstrativoFinanceiro() {
     () => [...categoriasComMovimento(reportTransactions, catFrom, catTo), ...selectedCatsDraft],
     [reportTransactions, catFrom, catTo, selectedCatsDraft]
   )
-  const catItems = useMemo(() =>
-    filtrarCategoriasPorPerfil(categories, activeProfile?.id || null, catsMantidas)
-      .map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
-  , [categories, activeProfile, catsMantidas])
+  // Ordem salva em Configurações → Categorias: itens já ordenados e `groupOrder` = posição do
+  // grupo (o MultiSelectPanel ordena seções por ela em vez de alfabético).
+  const catItems = useMemo(() => {
+    const ordenadas = ordenarCategorias(filtrarCategoriasPorPerfil(categories, activeProfile?.id || null, catsMantidas), categoryGroupOrder)
+    const posGrupo = new Map()
+    for (const c of ordenadas) if (c.group && !posGrupo.has(c.group)) posGrupo.set(c.group, posGrupo.size)
+    return ordenadas.map(c => ({
+      id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null,
+      groupOrder: c.group ? posGrupo.get(c.group) : null,
+    }))
+  }, [categories, activeProfile, catsMantidas, categoryGroupOrder])
 
   // Contas agrupadas e ORDENADAS pela ordem dos Grupos de Contas (Configurações), depois
   // pela ordem interna das contas. `group` = nome do grupo; `groupOrder` = posição do grupo

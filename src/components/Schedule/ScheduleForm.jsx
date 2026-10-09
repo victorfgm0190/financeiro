@@ -10,6 +10,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -180,7 +181,7 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder } = useApp()
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -309,8 +310,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // categorias já gravadas ficam na lista mesmo sendo de outro perfil.
   const perfilCategorias = perfilParaCategorias(accounts, form.accountId, activeProfileId)
   const categoriasDoPerfil = useMemo(
-    () => filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]),
-    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId]
+    () => ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [form.categoryId, form.reservaExpenseCategoryId]), categoryGroupOrder),
+    [categories, perfilCategorias, form.categoryId, form.reservaExpenseCategoryId, categoryGroupOrder]
   )
   const categoriaForaDoPerfil = !!form.categoryId
     && !categoriaDisponivelParaPerfil(categories.find(c => c.id === form.categoryId), perfilCategorias)
@@ -580,6 +581,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               <>
                 <SearchableSelect
                   options={expenseCatOpts}
+                  preserveGroupOrder
                   value={form.reservaExpenseCategoryId}
                   onChange={id => set('reservaExpenseCategoryId', id)}
                   placeholder="Sem categoria"
@@ -654,6 +656,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 <div className="flex-1 min-w-0">
                   <SearchableSelect
                     options={categoryOpts}
+                    preserveGroupOrder
                     value={form.categoryId}
                     onChange={id => set('categoryId', id)}
                     placeholder="Sem categoria"

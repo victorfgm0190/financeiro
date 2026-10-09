@@ -315,6 +315,12 @@ export default async function handler(req, res) {
     // Perfis (perfis.id) em que a categoria existe. NULL/vazio = todos — categorias existentes
     // não mudam de comportamento. Só filtra listas de escolha; relatórios não leem.
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS perfil_ids TEXT[]`)
+    // Ordem manual da categoria DENTRO do grupo (Configurações → Categorias). NULL = sem ordem
+    // manual → fim do grupo, alfabética (comportamento anterior).
+    await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS sort_order INTEGER`)
+    // true = a ordem do array category_groups é a ordem manual dos grupos. false (padrão) = o
+    // array é só a lista de rótulos e a ordem exibida é a padrão (GROUP_ORDER/alfabética).
+    await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups_ordem_manual BOOLEAN DEFAULT false`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS balance_snapshot JSONB`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS financial_month_mode TEXT DEFAULT 'custom'`)
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]'`)

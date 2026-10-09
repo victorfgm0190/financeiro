@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { X } from 'lucide-react'
 import { EMPTY_LANC_FILTROS, hasLancFiltros } from './utils'
+import { useApp } from '../../context/AppContext'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Barra de filtros em tempo real para listas de lançamentos.
 // `fields` controla quais inputs aparecem (default: os 5 originais). Os filtros
@@ -21,16 +23,19 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
     { key: 'para', placeholder: 'Conta Para', w: 'flex-1 min-w-[100px]' },
   ].filter(i => show.includes(i.key))
 
+  // Grupos e categorias na ordem salva em Configurações → Categorias (ordenarCategorias); o
+  // agrupamento abaixo preserva essa ordem.
+  const { categoryGroupOrder } = useApp()
   const catGroups = useMemo(() => {
     const grouped = {}
     const ungrouped = []
-    for (const c of categories) {
+    for (const c of ordenarCategorias(categories, categoryGroupOrder)) {
       if (c.group) { if (!grouped[c.group]) grouped[c.group] = []; grouped[c.group].push(c) }
       else ungrouped.push(c)
     }
-    const names = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    const names = Object.keys(grouped)
     return { grouped, ungrouped, names }
-  }, [categories])
+  }, [categories, categoryGroupOrder])
 
   const catLabel = c => `${c.icon ? c.icon + ' ' : ''}${c.name}`
 

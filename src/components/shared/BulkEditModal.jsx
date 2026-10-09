@@ -6,6 +6,7 @@ import SearchableSelect from './SearchableSelect'
 import { fmt, fmtDate } from './utils'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
@@ -24,7 +25,7 @@ function buildCatOpts(categories, type) {
 // Edição em lote de Data e/ou Categoria dos lançamentos selecionados.
 // `txs`: array de lançamentos selecionados. onApplied(count) é chamado após gravar.
 export default function BulkEditModal({ txs, onClose, onApplied }) {
-  const { categories, bulkUpdateTransactions, accounts, activeProfileId } = useApp()
+  const { categories, bulkUpdateTransactions, accounts, activeProfileId, categoryGroupOrder } = useApp()
 
   const [items, setItems] = useState(() => txs || [])
   const [stage, setStage] = useState('review') // review | edit | confirm | blocked
@@ -56,8 +57,8 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
     return perfis.size === 1 && [...perfis][0] ? [...perfis][0] : activeProfileId
   }, [items, accounts, activeProfileId])
   const catOpts = useMemo(
-    () => buildCatOpts(filtrarCategoriasPorPerfil(categories, perfilCategorias, [categoryId]), catType),
-    [categories, perfilCategorias, categoryId, catType]
+    () => buildCatOpts(ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [categoryId]), categoryGroupOrder), catType),
+    [categories, perfilCategorias, categoryId, catType, categoryGroupOrder]
   )
 
   const dateFilled = !!date
@@ -176,6 +177,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
               <label className="label">Categoria</label>
               <SearchableSelect
                 options={catOpts}
+                preserveGroupOrder
                 value={categoryId}
                 onChange={setCategoryId}
                 placeholder="Selecione uma categoria..."

@@ -14,6 +14,7 @@ import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import PerfisMultiSelect from './PerfisMultiSelect'
 import { categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
+import { compararNoGrupo } from '../../lib/ordemCategorias'
 import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 
 const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
@@ -50,6 +51,7 @@ export default function SettingsPanel() {
     settings, updateSettings,
     categories, addCategory, updateCategory, deleteCategory,
     categoryGroups, addCategoryGroup, renameCategoryGroup, deleteCategoryGroup,
+    reorderCategoryGroups, reorderCategoryInGroup, moveCategory, resetCategoryOrder,
     classificationRules, addRule, deleteRule,
     gerencialRules, addGerencialRule, deleteGerencialRule, moveGerencialRule,
     costCenters, addCostCenter,
@@ -300,18 +302,96 @@ export default function SettingsPanel() {
   }
 
   // Categorias agrupadas para exibição: grupos (ordenados) + "Sem grupo" ao final.
+  // categoryGroups já vem na ordem salva (ou padrão); categorias por sortOrder → alfabética.
   const catsVisiveis = categories.filter(c => categoriaDisponivelParaPerfil(c, filtroPerfilCat))
   const catsByGroup = categoryGroups.map(g => ({
     group: g,
-    cats: catsVisiveis.filter(c => c.group === g),
+    cats: catsVisiveis.filter(c => c.group === g).sort(compararNoGrupo),
   })).filter(({ cats }) => !filtroPerfilCat || cats.length > 0)
-  const ungroupedCats = catsVisiveis.filter(c => !c.group)
+  const ungroupedCats = catsVisiveis.filter(c => !c.group).sort(compararNoGrupo)
+
+  // Ordenação manual (mesmo padrão de Grupos de Contas: ⠿ arrastar + ↑↓). Com o filtro de perfil
+  // ativo a lista exibida é parcial — mover "para cima" pularia categorias ocultas sem que se
+  // visse — então a ordenação só fica disponível em "Todos os perfis".
+  const ordemLivre = !filtroPerfilCat
+  const [ordDrag, setOrdDrag] = useState(null) // { kind: 'grp' | 'cat', id, group }
+  const [ordDragOver, setOrdDragOver] = useState(null)
+  const [confirmOrdemPadrao, setConfirmOrdemPadrao] = useState(false)
+  const moveCatGroup = (name, direction) => {
+    const idx = categoryGroups.indexOf(name)
+    const alvo = direction === 'up' ? idx - 1 : idx + 1
+    if (idx === -1 || alvo < 0 || alvo >= categoryGroups.length) return
+    const nova = [...categoryGroups]
+    const [g] = nova.splice(idx, 1)
+    nova.splice(alvo, 0, g)
+    reorderCategoryGroups(nova)
+  }
+  const ordDragStart = (e, item) => {
+    if (!ordemLivre) return
+    e.stopPropagation()
+    setOrdDrag(item)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  // Categoria só se solta dentro do próprio grupo; grupo só sobre outro cabeçalho de grupo.
+  const ordAceita = (item) => !!ordDrag && ordDrag.kind === item.kind && ordDrag.id !== item.id
+    && (item.kind === 'grp' || (ordDrag.group || null) === (item.group || null))
+  const ordDragOverH = (e, item) => {
+    if (!ordAceita(item)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setOrdDragOver(item.id)
+  }
+  const ordDrop = (e, item) => {
+    e.preventDefault()
+    if (ordAceita(item)) {
+      if (item.kind === 'grp') {
+        const nova = categoryGroups.filter(g => g !== ordDrag.id)
+        nova.splice(categoryGroups.indexOf(item.id), 0, ordDrag.id)
+        reorderCategoryGroups(nova)
+      } else {
+        const doGrupo = categories.filter(c => (c.group || null) === (item.group || null)).sort(compararNoGrupo)
+        reorderCategoryInGroup(ordDrag.id, doGrupo.findIndex(c => c.id === item.id))
+      }
+    }
+    setOrdDrag(null)
+    setOrdDragOver(null)
+  }
+  const ordDragEnd = () => { setOrdDrag(null); setOrdDragOver(null) }
+  const ordHandle = (title) => (
+    <span
+      className={`select-none text-base leading-none shrink-0 ${ordemLivre ? 'text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing' : 'text-gray-800 cursor-not-allowed'}`}
+      title={ordemLivre ? title : 'Ordenação disponível só em "Todos os perfis"'}
+    >⠿</span>
+  )
+  const ordSetas = (onUp, onDown, primeiro, ultimo) => (
+    <div className="flex gap-0.5 shrink-0">
+      <button type="button" onClick={onUp} disabled={!ordemLivre || primeiro} title="Mover para cima"
+        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"><ArrowUp size={11} /></button>
+      <button type="button" onClick={onDown} disabled={!ordemLivre || ultimo} title="Mover para baixo"
+        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"><ArrowDown size={11} /></button>
+    </div>
+  )
 
   // Linha de categoria com reclassificação de grupo (só muda o vínculo — nenhum
   // lançamento ou saldo é alterado), conta de investimento e exclusão.
-  const renderCategoryRow = (cat) => (
-    <div key={cat.id} className="flex items-center justify-between gap-2 bg-gray-800 rounded-lg px-3 py-2">
+  // (cat, i, lista) — chamado via .map, então i/lista são a posição no grupo exibido.
+  const renderCategoryRow = (cat, i, lista) => (
+    <div
+      key={cat.id}
+      draggable={ordemLivre}
+      onDragStart={e => ordDragStart(e, { kind: 'cat', id: cat.id, group: cat.group || null })}
+      onDragOver={e => ordDragOverH(e, { kind: 'cat', id: cat.id, group: cat.group || null })}
+      onDrop={e => ordDrop(e, { kind: 'cat', id: cat.id, group: cat.group || null })}
+      onDragEnd={ordDragEnd}
+      className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 border transition-all ${
+        ordDrag?.id === cat.id ? 'opacity-40 border-transparent bg-gray-800' :
+        ordDragOver === cat.id ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
+        'border-transparent bg-gray-800'
+      }`}
+    >
       <div className="flex items-center gap-2 min-w-0">
+        {ordHandle('Arrastar para reordenar dentro do grupo')}
+        {ordSetas(() => moveCategory(cat.id, 'up'), () => moveCategory(cat.id, 'down'), i === 0, i === lista.length - 1)}
         <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
         <span className="text-sm text-gray-200 truncate">{cat.icon} {cat.name}</span>
         <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0">
@@ -762,9 +842,30 @@ export default function SettingsPanel() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-300">Categorias ({categories.length})</h2>
-          <span className="text-xs text-gray-500">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
+            <button
+              className="btn-secondary flex items-center gap-1.5 text-xs"
+              onClick={() => setConfirmOrdemPadrao(true)}
+              title="Restaurar ordem padrão de grupos e categorias"
+            >
+              <RotateCcw size={12} /> Padrão
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 -mt-2 mb-4">Categorias de receita e despesa, organizadas em grupos.</p>
+        <p className="text-xs text-gray-500 -mt-2 mb-4">
+          Categorias de receita e despesa, organizadas em grupos. Arraste ⠿ ou use ↑↓ para definir a ordem
+          de grupos e categorias exibida em todos os seletores.
+        </p>
+        {confirmOrdemPadrao && (
+          <ConfirmDialog
+            open
+            onClose={() => setConfirmOrdemPadrao(false)}
+            onConfirm={() => { resetCategoryOrder(); setConfirmOrdemPadrao(false) }}
+            title="Restaurar ordem padrão"
+            message="Grupos e categorias voltam para a ordem padrão (grupos na ordem padrão do sistema e categorias em ordem alfabética). A ordem manual será perdida. Continuar?"
+          />
+        )}
 
         {/* Criar grupo (só nome) */}
         <form onSubmit={handleAddGroup} className="flex gap-2 mb-4">
@@ -784,7 +885,7 @@ export default function SettingsPanel() {
               <option value="">Todos os perfis</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            {filtroPerfilCat && <span className="text-[11px] text-gray-600">inclui as categorias de todos os perfis</span>}
+            {filtroPerfilCat && <span className="text-[11px] text-gray-600">inclui as categorias de todos os perfis · para reordenar, volte para "Todos os perfis"</span>}
           </div>
         )}
 
@@ -792,7 +893,18 @@ export default function SettingsPanel() {
         <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
           {catsByGroup.map(({ group, cats }) => (
             <div key={group} className="rounded-lg border border-gray-800">
-              <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-gray-800/60 rounded-t-lg">
+              <div
+                draggable={ordemLivre && editingCatGroup !== group}
+                onDragStart={e => ordDragStart(e, { kind: 'grp', id: group })}
+                onDragOver={e => ordDragOverH(e, { kind: 'grp', id: group })}
+                onDrop={e => ordDrop(e, { kind: 'grp', id: group })}
+                onDragEnd={ordDragEnd}
+                className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-t-lg border transition-all ${
+                  ordDrag?.id === group ? 'opacity-40 border-transparent bg-gray-800/60' :
+                  ordDragOver === group ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
+                  'border-transparent bg-gray-800/60'
+                }`}
+              >
                 {editingCatGroup === group ? (
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <input
@@ -807,8 +919,15 @@ export default function SettingsPanel() {
                   </div>
                 ) : (
                   <>
-                    <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide truncate">
-                      {group} <span className="text-gray-600 font-normal normal-case">· {cats.length}</span>
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {ordHandle('Arrastar para reordenar o grupo')}
+                      {ordSetas(
+                        () => moveCatGroup(group, 'up'), () => moveCatGroup(group, 'down'),
+                        categoryGroups.indexOf(group) === 0, categoryGroups.indexOf(group) === categoryGroups.length - 1,
+                      )}
+                      <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide truncate">
+                        {group} <span className="text-gray-600 font-normal normal-case">· {cats.length}</span>
+                      </span>
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
                       <button onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-gray-500 hover:text-gray-300"><Edit2 size={12} /></button>

@@ -854,3 +854,11 @@ CREATE INDEX IF NOT EXISTS idx_marcos_saldo_gerencial_conta ON marcos_saldo_gere
 -- Só filtra as listas de escolha de categoria; relatórios/KPIs/saldos não usam.
 -- Também criada pela API em api/load.js (ADD COLUMN IF NOT EXISTS).
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS perfil_ids TEXT[];
+
+-- Ordenação manual de categorias e grupos (Configurações → Categorias).
+-- sort_order: posição da categoria dentro do grupo; NULL = fim do grupo, alfabética.
+-- category_groups_ordem_manual: quando true, a ordem do array category_groups é a ordem dos
+-- grupos; false (padrão) = ordem padrão (GROUP_ORDER, depois alfabética).
+-- Também criadas pela API em api/load.js (ADD COLUMN IF NOT EXISTS).
+ALTER TABLE categorias ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups_ordem_manual BOOLEAN DEFAULT false;

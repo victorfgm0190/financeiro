@@ -1,27 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
+import { compararGruposPadrao } from '../../lib/ordemCategorias'
 
-const GROUP_ORDER = [
-  // Despesas
-  'Alimentação', 'Bancos', 'Contribuicoes', 'Cuidados Pessoais', 'Doações',
-  'Educação', 'Empresa', 'Escritorio Contabilidade', 'Filhos', 'Finaciamentos',
-  'Fotografia', 'Impostos', 'Lazer', 'Moradia', 'Saúde',
-  'Seguro', 'Seguros', 'Transporte', 'Vestuário', 'Outras Despesas',
-  // Receitas
-  'Remunerações', 'Rendimentos', 'Rendimentos Empresariais', 'Outras Receitas',
-  // Investimentos
-  'Aplicações',
-]
-
+// Ordem padrão de grupos (GROUP_ORDER/alfabética). Listas de CATEGORIA já chegam ordenadas pela
+// ordem salva (ordenarCategorias) e passam `preserveGroupOrder`; este é só o fallback.
 function sortGroups(groupNames) {
-  return [...groupNames].sort((a, b) => {
-    const ia = GROUP_ORDER.indexOf(a), ib = GROUP_ORDER.indexOf(b)
-    if (ia === -1 && ib === -1) return a.localeCompare(b, 'pt-BR')
-    if (ia === -1) return 1
-    if (ib === -1) return -1
-    return ia - ib
-  })
+  return [...groupNames].sort(compararGruposPadrao)
 }
 
 // Posição do dropdown portado (position:fixed = coords de viewport). Mantém o menu COLADO ao

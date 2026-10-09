@@ -39,7 +39,7 @@ beforeEach(async () => {
   await db.exec(`CREATE TABLE categorias (
     id TEXT PRIMARY KEY, name TEXT, type TEXT, color TEXT, icon TEXT, category_group TEXT,
     investment_account_id TEXT, gera_espelho BOOLEAN, conta_espelho_id TEXT,
-    default_gerencial_group TEXT, perfil_ids TEXT[]
+    default_gerencial_group TEXT, perfil_ids TEXT[], sort_order INTEGER
   )`)
   await upsert(cheio)
 // A 1ª instância do PGlite carrega o WASM; com a suíte inteira rodando em paralelo isso passa dos
@@ -109,6 +109,13 @@ describe('categorias.perfil_ids no Postgres (PGlite)', () => {
   it('desmarcar todos volta para NULL', async () => {
     await upsertCat({ ...catBase, perfilIds: ['perf_pj'] })
     expect((await upsertCat({ ...catBase, perfilIds: [] })).perfilIds).toEqual([])
+  })
+
+  it('sort_order grava e lê; ausente vira NULL (sem ordem manual)', async () => {
+    expect((await upsertCat({ ...catBase, sortOrder: 3 })).sortOrder).toBe(3)
+    expect((await upsertCat({ ...catBase, sortOrder: 0 })).sortOrder).toBe(0)
+    expect((await upsertCat({ ...catBase, sortOrder: null })).sortOrder).toBeNull()
+    expect((await upsertCat(catBase)).sortOrder).toBeNull()
   })
 
   it('categoria antiga (sem o campo no app) continua valendo para todos', async () => {

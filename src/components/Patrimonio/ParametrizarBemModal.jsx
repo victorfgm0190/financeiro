@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { criarBem } from '../../lib/bemApi'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Liga uma conta patrimonial (type='asset') já existente ao módulo de bem: grava o valor da
 // nota fiscal e as 4 categorias. POST /api/bem/criar aceita conta_id e converte no lugar.
@@ -46,10 +47,11 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }))
 
   // Categorias por perfil: o da conta do bem (se tiver perfil), senão o chip do topo.
-  const { activeProfileId } = useApp()
+  // Ordem salva em Configurações → Categorias; SelectCategoria agrupa preservando a ordem.
+  const { activeProfileId, categoryGroupOrder } = useApp()
   const doPerfil = useMemo(
-    () => filtrarCategoriasPorPerfil(categorias, conta.profileId || activeProfileId),
-    [categorias, conta.profileId, activeProfileId]
+    () => ordenarCategorias(filtrarCategoriasPorPerfil(categorias, conta.profileId || activeProfileId), categoryGroupOrder),
+    [categorias, conta.profileId, activeProfileId, categoryGroupOrder]
   )
   const despesas = useMemo(() => doPerfil.filter(c => c.type === 'expense'), [doPerfil])
   const receitas = useMemo(() => doPerfil.filter(c => c.type === 'income'), [doPerfil])

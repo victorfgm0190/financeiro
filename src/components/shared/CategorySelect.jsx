@@ -3,13 +3,10 @@ import { createPortal } from 'react-dom'
 import { Search } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
-const GROUP_ORDER = [
-  'Alimentação', 'Transporte', 'Moradia', 'Saúde', 'Educação',
-  'Lazer', 'Vestuário', 'Impostos', 'Seguros', 'Bancos', 'Outras Despesas',
-  'Remunerações', 'Rendimentos', 'Outras Receitas',
-]
-
+// `categories` chega JÁ ORDENADA (ordenarCategorias: grupos na ordem salva/padrão, depois
+// sortOrder/alfabética) — aqui só agrupa, preservando a ordem de chegada.
 function buildGroups(categories, type) {
   const filtered = type
     ? categories.filter(c => c.type === type || c.type === 'both')
@@ -26,14 +23,7 @@ function buildGroups(categories, type) {
     }
   }
 
-  const sortedGroups = Object.keys(grouped).sort((a, b) => {
-    const ia = GROUP_ORDER.indexOf(a)
-    const ib = GROUP_ORDER.indexOf(b)
-    if (ia === -1 && ib === -1) return a.localeCompare(b, 'pt-BR')
-    if (ia === -1) return 1
-    if (ib === -1) return -1
-    return ia - ib
-  })
+  const sortedGroups = Object.keys(grouped)
 
   return { filtered, grouped, ungrouped, sortedGroups }
 }
@@ -214,11 +204,11 @@ export default function CategorySelect({
   searchable = false,
   perfilId,
 }) {
-  const { activeProfileId } = useApp()
+  const { activeProfileId, categoryGroupOrder } = useApp()
   const perfil = perfilId === undefined ? activeProfileId : perfilId
   const categories = useMemo(
-    () => filtrarCategoriasPorPerfil(categoriesProp, perfil, value ? [value] : []),
-    [categoriesProp, perfil, value]
+    () => ordenarCategorias(filtrarCategoriasPorPerfil(categoriesProp, perfil, value ? [value] : []), categoryGroupOrder),
+    [categoriesProp, perfil, value, categoryGroupOrder]
   )
   const selecionada = value ? categoriesProp?.find(c => c.id === value) : null
   const deOutroPerfil = !!selecionada && !categoriaDisponivelParaPerfil(selecionada, perfil)

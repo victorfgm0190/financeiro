@@ -6,13 +6,14 @@ import AccountOptions from '../shared/AccountOptions'
 import SearchableSelect from '../shared/SearchableSelect'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Formulário do lançamento PROVISÓRIO do Fluxo de Caixa por Conta: uma entrada/saída de
 // simulação gravada em fluxo_provisorios (tabela à parte — não é agendamento nem lançamento).
 // Com `initial`, abre em modo edição. `onSalvar` recebe o payload em snake_case, já validado,
 // no formato que /api/fluxo-provisorios espera.
 export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose }) {
-  const { profileAccounts: accounts, accountGroups, categories, activeProfileId } = useApp()
+  const { profileAccounts: accounts, accountGroups, categories, activeProfileId, categoryGroupOrder } = useApp()
 
   const [form, setForm] = useState({
     date: initial?.date || today(),
@@ -31,10 +32,10 @@ export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose
     const alvo = form.type === 'entrada' ? 'income' : 'expense'
     // Categorias por perfil: o da conta escolhida, senão o chip do topo; a já gravada fica.
     const perfil = perfilParaCategorias(accounts, form.account_id, activeProfileId)
-    return filtrarCategoriasPorPerfil(categories, perfil, [form.category_id])
+    return ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfil, [form.category_id]), categoryGroupOrder)
       .filter(c => c.type === alvo || c.type === 'both')
       .map(c => ({ id: c.id, label: `${c.icon || ''} ${c.name}`.trim(), group: c.group || null }))
-  }, [categories, form.type, accounts, form.account_id, form.category_id, activeProfileId])
+  }, [categories, form.type, accounts, form.account_id, form.category_id, activeProfileId, categoryGroupOrder])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -139,6 +140,7 @@ export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose
         <label className="label">Categoria (opcional)</label>
         <SearchableSelect
           options={catOpts}
+          preserveGroupOrder
           value={form.category_id}
           onChange={id => set('category_id', id || '')}
           placeholder="Sem categoria"

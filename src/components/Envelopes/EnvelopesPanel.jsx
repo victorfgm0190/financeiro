@@ -7,6 +7,7 @@ import { fmt } from '../shared/utils'
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '../../lib/origins'
 import { dueDateInMonth } from '../../lib/fatura'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
+import { ordenarCategorias } from '../../lib/ordemCategorias'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 
@@ -68,27 +69,23 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
   // Categorias por perfil: o da conta do envelope (se tiver perfil), senão o chip do topo; as já
   // vinculadas ao envelope continuam na lista.
-  const { activeProfileId } = useApp()
+  const { activeProfileId, categoryGroupOrder } = useApp()
   const perfilCategorias = perfilParaCategorias(accounts, accountId, activeProfileId)
   const expCats     = filtrarCategoriasPorPerfil(categories.filter(c => c.type === 'expense' || c.type === 'both'), perfilCategorias, categoryIds)
   const nonCreditAc = accounts.filter(a => a.type !== 'credit')
 
-  // Categorias agrupadas para exibição: grupos ordenados (pt-BR) e "Sem grupo" ao final.
+  // Categorias agrupadas para exibição, na ordem salva em Configurações → Categorias
+  // (ordenarCategorias já põe "Sem grupo" ao final).
   const UNGROUPED = 'Sem grupo'
   const grouped = useMemo(() => {
     const map = {}
-    expCats.forEach(cat => {
+    ordenarCategorias(expCats, categoryGroupOrder).forEach(cat => {
       const g = cat.group || UNGROUPED
       if (!map[g]) map[g] = []
       map[g].push(cat)
     })
-    const names = Object.keys(map).sort((a, b) => {
-      if (a === UNGROUPED) return 1
-      if (b === UNGROUPED) return -1
-      return a.localeCompare(b, 'pt-BR')
-    })
-    return names.map(g => [g, map[g]])
-  }, [expCats])
+    return Object.keys(map).map(g => [g, map[g]])
+  }, [expCats, categoryGroupOrder])
 
   return (
     <div className="space-y-4">
