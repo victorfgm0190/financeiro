@@ -14,6 +14,7 @@ import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
+import { scheduleDisplayDueDate, filtrarAgendamentos } from '../../lib/agendamentosFiltro'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -73,36 +74,6 @@ function seriesKeyOf(s) {
   return null
 }
 
-// Data de vencimento EXIBIDA (e usada no particionamento da lista) para um agendamento
-// RECORRENTE. Para 'once'/faturas e concluídos (nextDate null) devolve nextDate inalterado.
-// É puramente visual: as ações (pagar/pular/estornar) continuam usando nextDate (a ocorrência
-// pendente real).
-function scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, todayStr) {
-  // Exceção da ocorrência ("Próximas ocorrências" do formulário) manda na data EXIBIDA.
-  //
-  // Ela é guardada em `overrides[dataOriginal].date` e NÃO altera a data original — que é a
-  // chave de registered/skipped e continua sendo o que as ações usam (o `nextDate` deste
-  // arquivo). Sem passar por occEfetiva aqui, mover uma ocorrência de 09/09 para 11/09 gravava
-  // certo, sincronizava certo e não mudava nada na linha: o cabeçalho seguia em 09/09 enquanto
-  // a sub-lista de próximas ocorrências (que já usa occEfetiva) mostrava 11/09.
-  const efetiva = (d) => (d ? occEfetiva(schedule, d).date : d)
-
-  const proxima = efetiva(nextDate)
-  if (!proxima || (schedule.frequency || 'once') === 'once') return proxima
-  // Ocorrência pendente EM ATRASO manda: ela é a próxima NÃO PAGA e tem de aparecer com a
-  // própria data. Preferir a próxima futura (comportamento anterior) tirava a linha do bucket
-  // "Em atraso" — particionado por displayDate — enquanto o pagamento seguia em aberto.
-  //
-  // O teste é sobre a data EFETIVA: uma ocorrência vencida que foi adiada para o futuro não
-  // está mais em atraso, e cair no bucket "Em atraso" exibindo uma data futura seria pior que
-  // o bug original.
-  if (proxima < todayStr) return proxima
-  // Sem atraso: "Data de Vencimento Atual" do formulário, desde que ela mesma não seja uma data
-  // já consumida (nextOccurrence pode ficar para trás de registered/skipped).
-  const ancora = efetiva(schedule.nextOccurrence)
-  if (ancora && ancora >= todayStr) return ancora
-  return efetiva(getNextOccurrences(schedule, 24).find(d => efetiva(d) >= todayStr)) || proxima
-}
 
 // Aglutina a lista de agendamentos em "grupos" de exibição (somente visual — não toca dados):
 //   • Série de fatura: vira 1 linha; primary = fatura pendente mais próxima; futureItems = as
@@ -2425,30 +2396,14 @@ export default function SchedulePanel() {
 
   // Filtros em tempo real (data / descrição / categoria / valor) sobre a lista já filtrada por período
   const searchedSchedules = useMemo(() => {
-    const desc = fltDesc.trim().toLowerCase()
-    const payee = fltPayee.trim().toLowerCase()
-    const min = fltMin !== '' ? parseFloat(fltMin) : null
-    const max = fltMax !== '' ? parseFloat(fltMax) : null
-    if (!desc && !payee && !fltCat && !fltFrom && !fltTo && min === null && max === null) return displaySchedules
-    return displaySchedules.filter(s => {
-      if (desc && !(s.description || '').toLowerCase().includes(desc)) return false
-      if (payee && !(s.payee || '').toLowerCase().includes(payee)) return false
-      if (fltCat && s.categoryId !== fltCat) return false
-      if (min !== null || max !== null) {
-        // Passa se o valor BASE OU o valor EFETIVO da próxima ocorrência (override) cair no range.
-        const baseAmt = Number(s.amount) || 0
-        const nextDate = getNextOccurrences(s, 1)[0] || null
-        const effAmt = nextDate ? Number(occEfetiva(s, nextDate).amount) : baseAmt
-        const inRange = (a) => (min === null || a >= min) && (max === null || a <= max)
-        if (!inRange(baseAmt) && !inRange(effAmt)) return false
-      }
-      if (fltFrom || fltTo) {
-        const d = getNextOccurrences(s, 1)[0] || s.startDate || ''
-        if (fltFrom && d < fltFrom) return false
-        if (fltTo && d > fltTo) return false
-      }
-      return true
-    })
+    // Data De/Até comparam a MESMA data da coluna "Data" (override de data aplicado), como dia
+    // 'YYYY-MM-DD', inclusivos. Antes comparava a data ORIGINAL da ocorrência: um item com a data
+    // movida (ex.: 15/10 → 14/10) aparecia em 14/10 mas sumia do filtro 14/10–14/10.
+    return filtrarAgendamentos(displaySchedules, {
+      desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: fltFrom, to: fltTo,
+      min: fltMin !== '' ? parseFloat(fltMin) : null,
+      max: fltMax !== '' ? parseFloat(fltMax) : null,
+    }, getNextOccurrences, format(new Date(), 'yyyy-MM-dd'))
   }, [displaySchedules, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
 
   // Valores reais (distintos) dos agendamentos visíveis (já filtrados por data/etc.), maior → menor.
@@ -2564,12 +2519,12 @@ export default function SchedulePanel() {
             </div>
             <div>
               <label className="label text-xs">Valor de</label>
-              <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="0,00" />
+              <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." />
             </div>
             <div className="flex items-end gap-2">
               <div className="flex-1">
                 <label className="label text-xs">Valor até</label>
-                <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="0,00" />
+                <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." />
               </div>
               <div className="mb-0.5">
                 <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
