@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildScheduleGroups, seriesKeyOf } from './agendamentosGrupos'
+import { buildScheduleGroups, seriesKeyOf, rotuloFaturasSeguintes } from './agendamentosGrupos'
+import { filtrarAgendamentos } from './agendamentosFiltro'
 
 // getNextOccurrences simplificado: devolve as próximas datas pendentes declaradas no fixture.
 const getNext = (s, n = 1) => (s._next || []).slice(0, n)
@@ -71,5 +72,39 @@ describe('buildScheduleGroups — agrupamentos que continuam', () => {
     })
     const g = buildScheduleGroups([legado('a', '2026-10-10'), legado('b', '2026-11-10')], getNext)
     expect(linhas(g)).toEqual([{ id: 'a', n: 1 }])
+  })
+})
+
+describe('série de fatura × filtros', () => {
+  // Mesmo caminho da tela: filtra (filtrarAgendamentos) e depois agrupa, sem agrupar séries
+  // quando há filtro ativo.
+  const out = fatura('202610', '2026-10-14', 300)
+  const nov = fatura('202611', '2026-11-14', 450)
+  const lista = [out, nov]
+  const HOJE = '2026-10-08'
+
+  it('com filtro 01/10 a 30/11 → 2 linhas separadas, sem "› N"', () => {
+    const filtrados = filtrarAgendamentos(lista, { from: '2026-10-01', to: '2026-11-30' }, getNext, HOJE)
+    const g = buildScheduleGroups(filtrados, getNext, { agruparSeries: false })
+    expect(linhas(g)).toEqual([{ id: out.id, n: 0 }, { id: nov.id, n: 0 }])
+    expect(g.map(x => x.schedule.amount)).toEqual([300, 450])
+    expect(g.some(x => x.isSerie)).toBe(false)
+  })
+
+  it('sem filtro → 1 linha com o valor da fatura mais próxima e "+ 1 fatura seguinte"', () => {
+    const g = buildScheduleGroups(lista, getNext)
+    expect(linhas(g)).toEqual([{ id: out.id, n: 1 }])
+    expect(g[0].isSerie).toBe(true)
+    expect(g[0].schedule.amount).toBe(300) // não soma meses diferentes
+    expect(rotuloFaturasSeguintes(g[0].futureItems.length)).toBe('+ 1 fatura seguinte')
+  })
+
+  it('rótulo no plural', () => {
+    expect(rotuloFaturasSeguintes(3)).toBe('+ 3 faturas seguintes')
+  })
+
+  it('recorrente (mesmo agendamento) não é série: sem rótulo de faturas', () => {
+    const rec = { id: 'r', amount: 1, frequency: 'monthly', overrides: {}, _next: ['2026-10-05', '2026-11-05'] }
+    expect(buildScheduleGroups([rec], getNext)[0].isSerie).toBeUndefined()
   })
 })

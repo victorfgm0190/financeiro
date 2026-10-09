@@ -7,6 +7,11 @@ import { scheduleDisplayDueDate } from './agendamentosFiltro.js'
 // Quantas ocorrências futuras listar ao expandir um agendamento recorrente de valor fixo.
 export const FUTURE_OCC_COUNT = 12
 
+// Texto ao lado do "› N" numa linha de série de fatura.
+export function rotuloFaturasSeguintes(n) {
+  return `+ ${n} fatura${n !== 1 ? 's' : ''} seguinte${n !== 1 ? 's' : ''}`
+}
+
 // Tipos de agendamento de cartão/gerencial que o motor gera UM POR FATURA (frequency 'once',
 // id fsch_<card>_<yyyymm>_<slot>). Várias faturas da mesma série devem virar UMA linha.
 const SERIES_TIPOS = new Set(['pagamento_fatura', 'resgate_reserva', 'gerencial_devolucao'])
@@ -40,13 +45,16 @@ export function seriesKeyOf(s) {
 //   • Recorrente de verdade (frequency != once): 1 linha; futureItems = próximas ocorrências
 //     (getNextOccurrences) com o valor fixo do agendamento.
 //   • Único 'once' avulso: 1 linha, sem futureItems (inalterado).
-export function buildScheduleGroups(schedules, getNextOccurrences) {
+// `agruparSeries: false` (algum filtro ativo na lista): séries de fatura NÃO agrupam — cada
+// fatura que passou no filtro vira a sua linha, para o filtro nunca esconder item no "› N".
+// Grupos de série saem com `isSerie: true` (o cabeçalho mostra "+ N faturas seguintes").
+export function buildScheduleGroups(schedules, getNextOccurrences, { agruparSeries = true } = {}) {
   const todayStr = format(new Date(), 'yyyy-MM-dd')
   const displayDateOf = (s, nextDate) => scheduleDisplayDueDate(s, nextDate, getNextOccurrences, todayStr)
   const seriesMap = new Map()
   const singles = []
   for (const s of schedules) {
-    const key = seriesKeyOf(s)
+    const key = agruparSeries ? seriesKeyOf(s) : null
     if (key) {
       if (!seriesMap.has(key)) seriesMap.set(key, [])
       seriesMap.get(key).push(s)
@@ -71,7 +79,7 @@ export function buildScheduleGroups(schedules, getNextOccurrences) {
       const { date, amount } = occEfetiva(m.s, m.next)
       return { date, amount }
     })
-    groups.push({ schedule: primary.s, nextDate: primary.next, displayDate: displayDateOf(primary.s, primary.next), futureItems })
+    groups.push({ schedule: primary.s, nextDate: primary.next, displayDate: displayDateOf(primary.s, primary.next), futureItems, isSerie: true })
   }
 
   for (const s of singles) {

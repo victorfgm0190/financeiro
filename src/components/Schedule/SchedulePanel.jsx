@@ -15,7 +15,7 @@ import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos } from '../../lib/agendamentosFiltro'
-import { buildScheduleGroups } from '../../lib/agendamentosGrupos'
+import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -745,7 +745,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 }
 
 function ScheduleRow({
-  schedule, nextDate, futureItems = [], cols = 8, categories, accounts, gerencialGroups,
+  schedule, nextDate, futureItems = [], isSerie = false, cols = 8, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
   deleteSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
@@ -910,6 +910,13 @@ function ScheduleRow({
               >
                 {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 {hasFuture && <span className="text-[10px] font-semibold">{futureItems.length}</span>}
+                {/* Série de fatura: o valor da linha é o da fatura mais próxima (meses diferentes não
+                    somam); o texto deixa claro que há outras faturas dentro do "› N". */}
+                {isSerie && hasFuture && (
+                  <span className="text-[10px] font-normal text-gray-500 whitespace-nowrap ml-0.5">
+                    {rotuloFaturasSeguintes(futureItems.length)}
+                  </span>
+                )}
               </button>
             )}
             <p className="text-xs text-gray-200 font-medium whitespace-normal break-words min-w-0 flex-1" title={schedule.description}>{schedule.description}</p>
@@ -1503,7 +1510,7 @@ const SELECTION_GROUP_META = {
 }
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule }) {
+function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true }) {
   const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
@@ -1538,7 +1545,10 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
 
   // Linhas aglutinadas: 1 por agendamento lógico (séries de fatura colapsadas; recorrentes
   // com ocorrências futuras em futureItems). Particionamento/seleção seguem usando nextDate.
-  const rows = useMemo(() => buildScheduleGroups(schedules, getNextOccurrences), [schedules, getNextOccurrences])
+  const rows = useMemo(
+    () => buildScheduleGroups(schedules, getNextOccurrences, { agruparSeries }),
+    [schedules, getNextOccurrences, agruparSeries]
+  )
 
   // Particionamento por DATA usa displayDate (mesma data mostrada na linha e no formulário);
   // seleção/ações continuam por nextDate (ocorrência real).
@@ -1793,40 +1803,40 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
               {overdue.length > 0 && (
                 <>
                   <SectionHeader label="Em atraso" count={overdue.length} variant="overdue" cols={cols} />
-                  {overdue.map(({ schedule, nextDate, futureItems }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {overdue.map(({ schedule, nextDate, futureItems, isSerie }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} isSerie={isSerie} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {next7.length > 0 && (
                 <>
                   <SectionHeader label="Próximos 7 dias" count={next7.length} variant="soon" cols={cols} />
-                  {next7.map(({ schedule, nextDate, futureItems }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {next7.map(({ schedule, nextDate, futureItems, isSerie }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} isSerie={isSerie} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {next30.length > 0 && (
                 <>
                   <SectionHeader label="Próximos 30 dias" count={next30.length} variant="month" cols={cols} />
-                  {next30.map(({ schedule, nextDate, futureItems }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {next30.map(({ schedule, nextDate, futureItems, isSerie }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} isSerie={isSerie} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {future.length > 0 && (
                 <>
                   <SectionHeader label="Futuros" count={future.length} variant="default" cols={cols} />
-                  {future.map(({ schedule, nextDate, futureItems }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {future.map(({ schedule, nextDate, futureItems, isSerie }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} isSerie={isSerie} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
               {completed.length > 0 && (
                 <>
                   <SectionHeader label="Concluídos" count={completed.length} variant="history" cols={cols} />
-                  {completed.map(({ schedule, nextDate, futureItems }) => (
-                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} {...rowProps} isSelected={selected.has(schedule.id)} />
+                  {completed.map(({ schedule, nextDate, futureItems, isSerie }) => (
+                    <ScheduleRow key={schedule.id} schedule={schedule} nextDate={nextDate} futureItems={futureItems} isSerie={isSerie} {...rowProps} isSelected={selected.has(schedule.id)} />
                   ))}
                 </>
               )}
@@ -2460,6 +2470,7 @@ export default function SchedulePanel() {
 
           <SchedulesTable
             schedules={finalSchedules}
+            agruparSeries={!hasActiveFilter}
             categories={categories}
             accounts={accounts}
             gerencialGroups={gerencialGroups}
