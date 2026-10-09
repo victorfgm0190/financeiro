@@ -237,7 +237,7 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
   )
 }
 
-function SectionHeader({ label, count, variant = 'default', cols = 9 }) {
+function SectionHeader({ label, count, variant = 'default', cols = 8 }) {
   const colors = {
     overdue:  'text-red-400 bg-red-500/10 border-red-500/20',
     soon:     'text-amber-400 bg-amber-500/10 border-amber-500/20',
@@ -853,7 +853,7 @@ function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
 }
 
 function ScheduleRow({
-  schedule, nextDate, futureItems = [], cols = 9, categories, accounts, gerencialGroups,
+  schedule, nextDate, futureItems = [], cols = 8, categories, accounts, gerencialGroups,
   addTransaction, markScheduleRegistered, registerScheduleOccurrence, skipScheduleOccurrence,
   deleteSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
@@ -1005,10 +1005,10 @@ function ScheduleRow({
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 w-full max-w-0 overflow-hidden ${canExpand ? 'cursor-pointer' : ''}`}
+          className={`px-3 py-3 w-full max-w-0 ${canExpand ? 'cursor-pointer' : ''}`}
           onClick={canExpand ? toggleExpand : undefined}
         >
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-start gap-1.5">
             {canExpand && (
               <button
                 type="button"
@@ -1020,7 +1020,10 @@ function ScheduleRow({
                 {hasFuture && <span className="text-[10px] font-semibold">{futureItems.length}</span>}
               </button>
             )}
-            <p className="text-xs text-gray-200 font-medium truncate">{schedule.description}</p>
+            <p className="text-xs text-gray-200 font-medium whitespace-normal break-words min-w-0 flex-1" title={schedule.description}>{schedule.description}</p>
+          </div>
+          {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {isProvisao && !schedule.provisaoEfetivada && (
               <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
                 <Hourglass size={9} /> Provisão{schedule.frequency !== 'once' ? ' recorrente' : ''}
@@ -1066,6 +1069,27 @@ function ScheduleRow({
                 {schedule.confirmado ? 'Confirmado' : 'A confirmar'}
               </button>
             )}
+            {schedule.transactionType === 'income' ? (
+              <span className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                <ArrowDownCircle size={10} /> Receita
+              </span>
+            ) : isDepositoReserva ? (
+              <span className="inline-flex items-center gap-1 text-xs bg-reserva/15 text-reserva px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                <ArrowDownCircle size={10} /> Depósito Reserva
+              </span>
+            ) : isResgateReserva ? (
+              <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                <ArrowUpCircle size={10} /> Resgate Reserva
+              </span>
+            ) : schedule.transactionType === 'transfer' ? (
+              <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                <ArrowLeftRight size={10} /> Transferência
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                <ArrowUpCircle size={10} /> Despesa
+              </span>
+            )}
           </div>
           {reservaDetalhe && reservaDetalhe.length > 0 && (
             <ul className="mt-1 space-y-0.5" title="Detalhamento por função de reserva">
@@ -1098,38 +1122,13 @@ function ScheduleRow({
             </ul>
           )}
           {schedule.transactionType === 'transfer' ? (
-            <p className="text-xs text-gray-600 mt-0.5 truncate">
+            <p className="text-xs text-gray-600 mt-0.5 whitespace-normal break-words">
               <span className="text-purple-400">↔</span>{' '}
               {acc?.apelido || acc?.name || '?'} → {toAcc?.apelido || toAcc?.name || '?'}
             </p>
           ) : acc ? (
-            <p className="text-xs text-gray-600 mt-0.5 truncate">{acc.apelido || acc.name}</p>
+            <p className="text-xs text-gray-600 mt-0.5 whitespace-normal break-words">{acc.apelido || acc.name}</p>
           ) : null}
-        </td>
-
-        {/* Movimentação */}
-        <td className="px-3 py-3 whitespace-nowrap">
-          {schedule.transactionType === 'income' ? (
-            <span className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-600 px-2 py-0.5 rounded font-medium">
-              <ArrowDownCircle size={11} /> Receita
-            </span>
-          ) : isDepositoReserva ? (
-            <span className="inline-flex items-center gap-1 text-xs bg-reserva/15 text-reserva px-2 py-0.5 rounded font-medium">
-              <ArrowDownCircle size={11} /> Depósito Reserva
-            </span>
-          ) : isResgateReserva ? (
-            <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-2 py-0.5 rounded font-medium">
-              <ArrowUpCircle size={11} /> Resgate Reserva
-            </span>
-          ) : schedule.transactionType === 'transfer' ? (
-            <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded font-medium">
-              <ArrowLeftRight size={11} /> Transferência
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-2 py-0.5 rounded font-medium">
-              <ArrowUpCircle size={11} /> Despesa
-            </span>
-          )}
         </td>
 
         {/* Categoria */}
@@ -1776,7 +1775,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     )
   }
 
-  const cols = selectionMode ? 10 : 9
+  const cols = selectionMode ? 9 : 8
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
@@ -1891,7 +1890,6 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full">Descrição</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Movimentação</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
