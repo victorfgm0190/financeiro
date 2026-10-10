@@ -96,7 +96,7 @@ describe('Aplicar no agendamento', () => {
   it('"Esta e as próximas" fora da 1ª pendente é bloqueado (as anteriores sumiriam)', () => {
     const op = opcoesAplicarData(mensal, '2026-11-13', '2026-11-20', '2026-10-13')
     expect(op.serie.ok).toBe(false)
-    expect(op.serie.motivo).toMatch(/primeira ocorrência pendente/)
+    expect(op.serie.motivo).toBe("Para mover só esta data, use 'Só esta ocorrência'. Para mover a série, aplique a partir da primeira ocorrência pendente (13/10/2026).")
   })
 
   it('"Esta e as próximas" para antes de uma ocorrência já registrada é bloqueado', () => {

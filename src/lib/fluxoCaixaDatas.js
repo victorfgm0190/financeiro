@@ -53,6 +53,12 @@ export function agendamentoGeridoPeloMotor(s) {
 
 const ehChaveData = (k) => /^\d{4}-\d{2}-\d{2}$/.test(k)
 
+// 'YYYY-MM-DD' → 'dd/mm/aaaa' (direto da string, sem Date/fuso).
+const ddmmaaaa = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '')
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '—'
+}
+
 // Remove a exceção de DATA da ocorrência `orig` em `overrides`, preservando a de valor (que
 // passa para a chave `novaChave`, quando informada). Devolve um objeto novo.
 function moverExcecao(overrides, orig, novaChave) {
@@ -81,7 +87,9 @@ export function opcoesAplicarData(s, orig, nova, primeiraPendente) {
   const ultimaFeita = feitas.reduce((m, d) => (d > m ? d : m), '')
   let serie = { ok: true }
   if (orig !== primeiraPendente) {
-    serie = { ok: false, motivo: `Esta não é a primeira ocorrência pendente da série (${primeiraPendente || '—'}). Mover a série a partir daqui faria as ocorrências pendentes anteriores a ela sumirem sem serem registradas nem puladas.` }
+    // As ocorrências pendentes anteriores são compromissos reais: mover a âncora da série para cá
+    // as faria sumir do fluxo. Fica desabilitado; o texto orienta o caminho certo.
+    serie = { ok: false, motivo: `Para mover só esta data, use 'Só esta ocorrência'. Para mover a série, aplique a partir da primeira ocorrência pendente (${ddmmaaaa(primeiraPendente)}).` }
   } else if (ultimaFeita && nova <= ultimaFeita) {
     serie = { ok: false, motivo: `A nova data não pode ser igual ou anterior a uma ocorrência já registrada/pulada (${ultimaFeita}).` }
   }
