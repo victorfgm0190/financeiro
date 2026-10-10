@@ -862,3 +862,16 @@ ALTER TABLE categorias ADD COLUMN IF NOT EXISTS perfil_ids TEXT[];
 -- Também criadas pela API em api/load.js (ADD COLUMN IF NOT EXISTS).
 ALTER TABLE categorias ADD COLUMN IF NOT EXISTS sort_order INTEGER;
 ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups_ordem_manual BOOLEAN DEFAULT false;
+
+-- Datas PROVISÓRIAS de ocorrências de agendamento no relatório Fluxo de Caixa (só o relatório lê).
+-- "Aplicar data" grava em agendamentos.overrides e apaga o registro. Órfãos (ocorrência
+-- registrada/pulada ou agendamento excluído) são apagados pelo GET de /api/fluxo-datas-provisorias.
+-- Também criada pela API (CREATE TABLE IF NOT EXISTS em api/fluxo-datas-provisorias.js).
+CREATE TABLE IF NOT EXISTS fluxo_datas_provisorias (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  schedule_id TEXT NOT NULL,
+  data_original TEXT NOT NULL,   -- YYYY-MM-DD da ocorrência (chave de registered/skipped/overrides)
+  data_provisoria TEXT NOT NULL, -- YYYY-MM-DD
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (schedule_id, data_original)
+);

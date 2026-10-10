@@ -10,6 +10,7 @@ import {
   syncScheduleReservaFuncoes,
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
+  fetchDatasProvisorias, upsertDataProvisoria, deleteDatasProvisoriasApi,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
   fetchReserveSnapshots, createReserveSnapshots,
   createReserveLedgerRows,
@@ -745,6 +746,31 @@ export function AppProvider({ children }) {
   const [reserveAdjustments, setReserveAdjustments] = useState([])
   const [reserveSnapshots, setReserveSnapshots] = useState([])
   const [reserveHistoryLoaded, setReserveHistoryLoaded] = useState(false)
+
+  // Datas provisórias do relatório Fluxo de Caixa (fluxo_datas_provisorias). Mesmo modelo dos
+  // históricos de reserva: fora de `data`, gravadas direto no banco, state atualizado após
+  // sucesso. SÓ o relatório Fluxo de Caixa usa — Painel/KPIs/Agendamentos seguem a data real.
+  const [datasProvisorias, setDatasProvisorias] = useState([])
+  useEffect(() => {
+    if (!getToken()) return
+    let cancelled = false
+    fetchDatasProvisorias()
+      .then(lista => { if (!cancelled) setDatasProvisorias(lista) })
+      .catch(err => console.error('[datas provisórias]', err.message))
+    return () => { cancelled = true }
+  }, [])
+  const salvarDataProvisoria = useCallback(async (scheduleId, dataOriginal, dataProvisoria) => {
+    const row = await upsertDataProvisoria(scheduleId, dataOriginal, dataProvisoria)
+    setDatasProvisorias(prev => [...prev.filter(d => !(d.schedule_id === scheduleId && d.data_original === dataOriginal)), row])
+    return row
+  }, [])
+  const removerDatasProvisorias = useCallback(async (ids) => {
+    const lista = (ids || []).filter(Boolean)
+    if (lista.length === 0) return
+    await deleteDatasProvisoriasApi(lista)
+    const set = new Set(lista)
+    setDatasProvisorias(prev => prev.filter(d => !set.has(d.id)))
+  }, [])
 
   // Carrega os históricos no mount (paralelo ao load principal). Falha silenciosa
   // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
@@ -5392,6 +5418,7 @@ export function AppProvider({ children }) {
       scheduleReservaFuncoes: data.scheduleReservaFuncoes || [],
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       reservePeriods, reserveAdjustments, reserveSnapshots,
+      datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addReserveSnapshots,

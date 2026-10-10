@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { montarLinhasSimuladas, opcoesAplicarData, patchAplicarData, agendamentoGeridoPeloMotor } from './fluxoCaixaDatas'
+import { montarLinhasSimuladas, opcoesAplicarData, patchAplicarData, agendamentoGeridoPeloMotor, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from './fluxoCaixaDatas'
 import { computeOccurrences } from './occurrences'
-import { occEfetiva } from './fluxoCaixa'
+import { occEfetiva, computeFluxoCaixa } from './fluxoCaixa'
 
 const linha = (key, date, { entrada = 0, saida = 0, real = false, ...extra } = {}) =>
   ({ _key: key, date, entrada, saida, real, description: key, ...extra })
@@ -127,5 +127,50 @@ describe('Aplicar no agendamento', () => {
 
   it('fatura/gerencial: bloqueio com mensagem', () => {
     expect(opcoesAplicarData({ id: 'fsch_x', frequency: 'once' }, 'a', 'b', 'a').bloqueio).toMatch(/motor de faturas/)
+  })
+})
+
+describe('datas provisórias persistidas (camada do relatório)', () => {
+  // Recebimento todo dia 20; acho que em outubro só entra dia 25.
+  const receb = {
+    id: 'sch_receb', transactionType: 'income', accountId: 'acc_itau', amount: 3000,
+    frequency: 'monthly', occurrenceType: 'continuous', startDate: '2026-09-20', nextOccurrence: '2026-10-20',
+    registered: ['2026-09-20'], skipped: [], overrides: {},
+  }
+  const dp = { id: 'dp1', schedule_id: 'sch_receb', data_original: '2026-10-20', data_provisoria: '2026-10-25', created_at: '2026-10-10T12:00:00Z' }
+  const getNext = (s, n) => computeOccurrences(s, n)
+  const fluxo = (schedules, start = '2026-10-01', end = '2026-11-30') => computeFluxoCaixa({
+    accountIds: new Set(['acc_itau']), currentBalance: 0, start, end, schedules, getNextOccurrences: getNext,
+  })
+
+  it('a cópia do relatório põe a ocorrência no dia 25; o agendamento real continua no 20', () => {
+    const { schedules } = aplicarDatasNosAgendamentos([receb], [dp])
+    expect(fluxo(schedules).rows.map(r => r.date)).toEqual(['2026-10-25', '2026-11-20'])
+    expect(fluxo([receb]).rows.map(r => r.date)).toEqual(['2026-10-20', '2026-11-20'])
+    expect(receb.overrides).toEqual({})
+  })
+
+  it('anota a linha com a data real e o registro provisório', () => {
+    const { schedules, porChave } = aplicarDatasNosAgendamentos([receb], [dp])
+    const rows = anotarLinhasProvisorias(fluxo(schedules).rows, porChave, new Map([[receb.id, receb]]), occEfetiva)
+    expect(rows[0]).toMatchObject({ date: '2026-10-25', _dataOriginal: '2026-10-20', _dpId: 'dp1', _dpDesde: dp.created_at })
+    expect(rows[1]._dpId).toBeUndefined()
+  })
+
+  it('provisória move a ocorrência para dentro do período (original fora)', () => {
+    const { schedules } = aplicarDatasNosAgendamentos([receb], [dp])
+    expect(fluxo(schedules, '2026-10-21', '2026-10-31').rows.map(r => r.date)).toEqual(['2026-10-25'])
+  })
+
+  it('preserva a exceção de valor já existente na ocorrência', () => {
+    const comValor = { ...receb, overrides: { '2026-10-20': { amount: 3500 } } }
+    const { schedules } = aplicarDatasNosAgendamentos([comValor], [dp])
+    expect(schedules[0].overrides['2026-10-20']).toEqual({ amount: 3500, date: '2026-10-25' })
+  })
+
+  it('"Aplicar data" (só esta) leva a ocorrência a 25 e o mês seguinte segue no dia 20', () => {
+    const real = { ...receb, ...patchAplicarData(receb, '2026-10-20', '2026-10-25', 'ocorrencia') }
+    expect(fluxo([real]).rows.map(r => r.date)).toEqual(['2026-10-25', '2026-11-20'])
+    expect(opcoesAplicarData(receb, '2026-10-20', '2026-10-25', '2026-10-20').once).toBe(false)
   })
 })

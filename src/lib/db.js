@@ -176,6 +176,21 @@ export const rowToProvisorio = (r) => ({
   created_at: r.created_at,
 })
 
+// Datas provisórias de ocorrências de agendamento (relatório Fluxo de Caixa). Objetos em
+// snake_case, na forma do banco: { id, schedule_id, data_original, data_provisoria, created_at }.
+// O GET já apaga os órfãos (ocorrência registrada/pulada ou agendamento excluído).
+export async function fetchDatasProvisorias() {
+  const r = await apiGet('/api/fluxo-datas-provisorias')
+  return r?.datas || []
+}
+export async function upsertDataProvisoria(scheduleId, dataOriginal, dataProvisoria) {
+  const r = await apiPost('/api/fluxo-datas-provisorias', { schedule_id: scheduleId, data_original: dataOriginal, data_provisoria: dataProvisoria })
+  return r.data
+}
+export async function deleteDatasProvisoriasApi(ids) {
+  return apiDelete(`/api/fluxo-datas-provisorias?ids=${ids.map(encodeURIComponent).join(',')}`)
+}
+
 export async function fetchFluxoProvisorios() {
   const r = await apiGet('/api/fluxo-provisorios')
   return (r?.provisorios || []).map(rowToProvisorio)

@@ -4,8 +4,11 @@ import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpre
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
-import { computeFluxoCaixa } from '../../lib/fluxoCaixa'
-import { montarLinhasSimuladas, opcoesAplicarData, patchAplicarData } from '../../lib/fluxoCaixaDatas'
+import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
+import {
+  montarLinhasSimuladas, opcoesAplicarData, patchAplicarData,
+  aplicarDatasNosAgendamentos, anotarLinhasProvisorias,
+} from '../../lib/fluxoCaixaDatas'
 import {
   fetchFluxoProvisorios, createFluxoProvisorio, updateFluxoProvisorioApi,
   deleteFluxoProvisorioApi, efetivarFluxoProvisorio,
@@ -53,7 +56,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias } = useApp()
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -77,8 +80,10 @@ export default function FluxoCaixaPorConta() {
   // no estado global, nem no banco, nem no localStorage (a seleção salva em SELECAO_STORAGE_KEY
   // guarda aba/contas/datas, não isto), então recarregar a página volta tudo marcado.
   const [selExcluidas, setSelExcluidas] = useState(() => ({ escopo: '', keys: SEM_EXCLUSOES }))
-  // Datas PROVISÓRIAS por _key (mesma chave dos checkboxes), com a mesma assinatura de escopo:
-  // simulação de tela, nada gravado; zera ao recarregar ou trocar visão/contas/grupo/período.
+  // Datas provisórias de linhas de AGENDAMENTO: persistidas em fluxo_datas_provisorias (contexto),
+  // não zeram ao recarregar nem ao trocar visão/período. Linhas que não são de agendamento
+  // (Envelope "Projetado") têm data provisória só em tela, por _key e com a assinatura de
+  // escopo (zera ao recarregar ou trocar visão/contas/grupo/período, como os checkboxes).
   const [selDatas, setSelDatas] = useState(() => ({ escopo: '', datas: SEM_DATAS }))
   const [editandoData, setEditandoData] = useState(null) // { key, valor, original }
   // Esc desmonta o input, o que dispara onBlur com o rascunho da render anterior: sem esta
@@ -163,8 +168,8 @@ export default function FluxoCaixaPorConta() {
   const escopo = `${visao}|${selectedAccountIds.join(',')}|${groupId}|${start}|${end}`
   const excluidas = selExcluidas.escopo === escopo ? selExcluidas.keys : SEM_EXCLUSOES
   const limparExcluidas = () => setSelExcluidas({ escopo, keys: SEM_EXCLUSOES })
-  const datasProvisorias = selDatas.escopo === escopo ? selDatas.datas : SEM_DATAS
-  const setDataProvisoria = (key, novaData) => {
+  const datasTela = selDatas.escopo === escopo ? selDatas.datas : SEM_DATAS
+  const setDataTela = (key, novaData) => {
     setSelDatas(prev => {
       const next = new Map(prev.escopo === escopo ? prev.datas : SEM_DATAS)
       if (novaData) next.set(key, novaData)
@@ -172,7 +177,7 @@ export default function FluxoCaixaPorConta() {
       return { escopo, datas: next }
     })
   }
-  const limparDatas = () => setSelDatas({ escopo, datas: SEM_DATAS })
+  const limparDatasTela = () => setSelDatas({ escopo, datas: SEM_DATAS })
 
   const toggleLinha = (r) => {
     if (!simulavel(r)) return // registrada: o checkbox já vem disabled, isto é o cinto de segurança
@@ -211,20 +216,29 @@ export default function FluxoCaixaPorConta() {
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
 
+  // Datas provisórias persistidas entram como exceção de data em CÓPIAS dos agendamentos, só
+  // aqui: a ocorrência entra/sai do período e do saldo anterior como uma exceção real faria, e
+  // nada muda para Painel/KPIs/Agendamentos (que usam os agendamentos reais).
+  const { schedules: schedulesRelatorio, porChave: dpPorChave } = useMemo(
+    () => aplicarDatasNosAgendamentos(schedules, datasProvisorias),
+    [schedules, datasProvisorias],
+  )
+  const scheduleById = useMemo(() => new Map(schedules.map(sc => [sc.id, sc])), [schedules])
+
   // Fonte ÚNICA do cálculo (compartilhada com os KPIs FINAL CICLO/PROJETADO do Painel Geral).
   const { rows, saldoAnteriorRealizado, saldoAnteriorComAgendamentos } = useMemo(() => {
     const r = computeFluxoCaixa({
       accountIds, currentBalance, start, end,
-      transactions, schedules, envelopes, reserveFunctions, provisorios,
+      transactions, schedules: schedulesRelatorio, envelopes, reserveFunctions, provisorios,
       getNextOccurrences, includeSchedules,
       hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
     })
     return {
-      rows: r.rows,
+      rows: anotarLinhasProvisorias(r.rows, dpPorChave, scheduleById, occEfetiva),
       saldoAnteriorRealizado: r.saldoAnteriorRealizado,
       saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
     }
-  }, [transactions, schedules, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios])
+  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios])
 
   // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
   // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move
@@ -240,27 +254,71 @@ export default function FluxoCaixaPorConta() {
   // restaurar). Registrada nunca recebe data provisória nem sai do cálculo.
   const { rowsView, foraDoPeriodo, totalEntrada, totalSaida, saldoFinal } = useMemo(
     () => montarLinhasSimuladas(rows, {
-      datas: datasProvisorias, excluidas, start, end, saldoBase: saldoAnteriorComAgendamentos,
+      datas: datasTela, excluidas, start, end, saldoBase: saldoAnteriorComAgendamentos,
     }),
-    [rows, datasProvisorias, excluidas, start, end, saldoAnteriorComAgendamentos],
+    [rows, datasTela, excluidas, start, end, saldoAnteriorComAgendamentos],
   )
-  const qtdDatas = rowsView.reduce((n, r) => n + (r._dataOriginal ? 1 : 0), 0) + foraDoPeriodo.length
+
+  // Datas provisórias persistidas que dizem respeito a ESTA tela: agendamento das contas
+  // selecionadas, com a data original ou a provisória dentro do período. As que não viraram
+  // linha (provisória caiu fora do período) vão para o aviso, para poder restaurar.
+  const tocaContas = (sc) => accountIds.has(sc.accountId) || accountIds.has(sc.toAccountId)
+    || (sc.reservaFuncaoId && accountIds.has(funcById.get(sc.reservaFuncaoId)?.accountId))
+  const dpRelevantes = datasProvisorias.filter(d => {
+    const sc = scheduleById.get(d.schedule_id)
+    if (!sc || !tocaContas(sc)) return false
+    const dentro = (dt) => dt >= start && dt <= end
+    return dentro(d.data_original) || dentro(d.data_provisoria)
+  })
+  const dpVisiveis = new Set(rowsView.map(r => r._dpId).filter(Boolean))
+  const dpForaDoPeriodo = dpRelevantes.filter(d => !dpVisiveis.has(d.id))
+  const qtdDatasTela = rowsView.reduce((n, r) => n + (r._dataOriginal && !r._dpId ? 1 : 0), 0) + foraDoPeriodo.length
+  const qtdDatas = dpRelevantes.length + qtdDatasTela
+  const restaurarTodas = async () => {
+    limparDatasTela()
+    try {
+      await removerDatasProvisorias(dpRelevantes.map(d => d.id))
+    } catch (err) {
+      avisar(err?.message || 'Falha ao restaurar as datas.', 'error')
+    }
+  }
+  const restaurarPersistida = async (id) => {
+    try {
+      await removerDatasProvisorias([id])
+    } catch (err) {
+      avisar(err?.message || 'Falha ao restaurar a data.', 'error')
+    }
+  }
+  // ↺ de uma linha: persistida → apaga o registro; só de tela → tira do Map.
+  const restaurarLinha = (r) => (r._dpId ? restaurarPersistida(r._dpId) : setDataTela(r._key, null))
+  const fmtDdMm = (iso) => { const d = iso ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? format(d, 'dd/MM') : '' }
+  const tituloDataOriginal = (r) => `Data original: ${fmtDate(r._dataOriginal)}${r._dpDesde ? ` · Provisória desde ${fmtDdMm(r._dpDesde)}` : ''}`
 
   // Data editável: tudo o que ainda não aconteceu (A pagar / A receber / Projetado). Registrada
   // é fato; Provisório tem o próprio formulário (lápis).
   const dataEditavel = (r) => !r.real && !r._provisorio
-  const confirmarData = () => {
+  const confirmarData = async () => {
     if (cancelouDataRef.current) { cancelouDataRef.current = false; return }
     if (!editandoData) return
-    const { key, valor, original } = editandoData
+    const { key, valor, original, linha } = editandoData
     setEditandoData(null)
     if (!valor) return
-    setDataProvisoria(key, valor === original ? null : valor)
+    if (!linha?._scheduleId) { setDataTela(key, valor === original ? null : valor); return }
+    // Linha de agendamento: grava (upsert) ou, voltando à data real, apaga o registro.
+    try {
+      if (valor === original) {
+        if (linha._dpId) await removerDatasProvisorias([linha._dpId])
+      } else if (valor !== linha.date) {
+        await salvarDataProvisoria(linha._scheduleId, linha._origDate, valor)
+      }
+    } catch (err) {
+      avisar(err?.message || 'Falha ao salvar a data provisória.', 'error')
+    }
   }
 
-  // "Aplicar no agendamento": só para linhas de AGENDAMENTO (envelope projetado não tem onde
-  // gravar). Grava pelo mesmo caminho do ScheduleForm (updateSchedule → sync com o Neon).
-  const scheduleById = useMemo(() => new Map(schedules.map(sc => [sc.id, sc])), [schedules])
+  // "Aplicar data": só para linhas de AGENDAMENTO (envelope projetado não tem onde gravar).
+  // Grava pelo mesmo caminho do ScheduleForm (updateSchedule → sync com o Neon). Recorrente
+  // abre com "Só esta ocorrência" selecionado.
   const abrirAplicar = (linha) => {
     const sc = scheduleById.get(linha._scheduleId)
     if (!sc) { avisar('Agendamento de origem não encontrado.', 'error'); return }
@@ -268,17 +326,25 @@ export default function FluxoCaixaPorConta() {
     const op = opcoesAplicarData(sc, linha._origDate, linha.date, primeira)
     setAplicar({ linha, schedule: sc, op, modo: op.once ? 'unica' : 'ocorrencia' })
   }
-  const confirmarAplicar = () => {
+  const confirmarAplicar = async () => {
     if (!aplicar || aplicar.op.bloqueio) return
     const { linha, schedule: sc, modo } = aplicar
     try {
       updateSchedule(sc.id, patchAplicarData(sc, linha._origDate, linha.date, modo))
-      setDataProvisoria(linha._key, null)
-      setAplicar(null)
-      avisar(`Agendamento atualizado para ${fmtDate(linha.date)}`)
     } catch (err) {
-      // Override provisório mantido: a linha segue na data simulada.
+      // Data provisória mantida: a linha segue na data simulada.
       avisar(err?.message || 'Falha ao atualizar o agendamento.', 'error')
+      return
+    }
+    setAplicar(null)
+    avisar(`Agendamento atualizado para ${fmtDate(linha.date)}`)
+    // A data agora está no agendamento: o registro provisório (ou a data só de tela) sai.
+    if (linha._dpId) {
+      try { await removerDatasProvisorias([linha._dpId]) } catch (err) {
+        avisar(`Agendamento atualizado, mas a data provisória não foi apagada: ${err?.message || err}`, 'error')
+      }
+    } else {
+      setDataTela(linha._key, null)
     }
   }
 
@@ -511,13 +577,21 @@ export default function FluxoCaixaPorConta() {
           {!noSelection && qtdDatas > 0 && (
             <span className="inline-flex items-center gap-2 flex-wrap text-xs text-amber-500/90">
               {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''} provisoriamente
-              <button type="button" onClick={limparDatas} className="underline hover:text-amber-400">
+              <button type="button" onClick={restaurarTodas} className="underline hover:text-amber-400">
                 restaurar todas
               </button>
+              {dpForaDoPeriodo.map(d => (
+                <span key={d.id} className="inline-flex items-center gap-1 text-amber-500/70" title={`Data original: ${fmtDate(d.data_original)} · Provisória desde ${fmtDdMm(d.created_at)}`}>
+                  · {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
+                  <button type="button" onClick={() => restaurarPersistida(d.id)} className="hover:text-amber-400" title="Voltar à data original">
+                    <RotateCcw size={11} />
+                  </button>
+                </span>
+              ))}
               {foraDoPeriodo.map(r => (
-                <span key={r._key} className="inline-flex items-center gap-1 text-amber-500/70" title={`Data original: ${fmtDate(r._dataOriginal)}`}>
+                <span key={r._key} className="inline-flex items-center gap-1 text-amber-500/70" title={tituloDataOriginal(r)}>
                   · {r.description} → {fmtDate(r.date)} (fora do período)
-                  <button type="button" onClick={() => setDataProvisoria(r._key, null)} className="hover:text-amber-400" title="Voltar à data original">
+                  <button type="button" onClick={() => setDataTela(r._key, null)} className="hover:text-amber-400" title="Voltar à data original">
                     <RotateCcw size={11} />
                   </button>
                 </span>
@@ -666,18 +740,18 @@ export default function FluxoCaixaPorConta() {
                         <span className="inline-flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => { cancelouDataRef.current = false; setEditandoData({ key: r._key, valor: r.date, original: r._dataOriginal || r.date }) }}
+                            onClick={() => { cancelouDataRef.current = false; setEditandoData({ key: r._key, valor: r.date, original: r._dataOriginal || r.date, linha: r }) }}
                             className={`hover:underline ${r._dataOriginal ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}
-                            title={r._dataOriginal ? `Data original: ${fmtDate(r._dataOriginal)} — clique para alterar` : 'Alterar a data provisoriamente (simulação)'}
+                            title={r._dataOriginal ? `${tituloDataOriginal(r)} — clique para alterar` : 'Alterar a data provisoriamente'}
                           >
                             {fmtDate(r.date)}
                           </button>
                           {r._dataOriginal && (
                             <button
                               type="button"
-                              onClick={() => setDataProvisoria(r._key, null)}
+                              onClick={() => restaurarLinha(r)}
                               className="text-amber-500/80 hover:text-amber-300"
-                              title={`Data original: ${fmtDate(r._dataOriginal)} — voltar`}
+                              title={`${tituloDataOriginal(r)} — voltar`}
                             >
                               <RotateCcw size={11} />
                             </button>
@@ -703,7 +777,7 @@ export default function FluxoCaixaPorConta() {
                           className="inline-flex items-center gap-1 text-[11px] whitespace-nowrap px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
                           title="Gravar esta data no agendamento real"
                         >
-                          <Pin size={11} /> Aplicar no agendamento
+                          <Pin size={11} /> Aplicar data
                         </button>
                       )}
                       {r._provisorio && (
@@ -789,7 +863,7 @@ export default function FluxoCaixaPorConta() {
             + 'Ele vira um agendamento único (Uma vez, sem registro automático) e deixa de ser provisório.'}
       />
 
-      <Modal open={!!aplicar} onClose={() => setAplicar(null)} title="Aplicar data no agendamento">
+      <Modal open={!!aplicar} onClose={() => setAplicar(null)} title="Aplicar data">
         {aplicar && (
           <div className="space-y-4">
             <div className="text-sm space-y-1">

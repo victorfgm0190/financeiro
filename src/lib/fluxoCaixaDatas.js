@@ -128,3 +128,49 @@ export function patchAplicarData(s, orig, nova, modo) {
   }
   return { overrides: ov }
 }
+
+// ── Datas provisórias PERSISTIDAS (fluxo_datas_provisorias) ─────────────────────────────────
+// Só o relatório Fluxo de Caixa as usa: aqui viram uma exceção de data em CÓPIAS dos
+// agendamentos (overrides[dataOriginal].date), que o relatório passa ao computeFluxoCaixa. Assim a
+// ocorrência entra/sai do período e do saldo anterior exatamente como uma exceção real faria,
+// sem mudar a lib nem os números de quem chama com os agendamentos reais (Painel/KPIs).
+
+export const chaveDataProvisoria = (scheduleId, dataOriginal) => `${scheduleId}|${dataOriginal}`
+
+// Devolve { schedules (cópias com a data provisória), porChave: Map chave → registro }.
+export function aplicarDatasNosAgendamentos(schedules, datas) {
+  const porChave = new Map((datas || []).map(d => [chaveDataProvisoria(d.schedule_id, d.data_original), d]))
+  if (porChave.size === 0) return { schedules, porChave }
+  const porSchedule = new Map()
+  for (const d of datas) {
+    if (!porSchedule.has(d.schedule_id)) porSchedule.set(d.schedule_id, [])
+    porSchedule.get(d.schedule_id).push(d)
+  }
+  const out = schedules.map(s => {
+    const doSched = porSchedule.get(s.id)
+    if (!doSched) return s
+    const overrides = { ...(s.overrides || {}) }
+    for (const d of doSched) {
+      const atual = (overrides[d.data_original] && typeof overrides[d.data_original] === 'object') ? overrides[d.data_original] : {}
+      overrides[d.data_original] = { ...atual, date: d.data_provisoria }
+    }
+    return { ...s, overrides }
+  })
+  return { schedules: out, porChave }
+}
+
+// Marca as linhas que vieram de uma data provisória persistida: _dataOriginal = data REAL da
+// ocorrência (com a exceção real, se houver), _dpId / _dpDesde = registro e quando foi criado.
+// Provisória igual à real não é marcada (não há o que mostrar nem restaurar).
+export function anotarLinhasProvisorias(rows, porChave, realById, occEfetivaFn) {
+  if (!porChave || porChave.size === 0) return rows
+  return rows.map(r => {
+    if (!r._scheduleId || !r._origDate) return r
+    const d = porChave.get(chaveDataProvisoria(r._scheduleId, r._origDate))
+    if (!d) return r
+    const real = realById.get(r._scheduleId)
+    const dataReal = real ? occEfetivaFn(real, r._origDate).date : r._origDate
+    if (dataReal === r.date) return r
+    return { ...r, _dataOriginal: dataReal, _dpId: d.id, _dpDesde: d.created_at || null }
+  })
+}

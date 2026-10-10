@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { montarUpsertSql, separarLimpezaDeParcela, CAMPOS_PARCELA_PROTEGIDOS, serializarParam } from './_db.js'
 import { txToRow, categoryToRow, rowToCategory } from '../src/lib/db.js'
+import { SQL_ORFAOS } from './fluxo-datas-provisorias.js'
 
 // O upsert de lancamentos executado num Postgres de verdade (PGlite, em memória): NULL vindo do app
 // não apaga os 4 campos de parcela — e SÓ eles. Qualquer outra coluna recebe o NULL normalmente.
@@ -129,5 +130,25 @@ describe('categorias.perfil_ids no Postgres (PGlite)', () => {
     expect(serializarParam('agendamentos', 'registered', ['2026-10-01'])).toBe('["2026-10-01"]')
     expect(serializarParam('categorias', 'name', 'x')).toBe('x')
     expect(serializarParam('categorias', 'perfil_ids', null)).toBeNull()
+  })
+})
+
+// Limpeza das datas provisórias do Fluxo de Caixa: órfão = ocorrência registrada/pulada
+// (registered/skipped JSONB contêm a data original) ou agendamento excluído.
+describe('fluxo_datas_provisorias — conferência de órfãos (PGlite)', () => {
+  it('acha registrada, pulada e agendamento excluído; mantém a pendente', async () => {
+    await db.exec(`CREATE TABLE agendamentos (id TEXT PRIMARY KEY, registered JSONB, skipped JSONB)`)
+    await db.exec(`CREATE TABLE fluxo_datas_provisorias (id TEXT PRIMARY KEY, schedule_id TEXT, data_original TEXT, data_provisoria TEXT)`)
+    await db.exec(`INSERT INTO agendamentos VALUES
+      ('sch_rec', '["2026-09-20"]', '[]'),
+      ('sch_pul', '[]', '["2026-10-20"]'),
+      ('sch_pend', '["2026-09-20"]', NULL)`)
+    await db.exec(`INSERT INTO fluxo_datas_provisorias VALUES
+      ('registrada', 'sch_rec', '2026-09-20', '2026-09-25'),
+      ('pulada', 'sch_pul', '2026-10-20', '2026-10-25'),
+      ('excluido', 'sch_sumiu', '2026-10-20', '2026-10-25'),
+      ('pendente', 'sch_pend', '2026-10-20', '2026-10-25')`)
+    const ids = (await db.query(SQL_ORFAOS)).rows.map(r => r.id).sort()
+    expect(ids).toEqual(['excluido', 'pulada', 'registrada'])
   })
 })
