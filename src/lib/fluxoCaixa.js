@@ -176,7 +176,7 @@ export function computeFluxoCaixa({
                 fromAccountId: reservaAccId, toAccountId: principalId, categoryId: null,
                 reservaFuncaoId: s.reservaFuncaoId || null,
                 entrada: m1.entrada, saida: m1.saida, status: 'Projetado', real: false,
-                _key: s.id + '_resg_' + origDate,
+                _key: s.id + '_resg_' + origDate, _scheduleId: s.id, _origDate: origDate,
               })
             }
           }
@@ -190,7 +190,7 @@ export function computeFluxoCaixa({
                 categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
                 reservaFuncaoId: s.reservaFuncaoId || null,
                 entrada: m2.entrada, saida: m2.saida, status: 'Projetado', real: false,
-                _key: s.id + '_desp_' + origDate,
+                _key: s.id + '_desp_' + origDate, _scheduleId: s.id, _origDate: origDate,
               })
             }
           }
@@ -213,6 +213,9 @@ export function computeFluxoCaixa({
           reservaFuncaoId: s.reservaFuncaoId || null,
           entrada: m.entrada, saida: m.saida,
           status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + origDate,
+          // Origem da linha (agendamento + data ORIGINAL da ocorrência): usada pelo "Aplicar no
+          // agendamento" das datas provisórias do relatório. Só metadado — não entra em cálculo.
+          _scheduleId: s.id, _origDate: origDate,
         })
       })
     })

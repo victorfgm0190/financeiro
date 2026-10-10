@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { format, addDays } from 'date-fns'
-import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2, RotateCcw, Pin } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { computeFluxoCaixa } from '../../lib/fluxoCaixa'
+import { montarLinhasSimuladas, opcoesAplicarData, patchAplicarData } from '../../lib/fluxoCaixaDatas'
 import {
   fetchFluxoProvisorios, createFluxoProvisorio, updateFluxoProvisorioApi,
   deleteFluxoProvisorioApi, efetivarFluxoProvisorio,
@@ -20,6 +21,7 @@ const round2 = n => Math.round(n * 100) / 100
 const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
 const SEM_EXCLUSOES = new Set()
+const SEM_DATAS = new Map()
 
 // Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
 function exportSheet(rows, filename) {
@@ -51,7 +53,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule } = useApp()
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -75,6 +77,14 @@ export default function FluxoCaixaPorConta() {
   // no estado global, nem no banco, nem no localStorage (a seleção salva em SELECAO_STORAGE_KEY
   // guarda aba/contas/datas, não isto), então recarregar a página volta tudo marcado.
   const [selExcluidas, setSelExcluidas] = useState(() => ({ escopo: '', keys: SEM_EXCLUSOES }))
+  // Datas PROVISÓRIAS por _key (mesma chave dos checkboxes), com a mesma assinatura de escopo:
+  // simulação de tela, nada gravado; zera ao recarregar ou trocar visão/contas/grupo/período.
+  const [selDatas, setSelDatas] = useState(() => ({ escopo: '', datas: SEM_DATAS }))
+  const [editandoData, setEditandoData] = useState(null) // { key, valor, original }
+  // Esc desmonta o input, o que dispara onBlur com o rascunho da render anterior: sem esta
+  // trava o Esc CONFIRMARIA a data em vez de cancelar.
+  const cancelouDataRef = useRef(false)
+  const [aplicar, setAplicar] = useState(null)           // { linha, schedule, modo }
 
   // ── Lançamentos provisórios (simulação) ────────────────────────────────────
   // Vivem em fluxo_provisorios e SÓ neste relatório: não entram no estado global do app
@@ -153,6 +163,16 @@ export default function FluxoCaixaPorConta() {
   const escopo = `${visao}|${selectedAccountIds.join(',')}|${groupId}|${start}|${end}`
   const excluidas = selExcluidas.escopo === escopo ? selExcluidas.keys : SEM_EXCLUSOES
   const limparExcluidas = () => setSelExcluidas({ escopo, keys: SEM_EXCLUSOES })
+  const datasProvisorias = selDatas.escopo === escopo ? selDatas.datas : SEM_DATAS
+  const setDataProvisoria = (key, novaData) => {
+    setSelDatas(prev => {
+      const next = new Map(prev.escopo === escopo ? prev.datas : SEM_DATAS)
+      if (novaData) next.set(key, novaData)
+      else next.delete(key)
+      return { escopo, datas: next }
+    })
+  }
+  const limparDatas = () => setSelDatas({ escopo, datas: SEM_DATAS })
 
   const toggleLinha = (r) => {
     if (!simulavel(r)) return // registrada: o checkbox já vem disabled, isto é o cinto de segurança
@@ -214,22 +234,53 @@ export default function FluxoCaixaPorConta() {
   // Os dois saldos anteriores NÃO são refeitos, de propósito: eles são o saldo na véspera da
   // data inicial, ancorado em account.balance, e nenhuma linha DENTRO do período os compõe.
   // Desmarcar um lançamento simula o período, não reescreve o que já aconteceu antes dele.
-  const { rowsView, totalEntrada, totalSaida, saldoFinal } = useMemo(() => {
-    let bal = saldoAnteriorComAgendamentos
-    let entrada = 0
-    let saida = 0
-    const view = []
-    for (const r of rows) {
-      // Registrada é sempre ativa, aconteça o que acontecer com o Set.
-      const ativa = r.real || !excluidas.has(r._key)
-      if (!ativa) { view.push({ ...r, ativa, saldo: null }); continue }
-      entrada = round2(entrada + r.entrada)
-      saida = round2(saida + r.saida)
-      bal = round2(bal + r.entrada - r.saida)
-      view.push({ ...r, ativa, saldo: bal })
+  //
+  // Datas provisórias: a linha passa a ser ordenada/acumulada pela data nova; data nova fora do
+  // período tira a linha da tela e do cálculo (fica em `foraDoPeriodo`, listada no aviso para
+  // restaurar). Registrada nunca recebe data provisória nem sai do cálculo.
+  const { rowsView, foraDoPeriodo, totalEntrada, totalSaida, saldoFinal } = useMemo(
+    () => montarLinhasSimuladas(rows, {
+      datas: datasProvisorias, excluidas, start, end, saldoBase: saldoAnteriorComAgendamentos,
+    }),
+    [rows, datasProvisorias, excluidas, start, end, saldoAnteriorComAgendamentos],
+  )
+  const qtdDatas = rowsView.reduce((n, r) => n + (r._dataOriginal ? 1 : 0), 0) + foraDoPeriodo.length
+
+  // Data editável: tudo o que ainda não aconteceu (A pagar / A receber / Projetado). Registrada
+  // é fato; Provisório tem o próprio formulário (lápis).
+  const dataEditavel = (r) => !r.real && !r._provisorio
+  const confirmarData = () => {
+    if (cancelouDataRef.current) { cancelouDataRef.current = false; return }
+    if (!editandoData) return
+    const { key, valor, original } = editandoData
+    setEditandoData(null)
+    if (!valor) return
+    setDataProvisoria(key, valor === original ? null : valor)
+  }
+
+  // "Aplicar no agendamento": só para linhas de AGENDAMENTO (envelope projetado não tem onde
+  // gravar). Grava pelo mesmo caminho do ScheduleForm (updateSchedule → sync com o Neon).
+  const scheduleById = useMemo(() => new Map(schedules.map(sc => [sc.id, sc])), [schedules])
+  const abrirAplicar = (linha) => {
+    const sc = scheduleById.get(linha._scheduleId)
+    if (!sc) { avisar('Agendamento de origem não encontrado.', 'error'); return }
+    const primeira = getNextOccurrences(sc, 1)[0] || null
+    const op = opcoesAplicarData(sc, linha._origDate, linha.date, primeira)
+    setAplicar({ linha, schedule: sc, op, modo: op.once ? 'unica' : 'ocorrencia' })
+  }
+  const confirmarAplicar = () => {
+    if (!aplicar || aplicar.op.bloqueio) return
+    const { linha, schedule: sc, modo } = aplicar
+    try {
+      updateSchedule(sc.id, patchAplicarData(sc, linha._origDate, linha.date, modo))
+      setDataProvisoria(linha._key, null)
+      setAplicar(null)
+      avisar(`Agendamento atualizado para ${fmtDate(linha.date)}`)
+    } catch (err) {
+      // Override provisório mantido: a linha segue na data simulada.
+      avisar(err?.message || 'Falha ao atualizar o agendamento.', 'error')
     }
-    return { rowsView: view, totalEntrada: entrada, totalSaida: saida, saldoFinal: bal }
-  }, [rows, excluidas, saldoAnteriorComAgendamentos])
+  }
 
   const qtdExcluidas = rowsView.reduce((s, r) => s + (r.ativa ? 0 : 1), 0)
   // Dia imediatamente anterior à data inicial (rótulo do saldo base).
@@ -281,7 +332,8 @@ export default function FluxoCaixaPorConta() {
   // Exporta as linhas que COMPÕEM o total (já refletem filtros de data, toggles de ocultar
   // reserva/patrimônio, a visão selecionada e as linhas desmarcadas na tabela). As desmarcadas
   // ficam de fora para a planilha fechar: manter uma linha que não entrou na soma faria a coluna
-  // Saldo pular sem explicação. Inclui as linhas de Saldo anterior e o Total.
+  // Saldo pular sem explicação. Inclui as linhas de Saldo anterior e o Total. Datas provisórias
+  // saem com a data nova (a mesma da tela), para as somas da planilha fecharem com o relatório.
   const handleExport = () => {
     const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Categoria', 'Conta Reserva', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
     const aoa = [header]
@@ -456,6 +508,22 @@ export default function FluxoCaixaPorConta() {
               <span className="text-sm text-gray-300 select-none">Ocultar movimentos de patrimônio</span>
             </label>
           </div>
+          {!noSelection && qtdDatas > 0 && (
+            <span className="inline-flex items-center gap-2 flex-wrap text-xs text-amber-500/90">
+              {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''} provisoriamente
+              <button type="button" onClick={limparDatas} className="underline hover:text-amber-400">
+                restaurar todas
+              </button>
+              {foraDoPeriodo.map(r => (
+                <span key={r._key} className="inline-flex items-center gap-1 text-amber-500/70" title={`Data original: ${fmtDate(r._dataOriginal)}`}>
+                  · {r.description} → {fmtDate(r.date)} (fora do período)
+                  <button type="button" onClick={() => setDataProvisoria(r._key, null)} className="hover:text-amber-400" title="Voltar à data original">
+                    <RotateCcw size={11} />
+                  </button>
+                </span>
+              ))}
+            </span>
+          )}
           {!noSelection && qtdExcluidas > 0 && (
             <span className="inline-flex items-center gap-2 text-xs text-amber-500/90">
               {qtdExcluidas} linha{qtdExcluidas !== 1 ? 's' : ''} fora do cálculo
@@ -507,7 +575,7 @@ export default function FluxoCaixaPorConta() {
         <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-3">
           <Calendar size={14} className="text-gray-400" />
           <h2 className="text-sm font-semibold text-gray-300">Movimentações</h2>
-          <span className="text-xs text-gray-500 ml-auto">{rows.length} linha{rows.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-500 ml-auto">{rowsView.length} linha{rowsView.length !== 1 ? 's' : ''}</span>
           {!noSelection && rows.length > 0 && (
             <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
@@ -534,7 +602,7 @@ export default function FluxoCaixaPorConta() {
                   <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-24">Status</th>
                   {/* Só as linhas provisórias têm ações — as demais vêm de lançamentos/agendamentos
                       e se editam nas telas delas. */}
-                  <th className="w-20 px-2 py-2.5" />
+                  <th className="min-w-20 px-2 py-2.5" />
                 </tr>
               </thead>
               <tbody>
@@ -580,7 +648,45 @@ export default function FluxoCaixaPorConta() {
                           : r.ativa ? 'Tirar esta linha do cálculo' : 'Voltar a considerar esta linha'}
                       />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(r.date)}</td>
+                    <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                      {editandoData?.key === r._key ? (
+                        <input
+                          type="date"
+                          autoFocus
+                          className="input py-0.5 px-1 text-xs w-32"
+                          value={editandoData.valor}
+                          onChange={e => setEditandoData(ed => ({ ...ed, valor: e.target.value }))}
+                          onBlur={confirmarData}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); confirmarData() }
+                            if (e.key === 'Escape') { cancelouDataRef.current = true; setEditandoData(null) }
+                          }}
+                        />
+                      ) : dataEditavel(r) ? (
+                        <span className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => { cancelouDataRef.current = false; setEditandoData({ key: r._key, valor: r.date, original: r._dataOriginal || r.date }) }}
+                            className={`hover:underline ${r._dataOriginal ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}
+                            title={r._dataOriginal ? `Data original: ${fmtDate(r._dataOriginal)} — clique para alterar` : 'Alterar a data provisoriamente (simulação)'}
+                          >
+                            {fmtDate(r.date)}
+                          </button>
+                          {r._dataOriginal && (
+                            <button
+                              type="button"
+                              onClick={() => setDataProvisoria(r._key, null)}
+                              className="text-amber-500/80 hover:text-amber-300"
+                              title={`Data original: ${fmtDate(r._dataOriginal)} — voltar`}
+                            >
+                              <RotateCcw size={11} />
+                            </button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">{fmtDate(r.date)}</span>
+                      )}
+                    </td>
                     <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`} title={r.description}>{r.description}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{movimentacao(r)}</td>
                     <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
@@ -590,6 +696,16 @@ export default function FluxoCaixaPorConta() {
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
                     <td className="px-2 py-2.5">
+                      {r._dataOriginal && r._scheduleId && (
+                        <button
+                          type="button"
+                          onClick={() => abrirAplicar(r)}
+                          className="inline-flex items-center gap-1 text-[11px] whitespace-nowrap px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                          title="Gravar esta data no agendamento real"
+                        >
+                          <Pin size={11} /> Aplicar no agendamento
+                        </button>
+                      )}
                       {r._provisorio && (
                         <div className="flex items-center gap-1">
                           <button
@@ -672,6 +788,59 @@ export default function FluxoCaixaPorConta() {
           : `Efetivar "${provConfirm?.prov?.description}" (${fmt(provConfirm?.prov?.amount || 0)} em ${fmtDate(provConfirm?.prov?.date || '')})? `
             + 'Ele vira um agendamento único (Uma vez, sem registro automático) e deixa de ser provisório.'}
       />
+
+      <Modal open={!!aplicar} onClose={() => setAplicar(null)} title="Aplicar data no agendamento">
+        {aplicar && (
+          <div className="space-y-4">
+            <div className="text-sm space-y-1">
+              <p className="text-gray-200 font-medium">{aplicar.linha.description}</p>
+              <p className="text-gray-400">
+                {fmt(aplicar.linha.saida || aplicar.linha.entrada)} ·{' '}
+                <span className="text-gray-300">{fmtDate(aplicar.linha._dataOriginal)}</span> →{' '}
+                <span className="text-amber-400 font-semibold">{fmtDate(aplicar.linha.date)}</span>
+              </p>
+            </div>
+
+            {aplicar.op.bloqueio ? (
+              <p className="text-xs p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 leading-relaxed">{aplicar.op.bloqueio}</p>
+            ) : aplicar.op.once ? (
+              <p className="text-xs text-gray-400">Agendamento <span className="text-gray-200">Única</span>: a data dele passa a ser {fmtDate(aplicar.linha.date)}.</p>
+            ) : (
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" className="mt-0.5 accent-[#0F6E56]" checked={aplicar.modo === 'ocorrencia'} onChange={() => setAplicar(a => ({ ...a, modo: 'ocorrencia' }))} />
+                  <span className="text-sm text-gray-200">Só esta ocorrência
+                    <span className="block text-xs text-gray-500">Exceção desta ocorrência (a mesma de "Próximas ocorrências" no agendamento); a série não muda.</span>
+                  </span>
+                </label>
+                <label className={`flex items-start gap-2 ${aplicar.op.serie.ok ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                  <input type="radio" className="mt-0.5 accent-[#0F6E56]" disabled={!aplicar.op.serie.ok} checked={aplicar.modo === 'serie'} onChange={() => setAplicar(a => ({ ...a, modo: 'serie' }))} />
+                  <span className="text-sm text-gray-200">Esta e as próximas (move a série)
+                    <span className="block text-xs text-gray-500">
+                      {aplicar.op.serie.ok ? 'A série passa a partir desta nova data.' : aplicar.op.serie.motivo}
+                    </span>
+                  </span>
+                </label>
+                {aplicar.modo === 'serie' && aplicar.op.avisos.map((a, i) => (
+                  <p key={i} className="text-xs p-2 rounded bg-amber-500/10 text-amber-300">{a}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" className="btn-secondary flex-1" onClick={() => setAplicar(null)}>Cancelar</button>
+              <button
+                type="button"
+                className="btn-primary flex-1 disabled:opacity-40"
+                disabled={!!aplicar.op.bloqueio}
+                onClick={confirmarAplicar}
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </div>
