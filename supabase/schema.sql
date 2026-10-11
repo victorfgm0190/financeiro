@@ -875,3 +875,25 @@ CREATE TABLE IF NOT EXISTS fluxo_datas_provisorias (
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (schedule_id, data_original)
 );
+
+-- CONSULTAS salvas da tela Fluxo de Caixa Futuro (conjunto de contas + opções + horizonte).
+-- Só uma padrao = true (a API desmarca as outras na mesma transação). perfil_ids vazio = todos.
+-- Também criada pela API (CREATE TABLE IF NOT EXISTS em api/fluxo-consultas.js).
+CREATE TABLE IF NOT EXISTS fluxo_consultas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL,
+  modo TEXT NOT NULL CHECK (modo IN ('conta', 'grupo', 'principais')),
+  account_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  group_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  perfil_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  incluir_agendamentos BOOLEAN NOT NULL DEFAULT true,
+  incluir_lancamentos_futuros BOOLEAN NOT NULL DEFAULT true,
+  incluir_envelopes BOOLEAN NOT NULL DEFAULT true,
+  ocultar_reserva BOOLEAN NOT NULL DEFAULT false,
+  ocultar_patrimonio BOOLEAN NOT NULL DEFAULT false,
+  horizonte_padrao INTEGER NOT NULL DEFAULT 30,
+  padrao BOOLEAN NOT NULL DEFAULT false,
+  ordem INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

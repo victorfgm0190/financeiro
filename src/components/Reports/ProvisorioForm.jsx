@@ -11,8 +11,9 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 // Formulário do lançamento PROVISÓRIO do Fluxo de Caixa por Conta: uma entrada/saída de
 // simulação gravada em fluxo_provisorios (tabela à parte — não é agendamento nem lançamento).
 // Com `initial`, abre em modo edição. `onSalvar` recebe o payload em snake_case, já validado,
-// no formato que /api/fluxo-provisorios espera.
-export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose }) {
+// no formato que /api/fluxo-provisorios espera. `contas` (opcional) restringe a escolha de conta
+// (a tela Fluxo de Caixa Futuro passa só as contas da consulta ativa).
+export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar, onClose }) {
   const { profileAccounts: accounts, accountGroups, categories, activeProfileId, categoryGroupOrder } = useApp()
 
   const [form, setForm] = useState({
@@ -67,9 +68,9 @@ export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose
       <div className="flex items-start gap-2 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
         <Info size={14} className="text-purple-400 shrink-0 mt-0.5" />
         <p className="text-xs text-purple-300/90 leading-snug">
-          Um provisório é uma simulação: entra no saldo acumulado, nos totais e no Saldo
-          Projetado <strong>deste relatório</strong> e em mais nada — não vira agendamento, não
-          mexe no saldo da conta e não aparece em nenhuma outra tela. Dá para efetivá-lo depois.
+          Um provisório é uma simulação: entra no saldo acumulado, nos totais e no projetado
+          do <strong>Fluxo de Caixa</strong> (relatório e tela Fluxo de Caixa Futuro) e em mais
+          nada — não vira agendamento e não mexe no saldo da conta. Dá para efetivá-lo depois.
         </p>
       </div>
 
@@ -128,7 +129,7 @@ export default function ProvisorioForm({ initial, contaPadrao, onSalvar, onClose
           <label className="label">Conta *</label>
           <select className="input" value={form.account_id} onChange={e => set('account_id', e.target.value)} required>
             <AccountOptions
-              accounts={accounts}
+              accounts={contas || accounts}
               accountGroups={accountGroups}
               labelFn={a => a.apelido || a.name}
             />

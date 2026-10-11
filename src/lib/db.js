@@ -213,6 +213,24 @@ export async function efetivarFluxoProvisorio(id) {
   return { id, schedule: r?.schedule ? rowToSchedule(r.schedule) : null }
 }
 
+// Consultas salvas da tela Fluxo de Caixa Futuro (fluxo_consultas). Escrita direta por
+// operação, fora do diff-sync; objetos em snake_case (normalizados em lib/fluxoConsultas).
+export async function fetchFluxoConsultas() {
+  const r = await apiGet('/api/fluxo-consultas')
+  return r?.consultas || []
+}
+export async function createFluxoConsulta(c) {
+  const r = await apiPost('/api/fluxo-consultas', c)
+  return r.consulta
+}
+export async function updateFluxoConsultaApi(c) {
+  const r = await apiPut('/api/fluxo-consultas', c)
+  return r.consulta
+}
+export async function deleteFluxoConsultaApi(id) {
+  return apiDelete(`/api/fluxo-consultas?id=${encodeURIComponent(id)}`)
+}
+
 // ─── Motor de Integridade (pendências) ────────────────────────────────────────
 // Escrita direta por operação, fora do diff-sync (a tabela não faz parte de `data`).
 // Objetos em snake_case, como o endpoint devolve.

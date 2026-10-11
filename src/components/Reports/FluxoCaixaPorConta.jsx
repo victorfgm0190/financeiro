@@ -9,10 +9,7 @@ import {
   montarLinhasSimuladas, opcoesAplicarData, patchAplicarData,
   aplicarDatasNosAgendamentos, anotarLinhasProvisorias,
 } from '../../lib/fluxoCaixaDatas'
-import {
-  fetchFluxoProvisorios, createFluxoProvisorio, updateFluxoProvisorioApi,
-  deleteFluxoProvisorioApi, efetivarFluxoProvisorio,
-} from '../../lib/db'
+import { useFluxoProvisorios } from '../../hooks/useFluxoProvisorios'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
@@ -92,58 +89,40 @@ export default function FluxoCaixaPorConta() {
   const [aplicar, setAplicar] = useState(null)           // { linha, schedule, modo }
 
   // ── Lançamentos provisórios (simulação) ────────────────────────────────────
-  // Vivem em fluxo_provisorios e SÓ neste relatório: não entram no estado global do app
-  // (data/localStorage/diff-sync), então são lidos e gravados direto pelo endpoint.
-  const [provisorios, setProvisorios] = useState([])
+  // Vivem em fluxo_provisorios e são compartilhados com a tela Fluxo de Caixa Futuro (hook):
+  // o que se cria numa aparece na outra.
+  const { provisorios, salvarProvisorio: gravarProvisorio, excluirProvisorio: apagarProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
   const [provModal, setProvModal] = useState(null)   // { initial } — null = fechado
   const [provConfirm, setProvConfirm] = useState(null) // { acao: 'excluir'|'efetivar', prov }
   const [toast, setToast] = useState(null)           // { message, variant }
   const avisar = (message, variant = 'success') => setToast({ message, variant })
 
-  useEffect(() => {
-    let vivo = true
-    fetchFluxoProvisorios()
-      .then(lista => { if (vivo) setProvisorios(lista) })
-      // Falha aqui não pode derrubar o relatório: sem provisórios ele é exatamente o de antes.
-      .catch(err => console.error('[FluxoCaixa] provisórios:', err.message))
-    return () => { vivo = false }
-  }, [])
-
   const salvarProvisorio = useCallback(async (payload) => {
-    if (payload.id) {
-      const atualizado = await updateFluxoProvisorioApi(payload)
-      setProvisorios(lista => lista.map(p => p.id === atualizado.id ? atualizado : p))
-      avisar('Provisório atualizado.')
-    } else {
-      const criado = await createFluxoProvisorio(payload)
-      setProvisorios(lista => [...lista, criado])
-      avisar('Provisório adicionado.')
-    }
-  }, [])
+    await gravarProvisorio(payload)
+    avisar(payload.id ? 'Provisório atualizado.' : 'Provisório adicionado.')
+  }, [gravarProvisorio])
 
   const excluirProvisorio = useCallback(async (prov) => {
     try {
-      await deleteFluxoProvisorioApi(prov.id)
-      setProvisorios(lista => lista.filter(p => p.id !== prov.id))
+      await apagarProvisorio(prov.id)
       avisar('Provisório excluído.')
     } catch (err) {
       avisar(err.message || 'Falha ao excluir o provisório.', 'error')
     }
-  }, [])
+  }, [apagarProvisorio])
 
   // Efetivar: o backend cria o agendamento único e apaga o provisório na MESMA transação.
-  // Aqui só espelhamos o resultado — o agendamento no estado global (para ele já aparecer como
-  // "A pagar"/"A receber" sem esperar um full-load) e a remoção da linha provisória.
+  // Aqui só espelhamos o agendamento no estado global (para ele já aparecer como
+  // "A pagar"/"A receber" sem esperar um full-load).
   const efetivarProvisorio = useCallback(async (prov) => {
     try {
-      const { schedule } = await efetivarFluxoProvisorio(prov.id)
-      setProvisorios(lista => lista.filter(p => p.id !== prov.id))
+      const schedule = await efetivarComoAgendamento(prov.id)
       if (schedule) mergeScheduleFromDb(schedule)
       avisar('Provisório efetivado como agendamento.')
     } catch (err) {
       avisar(err.message || 'Falha ao efetivar o provisório.', 'error')
     }
-  }, [mergeScheduleFromDb])
+  }, [efetivarComoAgendamento, mergeScheduleFromDb])
 
   // Só o que AINDA NÃO ACONTECEU entra na simulação. `real` é exatamente o lançamento já
   // efetivado (status "Registrada"); ele compõe o saldo de verdade da conta e tirá-lo da conta

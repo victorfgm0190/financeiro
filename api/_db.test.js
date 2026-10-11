@@ -3,6 +3,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { montarUpsertSql, separarLimpezaDeParcela, CAMPOS_PARCELA_PROTEGIDOS, serializarParam } from './_db.js'
 import { txToRow, categoryToRow, rowToCategory } from '../src/lib/db.js'
 import { SQL_ORFAOS } from './fluxo-datas-provisorias.js'
+import { DDL_FLUXO_CONSULTAS, SQL_DESMARCAR_PADRAO, normalizarConsultaBody } from './fluxo-consultas.js'
 
 // O upsert de lancamentos executado num Postgres de verdade (PGlite, em memória): NULL vindo do app
 // não apaga os 4 campos de parcela — e SÓ eles. Qualquer outra coluna recebe o NULL normalmente.
@@ -150,5 +151,28 @@ describe('fluxo_datas_provisorias — conferência de órfãos (PGlite)', () => 
       ('pendente', 'sch_pend', '2026-10-20', '2026-10-25')`)
     const ids = (await db.query(SQL_ORFAOS)).rows.map(r => r.id).sort()
     expect(ids).toEqual(['excluido', 'pulada', 'registrada'])
+  })
+})
+
+// Consultas do Fluxo de Caixa Futuro: a DDL real roda no Postgres, o CHECK do modo vale e marcar
+// uma consulta como padrão desmarca as outras.
+describe('fluxo_consultas (PGlite)', () => {
+  it('DDL, CHECK do modo e só uma padrão', async () => {
+    await db.exec(DDL_FLUXO_CONSULTAS)
+    const ins = async (body) => {
+      const { dados } = normalizarConsultaBody(body)
+      return (await db.query(`INSERT INTO fluxo_consultas (nome, modo, account_ids, group_ids, perfil_ids,
+        incluir_agendamentos, incluir_lancamentos_futuros, incluir_envelopes, ocultar_reserva,
+        ocultar_patrimonio, horizonte_padrao, padrao, ordem)
+        VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`, dados)).rows[0]
+    }
+    const a = await ins({ nome: 'Só Itaú', modo: 'conta', account_ids: ['itau'], padrao: true })
+    expect(a).toMatchObject({ account_ids: ['itau'], horizonte_padrao: 30, incluir_envelopes: true, padrao: true })
+    const b = await ins({ nome: 'Bancos', modo: 'grupo', group_ids: ['g1'], horizonte_padrao: 45, padrao: true })
+    await db.query(SQL_DESMARCAR_PADRAO, [b.id])
+    const padroes = (await db.query('SELECT nome FROM fluxo_consultas WHERE padrao')).rows.map(r => r.nome)
+    expect(padroes).toEqual(['Bancos'])
+    await expect(db.query(`INSERT INTO fluxo_consultas (nome, modo) VALUES ('x', 'outro')`)).rejects.toThrow()
+    expect(normalizarConsultaBody({ nome: 'x', modo: 'conta', horizonte_padrao: 90 }).erro).toMatch(/horizonte/)
   })
 })
