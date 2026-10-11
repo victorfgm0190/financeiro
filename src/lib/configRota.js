@@ -19,6 +19,7 @@ export const CONFIG_ABAS = [
       { id: 'grupos-contas', label: 'Grupos de contas' },
       { id: 'controle-gerencial', label: 'Controle gerencial' },
       { id: 'favorecidos', label: 'Favorecidos', novo: true },
+      { id: 'tipos-documento', label: 'Tipos de documento', novo: true },
     ],
   },
   {

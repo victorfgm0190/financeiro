@@ -28,6 +28,9 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
 import { pagarParcela } from '../../lib/bemApi'
 import ToastShared from '../shared/Toast'
+import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
+import TipoDocumentoFiltro from '../shared/TipoDocumentoFiltro'
+import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO } from '../../lib/tiposDocumento'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -750,7 +753,7 @@ function ScheduleRow({
   deleteSchedule, getNextOccurrences, onToast,
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
-  srfBySchedule, rateiosBySchedule, onToggleConfirmado,
+  srfBySchedule, rateiosBySchedule, onToggleConfirmado, tiposDocumento = [],
 }) {
   // Provisão de despesa exibe badge "Provisão". O botão "Efetivar" aparece enquanto houver uma
   // próxima ocorrência a efetivar: para "Uma vez", até provisao_efetivada virar true; para
@@ -861,7 +864,7 @@ function ScheduleRow({
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
-            {nextDate ? (
+            {!ehSintetico(schedule) ? (
               <input
                 type="checkbox"
                 checked={isSelected}
@@ -893,6 +896,11 @@ function ScheduleRow({
               <span className="text-xs text-gray-700">Concluído</span>
             </div>
           )}
+        </td>
+
+        {/* Doc. — tipo de documento (gravado ou fallback CC/RES) */}
+        <td className="px-2 py-3 w-[70px] max-w-[70px] whitespace-nowrap">
+          <TipoDocumentoBadge tipo={resolverTipoDocumento(schedule, tiposDocumento)} />
         </td>
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
@@ -1511,7 +1519,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento } = useApp()
+  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1542,6 +1550,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const [showBatchRegister, setShowBatchRegister] = useState(false)
   const [showBatchSkip, setShowBatchSkip] = useState(false)
   const [toast, setToast] = useState(null)
+  // Edição em massa do tipo de documento: '' | id do tipo | SEM_TIPO (remover).
+  const [tipoMassa, setTipoMassa] = useState('')
+  const [aplicandoTipo, setAplicandoTipo] = useState(false)
 
   // Linhas aglutinadas: 1 por agendamento lógico (séries de fatura colapsadas; recorrentes
   // com ocorrências futuras em futureItems). Particionamento/seleção seguem usando nextDate.
@@ -1558,9 +1569,12 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const future     = rows.filter(r => r.displayDate && r.displayDate > in30).sort((a, b) => a.displayDate.localeCompare(b.displayDate))
   const completed  = rows.filter(r => !r.nextDate).sort((a, b) => (b.schedule.startDate || '').localeCompare(a.schedule.startDate || ''))
 
-  const selectableRows = rows.filter(r => r.nextDate)
+  // Selecionável = registro real (sintéticos — envelope, resgate previsto sch:… — nunca). Registrar/
+  // pular só valem para quem tem próxima ocorrência (selectedRows); o tipo de documento, para todos.
+  const selectableRows = rows.filter(r => !ehSintetico(r.schedule))
   const allSelected = selectableRows.length > 0 && selectableRows.every(r => selected.has(r.schedule.id))
   const selectedRows = rows.filter(r => selected.has(r.schedule.id) && r.nextDate)
+  const selectedIds = selectableRows.filter(r => selected.has(r.schedule.id)).map(r => r.schedule.id)
 
   // Totalizador dinâmico da seleção: agrupa por tipo de movimentação e calcula o saldo
   // líquido de caixa (receita + resgate − despesa − aplicação). Fatura é grupo à parte,
@@ -1659,6 +1673,28 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     showToastMsg(`${count} lançamento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''} com sucesso`)
   }
 
+  // Aplica (ou remove) o tipo de documento em todos os selecionados: uma transação no banco e o
+  // estado atualizado na hora (sem reload). A seleção é limpa — com o filtro "Sem tipo" ativo os
+  // itens saem da lista.
+  const aplicarTipoMassa = async () => {
+    if (!tipoMassa || selectedIds.length === 0) return
+    setAplicandoTipo(true)
+    try {
+      const remover = tipoMassa === SEM_TIPO
+      const n = await setTipoDocumentoEmMassa(selectedIds, remover ? null : tipoMassa)
+      const sigla = remover ? '' : (tiposDocumento.find(t => t.id === tipoMassa)?.sigla || '')
+      showToastMsg(remover
+        ? `Tipo de documento removido de ${n} agendamento${n !== 1 ? 's' : ''}`
+        : `Tipo ${sigla} aplicado em ${n} agendamento${n !== 1 ? 's' : ''}`)
+      setSelected(new Set())
+      setTipoMassa('')
+    } catch (err) {
+      showToastMsg(`Falha ao aplicar o tipo: ${err?.message || 'erro'}`)
+    } finally {
+      setAplicandoTipo(false)
+    }
+  }
+
   const handleBatchSkip = () => {
     const count = selectedRows.length
     selectedRows.forEach(({ schedule, nextDate }) => skipScheduleOccurrence(schedule.id, nextDate))
@@ -1677,7 +1713,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     )
   }
 
-  const cols = selectionMode ? 9 : 8
+  const cols = selectionMode ? 10 : 9
   const rowProps = {
     categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered,
     registerScheduleOccurrence, skipScheduleOccurrence,
@@ -1689,6 +1725,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     // (ver criarRateiosParcela). Serve a parcela de financiamento, que exibe principal e juros
     // como duas linhas sob o valor cheio, mas vale para qualquer agendamento rateado.
     rateiosBySchedule: rateiosByLancamento,
+    tiposDocumento,
     cols,
   }
 
@@ -1741,18 +1778,40 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowBatchRegister(true)}
-              disabled={selected.size === 0}
+              disabled={selectedRows.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <CheckCircle size={12} /> Registrar selecionados
             </button>
             <button
               onClick={() => setShowBatchSkip(true)}
-              disabled={selected.size === 0}
+              disabled={selectedRows.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <SkipForward size={12} /> Pular selecionados
             </button>
+            {/* Definir tipo de documento (em massa) */}
+            <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-indigo-500/20">
+              <select
+                className="input py-1 text-xs w-44"
+                value={tipoMassa}
+                onChange={e => setTipoMassa(e.target.value)}
+                title="Definir tipo de documento"
+              >
+                <option value="">Definir tipo de documento…</option>
+                {tiposDocumento.filter(t => t.ativo !== false).map(t => (
+                  <option key={t.id} value={t.id}>{t.sigla} — {t.nome}</option>
+                ))}
+                <option value={SEM_TIPO}>Remover tipo</option>
+              </select>
+              <button
+                onClick={aplicarTipoMassa}
+                disabled={!tipoMassa || selectedIds.length === 0 || aplicandoTipo}
+                className="px-3 py-1.5 text-xs font-medium bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {aplicandoTipo ? 'Aplicando…' : 'Aplicar'}
+              </button>
+            </div>
             <button
               onClick={cancelSelection}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg transition-colors"
@@ -1791,6 +1850,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                   </th>
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full">Descrição</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
@@ -2092,7 +2152,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
-    activeProfileId, settings,
+    activeProfileId, settings, tiposDocumento,
   } = useApp()
 
   // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
@@ -2132,8 +2192,10 @@ export default function SchedulePanel() {
   const [fltMax, setFltMax] = useState('')
   // Filtro de valor (multiselect) — valores reais dos agendamentos visíveis.
   const [selValores, setSelValores] = useState(() => new Set())
-  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0
-  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax(''); setSelValores(new Set()) }
+  // Multi-select de tipo de documento (chaves de chaveFiltroTipo; SEM_TIPO = "Sem tipo").
+  const [selTipos, setSelTipos] = useState(() => new Set())
+  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0 || selTipos.size > 0
+  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax(''); setSelValores(new Set()); setSelTipos(new Set()) }
 
   // Filtro por cartão na aba "Cartão de Crédito" ('' = todos os cartões)
   const [cartaoFiltroId, setCartaoFiltroId] = useState('')
@@ -2344,12 +2406,19 @@ export default function SchedulePanel() {
     return [...set].sort((a, b) => b - a)
   }, [searchedSchedules])
   // Lista final após o filtro de valor (multiselect).
-  const finalSchedules = useMemo(
-    () => selValores.size === 0
+  // + filtro de tipo de documento, pelo tipo RESOLVIDO (resolverTipoDocumento): a fatura de cartão
+  // sem tipo gravado cai em CC.
+  const finalSchedules = useMemo(() => {
+    const porValor = selValores.size === 0
       ? searchedSchedules
-      : searchedSchedules.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100)),
-    [searchedSchedules, selValores]
-  )
+      : searchedSchedules.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
+    return filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
+  }, [searchedSchedules, selValores, selTipos, tiposDocumento])
+  // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
+  const extrasTipoFiltro = useMemo(() => [
+    ...(tiposDocumento.some(t => t.sigla === 'CC') ? [] : [{ id: 'CC', sigla: 'CC', nome: 'Fatura de Cartão (automático)', cor: '#8b5cf6' }]),
+    { id: 'RES', sigla: 'RES', nome: 'Resgate de reserva (automático)', cor: '#14b8a6' },
+  ], [tiposDocumento])
 
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
@@ -2427,7 +2496,7 @@ export default function SchedulePanel() {
           </div>
 
           {/* Barra de filtros (tempo real) — fixa no topo ao rolar apenas no desktop (md+) */}
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 items-end md:sticky md:top-0 md:z-20">
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end md:sticky md:top-0 md:z-20">
             <div>
               <label className="label text-xs">Data de</label>
               <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
@@ -2447,6 +2516,10 @@ export default function SchedulePanel() {
             <div>
               <label className="label text-xs">Categoria</label>
               <CategorySelect categories={categories} value={fltCat} onChange={e => setFltCat(e.target.value)} className="input py-1.5 text-xs" />
+            </div>
+            <div>
+              <label className="label text-xs">Tipo de documento</label>
+              <TipoDocumentoFiltro tipos={tiposDocumento} extras={extrasTipoFiltro} selected={selTipos} onChange={setSelTipos} />
             </div>
             <div>
               <label className="label text-xs">Valor de</label>

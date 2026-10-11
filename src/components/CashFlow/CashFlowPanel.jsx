@@ -21,6 +21,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
+import { resolverTipoDocumento, itemDaLinhaFluxo } from '../../lib/tiposDocumento'
 import ProvisorioForm from '../Reports/ProvisorioForm'
 import ConsultaModal from './ConsultaModal'
 import ConsultaCard from './ConsultaCard'
@@ -79,10 +81,18 @@ export default function CashFlowPanel({ setActivePage }) {
     profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules,
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
-    datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
+    datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
+
+  // Coluna "Doc.": linha → agendamento/lançamento de origem → tipo (gravado ou fallback CC/ENV/RES).
+  const ctxDoc = useMemo(() => ({
+    txPorId: new Map(transactions.map(t => [t.id, t])),
+    agPorId: new Map(schedules.map(s => [s.id, s])),
+    contaPorId: new Map(accounts.map(a => [a.id, a])),
+  }), [transactions, schedules, accounts])
+  const docDaLinha = (r) => resolverTipoDocumento(itemDaLinhaFluxo(r, ctxDoc), tiposDocumento)
 
   const [toast, setToast] = useState(null)
   const avisar = (message, variant = 'success') => setToast({ message, variant })
@@ -549,11 +559,12 @@ export default function CashFlowPanel({ setActivePage }) {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: 860 }}>
+              <table className="w-full text-sm" style={{ minWidth: 930 }}>
                 <thead>
                   <tr className="border-b border-gray-800">
                     <th className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-28">Data</th>
+                    <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-32">Conta</th>
                     <th className="text-right px-3 py-2.5 text-xs text-blue-500 font-medium w-28">
@@ -570,7 +581,7 @@ export default function CashFlowPanel({ setActivePage }) {
                   <tr className="border-b border-gray-800/50 bg-gray-800/20">
                     <td className="px-2 py-2" />
                     <td className="px-3 py-2 text-xs text-gray-500">Hoje</td>
-                    <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>
+                    <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={5}>
                       Saldo inicial ({contas.length} conta{contas.length !== 1 ? 's' : ''}, cada uma no seu último dia)
                     </td>
                     <td className={`px-3 py-2 text-right text-xs font-bold ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</td>
@@ -591,7 +602,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           />
                         </td>
                         <td className="px-3 py-2 text-xs text-red-400">Hoje</td>
-                        <td className="px-3 py-2 text-xs" colSpan={2}>
+                        <td className="px-3 py-2 text-xs" colSpan={3}>
                           <button type="button" onClick={() => setAtrasoAberto(o => !o)} className="inline-flex items-center gap-1 text-red-300 hover:text-red-200">
                             {atrasoAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                             Pendências em atraso ({atraso.length})
@@ -610,6 +621,7 @@ export default function CashFlowPanel({ setActivePage }) {
                               <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
                             </td>
                             <td className="px-3 py-1.5 text-[11px] text-red-400/80 pl-6">{fmtDate(r.date)}</td>
+                            <td className="px-2 py-1.5 w-[70px]"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
                             <td className={`px-3 py-1.5 text-[11px] ${ativa ? 'text-gray-300' : 'text-gray-500 line-through'}`}>{r.description}</td>
                             <td className="px-3 py-1.5 text-[11px] text-gray-500">{accName(contaDaLinha(r, accountIds))}</td>
                             <td className="px-3 py-1.5 text-right text-[11px] text-blue-500/80">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
@@ -652,6 +664,7 @@ export default function CashFlowPanel({ setActivePage }) {
                             </span>
                           ) : <span className="text-gray-400">{fmtDate(r.date)}</span>}
                         </td>
+                        <td className="px-2 py-2.5 w-[70px] whitespace-nowrap"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`} title={r.description}>{r.description}</span>
@@ -698,7 +711,7 @@ export default function CashFlowPanel({ setActivePage }) {
                     )
                   })}
                   {rowsView.length === 0 && (
-                    <tr><td colSpan={8} className="text-center py-8 text-gray-500 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
+                    <tr><td colSpan={9} className="text-center py-8 text-gray-500 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
                   )}
                 </tbody>
               </table>

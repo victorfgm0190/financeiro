@@ -1,6 +1,7 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureBemSchema } from './_bem.js'
+import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -417,7 +418,11 @@ export default async function handler(req, res) {
       console.error('[api/load] ensureBemSchema:', err.message)
     }
 
-    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases] =
+    // Tipos de documento: tabela + seed + coluna tipo_documento_id em agendamentos/lancamentos.
+    // SEM try: txToRow/scheduleToRow mandam a coluna em todo sync, então sem ela o app não grava.
+    await ensureTiposDocumentoSchema()
+
+    const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos] =
       await Promise.all([
         query('SELECT * FROM contas'),
         query('SELECT * FROM lancamentos ORDER BY created_at'),
@@ -438,6 +443,7 @@ export default async function handler(req, res) {
         query('SELECT * FROM lancamento_rateios'),
         query('SELECT * FROM schedule_reserva_funcoes'),
         query('SELECT * FROM favorecido_alias ORDER BY created_at'),
+        query('SELECT * FROM tipos_documento ORDER BY ordem, nome'),
       ])
 
     res.json({
@@ -447,7 +453,7 @@ export default async function handler(req, res) {
       served_at: new Date().toISOString(),
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
-      envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases,
+      envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos,
     })
   } catch (err) {
     const isTableMissing =

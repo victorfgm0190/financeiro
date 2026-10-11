@@ -897,3 +897,42 @@ CREATE TABLE IF NOT EXISTS fluxo_consultas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- TIPOS DE DOCUMENTO (Boleto, NF, Fatura de Cartão…) + vínculo opcional em agendamentos/lançamentos.
+-- Também criados pela API (api/_tiposDocumento.js, chamado por /api/load e /api/tipos-documento).
+-- Seed só com a tabela vazia. sistema = true não pode ser excluído; tipo em uso só é inativado.
+CREATE TABLE IF NOT EXISTS tipos_documento (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  nome TEXT NOT NULL,
+  sigla TEXT NOT NULL CHECK (char_length(sigla) BETWEEN 1 AND 4),
+  natureza TEXT NOT NULL DEFAULT 'ambos' CHECK (natureza IN ('pagar', 'receber', 'ambos')),
+  cor TEXT,
+  ordem INTEGER NOT NULL DEFAULT 0,
+  ativo BOOLEAN NOT NULL DEFAULT true,
+  sistema BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE tipos_documento DISABLE ROW LEVEL SECURITY;
+
+INSERT INTO tipos_documento (nome, sigla, natureza, cor, sistema, ordem)
+SELECT * FROM (VALUES
+  ('Fatura', 'FAT', 'ambos', '#6366f1', false, 1),
+  ('Fatura de Cartão', 'CC', 'pagar', '#8b5cf6', true, 2),
+  ('Boleto', 'BOL', 'pagar', '#f59e0b', false, 3),
+  ('Nota Fiscal', 'NF', 'ambos', '#0ea5e9', false, 4),
+  ('Recibo', 'REC', 'ambos', '#14b8a6', false, 5),
+  ('Duplicata', 'DUP', 'ambos', '#a855f7', false, 6),
+  ('Guia de Imposto', 'GUIA', 'pagar', '#ef4444', false, 7),
+  ('Contrato', 'CTR', 'ambos', '#64748b', false, 8),
+  ('PIX/Transferência', 'PIX', 'ambos', '#10b981', false, 9),
+  ('Débito Automático', 'DA', 'pagar', '#f97316', false, 10),
+  ('Outros', 'OUT', 'ambos', '#9ca3af', false, 11)
+) AS v(nome, sigla, natureza, cor, sistema, ordem)
+WHERE NOT EXISTS (SELECT 1 FROM tipos_documento);
+
+-- Sem FK: o sync grava a tabela inteira e um id de tipo já apagado derrubaria o upsert.
+-- Registros existentes ficam NULL (a exibição usa fallback; nada é gravado automaticamente).
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_documento_id TEXT;
+ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS tipo_documento_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_agendamentos_tipo_documento ON agendamentos (tipo_documento_id);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo_documento ON lancamentos (tipo_documento_id);

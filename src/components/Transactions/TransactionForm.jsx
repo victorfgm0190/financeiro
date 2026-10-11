@@ -12,6 +12,8 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
+import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
@@ -146,6 +148,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     reservaFuncaoId: initial?.reservaFuncaoId || (initialReservaContaId ? (initialResgate?.reservaFuncaoId || '') : ''),
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
+    tipoDocumentoId: initial?.tipoDocumentoId || '',
     repeat: false,
     repeatFrequency: 'monthly',
     repeatOccurrenceType: 'continuous',
@@ -158,6 +161,9 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   })
 
   const [step, setStep] = useState('form')
+  // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
+  const [erroTipoDoc, setErroTipoDoc] = useState('')
+  const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.type })
   const [resgateInfo, setResgateInfo] = useState(null)
   const [resgateDate, setResgateDate] = useState(() => today())
   const [resgateToDelete, setResgateToDelete] = useState(null)
@@ -417,6 +423,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   const handleSubmit = (e, installmentDecision) => {
     e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
+    if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
 
     // Item 2: descrição com "N/Total" e "Parcelado" não marcado → nunca decidir em silêncio.
     // Mostra o passo de confirmação; a decisão volta como `installmentDecision` no re-submit
@@ -475,6 +482,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       // preserva o valor existente (ex.: etapa A tx_gerA_* já traz faturaRef própria).
       faturaRef: showFaturaRef ? ((form.faturaRef || '').trim() || null) : (initial?.faturaRef ?? null),
       dateCartao: form.dateCartao || null,
+      // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
+      tipoDocumentoId: form.tipoDocumentoId || null,
       // Campos de parcela só na CRIAÇÃO. Na edição eles saíam null (isParcelado/decidedInst só valem
       // para lançamento novo) e o updateTransaction gravava installment_num/total, serie_id e,
       // por derivação, installment_key = NULL — o vínculo da série se perdia ao salvar qualquer
@@ -751,6 +760,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         remindDaysBefore: Number(form.repeatRemindDaysBefore) || 0,
         autoRegister: false,
         grupoGerencial: showGerencial ? form.grupoGerencial : null,
+        tipoDocumentoId: form.tipoDocumentoId || null,
         skipped: [],
         overrides: {},
       })
@@ -1393,6 +1403,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           )}
         </>
       )}
+
+      <TipoDocumentoSelect
+        value={form.tipoDocumentoId}
+        onChange={v => { setErroTipoDoc(''); set('tipoDocumentoId', v || '') }}
+        tipoMov={form.type}
+        required={tipoDocObrigatorio}
+        erro={erroTipoDoc}
+      />
 
       <div>
         <label className="label">Data *</label>

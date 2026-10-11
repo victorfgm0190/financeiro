@@ -7,6 +7,8 @@ import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
+import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -252,7 +254,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     grupoGerencial: initial?.grupoGerencial || null,
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
+    tipoDocumentoId: initial?.tipoDocumentoId || '',
   }))
+  // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
+  const [erroTipoDoc, setErroTipoDoc] = useState('')
+  const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.transactionType })
 
   const [editingOcc, setEditingOcc] = useState(null)
 
@@ -394,9 +400,12 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
     if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
+    if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     const data = {
       ...form,
+      // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
+      tipoDocumentoId: form.tipoDocumentoId || null,
       // A âncora só muda se o campo foi editado. Ele EXIBE a data efetiva (com a exceção), e
       // salvar isso de volta re-ancoraria a série a cada save de qualquer outro campo.
       nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
@@ -684,6 +693,17 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             />
           </div>
         )}
+
+        {/* Tipo de documento */}
+        <div>
+          <TipoDocumentoSelect
+            value={form.tipoDocumentoId}
+            onChange={v => { setErroTipoDoc(''); set('tipoDocumentoId', v || '') }}
+            tipoMov={form.transactionType}
+            required={tipoDocObrigatorio}
+            erro={erroTipoDoc}
+          />
+        </div>
 
         {/* Frequência */}
         <div>

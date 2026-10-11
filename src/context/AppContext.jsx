@@ -11,12 +11,15 @@ import {
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
   fetchDatasProvisorias, upsertDataProvisoria, deleteDatasProvisoriasApi,
+  fetchTiposDocumento, createTipoDocumento, updateTipoDocumentoApi, reordenarTiposDocumentoApi,
+  deleteTipoDocumentoApi, setTipoDocumentoAgendamentosApi,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
   fetchReserveSnapshots, createReserveSnapshots,
   createReserveLedgerRows,
 } from '../lib/db'
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken } from '../lib/api'
+import { ordenarTipos } from '../lib/tiposDocumento'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
@@ -772,6 +775,42 @@ export function AppProvider({ children }) {
     setDatasProvisorias(prev => prev.filter(d => !set.has(d.id)))
   }, [])
 
+  // Tipos de documento (tipos_documento). Cadastro fora de `data` (não entra no diff-sync): CRUD
+  // direto em /api/tipos-documento, state atualizado após sucesso. Chega junto com o /api/load.
+  const [tiposDocumento, setTiposDocumento] = useState([])
+  const recarregarTiposDocumento = useCallback(async () => {
+    const lista = await fetchTiposDocumento()
+    setTiposDocumento(ordenarTipos(lista))
+    return lista
+  }, [])
+  const addTipoDocumento = useCallback(async (t) => {
+    const row = await createTipoDocumento(t)
+    setTiposDocumento(prev => ordenarTipos([...prev.filter(x => x.id !== row.id), row]))
+    return row
+  }, [])
+  const updateTipoDocumento = useCallback(async (t) => {
+    const row = await updateTipoDocumentoApi(t)
+    setTiposDocumento(prev => ordenarTipos(prev.map(x => (x.id === row.id ? row : x))))
+    return row
+  }, [])
+  // → { excluido } | { inativado, tipo }. Em uso, o banco só inativa.
+  const deleteTipoDocumento = useCallback(async (id) => {
+    const r = await deleteTipoDocumentoApi(id)
+    if (r.inativado && r.tipo) setTiposDocumento(prev => prev.map(x => (x.id === id ? r.tipo : x)))
+    else setTiposDocumento(prev => prev.filter(x => x.id !== id))
+    return r
+  }, [])
+  // Ordem nova (lista de ids): aplica no state na hora e grava; falha → recarrega do banco.
+  const reordenarTiposDocumento = useCallback(async (ids) => {
+    setTiposDocumento(prev => ordenarTipos(prev.map(x => (ids.includes(x.id) ? { ...x, ordem: ids.indexOf(x.id) + 1 } : x))))
+    try {
+      await reordenarTiposDocumentoApi(ids)
+    } catch (err) {
+      await recarregarTiposDocumento().catch(() => {})
+      throw err
+    }
+  }, [recarregarTiposDocumento])
+
   // Carrega os históricos no mount (paralelo ao load principal). Falha silenciosa
   // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
   useEffect(() => {
@@ -825,6 +864,7 @@ export function AppProvider({ children }) {
           scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
           favorecidoAliases: result.data.favorecidoAliases ?? [],
         }
+        setTiposDocumento(ordenarTipos(result.tiposDocumento || []))
 
         // Migração: funções de reserva do localStorage → Neon.
         // O localStorage só é limpo quando o banco já tem as funções (evita perda em reload
@@ -857,6 +897,7 @@ export function AppProvider({ children }) {
         // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase
         setDbStatus('connected')
         try { await seedDefaults(defaultData) } catch {}
+        fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
         fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
       } else {
         // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback
@@ -1149,6 +1190,8 @@ export function AppProvider({ children }) {
             date,
             scheduleId: schedule.id,
             reservaFuncaoId: schedule.reservaFuncaoId || null,
+            // O lançamento efetivado herda o tipo de documento do agendamento.
+            tipoDocumentoId: schedule.tipoDocumentoId || null,
             origin: ORIGIN.AGENDAMENTO_AUTO,
             createdAt: new Date().toISOString(),
           }
@@ -2260,6 +2303,22 @@ export function AppProvider({ children }) {
     if (antes) reconciliarPorAgendamento([antes, { ...antes, ...changes }])
   }, [update, reconciliarPorAgendamento])
 
+  // Tipo de documento em massa (ids de agendamentos; tipoId null = remover). Grava no banco numa
+  // transação (PUT /api/agendamentos) e espelha no estado num único update() — sem o espelho, o
+  // próximo syncSection('agendamentos') mandaria o tipo antigo por cima. Agendamento ainda não
+  // sincronizado (o banco não o tem) recebe o valor pelo estado e vai no sync seguinte.
+  // Devolve quantos foram alterados.
+  const setTipoDocumentoEmMassa = useCallback(async (ids, tipoId) => {
+    const alvo = new Set((ids || []).filter(id => id && !String(id).startsWith('sch:')))
+    if (alvo.size === 0) return 0
+    await setTipoDocumentoAgendamentosApi([...alvo], tipoId || null)
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => (alvo.has(s.id) ? { ...s, tipoDocumentoId: tipoId || null } : s)),
+    }))
+    return alvo.size
+  }, [update])
+
   // Aplica um mesmo favorecido a vários agendamentos de uma vez. Existe para espelhar o que
   // PATCH /api/financiamento/[id] acabou de gravar nas parcelas: `payee` está em scheduleToRow,
   // então sem espelhar aqui o próximo syncSection('agendamentos') mandaria o favorecido ANTIGO
@@ -2481,6 +2540,7 @@ export function AppProvider({ children }) {
           date,
           scheduleId,
           reservaFuncaoId: srf.reservaFuncaoId,
+          tipoDocumentoId: schedule.tipoDocumentoId || null,
           origin: ORIGIN.AGENDAMENTO,
           ...gerTrace,
           createdAt: nowIso,
@@ -2525,6 +2585,8 @@ export function AppProvider({ children }) {
         date,
         scheduleId,
         reservaFuncaoId: schedule.reservaFuncaoId || null,
+        // O lançamento efetivado herda o tipo de documento do agendamento.
+        tipoDocumentoId: schedule.tipoDocumentoId || null,
         origin: ORIGIN.AGENDAMENTO,
         ...gerTrace,
       }
@@ -5419,6 +5481,8 @@ export function AppProvider({ children }) {
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       reservePeriods, reserveAdjustments, reserveSnapshots,
       datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
+      tiposDocumento, addTipoDocumento, updateTipoDocumento, deleteTipoDocumento, reordenarTiposDocumento,
+      recarregarTiposDocumento, setTipoDocumentoEmMassa,
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addReserveSnapshots,

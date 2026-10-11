@@ -215,6 +215,43 @@ export async function efetivarFluxoProvisorio(id) {
 
 // Consultas salvas da tela Fluxo de Caixa Futuro (fluxo_consultas). Escrita direta por
 // operação, fora do diff-sync; objetos em snake_case (normalizados em lib/fluxoConsultas).
+// ─── Tipos de documento (escrita direta, fora do diff-sync) ──────────────────
+// Registros em snake_case, como o banco. Números/booleanos normalizados.
+export const normalizarTipoDocumento = (r) => ({
+  id: r.id,
+  nome: r.nome || '',
+  sigla: r.sigla || '',
+  natureza: r.natureza || 'ambos',
+  cor: r.cor || null,
+  ordem: Number(r.ordem) || 0,
+  ativo: r.ativo !== false,
+  sistema: !!r.sistema,
+})
+export async function fetchTiposDocumento() {
+  const r = await apiGet('/api/tipos-documento')
+  return (r?.tipos || []).map(normalizarTipoDocumento)
+}
+export async function createTipoDocumento(t) {
+  const r = await apiPost('/api/tipos-documento', t)
+  return normalizarTipoDocumento(r.tipo)
+}
+export async function updateTipoDocumentoApi(t) {
+  const r = await apiPut('/api/tipos-documento', t)
+  return normalizarTipoDocumento(r.tipo)
+}
+export async function reordenarTiposDocumentoApi(ids) {
+  return apiPut('/api/tipos-documento', { reordenar: ids })
+}
+// → { excluido: true } | { inativado: true, tipo }
+export async function deleteTipoDocumentoApi(id) {
+  const r = await apiDelete(`/api/tipos-documento?id=${encodeURIComponent(id)}`)
+  return r.tipo ? { ...r, tipo: normalizarTipoDocumento(r.tipo) } : r
+}
+// Tipo de documento em massa nos agendamentos (uma transação no banco). tipoId null = remover.
+export async function setTipoDocumentoAgendamentosApi(ids, tipoId) {
+  return apiPut('/api/agendamentos', { ids, tipo_documento_id: tipoId || null })
+}
+
 export async function fetchFluxoConsultas() {
   const r = await apiGet('/api/fluxo-consultas')
   return r?.consultas || []
@@ -474,6 +511,9 @@ export const txToRow = (tx) => ({
   }),
   categoria_cnpj_id: tx.categoriaCnpjId || null,
   categoria_cpf_id: tx.categoriaCpfId || null,
+  // Tipo de documento (tipos_documento.id). NULL = sem tipo; o fallback de exibição (CC/ENV/RES)
+  // nunca é gravado — ver src/lib/tiposDocumento.js.
+  tipo_documento_id: tx.tipoDocumentoId || null,
   created_at: tx.createdAt || new Date().toISOString(),
   // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
   // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
@@ -523,6 +563,7 @@ export const rowToTx = (r) => ({
   serieId: r.serie_id || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
+  tipoDocumentoId: r.tipo_documento_id || null,
   createdAt: r.created_at,
 })
 
@@ -566,6 +607,8 @@ export const scheduleToRow = (s) => ({
   // serializa arrays com JSON.stringify). Vazio [] = comportamento atual; nenhuma lógica de
   // criação/reconciliação depende disto ainda (Fase 2).
   source_expense_ids: Array.isArray(s.sourceExpenseIds) ? s.sourceExpenseIds : [],
+  // Tipo de documento (tipos_documento.id). NULL = sem tipo — fallback só na exibição.
+  tipo_documento_id: s.tipoDocumentoId || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -604,6 +647,7 @@ export const rowToSchedule = (r) => ({
   nextOccurrence: toDateStr(r.next_occurrence),
   // Fase 1: null/ausente → []. pg devolve JSONB já parseado (array JS).
   sourceExpenseIds: Array.isArray(r.source_expense_ids) ? r.source_expense_ids : [],
+  tipoDocumentoId: r.tipo_documento_id || null,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada
@@ -899,6 +943,8 @@ export async function loadFromDb(defaultData) {
         scheduleReservaFuncoes: d.srfs?.map(rowToScheduleReservaFuncao) || [],
         favorecidoAliases: d.aliases?.map(rowToFavorecidoAlias) || [],
       },
+      // Fora de `data` (não entra no diff-sync): escrita direta por /api/tipos-documento.
+      tiposDocumento: (d.tipos || []).map(normalizarTipoDocumento),
     }
   } catch (err) {
     if (err.status === 404) return { status: 'schema-missing', data: null, error: err.message }

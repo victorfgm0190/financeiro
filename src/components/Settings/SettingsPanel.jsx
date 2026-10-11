@@ -8,6 +8,7 @@ import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import FavorecidosPanel from './FavorecidosPanel'
+import TiposDocumentoPanel from './TiposDocumentoPanel'
 import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig, abaDe } from '../../lib/configRota'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
@@ -1840,6 +1841,7 @@ export default function SettingsPanel() {
       )}
 
       {secao === 'favorecidos' && <FavorecidosPanel />}
+      {secao === 'tipos-documento' && <TiposDocumentoPanel />}
         </div>
       </div>
 
