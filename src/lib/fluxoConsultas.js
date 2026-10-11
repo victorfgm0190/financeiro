@@ -180,12 +180,28 @@ export function situacaoSaldo(ultimo, hoje) {
 //  • lançamento com data futura NÃO está no balance → vira evento ("lançamento"), que pode ser
 //    desmarcado e ter a data simulada como qualquer projeção (real:false; _lancamento marca a
 //    origem). Some de vez com incluirLancamentosFuturos = false.
-//  • nada depois de `fim`: o computeFluxoCaixa data o envelope no FIM do ciclo, que pode cair
-//    além do horizonte (ciclo que fecha em 14/11 numa janela até 10/11) — fora da janela, sai.
+//  • nada depois de `fim`. Exceção: o computeFluxoCaixa data o envelope no FIM do ciclo, que
+//    pode cair além do horizonte (ciclo que fecha em 14/11 numa janela até 10/11). O restante
+//    dele continua sendo saída prevista: entra no ÚLTIMO dia do horizonte
+//    (min(fimCiclo, fim)), com o fim real do ciclo na descrição. Só nesta tela — a lib (e o
+//    relatório/Painel que a usam) seguem datando no fim do ciclo.
+const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0)
+export function envelopeNoFimDoHorizonte(r, fim) {
+  const nome = String(r.description || '').replace(/^Envelope:\s*/, '')
+  return {
+    ...r,
+    date: fim,
+    _cicloAte: r.date,
+    description: `Envelope ${nome} (restante ${brl(r.saida)} · ciclo até ${r.date.slice(8, 10)}/${r.date.slice(5, 7)})`,
+  }
+}
 export function linhasFuturas(rows, { hoje, fim, incluirLancamentosFuturos = true }) {
   const out = []
   for (const r of rows || []) {
-    if (fim && r.date > fim) continue
+    if (fim && r.date > fim) {
+      if (r._envelope) out.push(envelopeNoFimDoHorizonte(r, fim))
+      continue
+    }
     if (!r.real) { out.push(r); continue }
     if (r.date <= hoje || !incluirLancamentosFuturos) continue
     out.push({ ...r, real: false, _lancamento: true })

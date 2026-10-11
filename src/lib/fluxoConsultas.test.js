@@ -10,6 +10,7 @@ import { montarLinhasSimuladas } from './fluxoCaixaDatas'
 import { computeOccurrences } from './occurrences'
 
 const HOJE = '2026-10-11'
+const round2 = n => Math.round(n * 100) / 100
 const accounts = [
   { id: 'itau', name: 'Itaú', type: 'checking', balance: 1000, fluxoCaixaPrincipal: true, accountGroupId: 'g_banco' },
   { id: 'nu', name: 'Nubank', type: 'checking', balance: 500, fluxoCaixaPrincipal: false, accountGroupId: 'g_banco' },
@@ -132,9 +133,9 @@ describe('linhas, mínimo e série', () => {
   it('lançamento até hoje sai (já está no saldo); futuro vira evento desmarcável', () => {
     const r = linhasFuturas(rows, { hoje: HOJE })
     expect(r.map(x => x._key)).toEqual(['fut', 'agd'])
-    // Evento depois do fim do horizonte não entra (envelope datado no fim do ciclo, 14/11).
-    const comEnvelope = [...rows, { _key: 'env', date: '2026-11-14', real: false, entrada: 0, saida: 5000, _envelope: true }]
-    expect(linhasFuturas(comEnvelope, { hoje: HOJE, fim: '2026-11-10' }).map(x => x._key)).toEqual(['fut', 'agd'])
+    // Evento depois do fim do horizonte não entra.
+    const depois = [...rows, { _key: 'tarde', date: '2026-11-14', real: false, entrada: 0, saida: 50 }]
+    expect(linhasFuturas(depois, { hoje: HOJE, fim: '2026-11-10' }).map(x => x._key)).toEqual(['fut', 'agd'])
     expect(r[0]).toMatchObject({ real: false, _lancamento: true })
     expect(linhasFuturas(rows, { hoje: HOJE, incluirLancamentosFuturos: false }).map(x => x._key)).toEqual(['agd'])
   })
@@ -159,9 +160,19 @@ describe('linhas, mínimo e série', () => {
     expect(minimoProjetado(serieDiaria([], 1000, HOJE, HOJE))).toEqual({ valor: 1000, data: HOJE })
   })
 
+  it('envelope com ciclo fechando após o horizonte → restante no último dia do horizonte', () => {
+    const env = { _key: 'env_1_2026-11-14', date: '2026-11-14', description: 'Envelope: Mercado', real: false, entrada: 0, saida: 640.5, _envelope: true }
+    const r = linhasFuturas([...rows, env], { hoje: HOJE, fim: FIM })
+    const e = r.find(x => x._key === env._key)
+    expect(e).toMatchObject({ date: FIM, saida: 640.5, _cicloAte: '2026-11-14', _envelope: true })
+    expect(e.description).toMatch(/^Envelope Mercado \(restante R\$\s640,50 · ciclo até 14\/11\)$/)
+    // e entra no projetado do último dia
+    expect(projetadoNoFim(serieDe([...rows, env]))).toBe(round2(200 - 640.5))
+  })
+
   it('evento depois do horizonte não entra no mínimo nem no projetado; mínimo cai dentro do período', () => {
-    const comEnvelope = [...rows, { _key: 'env', date: '2026-11-14', real: false, entrada: 0, saida: 5000, _envelope: true }]
-    const s = serieDe(comEnvelope)
+    const comTarde = [...rows, { _key: 'tarde', date: '2026-11-14', real: false, entrada: 0, saida: 5000 }]
+    const s = serieDe(comTarde)
     expect(s[0].date).toBe(HOJE)
     expect(s[s.length - 1].date).toBe(FIM)
     const min = minimoProjetado(s)
