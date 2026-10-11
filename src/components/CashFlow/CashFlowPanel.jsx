@@ -473,7 +473,7 @@ export default function CashFlowPanel({ setActivePage }) {
             </div>
             <div className="card">
               <p className="text-xs text-gray-400 uppercase tracking-wide">Mínimo projetado</p>
-              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-amber-400' : 'text-red-500'}`}>{fmt(minimo.valor)}</p>
+              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-blue-500' : 'text-red-500'}`}>{fmt(minimo.valor)}</p>
               <p className="text-[11px] text-gray-500 mt-0.5">em {fmtDate(minimo.data)}</p>
             </div>
             {temSimulacao && (
@@ -624,11 +624,13 @@ export default function CashFlowPanel({ setActivePage }) {
                   {rowsView.map(r => {
                     const tipo = tipoEvento(r)
                     const ehMinimo = r._key === minimoKey
+                    // Mínimo positivo = azul de "Entrada" (não é saldo negativo); negativo = vermelho.
+                    const minimoNeg = ehMinimo && r.saldo < 0
                     return (
                       <tr
                         key={r._key}
                         className={`border-b border-gray-800/40 ${!r.ativa ? 'opacity-40' : ''} ${
-                          ehMinimo ? 'bg-red-500/15 hover:bg-red-500/20'
+                          ehMinimo ? (minimoNeg ? 'bg-red-500/15 hover:bg-red-500/20' : 'bg-blue-500/10 hover:bg-blue-500/15')
                             : r._provisorio ? 'bg-purple-500/10 hover:bg-purple-500/15'
                             : 'hover:bg-gray-800/20'
                         }`}
@@ -659,7 +661,10 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{accName(contaDaLinha(r, accountIds))}</td>
                         <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-500 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
                         <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
-                        <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-gray-600' : ehMinimo ? 'text-red-400' : r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
+                        <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-gray-600' : ehMinimo ? (minimoNeg ? 'text-red-400' : 'text-blue-500') : r.saldo >= 0 ? 'text-gray-100' : 'text-red-400'}`}>
+                          {ehMinimo && r.ativa && (
+                            <span className={`mr-1.5 align-middle text-[10px] font-normal px-1.5 py-0.5 rounded ${minimoNeg ? 'bg-red-500/15 text-red-300' : 'bg-blue-500/15 text-blue-300'}`}>mínimo</span>
+                          )}
                           {r.ativa ? fmt(r.saldo) : '—'}
                         </td>
                         <td className="px-3 py-2.5">
