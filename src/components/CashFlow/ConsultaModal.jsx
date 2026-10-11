@@ -5,7 +5,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import PerfisMultiSelect from '../Settings/PerfisMultiSelect'
 import { fmt, fmtDate, groupedAccountOptions } from '../shared/utils'
 import {
-  MODOS, HORIZONTES, contasDaConsulta, validarConsulta, ultimoDiaDeSaldo,
+  MODOS, HORIZONTES, NOME_MAX, contasDaConsulta, validarConsulta, ultimoDiaDeSaldo, erroNome,
 } from '../../lib/fluxoConsultas'
 
 const OPCOES = [
@@ -24,10 +24,13 @@ const vazia = (perfilId) => ({
 
 // Criar/editar uma consulta salva do Fluxo de Caixa Futuro. `initial` com id = edição.
 // onSalvar(payload) e onExcluir(id) lançam o erro do endpoint (mostrado aqui).
-export default function ConsultaModal({ initial, accounts, accountGroups, transactions, profiles, activeProfileId, hoje, onSalvar, onExcluir, onClose }) {
+// O nome é sempre digitado pelo usuário (nada é preenchido a partir das contas); `consultas`
+// serve só para avisar nome repetido no mesmo perfil.
+export default function ConsultaModal({ initial, consultas, accounts, accountGroups, transactions, profiles, activeProfileId, hoje, onSalvar, onExcluir, onClose }) {
   const editando = !!initial?.id
   const [form, setForm] = useState(() => (editando ? { ...initial } : vazia(activeProfileId)))
   const [erro, setErro] = useState('')
+  const [nomeTocado, setNomeTocado] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [confirmExcluir, setConfirmExcluir] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -49,7 +52,13 @@ export default function ConsultaModal({ initial, accounts, accountGroups, transa
 
   const toggle = (k, id) => set(k, form[k].includes(id) ? form[k].filter(x => x !== id) : [...form[k], id])
 
+  const erroDoNome = erroNome(form.nome, consultas, form.perfil_ids, initial?.id)
+  // Vazio só acusa depois de mexer no campo (ou tentar salvar); repetido/longo acusa na hora.
+  const mostrarErroNome = erroDoNome && (nomeTocado || String(form.nome || '').trim())
+
   const salvar = async () => {
+    setNomeTocado(true)
+    if (erroDoNome) return
     const e = validarConsulta(form)
     if (e) { setErro(e); return }
     setErro('')
@@ -91,15 +100,29 @@ export default function ConsultaModal({ initial, accounts, accountGroups, transa
     <>
     <Modal open={!confirmExcluir} onClose={onClose} title={editando ? 'Editar consulta' : 'Nova consulta'}>
       <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
-          <div>
-            <label className="label">Nome *</label>
-            <input className="input" value={form.nome} onChange={e => set('nome', e.target.value)} placeholder="Ex: Só Itaú" autoFocus />
+        <div>
+          <label className="label">Nome da consulta *</label>
+          <input
+            className={`input ${mostrarErroNome ? 'border-red-500/70' : ''}`}
+            value={form.nome}
+            onChange={e => set('nome', e.target.value)}
+            onBlur={() => setNomeTocado(true)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar() } }}
+            placeholder="Ex.: Só Itaú, Pessoal, Lumen"
+            maxLength={NOME_MAX}
+            autoComplete="off"
+            name="fluxo-consulta-nome"
+            autoFocus
+          />
+          <div className="flex justify-between gap-3 mt-1">
+            <span className="text-xs text-red-400">{mostrarErroNome ? erroDoNome : ''}</span>
+            <span className="text-[10px] text-gray-600 shrink-0">{String(form.nome || '').length}/{NOME_MAX}</span>
           </div>
-          <div>
-            <label className="label">Perfis</label>
-            <PerfisMultiSelect value={form.perfil_ids} onChange={v => set('perfil_ids', v)} profiles={profiles} className="py-2 w-full" />
-          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">Perfis</span>
+          <PerfisMultiSelect value={form.perfil_ids} onChange={v => set('perfil_ids', v)} profiles={profiles} />
         </div>
 
         <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">

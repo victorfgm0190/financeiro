@@ -9,18 +9,21 @@ import { fmt, fmtDate } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
 import { montarLinhasSimuladas, patchAplicarData, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from '../../lib/fluxoCaixaDatas'
 import {
-  HORIZONTES, rotuloModo, consultasDoPerfil, consultaInicial, contasDaConsulta, somarDias,
+  HORIZONTES, rotuloModo, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
+  erroNome, nomeDeCopia, projetadoNoFim, ID_CONSULTA_VIRTUAL, contasDaConsulta, somarDias,
   ultimoDiaDeSaldo, situacaoSaldo, linhasFuturas, tipoEvento, contaDaLinha, minimoProjetado,
   serieDiaria, totalEmAtraso,
 } from '../../lib/fluxoConsultas'
 import { hojeStr } from '../../lib/saldos'
 import { useFluxoConsultas } from '../../hooks/useFluxoConsultas'
 import { useFluxoProvisorios } from '../../hooks/useFluxoProvisorios'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import ProvisorioForm from '../Reports/ProvisorioForm'
 import ConsultaModal from './ConsultaModal'
+import ConsultaCard from './ConsultaCard'
 import EfetivarModal from './EfetivarModal'
 import MudarDataModal from './MudarDataModal'
 
@@ -30,6 +33,15 @@ const SEM_DATAS = new Map()
 const SEM_OVERRIDES = {}
 // Início "desde sempre" para listar as ocorrências pendentes ANTERIORES a hoje (em atraso).
 const INICIO_ATRASO = '0001-01-01'
+// Última consulta escolhida, POR PERFIL ({ [perfilId | '_tudo']: consultaId }). Só conveniência
+// de UI: storage indisponível → abre a padrão.
+const LS_CONSULTA_ATIVA = 'finup_fluxo_consulta_ativa'
+function lerConsultasLembradas() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_CONSULTA_ATIVA) || '{}')
+    return o && typeof o === 'object' ? o : {}
+  } catch { return {} }
+}
 const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
 
 const BADGE = {
@@ -77,8 +89,23 @@ export default function CashFlowPanel({ setActivePage }) {
 
   // ── Consulta ativa e horizonte ─────────────────────────────────────────────
   const visiveis = useMemo(() => consultasDoPerfil(consultas, activeProfileId), [consultas, activeProfileId])
-  const [ativaId, setAtivaId] = useState(null)
-  const consulta = useMemo(() => visiveis.find(c => c.id === ativaId) || consultaInicial(visiveis), [visiveis, ativaId])
+  const cartoes = useMemo(() => listaComVirtual(visiveis), [visiveis])
+  const padraoId = idPadrao(visiveis)
+  const perfilChave = activeProfileId || '_tudo'
+  const [lembradas, setLembradas] = useState(lerConsultasLembradas)
+  const ativaId = lembradas[perfilChave] || null
+  const setAtivaId = (id) => {
+    setLembradas(prev => {
+      const next = { ...prev }
+      if (id) next[perfilChave] = id
+      else delete next[perfilChave]
+      try { localStorage.setItem(LS_CONSULTA_ATIVA, JSON.stringify(next)) } catch { /* storage indisponível */ }
+      return next
+    })
+  }
+  const consulta = useMemo(() => resolverConsultaAtiva(visiveis, ativaId), [visiveis, ativaId])
+  const isMobile = useIsMobile()
+  const [consultaExcluir, setConsultaExcluir] = useState(null)
   // Horizonte escolhido vale para a consulta em que foi escolhido; trocar de consulta volta ao
   // horizonte padrão dela. Mesmo esquema (derivado, sem efeito) para os overrides da tabela,
   // as linhas desmarcadas e as datas só de tela.
@@ -153,7 +180,7 @@ export default function CashFlowPanel({ setActivePage }) {
       ...comum, start: hoje, end: fim, transactions, schedules: agds,
       envelopes: incluirEnvelopes ? envelopes : [], provisorios,
     })
-    const futuras = linhasFuturas(r.rows, { hoje, incluirLancamentosFuturos: consulta.incluir_lancamentos_futuros })
+    const futuras = linhasFuturas(r.rows, { hoje, fim, incluirLancamentosFuturos: consulta.incluir_lancamentos_futuros })
     // Pendências em atraso: as mesmas ocorrências que o relatório soma no "saldo anterior c/
     // agendamentos", aqui listadas uma a uma (sem lançamentos, envelopes nem provisórios).
     const a = consulta.incluir_agendamentos
@@ -170,12 +197,20 @@ export default function CashFlowPanel({ setActivePage }) {
     const { total, ativas } = totalEmAtraso(atraso, excluidas)
     return { atrasoTotal: total, atrasoAtivas: ativas, base: round2(saldoInicial + total) }
   }, [atraso, excluidas, saldoInicial])
-  const { rowsView, foraDoPeriodo, saldoFinal } = useMemo(
+  const { rowsView, foraDoPeriodo } = useMemo(
     () => montarLinhasSimuladas(rows, { datas: datasTela, excluidas, start: hoje, end: fim, saldoBase: base }),
     [rows, datasTela, excluidas, hoje, fim, base],
   )
-  const minimo = useMemo(() => minimoProjetado(rowsView, base, hoje), [rowsView, base, hoje])
-  const serie = useMemo(() => serieDiaria(rowsView, base, hoje, fim), [rowsView, base, hoje, fim])
+  // Série diária de [hoje, fim]: Projetado = saldo no fim do ÚLTIMO dia; Mínimo = menor saldo de
+  // fim de dia. Valores distintos, da mesma série que o gráfico desenha.
+  const { serie, projetado, minimo, minimoKey } = useMemo(() => {
+    const sr = serieDiaria(rowsView, base, hoje, fim)
+    const min = minimoProjetado(sr)
+    // Linha destacada: o último evento ativo do dia do mínimo (o que fecha aquele saldo).
+    let key = null
+    if (min && min.valor < base) for (const r of rowsView) if (r.ativa && r.date === min.data) key = r._key
+    return { serie: sr, projetado: projetadoNoFim(sr), minimo: min, minimoKey: key }
+  }, [rowsView, base, hoje, fim])
 
   // ── Simulação ativa (card) ─────────────────────────────────────────────────
   const tocaContas = (sc) => accountIds.has(sc.accountId) || accountIds.has(sc.toAccountId)
@@ -267,6 +302,35 @@ export default function CashFlowPanel({ setActivePage }) {
     return sc ? (getNextOccurrences(sc, 1)[0] || null) : null
   }
 
+  // ── Consultas: duplicar / padrão / excluir ─────────────────────────────────
+  const duplicarConsulta = async (c) => {
+    try {
+      // eslint-disable-next-line no-unused-vars
+      const { id: _id, created_at: _c, updated_at: _u, ...resto } = c
+      const nova = await salvarConsulta({ ...resto, nome: nomeDeCopia(c.nome, consultas, c.perfil_ids), padrao: false, ordem: null })
+      setAtivaId(nova.id)
+      avisar('Consulta duplicada.')
+    } catch (err) { avisar(err?.message || 'Falha ao duplicar a consulta.', 'error') }
+  }
+  // Padrão = uma salva com padrao=true; "FC Principal" padrão = nenhuma salva marcada (no perfil).
+  const definirPadrao = async (c) => {
+    try {
+      if (c.id === ID_CONSULTA_VIRTUAL) {
+        for (const v of visiveis.filter(x => x.padrao)) await salvarConsulta({ ...v, padrao: false })
+      } else {
+        await salvarConsulta({ ...c, padrao: true })
+      }
+      avisar(`"${c.nome}" é a consulta padrão.`)
+    } catch (err) { avisar(err?.message || 'Falha ao definir a padrão.', 'error') }
+  }
+  const confirmarExcluirConsulta = async (c) => {
+    try {
+      await excluirConsulta(c.id)
+      if (consulta.id === c.id) setAtivaId(null)
+      avisar('Consulta excluída.')
+    } catch (err) { avisar(err?.message || 'Falha ao excluir a consulta.', 'error') }
+  }
+
   const semContas = contas.length === 0
   const corSaldo = (v) => (v >= 0 ? 'text-blue-500' : 'text-orange-600')
 
@@ -294,9 +358,9 @@ export default function CashFlowPanel({ setActivePage }) {
         </div>
       </div>
 
-      {/* Consultas */}
+      {/* Consultas — "FC Principal" (virtual) sempre primeiro */}
       <div className="space-y-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Consultas</p>
           <div className="ml-auto flex gap-2">
             {!consulta.virtual && (
@@ -309,26 +373,35 @@ export default function CashFlowPanel({ setActivePage }) {
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(visiveis.length ? visiveis : [consulta]).map(c => {
-            const ativa = c.id === consulta.id
-            const n = contasDaConsulta(c, accounts).length
-            return (
-              <button
+        {isMobile && cartoes.length > 6 ? (
+          <div>
+            <label className="label">Trocar consulta</label>
+            <select className="input" value={consulta.id} onChange={e => setAtivaId(e.target.value)}>
+              {cartoes.map(c => (
+                <option key={c.id} value={c.id}>{c.nome}{c.id === padraoId ? ' (padrão)' : ''}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {cartoes.map(c => (
+              <ConsultaCard
                 key={c.id}
-                type="button"
-                onClick={() => setAtivaId(c.id)}
-                className={`text-left px-3 py-2 rounded-lg border transition-colors min-w-[150px] ${ativa ? 'border-[#0F6E56] bg-[#0F6E56]/15' : 'border-gray-800 bg-surface hover:border-gray-600'}`}
-              >
-                <span className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${ativa ? 'text-white' : 'text-gray-200'}`}>{c.nome}</span>
-                  {c.padrao && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0F6E56]/30 text-emerald-300">padrão</span>}
-                </span>
-                <span className="block text-[11px] text-gray-500 mt-0.5">{rotuloModo(c.modo)} · {n} conta{n !== 1 ? 's' : ''}</span>
-              </button>
-            )
-          })}
-        </div>
+                consulta={c}
+                ativa={c.id === consulta.id}
+                padrao={c.id === padraoId}
+                nContas={contasDaConsulta(c, accounts).length}
+                validarNome={(nome) => erroNome(nome, consultas, c.perfil_ids, c.id)}
+                onSelecionar={() => setAtivaId(c.id)}
+                onRenomear={async (nome) => { await salvarConsulta({ ...c, nome }); avisar('Consulta renomeada.') }}
+                onEditar={() => setConsultaModal({ initial: c })}
+                onDuplicar={() => duplicarConsulta(c)}
+                onDefinirPadrao={() => definirPadrao(c)}
+                onExcluir={() => setConsultaExcluir(c)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {semContas ? (
@@ -395,7 +468,7 @@ export default function CashFlowPanel({ setActivePage }) {
             </div>
             <div className="card">
               <p className="text-xs text-gray-400 uppercase tracking-wide">Projetado ({horizonte}D)</p>
-              <p className={`text-xl font-bold mt-1 ${corSaldo(saldoFinal)}`}>{fmt(saldoFinal)}</p>
+              <p className={`text-xl font-bold mt-1 ${corSaldo(projetado)}`}>{fmt(projetado)}</p>
               <p className="text-[11px] text-gray-500 mt-0.5">em {fmtDate(fim)}</p>
             </div>
             <div className="card">
@@ -550,7 +623,7 @@ export default function CashFlowPanel({ setActivePage }) {
 
                   {rowsView.map(r => {
                     const tipo = tipoEvento(r)
-                    const ehMinimo = r._key === minimo.key && minimo.valor < base
+                    const ehMinimo = r._key === minimoKey
                     return (
                       <tr
                         key={r._key}
@@ -632,6 +705,7 @@ export default function CashFlowPanel({ setActivePage }) {
       {consultaModal && (
         <ConsultaModal
           initial={consultaModal.initial}
+          consultas={consultas}
           accounts={accounts}
           accountGroups={accountGroups}
           transactions={transactions}
@@ -664,6 +738,16 @@ export default function CashFlowPanel({ setActivePage }) {
           />
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={!!consultaExcluir}
+        onClose={() => setConsultaExcluir(null)}
+        onConfirm={() => confirmarExcluirConsulta(consultaExcluir)}
+        danger
+        title="Excluir consulta"
+        confirmLabel="Excluir"
+        message={`Excluir a consulta "${consultaExcluir?.nome || ''}"? Provisórios e datas provisórias não são afetados.`}
+      />
 
       <ConfirmDialog
         open={!!provExcluir}

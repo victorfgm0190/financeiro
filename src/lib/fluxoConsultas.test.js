@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  CONSULTA_VIRTUAL, normalizarConsulta, consultasDoPerfil, consultaInicial, contasDaConsulta,
+  CONSULTA_VIRTUAL, normalizarConsulta, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
+  erroNome, nomeDeCopia, projetadoNoFim, contasDaConsulta,
   validarConsulta, somarDias, diasEntre, ultimoDiaDeSaldo, situacaoSaldo, linhasFuturas,
   tipoEvento, contaDaLinha, minimoProjetado, serieDiaria, totalEmAtraso,
 } from './fluxoConsultas'
@@ -33,12 +34,19 @@ describe('normalização e escolha da consulta', () => {
     expect(consultasDoPerfil(cs, null).map(c => c.id)).toEqual(['b', 'a', 'c'])
   })
 
-  it('abre a padrão; senão a primeira; sem nenhuma, a virtual FC Principal', () => {
+  it('FC Principal é sempre o primeiro cartão, mesmo com consultas salvas', () => {
+    expect(listaComVirtual([consulta({ id: 'a' })]).map(c => c.id)).toEqual([CONSULTA_VIRTUAL.id, 'a'])
+    expect(listaComVirtual([])).toEqual([CONSULTA_VIRTUAL])
+  })
+
+  it('abre a última escolhida; senão a padrão; senão FC Principal', () => {
     const a = consulta({ id: 'a' })
     const b = consulta({ id: 'b', padrao: true })
-    expect(consultaInicial([a, b]).id).toBe('b')
-    expect(consultaInicial([a]).id).toBe('a')
-    expect(consultaInicial([])).toBe(CONSULTA_VIRTUAL)
+    expect(resolverConsultaAtiva([a, b], 'a').id).toBe('a')
+    expect(resolverConsultaAtiva([a, b], 'sumiu').id).toBe('b')
+    expect(resolverConsultaAtiva([a], null)).toBe(CONSULTA_VIRTUAL)
+    expect(resolverConsultaAtiva([a], CONSULTA_VIRTUAL.id)).toBe(CONSULTA_VIRTUAL)
+    expect(idPadrao([a])).toBe(CONSULTA_VIRTUAL.id)
   })
 })
 
@@ -51,6 +59,28 @@ describe('contasDaConsulta', () => {
   })
   it('Contas Principais: as FC (sem cartão) — é a consulta virtual', () => {
     expect(contasDaConsulta(CONSULTA_VIRTUAL, accounts).map(a => a.id)).toEqual(['itau', 'poup'])
+  })
+})
+
+describe('nome da consulta', () => {
+  const cs = [consulta({ id: 'a', nome: 'Só Itaú', perfil_ids: ['pf'] }), consulta({ id: 'b', nome: 'Lumen', perfil_ids: ['pj'] })]
+  it('obrigatório, até 40 caracteres', () => {
+    expect(erroNome('  ', cs, [], null)).toMatch(/Informe/)
+    expect(erroNome('x'.repeat(41), cs, [], null)).toMatch(/40/)
+    expect(erroNome('x'.repeat(40), cs, [], null)).toBeNull()
+  })
+  it('repetido no mesmo perfil (sem diferenciar maiúsculas); outro perfil pode', () => {
+    expect(erroNome('só itaú ', cs, ['pf'], null)).toMatch(/Já existe/)
+    expect(erroNome('Só Itaú', cs, ['pj'], null)).toBeNull()
+    expect(erroNome('Só Itaú', cs, [], null)).toMatch(/Já existe/) // todos os perfis cruza com pf
+    expect(erroNome('Só Itaú', cs, ['pf'], 'a')).toBeNull()         // renomear para o próprio nome
+    expect(erroNome('fc principal', cs, ['pf'], null)).toMatch(/Já existe/)
+  })
+  it('cópia ganha sufixo único e respeita 40 caracteres', () => {
+    expect(nomeDeCopia('Só Itaú', cs, ['pf'])).toBe('Só Itaú (cópia)')
+    const comCopia = [...cs, consulta({ id: 'c', nome: 'Só Itaú (cópia)', perfil_ids: ['pf'] })]
+    expect(nomeDeCopia('Só Itaú', comCopia, ['pf'])).toBe('Só Itaú (cópia 2)')
+    expect(nomeDeCopia('y'.repeat(40), cs, ['pf'])).toHaveLength(40)
   })
 })
 
@@ -102,6 +132,9 @@ describe('linhas, mínimo e série', () => {
   it('lançamento até hoje sai (já está no saldo); futuro vira evento desmarcável', () => {
     const r = linhasFuturas(rows, { hoje: HOJE })
     expect(r.map(x => x._key)).toEqual(['fut', 'agd'])
+    // Evento depois do fim do horizonte não entra (envelope datado no fim do ciclo, 14/11).
+    const comEnvelope = [...rows, { _key: 'env', date: '2026-11-14', real: false, entrada: 0, saida: 5000, _envelope: true }]
+    expect(linhasFuturas(comEnvelope, { hoje: HOJE, fim: '2026-11-10' }).map(x => x._key)).toEqual(['fut', 'agd'])
     expect(r[0]).toMatchObject({ real: false, _lancamento: true })
     expect(linhasFuturas(rows, { hoje: HOJE, incluirLancamentosFuturos: false }).map(x => x._key)).toEqual(['agd'])
   })
@@ -114,12 +147,33 @@ describe('linhas, mínimo e série', () => {
     expect(contaDaLinha({ type: 'expense', saida: 10, fromAccountId: 'itau' }, ids)).toBe('itau')
   })
 
-  it('mínimo projetado com a data; linha desmarcada não conta', () => {
-    const sim = montarLinhasSimuladas(linhasFuturas(rows, { hoje: HOJE }), { start: HOJE, end: '2026-11-10', saldoBase: 1000 })
-    expect(minimoProjetado(sim.rowsView, 1000, HOJE)).toEqual({ valor: 200, data: '2026-10-15', key: 'fut' })
-    const sem = montarLinhasSimuladas(linhasFuturas(rows, { hoje: HOJE }), { start: HOJE, end: '2026-11-10', saldoBase: 1000, excluidas: new Set(['agd']) })
-    expect(minimoProjetado(sem.rowsView, 1000, HOJE)).toEqual({ valor: 900, data: '2026-10-15', key: 'fut' })
-    expect(minimoProjetado([], 1000, HOJE)).toEqual({ valor: 1000, data: HOJE, key: null })
+  const FIM = '2026-11-10'
+  const serieDe = (linhas, opts = {}) => {
+    const sim = montarLinhasSimuladas(linhasFuturas(linhas, { hoje: HOJE, fim: FIM }), { start: HOJE, end: FIM, saldoBase: 1000, ...opts })
+    return serieDiaria(sim.rowsView, 1000, HOJE, FIM)
+  }
+
+  it('mínimo = menor saldo diário, com a data; linha desmarcada não conta', () => {
+    expect(minimoProjetado(serieDe(rows))).toEqual({ valor: 200, data: '2026-10-15' })
+    expect(minimoProjetado(serieDe(rows, { excluidas: new Set(['agd']) }))).toEqual({ valor: 900, data: '2026-10-15' })
+    expect(minimoProjetado(serieDiaria([], 1000, HOJE, HOJE))).toEqual({ valor: 1000, data: HOJE })
+  })
+
+  it('evento depois do horizonte não entra no mínimo nem no projetado; mínimo cai dentro do período', () => {
+    const comEnvelope = [...rows, { _key: 'env', date: '2026-11-14', real: false, entrada: 0, saida: 5000, _envelope: true }]
+    const s = serieDe(comEnvelope)
+    expect(s[0].date).toBe(HOJE)
+    expect(s[s.length - 1].date).toBe(FIM)
+    const min = minimoProjetado(s)
+    expect(min.data >= HOJE && min.data <= FIM).toBe(true)
+    expect(min).toEqual({ valor: 200, data: '2026-10-15' })
+    expect(projetadoNoFim(s)).toBe(200)
+  })
+
+  it('Projetado (último dia) difere do Mínimo quando há entrada no fim', () => {
+    const s = serieDe([...rows, { _key: 'sal', date: '2026-11-09', real: false, entrada: 3000, saida: 0 }])
+    expect(minimoProjetado(s)).toEqual({ valor: 200, data: '2026-10-15' })
+    expect(projetadoNoFim(s)).toBe(3200)
   })
 
   it('série diária: um ponto por dia de hoje ao fim, saldo no fim do dia', () => {
@@ -151,7 +205,9 @@ describe('cenário da tela (computeFluxoCaixa de hoje ao horizonte + atraso)', (
     const { total } = totalEmAtraso(atraso, new Set())
     const sim = montarLinhasSimuladas(linhasFuturas(main.rows, { hoje: HOJE }), { start: HOJE, end: fim, saldoBase: 1000 + total })
     expect(sim.rowsView.map(r => [r.date, r.saldo])).toEqual([['2026-10-20', 3200], ['2026-11-05', 2400]])
-    expect(minimoProjetado(sim.rowsView, 1000 + total, HOJE)).toMatchObject({ valor: 200, data: HOJE })
+    const s = serieDiaria(sim.rowsView, 1000 + total, HOJE, fim)
+    expect(minimoProjetado(s)).toEqual({ valor: 200, data: HOJE })
+    expect(projetadoNoFim(s)).toBe(2400)
   })
 
   it('15 dias pega o salário de 20/10 mas não chega ao 05/11', () => {
