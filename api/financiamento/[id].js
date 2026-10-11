@@ -1,4 +1,5 @@
-import { query, parseBody } from '../_db.js'
+import { query, parseBody, withTransaction } from '../_db.js'
+import { ensureHistoricoSchema } from '../_historico.js'
 import { requireAuth } from '../_auth.js'
 import {
   getRouteId, genId, num, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
@@ -159,15 +160,20 @@ async function patch(req, res) {
       ? (String(body.banco || '').trim() || null)
       : (favorecido ? favorecido.name : fin.banco ?? null)
 
-    await query(
-      `UPDATE financing SET banco_favorecido_id = $2, banco = $3 WHERE id = $1`,
-      [id, favorecidoId, bancoTexto],
-    )
-
-    // Propaga para os agendamentos das parcelas. O favorecido exibido segue o MESMO texto que a
-    // UI mostra (`bancoTexto`), e não o nome cru da conta: desvincular o favorecido mantendo o
-    // texto livre "Safra" deve deixar as parcelas com "Safra", não em branco.
-    const agendamentosAtualizados = await sincronizarFavorecidoAgendamentos(query, id, bancoTexto)
+    // Financiamento + parcelas PENDENTES + histórico numa transação só.
+    // O favorecido exibido segue o MESMO texto que a UI mostra (`bancoTexto`), e não o nome cru
+    // da conta: desvincular o favorecido mantendo o texto livre "Safra" deixa as parcelas com "Safra".
+    await ensureHistoricoSchema()
+    const agendamentosAtualizados = await withTransaction(async (q) => {
+      await q(
+        `UPDATE financing SET banco_favorecido_id = $2, banco = $3 WHERE id = $1`,
+        [id, favorecidoId, bancoTexto],
+      )
+      return sincronizarFavorecidoAgendamentos(q, id, bancoTexto, {
+        loteId: body.lote_id || null, motivo: body.motivo || null,
+        serieKey: fin.conta_divida_id ? `financiamento|${fin.conta_divida_id}` : null,
+      })
+    })
 
     // A conta "Contas a Pagar - Fin. <bem>" é a face visível do financiamento no Patrimônio —
     // é a descrição dela que mostra a quem a dívida é devida.

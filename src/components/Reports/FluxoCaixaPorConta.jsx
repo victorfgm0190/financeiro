@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
+import { serieKeyDe } from '../../lib/camposSerie'
 import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2, RotateCcw, Pin } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -53,7 +55,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao } = useApp()
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -308,8 +310,10 @@ export default function FluxoCaixaPorConta() {
   const confirmarAplicar = async () => {
     if (!aplicar || aplicar.op.bloqueio) return
     const { linha, schedule: sc, modo } = aplicar
+    let patch
     try {
-      updateSchedule(sc.id, patchAplicarData(sc, linha._origDate, linha.date, modo))
+      patch = patchAplicarData(sc, linha._origDate, linha.date, modo)
+      updateSchedule(sc.id, patch)
     } catch (err) {
       // Data provisória mantida: a linha segue na data simulada.
       avisar(err?.message || 'Falha ao atualizar o agendamento.', 'error')
@@ -317,6 +321,12 @@ export default function FluxoCaixaPorConta() {
     }
     setAplicar(null)
     avisar(`Agendamento atualizado para ${fmtDate(linha.date)}`)
+    // Edição do usuário → histórico (mesma transação da gravação do agendamento).
+    const loteId = novoLoteId()
+    registrarEdicao({
+      agendamentos: [{ ...sc, ...patch }], loteId,
+      historico: historicoDataAgendamento({ schedule: sc, origDate: linha._origDate, de: occEfetiva(sc, linha._origDate).date, para: linha.date, modo, loteId, serieKey: serieKeyDe({ agendamento: sc }) }),
+    }).catch(err => avisar(`Data gravada, mas o histórico não foi registrado: ${err?.message || err}`, 'error'))
     // A data agora está no agendamento: o registro provisório (ou a data só de tela) sai.
     if (linha._dpId) {
       try { await removerDatasProvisorias([linha._dpId]) } catch (err) {

@@ -1,4 +1,5 @@
 import { withTransaction } from './_db.js'
+import { inserirHistorico } from './_historico.js'
 
 // Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
 //
@@ -496,18 +497,35 @@ export async function criarRateiosParcela(q, {
 // Consequência: escrever só aqui não basta. O próximo syncSection('agendamentos', ...) faz upsert
 // de todos os agendamentos a partir do estado do app e devolveria o payee antigo. Por isso o
 // endpoint que chama isto devolve os ids afetados, para o app espelhar a mudança em memória.
-// Inclui parcelas já pagas de propósito: o favorecido é descritivo e um histórico com dois
-// favorecidos diferentes para o mesmo financiamento confundiria mais do que ajudaria.
-export async function sincronizarFavorecidoAgendamentos(q, financingId, payee) {
+// Regra única de séries (src/lib/camposSerie.js): favorecido é campo da SÉRIE e vale só para as
+// parcelas PENDENTES — parcela paga (status 'paid' ou ocorrência já registrada) mantém o
+// favorecido com que foi paga. Cada agendamento alterado gera uma linha de histórico na MESMA
+// transação (`q`), com o lote/motivo da edição. Devolve os ids alterados.
+export async function sincronizarFavorecidoAgendamentos(q, financingId, payee, { loteId = null, motivo = null, serieKey = null } = {}) {
   const rows = await q(
-    `UPDATE agendamentos
-        SET payee = $1
-      WHERE financing_installment_id IN (
-              SELECT id FROM financing_installments WHERE financing_id = $2
-            )
-      RETURNING id`,
+    `WITH alvo AS (
+        SELECT a.id, a.payee AS antes
+          FROM agendamentos a
+          JOIN financing_installments fi ON fi.id = a.financing_installment_id
+         WHERE fi.financing_id = $2
+           AND COALESCE(fi.status, 'open') <> 'paid'
+           AND COALESCE(jsonb_array_length(a.registered), 0) = 0
+           AND a.payee IS DISTINCT FROM $1
+         FOR UPDATE OF a
+      )
+      UPDATE agendamentos a SET payee = $1 FROM alvo WHERE a.id = alvo.id
+      RETURNING a.id, alvo.antes`,
     [payee || null, financingId],
   )
+  if (rows.length) {
+    const lote = loteId || genId('lote')
+    await inserirHistorico(q, rows.map(r => ({
+      entidade: 'agendamento', entidade_id: r.id, ocorrencia_data: null, serie_key: serieKey,
+      lote_id: lote, escopo: 'serie', campo: 'payee',
+      valor_anterior: r.antes ?? null, valor_novo: payee || null,
+      motivo: motivo ? String(motivo).trim().slice(0, 500) || null : null,
+    })))
+  }
   return rows.map(r => r.id)
 }
 

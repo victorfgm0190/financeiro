@@ -32,6 +32,9 @@ import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import TipoDocumentoFiltro from '../shared/TipoDocumentoFiltro'
 import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO } from '../../lib/tiposDocumento'
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
+import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
+import { novoLoteId } from '../../lib/historico'
+import HistoricoModal from '../shared/HistoricoPainel'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -151,7 +154,10 @@ function SectionHeader({ label, count, variant = 'default', cols = 8 }) {
   )
 }
 
-function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
+function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
+  // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
+  // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
+  const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
   const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount } = useApp()
   // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
   // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
@@ -772,7 +778,9 @@ function ScheduleRow({
   // (gerencial_devolucao / resgate_reserva). Em pagamento_fatura é só visual.
   const canConfirm = schedule.tipo !== 'gerencial_devolucao' && schedule.tipo !== 'resgate_reserva'
   const today = format(new Date(), 'yyyy-MM-dd')
-  const cat = categories.find(c => c.id === schedule.categoryId)
+  // Categoria/descrição da PRÓXIMA ocorrência (override "Só esta parcela" aplicado).
+  const occ = nextDate ? occCampos(schedule, nextDate) : schedule
+  const cat = categories.find(c => c.id === occ.categoryId)
   const acc = accounts.find(a => a.id === schedule.accountId)
   const toAcc = accounts.find(a => a.id === schedule.toAccountId)
   const isDepositoReserva = schedule.transactionType === 'transfer' && !!toAcc?.isReserva
@@ -804,6 +812,9 @@ function ScheduleRow({
   const [showPularUnico, setShowPularUnico] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [showHistorico, setShowHistorico] = useState(false)
+  const { temHistorico } = useApp()
+  const comHistorico = temHistorico('agendamento', schedule.id)
   const hasFuture = futureItems.length > 0
   const toggleExpand = () => setExpanded(v => !v)
 
@@ -932,7 +943,7 @@ function ScheduleRow({
                 )}
               </button>
             )}
-            <p className="text-xs text-gray-200 font-medium whitespace-normal break-words min-w-0 flex-1" title={schedule.description}>{schedule.description}</p>
+            <p className="text-xs text-gray-200 font-medium whitespace-normal break-words min-w-0 flex-1" title={occ.description}>{occ.description}{comHistorico && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400/80 align-middle" title="Tem histórico de alterações" />}</p>
           </div>
           {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -1129,6 +1140,10 @@ function ScheduleRow({
                 </button>
               </>
             )}
+            <button onClick={() => setShowHistorico(true)} className="btn-amber w-7 h-7 p-0 justify-center relative" title="Histórico de alterações" aria-label="Histórico">
+              <History size={13} />
+              {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+            </button>
             <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-7 h-7 p-0 justify-center" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
             </button>
@@ -1191,6 +1206,9 @@ function ScheduleRow({
         </tr>
       )}
 
+      {showHistorico && (
+        <HistoricoModal open onClose={() => setShowHistorico(false)} entidade="agendamento" entidadeId={schedule.id} serieKey={serieKeyDe({ agendamento: schedule })} />
+      )}
       {showPay && (
         <PayModal
           schedule={schedule}
@@ -1557,6 +1575,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const [toast, setToast] = useState(null)
   // Edição em massa do tipo de documento: '' | id do tipo | SEM_TIPO (remover).
   const [tipoMassa, setTipoMassa] = useState('')
+  const [motivoMassa, setMotivoMassa] = useState('')
   const [aplicandoTipo, setAplicandoTipo] = useState(false)
 
   // Linhas aglutinadas: 1 por agendamento lógico (séries de fatura colapsadas; recorrentes
@@ -1645,7 +1664,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // occurrenceDate = ocorrência a baixar (nextDate); txDate = data dos lançamentos criados.
   // Registrar a ocorrência em nextDate (e não em txDate) é o que faz o agendamento avançar —
   // mesmo comportamento do pagamento individual (PayModal usa regDate = nextDate).
-  const registerWithGerencial = (schedule, occurrenceDate, txDate, amountArg = null) => {
+  const registerWithGerencial = (scheduleBase, occurrenceDate, txDate, amountArg = null) => {
+    const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, accounts)
     registerScheduleOccurrence(schedule.id, txDate, occurrenceDate, amountArg)
     if (!schedule.grupoGerencial) return
     const amount = amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0)
@@ -1686,13 +1706,14 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     setAplicandoTipo(true)
     try {
       const remover = tipoMassa === SEM_TIPO
-      const n = await setTipoDocumentoEmMassa(selectedIds, remover ? null : tipoMassa)
+      const n = await setTipoDocumentoEmMassa(selectedIds, remover ? null : tipoMassa, { loteId: novoLoteId(), motivo: motivoMassa.trim() || null })
       const sigla = remover ? '' : (tiposDocumento.find(t => t.id === tipoMassa)?.sigla || '')
       showToastMsg(remover
-        ? `Tipo de documento removido de ${n} agendamento${n !== 1 ? 's' : ''}`
-        : `Tipo ${sigla} aplicado em ${n} agendamento${n !== 1 ? 's' : ''}`)
+        ? `Tipo de documento removido de ${n} agendamento${n !== 1 ? 's' : ''}. Histórico registrado.`
+        : `Tipo ${sigla} aplicado em ${n} agendamento${n !== 1 ? 's' : ''}. Histórico registrado.`)
       setSelected(new Set())
       setTipoMassa('')
+      setMotivoMassa('')
     } catch (err) {
       showToastMsg(`Falha ao aplicar o tipo: ${err?.message || 'erro'}`)
     } finally {
@@ -1809,6 +1830,16 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 ))}
                 <option value={SEM_TIPO}>Remover tipo</option>
               </select>
+              {tipoMassa && (
+                <input
+                  className="input py-1 text-xs w-40"
+                  value={motivoMassa}
+                  maxLength={200}
+                  onChange={e => setMotivoMassa(e.target.value)}
+                  placeholder="Motivo (opcional)"
+                  title="Motivo da alteração (opcional) — vai para o histórico"
+                />
+              )}
               <button
                 onClick={aplicarTipoMassa}
                 disabled={!tipoMassa || selectedIds.length === 0 || aplicandoTipo}

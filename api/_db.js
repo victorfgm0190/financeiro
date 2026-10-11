@@ -126,30 +126,38 @@ async function reconcileInstallmentKeys(client, rows) {
 // Devolve quantas linhas foram efetivamente gravadas (inseridas + atualizadas). Quem chama usa
 // isso para provar que a escrita aconteceu: antes, uma requisição que não gravava nada terminava
 // exatamente como uma que gravava tudo, e a única forma de descobrir era recarregar o app.
+// Upsert usando um client JÁ em transação (quem chama faz BEGIN/COMMIT). É o miolo do upsertRows,
+// separado para endpoints que precisam gravar linhas + outra coisa (ex.: histórico de alterações)
+// na MESMA transação.
+export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id') {
+  if (!rows || rows.length === 0) return 0
+  // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
+  let lotes = [[rows, []]]
+  if (table === 'lancamentos') {
+    const { protegidas, limpar } = separarLimpezaDeParcela(rows)
+    lotes = [
+      [await reconcileInstallmentKeys(client, protegidas), CAMPOS_PARCELA_PROTEGIDOS],
+      [await reconcileInstallmentKeys(client, limpar), []],
+    ]
+  }
+  let gravadas = 0
+  for (const [lote, preservar] of lotes) {
+    if (!lote.length) continue
+    const cols = Object.keys(lote[0])
+    const perChunk = Math.max(1, Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_BIND_PARAMS / cols.length)))
+    for (let i = 0; i < lote.length; i += perChunk) {
+      gravadas += await upsertChunk(client, table, cols, lote.slice(i, i + perChunk), conflictCol, preservar)
+    }
+  }
+  return gravadas
+}
+
 export async function upsertRows(table, rows, conflictCol = 'id') {
   if (!rows || rows.length === 0) return 0
   const client = await getPool().connect()
   try {
-    // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
-    let lotes = [[rows, []]]
-    if (table === 'lancamentos') {
-      const { protegidas, limpar } = separarLimpezaDeParcela(rows)
-      lotes = [
-        [await reconcileInstallmentKeys(client, protegidas), CAMPOS_PARCELA_PROTEGIDOS],
-        [await reconcileInstallmentKeys(client, limpar), []],
-      ]
-    }
-
     await client.query('BEGIN')
-    let gravadas = 0
-    for (const [lote, preservar] of lotes) {
-      if (!lote.length) continue
-      const cols = Object.keys(lote[0])
-      const perChunk = Math.max(1, Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_BIND_PARAMS / cols.length)))
-      for (let i = 0; i < lote.length; i += perChunk) {
-        gravadas += await upsertChunk(client, table, cols, lote.slice(i, i + perChunk), conflictCol, preservar)
-      }
-    }
+    const gravadas = await upsertRowsNoClient(client, table, rows, conflictCol)
     await client.query('COMMIT')
     return gravadas
   } catch (err) {
@@ -164,12 +172,13 @@ export async function upsertRows(table, rows, conflictCol = 'id') {
 // `query` mas amarrado ao client da transação. COMMIT no retorno, ROLLBACK em qualquer throw.
 // Endpoints que fazem várias escritas dependentes (pagar parcela, criar financiamento) precisam
 // disso — `query` usa o pool e cada chamada sairia numa conexão/transação diferente.
+// O 2º argumento (client) serve a quem precisa do upsertRowsNoClient na mesma transação.
 export async function withTransaction(fn) {
   const client = await getPool().connect()
   const q = async (sql, params = []) => (await client.query(sql, params)).rows
   try {
     await client.query('BEGIN')
-    const result = await fn(q)
+    const result = await fn(q, client)
     await client.query('COMMIT')
     return result
   } catch (err) {

@@ -3,12 +3,15 @@ import { requireAuth } from '../../../_auth.js'
 import {
   getRouteId, fail, explicarErro, ensureBemSchema, sincronizarFavorecidoAgendamentos,
 } from '../../../_bem.js'
+import { ensureHistoricoSchema } from '../../../_historico.js'
 
 // PATCH /api/financiamento/parcela/[id]/favorecido — o lado INVERSO da sincronização.
 // Body: { payee }
 //
 // Editar o favorecido de UMA parcela pela tela de Agendamentos passa a valer para o
-// financiamento inteiro: grava `financing.banco` e reaplica o mesmo texto em TODAS as parcelas.
+// financiamento inteiro: grava `financing.banco` e reaplica o mesmo texto nas parcelas PENDENTES
+// (as pagas mantêm o favorecido com que foram pagas). Body opcional: { lote_id, motivo } — vão
+// para o histórico de alterações, gravado na mesma transação.
 // A alternativa — deixar a parcela divergir sozinha — daria um financiamento com dois
 // favorecidos, e o próximo PATCH pela aba Parcelas apagaria a divergência sem avisar.
 //
@@ -20,6 +23,7 @@ export default async function handler(req, res) {
 
   try {
     await ensureBemSchema()
+    await ensureHistoricoSchema()
 
     const parcelaId = getRouteId(req, 1)
     if (!parcelaId) return fail(res, 400, 'id da parcela é obrigatório')
@@ -61,7 +65,10 @@ export default async function handler(req, res) {
           [fin.conta_divida_id, `Financiamento ${payee || ''} — ${bem?.name ?? ''}`.trim()],
         )
       }
-      return sincronizarFavorecidoAgendamentos(q, fin.id, payee)
+      return sincronizarFavorecidoAgendamentos(q, fin.id, payee, {
+        loteId: body.lote_id || null, motivo: body.motivo || null,
+        serieKey: fin.conta_divida_id ? `financiamento|${fin.conta_divida_id}` : null,
+      })
     })
 
     return res.json({

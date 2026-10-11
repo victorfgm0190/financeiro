@@ -92,8 +92,12 @@ export function normalizarTipoBody(body) {
 
 // Atualização em massa do tipo nos agendamentos — numa transação (o UPDATE é um comando só, mas o
 // BEGIN/COMMIT do withTransaction garante tudo-ou-nada se a lista crescer para mais de um comando).
-export const SQL_TIPO_EM_MASSA_AGENDAMENTOS =
-  'UPDATE agendamentos SET tipo_documento_id = $2 WHERE id = ANY($1) RETURNING id'
+// Devolve também o valor ANTERIOR de cada um (para o histórico de alterações).
+export const SQL_TIPO_EM_MASSA_AGENDAMENTOS = `WITH antes AS (
+    SELECT id, tipo_documento_id AS antes FROM agendamentos WHERE id = ANY($1) FOR UPDATE
+  )
+  UPDATE agendamentos a SET tipo_documento_id = $2 FROM antes WHERE a.id = antes.id
+  RETURNING a.id, antes.antes`
 
 // Usos de um tipo (decide entre excluir de fato e só inativar).
 export const SQL_USOS_TIPO = `SELECT

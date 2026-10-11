@@ -23,6 +23,8 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import { resolverTipoDocumento, itemDaLinhaFluxo } from '../../lib/tiposDocumento'
+import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
+import { serieKeyDe } from '../../lib/camposSerie'
 import ProvisorioForm from '../Reports/ProvisorioForm'
 import ConsultaModal from './ConsultaModal'
 import ConsultaCard from './ConsultaCard'
@@ -81,7 +83,7 @@ export default function CashFlowPanel({ setActivePage }) {
     profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules,
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
-    datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento,
+    datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
@@ -269,8 +271,15 @@ export default function CashFlowPanel({ setActivePage }) {
   const gravarData = async (r, nova, modo) => {
     const sc = scheduleById.get(r._scheduleId)
     if (!sc) throw new Error('Agendamento de origem não encontrado.')
-    updateSchedule(sc.id, patchAplicarData(sc, r._origDate, nova, modo))
+    const patch = patchAplicarData(sc, r._origDate, nova, modo)
+    updateSchedule(sc.id, patch)
     avisar(`Agendamento atualizado para ${fmtDate(nova)}`)
+    // Edição do usuário → histórico (mesma transação da gravação do agendamento).
+    const loteId = novoLoteId()
+    registrarEdicao({
+      agendamentos: [{ ...sc, ...patch }], loteId,
+      historico: historicoDataAgendamento({ schedule: sc, origDate: r._origDate, de: occEfetiva(sc, r._origDate).date, para: nova, modo, loteId, serieKey: serieKeyDe({ agendamento: sc }) }),
+    }).catch(err => avisar(`Data gravada, mas o histórico não foi registrado: ${err?.message || err}`, 'error'))
     if (r._dpId) {
       try { await removerDatasProvisorias([r._dpId]) } catch (err) {
         avisar(`Agendamento atualizado, mas a data provisória não foi apagada: ${err?.message || err}`, 'error')

@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { Info, X } from 'lucide-react'
+import { Info, X, History, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -9,6 +9,14 @@ import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
+import EscopoSerieDialog from '../shared/EscopoSerieDialog'
+import { HistoricoPainel } from '../shared/HistoricoPainel'
+import {
+  ESCOPO, diffCampos, precisaEscolherEscopo, planoAgendamento, planoRegistros, occCampos,
+  mudancasDaSerie, agendamentoDoMotor, chaveSerieFinanciamento, irmasFinanciamento,
+  agendamentoUnicoPendente, serieKeyDe, mensagemAplicada,
+} from '../../lib/camposSerie'
+import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -183,7 +191,7 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico } = useApp()
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -230,17 +238,29 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // `data = { ...form }`) e deslocaria a série inteira sem ninguém pedir.
   const [ancoraTocada, setAncoraTocada] = useState(false)
 
+  // ── Regra única de séries (lib/camposSerie.js) ────────────────────────────────────────────
+  // Recorrente (A/B/C): UM agendamento; o formulário edita a ocorrência da "Data de Vencimento
+  // Atual" e, por isso, mostra os campos da PARCELA dela (com o override "Só esta" aplicado).
+  // Financiamento (F): parcelas são agendamentos separados ligados pela conta da dívida.
+  // Motor da fatura (I): fora da regra — só o aviso de que pode ser sobrescrito.
+  const ehMotor = !!initial?.id && agendamentoDoMotor(initial)
+  const ehFinanciamento = !!initial?.id && !!chaveSerieFinanciamento(initial)
+  const ehRecorrente = !!initial?.id && !ehMotor && !ehFinanciamento && (initial.frequency || 'once') !== 'once'
+  const occInicial = ehRecorrente && ancoraSalva ? occCampos(initial, ancoraSalva) : null
+  const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes }
+  const [verHistorico, setVerHistorico] = useState(false)
+
   const [form, setForm] = useState(() => ({
-    description: initial?.description || '',
+    description: (occInicial ? occInicial.description : initial?.description) || '',
     transactionType: initial?.transactionType || 'expense',
-    accountId: initial?.accountId || accounts[0]?.id || '',
+    accountId: (occInicial ? occInicial.accountId : initial?.accountId) || accounts[0]?.id || '',
     toAccountId: initial?.toAccountId || '',
     reservaExpenseCategoryId: initial?.reservaExpenseCategoryId || '',
     reservaFuncaoId: initial?.reservaFuncaoId || '',
-    amount: initial?.amount ?? '',
-    categoryId: initial?.categoryId || '',
+    amount: (occInicial ? occInicial.amount : initial?.amount) ?? '',
+    categoryId: (occInicial ? occInicial.categoryId : initial?.categoryId) || '',
     payee: initial?.payee || '',
-    costCenter: initial?.costCenter || '',
+    costCenter: (occInicial ? occInicial.costCenter : initial?.costCenter) || '',
     frequency: initial?.frequency || '',
     startDate: initial?.startDate || today(),
     // Data de Vencimento Atual: re-ancora a série. O campo EXIBE a data efetiva (com a exceção
@@ -251,7 +271,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     installments: initial?.installments ?? 0,
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
     autoRegister: initial?.autoRegister ?? true,
-    grupoGerencial: initial?.grupoGerencial || null,
+    grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial?.grupoGerencial) || null,
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
     tipoDocumentoId: initial?.tipoDocumentoId || '',
@@ -388,14 +408,155 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         : f.skipped.filter(d => d !== editingOcc)
       const newOverrides = changes.skip
         ? Object.fromEntries(Object.entries(f.overrides).filter(([k]) => k !== editingOcc))
-        : { ...f.overrides, [editingOcc]: { date: changes.date, amount: changes.amount } }
+        : (() => {
+          // Só grava o que difere da série (antes gravava amount sempre e congelava o valor da
+          // ocorrência mesmo quando só a data mudava). Mantém os demais campos do override.
+          const ov = { ...(f.overrides[editingOcc] || {}) }
+          if (changes.date && changes.date !== editingOcc) ov.date = changes.date
+          else delete ov.date
+          if (Math.abs(Number(changes.amount) - (Number(f.amount) || 0)) > 0.005) ov.amount = Number(changes.amount)
+          else delete ov.amount
+          const resto = { ...f.overrides }
+          if (Object.keys(ov).length) resto[editingOcc] = ov
+          else delete resto[editingOcc]
+          return resto
+        })()
       return { ...f, skipped: newSkipped, overrides: newOverrides }
     })
     setEditingOcc(null)
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  // Campos rastreados (valor, data, categoria, descrição, conta, centro de custo, grupo, favorecido,
+  // tipo) ANTES e DEPOIS — base do diff da regra de séries e do histórico. A data só entra se o
+  // campo foi tocado (o mesmo critério que já protegia a âncora).
+  const camposAntes = initial?.id ? {
+    amount: occInicial ? occInicial.amount : initial.amount,
+    date: ancoraExibida || null,
+    categoryId: (occInicial ? occInicial.categoryId : initial.categoryId) || null,
+    description: (occInicial ? occInicial.description : initial.description) || null,
+    accountId: (occInicial ? occInicial.accountId : initial.accountId) || null,
+    costCenter: (occInicial ? occInicial.costCenter : initial.costCenter) || null,
+    grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial.grupoGerencial) || null,
+    payee: initial.payee || null,
+    tipoDocumentoId: initial.tipoDocumentoId || null,
+  } : null
+  const camposDoForm = (f) => ({
+    amount: Number(f.amount),
+    ...(ancoraTocada ? { date: f.nextOccurrence || null } : {}),
+    categoryId: f.categoryId || null,
+    description: f.description || null,
+    accountId: f.accountId || null,
+    costCenter: f.costCenter || null,
+    grupoGerencial: f.grupoGerencial || null,
+    payee: f.payee || null,
+    tipoDocumentoId: f.tipoDocumentoId || null,
+  })
+  const mudancasAoVivo = camposAntes ? diffCampos(camposAntes, camposDoForm(form)) : []
+  const avisoMotor = ehMotor && mudancasAoVivo.some(m => m.campo !== 'tipoDocumentoId')
+
+  const contextoSerie = () => {
+    if (ehRecorrente) {
+      const pendentes = getNextOccurrences(initial, 400)
+      const occDate = ancoraSalva || pendentes[0]
+      return { tipo: 'A', occDate, nProximas: pendentes.filter(d => d > occDate).length, nPendentes: pendentes.length }
+    }
+    if (ehFinanciamento) {
+      const irmas = irmasFinanciamento(initial, schedules)
+      const pend = irmas.filter(agendamentoUnicoPendente)
+      return { tipo: 'F', irmas, nProximas: pend.filter(s => (s.startDate || '') > (initial.startDate || '')).length, nPendentes: pend.length + 1 }
+    }
+    return { tipo: 'simples', nProximas: 0, nPendentes: 1 }
+  }
+
+  // Aplica a edição de um agendamento EXISTENTE pela regra única e registra o histórico (mesma
+  // transação: POST /api/historico). Devolve false se algo impediu salvar.
+  const salvarEdicao = async (data, mudancas, ctx, decisao) => {
+    const loteId = novoLoteId()
+    const motivo = decisao?.motivo || null
+    const serieKey = serieKeyDe({ agendamento: initial })
+    let finais
+    let entradas
+    let nAfetadas = 1
+    let escopoParcela = decisao?.escopo || (ctx.nProximas > 0 ? ESCOPO.PARCELA : ESCOPO.PROXIMAS)
+
+    if (ctx.tipo === 'A') {
+      // Estrutura do formulário (frequência, parcelas, prévia…) + campos rastreados ainda com o
+      // valor da SÉRIE; o plano decide override × agendamento base.
+      const base = {
+        ...initial, ...data, nextOccurrence: ancoraSalva,
+        amount: initial.amount, categoryId: initial.categoryId, description: initial.description,
+        accountId: initial.accountId, accountType: initial.accountType, costCenter: initial.costCenter,
+        grupoGerencial: initial.grupoGerencial, payee: initial.payee, tipoDocumentoId: initial.tipoDocumentoId,
+      }
+      const plano = planoAgendamento(base, {
+        occDate: ctx.occDate, mudancas, escopo: escopoParcela,
+        pendentes: getNextOccurrences(base, 400), proximasDoNovo: s => getNextOccurrences(s, 400),
+      })
+      const final = { ...plano.schedule, accountType: accounts.find(a => a.id === plano.schedule.accountId)?.type || plano.schedule.accountType }
+      updateSchedule(initial.id, final)
+      finais = [final]
+      nAfetadas = plano.afetadas.length || 1
+      if (ctx.nProximas === 0) escopoParcela = ESCOPO.PARCELA
+      entradas = [{ id: initial.id, ocorrenciaData: escopoParcela === ESCOPO.PARCELA ? ctx.occDate : null, mudancas }]
+    } else if (ctx.tipo === 'F') {
+      // Favorecido: endpoint do financiamento (só parcelas PENDENTES + histórico no mesmo lote).
+      const mPayee = mudancasDaSerie(mudancas).find(m => m.campo === 'payee')
+      let nPayee = 0
+      if (mPayee) {
+        try {
+          nPayee = (await salvarFavorecidoDoAgendamento(initial.id, mPayee.para || '', { loteId, motivo })).total
+        } catch (err) {
+          onAviso?.(`Não foi possível sincronizar o favorecido: ${err.message}`, 'error')
+          return false
+        }
+      }
+      const outras = mudancas.filter(m => m.campo !== 'payee')
+      const vista = (s) => ({ ...s, date: occEfetiva(s, s.startDate).date })
+      const plano = planoRegistros(vista(initial), {
+        mudancas: outras, escopo: escopoParcela, irmas: ctx.irmas.map(vista),
+        ehPendente: agendamentoUnicoPendente, ordem: s => s.startDate || '',
+      })
+      updateSchedule(initial.id, data)
+      finais = [{ ...initial, ...data }]
+      for (const p of plano.slice(1)) {
+        const s = ctx.irmas.find(x => x.id === p.id)
+        const ch = { ...p.changes }
+        // Data de uma parcela de financiamento vira exceção da ocorrência: a baixa registra a data
+        // ORIGINAL do vencimento, que assim continua casando.
+        if ('date' in ch) {
+          ch.overrides = { ...(s.overrides || {}), [s.startDate]: { ...(s.overrides?.[s.startDate] || {}), date: ch.date } }
+          delete ch.date
+        }
+        updateSchedule(s.id, ch)
+        finais.push({ ...s, ...ch })
+      }
+      nAfetadas = Math.max(plano.length, nPayee)
+      if (ctx.nProximas === 0) escopoParcela = ESCOPO.PARCELA
+      entradas = [{ ...plano[0], mudancas: outras }, ...plano.slice(1)]
+    } else {
+      updateSchedule(initial.id, data)
+      finais = [{ ...initial, ...data }]
+      escopoParcela = ESCOPO.PARCELA
+      entradas = [{ id: initial.id, mudancas }]
+    }
+
+    const historico = linhasHistorico({ entidade: 'agendamento', itens: itensPorEscopo(entradas, escopoParcela), serieKey, loteId, motivo })
+    if (historico.length) {
+      try {
+        await registrarEdicao({ agendamentos: finais, historico, loteId, motivo })
+      } catch (err) {
+        onAviso?.(`Alteração salva, mas o histórico não foi registrado: ${err.message}`, 'error')
+        return true
+      }
+    }
+    if (mudancas.length) {
+      onAviso?.(ctx.tipo === 'simples' ? 'Alteração salva. Histórico registrado.' : mensagemAplicada(nAfetadas))
+    }
+    return true
+  }
+
+  const handleSubmit = async (e, decisao = null) => {
+    e?.preventDefault?.()
     if (!form.description || !form.amount || !form.accountId || !form.frequency) return
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.transactionType === 'transfer' && !form.toAccountId) return
@@ -420,22 +581,18 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     // que não casa com nenhum agendamento — o modal fechava e nada era criado, sem erro.
     let schedId = initial?.id
     if (schedId) {
-      // Parcela de financiamento: trocar o favorecido aqui vale para o financiamento inteiro.
-      // Vai ANTES do updateSchedule para que uma falha do endpoint não deixe o estado local
-      // com um favorecido que o banco não tem — o sync o empurraria depois como se fosse bom.
-      if (initial.financingInstallmentId && (data.payee || '') !== (initial.payee || '')) {
-        try {
-          const r = await salvarFavorecidoDoAgendamento(schedId, data.payee || '')
-          onAviso?.(
-            `Favorecido atualizado para ${data.payee || '(vazio)'}.`
-            + ` ${r.total} parcela(s) e o financiamento atualizados.`,
-          )
-        } catch (err) {
-          onAviso?.(`Não foi possível sincronizar o favorecido: ${err.message}`, 'error')
-          return
-        }
+      // Regra única de séries: campo da PARCELA mudou e há pendentes depois → pergunta o escopo.
+      const mudancas = diffCampos(camposAntes, camposDoForm(form))
+      const ctx = contextoSerie()
+      if (!decisao && precisaEscolherEscopo(mudancas, ctx.nProximas)) {
+        setEscopoPendente({ mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes })
+        return
       }
-      updateSchedule(schedId, data)
+      // Parcela de financiamento: o favorecido vale para o financiamento e as parcelas PENDENTES —
+      // o endpoint vai ANTES do updateSchedule (falha não deixa o estado com um favorecido que o
+      // banco não tem).
+      const ok = await salvarEdicao(data, mudancas, ctx, decisao)
+      if (!ok) return
     } else {
       schedId = addSchedule(data)
     }
@@ -447,9 +604,38 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     onClose()
   }
 
+  if (verHistorico && initial?.id) {
+    return <HistoricoPainel entidade="agendamento" entidadeId={initial.id} serieKey={serieKeyDe({ agendamento: initial })} onVoltar={() => setVerHistorico(false)} />
+  }
+  if (escopoPendente) {
+    return (
+      <EscopoSerieDialog
+        mudancas={escopoPendente.mudancas}
+        nProximas={escopoPendente.nProximas}
+        nPendentesSerie={escopoPendente.nPendentes}
+        onCancel={() => setEscopoPendente(null)}
+        onConfirm={(decisao) => { setEscopoPendente(null); handleSubmit(null, decisao) }}
+      />
+    )
+  }
+
   return (
     <>
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+        {initial?.id && (
+          <div className="col-span-2 flex items-center justify-end -mb-2">
+            <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5" title="Histórico de alterações">
+              <History size={13} /> Histórico
+              {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+            </button>
+          </div>
+        )}
+        {avisoMotor && (
+          <div className="col-span-2 flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            Este agendamento é recalculado pelo motor da fatura; alterações manuais podem ser sobrescritas
+          </div>
+        )}
         {showRateio && (
           <RateioModal
             total={Number(form.amount) || rateioTotal || 0}
@@ -495,7 +681,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             onChange={e => set('description', e.target.value)}
             placeholder="Ex: Aluguel, Salário..."
             required
+            readOnly={ehFinanciamento}
           />
+          {ehFinanciamento && <p className="text-[11px] text-gray-500 mt-1">Parcela de financiamento: a descrição do lançamento vem do bem ("Parcela n/N"), por isso não é editável aqui.</p>}
         </div>
 
         {/* Conta */}
@@ -524,8 +712,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             onChange={e => set('amount', e.target.value)}
             placeholder="0,00"
             required
+            readOnly={ehFinanciamento}
           />
-          {hasNextDiff && (
+          {ehFinanciamento && <p className="text-[11px] text-gray-500 mt-1">O pagamento usa principal + juros da parcela; o valor não é editável aqui.</p>}
+          {hasNextDiff && !occInicial && (
             <p className="text-xs text-gray-400 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
           )}
           {/* Divisão do valor em categorias. Mesmo padrão da listagem (SchedulePanel).
@@ -682,8 +872,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           </div>
         )}
 
-        {/* Favorecido */}
-        {form.transactionType !== 'transfer' && (
+        {/* Favorecido — também na parcela de financiamento (transferência), onde é campo da série */}
+        {(form.transactionType !== 'transfer' || ehFinanciamento) && (
           <div>
             <LabelTip tip={TIPS.payee}>Favorecido</LabelTip>
             <FavorecidoAutocomplete

@@ -936,3 +936,27 @@ ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS tipo_documento_id TEXT;
 ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS tipo_documento_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_agendamentos_tipo_documento ON agendamentos (tipo_documento_id);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo_documento ON lancamentos (tipo_documento_id);
+
+-- HISTÓRICO DE ALTERAÇÕES feitas pelo usuário (edição individual, em série ou em massa) em
+-- agendamentos e lançamentos. 1 linha por campo e por item; lote_id agrupa uma mesma edição.
+-- Gravado na mesma transação da alteração (api/historico.js POST, api/agendamentos.js,
+-- api/transactions-bulk-update.js, favorecido do financiamento). Motor/sync NÃO gravam.
+-- Também criada pela API (api/_historico.js, chamado por /api/load).
+CREATE TABLE IF NOT EXISTS historico_alteracoes (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  entidade TEXT NOT NULL CHECK (entidade IN ('agendamento', 'lancamento')),
+  entidade_id TEXT NOT NULL,
+  ocorrencia_data TEXT,          -- YYYY-MM-DD da ocorrência (agendamento recorrente), se houver
+  serie_key TEXT,                -- agendamento|<id>, serie|<serie_id>, parcelado|<raiz>, financiamento|<conta dívida>
+  lote_id TEXT NOT NULL,
+  escopo TEXT NOT NULL CHECK (escopo IN ('parcela', 'proximas', 'serie')),
+  campo TEXT NOT NULL,           -- amount, date, categoryId, description, accountId, costCenter, grupoGerencial, payee, tipoDocumentoId
+  valor_anterior JSONB,
+  valor_novo JSONB,
+  motivo TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE historico_alteracoes DISABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_historico_entidade ON historico_alteracoes (entidade, entidade_id);
+CREATE INDEX IF NOT EXISTS idx_historico_serie ON historico_alteracoes (serie_key);
+CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id);

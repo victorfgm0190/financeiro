@@ -13,6 +13,7 @@ import {
   fetchDatasProvisorias, upsertDataProvisoria, deleteDatasProvisoriasApi,
   fetchTiposDocumento, createTipoDocumento, updateTipoDocumentoApi, reordenarTiposDocumentoApi,
   deleteTipoDocumentoApi, setTipoDocumentoAgendamentosApi,
+  aplicarEdicaoApi, fetchHistoricoResumo,
   fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
   fetchReserveSnapshots, createReserveSnapshots,
   createReserveLedgerRows,
@@ -21,6 +22,7 @@ import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/rese
 import { getToken } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
+import { comCamposDaOcorrencia } from '../lib/camposSerie'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
@@ -812,6 +814,40 @@ export function AppProvider({ children }) {
     }
   }, [recarregarTiposDocumento])
 
+  // Histórico de alterações: quais registros têm histórico (indicador discreto nas listas).
+  // Chaves 'agendamento:<id>' / 'lancamento:<id>'. Carregado no mount; cada edição registrada soma.
+  const [historicoChaves, setHistoricoChaves] = useState(() => new Set())
+  useEffect(() => {
+    if (!getToken()) return
+    let cancelled = false
+    fetchHistoricoResumo()
+      .then(itens => { if (!cancelled) setHistoricoChaves(new Set(itens.map(i => `${i.entidade}:${i.entidade_id}`))) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+  const temHistorico = useCallback((entidade, id) => historicoChaves.has(`${entidade}:${id}`), [historicoChaves])
+  const marcarHistorico = useCallback((linhas) => {
+    if (!linhas?.length) return
+    setHistoricoChaves(prev => {
+      const next = new Set(prev)
+      for (const l of linhas) next.add(`${l.entidade}:${l.entidade_id}`)
+      return next
+    })
+  }, [])
+  // Grava uma edição do USUÁRIO + o histórico numa transação (POST /api/historico). Recebe os
+  // registros JÁ alterados (objetos do app); converte para as rows do sync. Sem linhas de
+  // histórico (nada mudou) não chama o banco.
+  const registrarEdicao = useCallback(async ({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null }) => {
+    if (!historico.length) return { historico: 0 }
+    const r = await aplicarEdicaoApi({
+      agendamentos: agendamentos.map(scheduleToRow),
+      lancamentos: lancamentos.map(txToRow),
+      historico, loteId, motivo,
+    })
+    marcarHistorico(historico)
+    return r
+  }, [marcarHistorico])
+
   // Carrega os históricos no mount (paralelo ao load principal). Falha silenciosa
   // (banco indisponível) → mantém arrays vazios; o ReservasPanel cai nos fallbacks legados.
   useEffect(() => {
@@ -1157,15 +1193,17 @@ export function AppProvider({ children }) {
       let transactions = prev.transactions
       let changed = false
 
-      for (const schedule of prev.schedules) {
-        if (!schedule.autoRegister) continue
+      for (const scheduleBase of prev.schedules) {
+        if (!scheduleBase.autoRegister) continue
         // Vencimento pela data EFETIVA (override da prévia): ocorrência adiada espera a nova data,
         // antecipada dispara antes. Lançamento na data efetiva; registered na chave ORIGINAL.
-        const pending = ocorrenciasVencidas(schedule, todayStr)
+        const pending = ocorrenciasVencidas(scheduleBase, todayStr)
         if (pending.length === 0) continue
-        const schedRateios = (prev.rateios || []).filter(r => r.lancamentoId === schedule.id)
+        const schedRateios = (prev.rateios || []).filter(r => r.lancamentoId === scheduleBase.id)
 
         for (const { occurrenceDate, date, amount: occAmount } of pending) {
+          // Campos da parcela com o override da ocorrência ("Só esta parcela") aplicado.
+          const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, accounts)
           changed = true
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
           // occAmount = valor EFETIVO da ocorrência (sem override, o valor base). Vale para o
@@ -1860,7 +1898,7 @@ export function AppProvider({ children }) {
   // Reaproveita updateTransaction por id para herdar o recálculo de fatura/saldo do cartão
   // (mudança de data realoca a fatura → recalcula creditDebt) e a persistência via sync.
   // Dispara também o endpoint /api/transactions-bulk-update para a gravação em lote no banco.
-  const bulkUpdateTransactions = useCallback((ids, { date, categoryId } = {}) => {
+  const bulkUpdateTransactions = useCallback((ids, { date, categoryId, motivo = null } = {}) => {
     const list = Array.isArray(ids) ? ids.filter(Boolean) : []
     if (list.length === 0) return
     const changes = {}
@@ -1869,12 +1907,14 @@ export function AppProvider({ children }) {
     if (Object.keys(changes).length === 0) return
 
     // Gravação atômica em lote no banco (não bloqueia a UI; o sync por estado é o backstop).
-    bulkUpdateTransactionsApi(list, { date: changes.date || null, categoryId: 'categoryId' in changes ? changes.categoryId : undefined })
+    // Mesma transação grava o histórico (1 linha por campo e por lançamento, um lote só).
+    bulkUpdateTransactionsApi(list, { date: changes.date || null, categoryId: 'categoryId' in changes ? changes.categoryId : undefined, motivo })
+      .then(r => { if (r?.historico) marcarHistorico(list.map(id => ({ entidade: 'lancamento', entidade_id: id }))) })
       .catch(e => console.error('[bulkUpdate] api', e.message))
 
     // Estado + recálculo de fatura/saldo por lançamento (e persistência via diff-sync).
     for (const id of list) updateTransaction(id, changes)
-  }, [updateTransaction])
+  }, [updateTransaction, marcarHistorico])
 
   const deleteTransaction = useCallback((id) => {
     // Captura as faturas afetadas (gasto + parcelas-filhas) antes do update p/ recalcular depois.
@@ -2311,16 +2351,17 @@ export function AppProvider({ children }) {
   // próximo syncSection('agendamentos') mandaria o tipo antigo por cima. Agendamento ainda não
   // sincronizado (o banco não o tem) recebe o valor pelo estado e vai no sync seguinte.
   // Devolve quantos foram alterados.
-  const setTipoDocumentoEmMassa = useCallback(async (ids, tipoId) => {
+  const setTipoDocumentoEmMassa = useCallback(async (ids, tipoId, { loteId = null, motivo = null } = {}) => {
     const alvo = new Set((ids || []).filter(id => id && !String(id).startsWith('sch:')))
     if (alvo.size === 0) return 0
-    await setTipoDocumentoAgendamentosApi([...alvo], tipoId || null)
+    const r = await setTipoDocumentoAgendamentosApi([...alvo], tipoId || null, { loteId, motivo })
+    if (r?.historico) marcarHistorico([...alvo].map(id => ({ entidade: 'agendamento', entidade_id: id })))
     update(d => ({
       ...d,
       schedules: d.schedules.map(s => (alvo.has(s.id) ? { ...s, tipoDocumentoId: tipoId || null } : s)),
     }))
     return alvo.size
-  }, [update])
+  }, [update, marcarHistorico])
 
   // Aplica um mesmo favorecido a vários agendamentos de uma vez. Existe para espelhar o que
   // PATCH /api/financiamento/[id] acabou de gravar nas parcelas: `payee` está em scheduleToRow,
@@ -2340,19 +2381,21 @@ export function AppProvider({ children }) {
   // escritas na mesma transação — deixar uma parcela divergir daria um financiamento com dois
   // favorecidos, e a próxima troca pela aba Parcelas apagaria a divergência sem avisar.
   // Devolve quantos agendamentos mudaram, para quem chamou poder avisar o usuário.
-  const salvarFavorecidoDoAgendamento = useCallback(async (scheduleId, novoPayee) => {
+  const salvarFavorecidoDoAgendamento = useCallback(async (scheduleId, novoPayee, { loteId = null, motivo = null } = {}) => {
     const sched = dataRef.current.schedules.find(s => s.id === scheduleId)
     if (!sched?.financingInstallmentId) {
       updateSchedule(scheduleId, { payee: novoPayee || '' })
       return { sincronizado: false, total: 1 }
     }
-    const resposta = await sincronizarFavorecidoDeParcela(sched.financingInstallmentId, novoPayee)
+    // Só as parcelas PENDENTES mudam (as pagas mantêm o favorecido); o histórico sai no mesmo lote.
+    const resposta = await sincronizarFavorecidoDeParcela(sched.financingInstallmentId, novoPayee, { loteId, motivo })
     const ids = resposta.agendamentos_atualizados || []
+    marcarHistorico(ids.map(id => ({ entidade: 'agendamento', entidade_id: id })))
     // Espelha as OUTRAS parcelas também: o endpoint já as gravou, mas sem isto o próximo
     // syncSection('agendamentos') mandaria o payee antigo do estado por cima do banco.
     updateSchedulesPayee(ids, resposta.agendamentos_payee)
     return { sincronizado: true, total: ids.length }
-  }, [updateSchedule, updateSchedulesPayee])
+  }, [updateSchedule, updateSchedulesPayee, marcarHistorico])
 
   // Alterna a flag visual "Confirmado / A Confirmar" do agendamento.
   const toggleScheduleConfirmado = useCallback((id) => {
@@ -2483,8 +2526,10 @@ export function AppProvider({ children }) {
     const date = dateArg || (schedAtual ? occEfetiva(schedAtual, occurrenceDate).date : occurrenceDate)
     const newTxId = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2)
     update(d => {
-      const schedule = d.schedules.find(s => s.id === scheduleId)
-      if (!schedule) return d
+      const scheduleBase = d.schedules.find(s => s.id === scheduleId)
+      if (!scheduleBase) return d
+      // Campos da parcela com o override da ocorrência ("Só esta parcela") aplicado.
+      const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, d.accounts)
 
       // Rastreabilidade: para os agendamentos gerenciais (gerencial_devolucao / resgate_reserva /
       // pagamento_fatura), copia cartão, fatura e o próprio agendamento para o lançamento gerado.
@@ -5465,6 +5510,7 @@ export function AppProvider({ children }) {
       datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
       tiposDocumento, addTipoDocumento, updateTipoDocumento, deleteTipoDocumento, reordenarTiposDocumento,
       recarregarTiposDocumento, setTipoDocumentoEmMassa,
+      registrarEdicao, temHistorico,
       addReservePeriod, deleteReservePeriod,
       addReserveAdjustment, updateReserveAdjustment, deleteReserveAdjustment,
       addReserveSnapshots,

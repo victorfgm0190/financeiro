@@ -2,6 +2,7 @@ import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureBemSchema } from './_bem.js'
 import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
+import { ensureHistoricoSchema } from './_historico.js'
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -421,6 +422,8 @@ export default async function handler(req, res) {
     // Tipos de documento: tabela + seed + coluna tipo_documento_id em agendamentos/lancamentos.
     // SEM try: txToRow/scheduleToRow mandam a coluna em todo sync, então sem ela o app não grava.
     await ensureTiposDocumentoSchema()
+    // Histórico de alterações (tabela própria; só os endpoints de edição do usuário gravam nela).
+    await ensureHistoricoSchema()
 
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos] =
       await Promise.all([

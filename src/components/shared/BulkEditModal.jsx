@@ -31,6 +31,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
   const [stage, setStage] = useState('review') // review | edit | confirm | blocked
   const [date, setDate] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [motivo, setMotivo] = useState('') // vai para o histórico de alterações (mesmo lote)
   const [error, setError] = useState('')
 
   const removeItem = (id) => setItems(prev => prev.filter(t => t.id !== id))
@@ -72,6 +73,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
     bulkUpdateTransactions(items.map(t => t.id), {
       date: dateFilled ? date : undefined,
       categoryId: catFilled ? categoryId : undefined,
+      motivo: motivo.trim() || null,
     })
     onApplied?.(items.length)
     onClose()
@@ -188,6 +190,11 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
                   A seleção contém Transferências — não é possível alterar Categoria com tipos diferentes.
                 </p>
               )}
+            </div>
+            <div>
+              <label className="label">Motivo da alteração (opcional)</label>
+              <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: Reclassificação do mês" />
+              <p className="text-[11px] text-gray-500 mt-1">Fica no histórico de alterações de cada lançamento.</p>
             </div>
           </div>
           {error && <p className="text-xs text-amber-400 mb-3">{error}</p>}

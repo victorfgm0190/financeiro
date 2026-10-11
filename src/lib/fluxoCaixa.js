@@ -9,6 +9,7 @@
 //   FINAL CICLO   = saldoFinal + envelopesTotal (mesma projeção SEM subtrair os envelopes)
 
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
+import { occCampos } from './camposSerie.js'
 import { dueDateInMonth } from './fatura.js'
 
 const round2 = n => Math.round(n * 100) / 100
@@ -198,18 +199,27 @@ export function computeFluxoCaixa({
         return
       }
 
-      if (!accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
-      if (oculto(s.accountId, s.toAccountId)) return
+      // Conta/categoria/descrição POR OCORRÊNCIA: o override "Só esta parcela" pode trocar a conta
+      // de uma ocorrência só (camposSerie.occCampos). Sem override de conta, o filtro por conta
+      // continua saindo cedo, como antes.
+      const contaPorOcorrencia = Object.values(s.overrides || {}).some(o => o && typeof o === 'object' && o.accountId)
+      if (!contaPorOcorrencia && !accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
+      if (!contaPorOcorrencia && oculto(s.accountId, s.toAccountId)) return
       getNextOccurrences(s, 400).forEach(origDate => {
+        const oc = occCampos(s, origDate)
+        if (contaPorOcorrencia) {
+          if (!accountIds.has(oc.accountId) && !accountIds.has(s.toAccountId)) return
+          if (oculto(oc.accountId, s.toAccountId)) return
+        }
         const { date, amount } = occEfetiva(s, origDate)
         if (date > end) return
-        const m = classify(s.transactionType, s.accountId, s.toAccountId, amount)
+        const m = classify(s.transactionType, oc.accountId, s.toAccountId, amount)
         if (!m) return
         if (date < start) { agendamentosAntes = round2(agendamentosAntes + m.entrada - m.saida); return }
         out.push({
-          date, description: s.description || '(agendamento)', type: s.transactionType,
-          fromAccountId: s.accountId, toAccountId: s.toAccountId,
-          categoryId: s.categoryId || s.reservaExpenseCategoryId || null,
+          date, description: oc.description || '(agendamento)', type: s.transactionType,
+          fromAccountId: oc.accountId, toAccountId: s.toAccountId,
+          categoryId: oc.categoryId || s.reservaExpenseCategoryId || null,
           reservaFuncaoId: s.reservaFuncaoId || null,
           entrada: m.entrada, saida: m.saida,
           status: m.entrada > 0 ? 'A receber' : 'A pagar', real: false, _key: s.id + '_' + origDate,

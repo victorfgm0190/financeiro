@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import { ArrowLeftRight, PiggyBank, Repeat, Pencil, Check, X } from 'lucide-react'
+import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -15,6 +15,13 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/herancaCampos'
+import EscopoSerieDialog from '../shared/EscopoSerieDialog'
+import { HistoricoPainel } from '../shared/HistoricoPainel'
+import {
+  ESCOPO, diffCampos, precisaEscolherEscopo, planoRegistros, irmasLancamento, parcelaCartaoPendente,
+  serieKeyDe, mensagemAplicada,
+} from '../../lib/camposSerie'
+import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
@@ -97,12 +104,13 @@ function buildCatOptsPorSentido(categories, sentido) {
 export default function TransactionForm({ initial, onClose, onToast }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
-    gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, propagarValorParcelas, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
+    gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
     reserveFunctions, settings, findLinkedResgate, profiles, activeProfileId, categoryGroupOrder,
+    registrarEdicao, temHistorico,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -401,27 +409,35 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
   }, [transactions, payees])
 
-  // Parcelas seguintes (X+1..N) da mesma cadeia X/N, no mesmo cartão — para propagação de valor
-  const subsequentParcelas = useMemo(() => {
-    if (!initial?.id || initial.accountType !== 'credit' || initial.type !== 'expense') return []
-    const parse = (desc) => {
-      const m = (desc || '').match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?!\d)/)
-      if (!m) return null
-      const num = parseInt(m[1], 10), total = parseInt(m[2], 10)
-      if (num < 1 || total < 2 || num > total) return null
-      return { num, total, base: desc.replace(m[0], '').trim().replace(/\s+/g, ' ').toLowerCase() }
-    }
-    const baseInst = parse(initial.description)
-    if (!baseInst) return []
-    return transactions.filter(t => {
-      if (t.id === initial.id) return false
-      if (t.accountId !== initial.accountId || t.type !== 'expense' || t.accountType !== 'credit') return false
-      const pi = parse(t.description)
-      return pi && pi.total === baseInst.total && pi.num > baseInst.num && pi.base === baseInst.base
-    })
-  }, [initial, transactions])
+  // ── Regra única de séries (lib/camposSerie.js) — lançamentos parcelados (cartão/importação) ──
+  // Irmãs por serie_id (ou raiz parentTxId) + installmentNum — nunca pela descrição "N/M". Só as
+  // PENDENTES mudam: parcela em fatura fechada/paga fica como está.
+  const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes }
+  const camposRastreados = (t) => ({
+    amount: t.amount, date: t.date || null, categoryId: t.categoryId || null,
+    description: t.description || null, accountId: t.accountId || null, costCenter: t.costCenter || null,
+    grupoGerencial: t.grupoGerencial || null, payee: t.payee || null, tipoDocumentoId: t.tipoDocumentoId || null,
+  })
+  const parcelaPendente = (t) => parcelaCartaoPendente(t, { faturasFechadas: settings?.faturasFechadas, schedules })
 
-  const handleSubmit = (e, installmentDecision) => {
+  // Edição do usuário: aplica nas irmãs (conforme o escopo) via updateTransaction e grava o
+  // histórico numa transação (POST /api/historico). Fora do fluxo síncrono do submit.
+  const aplicarSerieEHistorico = (plano, mudancas, escopo, motivo, finalItem) => {
+    if (!mudancas.length) return
+    for (const p of plano.slice(1)) updateTransaction(p.id, p.changes)
+    const loteId = novoLoteId()
+    const entradas = [{ id: initial.id, mudancas }, ...plano.slice(1)]
+    const historico = linhasHistorico({
+      entidade: 'lancamento', itens: itensPorEscopo(entradas, escopo),
+      serieKey: serieKeyDe({ lancamento: initial }), loteId, motivo,
+    })
+    const finais = [finalItem, ...plano.slice(1).map(p => ({ ...transactions.find(t => t.id === p.id), ...p.changes }))]
+    registrarEdicao({ lancamentos: finais, historico, loteId, motivo })
+      .then(() => onToast?.(plano.length > 1 ? mensagemAplicada(plano.length) : 'Alteração salva. Histórico registrado.'))
+      .catch(err => onToast?.(`Alteração salva, mas o histórico não foi registrado: ${err.message}`))
+  }
+
+  const handleSubmit = (e, installmentDecision, decisao = null) => {
     e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
@@ -517,7 +533,21 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     txData.categoriaCpfId = isInterProfileTransfer ? (form.categoriaCpfId || null) : null
 
     if (initial?.id) {
+      const mudancas = diffCampos(camposRastreados(initial), camposRastreados(txData))
+      const irmas = irmasLancamento(initial, transactions)
+      const nProximas = irmas.filter(t => (t.installmentNum || 0) > (initial.installmentNum || 0) && parcelaPendente(t)).length
+      if (!decisao && precisaEscolherEscopo(mudancas, nProximas)) {
+        setEscopoPendente({ mudancas, nProximas, nPendentes: irmas.filter(parcelaPendente).length + 1 })
+        setStep('escopo-serie')
+        return
+      }
+      const escopo = decisao?.escopo || ESCOPO.PARCELA
+      const plano = planoRegistros(initial, {
+        mudancas, escopo, irmas, ehPendente: parcelaPendente, ordem: t => t.installmentNum || 0,
+        numParcela: initial.installmentNum, total: initial.installmentTotal,
+      })
       updateTransaction(initial.id, txData)
+      aplicarSerieEHistorico(plano, mudancas, escopo, decisao?.motivo || null, { ...initial, ...txData })
 
       // Rateio: grava/atualiza ou remove os rateios deste lançamento.
       if (form.type !== 'transfer') {
@@ -666,13 +696,6 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       } else if (linkedSch && !isResgatePago(linkedSch.id, schedules, transactions)) {
         setResgateToDelete(linkedSch)
         reservaStep = 'resgate-delete'
-      }
-
-      // Parcelado: oferecer propagação do novo valor para as parcelas seguintes da cadeia
-      const amountChangedNow = Math.abs(Number(form.amount) - initial.amount) > 0.005
-      if (amountChangedNow && subsequentParcelas.length > 0) {
-        setStep('propagate-parcelas')
-        return
       }
 
       if (reservaStep) {
@@ -990,36 +1013,30 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     )
   }
 
-  if (step === 'propagate-parcelas') {
-    const novoValor = Number(form.amount)
-    const n = subsequentParcelas.length
+  if (step === 'escopo-serie' && escopoPendente) {
     return (
-      <div className="space-y-5 py-2">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-purple-500/15 flex items-center justify-center mx-auto">
-            <ArrowLeftRight size={22} className="text-purple-400" />
-          </div>
-          <h3 className="font-semibold text-gray-100">Aplicar às demais parcelas?</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">
-            Aplicar este valor (<span className="text-white font-semibold">{fmt(novoValor)}</span>) a todas as{' '}
-            <span className="text-white font-semibold">{n}</span> parcela{n !== 1 ? 's' : ''} seguinte{n !== 1 ? 's' : ''} desta cadeia?
-          </p>
-          <p className="text-xs text-gray-600">
-            Os reflexos gerenciais (provisões, resgates e pagamentos) serão ajustados automaticamente.
-          </p>
-        </div>
-        <div className="flex gap-3 pt-2">
-          <button className="btn-secondary flex-1" onClick={onClose}>Não, só esta</button>
-          <button
-            className="btn-primary flex-1"
-            onClick={() => { propagarValorParcelas(initial.id, novoValor); onClose() }}
-          >
-            Sim, aplicar a todas
-          </button>
-        </div>
-      </div>
+      <EscopoSerieDialog
+        mudancas={escopoPendente.mudancas}
+        nProximas={escopoPendente.nProximas}
+        nPendentesSerie={escopoPendente.nPendentes}
+        onCancel={() => { setEscopoPendente(null); setStep('form') }}
+        onConfirm={(decisao) => { setEscopoPendente(null); setStep('form'); handleSubmit(null, undefined, decisao) }}
+      />
     )
   }
+
+  if (step === 'historico' && initial?.id) {
+    return (
+      <HistoricoPainel
+        entidade="lancamento"
+        entidadeId={initial.id}
+        serieKey={serieKeyDe({ lancamento: initial })}
+        origem={initial.scheduleId ? { entidade: 'agendamento', entidadeId: initial.scheduleId } : null}
+        onVoltar={() => setStep('form')}
+      />
+    )
+  }
+
 
   if (step === 'installment-detect' && installmentPrompt) {
     const { num, total } = installmentPrompt
@@ -1160,6 +1177,14 @@ export default function TransactionForm({ initial, onClose, onToast }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {initial?.id && (
+        <div className="flex justify-end -mb-2">
+          <button type="button" onClick={() => setStep('historico')} className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5" title="Histórico de alterações">
+            <History size={13} /> Histórico
+            {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+          </button>
+        </div>
+      )}
       {showRateio && (
         <RateioModal
           total={Number(form.amount) || rateioTotal || 0}

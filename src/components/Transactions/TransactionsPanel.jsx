@@ -105,7 +105,7 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico } = useApp()
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [bulkEditTxs, setBulkEditTxs] = useState(null)
@@ -275,7 +275,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                     <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                       <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
-                        <p className="text-gray-200 text-sm">{tx.description}</p>
+                        <p className="text-gray-200 text-sm">{tx.description}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400/80 align-middle" title="Tem histórico de alterações" />}</p>
                         {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">

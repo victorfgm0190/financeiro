@@ -68,8 +68,9 @@ export async function fetchFaturaConferencia(accountId, faturaMonthYear) {
 }
 
 // Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
-export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId } = {}) {
-  return apiPost('/api/transactions-bulk-update', { ids, date, categoryId })
+// lote_id/motivo vão para o histórico de alterações, gravado na mesma transação.
+export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId, loteId = null, motivo = null } = {}) {
+  return apiPost('/api/transactions-bulk-update', { ids, date, categoryId, lote_id: loteId, motivo })
 }
 
 // ─── Reservas: histórico de períodos e ajustes (escrita direta, sem diff-sync) ──
@@ -248,8 +249,25 @@ export async function deleteTipoDocumentoApi(id) {
   return r.tipo ? { ...r, tipo: normalizarTipoDocumento(r.tipo) } : r
 }
 // Tipo de documento em massa nos agendamentos (uma transação no banco). tipoId null = remover.
-export async function setTipoDocumentoAgendamentosApi(ids, tipoId) {
-  return apiPut('/api/agendamentos', { ids, tipo_documento_id: tipoId || null })
+export async function setTipoDocumentoAgendamentosApi(ids, tipoId, { loteId = null, motivo = null } = {}) {
+  return apiPut('/api/agendamentos', { ids, tipo_documento_id: tipoId || null, lote_id: loteId, motivo })
+}
+
+// ─── Histórico de alterações ─────────────────────────────────────────────────
+// Edição do USUÁRIO: grava as linhas alteradas (rows snake_case, as mesmas do sync) e o histórico
+// numa transação só. O sync/motor nunca chamam isto.
+export async function aplicarEdicaoApi({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null }) {
+  return apiPost('/api/historico', { agendamentos, lancamentos, historico, lote_id: loteId, motivo })
+}
+// params: { entidade, entidade_id } | { serie_key } | { lote_id }
+export async function fetchHistorico(params) {
+  const qs = new URLSearchParams(Object.entries(params || {}).filter(([, v]) => v != null && v !== '')).toString()
+  const r = await apiGet(`/api/historico?${qs}`)
+  return r?.historico || []
+}
+export async function fetchHistoricoResumo() {
+  const r = await apiGet('/api/historico?resumo=1')
+  return r?.itens || []
 }
 
 export async function fetchFluxoConsultas() {

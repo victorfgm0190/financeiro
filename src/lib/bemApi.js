@@ -80,8 +80,9 @@ export const atualizarFavorecido = (financiamentoId, payload) =>
 // Lado inverso: edita o favorecido a partir de UMA parcela e propaga para o financiamento e
 // para todas as outras parcelas. Devolve os ids dos agendamentos afetados, que o app precisa
 // espelhar no estado (`payee` está em scheduleToRow — ver AppContext).
-export const sincronizarFavorecidoDeParcela = (parcelaId, payee) =>
-  patch(`/api/financiamento/parcela/${enc(parcelaId)}/favorecido`, { payee })
+// Só as parcelas PENDENTES mudam; lote_id/motivo vão para o histórico (mesma transação).
+export const sincronizarFavorecidoDeParcela = (parcelaId, payee, { loteId = null, motivo = null } = {}) =>
+  patch(`/api/financiamento/parcela/${enc(parcelaId)}/favorecido`, { payee, lote_id: loteId, motivo })
 
 // Popula os rateios (principal + juros) dos agendamentos de um financiamento antigo. Idempotente:
 // parcela que já tem rateio é pulada. Devolve as linhas gravadas para o app espelhar no estado.
