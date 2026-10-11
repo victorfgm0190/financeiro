@@ -14,6 +14,7 @@ import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
+import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/herancaCampos'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
@@ -706,6 +707,11 @@ export default function TransactionForm({ initial, onClose, onToast }) {
       }
     }
 
+    // "Repetir": o agendamento ganha o id ANTES, para o lançamento 1/N nascer com scheduleId —
+    // excluí-lo reabre a ocorrência, como em qualquer lançamento gerado por agendamento.
+    const repeatSchId = form.repeat ? novoIdAgendamento() : null
+    if (repeatSchId) txData.scheduleId = repeatSchId
+
     const txId = addTransaction(txData)
 
     // Rateio: salva os rateios para o lançamento recém-criado.
@@ -725,11 +731,8 @@ export default function TransactionForm({ initial, onClose, onToast }) {
         grupoGerencialId: txData.grupoGerencial,
         installments: form.installments,
         description: form.description,
-        categoryId: txData.categoryId || null,
-        payee: form.payee || null,
-        costCenter: form.costCenter || null,
-        notes: form.notes || null,
-        reservaFuncaoId: txData.reservaFuncaoId || null,
+        // Categoria, favorecido, centro de custo, observações, função e tipo de documento da parcela 1.
+        ...camposHerdadosParcelaFilha({ ...txData, payee: form.payee, costCenter: form.costCenter, notes: form.notes }),
         baseFaturaMonthYear: txData.faturaMonthYear || null,
         serieId,
       })
@@ -744,6 +747,7 @@ export default function TransactionForm({ initial, onClose, onToast }) {
     // autoRegister fica desligado para não re-registrar datas passadas no próximo load.
     if (form.repeat) {
       const schId = addSchedule({
+        id: repeatSchId,
         description: form.description || form.payee || 'Lançamento recorrente',
         transactionType: form.type,
         accountId: form.accountId,

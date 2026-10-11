@@ -4,27 +4,10 @@ import { Copy } from 'lucide-react'
 import { today } from './utils'
 import Modal from './Modal'
 import ScheduleForm from '../Schedule/ScheduleForm'
+import { txToScheduleInitial } from '../../lib/herancaCampos'
 
-// Mapeia um lançamento (transaction) para o `initial` de um Agendamento NOVO (ScheduleForm).
-// Só copia os campos "de conteúdo"; data/frequência/recorrência ficam nos defaults do form
-// (Data de Início = hoje; frequência vazia — o usuário escolhe). Nada de id/parentTxId/origin/
-// installment* — é um agendamento novo. Observação de nomes: o lançamento usa `type`, o
-// agendamento usa `transactionType`; os demais campos compartilham o mesmo nome camelCase.
-function txToScheduleInitial(tx) {
-  if (!tx) return null
-  return {
-    description: tx.description || '',
-    transactionType: tx.type || 'expense',
-    amount: tx.amount ?? '',
-    accountId: tx.accountId || '',       // conta origem (também from_account_id em transferência)
-    toAccountId: tx.toAccountId || '',   // conta destino (transferência)
-    categoryId: tx.categoryId || '',
-    payee: tx.payee || '',
-    costCenter: tx.costCenter || '',
-    reservaFuncaoId: tx.reservaFuncaoId || '',
-    grupoGerencial: tx.grupoGerencial || null,
-  }
-}
+// Lançamento → `initial` de um Agendamento NOVO: txToScheduleInitial (lib/herancaCampos.js) —
+// data/frequência ficam nos defaults do form; o tipo de documento é mantido.
 
 // Botão "Duplicar" para uma linha de extrato. Ao clicar, pergunta "Duplicar como…":
 //   📋 Criar Lançamento  → fluxo existente (escolhe a DATA e chama onConfirm(novaData)).

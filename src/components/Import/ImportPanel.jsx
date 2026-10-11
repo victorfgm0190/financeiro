@@ -26,6 +26,7 @@ import ImportPreviewModal from './ImportPreviewModal'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
+import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
@@ -695,6 +696,9 @@ function buildInstallmentFromRow(fp, { accountId, defaultGrupoD }) {
     reservaFuncaoId: fp._reservaFuncaoId || null,
     installmentNum: fp.num, installmentTotal: fp.total,
     serieId: fp._serieId || null,
+    costCenter: fp.costCenter || null,
+    notes: fp.notes || null,
+    tipoDocumentoId: fp.tipoDocumentoId || null,
     _fromImport: true,
   }
 }
@@ -1951,6 +1955,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           _reservaFuncaoId: existing ? null : (row._reservaFuncaoId || null),
           // serie_id herdado da parcela base (elo da série); já existente preserva o próprio.
           _serieId: existing ? (existing.serieId || null) : (row._serieId || null),
+          // Centro de custo, observações e tipo de documento da linha base / irmã gravada.
+          ...camposHerdadosProjecao(row),
           _exists: !!existing,
           _existingId: existing?.id || null,
         })

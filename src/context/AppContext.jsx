@@ -20,6 +20,7 @@ import {
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
+import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
@@ -2277,7 +2278,9 @@ export function AppProvider({ children }) {
   }, [])
 
   const addSchedule = useCallback((schedule) => {
-    const id = 'sch_' + Date.now()
+    // Id de fora ganha do gerado (mesma regra do addTransaction): o "Repetir" do TransactionForm
+    // gera o id antes para o lançamento 1/N já nascer com scheduleId.
+    const id = schedule.id || 'sch_' + Date.now()
     update(d => ({ ...d, schedules: [...d.schedules, { ...schedule, id, skipped: [], registered: [] }] }))
     reconciliarPorAgendamento([{ ...schedule, id, skipped: [], registered: [] }])
     return id
@@ -2419,34 +2422,11 @@ export function AppProvider({ children }) {
       // entra na lista normal para ser pago. (Provisão "Uma vez" continua virando ela mesma
       // a despesa efetivada, acima — sem agendamento duplicado.)
       if (!isOnce) {
-        schedules = [...schedules, {
+        // Campos definitivos da provisão (inclui tipo de documento) — lib/herancaCampos.js.
+        schedules = [...schedules, agendamentoDaEfetivacao(prov, {
           id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-          description: prov.description,
-          transactionType: prov.transactionType || 'expense',
-          accountId: prov.accountId,
-          accountType: prov.accountType || null,
-          toAccountId: prov.toAccountId || '',
-          amount: valor,
-          categoryId: prov.categoryId || '',
-          payee: prov.payee || '',
-          costCenter: prov.costCenter || '',
-          frequency: 'once',
-          // Ancora à ocorrência efetivada (não à 1ª); cai p/ `date` se a modal não enviar occurrenceDate.
-          startDate: occurrenceDate || date,
-          occurrenceType: 'continuous',
-          installments: 0,
-          registered: [],
-          skipped: [],
-          remindDaysBefore: prov.remindDaysBefore ?? 3,
-          autoRegister: false,
-          overrides: {},
-          grupoGerencial: prov.grupoGerencial ?? null,
-          reservaExpenseCategoryId: prov.reservaExpenseCategoryId ?? null,
-          // O resgate da reserva (transferência) é criado à parte; a despesa em si não carrega função.
-          reservaFuncaoId: null,
-          isProvisao: false,
-          provisaoEfetivada: false,
-        }]
+          valor, date, occurrenceDate,
+        })]
       }
 
       if (prov.reservaFuncaoId) {
@@ -4648,6 +4628,7 @@ export function AppProvider({ children }) {
     payee = null,               // favorecido herdado da parcela base
     costCenter = null,          // centro de custo herdado da parcela base
     notes = null,               // observações herdadas da parcela base
+    tipoDocumentoId = null,     // tipo de documento herdado da parcela base
     serieId = null,             // elo da série (gerado na base) — propagado às filhas
   }) => {
     if (!installments || installments <= 1) return []
@@ -4715,6 +4696,7 @@ export function AppProvider({ children }) {
         description: baseDesc,
         categoryId: categoryId || null, payee: payee || null,
         costCenter: costCenter || null, notes: notes || null,
+        tipoDocumentoId: tipoDocumentoId || null,
         grupoGerencial: grupoGerencialId, faturaMonthYear: futureFatura,
         faturaRef: resolveFaturaRef({ faturaMonthYear: futureFatura }),
         reservaFuncaoId: reservaFuncaoId || null,

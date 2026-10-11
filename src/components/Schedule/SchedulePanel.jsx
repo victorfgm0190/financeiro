@@ -31,6 +31,7 @@ import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import TipoDocumentoFiltro from '../shared/TipoDocumentoFiltro'
 import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO } from '../../lib/tiposDocumento'
+import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -321,6 +322,8 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         amount, date: payDate, categoryId: payCategoryId,
         grupoGerencial: payGrupo || undefined,
         description: schedule.description, notes: payNotes,
+        // Tipo de documento e centro de custo não estão no modal → herdam do agendamento.
+        ...camposHerdadosNoPagamento(schedule),
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
@@ -349,6 +352,8 @@ function PayModal({ schedule, nextDate, accounts, categories, gerencialGroups, a
         type: 'income', accountId: recAccountId, payee: recPayee,
         amount, date: recDate,
         categoryId: recCategoryId, description: schedule.description, notes: recNotes,
+        // Recebimento não tem select de grupo: grupo, tipo de documento e centro de custo herdam.
+        ...camposHerdadosNoPagamento(schedule, {}, { incluirGrupo: true }),
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
