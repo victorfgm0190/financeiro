@@ -84,7 +84,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
                 Ver tudo <ChevronRight size={14} />
               </button>
             </div>
-            {Corpo ? <Corpo v={v} oculto={ocultar} /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
+            {Corpo ? <Corpo v={v} oculto={ocultar} card /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
           </section>
         )
       })}

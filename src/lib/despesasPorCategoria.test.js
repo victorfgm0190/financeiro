@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { despesasPorCategoria, periodoDoFiltro } from './despesasPorCategoria'
+import { despesasPorCategoria, periodoDoFiltro, agruparTopN, corDaCategoria, OUTRAS_ID, COR_OUTRAS, CORES_TOP } from './despesasPorCategoria'
 
 // Classificação mínima: despesa = type expense; resgate = receita com id tx_rsg_.
 const cls = {
@@ -66,5 +66,51 @@ describe('periodoDoFiltro (meses financeiros)', () => {
     expect(periodoDoFiltro('current', fp)).toEqual({ start: iso(new Date(2026, 9, 10)), end: iso(new Date(2026, 10, 9)) })
     expect(periodoDoFiltro('prev', fp)).toEqual({ start: iso(new Date(2026, 8, 10)), end: iso(new Date(2026, 9, 9)) })
     expect(periodoDoFiltro('3m', fp)).toEqual({ start: iso(new Date(2026, 7, 10)), end: iso(new Date(2026, 10, 9)) })
+  })
+})
+
+describe('agruparTopN (top 5 + Outras)', () => {
+  // 8 categorias com despesa e resgates em algumas → valida os dois modos.
+  const tx = []
+  ;[900, 700, 500, 400, 300, 200, 150, 75.33].forEach((v, i) => {
+    tx.push({ id: `d${i}`, type: 'expense', categoryId: `c${i}`, amount: v, date: '2026-10-03' })
+    if (i % 2 === 0) tx.push({ id: `tx_rsg_${i}`, type: 'income', categoryId: `c${i}`, amount: v / 4, date: '2026-10-04' })
+  })
+  tx.push({ id: 'semcat', type: 'expense', categoryId: null, amount: 10, date: '2026-10-04' })
+
+  for (const modo of ['cheio', 'liquido']) {
+    it(`soma das fatias = total das categorias do período (${modo})`, () => {
+      const { categorias, totalDespesas } = despesasPorCategoria(tx, P, cls, modo)
+      const { fatias, outras } = agruparTopN(categorias, totalDespesas)
+      expect(fatias).toHaveLength(6)
+      expect(fatias.slice(0, 5)).toEqual(categorias.slice(0, 5))
+      expect(outras.categoryId).toBe(OUTRAS_ID)
+      expect(outras.membros).toEqual(categorias.slice(5))
+      expect(soma(fatias.map(f => ({ amount: f.valor })))).toBe(soma(categorias.map(c => ({ amount: c.valor }))))
+      expect(soma(fatias.map(f => ({ amount: f.pct })))).toBeCloseTo(categorias.reduce((s, c) => s + c.pct, 0))
+    })
+  }
+
+  it('no modo cheio, com tudo categorizado, a soma das fatias é o total de despesas', () => {
+    const soCat = tx.filter(t => t.categoryId)
+    const { categorias, totalDespesas } = despesasPorCategoria(soCat, P, cls, 'cheio')
+    const { fatias } = agruparTopN(categorias, totalDespesas)
+    expect(soma(fatias.map(f => ({ amount: f.valor })))).toBe(totalDespesas)
+  })
+
+  it('5 categorias ou menos: sem Outras; n = null devolve todas', () => {
+    const cats = despesasPorCategoria(TX, P, cls, 'cheio').categorias
+    expect(agruparTopN(cats, 100)).toEqual({ fatias: cats, outras: null })
+    const muitas = despesasPorCategoria(tx, P, cls, 'cheio').categorias
+    expect(agruparTopN(muitas, 100, null).fatias).toEqual(muitas)
+  })
+})
+
+describe('corDaCategoria', () => {
+  it('top 5 com cores fixas, Outras cinza, demais determinísticas', () => {
+    expect(corDaCategoria('x', 0)).toBe(CORES_TOP[0])
+    expect(corDaCategoria(OUTRAS_ID, 0)).toBe(COR_OUTRAS)
+    expect(corDaCategoria('lazer', 7)).toBe(corDaCategoria('lazer', 12))
+    expect(corDaCategoria('lazer', 7)).toMatch(/^hsl\(/)
   })
 })

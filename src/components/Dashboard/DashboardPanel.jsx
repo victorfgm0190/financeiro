@@ -291,12 +291,13 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   }, [accounts, transactions])
 
   // ── P17: Maiores Despesas / Ranking ───────────────────────────────────────
-  // Período da pizza em meses financeiros; o ranking fica no mês atual. Valores, % e a lista do
-  // clique vêm de despesasPorCategoria (src/lib), no modo Cheio/Líquido compartilhado pelos dois.
+  // Período (meses financeiros) e modo Cheio/Líquido compartilhados pela pizza e pelo ranking;
+  // "Ver todas" é de cada bloco. Valores, % e a lista do clique vêm de despesasPorCategoria (src/lib).
   const [pieFilter, setPieFilter] = useState('current')
   const [modoDespesas, setModoDespesas] = useModoDespesas()
   const pieRange = useMemo(() => periodoDoFiltro(pieFilter, getFinancialPeriod), [pieFilter, getFinancialPeriod])
-  const rankingRange = useMemo(() => periodoDoFiltro('current', getFinancialPeriod), [getFinancialPeriod])
+  const [pizzaTodas, setPizzaTodas] = useState(false)
+  const [rankingTodas, setRankingTodas] = useState(false)
   const [txModal, setTxModal] = useState(null) // { title, total, color, txs } — receitas/despesas do mês
 
   return (
@@ -617,16 +618,19 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             </div>
           </div>
 
-          <PizzaDespesas periodo={pieRange} modo={modoDespesas} />
+          <PizzaDespesas periodo={pieRange} modo={modoDespesas} todas={pizzaTodas} onAlternarTodas={() => setPizzaTodas(t => !t)} />
         </div>
 
-        {/* Right: ranking de categorias com barra */}
+        {/* Right: ranking de categorias com barra (mesmo período e modo da pizza) */}
         <div className="card">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h3 className="text-sm font-semibold text-gray-300 shrink-0">Ranking por Categoria</h3>
-            <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+              <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+              <Segmentado opcoes={PERIOD_OPTS} valor={pieFilter} onChange={setPieFilter} rotulo="Período" />
+            </div>
           </div>
-          <RankingDespesas periodo={rankingRange} modo={modoDespesas} />
+          <RankingDespesas periodo={pieRange} modo={modoDespesas} todas={rankingTodas} onAlternarTodas={() => setRankingTodas(t => !t)} />
         </div>
       </div>
 

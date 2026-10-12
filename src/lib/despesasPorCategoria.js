@@ -70,6 +70,42 @@ export function despesasPorCategoria(transactions, periodo, cls, modo = MODO_DES
   return { categorias, totalDespesas }
 }
 
+// ── Top N + "Outras" e cores ──────────────────────────────────────────────────────────────────
+export const TOP_CATEGORIAS = 5
+export const OUTRAS_ID = '__outras'
+export const COR_OUTRAS = '#6b7280'
+// Cores das 5 primeiras (as de sempre da pizza); as demais saem de corDaCategoria.
+export const CORES_TOP = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4']
+
+// Modo fechado: as N maiores + uma fatia "Outras" com a soma do resto (membros = as categorias
+// dentro dela, já ordenadas). Com N categorias ou menos não há "Outras". A soma das fatias é
+// sempre a soma de todas as categorias (a pizza representa 100% do que ela mostra).
+// Sem `n` (modo "Ver todas"): todas as categorias, sem "Outras".
+export function agruparTopN(categorias, totalDespesas, n = TOP_CATEGORIAS) {
+  const lista = categorias || []
+  if (n == null || lista.length <= n) return { fatias: lista, outras: null }
+  const membros = lista.slice(n)
+  const valor = r2(membros.reduce((s, c) => s + c.valor, 0))
+  const outras = {
+    categoryId: OUTRAS_ID,
+    outras: true,
+    valor,
+    pct: totalDespesas > 0 ? (valor / totalDespesas) * 100 : 0,
+    membros,
+  }
+  return { fatias: [...lista.slice(0, n), outras], outras }
+}
+
+// Cor da fatia: posição < 5 → cor fixa do top; "Outras" → cinza; demais → tom determinístico
+// pelo id da categoria (mesma categoria = mesma cor em qualquer tela).
+export function corDaCategoria(categoryId, indice) {
+  if (categoryId === OUTRAS_ID) return COR_OUTRAS
+  if (indice != null && indice < CORES_TOP.length) return CORES_TOP[indice]
+  let h = 0
+  for (const ch of String(categoryId)) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return `hsl(${h % 360}, 55%, ${48 + (h % 3) * 6}%)`
+}
+
 // Filtro de período dos blocos → { start, end } em MESES FINANCEIROS (getFinancialPeriod do
 // AppContext): 'current' = mês atual, 'prev' = mês anterior, '3m' = os 3 últimos (inclui o atual).
 export function periodoDoFiltro(filtro, getFinancialPeriod) {

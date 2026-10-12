@@ -96,3 +96,18 @@ export default function CategoriaLancamentos({ categoriaId, periodo, modo }) {
     </div>
   )
 }
+
+// Clique em "Outras": os lançamentos de cada categoria dentro dela, agrupados por categoria
+// (membros = agruparTopN(...).outras.membros, já em ordem de valor).
+export function OutrasLancamentos({ membros, valor, periodo, modo }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-300 px-1">
+        <span className="font-semibold text-gray-100">Outras</span> · {fmt(valor)} · {membros.length} categoria{membros.length !== 1 ? 's' : ''}
+      </p>
+      {membros.map(m => (
+        <CategoriaLancamentos key={m.categoryId} categoriaId={m.categoryId} periodo={periodo} modo={modo} />
+      ))}
+    </div>
+  )
+}
