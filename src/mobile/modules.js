@@ -13,10 +13,11 @@
 // card: true → pode virar card no Início (`cardTitle` é o título do card).
 import {
   Home, TrendingUp, Calendar, LayoutGrid, PiggyBank, Mail, Plus, CalendarPlus, ArrowLeftRight,
-  Wallet, CreditCard, List, PieChart, Gem, BarChart3, Bell, Settings, LayoutDashboard,
+  Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard,
 } from 'lucide-react'
 import InicioMobile from './InicioMobile'
 import MaisMobile from './MaisMobile'
+import DespesasMobile from './DespesasMobile'
 import { LancamentoAcao, AgendamentoAcao, TransferenciaAcao, ReservaAcao } from './acoes'
 
 export const mobileModules = [
@@ -30,6 +31,7 @@ export const mobileModules = [
   { id: 'contas',        label: 'Contas',          icon: Wallet,         place: 'more', group: 'Contas e cartões', page: 'accounts' },
   { id: 'cartao',        label: 'Cartão',          icon: CreditCard,     place: 'more', group: 'Contas e cartões', page: 'credit' },
   { id: 'lancamentos',   label: 'Lançamentos',     icon: List,           place: 'more', group: 'Contas e cartões', page: 'transactions' },
+  { id: 'despesas',      label: 'Maiores despesas', icon: ChartPie,      place: 'more', group: 'Planejamento e análise', card: true, component: DespesasMobile },
   { id: 'painel',        label: 'Painel completo', icon: LayoutDashboard, place: 'more', group: 'Planejamento e análise', page: 'dashboard' },
   { id: 'orcamento',     label: 'Orçamento',       icon: PieChart,       place: 'more', group: 'Planejamento e análise', page: 'budget' },
   { id: 'patrimonio',    label: 'Patrimônio',      icon: Gem,            place: 'more', group: 'Planejamento e análise', page: 'patrimonio' },

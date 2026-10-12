@@ -11,6 +11,8 @@ import { occEfetiva } from '../lib/fluxoCaixa'
 import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../lib/receitasDespesas'
 import { gastoEnvelopes, currentCompetencia } from '../lib/envelopes'
 import { resolverCards, prefDosCards } from './navegacao'
+import { gravarPreferencias } from '../lib/preferenciasUi'
+import DespesasMobile from './DespesasMobile'
 
 const OCULTAR_KEY = 'finup:mobile:ocultarValores'
 const MASCARA = 'R$ ••••'
@@ -46,7 +48,8 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   }
 
   const cards = resolverCards(modules, settings?.mobileHomeCards)
-  const salvarCards = (lista) => updateSettings({ mobileHomeCards: prefDosCards(lista) })
+  const salvarCards = (lista) =>
+    updateSettings({ mobileHomeCards: gravarPreferencias(settings?.mobileHomeCards, { cards: prefDosCards(lista) }) })
 
   const mes = format(new Date(), "MMMM 'de' yyyy", { locale: ptBR })
   const nome = nomeDoToken()
@@ -81,7 +84,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
                 Ver tudo <ChevronRight size={14} />
               </button>
             </div>
-            {Corpo ? <Corpo v={v} /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
+            {Corpo ? <Corpo v={v} oculto={ocultar} /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
           </section>
         )
       })}
@@ -220,7 +223,7 @@ function CardProximos({ v }) {
 
 // Corpo de cada card do Início por id de módulo. Módulo com card: true sem corpo aqui vira um card
 // simples com "Ver tudo".
-const CORPOS = { reservas: CardReservas, envelopes: CardEnvelopes, agenda: CardProximos }
+const CORPOS = { reservas: CardReservas, envelopes: CardEnvelopes, agenda: CardProximos, despesas: DespesasMobile }
 
 // Liga/desliga e ordem dos cards. Salva em settings.mobileHomeCards (Neon, configuracoes). Só é
 // montado aberto, então sempre começa do que está salvo.

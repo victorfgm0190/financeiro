@@ -3,7 +3,7 @@ import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
   ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight, X,
 } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
@@ -15,14 +15,9 @@ import { occEfetiva } from '../../lib/fluxoCaixa'
 import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
-
-const PIE_COLORS = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899']
-
-const PERIOD_OPTS = [
-  { value: 'current', label: 'Mês atual' },
-  { value: 'prev', label: 'Mês anterior' },
-  { value: '3m', label: 'Últimos 3m' },
-]
+import { PizzaDespesas, RankingDespesas, Segmentado } from './DespesasCategoria'
+import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
+import { periodoDoFiltro, PERIOD_OPTS, MODO_OPTS } from '../../lib/despesasPorCategoria'
 
 // Placeholder shimmer dos valores enquanto a API ainda não respondeu (dbStatus === 'connecting').
 // Evita o flicker de pintar o cache do localStorage e depois sobrescrever com os dados frescos.
@@ -187,18 +182,6 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     })
   }, [accounts])
 
-  const topExpenses = useMemo(() => {
-    const catTotals = {}
-    periodTxs.filter(t => isExpenseTx(t) && t.categoryId).forEach(t => {
-      catTotals[t.categoryId] = (catTotals[t.categoryId] || 0) + t.amount
-    })
-    return Object.entries(catTotals)
-      .map(([id, amt]) => ({ cat: categories.find(c => c.id === id), amt }))
-      .filter(e => e.cat)
-      .sort((a, b) => b.amt - a.amt)
-      .slice(0, 5)
-  }, [periodTxs, categories, isExpenseTx])
-
   // ── Saldo Projetado + Final ──────────────────────────────────────────────────
   const saldoProjetado = useMemo(() => {
     const principalIds = new Set(
@@ -307,51 +290,14 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     return result
   }, [accounts, transactions])
 
-  // ── P17: Pie chart state ─────────────────────────────────────────────────
+  // ── P17: Maiores Despesas / Ranking ───────────────────────────────────────
+  // Período da pizza em meses financeiros; o ranking fica no mês atual. Valores, % e a lista do
+  // clique vêm de despesasPorCategoria (src/lib), no modo Cheio/Líquido compartilhado pelos dois.
   const [pieFilter, setPieFilter] = useState('current')
-  const [catModal, setCatModal] = useState(null) // { name, cat, txs, value, color }
+  const [modoDespesas, setModoDespesas] = useModoDespesas()
+  const pieRange = useMemo(() => periodoDoFiltro(pieFilter, getFinancialPeriod), [pieFilter, getFinancialPeriod])
+  const rankingRange = useMemo(() => periodoDoFiltro('current', getFinancialPeriod), [getFinancialPeriod])
   const [txModal, setTxModal] = useState(null) // { title, total, color, txs } — receitas/despesas do mês
-
-  const pieRange = useMemo(() => {
-    const now = new Date()
-    if (pieFilter === 'prev') {
-      const d = subMonths(now, 1)
-      return { start: startOfMonth(d).toISOString().split('T')[0], end: endOfMonth(d).toISOString().split('T')[0] }
-    }
-    if (pieFilter === '3m') {
-      return { start: startOfMonth(subMonths(now, 2)).toISOString().split('T')[0], end: endOfMonth(now).toISOString().split('T')[0] }
-    }
-    return { start: periodStr.start, end: periodStr.end }
-  }, [pieFilter, periodStr])
-
-  const topCatData = useMemo(() => {
-    const totals = {}
-    const txMap = {}
-    const inRange = (tx) => tx.date >= pieRange.start && tx.date <= pieRange.end && tx.categoryId
-    transactions
-      .filter(tx => isExpenseTx(tx) && inRange(tx))
-      .forEach(tx => {
-        totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
-        ;(txMap[tx.categoryId] = txMap[tx.categoryId] || []).push(tx)
-      })
-    // Receita de compensação do resgate de reserva (perna _r): ABATE o total da categoria
-    // e aparece no drill-down como receita. Só em categorias que já têm despesa.
-    transactions
-      .filter(tx => isResgateReservaSombra(tx) && tx.type === 'income' && inRange(tx) && tx.categoryId in totals)
-      .forEach(tx => {
-        totals[tx.categoryId] = Math.round((totals[tx.categoryId] - tx.amount) * 100) / 100
-        txMap[tx.categoryId].push(tx)
-      })
-    const entries = Object.entries(totals).filter(([, value]) => value > 0)
-    const total = entries.reduce((s, [, v]) => s + v, 0)
-    return entries
-      .map(([id, value]) => {
-        const cat = categories.find(c => c.id === id)
-        return { id, cat, name: cat ? `${cat.icon} ${cat.name}` : id, value, pct: total > 0 ? (value / total) * 100 : 0, txs: txMap[id] || [] }
-      })
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5)
-  }, [transactions, categories, pieRange, isExpenseTx])
 
   return (
     <div className="space-y-4">
@@ -665,126 +611,24 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         <div className="card">
           <div className="flex items-center justify-between mb-3 gap-2">
             <h3 className="text-sm font-semibold text-gray-300 shrink-0">Maiores Despesas</h3>
-            <div className="flex gap-1 shrink-0">
-              {PERIOD_OPTS.map(o => (
-                <button
-                  key={o.value}
-                  onClick={() => setPieFilter(o.value)}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${pieFilter === o.value ? 'bg-gray-700 text-gray-200' : 'text-gray-600 hover:text-gray-400'}`}
-                >
-                  {o.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+              <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+              <Segmentado opcoes={PERIOD_OPTS} valor={pieFilter} onChange={setPieFilter} rotulo="Período" />
             </div>
           </div>
 
-          {topCatData.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-10">Sem despesas no período</p>
-          ) : (
-            <div>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={topCatData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={78}
-                    paddingAngle={2}
-                    dataKey="value"
-                    onClick={(d, i) => setCatModal({ ...d, color: PIE_COLORS[i % PIE_COLORS.length] })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {topCatData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={v => fmt(v)}
-                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-
-              {/* Legend */}
-              <div className="space-y-1 mt-1">
-                {topCatData.map((item, i) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setCatModal({ ...item, color: PIE_COLORS[i % PIE_COLORS.length] })}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-gray-800/60 transition-colors text-left group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">{item.name}</span>
-                    </div>
-                    <span className="text-xs text-gray-500 shrink-0 ml-2 tabular-nums">
-                      {item.pct.toFixed(0)}% — {fmt(item.value)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <PizzaDespesas periodo={pieRange} modo={modoDespesas} />
         </div>
 
         {/* Right: ranking de categorias com barra */}
         <div className="card">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3">Ranking por Categoria</h3>
-          {topExpenses.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-4">Sem despesas no período atual</p>
-          ) : (
-            <div className="space-y-2.5">
-              {topExpenses.map(({ cat, amt }) => {
-                const pct = expense > 0 ? (amt / expense) * 100 : 0
-                return (
-                  <div key={cat.id}>
-                    <div className="flex justify-between text-xs mb-0.5">
-                      <span className="text-gray-300">{cat.icon} {cat.name}</span>
-                      <span className="text-gray-400">{fmt(amt)} <span className="text-gray-600">({pct.toFixed(0)}%)</span></span>
-                    </div>
-                    <div className="h-1.5 bg-gray-800 rounded-full">
-                      <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: cat.color || '#EA580C' }} />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <h3 className="text-sm font-semibold text-gray-300 shrink-0">Ranking por Categoria</h3>
+            <Segmentado opcoes={MODO_OPTS} valor={modoDespesas} onChange={setModoDespesas} rotulo="Regra do valor" />
+          </div>
+          <RankingDespesas periodo={rankingRange} modo={modoDespesas} />
         </div>
       </div>
-
-      {/* Category drill-down modal */}
-      {catModal && (
-        <Modal open={!!catModal} onClose={() => setCatModal(null)} title={catModal.name} size="md">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 border-b border-gray-800">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Total da categoria</span>
-              <span className="text-lg font-bold" style={{ color: catModal.color }}>{fmt(catModal.value)}</span>
-            </div>
-            <div className="space-y-0 max-h-80 overflow-y-auto">
-              {[...catModal.txs]
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .map(tx => {
-                  // Resgate de reserva (perna _r) entra como RECEITA de compensação (+, azul).
-                  const isReceita = tx.type === 'income'
-                  return (
-                    <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-200 truncate">{tx.description || catModal.name}</p>
-                        <p className="text-xs text-gray-500">{fmtDate(tx.date)}{tx.payee ? ` · ${tx.payee}` : ''}</p>
-                      </div>
-                      <span className={`text-sm font-semibold shrink-0 ml-3 ${isReceita ? 'text-receita' : 'text-orange-600'}`}>
-                        {isReceita ? '+' : '−'}{fmt(tx.amount)}
-                      </span>
-                    </div>
-                  )
-                })
-              }
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {/* Receitas/Despesas do mês drill-down modal */}
       {txModal && (

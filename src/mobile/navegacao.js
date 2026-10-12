@@ -1,4 +1,5 @@
 // Derivações puras do registro de módulos (barra, "+", "Mais", cards do Início). Sem React.
+import { lerPreferencias } from '../lib/preferenciasUi.js'
 
 export const MAX_TABS = 4
 
@@ -27,10 +28,12 @@ export function secoesMais(modules) {
   return secoes.filter(s => s.itens.length > 0)
 }
 
-// Cards do Início: preferência salva [{ id, on }] (ordem + liga/desliga) aplicada aos módulos com
+// Cards do Início: preferência salva [{ id, on }] (ordem + liga/desliga; `raw` = valor de
+// settings.mobileHomeCards, formato antigo ou novo — lerPreferencias) aplicada aos módulos com
 // card: true. Sem preferência → todos ligados na ordem do registro. Card novo (fora da
 // preferência) entra ligado no fim; id da preferência que não é mais card é ignorado.
-export function resolverCards(modules, pref) {
+export function resolverCards(modules, raw) {
+  const pref = lerPreferencias(raw).cards
   const cards = modules.filter(m => m.card)
   const porId = new Map(cards.map(m => [m.id, m]))
   const out = []
