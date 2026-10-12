@@ -3,6 +3,7 @@ import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { parseValorBR } from '../../lib/valorBR'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
@@ -101,7 +102,9 @@ function buildCatOptsPorSentido(categories, sentido) {
   }))
 }
 
-export default function TransactionForm({ initial, onClose, onToast }) {
+// `rapido` (só o "+" do mobile): mostra só tipo, valor, descrição, conta e categoria; "Mais opções"
+// abre o formulário completo com o mesmo estado. Salvar é o mesmo handleSubmit nos dois modos.
+export default function TransactionForm({ initial, onClose, onToast, rapido = false }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -170,6 +173,10 @@ export default function TransactionForm({ initial, onClose, onToast }) {
   })
 
   const [step, setStep] = useState('form')
+  // Modo rápido (mobile): "Mais opções" troca para o formulário completo; o texto do valor fica
+  // separado de form.amount para aceitar vírgula (parseValorBR).
+  const [maisOpcoes, setMaisOpcoes] = useState(false)
+  const [valorRapido, setValorRapido] = useState('')
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.type })
@@ -1172,6 +1179,101 @@ export default function TransactionForm({ initial, onClose, onToast }) {
           <button className="btn-primary flex-1" disabled={!resgateDate} onClick={handleResgate}>Criar Agendamento</button>
         </div>
       </div>
+    )
+  }
+
+  if (rapido && !maisOpcoes) {
+    const saida = form.type !== 'income'
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex rounded-xl overflow-hidden border border-gray-700" role="group" aria-label="Tipo">
+          {[{ v: 'expense', l: 'Saída' }, { v: 'income', l: 'Entrada' }].map(t => (
+            <button
+              type="button"
+              key={t.v}
+              onClick={() => set('type', t.v)}
+              aria-pressed={form.type === t.v}
+              className={`flex-1 min-h-[44px] text-sm font-semibold transition-colors ${
+                form.type === t.v
+                  ? (t.v === 'income' ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white')
+                  : 'bg-gray-800 text-gray-400'
+              }`}
+            >
+              {t.l}
+            </button>
+          ))}
+        </div>
+
+        <div className="text-center py-2">
+          <label htmlFor="valor-rapido" className="text-xs text-gray-500">Valor</label>
+          <div className={`flex items-baseline justify-center gap-1 ${saida ? 'text-orange-400' : 'text-blue-400'}`}>
+            <span className="text-xl font-semibold">R$</span>
+            <input
+              id="valor-rapido"
+              inputMode="decimal"
+              autoComplete="off"
+              autoFocus
+              value={valorRapido}
+              onChange={e => {
+                const v = e.target.value
+                setValorRapido(v)
+                const n = parseValorBR(v)
+                set('amount', Number.isFinite(n) && n > 0 ? String(n) : '')
+              }}
+              placeholder="0,00"
+              className="w-44 bg-transparent text-center text-4xl font-bold outline-none placeholder:text-gray-700"
+              required
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Descrição</label>
+          <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Ex.: Mercado" />
+        </div>
+
+        <div>
+          <label className="label">Conta *</label>
+          <SearchableSelect
+            options={accountOpts}
+            value={form.accountId}
+            onChange={id => set('accountId', id)}
+            placeholder="Selecione a conta..."
+            preserveGroupOrder
+            ungroupedLast
+            required
+          />
+        </div>
+
+        <div>
+          <label className="label">Categoria</label>
+          <SearchableSelect
+            options={categoryOpts}
+            preserveGroupOrder
+            value={form.categoryId}
+            onChange={onCategoryChange}
+            placeholder="Sem categoria"
+            ungroupedLast
+            ungroupedLabel="Sem grupo"
+          />
+        </div>
+
+        {tipoDocObrigatorio && (
+          <TipoDocumentoSelect
+            value={form.tipoDocumentoId}
+            onChange={v => { setErroTipoDoc(''); set('tipoDocumentoId', v || '') }}
+            tipoMov={form.type}
+            required
+            erro={erroTipoDoc}
+          />
+        )}
+
+        <button type="button" onClick={() => setMaisOpcoes(true)} className="text-sm text-emerald-400 min-h-[44px]">
+          + Mais opções (data, parcelas, envelope)
+        </button>
+
+        <button type="submit" className="btn-primary w-full min-h-[48px] text-base">Salvar</button>
+      </form>
     )
   }
 

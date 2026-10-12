@@ -4,7 +4,7 @@ import { ptBR } from 'date-fns/locale'
 import { Package, Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
-import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '../../lib/origins'
+import { gastoEnvelopes, currentCompetencia } from '../../lib/envelopes'
 import { dueDateInMonth } from '../../lib/fatura'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
@@ -33,24 +33,6 @@ export function getEnvelopePeriod(dueDay) {
     from: format(from, 'yyyy-MM-dd'),
     to:   format(to,   'yyyy-MM-dd'),
   }
-}
-
-// ── Competência (mês financeiro) ────────────────────────────────────────────
-// Chave comparável (ano*12 + mês0) da competência de uma data, aplicando o dia de
-// início do mês financeiro: date.day >= startDay → mês da data; senão → mês anterior.
-function competenciaKeyOf(dateStr, startDay) {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  let year = y, month0 = m - 1
-  if (d < startDay) { const p = new Date(y, m - 2, 1); year = p.getFullYear(); month0 = p.getMonth() }
-  return year * 12 + month0
-}
-
-// Competência atual: hoje.day >= startDay → mês atual; senão mês anterior.
-function currentCompetencia(startDay) {
-  const t = new Date()
-  if (t.getDate() >= startDay) return { year: t.getFullYear(), month0: t.getMonth() }
-  const p = new Date(t.getFullYear(), t.getMonth() - 1, 1)
-  return { year: p.getFullYear(), month0: p.getMonth() }
 }
 
 // ── EnvelopeForm ──────────────────────────────────────────────────────────────
@@ -314,18 +296,10 @@ export default function EnvelopesPanel() {
   }, [comp, startDay])
   const shiftComp = (delta) => setMonthOffset(o => o + delta)
 
-  const envelopeData = useMemo(() => {
-    return envelopes.map(env => {
-      const txs = transactions.filter(tx =>
-        tx.type === 'expense' &&
-        !tx.reservaAuto && !isReservaShadowOrigin(tx) && !isPatrimonioOrigin(tx) && !isInvestAutoOrigin(tx) &&
-        env.categoryIds.includes(tx.categoryId) &&
-        competenciaKeyOf(tx.date, startDay) === compKey
-      )
-      const spent = txs.reduce((s, t) => s + t.amount, 0)
-      return { env, txs, spent }
-    })
-  }, [envelopes, transactions, compKey, startDay])
+  const envelopeData = useMemo(
+    () => gastoEnvelopes(envelopes, transactions, compKey, startDay),
+    [envelopes, transactions, compKey, startDay]
+  )
 
   function handleSave(data) {
     if (editEnv) updateEnvelope(editEnv.id, data)

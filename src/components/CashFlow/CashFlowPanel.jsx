@@ -31,6 +31,8 @@ import ConsultaModal from './ConsultaModal'
 import ConsultaCard from './ConsultaCard'
 import EfetivarModal from './EfetivarModal'
 import MudarDataModal from './MudarDataModal'
+import FluxoMobileLista, { FluxoSheet } from './FluxoMobileLista'
+import { HORIZONTES_MOBILE } from '../../lib/fluxoMobile'
 
 const round2 = n => Math.round(n * 100) / 100
 const SEM_EXCLUSOES = new Set()
@@ -85,7 +87,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado,
+    toggleScheduleConfirmado, categories,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
@@ -192,6 +194,9 @@ export default function CashFlowPanel({ setActivePage }) {
   })
 
   const [atrasoAberto, setAtrasoAberto] = useState(false)
+  // Só no celular: filtros/consultas num bottom sheet e a tabela de saldo por conta recolhida.
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  const [saldoContasAberto, setSaldoContasAberto] = useState(false)
   const [consultaModal, setConsultaModal] = useState(null) // { initial } | null
   const [provModal, setProvModal] = useState(null)         // { initial } | null
   const [provExcluir, setProvExcluir] = useState(null)
@@ -208,6 +213,8 @@ export default function CashFlowPanel({ setActivePage }) {
   const saldoInicial = useMemo(() => round2(contas.reduce((s, a) => s + (a.balance || 0), 0)), [contas])
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
+  const catById = useMemo(() => new Map((categories || []).map(c => [c.id, c])), [categories])
+  const catName = (id) => catById.get(id)?.name || 'Sem categoria'
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const patrimonioSet = useMemo(() => new Set(accounts.filter(a => a.vinculoTipo === 'patrimonio').map(a => a.id)), [accounts])
   const funcById = useMemo(() => new Map((reserveFunctions || []).map(f => [f.id, f])), [reserveFunctions])
@@ -398,31 +405,8 @@ export default function CashFlowPanel({ setActivePage }) {
   const semContas = contas.length === 0
   const corSaldo = (v) => (v >= 0 ? 'text-blue-500' : 'text-orange-600')
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div className="space-y-4">
-      {/* Cabeçalho: período + horizonte */}
-      <div className="card flex items-center justify-between gap-3 flex-wrap py-3">
-        <p className="text-sm text-gray-300">
-          Hoje, <span className="font-semibold text-gray-100">{fmtDate(hoje)}</span>
-          <span className="text-gray-500"> → </span>
-          <span className="font-semibold text-gray-100">{fmtDate(fim)}</span>
-        </p>
-        <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
-          {HORIZONTES.map(h => (
-            <button
-              key={h}
-              type="button"
-              onClick={() => setHorizonteSel({ consultaId: consulta.id, h })}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${horizonte === h ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'}`}
-            >
-              {h} dias
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Consultas — "FC Principal" (virtual) sempre primeiro */}
+  // Consultas — "FC Principal" (virtual) sempre primeiro. No celular, vai para o sheet de filtros.
+  const secaoConsultas = (
       <div className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Consultas</p>
@@ -467,6 +451,85 @@ export default function CashFlowPanel({ setActivePage }) {
           </div>
         )}
       </div>
+  )
+
+  // Datas simuladas que caíram fora da janela (com o "voltar à data original").
+  const avisosForaDoPeriodo = (
+            foraDoPeriodo.length + dpForaDoPeriodo.length > 0 && (
+              <div className="px-4 py-2 border-b border-gray-800 text-xs text-amber-500/90 flex flex-wrap gap-x-3 gap-y-1">
+                {dpForaDoPeriodo.map(d => (
+                  <span key={d.id} className="inline-flex items-center gap-1">
+                    {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
+                    <button type="button" onClick={() => removerDatasProvisorias([d.id]).catch(err => avisar(err.message, 'error'))} title="Voltar à data original"><RotateCcw size={11} /></button>
+                  </span>
+                ))}
+                {foraDoPeriodo.map(r => (
+                  <span key={r._key} className="inline-flex items-center gap-1">
+                    {r.description} → {fmtDate(r.date)} (fora do período)
+                    <button type="button" onClick={() => setDataTela(r._key, null)} title="Voltar à data original"><RotateCcw size={11} /></button>
+                  </span>
+                ))}
+              </div>
+            )
+  )
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-4">
+      {/* Cabeçalho: período + horizonte */}
+      {isMobile ? (
+        <div className="card py-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 grid grid-cols-3 gap-1 bg-gray-800/60 rounded-lg p-1" role="tablist" aria-label="Horizonte">
+              {HORIZONTES_MOBILE.map(({ dias, rotulo }) => (
+                <button
+                  key={dias}
+                  type="button"
+                  role="tab"
+                  aria-selected={horizonte === dias}
+                  onClick={() => setHorizonteSel({ consultaId: consulta.id, h: dias })}
+                  className={`min-h-[44px] rounded-md text-xs font-medium transition-colors ${horizonte === dias ? 'bg-[#0F6E56] text-white' : 'text-gray-400'}`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltrosAbertos(true)}
+              aria-label="Filtros e consultas"
+              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-gray-800/60 text-gray-300"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            <span className="text-gray-300 font-medium">{consulta.nome}</span> · {fmtDate(hoje)} → {fmtDate(fim)}
+          </p>
+        </div>
+      ) : (
+      <div className="card flex items-center justify-between gap-3 flex-wrap py-3">
+        <p className="text-sm text-gray-300">
+          Hoje, <span className="font-semibold text-gray-100">{fmtDate(hoje)}</span>
+          <span className="text-gray-500"> → </span>
+          <span className="font-semibold text-gray-100">{fmtDate(fim)}</span>
+        </p>
+        <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
+          {HORIZONTES.map(h => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => setHorizonteSel({ consultaId: consulta.id, h })}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${horizonte === h ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+            >
+              {h} dias
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {!isMobile && secaoConsultas}
 
       {semContas ? (
         <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
@@ -499,6 +562,18 @@ export default function CashFlowPanel({ setActivePage }) {
               </div>
               <p className={`ml-auto text-lg font-bold whitespace-nowrap ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</p>
             </div>
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setSaldoContasAberto(o => !o)}
+                aria-expanded={saldoContasAberto}
+                className="w-full min-h-[44px] px-4 flex items-center gap-1.5 text-xs text-gray-400 border-b border-gray-800"
+              >
+                {saldoContasAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                {saldoContasAberto ? 'Ocultar saldo por conta' : 'Ver saldo por conta'}
+              </button>
+            )}
+            {(!isMobile || saldoContasAberto) && (
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: 520 }}>
                 <thead>
@@ -521,6 +596,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 </tbody>
               </table>
             </div>
+            )}
           </div>
 
           {/* Cards */}
@@ -571,6 +647,35 @@ export default function CashFlowPanel({ setActivePage }) {
           </div>
 
           {/* Eventos */}
+          {isMobile ? (
+            <>
+              {avisosForaDoPeriodo && <div className="card p-0 overflow-hidden">{avisosForaDoPeriodo}</div>}
+              <FluxoMobileLista
+                rowsView={rowsView}
+                atraso={atraso}
+                excluidas={excluidas}
+                atrasoAtivas={atrasoAtivas}
+                atrasoTotal={atrasoTotal}
+                base={base}
+                saldoInicial={saldoInicial}
+                minimoKey={minimoKey}
+                horizonte={horizonte}
+                qtdContas={contas.length}
+                corSaldo={corSaldo}
+                subtitulo={(r) => `${catName(r.categoryId)} · ${accName(contaDaLinha(r, accountIds))}`}
+                statusCelula={statusCelula}
+                docBadge={(r) => <TipoDocumentoBadge tipo={docDaLinha(r)} />}
+                tipoBadge={(r) => { const t = tipoEvento(r); return <span className={`text-[10px] px-1.5 py-0.5 rounded ${BADGE[t]}`}>{t}</span> }}
+                toggleLinha={toggleLinha}
+                toggleAtraso={toggleAtraso}
+                onMudarData={setMudarData}
+                onDesfazerData={desfazerData}
+                onEfetivar={setEfetivar}
+                onEditarProvisorio={(p) => setProvModal({ initial: p })}
+                onExcluirProvisorio={setProvExcluir}
+              />
+            </>
+          ) : (
           <div className="card p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-3 flex-wrap">
               <Calendar size={14} className="text-gray-400" />
@@ -595,22 +700,7 @@ export default function CashFlowPanel({ setActivePage }) {
               </div>
             </div>
 
-            {foraDoPeriodo.length + dpForaDoPeriodo.length > 0 && (
-              <div className="px-4 py-2 border-b border-gray-800 text-xs text-amber-500/90 flex flex-wrap gap-x-3 gap-y-1">
-                {dpForaDoPeriodo.map(d => (
-                  <span key={d.id} className="inline-flex items-center gap-1">
-                    {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
-                    <button type="button" onClick={() => removerDatasProvisorias([d.id]).catch(err => avisar(err.message, 'error'))} title="Voltar à data original"><RotateCcw size={11} /></button>
-                  </span>
-                ))}
-                {foraDoPeriodo.map(r => (
-                  <span key={r._key} className="inline-flex items-center gap-1">
-                    {r.description} → {fmtDate(r.date)} (fora do período)
-                    <button type="button" onClick={() => setDataTela(r._key, null)} title="Voltar à data original"><RotateCcw size={11} /></button>
-                  </span>
-                ))}
-              </div>
-            )}
+            {avisosForaDoPeriodo}
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: isMobile ? 960 : 1030 }}>
@@ -774,7 +864,32 @@ export default function CashFlowPanel({ setActivePage }) {
               </table>
             </div>
           </div>
+          )}
         </>
+      )}
+
+      {isMobile && (
+        <FluxoSheet open={filtrosAbertos} onClose={() => setFiltrosAbertos(false)} title="Filtros e consultas">
+          {secaoConsultas}
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500 uppercase tracking-wide">Eventos</p>
+            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-gray-300" title="Override temporário da consulta">
+              <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
+              Incluir envelopes
+            </label>
+            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-gray-300" title="Override temporário da consulta">
+              <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
+              Ocultar reservas
+            </label>
+            <button
+              type="button"
+              onClick={() => { setFiltrosAbertos(false); setProvModal({ initial: null }) }}
+              className="btn-secondary min-h-[44px] w-full flex items-center justify-center gap-1.5 text-sm border-purple-500/40 text-purple-300"
+            >
+              <Plus size={14} /> Novo provisório
+            </button>
+          </div>
+        </FluxoSheet>
       )}
 
       {consultaModal && (

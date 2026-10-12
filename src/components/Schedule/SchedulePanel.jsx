@@ -35,6 +35,8 @@ import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
 import { novoLoteId } from '../../lib/historico'
 import HistoricoModal from '../shared/HistoricoPainel'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import AgendaMobile from './AgendaMobile'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -1564,6 +1566,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   }, [scheduleReservaFuncoes, reserveFunctions])
 
   const today = format(new Date(), 'yyyy-MM-dd')
+  const isMobile = useIsMobile()
   const in7 = format(addDays(new Date(), 7), 'yyyy-MM-dd')
   const in30 = format(addDays(new Date(), 30), 'yyyy-MM-dd')
 
@@ -1753,6 +1756,31 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     rateiosBySchedule: rateiosByLancamento,
     tiposDocumento,
     cols,
+  }
+
+  // Celular: abas Pendentes | Atrasados | Pagos agrupadas por semana (AgendaMobile). Tocar num
+  // item abre a linha da tabela com todas as ações de sempre. No modo de seleção (ações em
+  // massa) volta para a tabela abaixo.
+  if (isMobile && !selectionMode) {
+    return (
+      <>
+        <AgendaMobile
+          rows={rows}
+          schedules={schedules}
+          getNextOccurrences={getNextOccurrences}
+          today={today}
+          onSelecionar={selectableRows.length > 0 ? () => setSelectionMode(true) : null}
+          renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
+            <table className="w-full text-sm">
+              <tbody>
+                <ScheduleRow schedule={schedule} nextDate={nextDate} futureItems={futureItems || []} isSerie={isSerie} {...rowProps} isSelected={false} />
+              </tbody>
+            </table>
+          )}
+        />
+        {toast && <Toast message={toast} />}
+      </>
+    )
   }
 
   return (

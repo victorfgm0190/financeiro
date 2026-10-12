@@ -1230,9 +1230,9 @@ export default function CreditCardPanel() {
           mobile por causa da navegação inferior). */}
       {selectMode && <div className="h-36 md:h-24" />}
 
-      {/* ── Barra de ações (modo Selecionar) — acima do BottomNav no mobile ── */}
+      {/* ── Barra de ações (modo Selecionar) — acima da barra inferior do mobile ── */}
       {selectMode && (
-        <div className="fixed bottom-16 md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
+        <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
           <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-gray-700 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
             <span className="text-sm text-gray-300 font-medium">
               {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}

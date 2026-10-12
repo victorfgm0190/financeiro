@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
   ArrowDownCircle, ArrowUpCircle, CreditCard, AlertTriangle, Calendar, ChevronRight, X,
@@ -7,7 +7,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView, isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds } from '../shared/utils'
+import { fmt, fmtDate, accountsForView, isResgateReservaSombra } from '../shared/utils'
+import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../../lib/receitasDespesas'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { computeFaturaRef } from '../../lib/fatura'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -78,50 +79,16 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   // Transferências entre perfis viram receita/despesa na visão do perfil ativo (KPIs/gráficos).
   const transactions = profileReportTransactions
 
-  // Depósitos em reserva de funções marcadas "exibir como despesa" contam como despesa.
-  const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
-  // category_ids das funções com exibir_como_despesa = true — reconhece sombras legadas
-  // (reservaFuncaoId = null) pelo category_id, mantendo-as nas despesas (fora do card Reservas).
-  const reservaDespesaCategorySet = useMemo(() => new Set(
-    (reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.categoryId).filter(Boolean)
-  ), [reserveFunctions])
-  const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
-  // Sombra de reserva de função com exibir_como_despesa = FALSE (ou sem função vinculada) → entra
-  // no card "Reservas", não em Receitas/Despesas. Funções com exibir_como_despesa = TRUE seguem
-  // dentro das despesas (reconhecidas por reservaFuncaoId ou pelo category_id da função).
-  const isReservaGerSombra = useCallback(
-    (t) => t.reservaAuto === true && !reservaDespesaFuncSet.has(t.reservaFuncaoId) && !(t.reservaFuncaoId == null && reservaDespesaCategorySet.has(t.categoryId)),
-    [reservaDespesaFuncSet, reservaDespesaCategorySet]
-  )
-  const isExpenseTx = useCallback(
-    (t) => {
-      // Movimento de reserva sem categoria → card Reservas, fora das despesas.
-      if (isReservaGerSombra(t)) return false
-      // Prioridade: movimento de reserva de função não-despesa nunca conta como despesa.
-      if (isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)) return false
-      // Perna de despesa do RESGATE de reserva não conta (o resgate é receita de compensação).
-      if (isResgateReservaSombra(t)) return false
-      return t.type === 'expense' || isReservaDepositoDespesa(t, reservaDespesaFuncSet, reservaSet)
-    },
-    [reservaDespesaFuncSet, reservaSet, isReservaGerSombra]
-  )
-  // Receita: exclui as sombras de reserva de função não-despesa (ex.: "Resgate Reserva: X"
-  // income), mantendo o par receita+despesa neutro quando a reserva é poupança.
-  const isIncomeTx = useCallback(
-    (t) => t.type === 'income' && !isReservaGerSombra(t) && !isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet),
-    [reservaDespesaFuncSet, reservaSet, isReservaGerSombra]
+  // Classificação receita/despesa (mesma função do card do Início mobile).
+  const { isReservaGerSombra, isExpenseTx, isIncomeTx } = useMemo(
+    () => criarClassificadores(reserveFunctions, accounts), [reserveFunctions, accounts]
   )
 
   const period = getFinancialPeriod()
-  const periodStr = {
-    start: period.start.toISOString().split('T')[0],
-    end: period.end.toISOString().split('T')[0],
-  }
+  const periodStr = periodoStr(period)
 
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
-  const periodTxs = transactions.filter(tx => tx.date >= periodStr.start && tx.date <= periodStr.end && !isInvestAutoOrigin(tx))
-  const income = periodTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
-  const expense = periodTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
+  const { periodTxs, income, expense } = totaisDoPeriodo(transactions, periodStr, { isIncomeTx, isExpenseTx })
   // Reservas do período (funções sem categoria): líquido = utilizadas (resgate _r) − feitas (depósito).
   const reservasFeitas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'expense' && !isResgateReservaSombra(t))
   const reservasUtilizadas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'income' && isResgateReservaSombra(t))

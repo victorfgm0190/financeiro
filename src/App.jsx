@@ -2,15 +2,14 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { dueDateInMonth } from './lib/fatura'
 import { AppProvider, useApp } from './context/AppContext'
-import { FabProvider, useFab } from './context/FabContext'
+import { FabProvider } from './context/FabContext'
+import { useIsMobile } from './hooks/useIsMobile'
 import { useAutoBackup } from './hooks/useAutoBackup'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
-import BottomNav from './components/Layout/BottomNav'
 import Header from './components/Layout/Header'
 import Modal from './components/shared/Modal'
-import TransactionForm from './components/Transactions/TransactionForm'
 import SaldoPrincipalBreakdownModal from './components/Dashboard/SaldoPrincipalBreakdownModal'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
 import AccountsPanel from './components/Accounts/AccountsPanel'
@@ -32,16 +31,26 @@ import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
 import { getToken } from './lib/api'
 import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
+import MobileShell from './mobile/MobileShell'
+import { mobileModules } from './mobile/modules'
+import { moduloDaPagina } from './mobile/navegacao'
 
 function AppContent() {
   // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
   const [activePage, setActivePage] = useState(() => (ehHashConfig(window.location.hash) ? 'settings' : 'dashboard'))
+  // Mobile: módulo aberto no MobileShell (id de src/mobile/modules.js). Acompanha activePage quando
+  // um painel navega por página (ex.: "Ver alertas" → Alertas).
+  const isMobile = useIsMobile()
+  const [mobileAtivo, setMobileAtivo] = useState(() => (ehHashConfig(window.location.hash) ? 'configuracoes' : 'inicio'))
   useEffect(() => {
-    const onHash = () => { if (ehHashConfig(window.location.hash)) setActivePage('settings') }
+    const onHash = () => {
+      if (!ehHashConfig(window.location.hash)) return
+      setActivePage('settings')
+      setMobileAtivo(moduloDaPagina(mobileModules, 'settings')?.id ?? 'mais')
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
-  const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [showPosicao, setShowPosicao] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
@@ -64,20 +73,22 @@ function AppContent() {
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     setActivePage(page)
+    const m = moduloDaPagina(mobileModules, page)
+    if (m) setMobileAtivo(m.id)
   }, [activePage, scrollScope])
+  // Troca de módulo no mobile: módulo de painel passa pelo navigate (hash, activePage); tela própria
+  // do mobile (Início, Mais) só troca o módulo.
+  const irParaModulo = useCallback((id) => {
+    const m = mobileModules.find(x => x.id === id)
+    if (!m) return
+    if (m.page) navigate(m.page)
+    setMobileAtivo(id)
+  }, [navigate])
   const scrollCtx = useMemo(() => ({
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data, syncError, dismissSyncError } = useApp()
-  const { fabAction } = useFab()
-
-  // FAB central (BottomNav mobile): usa a ação contextual registrada pela tela
-  // ativa (ex.: novo lançamento na conta/cartão atual); senão, quick-add global.
-  const handleFab = useCallback(() => {
-    if (fabAction) fabAction()
-    else setShowQuickAdd(true)
-  }, [fabAction])
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
@@ -152,21 +163,9 @@ function AppContent() {
     settings: <SettingsPanel />,
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-gray-950">
-      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
-        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
-          <ScrollScopeContext.Provider value={scrollCtx}>
-            {panels[activePage] ?? panels.dashboard}
-          </ScrollScopeContext.Provider>
-        </main>
-      </div>
-      <BottomNav active={activePage} setActive={navigate} onFab={handleFab} />
-      <Modal open={showQuickAdd} onClose={() => setShowQuickAdd(false)} title="Novo Lançamento">
-        <TransactionForm onClose={() => setShowQuickAdd(false)} onToast={setGenericToast} />
-      </Modal>
+  // Modais/toasts globais — iguais no desktop e no mobile.
+  const overlays = (
+    <>
       <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Como chegamos aqui" size="lg">
         <SaldoPrincipalBreakdownModal />
       </Modal>
@@ -184,6 +183,39 @@ function AppContent() {
       )}
       <MonthStartModal />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+    </>
+  )
+
+  // Mobile (< 768px): navegação própria (barra inferior, "+", Início, Mais). Desktop segue abaixo.
+  if (isMobile) {
+    return (
+      <>
+        <MobileShell
+          modules={mobileModules}
+          panels={panels}
+          ativo={mobileAtivo}
+          irPara={irParaModulo}
+          saldosPrincipais={saldosPrincipais}
+          onToast={setGenericToast}
+          onOpenSearch={() => setShowSearch(true)}
+        />
+        {overlays}
+      </>
+    )
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-gray-950">
+      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
+          <ScrollScopeContext.Provider value={scrollCtx}>
+            {panels[activePage] ?? panels.dashboard}
+          </ScrollScopeContext.Provider>
+        </main>
+      </div>
+      {overlays}
     </div>
   )
 }
