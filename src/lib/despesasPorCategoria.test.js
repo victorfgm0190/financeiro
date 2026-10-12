@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { despesasPorCategoria, periodoDoFiltro, agruparTopN, corDaCategoria, OUTRAS_ID, COR_OUTRAS, CORES_TOP } from './despesasPorCategoria'
+import { despesasPorCategoria, periodoDoFiltro, agruparTopN, corDaCategoria, OUTRAS_ID, COR_OUTRAS, CORES_TOP, SEM_CATEGORIA_ID, COR_SEM_CATEGORIA } from './despesasPorCategoria'
 
 // Classificação mínima: despesa = type expense; resgate = receita com id tx_rsg_.
 const cls = {
@@ -19,17 +19,44 @@ const TX = [
 const soma = (txs) => Math.round(txs.reduce((s, t) => s + t.amount, 0) * 100) / 100
 
 describe('despesasPorCategoria', () => {
-  it('cheio: soma sem descontar resgate; % sobre o total de despesas (com sem-categoria)', () => {
-    const { categorias, totalDespesas } = despesasPorCategoria(TX, P, cls, 'cheio')
+  it('cheio: soma sem descontar resgate; "Sem categoria" vira fatia; % sobre o total de despesas', () => {
+    const { categorias, totalDespesas, base } = despesasPorCategoria(TX, P, cls, 'cheio')
     expect(totalDespesas).toBe(7005.84)
-    expect(categorias.map(c => [c.categoryId, c.valor])).toEqual([['aniv', 4005.84], ['mob', 2500]])
+    expect(base).toBe(7005.84)
+    expect(categorias.map(c => [c.categoryId, c.valor])).toEqual([['aniv', 4005.84], ['mob', 2500], [SEM_CATEGORIA_ID, 500]])
     expect(categorias[0].pct).toBeCloseTo((4005.84 / 7005.84) * 100)
   })
 
-  it('líquido: despesa menos o resgate da mesma categoria; resgate sem despesa é ignorado', () => {
-    const { categorias, totalDespesas } = despesasPorCategoria(TX, P, cls, 'liquido')
+  it('líquido: despesa menos o resgate da mesma categoria; base = total líquido', () => {
+    const { categorias, totalDespesas, base } = despesasPorCategoria(TX, P, cls, 'liquido')
     expect(totalDespesas).toBe(7005.84)
-    expect(categorias.map(c => [c.categoryId, c.valor])).toEqual([['mob', 2500], ['aniv', 2228.65]])
+    expect(base).toBe(5228.65) // 7005,84 − 1777,19 (o resgate sem despesa na categoria é ignorado)
+    expect(categorias.map(c => [c.categoryId, c.valor])).toEqual([['mob', 2500], ['aniv', 2228.65], [SEM_CATEGORIA_ID, 500]])
+    expect(categorias[0].pct).toBeCloseTo((2500 / 5228.65) * 100)
+  })
+
+  it('nos dois modos: soma das fatias = base do % e soma dos % = 100 (top 5 + Outras e todas)', () => {
+    const tx = [...TX]
+    ;[900, 700, 500, 400, 300, 200, 150, 75.33].forEach((v, i) => {
+      tx.push({ id: `d${i}`, type: 'expense', categoryId: `c${i}`, amount: v, date: '2026-10-03' })
+      if (i % 2 === 0) tx.push({ id: `tx_rsg_${i}`, type: 'income', categoryId: `c${i}`, amount: v / 3, date: '2026-10-04' })
+    })
+    for (const modo of ['cheio', 'liquido']) {
+      const { categorias, base } = despesasPorCategoria(tx, P, cls, modo)
+      for (const n of [5, null]) {
+        const { fatias } = agruparTopN(categorias, base, n)
+        expect(Math.abs(fatias.reduce((s, f) => s + f.valor, 0) - base)).toBeLessThan(0.011)
+        expect(fatias.reduce((s, f) => s + f.pct, 0)).toBeCloseTo(100, 6)
+      }
+    }
+  })
+
+  it('"Sem categoria" fora do top 5 vai para Outras', () => {
+    const tx = [{ id: 's', type: 'expense', categoryId: null, amount: 1, date: '2026-10-02' }]
+    ;[90, 80, 70, 60, 50].forEach((v, i) => tx.push({ id: `d${i}`, type: 'expense', categoryId: `c${i}`, amount: v, date: '2026-10-02' }))
+    const { categorias, base } = despesasPorCategoria(tx, P, cls, 'cheio')
+    const { outras } = agruparTopN(categorias, base)
+    expect(outras.membros.map(m => m.categoryId)).toEqual([SEM_CATEGORIA_ID])
   })
 
   it('total da lista do clique = valor do bloco, nos dois modos', () => {
@@ -80,9 +107,9 @@ describe('agruparTopN (top 5 + Outras)', () => {
 
   for (const modo of ['cheio', 'liquido']) {
     it(`soma das fatias = total das categorias do período (${modo})`, () => {
-      const { categorias, totalDespesas } = despesasPorCategoria(tx, P, cls, modo)
-      const { fatias, outras } = agruparTopN(categorias, totalDespesas)
-      expect(fatias).toHaveLength(6)
+      const { categorias, base } = despesasPorCategoria(tx, P, cls, modo)
+      const { fatias, outras } = agruparTopN(categorias, base)
+      expect(fatias).toHaveLength(6) // 9 categorias (8 + Sem categoria) → top 5 + Outras
       expect(fatias.slice(0, 5)).toEqual(categorias.slice(0, 5))
       expect(outras.categoryId).toBe(OUTRAS_ID)
       expect(outras.membros).toEqual(categorias.slice(5))
@@ -110,6 +137,8 @@ describe('corDaCategoria', () => {
   it('top 5 com cores fixas, Outras cinza, demais determinísticas', () => {
     expect(corDaCategoria('x', 0)).toBe(CORES_TOP[0])
     expect(corDaCategoria(OUTRAS_ID, 0)).toBe(COR_OUTRAS)
+    expect(corDaCategoria(SEM_CATEGORIA_ID, 0)).toBe(COR_SEM_CATEGORIA)
+    expect(COR_SEM_CATEGORIA).not.toBe(COR_OUTRAS)
     expect(corDaCategoria('lazer', 7)).toBe(corDaCategoria('lazer', 12))
     expect(corDaCategoria('lazer', 7)).toMatch(/^hsl\(/)
   })

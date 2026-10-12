@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useDespesasPorCategoria } from '../../hooks/useDespesasPorCategoria'
 import CategoriaLancamentos, { OutrasLancamentos } from '../shared/CategoriaLancamentos'
-import { agruparTopN, corDaCategoria, OUTRAS_ID, TOP_CATEGORIAS } from '../../lib/despesasPorCategoria'
+import { agruparTopN, corDaCategoria, OUTRAS_ID, SEM_CATEGORIA_ID, TOP_CATEGORIAS } from '../../lib/despesasPorCategoria'
 import { fmt } from '../shared/utils'
 
 // Blocos "Maiores Despesas" (pizza) e "Ranking por Categoria" — os mesmos no Painel (desktop) e no
@@ -38,6 +38,7 @@ export function Segmentado({ opcoes, valor, onChange, grande = false, rotulo }) 
 
 const nomeCat = (categories, id) => {
   if (id === OUTRAS_ID) return 'Outras'
+  if (id === SEM_CATEGORIA_ID) return 'Sem categoria'
   const c = categories.find(x => x.id === id)
   return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : id
 }
@@ -48,8 +49,8 @@ const pctTxt = (p) => (p > 0 && p < 1 ? '<1%' : `${p.toFixed(0)}%`)
 // Fatias do bloco (top 5 + Outras, ou todas) e a categoria aberta. "Outras" aberta fecha ao
 // expandir (deixa de existir); uma categoria aberta continua aberta nos dois modos.
 function useBloco(periodo, modo, todas) {
-  const { categorias, totalDespesas } = useDespesasPorCategoria(periodo, modo)
-  const { fatias, outras } = agruparTopN(categorias, totalDespesas, todas ? null : TOP_CATEGORIAS)
+  const { categorias, base } = useDespesasPorCategoria(periodo, modo)
+  const { fatias, outras } = agruparTopN(categorias, base, todas ? null : TOP_CATEGORIAS)
   const [aberta, setAberta] = useState(null)
   const alternar = (id) => setAberta(a => (a === id ? null : id))
   return { categorias, fatias, outras, aberta: aberta === OUTRAS_ID && !outras ? null : aberta, alternar }
@@ -176,7 +177,7 @@ export function RankingDespesas({ periodo, modo, grande = false, todas = false, 
           const cat = categories.find(x => x.id === c.categoryId)
           const sel = aberta === c.categoryId
           const Seta = sel ? ChevronDown : ChevronRight
-          const cor = c.outras ? corDaCategoria(OUTRAS_ID) : (cat?.color || corDaCategoria(c.categoryId, i))
+          const cor = cat?.color || corDaCategoria(c.categoryId, i)
           return (
             <div key={c.categoryId}>
               <button
@@ -190,7 +191,7 @@ export function RankingDespesas({ periodo, modo, grande = false, todas = false, 
                     <Seta size={12} className="text-gray-600" />
                     {c.outras
                       ? <>Outras <span className="text-gray-500">({c.membros.length})</span></>
-                      : <>{cat?.icon} {cat?.name ?? c.categoryId}</>}
+                      : nomeCat(categories, c.categoryId)}
                   </span>
                   <span className="text-gray-400">{fmt(c.valor)} <span className="text-gray-600">({pctTxt(c.pct)})</span></span>
                 </div>

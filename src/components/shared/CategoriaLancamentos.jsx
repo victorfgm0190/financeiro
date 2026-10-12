@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useDespesasPorCategoria } from '../../hooks/useDespesasPorCategoria'
 import { fmt, fmtDate } from './utils'
+import { SEM_CATEGORIA_ID } from '../../lib/despesasPorCategoria'
 import Modal from './Modal'
 import TransactionForm from '../Transactions/TransactionForm'
 
@@ -17,7 +18,7 @@ export default function CategoriaLancamentos({ categoriaId, periodo, modo }) {
   const [editTx, setEditTx] = useState(null)
 
   const cat = categories.find(c => c.id === categoriaId)
-  const nome = cat ? `${cat.icon ? cat.icon + ' ' : ''}${cat.name}` : 'Categoria'
+  const nome = cat ? `${cat.icon ? cat.icon + ' ' : ''}${cat.name}` : (categoriaId === SEM_CATEGORIA_ID ? 'Sem categoria' : 'Categoria')
   const dados = categorias.find(c => c.categoryId === categoriaId)
   const contaNome = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
   // Linha de rateio/visão de perfil → lançamento real para editar.
