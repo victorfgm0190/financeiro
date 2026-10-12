@@ -102,7 +102,8 @@ export default function CashFlowPanel({ setActivePage }) {
   const avisar = (message, variant = 'success') => setToast({ message, variant })
 
   // Coluna "Status": flag Confirmado / A confirmar do agendamento de origem (a mesma de
-  // Agendamentos). Só exibição + toggle — não entra em saldo, entradas ou saídas.
+  // Agendamentos), só na linha do próximo vencimento; as posteriores são "A confirmar" fixo.
+  // Só exibição + toggle — não entra em saldo, entradas ou saídas.
   const alternarConfirmado = (st) => {
     const s = ctxDoc.agPorId.get(st.scheduleId)
     toggleScheduleConfirmado(st.scheduleId)
@@ -115,6 +116,18 @@ export default function CashFlowPanel({ setActivePage }) {
     const ok = st.status === STATUS_CONFIRMACAO.CONFIRMADO
     const rotulo = ok ? 'Confirmado' : 'A confirmar'
     const soIcone = compacto || isMobile
+    if (!st.confirmavel) {
+      return (
+        <span
+          title="Só o próximo vencimento pode ser confirmado"
+          aria-label={rotulo}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-gray-700/40 text-gray-500 cursor-default"
+        >
+          <Circle size={10} />
+          {!soIcone && rotulo}
+        </span>
+      )
+    }
     return (
       <button
         type="button"
