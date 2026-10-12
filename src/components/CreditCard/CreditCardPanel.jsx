@@ -599,7 +599,7 @@ export default function CreditCardPanel() {
     )
   }
 
-  if (showExtrato) {
+  if (showExtrato && !isMobile) {
     return (
       <div className="space-y-4">
         <button
@@ -672,12 +672,15 @@ export default function CreditCardPanel() {
 
         {/* Links auxiliares */}
         <div className="flex items-center gap-3 shrink-0 ml-auto">
-          <button
-            onClick={() => { saveScroll(); setShowExtrato(true) }}
-            className="btn-amber"
-          >
-            <FileText size={13} /> Extrato
-          </button>
+          {/* Extrato Gerencial: só no computador (grupos gerenciais fora do mobile). */}
+          {!isMobile && (
+            <button
+              onClick={() => { saveScroll(); setShowExtrato(true) }}
+              className="btn-amber"
+            >
+              <FileText size={13} /> Extrato
+            </button>
+          )}
           <button
             onClick={() => { saveScroll(); setShowRelatorio(true) }}
             className="btn-amber"
@@ -794,15 +797,17 @@ export default function CreditCardPanel() {
           >
             <GitCompare size={14} /> Revisar Movimentos Automáticos
           </button>
-          <button
-            className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 disabled:opacity-50 transition-colors py-1"
-            onClick={handleReconciliarGerencial}
-            disabled={reconciling}
-            title="Reconcilia agendamentos gerenciais e saldos das contas Ger. deste cartão"
-          >
-            <RotateCcw size={12} className={reconciling ? 'animate-spin' : ''} />
-            {reconciling ? 'Reconciliando…' : '🔄 Reconciliar Gerenciais'}
-          </button>
+          {!isMobile && (
+            <button
+              className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 disabled:opacity-50 transition-colors py-1"
+              onClick={handleReconciliarGerencial}
+              disabled={reconciling}
+              title="Reconcilia agendamentos gerenciais e saldos das contas Ger. deste cartão"
+            >
+              <RotateCcw size={12} className={reconciling ? 'animate-spin' : ''} />
+              {reconciling ? 'Reconciliando…' : '🔄 Reconciliar Gerenciais'}
+            </button>
+          )}
         </div>
       </div>
       </div>
@@ -843,7 +848,7 @@ export default function CreditCardPanel() {
                 <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
               </button>
             )}
-            {billLancamentos.length > 0 && (
+            {billLancamentos.length > 0 && !isMobile && (
               <button
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
@@ -1245,22 +1250,27 @@ export default function CreditCardPanel() {
               >
                 <PencilLine size={12} /> Alterar Selecionados
               </button>
-              <button
-                onClick={() => handleBulkReconcile(true)}
-                disabled={selectedIds.size === 0}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Conciliar lançamentos selecionados"
-              >
-                <Check size={12} /> Conciliar
-              </button>
-              <button
-                onClick={() => handleBulkReconcile(false)}
-                disabled={selectedIds.size === 0}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Desconciliar lançamentos selecionados"
-              >
-                <Circle size={12} /> Desconciliar
-              </button>
+              {/* Conciliar/Desconciliar em lote: só no computador. */}
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => handleBulkReconcile(true)}
+                    disabled={selectedIds.size === 0}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Conciliar lançamentos selecionados"
+                  >
+                    <Check size={12} /> Conciliar
+                  </button>
+                  <button
+                    onClick={() => handleBulkReconcile(false)}
+                    disabled={selectedIds.size === 0}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Desconciliar lançamentos selecionados"
+                  >
+                    <Circle size={12} /> Desconciliar
+                  </button>
+                </>
+              )}
               <button
                 onClick={exitSelect}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"

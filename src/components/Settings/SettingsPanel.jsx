@@ -9,7 +9,10 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
-import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig, abaDe } from '../../lib/configRota'
+import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig } from '../../lib/configRota'
+import { useIsMobile } from '../../hooks/useIsMobile'
+import { mobileModules } from '../../mobile/modules'
+import { secoesConfigSoDesktop } from '../../mobile/navegacao'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
@@ -35,8 +38,13 @@ function maskDoc(raw, type) {
     .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
 }
 
+// Seções que só existem no computador (place: 'desktop' em src/mobile/modules.js → configSecoes).
+const SECOES_SO_DESKTOP = secoesConfigSoDesktop(mobileModules)
+const SEM_OCULTAS = new Set()
+
 export default function SettingsPanel() {
   const [rota, setRota] = useState(() => parseConfigHash(window.location.hash))
+  const isMobile = useIsMobile()
   useEffect(() => {
     const h = configHash(rota.aba, rota.secao)
     if (window.location.hash !== h) window.history.replaceState(null, '', h)
@@ -567,8 +575,14 @@ export default function SettingsPanel() {
     return nums.length > 0 ? Math.max(...nums) + 1 : 2
   })()
 
-  const abaAtual = abaDe(rota.aba)
-  const secao = rota.secao
+  // No mobile as seções só do computador saem do menu; rota apontando para uma delas cai na 1ª
+  // seção visível da aba. No desktop nada é filtrado (abas === CONFIG_ABAS em conteúdo).
+  const ocultas = isMobile ? SECOES_SO_DESKTOP : SEM_OCULTAS
+  const abas = CONFIG_ABAS
+    .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id)) }))
+    .filter(a => a.secoes.length > 0)
+  const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
+  const secao = abaAtual.secoes.some(s => s.id === rota.secao) ? rota.secao : abaAtual.secoes[0].id
   const secaoAtual = abaAtual.secoes.find(s => s.id === secao) || abaAtual.secoes[0]
   const temSubmenu = abaAtual.secoes.length > 1
 
@@ -591,7 +605,7 @@ export default function SettingsPanel() {
       </div>
 
       <div role="tablist" className="flex overflow-x-auto border-b border-gray-800 -mx-4 px-4 md:mx-0 md:px-0">
-        {CONFIG_ABAS.map(a => {
+        {abas.map(a => {
           const ativa = a.id === abaAtual.id
           const cor = a.perigo
             ? (ativa ? 'text-red-400 border-red-500' : 'text-red-400/70 border-transparent hover:text-red-400')

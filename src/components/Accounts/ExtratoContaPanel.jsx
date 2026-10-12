@@ -19,6 +19,7 @@ import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import DuplicateButton from '../shared/DuplicateButton'
 import ReconciledTotals from '../shared/ReconciledTotals'
 import ReconcileBadge from '../shared/ReconcileBadge'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -485,6 +486,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
+  // Ações de conciliação em lote ficam só no computador.
+  const isMobile = useIsMobile()
 
   // KPIs de saldo do cabeçalho. Vêm da MESMA engine do card de conta (getAccountSaldos), para
   // que "Saldo Atual" aqui e lá nunca divirjam: saldoHoje é recalculado a cada render, enquanto
@@ -1096,20 +1099,25 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
               </button>
-              <button
-                onClick={() => setShowReconciliar(true)}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
-                title="Reconciliar transações do período"
-              >
-                <CheckSquare size={12} /> Reconciliar
-              </button>
-              <button
-                onClick={handleConciliarGerenciais}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
-                title="Conciliar todos os lançamentos pendentes do período que envolvem uma conta gerencial (origem ou destino)"
-              >
-                <Zap size={12} /> Conciliar Gerenciais
-              </button>
+              {/* Reconciliar / Conciliar Gerenciais em lote: só no computador. */}
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => setShowReconciliar(true)}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                    title="Reconciliar transações do período"
+                  >
+                    <CheckSquare size={12} /> Reconciliar
+                  </button>
+                  <button
+                    onClick={handleConciliarGerenciais}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                    title="Conciliar todos os lançamentos pendentes do período que envolvem uma conta gerencial (origem ou destino)"
+                  >
+                    <Zap size={12} /> Conciliar Gerenciais
+                  </button>
+                </>
+              )}
               {isGerencial && (
                 <button
                   onClick={handleExportExcel}
@@ -1557,22 +1565,27 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <PencilLine size={12} /> Alterar Selecionados
               </button>
-              <button
-                onClick={() => handleBulkReconcile(true)}
-                disabled={selectedIds.size === 0}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Conciliar lançamentos selecionados"
-              >
-                <Check size={12} /> Conciliar
-              </button>
-              <button
-                onClick={() => handleBulkReconcile(false)}
-                disabled={selectedIds.size === 0}
-                className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                title="Desconciliar lançamentos selecionados"
-              >
-                <Circle size={12} /> Desconciliar
-              </button>
+              {/* Conciliar/Desconciliar em lote: só no computador. */}
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => handleBulkReconcile(true)}
+                    disabled={selectedIds.size === 0}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Conciliar lançamentos selecionados"
+                  >
+                    <Check size={12} /> Conciliar
+                  </button>
+                  <button
+                    onClick={() => handleBulkReconcile(false)}
+                    disabled={selectedIds.size === 0}
+                    className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Desconciliar lançamentos selecionados"
+                  >
+                    <Circle size={12} /> Desconciliar
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setShowBulkDelete(true)}
                 disabled={selectedIds.size === 0}

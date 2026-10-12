@@ -33,7 +33,7 @@ import { getToken } from './lib/api'
 import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
 import MobileShell from './mobile/MobileShell'
 import { mobileModules } from './mobile/modules'
-import { moduloDaPagina } from './mobile/navegacao'
+import { moduloAposNavegar, moduloMobile } from './mobile/navegacao'
 
 function AppContent() {
   // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
@@ -46,7 +46,7 @@ function AppContent() {
     const onHash = () => {
       if (!ehHashConfig(window.location.hash)) return
       setActivePage('settings')
-      setMobileAtivo(moduloDaPagina(mobileModules, 'settings')?.id ?? 'mais')
+      setMobileAtivo(atual => moduloAposNavegar(mobileModules, 'settings', atual))
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -73,16 +73,15 @@ function AppContent() {
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
     setActivePage(page)
-    const m = moduloDaPagina(mobileModules, page)
-    if (m) setMobileAtivo(m.id)
+    // Mobile: página só do computador (place: 'desktop' em modules.js) cai no Início.
+    setMobileAtivo(atual => moduloAposNavegar(mobileModules, page, atual))
   }, [activePage, scrollScope])
   // Troca de módulo no mobile: módulo de painel passa pelo navigate (hash, activePage); tela própria
   // do mobile (Início, Mais) só troca o módulo.
   const irParaModulo = useCallback((id) => {
-    const m = mobileModules.find(x => x.id === id)
-    if (!m) return
+    const m = mobileModules.find(x => x.id === moduloMobile(mobileModules, id))
     if (m.page) navigate(m.page)
-    setMobileAtivo(id)
+    setMobileAtivo(m.id)
   }, [navigate])
   const scrollCtx = useMemo(() => ({
     setScope: setScrollScope,
@@ -193,7 +192,8 @@ function AppContent() {
         <MobileShell
           modules={mobileModules}
           panels={panels}
-          ativo={mobileAtivo}
+          // Ponto único de proteção: módulo só do computador ou inválido → Início.
+          ativo={moduloMobile(mobileModules, mobileAtivo)}
           irPara={irParaModulo}
           saldosPrincipais={saldosPrincipais}
           onToast={setGenericToast}

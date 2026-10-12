@@ -1,4 +1,4 @@
-import { Laptop, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { secoesMais } from './navegacao'
 
 // Tela "Mais": gerada 100% de modules.js (secoesMais) — aqui só o layout de cada tipo de seção.
@@ -26,17 +26,6 @@ export default function MaisMobile({ modules, irPara }) {
                 )
               })}
             </div>
-          )}
-          {sec.tipo === 'desktop' && (
-            <ul className="rounded-xl border border-gray-800 divide-y divide-gray-800">
-              {sec.itens.map(m => (
-                <li key={m.id} aria-disabled="true" className="flex items-center gap-3 px-4 min-h-[48px] text-sm text-gray-500">
-                  <Laptop size={16} className="text-gray-600" />
-                  <span className="flex-1">{m.label}</span>
-                  <span className="text-[11px] text-gray-600">no computador</span>
-                </li>
-              ))}
-            </ul>
           )}
           {sec.tipo === 'config' && (
             <ul className="rounded-xl border border-gray-800 divide-y divide-gray-800">

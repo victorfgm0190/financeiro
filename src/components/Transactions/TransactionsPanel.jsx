@@ -110,6 +110,8 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [bulkEditTxs, setBulkEditTxs] = useState(null)
   const [editTx, setEditTx] = useState(null)
+  // Reconciliar em lote: só no computador.
+  const isMobile = useIsMobile()
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmEstorno, setConfirmEstorno] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
@@ -172,7 +174,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         <span className="text-sm text-gray-200">Fatura {label}</span>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-base font-bold text-orange-600">{fmt(total)}</span>
-          {txs.length > 0 && (
+          {txs.length > 0 && !isMobile && (
             <button
               onClick={() => setShowReconciliar(true)}
               className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"

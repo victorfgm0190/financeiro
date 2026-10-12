@@ -4,7 +4,9 @@
 //   'tab'     → barra inferior (máx. 4 + o botão central "+"), na ordem deste array
 //   'more'    → tela "Mais", agrupado por `group` (seções na ordem em que aparecem)
 //   'action'  → menu do botão "+" (primary: true = card 2x2; senão item de lista)
-//   'desktop' → "Mais" › "Melhor no computador" (cinza, não abre no mobile)
+//   'desktop' → só no computador: não aparece no mobile (documentação). `page` dele, se o App
+//               cair nela no mobile, redireciona para o Início; `configSecoes` somem de
+//               Configurações no mobile. Botões dessas funções nas telas usam useIsMobile.
 //   'config'  → "Mais" › última seção (Configurações)
 // Tela: `page` = painel existente do App (mesma instância/props do desktop); `component` = tela
 // nova do mobile (recebe as props do shell). Ações: `component` recebe { onClose, onToast }.
@@ -39,9 +41,9 @@ export const mobileModules = [
   { id: 'transferencia', label: 'Transferência',   icon: ArrowLeftRight, place: 'action', primary: true, component: TransferenciaAcao },
   { id: 'reserva_mov',   label: 'Reserva',         icon: PiggyBank,      place: 'action', primary: true, component: ReservaAcao },
 
-  { id: 'importar',      label: 'Importar fatura',   place: 'desktop' },
+  { id: 'importar',      label: 'Importar fatura',   place: 'desktop', page: 'import' },
   { id: 'conciliacao',   label: 'Conciliação',       place: 'desktop' },
-  { id: 'gerenciais',    label: 'Grupos gerenciais', place: 'desktop' },
+  { id: 'gerenciais',    label: 'Grupos gerenciais', place: 'desktop', configSecoes: ['controle-gerencial', 'grupo-gerencial'] },
 
   { id: 'configuracoes', label: 'Configurações',   icon: Settings,       place: 'config', page: 'settings' },
 ]
