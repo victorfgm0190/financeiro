@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 import {
   ArrowDownCircle, ArrowUpCircle, Wallet, AlertTriangle, Calendar, Plus, Pencil, Trash2,
-  CheckCircle2, RotateCcw, CalendarClock, ChevronDown, ChevronRight, SlidersHorizontal,
+  CheckCircle2, RotateCcw, CalendarClock, ChevronDown, ChevronRight, SlidersHorizontal, CheckCircle, Circle,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
@@ -23,6 +23,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import { resolverTipoDocumento, itemDaLinhaFluxo } from '../../lib/tiposDocumento'
+import { statusConfirmacaoLinha, STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
 import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
 import { serieKeyDe } from '../../lib/camposSerie'
 import ProvisorioForm from '../Reports/ProvisorioForm'
@@ -84,6 +85,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
+    toggleScheduleConfirmado,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
@@ -98,6 +100,36 @@ export default function CashFlowPanel({ setActivePage }) {
 
   const [toast, setToast] = useState(null)
   const avisar = (message, variant = 'success') => setToast({ message, variant })
+
+  // Coluna "Status": flag Confirmado / A confirmar do agendamento de origem (a mesma de
+  // Agendamentos). Só exibição + toggle — não entra em saldo, entradas ou saídas.
+  const alternarConfirmado = (st) => {
+    const s = ctxDoc.agPorId.get(st.scheduleId)
+    toggleScheduleConfirmado(st.scheduleId)
+    const agora = st.status === STATUS_CONFIRMACAO.CONFIRMADO ? 'A confirmar' : 'Confirmado'
+    avisar(`${s?.description || 'Agendamento'}: ${agora}`)
+  }
+  const statusCelula = (r, compacto = false) => {
+    const st = statusConfirmacaoLinha(r, ctxDoc)
+    if (!st) return <span className="text-gray-600 text-xs">—</span>
+    const ok = st.status === STATUS_CONFIRMACAO.CONFIRMADO
+    const rotulo = ok ? 'Confirmado' : 'A confirmar'
+    const soIcone = compacto || isMobile
+    return (
+      <button
+        type="button"
+        onClick={() => alternarConfirmado(st)}
+        title={ok ? 'Confirmado — clique para marcar como A confirmar' : 'A confirmar — clique para marcar como Confirmado'}
+        aria-label={rotulo}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap transition-colors ${
+          ok ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-gray-700/60 text-gray-400 hover:bg-gray-700'
+        }`}
+      >
+        {ok ? <CheckCircle size={10} /> : <Circle size={10} />}
+        {!soIcone && rotulo}
+      </button>
+    )
+  }
 
   // ── Consulta ativa e horizonte ─────────────────────────────────────────────
   const visiveis = useMemo(() => consultasDoPerfil(consultas, activeProfileId), [consultas, activeProfileId])
@@ -568,11 +600,12 @@ export default function CashFlowPanel({ setActivePage }) {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: 930 }}>
+              <table className="w-full text-sm" style={{ minWidth: isMobile ? 960 : 1030 }}>
                 <thead>
                   <tr className="border-b border-gray-800">
                     <th className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-28">Data</th>
+                    <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
                     <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-32">Conta</th>
@@ -590,7 +623,7 @@ export default function CashFlowPanel({ setActivePage }) {
                   <tr className="border-b border-gray-800/50 bg-gray-800/20">
                     <td className="px-2 py-2" />
                     <td className="px-3 py-2 text-xs text-gray-500">Hoje</td>
-                    <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={5}>
+                    <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={6}>
                       Saldo inicial ({contas.length} conta{contas.length !== 1 ? 's' : ''}, cada uma no seu último dia)
                     </td>
                     <td className={`px-3 py-2 text-right text-xs font-bold ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</td>
@@ -611,7 +644,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           />
                         </td>
                         <td className="px-3 py-2 text-xs text-red-400">Hoje</td>
-                        <td className="px-3 py-2 text-xs" colSpan={3}>
+                        <td className="px-3 py-2 text-xs" colSpan={4}>
                           <button type="button" onClick={() => setAtrasoAberto(o => !o)} className="inline-flex items-center gap-1 text-red-300 hover:text-red-200">
                             {atrasoAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                             Pendências em atraso ({atraso.length})
@@ -630,6 +663,7 @@ export default function CashFlowPanel({ setActivePage }) {
                               <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
                             </td>
                             <td className="px-3 py-1.5 text-[11px] text-red-400/80 pl-6">{fmtDate(r.date)}</td>
+                            <td className="px-2 py-1.5 w-[100px]">{statusCelula(r)}</td>
                             <td className="px-2 py-1.5 w-[70px]"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
                             <td className={`px-3 py-1.5 text-[11px] ${ativa ? 'text-gray-300' : 'text-gray-500 line-through'}`}>{r.description}</td>
                             <td className="px-3 py-1.5 text-[11px] text-gray-500">{accName(contaDaLinha(r, accountIds))}</td>
@@ -673,6 +707,7 @@ export default function CashFlowPanel({ setActivePage }) {
                             </span>
                           ) : <span className="text-gray-400">{fmtDate(r.date)}</span>}
                         </td>
+                        <td className="px-2 py-2.5 w-[100px] whitespace-nowrap">{statusCelula(r)}</td>
                         <td className="px-2 py-2.5 w-[70px] whitespace-nowrap"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
@@ -720,7 +755,7 @@ export default function CashFlowPanel({ setActivePage }) {
                     )
                   })}
                   {rowsView.length === 0 && (
-                    <tr><td colSpan={9} className="text-center py-8 text-gray-500 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
+                    <tr><td colSpan={10} className="text-center py-8 text-gray-500 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
                   )}
                 </tbody>
               </table>
