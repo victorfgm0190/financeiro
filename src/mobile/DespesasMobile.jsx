@@ -13,8 +13,8 @@ const ultimo = { filtro: 'current', visao: 'pizza' }
 
 // "Maiores despesas" no mobile (card do Início e tela própria): os MESMOS blocos do Painel, com
 // período e Cheio/Líquido em segmented control e Pizza | Ranking em abas — um card só.
-// `card`: card do Início, sempre compacto (top 5 + Outras); a tela abre em "Ver todas", e
-// "Mostrar menos" volta ao top 5 + Outras.
+// `card`: card do Início, sempre compacto (pizza 6 + Outras; legenda/ranking com 5); a tela abre
+// em "Ver todas", e "Mostrar menos" volta às 5 primeiras.
 // `oculto`: valores ocultos pelo botão olho do Início.
 export default function DespesasMobile({ card = false, oculto = false }) {
   const { getFinancialPeriod } = useApp()

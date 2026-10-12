@@ -78,12 +78,14 @@ export function despesasPorCategoria(transactions, periodo, cls, modo = MODO_DES
 }
 
 // ── Top N + "Outras" e cores ──────────────────────────────────────────────────────────────────
+// Pizza: as 6 maiores + "Outras (N)". Legenda e ranking: as 5 primeiras + "Ver todas (N)".
+export const FATIAS_PIZZA = 6
 export const TOP_CATEGORIAS = 5
 export const OUTRAS_ID = '__outras'
 export const COR_OUTRAS = '#6b7280'
 export const COR_SEM_CATEGORIA = '#4b5563'
-// Cores das 5 primeiras (as de sempre da pizza); as demais saem de corDaCategoria.
-export const CORES_TOP = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4']
+// Cores das 6 fatias da pizza (as de sempre); as demais saem de corDaCategoria.
+export const CORES_TOP = ['#6366f1', '#f97316', '#3b82f6', '#8b5cf6', '#06b6d4', '#f59e0b']
 
 // Modo fechado: as N maiores + uma fatia "Outras" com a soma do resto (membros = as categorias
 // dentro dela, já ordenadas). Com N categorias ou menos não há "Outras". A soma das fatias é
@@ -105,8 +107,21 @@ export function agruparTopN(categorias, base, n = TOP_CATEGORIAS) {
   return { fatias: [...lista.slice(0, n), outras], outras }
 }
 
-// Cor da fatia: "Outras" → cinza; "Sem categoria" → cinza escuro; posição < 5 → cor fixa do top; demais → tom determinístico
-// pelo id da categoria (mesma categoria = mesma cor em qualquer tela).
+// Os três recortes dos blocos a partir de UM resultado de despesasPorCategoria — pizza, legenda
+// e ranking nunca recalculam nada, então o valor de uma categoria é o mesmo nos três.
+//   pizza   → 6 maiores + "Outras" (agruparTopN)
+//   lista   → legenda e ranking: 5 primeiras, ou todas (`todas`), em ordem de valor desc
+export function montarBlocos(categorias, base, todas = false) {
+  const lista = categorias || []
+  return {
+    pizza: agruparTopN(lista, base, FATIAS_PIZZA),
+    lista: todas ? lista : lista.slice(0, TOP_CATEGORIAS),
+    total: lista.length,
+  }
+}
+
+// Cor: "Outras" → cinza; "Sem categoria" → cinza escuro; posição < 6 → cor fixa da pizza; demais →
+// tom determinístico pelo id da categoria (mesma categoria = mesma cor em qualquer tela).
 export function corDaCategoria(categoryId, indice) {
   if (categoryId === OUTRAS_ID) return COR_OUTRAS
   if (categoryId === SEM_CATEGORIA_ID) return COR_SEM_CATEGORIA

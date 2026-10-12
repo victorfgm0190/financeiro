@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { despesasPorCategoria, periodoDoFiltro, agruparTopN, corDaCategoria, OUTRAS_ID, COR_OUTRAS, CORES_TOP, SEM_CATEGORIA_ID, COR_SEM_CATEGORIA } from './despesasPorCategoria'
+import { despesasPorCategoria, periodoDoFiltro, agruparTopN, corDaCategoria, OUTRAS_ID, COR_OUTRAS, CORES_TOP, SEM_CATEGORIA_ID, COR_SEM_CATEGORIA, montarBlocos, FATIAS_PIZZA, TOP_CATEGORIAS } from './despesasPorCategoria'
 
 // Classificação mínima: despesa = type expense; resgate = receita com id tx_rsg_.
 const cls = {
@@ -141,5 +141,55 @@ describe('corDaCategoria', () => {
     expect(COR_SEM_CATEGORIA).not.toBe(COR_OUTRAS)
     expect(corDaCategoria('lazer', 7)).toBe(corDaCategoria('lazer', 12))
     expect(corDaCategoria('lazer', 7)).toMatch(/^hsl\(/)
+  })
+})
+
+describe('montarBlocos (pizza 6 + Outras; legenda e ranking 5 / todas)', () => {
+  // 10 categorias + sem categoria, com resgates em algumas → valida os dois modos.
+  const tx = []
+  ;[900, 700, 500, 400, 300, 200, 150, 75.33, 40, 12.5].forEach((v, i) => {
+    tx.push({ id: `d${i}`, type: 'expense', categoryId: `c${i}`, amount: v, date: '2026-10-03' })
+    if (i % 3 === 0) tx.push({ id: `tx_rsg_${i}`, type: 'income', categoryId: `c${i}`, amount: v / 5, date: '2026-10-04' })
+  })
+  tx.push({ id: 'sc', type: 'expense', categoryId: null, amount: 33.33, date: '2026-10-05' })
+  const r2 = (n) => Math.round(n * 100) / 100
+
+  for (const modo of ['cheio', 'liquido']) {
+    it(`soma de todas as categorias = total de despesas do período (${modo})`, () => {
+      const { categorias, base, totalDespesas } = despesasPorCategoria(tx, P, cls, modo)
+      const total = modo === 'cheio' ? totalDespesas : r2(totalDespesas - tx.filter(t => t.id.startsWith('tx_rsg_')).reduce((s, t) => s + t.amount, 0))
+      expect(base).toBe(total)
+      expect(r2(categorias.reduce((s, c) => s + c.valor, 0))).toBe(total)
+    })
+
+    it(`fatia Outras = total − soma das 6 maiores (${modo})`, () => {
+      const { categorias, base } = despesasPorCategoria(tx, P, cls, modo)
+      const { pizza } = montarBlocos(categorias, base)
+      expect(pizza.fatias).toHaveLength(FATIAS_PIZZA + 1)
+      expect(pizza.outras.membros).toHaveLength(categorias.length - FATIAS_PIZZA)
+      const seis = categorias.slice(0, FATIAS_PIZZA).reduce((s, c) => s + c.valor, 0)
+      expect(pizza.outras.valor).toBe(r2(base - seis))
+    })
+
+    it(`pizza, legenda e ranking: mesmo valor por categoria (${modo})`, () => {
+      const { categorias, base } = despesasPorCategoria(tx, P, cls, modo)
+      const fechado = montarBlocos(categorias, base, false)
+      const aberto = montarBlocos(categorias, base, true)
+      expect(fechado.lista).toHaveLength(TOP_CATEGORIAS)
+      expect(aberto.lista).toEqual(categorias)
+      expect(fechado.total).toBe(categorias.length)
+      const porId = new Map(aberto.lista.map(c => [c.categoryId, c]))
+      for (const f of fechado.pizza.fatias.filter(f => !f.outras)) {
+        expect(f.valor).toBe(porId.get(f.categoryId).valor)
+        expect(f.pct).toBe(porId.get(f.categoryId).pct)
+      }
+      for (const m of fechado.pizza.outras.membros) expect(m.valor).toBe(porId.get(m.categoryId).valor)
+    })
+  }
+
+  it('lista em ordem decrescente de valor', () => {
+    const { categorias, base } = despesasPorCategoria(tx, P, cls, 'cheio')
+    const { lista } = montarBlocos(categorias, base, true)
+    for (let i = 1; i < lista.length; i++) expect(lista[i - 1].valor).toBeGreaterThanOrEqual(lista[i].valor)
   })
 })

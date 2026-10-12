@@ -3,15 +3,17 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useDespesasPorCategoria } from '../../hooks/useDespesasPorCategoria'
-import CategoriaLancamentos, { OutrasLancamentos } from '../shared/CategoriaLancamentos'
-import { agruparTopN, corDaCategoria, OUTRAS_ID, SEM_CATEGORIA_ID, TOP_CATEGORIAS } from '../../lib/despesasPorCategoria'
+import CategoriaLancamentos from '../shared/CategoriaLancamentos'
+import { montarBlocos, corDaCategoria, OUTRAS_ID, SEM_CATEGORIA_ID, TOP_CATEGORIAS } from '../../lib/despesasPorCategoria'
 import { fmt } from '../shared/utils'
 
 // Blocos "Maiores Despesas" (pizza) e "Ranking por Categoria" — os mesmos no Painel (desktop) e no
-// card do Início (mobile). Valores, % e a lista do clique saem de despesasPorCategoria
-// (src/lib) via useDespesasPorCategoria, com o período e o modo (Cheio/Líquido) recebidos.
-// Modo fechado: top 5 + "Outras" (agruparTopN); `todas`: uma fatia/linha por categoria.
-// `onAlternarTodas`: mostra o botão "Ver todas (N)" / "Mostrar menos" no rodapé.
+// mobile. Valores, % e a lista do clique saem de UM resultado de despesasPorCategoria (src/lib) via
+// useDespesasPorCategoria, recortado por montarBlocos, com o período e o modo (Cheio/Líquido)
+// recebidos: o valor de uma categoria é idêntico na pizza, na legenda e no ranking.
+//   pizza: 6 maiores + "Outras (N)" (clicar abre a lista das categorias dentro dela)
+//   legenda e ranking: 5 primeiras; `todas` → todas. `onAlternarTodas` mostra o botão
+//   "Ver todas (N)" / "Mostrar menos" no rodapé.
 
 // Segmented control genérico (filtros de período, Cheio/Líquido, Pizza/Ranking).
 // `grande`: alvos de 44px (mobile).
@@ -43,25 +45,17 @@ const nomeCat = (categories, id) => {
   return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : id
 }
 
-// < 1% aparece como "<1%" (fatia fina demais para ler, mas segue clicável pela legenda).
+// < 1% aparece como "<1%".
 const pctTxt = (p) => (p > 0 && p < 1 ? '<1%' : `${p.toFixed(0)}%`)
 
-// Fatias do bloco (top 5 + Outras, ou todas) e a categoria aberta. "Outras" aberta fecha ao
-// expandir (deixa de existir); uma categoria aberta continua aberta nos dois modos.
+// Recortes do bloco e a categoria aberta (uma por vez; a mesma fecha). "Outras" aberta fecha se
+// deixar de existir após trocar período/modo.
 function useBloco(periodo, modo, todas) {
   const { categorias, base } = useDespesasPorCategoria(periodo, modo)
-  const { fatias, outras } = agruparTopN(categorias, base, todas ? null : TOP_CATEGORIAS)
+  const { pizza, lista, total } = montarBlocos(categorias, base, todas)
   const [aberta, setAberta] = useState(null)
   const alternar = (id) => setAberta(a => (a === id ? null : id))
-  return { categorias, fatias, outras, aberta: aberta === OUTRAS_ID && !outras ? null : aberta, alternar }
-}
-
-// Lista do clique: uma categoria, ou as categorias dentro de "Outras" (agrupadas).
-function Lista({ id, outras, periodo, modo }) {
-  if (id === OUTRAS_ID) {
-    return outras ? <OutrasLancamentos membros={outras.membros} valor={outras.valor} periodo={periodo} modo={modo} /> : null
-  }
-  return <CategoriaLancamentos categoriaId={id} periodo={periodo} modo={modo} />
+  return { pizza, lista, total, aberta: aberta === OUTRAS_ID && !pizza.outras ? null : aberta, alternar }
 }
 
 function BotaoTodas({ total, todas, onAlternar, grande }) {
@@ -78,32 +72,83 @@ function BotaoTodas({ total, todas, onAlternar, grande }) {
   )
 }
 
+// Linha da legenda. `indice`: posição da categoria no resultado (cor da fatia).
+function LinhaLegenda({ c, indice, sel, esmaecer, onClick, grande }) {
+  const { categories } = useApp()
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={sel}
+      className={`w-full flex items-center justify-between px-2 rounded-lg transition-colors text-left group cursor-pointer ${grande ? 'min-h-[44px]' : 'py-1.5'} ${sel ? 'bg-gray-800/70' : 'hover:bg-gray-800/60'} ${esmaecer ? 'opacity-50' : ''}`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: corDaCategoria(c.categoryId, indice) }} />
+        <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">{nomeCat(categories, c.categoryId)}</span>
+      </div>
+      <span className="text-xs text-gray-500 shrink-0 ml-2 tabular-nums">
+        {pctTxt(c.pct)} — {fmt(c.valor)}
+      </span>
+    </button>
+  )
+}
+
+// Clique na fatia "Outras": a lista das categorias dentro dela; cada uma abre os próprios
+// lançamentos. `inicio`: posição da 1ª categoria de Outras no resultado (cor).
+function OutrasLista({ outras, inicio, periodo, modo, grande }) {
+  const [aberta, setAberta] = useState(null)
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-900/40 px-2 py-2 space-y-1">
+      <p className="text-xs text-gray-300 px-2 pb-1">
+        <span className="font-semibold text-gray-100">Outras ({outras.membros.length})</span> · {fmt(outras.valor)}
+      </p>
+      {outras.membros.map((c, i) => (
+        <div key={c.categoryId}>
+          <LinhaLegenda
+            c={c}
+            indice={inicio + i}
+            sel={aberta === c.categoryId}
+            onClick={() => setAberta(a => (a === c.categoryId ? null : c.categoryId))}
+            grande={grande}
+          />
+          {aberta === c.categoryId && (
+            <div className="mt-1 mb-2">
+              <CategoriaLancamentos categoriaId={c.categoryId} periodo={periodo} modo={modo} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // Pizza + legenda. Clicar numa fatia ou linha da legenda abre a lista logo abaixo da legenda
 // (mesmo item fecha; outro troca). A categoria aberta sobrevive à troca de período/modo.
 export function PizzaDespesas({ periodo, modo, grande = false, todas = false, onAlternarTodas }) {
   const { categories } = useApp()
-  const { categorias, fatias, outras, aberta, alternar } = useBloco(periodo, modo, todas)
+  const { pizza, lista, total, aberta, alternar } = useBloco(periodo, modo, todas)
+  const { fatias, outras } = pizza
 
   if (fatias.length === 0) {
     return (
       <div>
         <p className="text-xs text-gray-500 text-center py-10">Sem despesas no período</p>
-        {aberta && <Lista id={aberta} outras={outras} periodo={periodo} modo={modo} />}
+        {aberta && aberta !== OUTRAS_ID && <CategoriaLancamentos categoriaId={aberta} periodo={periodo} modo={modo} />}
       </div>
     )
   }
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={todas ? 220 : 180}>
+      <ResponsiveContainer width="100%" height={180}>
         <PieChart>
           <Pie
             data={fatias}
             cx="50%"
             cy="50%"
-            innerRadius={todas ? 58 : 48}
-            outerRadius={todas ? 94 : 78}
-            paddingAngle={fatias.length > 12 ? 0.5 : 2}
+            innerRadius={48}
+            outerRadius={78}
+            paddingAngle={2}
             dataKey="valor"
             onClick={(d) => alternar(d.categoryId)}
             style={{ cursor: 'pointer' }}
@@ -119,65 +164,58 @@ export function PizzaDespesas({ periodo, modo, grande = false, todas = false, on
             ))}
           </Pie>
           <Tooltip
-            formatter={(v, _n, item) => [fmt(v), nomeCat(categories, item?.payload?.categoryId)]}
+            formatter={(v, _n, item) => {
+              const p = item?.payload
+              return [fmt(v), p?.outras ? `Outras (${p.membros.length})` : nomeCat(categories, p?.categoryId)]
+            }}
             contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
           />
         </PieChart>
       </ResponsiveContainer>
 
-      {/* Legenda (clicável, acessível por teclado) — também o acesso às fatias muito finas. */}
+      {/* Legenda (clicável, acessível por teclado): 5 primeiras ou todas. */}
       <div className="space-y-1 mt-1">
-        {fatias.map((c, i) => {
-          const sel = aberta === c.categoryId
-          return (
-            <button
-              key={c.categoryId}
-              type="button"
-              onClick={() => alternar(c.categoryId)}
-              aria-expanded={sel}
-              className={`w-full flex items-center justify-between px-2 rounded-lg transition-colors text-left group cursor-pointer ${grande ? 'min-h-[44px]' : 'py-1.5'} ${sel ? 'bg-gray-800/70' : 'hover:bg-gray-800/60'} ${aberta && !sel ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: corDaCategoria(c.categoryId, i) }} />
-                <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">
-                  {nomeCat(categories, c.categoryId)}
-                  {c.outras && <span className="text-gray-500"> ({c.membros.length})</span>}
-                </span>
-              </div>
-              <span className="text-xs text-gray-500 shrink-0 ml-2 tabular-nums">
-                {pctTxt(c.pct)} — {fmt(c.valor)}
-              </span>
-            </button>
-          )
-        })}
+        {lista.map((c, i) => (
+          <LinhaLegenda
+            key={c.categoryId}
+            c={c}
+            indice={i}
+            sel={aberta === c.categoryId}
+            esmaecer={aberta && aberta !== c.categoryId}
+            onClick={() => alternar(c.categoryId)}
+            grande={grande}
+          />
+        ))}
       </div>
 
       {aberta && (
         <div className="mt-2">
-          <Lista id={aberta} outras={outras} periodo={periodo} modo={modo} />
+          {aberta === OUTRAS_ID
+            ? outras && <OutrasLista outras={outras} inicio={fatias.length - 1} periodo={periodo} modo={modo} grande={grande} />
+            : <CategoriaLancamentos categoriaId={aberta} periodo={periodo} modo={modo} />}
         </div>
       )}
 
-      <BotaoTodas total={categorias.length} todas={todas} onAlternar={onAlternarTodas} grande={grande} />
+      <BotaoTodas total={total} todas={todas} onAlternar={onAlternarTodas} grande={grande} />
     </div>
   )
 }
 
-// Ranking com barra. Clicar numa linha expande a lista logo abaixo dela (acordeão, um por vez).
+// Ranking com barra: 5 primeiras ou todas. Clicar numa linha expande a lista logo abaixo dela
+// (acordeão, um por vez).
 export function RankingDespesas({ periodo, modo, grande = false, todas = false, onAlternarTodas }) {
   const { categories } = useApp()
-  const { categorias, fatias, outras, aberta, alternar } = useBloco(periodo, modo, todas)
+  const { lista, total, aberta, alternar } = useBloco(periodo, modo, todas)
 
-  if (fatias.length === 0) return <p className="text-xs text-gray-500 text-center py-4">Sem despesas no período</p>
+  if (lista.length === 0) return <p className="text-xs text-gray-500 text-center py-4">Sem despesas no período</p>
 
   return (
     <div>
       <div className="space-y-2.5">
-        {fatias.map((c, i) => {
+        {lista.map((c, i) => {
           const cat = categories.find(x => x.id === c.categoryId)
           const sel = aberta === c.categoryId
           const Seta = sel ? ChevronDown : ChevronRight
-          const cor = cat?.color || corDaCategoria(c.categoryId, i)
           return (
             <div key={c.categoryId}>
               <button
@@ -189,30 +227,28 @@ export function RankingDespesas({ periodo, modo, grande = false, todas = false, 
                 <div className="flex justify-between text-xs mb-0.5">
                   <span className="text-gray-300 flex items-center gap-1">
                     <Seta size={12} className="text-gray-600" />
-                    {c.outras
-                      ? <>Outras <span className="text-gray-500">({c.membros.length})</span></>
-                      : nomeCat(categories, c.categoryId)}
+                    {nomeCat(categories, c.categoryId)}
                   </span>
                   <span className="text-gray-400">{fmt(c.valor)} <span className="text-gray-600">({pctTxt(c.pct)})</span></span>
                 </div>
                 <div className="h-1.5 bg-gray-800 rounded-full">
-                  <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, c.pct)}%`, background: cor }} />
+                  <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, c.pct)}%`, background: cat?.color || corDaCategoria(c.categoryId, i) }} />
                 </div>
               </button>
               {sel && (
                 <div className="mt-2">
-                  <Lista id={c.categoryId} outras={outras} periodo={periodo} modo={modo} />
+                  <CategoriaLancamentos categoriaId={c.categoryId} periodo={periodo} modo={modo} />
                 </div>
               )}
             </div>
           )
         })}
-        {/* Categoria aberta que saiu da lista após trocar período/modo continua visível. */}
-        {aberta && !fatias.some(c => c.categoryId === aberta) && (
-          <Lista id={aberta} outras={outras} periodo={periodo} modo={modo} />
+        {/* Categoria aberta que saiu da lista (período/modo/Mostrar menos) continua visível. */}
+        {aberta && !lista.some(c => c.categoryId === aberta) && (
+          <CategoriaLancamentos categoriaId={aberta} periodo={periodo} modo={modo} />
         )}
       </div>
-      <BotaoTodas total={categorias.length} todas={todas} onAlternar={onAlternarTodas} grande={grande} />
+      <BotaoTodas total={total} todas={todas} onAlternar={onAlternarTodas} grande={grande} />
     </div>
   )
 }
