@@ -13,6 +13,8 @@ import { gastoEnvelopes, currentCompetencia } from '../lib/envelopes'
 import { resolverCards, prefDosCards } from './navegacao'
 import { gravarPreferencias } from '../lib/preferenciasUi'
 import DespesasMobile from './DespesasMobile'
+import { useSaldosProntos } from '../hooks/useSaldosProntos'
+import { SkeletonVal, SkeletonLinhas } from './Carregando'
 
 const OCULTAR_KEY = 'finup:mobile:ocultarValores'
 const MASCARA = 'R$ ••••'
@@ -38,6 +40,9 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   const { settings, updateSettings } = useApp()
   const [ocultar, setOcultar] = useState(lerOcultar)
   const [personalizar, setPersonalizar] = useState(false)
+  // Enquanto o recálculo automático não termina (mesmo sinal do Painel), nenhum número aparece:
+  // o resumo mostra shimmer e os cards, linhas de placeholder.
+  const carregando = useSaldosProntos() === 'carregando'
   const v = (n) => (ocultar ? MASCARA : fmt(n))
 
   const alternarOcultar = () => {
@@ -72,7 +77,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
         </button>
       </header>
 
-      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} />
+      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} carregando={carregando} />
 
       {cards.filter(c => c.on).map(({ modulo }) => {
         const Corpo = CORPOS[modulo.id]
@@ -84,7 +89,9 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
                 Ver tudo <ChevronRight size={14} />
               </button>
             </div>
-            {Corpo ? <Corpo v={v} oculto={ocultar} card /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
+            {carregando
+              ? <SkeletonLinhas />
+              : Corpo ? <Corpo v={v} oculto={ocultar} card /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
           </section>
         )
       })}
@@ -102,16 +109,18 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   )
 }
 
-function ResumoCard({ saldosPrincipais, v }) {
+function ResumoCard({ saldosPrincipais, v: valor, carregando }) {
   const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
   const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
   const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(getFinancialPeriod()), cls)
+  // Shimmer claro sobre o verde (o .skeleton padrão é escuro).
+  const v = (n, tam = 'w-24 h-4') => (carregando ? <SkeletonVal className={`${tam} my-0.5 opacity-40`} /> : valor(n))
 
   return (
     <section className="rounded-2xl p-5 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #0E6B4E 0%, #0B5740 100%)' }}>
       <p className="text-xs text-white/70">Saldo total</p>
-      <p className="text-3xl font-extrabold tracking-tight mt-0.5">{v(saldosPrincipais?.saldoAtual ?? 0)}</p>
+      <p className="text-3xl font-extrabold tracking-tight mt-0.5">{v(saldosPrincipais?.saldoAtual ?? 0, 'w-40 h-8')}</p>
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div>
           <p className="text-[11px] text-white/70">Entradas do mês</p>

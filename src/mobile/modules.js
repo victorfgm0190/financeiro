@@ -11,6 +11,8 @@
 // Tela: `page` = painel existente do App (mesma instância/props do desktop); `component` = tela
 // nova do mobile (recebe as props do shell). Ações: `component` recebe { onClose, onToast }.
 // card: true → pode virar card no Início (`cardTitle` é o título do card).
+// saldo: true → tela mostra saldos/valores: placeholder até o recálculo automático terminar
+//               (useSaldosProntos, mesmo sinal do Painel do desktop).
 import {
   Home, TrendingUp, Calendar, LayoutGrid, PiggyBank, Mail, Plus, CalendarPlus, ArrowLeftRight,
   Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard,
@@ -22,20 +24,20 @@ import { LancamentoAcao, AgendamentoAcao, TransferenciaAcao, ReservaAcao } from 
 
 export const mobileModules = [
   { id: 'inicio',        label: 'Início',          icon: Home,           place: 'tab', component: InicioMobile },
-  { id: 'fluxo',         label: 'Fluxo',           icon: TrendingUp,     place: 'tab', page: 'cashflow' },
-  { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias' },
+  { id: 'fluxo',         label: 'Fluxo',           icon: TrendingUp,     place: 'tab', page: 'cashflow', saldo: true },
+  { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true },
   { id: 'mais',          label: 'Mais',            icon: LayoutGrid,     place: 'tab', component: MaisMobile },
 
-  { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, page: 'reservas' },
-  { id: 'envelopes',     label: 'Envelopes',       icon: Mail,           place: 'more', group: 'Dinheiro guardado', card: true, page: 'envelopes' },
-  { id: 'contas',        label: 'Contas',          icon: Wallet,         place: 'more', group: 'Contas e cartões', page: 'accounts' },
-  { id: 'cartao',        label: 'Cartão',          icon: CreditCard,     place: 'more', group: 'Contas e cartões', page: 'credit' },
-  { id: 'lancamentos',   label: 'Lançamentos',     icon: List,           place: 'more', group: 'Contas e cartões', page: 'transactions' },
-  { id: 'despesas',      label: 'Maiores despesas', icon: ChartPie,      place: 'more', group: 'Planejamento e análise', card: true, component: DespesasMobile },
+  { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, page: 'reservas', saldo: true },
+  { id: 'envelopes',     label: 'Envelopes',       icon: Mail,           place: 'more', group: 'Dinheiro guardado', card: true, page: 'envelopes', saldo: true },
+  { id: 'contas',        label: 'Contas',          icon: Wallet,         place: 'more', group: 'Contas e cartões', page: 'accounts', saldo: true },
+  { id: 'cartao',        label: 'Cartão',          icon: CreditCard,     place: 'more', group: 'Contas e cartões', page: 'credit', saldo: true },
+  { id: 'lancamentos',   label: 'Lançamentos',     icon: List,           place: 'more', group: 'Contas e cartões', page: 'transactions', saldo: true },
+  { id: 'despesas',      label: 'Maiores despesas', icon: ChartPie,      place: 'more', group: 'Planejamento e análise', card: true, component: DespesasMobile, saldo: true },
   { id: 'painel',        label: 'Painel completo', icon: LayoutDashboard, place: 'more', group: 'Planejamento e análise', page: 'dashboard' },
-  { id: 'orcamento',     label: 'Orçamento',       icon: PieChart,       place: 'more', group: 'Planejamento e análise', page: 'budget' },
-  { id: 'patrimonio',    label: 'Patrimônio',      icon: Gem,            place: 'more', group: 'Planejamento e análise', page: 'patrimonio' },
-  { id: 'relatorios',    label: 'Relatórios',      icon: BarChart3,      place: 'more', group: 'Planejamento e análise', page: 'reports' },
+  { id: 'orcamento',     label: 'Orçamento',       icon: PieChart,       place: 'more', group: 'Planejamento e análise', page: 'budget', saldo: true },
+  { id: 'patrimonio',    label: 'Patrimônio',      icon: Gem,            place: 'more', group: 'Planejamento e análise', page: 'patrimonio', saldo: true },
+  { id: 'relatorios',    label: 'Relatórios',      icon: BarChart3,      place: 'more', group: 'Planejamento e análise', page: 'reports', saldo: true },
   { id: 'alertas',       label: 'Alertas',         icon: Bell,           place: 'more', group: 'Planejamento e análise', page: 'alerts' },
 
   { id: 'lancamento',    label: 'Lançamento',      icon: Plus,           place: 'action', primary: true, component: LancamentoAcao },

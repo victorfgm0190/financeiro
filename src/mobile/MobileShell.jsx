@@ -4,6 +4,8 @@ import { useFab } from '../context/FabContext'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from '../hooks/useScrollRestoration'
 import { abas } from './navegacao'
 import ActionSheet from './ActionSheet'
+import { useSaldosProntos } from '../hooks/useSaldosProntos'
+import { TelaCarregando, AvisoDesatualizado } from './Carregando'
 
 const VERDE = '#0E6B4E'
 const CINZA = '#5B6660'
@@ -13,6 +15,7 @@ const CINZA = '#5B6660'
 // ativo / irPara: módulo aberto (estado do App, para os painéis navegarem por página).
 export default function MobileShell({ modules, panels, ativo, irPara, saldosPrincipais, onToast, onOpenSearch }) {
   const { fabAction } = useFab()
+  const saldos = useSaldosProntos()
   const [acoesAbertas, setAcoesAbertas] = useState(false)
 
   // Scroll por módulo (o container que rola é este, não o <main> do desktop).
@@ -38,9 +41,13 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   }
 
   const Tela = modulo.component
-  const conteudo = Tela
-    ? <Tela modules={modules} irPara={ir} saldosPrincipais={saldosPrincipais} onToast={onToast} />
-    : panels[modulo.page]
+  // Tela com saldo (`saldo: true`) só aparece depois do recálculo — antes, placeholder (o Início
+  // trata os próprios números).
+  const conteudo = saldos === 'carregando' && modulo.saldo
+    ? <TelaCarregando />
+    : Tela
+      ? <Tela modules={modules} irPara={ir} saldosPrincipais={saldosPrincipais} onToast={onToast} />
+      : panels[modulo.page]
 
   const meio = Math.ceil(tabs.length / 2)
   const botaoAba = (m) => {
@@ -83,6 +90,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
         style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}
       >
         <ScrollScopeContext.Provider value={scrollCtx}>
+          {saldos === 'desatualizado' && modulo.id !== 'mais' && <AvisoDesatualizado />}
           {conteudo}
         </ScrollScopeContext.Provider>
       </main>
