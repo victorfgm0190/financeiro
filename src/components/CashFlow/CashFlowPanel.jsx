@@ -32,7 +32,7 @@ import ConsultaCard from './ConsultaCard'
 import EfetivarModal from './EfetivarModal'
 import MudarDataModal from './MudarDataModal'
 import FluxoMobileLista, { FluxoSheet } from './FluxoMobileLista'
-import { HORIZONTES_MOBILE } from '../../lib/fluxoMobile'
+import { HORIZONTES_MOBILE, marcadoresLinhaMobile } from '../../lib/fluxoMobile'
 
 const round2 = n => Math.round(n * 100) / 100
 const SEM_EXCLUSOES = new Set()
@@ -665,6 +665,9 @@ export default function CashFlowPanel({ setActivePage }) {
                 subtitulo={(r) => `${catName(r.categoryId)} · ${accName(contaDaLinha(r, accountIds))}`}
                 statusCelula={statusCelula}
                 docBadge={(r) => <TipoDocumentoBadge tipo={docDaLinha(r)} />}
+                docDaLinha={docDaLinha}
+                statusDaLinha={(r) => statusConfirmacaoLinha(r, ctxDoc)}
+                marcadores={(r) => marcadoresLinhaMobile(r, ctxDoc, tiposDocumento)}
                 tipoBadge={(r) => { const t = tipoEvento(r); return <span className={`text-[10px] px-1.5 py-0.5 rounded ${BADGE[t]}`}>{t}</span> }}
                 toggleLinha={toggleLinha}
                 toggleAtraso={toggleAtraso}

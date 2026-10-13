@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, CalendarClock, RotateCcw, CheckCircle2, Pencil, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CalendarClock, RotateCcw, CheckCircle2, Pencil, Trash2, CircleCheck, CircleDashed } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { agruparPorDia } from '../../lib/fluxoMobile'
+import { STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
+import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import BottomSheet from '../shared/BottomSheet'
 
 // Bottom sheet dos filtros/consultas do Fluxo no celular (componente compartilhado).
@@ -16,12 +18,25 @@ function valor(r, apagado) {
   return <span className="text-sm text-gray-500">—</span>
 }
 
-// Lista do Fluxo no celular: agrupada por dia, cada item com descrição, "categoria · conta" e valor.
-// O resto (status, doc, tipo, saldo, incluir no cálculo, ações) abre ao tocar no item.
+// Status da linha no celular: só o ícone (Confirmado = check azul, A confirmar = círculo tracejado âmbar).
+function iconeStatus(status) {
+  if (!status) return null
+  const ok = status === STATUS_CONFIRMACAO.CONFIRMADO
+  const rotulo = ok ? 'Confirmado' : 'A confirmar'
+  const Icone = ok ? CircleCheck : CircleDashed
+  return (
+    <span role="img" aria-label={rotulo} title={rotulo} className={`inline-flex align-middle ${ok ? 'text-blue-400' : 'text-amber-400'}`}>
+      <Icone size={13} aria-hidden="true" />
+    </span>
+  )
+}
+
+// Lista do Fluxo no celular: agrupada por dia, cada item com [doc] [status] descrição, "categoria · conta"
+// e valor. O resto (tipo, saldo, incluir no cálculo, ações, doc/status por extenso) abre ao tocar no item.
 // Recebe as linhas JÁ calculadas pelo painel — nenhum valor é recalculado aqui.
 export default function FluxoMobileLista({
   rowsView, atraso, excluidas, atrasoAtivas, atrasoTotal, base, saldoInicial, minimoKey, horizonte,
-  qtdContas, corSaldo, subtitulo, statusCelula, docBadge, tipoBadge,
+  qtdContas, corSaldo, subtitulo, statusCelula, docBadge, tipoBadge, docDaLinha, statusDaLinha, marcadores,
   toggleLinha, toggleAtraso, onMudarData, onDesfazerData, onEfetivar, onEditarProvisorio, onExcluirProvisorio,
 }) {
   const [aberta, setAberta] = useState(null)
@@ -31,6 +46,8 @@ export default function FluxoMobileLista({
 
   const detalhe = (r, ativa, emAtraso) => {
     const ehMinimo = r._key === minimoKey
+    const st = statusDaLinha(r)
+    const doc = docDaLinha(r)
     return (
       <div className="px-4 pb-3 pt-1 space-y-2 bg-gray-800/30">
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -41,8 +58,14 @@ export default function FluxoMobileLista({
           {!emAtraso && tipoBadge(r)}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="inline-flex items-center gap-1.5"><span className="text-gray-500">Status</span>{statusCelula(r)}</span>
-          <span className="inline-flex items-center gap-1.5"><span className="text-gray-500">Doc.</span>{docBadge(r)}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-gray-500">Status</span>{statusCelula(r)}
+            {st && <span className="text-gray-300">{st.status === STATUS_CONFIRMACAO.CONFIRMADO ? 'Confirmado' : 'A confirmar'}</span>}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-gray-500">Documento</span>{docBadge(r)}
+            {doc && <span className="text-gray-300">{doc.nome}</span>}
+          </span>
           {!emAtraso && (
             <span className="inline-flex items-center gap-1.5">
               <span className="text-gray-500">Saldo</span>
@@ -90,6 +113,7 @@ export default function FluxoMobileLista({
     const ehMinimo = r._key === minimoKey && ativa
     const fundo = ehMinimo ? (r.saldo < 0 ? 'bg-red-500/10' : 'bg-blue-500/10') : r._provisorio ? 'bg-purple-500/10' : ''
     const expandida = aberta === r._key
+    const mk = marcadores(r)
     return (
       <li key={r._key} className={`border-b border-gray-800/40 ${fundo}`}>
         <button
@@ -99,7 +123,11 @@ export default function FluxoMobileLista({
           className={`w-full min-h-[52px] px-4 py-2 flex items-center gap-3 text-left ${ativa ? '' : 'opacity-50'}`}
         >
           <div className="min-w-0 flex-1">
-            <p className={`text-sm truncate ${ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`}>{r.description}</p>
+            <p className={`text-sm truncate ${ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`}>
+              {mk.doc && <><TipoDocumentoBadge tipo={mk.doc} compacto />{' '}</>}
+              {mk.status && <>{iconeStatus(mk.status)}{' '}</>}
+              {r.description}
+            </p>
             <p className="text-[11px] text-gray-500 truncate">{subtitulo(r)}</p>
           </div>
           {valor(r, !ativa)}
