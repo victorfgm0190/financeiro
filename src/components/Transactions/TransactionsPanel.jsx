@@ -56,6 +56,7 @@ function getBillLabel(key) {
 // ─── Account picker (step 1 of new-tx modal) ───────────────────────────────
 
 function AccountPickerButton({ a, onSelect }) {
+  const { creditUsage } = useApp()
   return (
     <button
       onClick={() => onSelect(a)}
@@ -73,7 +74,7 @@ function AccountPickerButton({ a, onSelect }) {
         </div>
       </div>
       <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
-        {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
+        {a.type === 'credit' ? fmt(creditUsage(a.id)) : fmt(a.balance || 0)}
       </span>
     </button>
   )
@@ -429,6 +430,7 @@ function AccountView({ account, onBack, onNewTx, onEditTx }) {
 // ─── Accounts list view ─────────────────────────────────────────────────────
 
 function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount, onSelectFatura, onNewTx }) {
+  const { creditUsage } = useApp()
   return (
     <div className="space-y-6">
       {/* Contas bancárias */}
@@ -492,7 +494,7 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-gray-500">
-                        Dívida: <span className="text-purple-400 font-semibold">{fmt(card.creditDebt || 0)}</span>
+                        Dívida: <span className="text-purple-400 font-semibold">{fmt(creditUsage(card.id))}</span>
                       </span>
                       <button
                         onClick={() => onNewTx(card)}

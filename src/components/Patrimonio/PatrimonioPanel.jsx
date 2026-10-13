@@ -90,7 +90,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function PatrimonioPanel() {
-  const { profileAccounts: accounts, accountGroups } = useApp()
+  const { profileAccounts: accounts, accountGroups, creditUsage } = useApp()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [expandedHistory, setExpandedHistory] = useState(null)
   const [detalheBem, setDetalheBem] = useState(null)
@@ -136,10 +136,10 @@ export default function PatrimonioPanel() {
     const emprestimos = categorized.emprestimos.reduce((s, a) => s + (a.balance || 0), 0)
     const investimentos = categorized.investimentos.reduce((s, a) => s + (a.balance || 0), 0)
     const contas = categorized.contas.reduce((s, a) => s + (a.balance || 0), 0)
-    const cartao = categorized.cartoes.reduce((s, a) => s + (a.creditDebt || 0), 0)
+    const cartao = categorized.cartoes.reduce((s, a) => s + creditUsage(a.id), 0)
     const pl = bens + investimentos + contas - dividas - emprestimos - cartao
     return { bens, dividas, emprestimos, investimentos, contas, cartao, pl }
-  }, [categorized])
+  }, [categorized, creditUsage])
 
   // Monthly PL evolution (last 6 months)
   const chartData = useMemo(() => {

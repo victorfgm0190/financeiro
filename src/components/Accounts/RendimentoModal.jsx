@@ -16,9 +16,9 @@ import DateInput from '../shared/DateInput'
 // data (hoje) e por isso nunca se sobrepõem.
 //
 // Cartão não tem saldo de ciclo: entra pela dívida negativa. Bem/passivo caem no balance gravado.
-function saldoFuturoRealDe(account, getAccountSaldos) {
+function saldoFuturoRealDe(account, getAccountSaldos, creditUsage) {
   if (!account) return 0
-  if (account.type === 'credit') return -(account.creditDebt || 0)
+  if (account.type === 'credit') return -creditUsage(account.id)
   const s = getAccountSaldos(account)
   if (s?.applicable) return Math.round((s.saldoHoje + s.saldoFuturo) * 100) / 100
   return account.balance || 0
@@ -36,7 +36,7 @@ function saldoFuturoRealDe(account, getAccountSaldos) {
 // quando um investimento é acompanhado pelo total do grupo. A receita, porém, vai SEMPRE na
 // conta clicada (é ela que tem a categoria de rendimento configurada).
 export default function RendimentoModal({ account, onClose }) {
-  const { accounts, addTransaction, getAccountSaldos } = useApp()
+  const { accounts, addTransaction, getAccountSaldos, creditUsage } = useApp()
 
   const isGrupo = account.rendimentoModo === 'grupo' && !!account.accountGroupId
   // Contas do escopo: no modo grupo, todas as do mesmo grupo (inclusive a clicada); senão só ela.
@@ -45,8 +45,8 @@ export default function RendimentoModal({ account, onClose }) {
     [isGrupo, accounts, account]
   )
   const saldoFuturoReal = useMemo(
-    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoFuturoRealDe(a, getAccountSaldos), 0) * 100) / 100,
-    [contasDoEscopo, getAccountSaldos]
+    () => Math.round(contasDoEscopo.reduce((s, a) => s + saldoFuturoRealDe(a, getAccountSaldos, creditUsage), 0) * 100) / 100,
+    [contasDoEscopo, getAccountSaldos, creditUsage]
   )
 
   const [novoSaldo, setNovoSaldo] = useState('')

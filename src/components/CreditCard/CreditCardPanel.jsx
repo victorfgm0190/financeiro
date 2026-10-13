@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura, creditLimitUsage } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
@@ -177,7 +177,7 @@ export default function CreditCardPanel() {
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
     reconciliarGerencial, revisarMovimentosFatura, getOccurrencesProjecao: getNextOccurrences,
-    isFaturaFechada, fecharFatura, abrirFatura,
+    isFaturaFechada, fecharFatura, abrirFatura, creditUsage,
   } = useApp()
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
@@ -498,10 +498,7 @@ export default function CreditCardPanel() {
 
   // Dívida Total / Limite Disponível: em aberto do cartão inteiro (todas as faturas não pagas),
   // independente do seletor de fatura. Não usa creditDebt (acumulador que infla com o tempo).
-  const usoLimite = useMemo(
-    () => creditLimitUsage(selectedCard, transactions, schedules, { isFechada: isFaturaFechada }).total,
-    [selectedCard, transactions, schedules, isFaturaFechada]
-  )
+  const usoLimite = creditUsage(selectedCard?.id)
 
   // Fatura fechada: bloqueia novos lançamentos e importação; edição/exclusão dos existentes segue normal.
   const faturaFechada = isFaturaFechada(selectedCard?.id, billKey)

@@ -65,7 +65,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus, creditUsage } = useApp()
   const accounts = profileAccounts
   // Enquanto a API não respondeu, os valores exibidos vêm do cache local (sessão anterior) e
   // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.
@@ -110,7 +110,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   })
 
   const totalAssets = accounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
-  const totalDebt = accounts.filter(a => a.type === 'credit').reduce((s, a) => s + (a.creditDebt || 0), 0)
+  const totalDebt = accounts.filter(a => a.type === 'credit').reduce((s, a) => s + creditUsage(a.id), 0)
   // Saldo Principal do ciclo (mesmos valores de saldosPrincipais do App; fallback ao
   // somatório de balance caso a prop não venha). Mantém o painel consistente com sidebar/header.
   const saldoPrincipal = saldosPrincipais
@@ -727,7 +727,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                   {a.isMain && <span className="text-yellow-400 text-xs shrink-0 ml-1">★</span>}
                 </div>
                 <p className={`text-sm font-bold ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {a.type === 'credit' ? fmt(a.creditDebt || 0) : fmt(a.balance || 0)}
+                  {a.type === 'credit' ? fmt(creditUsage(a.id)) : fmt(a.balance || 0)}
                 </p>
                 <p className="text-xs text-gray-600 mt-0.5">{a.type === 'credit' ? 'Dívida' : 'Saldo'}</p>
                 {lastActivityNode}

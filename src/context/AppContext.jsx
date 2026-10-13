@@ -39,6 +39,7 @@ import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
+import { creditLimitUsage } from '../components/shared/utils'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import { ordenarGrupos, ordemGruposSalva, reordenarNoGrupo, ordemAoTrocarDeGrupo, compararNoGrupo } from '../lib/ordemCategorias'
 import {
@@ -4310,6 +4311,17 @@ export function AppProvider({ children }) {
     (cardId, faturaMonthYear) => faturaEstaFechada(data.settings?.faturasFechadas, cardId, faturaMonthYear),
     [data.settings]
   )
+  // Uso do limite de cada cartão = em aberto de todas as faturas não pagas (creditLimitUsage),
+  // calculado UMA vez aqui para todas as telas. Substitui a LEITURA de creditDebt, acumulador
+  // gravado que infla (não vê o pagamento por agendamento pagamento_fatura).
+  const creditUsageByCard = useMemo(() => {
+    const out = {}
+    for (const a of data.accounts) {
+      if (a.type === 'credit') out[a.id] = creditLimitUsage(a, data.transactions, data.schedules, { isFechada: isFaturaFechada })
+    }
+    return out
+  }, [data.accounts, data.transactions, data.schedules, isFaturaFechada])
+  const creditUsage = useCallback((cardId) => creditUsageByCard[cardId]?.total || 0, [creditUsageByCard])
   // Fecha a fatura e recalcula seus agendamentos (mesmo efeito do "Atualizar").
   const fecharFatura = useCallback((cardId, faturaMonthYear) => {
     if (!cardId || !faturaMonthYear) return
@@ -5539,7 +5551,7 @@ export function AppProvider({ children }) {
       addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
       criarParcelasGerencial,
       recalcularAgendamentosFatura,
-      isFaturaFechada, fecharFatura, abrirFatura,
+      isFaturaFechada, fecharFatura, abrirFatura, creditUsageByCard, creditUsage,
       reconciliarGerencial,
       revisarMovimentosFatura,
       ajustarParcelasGrupoGerencial,

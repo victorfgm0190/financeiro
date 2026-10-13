@@ -226,7 +226,7 @@ function GroupManager({ groups }) {
 }
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue, isNextDue = false, nextDueDays = null }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos, creditUsage } = useApp()
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const isCredit = account.type === 'credit'
   const highlightCard = isCredit && isNextDue
@@ -409,7 +409,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             {creditInfo && creditInfo.nextTotal > 0.005 && (
               <p className="text-xs opacity-75 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
             )}
-            <p className="text-xs opacity-70 mt-0.5">Dívida total: {fmt(account.creditDebt || 0)}</p>
+            <p className="text-xs opacity-70 mt-0.5">Dívida total: {fmt(creditUsage(account.id))}</p>
             <div className="flex gap-3 text-xs opacity-60 mt-1">
               <span>Fecha dia {account.closingDay}</span>
               <span>Vence dia {account.dueDay}</span>
@@ -430,7 +430,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             {creditInfo && creditInfo.nextTotal > 0.005 && (
               <p className="text-xs opacity-60 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
             )}
-            <p className="text-xs opacity-60 mt-0.5">Dívida total: {fmt(account.creditDebt || 0)}</p>
+            <p className="text-xs opacity-60 mt-0.5">Dívida total: {fmt(creditUsage(account.id))}</p>
             <div className="flex gap-3 text-xs opacity-60 mt-1">
               <span>Fecha dia {account.closingDay}</span>
               <span>Vence dia {account.dueDay}</span>
@@ -440,7 +440,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
                 <div className="h-1 bg-white/20 rounded-full">
                   <div
                     className="h-1 bg-white rounded-full"
-                    style={{ width: `${Math.min(100, ((account.creditDebt || 0) / account.creditLimit) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (creditUsage(account.id) / account.creditLimit) * 100)}%` }}
                   />
                 </div>
                 <p className="text-xs opacity-50 mt-0.5">Limite: {fmt(account.creditLimit)}</p>
@@ -527,8 +527,8 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
 // patrimonial pelo balance gravado. Usa saldoHoje em vez de account.balance — os dois têm a
 // MESMA fórmula (initialBalance + lançamentos até hoje), mas balance é valor gravado que só se
 // atualiza quando recalcularSaldo roda, e um total defasado não fecharia com o KPI do topo.
-function saldosDe(account, getAccountSaldos) {
-  if (account.type === 'credit') return { atual: -(account.creditDebt || 0), futuro: 0 }
+function saldosDe(account, getAccountSaldos, creditUsage) {
+  if (account.type === 'credit') return { atual: -creditUsage(account.id), futuro: 0 }
   const s = getAccountSaldos(account)
   if (s?.applicable) return { atual: s.saldoHoje, futuro: s.saldoFuturo }
   return { atual: account.balance || 0, futuro: 0 }
@@ -620,7 +620,7 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
 }
 
 export default function AccountsPanel() {
-  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -642,16 +642,16 @@ export default function AccountsPanel() {
     .reduce((sum, a) => sum + valorPatrimonial(a), 0)
   const totalCredit = accounts
     .filter(a => a.type === 'credit')
-    .reduce((sum, a) => sum + (a.creditDebt || 0), 0)
+    .reduce((sum, a) => sum + creditUsage(a.id), 0)
 
   // Saldos por conta, calculados UMA vez e reusados pelo KPI do topo, por cada grupo e pela
   // seção "Sem grupo". getAccountSaldos varre data.transactions inteira a cada chamada; sem o
   // mapa, o painel faria uma passada por conta no topo e outra por conta em cada grupo.
   const saldosByAccount = useMemo(() => {
     const m = new Map()
-    for (const a of accounts) m.set(a.id, saldosDe(a, getAccountSaldos))
+    for (const a of accounts) m.set(a.id, saldosDe(a, getAccountSaldos, creditUsage))
     return m
-  }, [accounts, getAccountSaldos])
+  }, [accounts, getAccountSaldos, creditUsage])
 
   // Cartão de crédito com vencimento mais próximo (menor nº de dias até o dueDay);
   // empate → maior fatura atual (creditMonthBill). Destacado entre os cards de cartão.
