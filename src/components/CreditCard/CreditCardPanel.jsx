@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
+import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura, creditLimitUsage } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
@@ -496,6 +496,13 @@ export default function CreditCardPanel() {
   const saldoAPagarComPrevistos = saldoRestante + totalPrevisto
   const billTotalComPrevistos = billTotal + totalPrevisto
 
+  // Dívida Total / Limite Disponível: em aberto do cartão inteiro (todas as faturas não pagas),
+  // independente do seletor de fatura. Não usa creditDebt (acumulador que infla com o tempo).
+  const usoLimite = useMemo(
+    () => creditLimitUsage(selectedCard, transactions, schedules, { isFechada: isFaturaFechada }).total,
+    [selectedCard, transactions, schedules, isFaturaFechada]
+  )
+
   // Fatura fechada: bloqueia novos lançamentos e importação; edição/exclusão dos existentes segue normal.
   const faturaFechada = isFaturaFechada(selectedCard?.id, billKey)
   const handleFecharFatura = () => {
@@ -724,7 +731,7 @@ export default function CreditCardPanel() {
             <span className="text-xs uppercase tracking-wide">Limite Disponível</span>
           </div>
           <p className="text-2xl font-bold text-receita">
-            {fmt((selectedCard?.creditLimit || 0) - (selectedCard?.creditDebt || 0))}
+            {fmt((selectedCard?.creditLimit || 0) - usoLimite)}
           </p>
           <p className="text-xs text-gray-500 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
         </div>
@@ -733,7 +740,7 @@ export default function CreditCardPanel() {
             <CreditCard size={13} />
             <span className="text-xs uppercase tracking-wide">Dívida Total</span>
           </div>
-          <p className="text-2xl font-bold text-gray-200">{fmt(selectedCard?.creditDebt || 0)}</p>
+          <p className="text-2xl font-bold text-gray-200">{fmt(usoLimite)}</p>
           <p className="text-xs text-gray-500 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
         </div>
         <div className="card">

@@ -278,3 +278,40 @@ export function creditBillStatus(card, transactions, schedules, billKey) {
   const totalPago = Math.round(pago * 100) / 100
   return { billKey, billTotal, totalPago, ...classifyFatura(billTotal, totalPago) }
 }
+
+// Uso do limite do cartão INTEIRO (independe da fatura selecionada): soma do saldoRestante de
+// cada fatura (despesas − estornos − pago, piso 0 por fatura). Fatura paga entra como 0, pagamento
+// parcial já vem abatido, parcelas futuras já lançadas entram. Agendamentos previstos não são
+// lançamentos, então não entram; pagamentos de fatura só abatem, nunca contam como gasto.
+// Regra extra: fatura FECHADA anterior à fatura paga mais recente conta como paga (resíduos antigos).
+// Substitui o acumulador contas.credit_debt, que não via o pagamento abstrato por agendamento.
+export function creditLimitUsage(card, transactions, schedules, { isFechada } = {}) {
+  if (!card) return { total: 0, faturas: [] }
+  // Pré-filtra o que toca o cartão: creditBillStatus percorre a lista inteira a cada fatura.
+  const txs = (transactions || []).filter(tx =>
+    tx.accountId === card.id || (tx.type === 'transfer' && tx.toAccountId === card.id))
+  const scheds = (schedules || []).filter(s => s.tipo === 'pagamento_fatura' && s.cardId === card.id)
+
+  const keys = new Set()
+  for (const tx of txs) {
+    if (tx.type === 'transfer') { if (tx.faturaMonthYear) keys.add(tx.faturaMonthYear); continue }
+    if (tx.type === 'credit_payment') {
+      if (tx.faturaMonthYear) keys.add(tx.faturaMonthYear)
+      if (tx.date) keys.add(tx.date.slice(0, 7))
+      continue
+    }
+    if (tx.type === 'expense' || tx.type === 'income') keys.add(billKeyOfTx(tx, card))
+  }
+  for (const s of scheds) if (s.faturaMesAno) keys.add(s.faturaMesAno)
+  keys.delete('')
+
+  const faturas = [...keys].sort().map(k => creditBillStatus(card, txs, scheds, k))
+  const ultimaPaga = faturas.filter(f => f.isFaturaPaga).map(f => f.billKey).pop() || ''
+  let total = 0
+  for (const f of faturas) {
+    f.fechadaAntiga = !!(isFechada && f.billKey < ultimaPaga && isFechada(card.id, f.billKey))
+    f.emAberto = f.fechadaAntiga ? 0 : f.saldoRestante
+    total += f.emAberto
+  }
+  return { total: Math.round(total * 100) / 100, faturas }
+}
