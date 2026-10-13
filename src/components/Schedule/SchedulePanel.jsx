@@ -767,6 +767,9 @@ function ScheduleRow({
   onEditSchedule, efetivarProvisao, getProximaProvisaoOccurrence,
   selectionMode, isSelected, onToggleSelect,
   srfBySchedule, rateiosBySchedule, onToggleConfirmado, tiposDocumento = [],
+  // Detalhe do card no celular (AgendaMobile): mantém o "+ N faturas seguintes" junto do chevron,
+  // como era; no desktop ele vai para a linha de badges e a célula tem largura mínima.
+  detalheMobile = false,
 }) {
   // Provisão de despesa exibe badge "Provisão". O botão "Efetivar" aparece enquanto houver uma
   // próxima ocorrência a efetivar: para "Uma vez", até provisao_efetivada virar true; para
@@ -923,7 +926,7 @@ function ScheduleRow({
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 w-full max-w-0 ${canExpand ? 'cursor-pointer' : ''}`}
+          className={`px-3 py-3 w-full max-w-0 ${detalheMobile ? '' : 'min-w-[220px]'} ${canExpand ? 'cursor-pointer' : ''}`}
           onClick={canExpand ? toggleExpand : undefined}
         >
           <div className="flex items-start gap-1.5">
@@ -938,7 +941,7 @@ function ScheduleRow({
                 {hasFuture && <span className="text-[10px] font-semibold">{futureItems.length}</span>}
                 {/* Série de fatura: o valor da linha é o da fatura mais próxima (meses diferentes não
                     somam); o texto deixa claro que há outras faturas dentro do "› N". */}
-                {isSerie && hasFuture && (
+                {detalheMobile && isSerie && hasFuture && (
                   <span className="text-[10px] font-normal text-gray-500 whitespace-nowrap ml-0.5">
                     {rotuloFaturasSeguintes(futureItems.length)}
                   </span>
@@ -949,6 +952,13 @@ function ScheduleRow({
           </div>
           {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            {/* Série de fatura (desktop): o "+ N faturas seguintes" fica aqui, fora da linha do título,
+                para não espremer a descrição. */}
+            {!detalheMobile && isSerie && hasFuture && (
+              <span className="shrink-0 text-[10px] bg-gray-700/40 text-gray-400 px-1.5 py-0.5 rounded whitespace-nowrap">
+                {rotuloFaturasSeguintes(futureItems.length)}
+              </span>
+            )}
             {isProvisao && !schedule.provisaoEfetivada && (
               <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
                 <Hourglass size={9} /> Provisão{schedule.frequency !== 'once' ? ' recorrente' : ''}
@@ -1773,7 +1783,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
             <table className="w-full text-sm">
               <tbody>
-                <ScheduleRow schedule={schedule} nextDate={nextDate} futureItems={futureItems || []} isSerie={isSerie} {...rowProps} isSelected={false} />
+                <ScheduleRow schedule={schedule} nextDate={nextDate} futureItems={futureItems || []} isSerie={isSerie} {...rowProps} isSelected={false} detalheMobile />
               </tbody>
             </table>
           )}
@@ -1915,7 +1925,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full min-w-[220px]">Descrição</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
