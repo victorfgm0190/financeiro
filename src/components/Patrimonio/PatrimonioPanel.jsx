@@ -132,7 +132,10 @@ export default function PatrimonioPanel() {
     // Bem entra pelo valor que a conta escolheu (nota fiscal × valor pago), não pelo saldo
     // cru: um bem antigo tem saldo 0 e só existe no PL pelo número informado à mão.
     const bens = calcularPatrimonioTotal(categorized.bens)
-    const dividas = categorized.dividas.reduce((s, a) => s + (a.balance || 0), 0)
+    // Passivo guarda o saldo devedor NEGATIVO (financiamento: −63 mil). Como o PL subtrai
+    // `dividas`, ela precisa ser o valor devido em positivo — somar o balance cru fazia o PL
+    // subtrair um negativo, ou seja, SOMAR a dívida.
+    const dividas = -categorized.dividas.reduce((s, a) => s + (a.balance || 0), 0)
     const emprestimos = categorized.emprestimos.reduce((s, a) => s + (a.balance || 0), 0)
     const investimentos = categorized.investimentos.reduce((s, a) => s + (a.balance || 0), 0)
     const contas = categorized.contas.reduce((s, a) => s + (a.balance || 0), 0)
@@ -148,6 +151,9 @@ export default function PatrimonioPanel() {
       const refDate = subMonths(today, 5 - i)
       const monthEnd = format(endOfMonth(refDate), 'yyyy-MM-dd')
       const label = format(refDate, 'MMM/yy', { locale: ptBR })
+      // Mês corrente = o mesmo PL dos cards e do Resumo (uma fonte só); o histórico de valores
+      // dos bens só vale para os meses anteriores.
+      if (i === 5) return { label, pl: totals.pl }
 
       // Asset values at this month-end: use last valueHistory entry <= monthEnd, fallback to current
       const bensVal = categorized.bens.reduce((s, a) => {
