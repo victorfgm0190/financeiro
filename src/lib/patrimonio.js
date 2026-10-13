@@ -39,3 +39,48 @@ export function valorPatrimonialEhFallback(conta) {
 export function calcularPatrimonioTotal(contas) {
   return (contas || []).reduce((total, c) => total + valorPatrimonial(c), 0)
 }
+
+// Separa as contas nas categorias do Patrimônio. Mesma ordem de decisão que o painel sempre usou:
+// vínculo Patrimônio → investimento; grupo patrimonial → pelo behavior; depois pelo type.
+export function categorizarPatrimonio(accounts, accountGroups) {
+  const cat = { bens: [], dividas: [], emprestimos: [], investimentos: [], contas: [], cartoes: [] }
+  for (const a of (accounts || [])) {
+    const group = (accountGroups || []).find(g => g.id === a.accountGroupId)
+    if (a.vinculoTipo === 'patrimonio') cat.investimentos.push(a)
+    else if (group?.type === 'patrimonial') {
+      if (group.behavior === 'divida') cat.dividas.push(a)
+      else if (group.behavior === 'emprestimo') cat.emprestimos.push(a)
+      else cat.bens.push(a)
+    } else if (a.type === 'asset') cat.bens.push(a)
+    else if (a.type === 'liability') cat.dividas.push(a)
+    else if (a.type === 'credit') cat.cartoes.push(a)
+    else {
+      const gName = (group?.name || '').toLowerCase()
+      if (gName.includes('invest') || gName.includes('aplic')) cat.investimentos.push(a)
+      else if (['checking', 'savings', 'cash'].includes(a.type)) cat.contas.push(a)
+    }
+  }
+  return cat
+}
+
+// Totais do Patrimônio E os itens que formam cada total — fonte ÚNICA dos cards, do Resumo, do
+// gráfico e do modal de composição (cada total é literalmente a soma dos seus itens).
+// `creditUsage(cardId)` é o em aberto do cartão (AppContext → creditLimitUsage).
+//
+// Dívida entra pelo valor devido em POSITIVO: o passivo guarda o saldo devedor negativo
+// (financiamento −63 mil) e o PL subtrai `dividas` — somar o balance cru somava a dívida.
+export function totaisPatrimonio(categorized, creditUsage) {
+  const item = (conta, valor) => ({ conta, valor })
+  const itens = {
+    bens: categorized.bens.map(a => item(a, valorPatrimonial(a))),
+    investimentos: categorized.investimentos.map(a => item(a, a.balance || 0)),
+    contas: categorized.contas.map(a => item(a, a.balance || 0)),
+    dividas: categorized.dividas.map(a => item(a, -(a.balance || 0))),
+    emprestimos: categorized.emprestimos.map(a => item(a, a.balance || 0)),
+    cartao: categorized.cartoes.map(a => item(a, creditUsage(a.id))),
+  }
+  const soma = (lista) => lista.reduce((s, i) => s + i.valor, 0)
+  const t = Object.fromEntries(Object.entries(itens).map(([k, lista]) => [k, soma(lista)]))
+  const pl = t.bens + t.investimentos + t.contas - t.dividas - t.emprestimos - t.cartao
+  return { ...t, pl, itens }
+}

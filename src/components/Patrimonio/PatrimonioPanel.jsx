@@ -9,7 +9,10 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import Modal from '../shared/Modal'
 import BemDetail from './BemDetail'
-import { valorPatrimonial, calcularPatrimonioTotal } from '../../lib/patrimonio'
+import { valorPatrimonial } from '../../lib/patrimonio'
+import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
+import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
+import ComposicaoPatrimonioModal from './ComposicaoPatrimonioModal'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue } = useApp()
@@ -89,60 +92,24 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-export default function PatrimonioPanel() {
-  const { profileAccounts: accounts, accountGroups, creditUsage } = useApp()
+export default function PatrimonioPanel({ setActivePage }) {
+  const { profileAccounts: accounts, accountGroups } = useApp()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [expandedHistory, setExpandedHistory] = useState(null)
-  const [detalheBem, setDetalheBem] = useState(null)
+  // "Abrir bem" vindo de outra tela (composição do PL em Contas) — lido uma vez, na montagem.
+  const [detalheBem, setDetalheBem] = useState(() => {
+    const v = lerHandoff(ABRIR_BEM_KEY)
+    return v ? accounts.find(a => a.id === v.accountId) || null : null
+  })
 
-  // Categorize accounts by group behavior / type
-  const categorized = useMemo(() => {
-    const bens = []
-    const dividas = []
-    const emprestimos = []
-    const investimentos = []
-    const contas = []
-    const cartoes = []
+  // Categorias, totais e itens de cada total — fonte única (cards, Resumo, gráfico e composição).
+  const { categorized, totals } = usePatrimonioTotals()
 
-    for (const a of accounts) {
-      const group = accountGroups.find(g => g.id === a.accountGroupId)
-      // Contas com vínculo "Patrimônio" são sempre tratadas como investimento.
-      if (a.vinculoTipo === 'patrimonio') {
-        investimentos.push(a)
-      } else if (group?.type === 'patrimonial') {
-        if (group.behavior === 'divida') dividas.push(a)
-        else if (group.behavior === 'emprestimo') emprestimos.push(a)
-        else bens.push(a)
-      } else if (a.type === 'asset') {
-        bens.push(a)
-      } else if (a.type === 'liability') {
-        dividas.push(a)
-      } else if (a.type === 'credit') {
-        cartoes.push(a)
-      } else {
-        const gName = (group?.name || '').toLowerCase()
-        if (gName.includes('invest') || gName.includes('aplic')) investimentos.push(a)
-        else if (['checking', 'savings', 'cash'].includes(a.type)) contas.push(a)
-      }
-    }
-    return { bens, dividas, emprestimos, investimentos, contas, cartoes }
-  }, [accounts, accountGroups])
-
-  const totals = useMemo(() => {
-    // Bem entra pelo valor que a conta escolheu (nota fiscal × valor pago), não pelo saldo
-    // cru: um bem antigo tem saldo 0 e só existe no PL pelo número informado à mão.
-    const bens = calcularPatrimonioTotal(categorized.bens)
-    // Passivo guarda o saldo devedor NEGATIVO (financiamento: −63 mil). Como o PL subtrai
-    // `dividas`, ela precisa ser o valor devido em positivo — somar o balance cru fazia o PL
-    // subtrair um negativo, ou seja, SOMAR a dívida.
-    const dividas = -categorized.dividas.reduce((s, a) => s + (a.balance || 0), 0)
-    const emprestimos = categorized.emprestimos.reduce((s, a) => s + (a.balance || 0), 0)
-    const investimentos = categorized.investimentos.reduce((s, a) => s + (a.balance || 0), 0)
-    const contas = categorized.contas.reduce((s, a) => s + (a.balance || 0), 0)
-    const cartao = categorized.cartoes.reduce((s, a) => s + creditUsage(a.id), 0)
-    const pl = bens + investimentos + contas - dividas - emprestimos - cartao
-    return { bens, dividas, emprestimos, investimentos, contas, cartao, pl }
-  }, [categorized, creditUsage])
+  // Composição do card/linha clicada. Os destinos navegam pelo handoff de abrirTela.
+  const [composicao, setComposicao] = useState(null)
+  const abrirConta = (conta) => { deixarHandoff(ABRIR_EXTRATO_KEY, { accountId: conta.id }); setActivePage?.('accounts') }
+  const abrirFatura = (cardId, faturaMesAno) => { deixarHandoff(ABRIR_FATURA_KEY, { cardId, faturaMesAno }); setActivePage?.('credit') }
+  const abrirBem = (conta) => { setComposicao(null); setDetalheBem(conta) }
 
   // Monthly PL evolution (last 6 months)
   const chartData = useMemo(() => {
@@ -180,30 +147,30 @@ export default function PatrimonioPanel() {
     <div className="space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="card">
+        <button type="button" onClick={() => setComposicao('bens')} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Bens</p>
           <p className="text-lg font-bold text-teal-400 mt-1">{fmt(totals.bens)}</p>
-        </div>
-        <div className="card">
+        </button>
+        <button type="button" onClick={() => setComposicao('investimentos')} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Investimentos</p>
           <p className="text-lg font-bold text-blue-400 mt-1">{fmt(totals.investimentos)}</p>
-        </div>
-        <div className="card">
+        </button>
+        <button type="button" onClick={() => setComposicao('contas')} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Contas</p>
           <p className="text-lg font-bold text-receita mt-1">{fmt(totals.contas)}</p>
-        </div>
-        <div className="card">
+        </button>
+        <button type="button" onClick={() => setComposicao('dividas')} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Dívidas</p>
           <p className="text-lg font-bold text-despesa mt-1">{fmt(totals.dividas)}</p>
-        </div>
-        <div className="card">
+        </button>
+        <button type="button" onClick={() => setComposicao('cartao')} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Cartão</p>
           <p className="text-lg font-bold text-orange-400 mt-1">{fmt(totals.cartao)}</p>
-        </div>
-        <div className="card border border-[#0F6E56]/30 bg-[#0F6E56]/5">
+        </button>
+        <button type="button" onClick={() => setComposicao('pl')} className="card text-left border border-[#0F6E56]/30 bg-[#0F6E56]/5 hover:bg-[#0F6E56]/10 transition-colors">
           <p className="text-xs text-[#0F6E56] uppercase tracking-wide font-semibold">Patrimônio Líquido</p>
           <p className={`text-lg font-bold mt-1 ${totals.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(totals.pl)}</p>
-        </div>
+        </button>
       </div>
 
       {/* Evolution Chart */}
@@ -422,30 +389,30 @@ export default function PatrimonioPanel() {
           <TrendingUp size={14} className="text-blue-400" /> Resumo Patrimonial
         </h2>
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between py-1.5 border-b border-gray-800">
+          <button type="button" onClick={() => setComposicao('bens')} className="w-full flex justify-between py-1.5 border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-400">(+) Bens e Ativos</span>
             <span className="text-teal-400 font-medium">{fmt(totals.bens)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-800">
+          </button>
+          <button type="button" onClick={() => setComposicao('investimentos')} className="w-full flex justify-between py-1.5 border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-400">(+) Investimentos</span>
             <span className="text-blue-400 font-medium">{fmt(totals.investimentos)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-800">
+          </button>
+          <button type="button" onClick={() => setComposicao('contas')} className="w-full flex justify-between py-1.5 border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-400">(+) Contas Financeiras</span>
             <span className="text-receita font-medium">{fmt(totals.contas)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-800">
+          </button>
+          <button type="button" onClick={() => setComposicao('passivos')} className="w-full flex justify-between py-1.5 border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-400">(−) Dívidas e Passivos</span>
             <span className="text-despesa font-medium">{fmt(totals.dividas + totals.emprestimos)}</span>
-          </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-800">
+          </button>
+          <button type="button" onClick={() => setComposicao('cartao')} className="w-full flex justify-between py-1.5 border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-400">(−) Dívida Cartão de Crédito</span>
             <span className="text-orange-400 font-medium">{fmt(totals.cartao)}</span>
-          </div>
-          <div className="flex justify-between py-2 font-semibold">
+          </button>
+          <button type="button" onClick={() => setComposicao('pl')} className="w-full flex justify-between py-2 font-semibold hover:bg-gray-800/40 transition-colors">
             <span className="text-gray-200">= Patrimônio Líquido</span>
             <span className={totals.pl >= 0 ? 'text-receita' : 'text-despesa'}>{fmt(totals.pl)}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -468,6 +435,16 @@ export default function PatrimonioPanel() {
           <UpdateValueModal account={updateValueAccount} onClose={() => setUpdateValueAccount(null)} />
         )}
       </Modal>
+
+      {composicao && (
+        <ComposicaoPatrimonioModal
+          tipo={composicao}
+          onClose={() => setComposicao(null)}
+          onAbrirConta={abrirConta}
+          onAbrirBem={abrirBem}
+          onAbrirFatura={abrirFatura}
+        />
+      )}
 
       {detalheBem && (
         <BemDetail conta={detalheBem} onClose={() => setDetalheBem(null)} />

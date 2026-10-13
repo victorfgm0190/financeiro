@@ -14,6 +14,9 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
 import ExtratoContaPanel from './ExtratoContaPanel'
 import RendimentoModal from './RendimentoModal'
+import ComposicaoPatrimonioModal from '../Patrimonio/ComposicaoPatrimonioModal'
+import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
+import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
 import TransactionForm from '../Transactions/TransactionForm'
 
 const ACCOUNT_ICONS = {
@@ -619,12 +622,19 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
   )
 }
 
-export default function AccountsPanel() {
+export default function AccountsPanel({ setActivePage }) {
   const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [extratoAccount, setExtratoAccount] = useState(null)
+  // "Abrir extrato" vindo de outra tela (composição do Patrimônio) — lido uma vez, na montagem.
+  const [extratoAccount, setExtratoAccount] = useState(() => {
+    const v = lerHandoff(ABRIR_EXTRATO_KEY)
+    return v ? accounts.find(a => a.id === v.accountId) || null : null
+  })
+  // PL = o mesmo do painel de Patrimônio (bens + investimentos + contas − dívidas − cartão).
+  const { totals: patrimonio } = usePatrimonioTotals()
+  const [showComposicaoPL, setShowComposicaoPL] = useState(false)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [showTxForm, setShowTxForm] = useState(false)
@@ -761,13 +771,23 @@ export default function AccountsPanel() {
           <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
           <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
         </div>
-        <div className="card">
+        <button type="button" onClick={() => setShowComposicaoPL(true)} className="card text-left hover:bg-gray-800/40 transition-colors">
           <p className="text-xs text-gray-400 uppercase tracking-wide">Patrimônio Líquido</p>
-          <p className={`text-2xl font-bold mt-1 ${totalAssets - totalCredit >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(totalAssets - totalCredit)}
+          <p className={`text-2xl font-bold mt-1 ${patrimonio.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>
+            {fmt(patrimonio.pl)}
           </p>
-        </div>
+        </button>
       </div>
+
+      {showComposicaoPL && (
+        <ComposicaoPatrimonioModal
+          tipo="pl"
+          onClose={() => setShowComposicaoPL(false)}
+          onAbrirConta={(conta) => { setShowComposicaoPL(false); handleExtrato(conta) }}
+          onAbrirBem={(conta) => { deixarHandoff(ABRIR_BEM_KEY, { accountId: conta.id }); setActivePage?.('patrimonio') }}
+          onAbrirFatura={(cardId, faturaMesAno) => { deixarHandoff(ABRIR_FATURA_KEY, { cardId, faturaMesAno }); setActivePage?.('credit') }}
+        />
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-300">Contas ({accounts.length})</h2>

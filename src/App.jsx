@@ -147,7 +147,7 @@ function AppContent() {
 
   const panels = {
     dashboard: <DashboardPanel setActivePage={navigate} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
-    accounts: <AccountsPanel />,
+    accounts: <AccountsPanel setActivePage={navigate} />,
     transactions: <TransactionsPanel />,
     credit: <CreditCardPanel />,
     schedule: <SchedulePanel />,
@@ -156,7 +156,7 @@ function AppContent() {
     reservas:   <ReservasPanel />,
     envelopes:  <EnvelopesPanel />,
     budget:     <BudgetPanel />,
-    patrimonio: <PatrimonioPanel />,
+    patrimonio: <PatrimonioPanel setActivePage={navigate} />,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
