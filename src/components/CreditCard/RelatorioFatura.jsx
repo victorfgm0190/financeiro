@@ -8,11 +8,11 @@ import { fmt, fmtDate } from '../shared/utils'
 // G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
-  if (!grupo) return <span className="text-gray-700 text-xs">—</span>
+  if (!grupo) return <span className="text-texto-3 text-xs">—</span>
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
-  else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
-  else cls += ' bg-orange-500/20 text-orange-600'
+  else if (grupo.number === 'D') cls += ' bg-surface-hover/60 text-texto-3'
+  else cls += ' bg-despesa/20 text-despesa'
   return <span className={cls}>{grupo.alias}</span>
 }
 
@@ -32,19 +32,19 @@ function CopyIdBadge({ id }) {
       type="button"
       onClick={copy}
       title="Clique para copiar o ID"
-      className="inline-block font-mono text-[10px] text-gray-500 hover:text-gray-300 bg-gray-800/60 hover:bg-gray-700/60 px-1 py-0.5 rounded transition-colors"
+      className="inline-block font-mono text-[10px] text-texto-3 hover:text-texto-2 bg-surface-2/60 hover:bg-surface-hover/60 px-1 py-0.5 rounded transition-colors"
     >
       {copied ? 'copiado ✓' : id}
     </button>
   )
 }
 
-// Badge amarelo de parcela ("3/12") — mesmo estilo do badge de parcela da importação.
+// Badge neutro de parcela ("3/12") — informativo (D6/D8 do tema).
 // Retorna null quando o lançamento não é parcelado (num nulo/0).
 function InstallmentBadge({ num, total }) {
   if (!num || num <= 0) return null
   return (
-    <span className="mt-0.5 inline-block bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded font-medium">
+    <span className="mt-0.5 inline-block bg-surface-2 text-texto-2 text-xs px-1.5 py-0.5 rounded font-medium">
       {num}/{total || '?'}
     </span>
   )
@@ -258,8 +258,8 @@ export default function RelatorioFatura({ initialCardId }) {
     <div className="space-y-4">
       {/* Filtros */}
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
-          <FileBarChart size={14} style={{ color: '#0F6E56' }} /> Relatório de Fatura
+        <h2 className="text-sm font-semibold text-texto-2 mb-4 flex items-center gap-2">
+          <FileBarChart size={14} className="text-primary-fg" /> Relatório de Fatura
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-36">
@@ -310,11 +310,11 @@ export default function RelatorioFatura({ initialCardId }) {
       {selectedBill && billTxs.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <div className="card">
-            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Fatura</p>
-            <p className="text-xl font-bold text-orange-600">{fmt(totals.total)}</p>
+            <p className="text-xs text-texto-2 uppercase tracking-wide mb-1">Total Fatura</p>
+            <p className="text-xl font-bold text-despesa">{fmt(totals.total)}</p>
           </div>
           {grp1 && totals[grp1.id] > 0 && (
-            <div className="card" style={{ borderColor: 'rgba(16,185,129,0.25)', borderWidth: 1 }}>
+            <div className="card border-reserva/25">
               <p className="text-xs text-reserva uppercase tracking-wide mb-1">{grp1.alias} · {grp1.name}</p>
               <p className="text-xl font-bold text-reserva">{fmt(totals[grp1.id])}</p>
               {totals.total > 0 && (
@@ -323,20 +323,20 @@ export default function RelatorioFatura({ initialCardId }) {
             </div>
           )}
           {customGroups.filter(g => totals[g.id] > 0).map(g => (
-            <div key={g.id} className="card" style={{ borderColor: 'rgba(234,88,12,0.25)', borderWidth: 1 }}>
-              <p className="text-xs text-orange-600 uppercase tracking-wide mb-1">{g.alias} · {g.name}</p>
-              <p className="text-xl font-bold text-orange-600">{fmt(totals[g.id])}</p>
+            <div key={g.id} className="card border-despesa/25">
+              <p className="text-xs text-despesa uppercase tracking-wide mb-1">{g.alias} · {g.name}</p>
+              <p className="text-xl font-bold text-despesa">{fmt(totals[g.id])}</p>
               {totals.total > 0 && (
-                <p className="text-xs text-orange-800 mt-0.5">{((totals[g.id] / totals.total) * 100).toFixed(0)}%</p>
+                <p className="text-xs text-despesa mt-0.5">{((totals[g.id] / totals.total) * 100).toFixed(0)}%</p>
               )}
             </div>
           ))}
           {grpD && totals[grpD.id] > 0 && (
             <div className="card">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">D · Despesas</p>
-              <p className="text-xl font-bold text-gray-300">{fmt(totals[grpD.id])}</p>
+              <p className="text-xs text-texto-2 uppercase tracking-wide mb-1">D · Despesas</p>
+              <p className="text-xl font-bold text-texto-2">{fmt(totals[grpD.id])}</p>
               {totals.total > 0 && (
-                <p className="text-xs text-gray-600 mt-0.5">{((totals[grpD.id] / totals.total) * 100).toFixed(0)}%</p>
+                <p className="text-xs text-texto-3 mt-0.5">{((totals[grpD.id] / totals.total) * 100).toFixed(0)}%</p>
               )}
             </div>
           )}
@@ -346,26 +346,26 @@ export default function RelatorioFatura({ initialCardId }) {
       {/* Tabela principal */}
       {!selectedCardId || !selectedBill ? (
         <div className="card text-center py-12">
-          <FileBarChart size={32} className="text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Selecione um cartão e uma fatura para visualizar o relatório</p>
+          <FileBarChart size={32} className="text-texto-3 mx-auto mb-3" />
+          <p className="text-texto-3 text-sm">Selecione um cartão e uma fatura para visualizar o relatório</p>
         </div>
       ) : billTxs.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
+          <p className="text-texto-3 text-sm">Nenhum lançamento nesta fatura</p>
         </div>
       ) : (
         <div className="card p-0 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden lg:table-cell">ID</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap hidden md:table-cell">Fatura</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Ger.</th>
-                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
+              <tr className="border-b border-borda">
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Descrição</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden lg:table-cell">ID</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap hidden md:table-cell">Fatura</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden lg:table-cell">Favorecido</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Ger.</th>
+                <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap">Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -375,50 +375,50 @@ export default function RelatorioFatura({ initialCardId }) {
                 const isGrp1 = gid === grp1?.id
                 const isGrpD = !gid || gid === grpD?.id
                 const rowCls = isGrp1
-                  ? 'border-b border-gray-800/50 bg-reserva/5 hover:bg-reserva/10 transition-colors'
+                  ? 'border-b border-borda/50 bg-reserva/5 hover:bg-reserva/10 transition-colors'
                   : !isGrpD
-                  ? 'border-b border-gray-800/50 bg-orange-500/5 hover:bg-orange-500/10 transition-colors'
-                  : 'border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors'
+                  ? 'border-b border-borda/50 bg-despesa/5 hover:bg-despesa/10 transition-colors'
+                  : 'border-b border-borda/50 hover:bg-surface-hover/30 transition-colors'
                 const faturaRef = faturaRefOf(tx)
                 return (
                   <tr key={tx.id} className={rowCls}>
-                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs align-top">{fmtDate(tx.date)}</td>
-                    <td className="px-3 py-2.5 text-gray-200 max-w-xs align-top">
+                    <td className="px-3 py-2.5 text-texto-2 whitespace-nowrap text-xs align-top">{fmtDate(tx.date)}</td>
+                    <td className="px-3 py-2.5 text-texto-1 max-w-xs align-top">
                       <p className="truncate">{tx.description}</p>
                       {/* Descrição original (Observações) — linha secundária menor em cinza. */}
-                      {tx.notes && <p className="text-xs text-gray-500 truncate">{tx.notes}</p>}
+                      {tx.notes && <p className="text-xs text-texto-3 truncate">{tx.notes}</p>}
                       {/* Badge de parcela (num/total) abaixo da descrição. */}
                       <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                       {/* Em telas pequenas, mostra Favorecido/Fatura aqui, já que as colunas somem. */}
-                      {tx.payee && <p className="text-xs text-gray-500 lg:hidden">{tx.payee}</p>}
-                      {faturaRef && <p className="text-[10px] text-gray-600 md:hidden">Fatura {faturaRef}</p>}
+                      {tx.payee && <p className="text-xs text-texto-3 lg:hidden">{tx.payee}</p>}
+                      {faturaRef && <p className="text-[10px] text-texto-3 md:hidden">Fatura {faturaRef}</p>}
                     </td>
                     <td className="px-3 py-2.5 align-top hidden lg:table-cell">
                       <CopyIdBadge id={tx.id} />
                     </td>
-                    <td className="px-3 py-2.5 align-top text-xs text-gray-300 whitespace-nowrap hidden md:table-cell">
-                      {faturaRef || <span className="text-gray-700">—</span>}
+                    <td className="px-3 py-2.5 align-top text-xs text-texto-2 whitespace-nowrap hidden md:table-cell">
+                      {faturaRef || <span className="text-texto-3">—</span>}
                     </td>
                     <td className="px-3 py-2.5 align-top hidden md:table-cell">
                       {cat && (
-                        <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">{cat.icon} {cat.name}</span>
+                        <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2">{cat.icon} {cat.name}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 align-top hidden lg:table-cell text-xs text-gray-300">
-                      {tx.payee || <span className="text-gray-700">—</span>}
+                    <td className="px-3 py-2.5 align-top hidden lg:table-cell text-xs text-texto-2">
+                      {tx.payee || <span className="text-texto-3">—</span>}
                     </td>
                     <td className="px-3 py-2.5 align-top">
                       <GerBadge grupoId={gid || grpD?.id} gerencialGroups={gerencialGroups} />
                     </td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-orange-600 whitespace-nowrap align-top">{fmt(tx.amount)}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-despesa whitespace-nowrap align-top">{fmt(tx.amount)}</td>
                   </tr>
                 )
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-gray-700 bg-gray-800/60">
-                <td className="px-3 py-3 text-xs text-gray-300 font-bold" colSpan={7}>Total · {billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</td>
-                <td className="px-3 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{fmt(totals.total)}</td>
+              <tr className="border-t-2 border-borda-forte bg-surface-2/60">
+                <td className="px-3 py-3 text-xs text-texto-2 font-bold" colSpan={7}>Total · {billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</td>
+                <td className="px-3 py-3 text-right font-bold text-despesa whitespace-nowrap">{fmt(totals.total)}</td>
               </tr>
             </tfoot>
           </table>

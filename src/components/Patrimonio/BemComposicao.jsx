@@ -10,9 +10,9 @@ import { fmtData } from './bemUtils'
 
 function Linha({ label, children, destaque, sub }) {
   return (
-    <div className={`flex items-center justify-between gap-3 py-1.5 ${sub ? '' : 'border-b border-gray-800 last:border-0'}`}>
-      <span className={sub ? 'text-xs text-gray-600 pl-4' : 'text-xs text-gray-500'}>{label}</span>
-      <span className={`text-sm text-right ${destaque || (sub ? 'text-gray-400' : 'text-gray-200')}`}>
+    <div className={`flex items-center justify-between gap-3 py-1.5 ${sub ? '' : 'border-b border-borda last:border-0'}`}>
+      <span className={sub ? 'text-xs text-texto-3 pl-4' : 'text-xs text-texto-3'}>{label}</span>
+      <span className={`text-sm text-right ${destaque || (sub ? 'text-texto-2' : 'text-texto-1')}`}>
         {children}
       </span>
     </div>
@@ -32,20 +32,20 @@ export default function BemComposicao({ composicao }) {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <FileText size={14} className="text-gray-400" /> Valor do Contrato
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <FileText size={14} className="text-texto-2" /> Valor do Contrato
         </h3>
-        <Linha label="Valor original (nota/contrato)" destaque="text-gray-200 font-semibold">
+        <Linha label="Valor original (nota/contrato)" destaque="text-texto-1 font-semibold">
           {fmt(contrato)}
         </Linha>
-        <p className="text-xs text-gray-600 mt-2">
+        <p className="text-xs text-texto-3 mt-2">
           Referência fixa — não muda com os pagamentos.
         </p>
       </div>
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <Wallet size={14} className="text-teal-400" /> Pago até agora
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <Wallet size={14} className="text-receita" /> Pago até agora
         </h3>
 
         <Linha label="Dinheiro">{fmt(pago.dinheiro)}</Linha>
@@ -74,24 +74,24 @@ export default function BemComposicao({ composicao }) {
         {/* Fora do total de propósito — a linha existe para responder "quanto já custou o
             crédito", não para compor o investimento. Por isso vem depois do principal e em
             cinza, e não some quando é zero: zero aqui também é informação. */}
-        <Linha label="Parcelas (juros)" destaque="text-gray-500">
+        <Linha label="Parcelas (juros)" destaque="text-texto-3">
           {fmt(financiamento.juros_pago)}
         </Linha>
 
-        <div className="mt-2 pt-2 border-t border-gray-700">
-          <Linha label="TOTAL INVESTIDO" destaque="text-teal-400 font-semibold">
+        <div className="mt-2 pt-2 border-t border-borda-forte">
+          <Linha label="TOTAL INVESTIDO" destaque="text-receita font-semibold">
             {fmt(pago.total)}
           </Linha>
         </div>
-        <p className="text-xs text-gray-600 mt-2">
+        <p className="text-xs text-texto-3 mt-2">
           Dinheiro, bens e principal das parcelas. Os juros ficam fora: são custo do crédito, não
           investimento no bem, e já saem como despesa na categoria de taxa.
         </p>
       </div>
 
-      <div className="card border border-red-500/10">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <Landmark size={14} className="text-red-400" /> Financiamento
+      <div className="card border border-despesa/20">
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <Landmark size={14} className="text-despesa" /> Financiamento
         </h3>
         <Linha label="Valor financiado (principal)">{fmt(financiamento.valor_principal)}</Linha>
         <Linha label="Principal já amortizado">{fmt(financiamento.principal_pago)}</Linha>
@@ -104,14 +104,14 @@ export default function BemComposicao({ composicao }) {
       </div>
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <Scale size={14} className="text-blue-400" /> Saldo Patrimonial
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <Scale size={14} className="text-texto-2" /> Saldo Patrimonial
         </h3>
         <Linha label="Investido no bem">{fmt(patrimonio.investido)}</Linha>
         <Linha label="Menos dívida" destaque="text-despesa">
           {fmt(-patrimonio.divida)}
         </Linha>
-        <div className="mt-2 pt-2 border-t border-gray-700">
+        <div className="mt-2 pt-2 border-t border-borda-forte">
           <Linha
             label="= Patrimônio (equity)"
             destaque={patrimonio.equity >= 0 ? 'text-receita font-semibold' : 'text-despesa font-semibold'}
@@ -120,7 +120,7 @@ export default function BemComposicao({ composicao }) {
           </Linha>
         </div>
         {patrimonio.perda_ganho_troca !== 0 && (
-          <p className="text-xs text-gray-600 mt-2">
+          <p className="text-xs text-texto-3 mt-2">
             A {patrimonio.perda_ganho_troca >= 0 ? 'ganho' : 'perda'} de capital da troca
             ({fmt(patrimonio.perda_ganho_troca)}) não é descontada aqui: o bem antigo entrou pelo
             valor negociado, e a diferença já virou lançamento na categoria de{' '}
@@ -128,8 +128,8 @@ export default function BemComposicao({ composicao }) {
           </p>
         )}
         {descoberto > 0.01 && (
-          <p className="text-xs text-amber-400/80 mt-2">
-            {fmt(descoberto)} do contrato ainda não tem origem registrada — falta entrada ou
+          <p className="text-xs text-aviso mt-2">
+            ⚠{' '}{fmt(descoberto)} do contrato ainda não tem origem registrada — falta entrada ou
             financiamento.
           </p>
         )}

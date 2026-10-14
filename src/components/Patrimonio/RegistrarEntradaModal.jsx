@@ -9,8 +9,8 @@ import { fmtData, hojeIso, round2, montarAjustesEntrada } from './bemUtils'
 function Calculo({ label, children, cor }) {
   return (
     <div className="flex justify-between gap-3 text-xs">
-      <span className="text-gray-500">{label}</span>
-      <span className={cor || 'text-gray-300'}>{children}</span>
+      <span className="text-texto-3">{label}</span>
+      <span className={cor || 'text-texto-2'}>{children}</span>
     </div>
   )
 }
@@ -150,9 +150,9 @@ export default function RegistrarEntradaModal({
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <div className="p-3 bg-gray-800/60 rounded-lg text-xs space-y-1">
-        <div className="flex justify-between"><span className="text-gray-500">Bem</span><span className="text-gray-200">{bem.nome}</span></div>
-        <div className="flex justify-between"><span className="text-gray-500">Saldo atual</span><span className="text-gray-200">{fmt(bem.saldo)}</span></div>
+      <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1">
+        <div className="flex justify-between"><span className="text-texto-3">Bem</span><span className="text-texto-1">{bem.nome}</span></div>
+        <div className="flex justify-between"><span className="text-texto-3">Saldo atual</span><span className="text-texto-1">{fmt(bem.saldo)}</span></div>
       </div>
 
       <div>
@@ -163,19 +163,19 @@ export default function RegistrarEntradaModal({
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="label mb-0">Transferências Disponíveis</label>
-          <span className="text-xs text-gray-600">{Object.keys(escolhidas).length} selecionada(s)</span>
+          <span className="text-xs text-texto-3">{Object.keys(escolhidas).length} selecionada(s)</span>
         </div>
         <div className="relative mb-2">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
           <input
             className="input pl-8" placeholder="Buscar por descrição ou conta..."
             value={busca} onChange={e => setBusca(e.target.value)}
           />
         </div>
 
-        <div className="max-h-56 overflow-y-auto space-y-1 border border-gray-800 rounded-lg p-2">
+        <div className="max-h-56 overflow-y-auto space-y-1 border border-borda rounded-lg p-2">
           {transferencias.length === 0 && (
-            <p className="text-xs text-gray-600 py-3 px-3 text-center">
+            <p className="text-xs text-texto-3 py-3 px-3 text-center">
               {semCandidatas
                 ? 'Nenhuma transferência disponível. Só aparecem aqui transferências feitas '
                   + `para a conta "${bem.nome}".`
@@ -185,22 +185,22 @@ export default function RegistrarEntradaModal({
           {transferencias.map(t => {
             const marcada = t.id in escolhidas
             return (
-              <div key={t.id} className={`rounded-lg px-2.5 py-2 ${marcada ? 'bg-blue-500/10 border border-blue-500/20' : 'hover:bg-gray-800/50'}`}>
+              <div key={t.id} className={`rounded-lg px-2.5 py-2 ${marcada ? 'bg-primary/10 border border-primary/20' : 'hover:bg-surface-hover/50'}`}>
                 <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input type="checkbox" className="mt-1 accent-blue-500" checked={marcada} onChange={() => toggle(t)} />
+                  <input type="checkbox" className="mt-1 accent-primary" checked={marcada} onChange={() => toggle(t)} />
                   <span className="flex-1 min-w-0">
                     <span className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-sm text-gray-200 truncate">{t.description || 'Transferência'}</span>
+                        <span className="text-sm text-texto-1 truncate">{t.description || 'Transferência'}</span>
                         {t.bemId && (
-                          <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+                          <span className="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-surface-2 text-texto-2 border border-borda-forte">
                             Já vinculada
                           </span>
                         )}
                       </span>
-                      <span className="text-sm text-gray-200 shrink-0">{fmt(Math.abs(Number(t.amount) || 0))}</span>
+                      <span className="text-sm text-texto-1 shrink-0">{fmt(Math.abs(Number(t.amount) || 0))}</span>
                     </span>
-                    <span className="block text-xs text-gray-600 truncate">
+                    <span className="block text-xs text-texto-3 truncate">
                       {fmtData(t.date)} · {nomeConta(t.accountId)} → {nomeConta(t.toAccountId)}
                       {t.payee && ` · ${t.payee}`}
                     </span>
@@ -230,19 +230,19 @@ export default function RegistrarEntradaModal({
           suggestions={favorecidos}
           placeholder="Ex: Shopping Car Londrina"
         />
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-xs text-texto-3 mt-1">
           Preenche as transferências selecionadas que estão SEM favorecido. As que já têm um
           não são alteradas — o mesmo vale para a categoria.
         </p>
       </div>
 
-      <div className="border border-gray-800 rounded-lg p-3 space-y-3">
+      <div className="border border-borda rounded-lg p-3 space-y-3">
         <label className="flex items-center gap-2.5 cursor-pointer">
           <input
-            type="checkbox" className="accent-blue-500" checked={usarBemAntigo}
+            type="checkbox" className="accent-primary" checked={usarBemAntigo}
             onChange={e => setUsarBemAntigo(e.target.checked)}
           />
-          <span className="text-sm text-gray-300">Usar um bem antigo como entrada (trade-in)</span>
+          <span className="text-sm text-texto-2">Usar um bem antigo como entrada (trade-in)</span>
         </label>
 
         {usarBemAntigo && (
@@ -254,12 +254,12 @@ export default function RegistrarEntradaModal({
                 {bensDisponiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               {bensDisponiveis.length === 0 && (
-                <p className="text-xs text-gray-600 mt-1">Nenhum outro bem cadastrado.</p>
+                <p className="text-xs text-texto-3 mt-1">Nenhum outro bem cadastrado.</p>
               )}
             </div>
 
             {carregandoBemAntigo && (
-              <p className="text-xs text-gray-500 flex items-center gap-1.5">
+              <p className="text-xs text-texto-3 flex items-center gap-1.5">
                 <Loader2 size={12} className="animate-spin" /> Buscando nota fiscal...
               </p>
             )}
@@ -267,8 +267,8 @@ export default function RegistrarEntradaModal({
             {bemAntigo && (
               <>
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Nota fiscal</span>
-                  <span className="text-gray-200">{fmt(bemAntigo.valor_nota_fiscal)}</span>
+                  <span className="text-texto-3">Nota fiscal</span>
+                  <span className="text-texto-1">{fmt(bemAntigo.valor_nota_fiscal)}</span>
                 </div>
                 {bemAntigo.foi_vendido && (
                   <p className="text-xs text-despesa">
@@ -284,7 +284,7 @@ export default function RegistrarEntradaModal({
                 </div>
                 {perdaGanho !== null && valorTradeIn > 0 && (
                   <div className={`rounded-lg border p-2.5 space-y-1 ${
-                    ehGanho ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-red-500/20 bg-red-500/5'
+                    ehGanho ? 'border-receita/20 bg-receita/5' : 'border-despesa/20 bg-despesa/5'
                   }`}>
                     <p className={`text-[11px] font-semibold ${ehGanho ? 'text-receita' : 'text-despesa'}`}>
                       Cálculo automático
@@ -293,7 +293,7 @@ export default function RegistrarEntradaModal({
                       {fmt(bemAntigo.valor_nota_fiscal)}
                     </Calculo>
                     <Calculo label="Você recebe na troca">{fmt(valorTradeIn)}</Calculo>
-                    <div className="pt-1.5 mt-1.5 border-t border-gray-800">
+                    <div className="pt-1.5 mt-1.5 border-t border-borda">
                       <Calculo
                         label={ehGanho ? 'Ganho de capital' : 'Perda de capital'}
                         cor={ehGanho ? 'text-receita font-semibold' : 'text-despesa font-semibold'}
@@ -301,11 +301,11 @@ export default function RegistrarEntradaModal({
                         {fmt(perdaGanho)}
                       </Calculo>
                     </div>
-                    <p className="text-[11px] text-gray-500 pt-1">
+                    <p className="text-[11px] text-texto-3 pt-1">
                       Vai ser lançado como {ehGanho ? 'RECEITA' : 'DESPESA'}
                       {categoriaResultado ? ` em “${categoriaResultado}”` : ''}.
                     </p>
-                    <ul className="text-[11px] text-gray-500 pt-1.5 mt-1.5 border-t border-gray-800 space-y-0.5">
+                    <ul className="text-[11px] text-texto-3 pt-1.5 mt-1.5 border-t border-borda space-y-0.5">
                       <li>• {bem.nome} sobe {fmt(valorTradeIn)}</li>
                       <li>• {bemAntigo.nome} vai a {fmt(0)} e passa a constar como vendido</li>
                       <li>• {ehGanho ? 'Ganho' : 'Perda'} de {fmt(Math.abs(perdaGanho))} lançada</li>
@@ -318,9 +318,9 @@ export default function RegistrarEntradaModal({
         )}
       </div>
 
-      <div className="p-3 bg-gray-800/60 rounded-lg flex items-center justify-between">
-        <span className="text-sm text-gray-400">Total da Entrada</span>
-        <span className="text-lg font-bold text-teal-400">{fmt(totalEntrada)}</span>
+      <div className="p-3 bg-surface-2/60 rounded-lg flex items-center justify-between">
+        <span className="text-sm text-texto-2">Total da Entrada</span>
+        <span className="text-lg font-bold text-receita">{fmt(totalEntrada)}</span>
       </div>
 
       <div className="flex gap-3 pt-1">

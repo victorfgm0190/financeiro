@@ -15,8 +15,10 @@ export default defineConfig({
         short_name: 'Finup',
         description: 'Gestão financeira pessoal',
         lang: 'pt-BR',
-        theme_color: '#0F6E56',
-        background_color: '#0b0f0e',
+        // = --color-page do tema escuro (padrão). O manifest é estático; a barra acompanha o
+        // tema efetivo via <meta name="theme-color"> (index.html + useTheme).
+        theme_color: '#030712',
+        background_color: '#030712',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

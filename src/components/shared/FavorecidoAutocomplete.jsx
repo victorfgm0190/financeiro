@@ -72,7 +72,7 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', left: rect.left, top: rect.bottom + 4, width: rect.width, zIndex: 9999 }}
-          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-y-auto overscroll-contain max-h-48"
+          className="bg-surface border border-borda-forte rounded-lg shadow-2xl overflow-y-auto overscroll-contain max-h-48"
         >
           {filtered.map((item, i) => (
             <button
@@ -80,7 +80,7 @@ export default function FavorecidoAutocomplete({ value, onChange, suggestions, p
               type="button"
               onClick={() => handleSelect(item)}
               className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${
-                i === active ? 'bg-gray-700 text-gray-100' : 'text-gray-300 hover:bg-gray-800'
+                i === active ? 'bg-surface-hover text-texto-1' : 'text-texto-2 hover:bg-surface-hover'
               }`}
             >
               {item}

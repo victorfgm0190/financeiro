@@ -253,21 +253,21 @@ export default function DindinImportPanel() {
   return (
     <div className="card space-y-4">
       <div className="flex items-center gap-2">
-        <Upload size={15} className="text-indigo-400" />
-        <h2 className="text-sm font-semibold text-gray-300">Importação Dindin</h2>
+        <Upload size={15} className="text-primary-fg" />
+        <h2 className="text-sm font-semibold text-texto-2">Importação Dindin</h2>
         <button
           onClick={reload}
-          className="ml-auto text-gray-500 hover:text-gray-300 disabled:opacity-50"
+          className="ml-auto text-texto-3 hover:text-texto-2 disabled:opacity-50"
           title="Recarregar"
           disabled={loading}
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-      <p className="text-xs text-gray-500 -mt-3">Importação histórica dos lançamentos exportados do Dindin.</p>
+      <p className="text-xs text-texto-3 -mt-3">Importação histórica dos lançamentos exportados do Dindin.</p>
 
       {/* Sub-tabs Conta Corrente | Cartões */}
-      <div className="flex items-center gap-1 border-b border-gray-800">
+      <div className="flex items-center gap-1 border-b border-borda">
         {tabs.map(t => {
           const Icon = t.icon
           return (
@@ -275,7 +275,7 @@ export default function DindinImportPanel() {
               key={t.id}
               onClick={() => changeTab(t.id)}
               className={`px-3 pb-2 text-xs font-medium border-b-2 -mb-px flex items-center gap-1.5 transition-colors ${
-                tab === t.id ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-300'
+                tab === t.id ? 'border-primary text-primary-fg' : 'border-transparent text-texto-3 hover:text-texto-2'
               }`}
             >
               <Icon size={12} /> {t.label}
@@ -285,9 +285,9 @@ export default function DindinImportPanel() {
       </div>
 
       {/* Upload */}
-      <label className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-gray-800 opacity-50 pointer-events-none' : 'border-gray-700 hover:border-indigo-500/60'}`}>
-        <Upload size={20} className="text-gray-600 mx-auto mb-1" />
-        <p className="text-xs text-gray-400">
+      <label className={`block border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${busy === 'upload' ? 'border-borda opacity-50 pointer-events-none' : 'border-borda-forte hover:border-primary/60'}`}>
+        <Upload size={20} className="text-texto-3 mx-auto mb-1" />
+        <p className="text-xs text-texto-2">
           {busy === 'upload' ? 'Processando…' : `Selecionar arquivo Dindin — ${tab === 'cc' ? 'Conta Corrente' : 'Cartões'} (XLS/XLSX)`}
         </p>
         <input
@@ -299,28 +299,28 @@ export default function DindinImportPanel() {
         />
       </label>
 
-      {error && <p className="text-xs text-orange-400 bg-orange-500/5 border border-orange-500/20 rounded px-3 py-2">{error}</p>}
-      {info && <p className="text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 rounded px-3 py-2">{info}</p>}
+      {error && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/20 rounded px-3 py-2">{error}</p>}
+      {info && <p className="text-xs text-primary-fg bg-primary/5 border border-primary/20 rounded px-3 py-2">{info}</p>}
 
       {/* Counts */}
-      <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-        <span><b className="text-gray-300">{counts.pendente}</b> pendentes</span>
-        {counts.ambiguos > 0 && <span className="text-amber-400">{counts.ambiguos} sem conta</span>}
+      <div className="flex items-center gap-3 text-xs text-texto-3 flex-wrap">
+        <span><b className="text-texto-2">{counts.pendente}</b> pendentes</span>
+        {counts.ambiguos > 0 && <span className="text-aviso">⚠ {counts.ambiguos} sem conta</span>}
         <span>{counts.confirmado} confirmados</span>
         <span>{counts.ignorado} ignorados</span>
       </div>
 
       {/* Review table */}
       {rows.length === 0 ? (
-        <p className="text-xs text-gray-600 text-center py-6">
+        <p className="text-xs text-texto-3 text-center py-6">
           {loading ? 'Carregando…' : 'Sem linhas pendentes nesta aba. Faça upload de um arquivo acima.'}
         </p>
       ) : (
         <>
-          <div className="overflow-x-auto border border-gray-800 rounded-lg">
+          <div className="overflow-x-auto border border-borda rounded-lg">
             <table className="w-full text-xs" style={{ minWidth: 640 }}>
               <thead>
-                <tr className="border-b border-gray-800 bg-gray-800/30 text-gray-400">
+                <tr className="border-b border-borda bg-surface-2/30 text-texto-2">
                   <th className="px-2 py-2 w-8 text-center">
                     <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} />
                   </th>
@@ -333,24 +333,24 @@ export default function DindinImportPanel() {
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.id} className={`border-b border-gray-800/50 ${r.ambiguo ? 'bg-amber-500/5' : 'hover:bg-gray-800/20'}`}>
+                  <tr key={r.id} className={`border-b border-borda/50 ${r.ambiguo ? 'bg-aviso/5' : 'hover:bg-surface-hover/20'}`}>
                     <td className="px-2 py-1.5 text-center">
                       <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} />
                     </td>
-                    <td className="px-2 py-1.5 text-gray-400 whitespace-nowrap">{fmtDate(r.data)}</td>
-                    <td className="px-2 py-1.5 text-gray-200">
+                    <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(r.data)}</td>
+                    <td className="px-2 py-1.5 text-texto-1">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[10px] px-1 rounded bg-gray-700 text-gray-400">{TIPO_LABEL[r.tipo] || r.tipo}</span>
+                        <span className="text-[10px] px-1 rounded bg-surface-hover text-texto-2">{TIPO_LABEL[r.tipo] || r.tipo}</span>
                         <span className="truncate max-w-[280px]" title={r.descricao}>{r.descricao}</span>
                       </span>
                     </td>
-                    <td className="px-2 py-1.5 text-right font-medium text-gray-200">{fmt(r.valor)}</td>
+                    <td className="px-2 py-1.5 text-right font-medium text-texto-1">{fmt(r.valor)}</td>
                     <td className="px-2 py-1.5">
                       {r.contaLabel
-                        ? <span className="text-gray-300">{r.contaLabel}</span>
-                        : <span className="inline-flex items-center gap-1 text-amber-400"><AlertTriangle size={11} /> não mapeada</span>}
+                        ? <span className="text-texto-2">{r.contaLabel}</span>
+                        : <span className="inline-flex items-center gap-1 text-aviso"><AlertTriangle size={11} /> não mapeada</span>}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-400">{r.catLabel || <span className="text-gray-600">—</span>}</td>
+                    <td className="px-2 py-1.5 text-texto-2">{r.catLabel || <span className="text-texto-3">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -376,7 +376,7 @@ export default function DindinImportPanel() {
             <button
               onClick={() => setConfirmClear(true)}
               disabled={busy === 'clear'}
-              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto text-gray-500"
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 ml-auto text-texto-3"
               title="Remove todas as pendências (não afeta lançamentos já confirmados)"
             >
               <Trash2 size={12} /> Limpar pendentes
@@ -385,7 +385,7 @@ export default function DindinImportPanel() {
         </>
       )}
 
-      <p className="text-xs text-gray-600 leading-relaxed">
+      <p className="text-xs text-texto-3 leading-relaxed">
         Mapeamento automático via De-Para de contas (account_mapping): linhas sem conta ficam
         em amarelo para revisão. Regras aplicadas no upload — contas <i>não criar</i> e
         transferências <i>ignoradas</i> são puladas; pagamento de fatura é ignorado no lado

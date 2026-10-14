@@ -119,13 +119,13 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-        <DollarSign size={15} className="text-blue-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-3 bg-surface-2 border border-borda-forte rounded-lg">
+        <DollarSign size={15} className="text-texto-2 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium text-blue-300">
+          <p className="text-sm font-medium text-texto-1">
             {isEmprestimo ? 'Empréstimo concedido' : 'Empréstimo recebido'}
           </p>
-          <p className="text-xs text-blue-400/70 mt-0.5">
+          <p className="text-xs text-texto-3 mt-0.5">
             {fmt(amount)} em {fmtBR(date)} — conta: {account.name}
           </p>
         </div>
@@ -229,17 +229,17 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
       </div>
 
       {form.installments > 0 && form.firstDueDate && (
-        <div className="p-3 bg-gray-800 rounded-lg space-y-1.5">
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resumo do plano</p>
-          <p className="text-sm font-semibold text-gray-200">
+        <div className="p-3 bg-surface-2 rounded-lg space-y-1.5">
+          <p className="text-xs text-texto-3 uppercase tracking-wide mb-1">Resumo do plano</p>
+          <p className="text-sm font-semibold text-texto-1">
             {form.installments}× de {fmt(form.installmentAmount)}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-texto-3">
             Vencimentos: {previewDates.join(' · ')}{form.installments > 3 ? ` · ... (+${form.installments - 3})` : ''}
           </p>
           {diff > 0.01 && (
-            <p className="text-xs text-amber-400/80">
-              Total das parcelas: {fmt(totalPayout)} (difere {fmt(diff)} do principal)
+            <p className="text-xs text-aviso">
+              ⚠{' '}Total das parcelas: {fmt(totalPayout)} (difere {fmt(diff)} do principal)
             </p>
           )}
         </div>

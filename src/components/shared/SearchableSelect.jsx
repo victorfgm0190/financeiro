@@ -181,10 +181,10 @@ export default function SearchableSelect({
 
   const itemClass = (id) => {
     const idx = getIdx(id)
-    if (idx === active) return 'bg-gray-700 text-gray-100'
-    if (id && id === value) return 'bg-indigo-500/15 text-indigo-300'
-    if (!id) return 'text-gray-500 hover:bg-gray-800'
-    return 'text-gray-300 hover:bg-gray-800'
+    if (idx === active) return 'bg-surface-hover text-texto-1'
+    if (id && id === value) return 'bg-primary/15 text-primary-fg'
+    if (!id) return 'text-texto-3 hover:bg-surface-hover'
+    return 'text-texto-2 hover:bg-surface-hover'
   }
 
   return (
@@ -193,19 +193,19 @@ export default function SearchableSelect({
         ref={triggerRef}
         type="button"
         onClick={openDropdown}
-        className={`input flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-gray-500' : ''}`}
+        className={`input flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-texto-3' : ''}`}
       >
         <span className="flex-1 truncate min-w-0">{selected ? selected.label : placeholder}</span>
         <div className="flex items-center gap-1 shrink-0">
           {value && !required && (
             <span
-              className="p-0.5 rounded text-gray-500 hover:text-gray-300"
+              className="p-0.5 rounded text-texto-3 hover:text-texto-2"
               onMouseDown={e => { e.stopPropagation(); onChange('') }}
             >
               <X size={12} />
             </span>
           )}
-          <ChevronDown size={14} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={14} className={`text-texto-3 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </button>
 
@@ -218,14 +218,14 @@ export default function SearchableSelect({
           // propagação aqui resolve de uma vez para TODOS os SearchableSelect do sistema.
           onClick={(e) => e.stopPropagation()}
           style={computeMenuStyle(rect)}
-          className="bg-surface border border-gray-700 rounded-lg shadow-2xl flex flex-col max-h-64"
+          className="bg-surface border border-borda-forte rounded-lg shadow-2xl flex flex-col max-h-64"
         >
-          <div className="px-2 py-2 border-b border-gray-800 shrink-0">
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-800 rounded-lg">
-              <Search size={12} className="text-gray-500 shrink-0" />
+          <div className="px-2 py-2 border-b border-borda shrink-0">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-2 rounded-lg">
+              <Search size={12} className="text-texto-3 shrink-0" />
               <input
                 ref={searchRef}
-                className="flex-1 bg-transparent text-sm text-gray-200 outline-none placeholder-gray-600"
+                className="flex-1 bg-transparent text-sm text-texto-1 outline-none placeholder-texto-3"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setActive(-1) }}
                 onKeyDown={handleKeyDown}
@@ -236,7 +236,7 @@ export default function SearchableSelect({
 
           <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0">
             {allItems.length === 0 && (
-              <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhum resultado</p>
+              <p className="text-xs text-texto-3 px-3 py-3 text-center">Nenhum resultado</p>
             )}
 
             {!required && (
@@ -254,7 +254,7 @@ export default function SearchableSelect({
               const ungroupedBlock = ungrouped.length > 0 && (
                 <div key="__ungrouped">
                   {ungroupedLabel && sortedGroupNames.length > 0 && (
-                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
+                    <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-texto-3 bg-surface sticky top-0">
                       {ungroupedLabel}
                     </p>
                   )}
@@ -273,7 +273,7 @@ export default function SearchableSelect({
               )
               const groupedBlock = sortedGroupNames.map(groupName => (
                 <div key={groupName}>
-                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600 bg-surface sticky top-0">
+                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-texto-3 bg-surface sticky top-0">
                     {groupName}
                   </p>
                   {groupedMap[groupName].map(opt => (
@@ -292,7 +292,7 @@ export default function SearchableSelect({
               return (
                 <div key={secKey ?? '__all'}>
                   {secLabel && (
-                    <p className="px-3 pt-2.5 pb-1 mt-1 border-t border-gray-700 text-[11px] font-bold tracking-wider text-gray-300 bg-gray-800/60">
+                    <p className="px-3 pt-2.5 pb-1 mt-1 border-t border-borda-forte text-[11px] font-bold tracking-wider text-texto-2 bg-surface-2/60">
                       {secLabel}
                     </p>
                   )}

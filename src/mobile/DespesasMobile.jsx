@@ -26,7 +26,7 @@ export default function DespesasMobile({ card = false, oculto = false }) {
   const setFiltro = (f) => { ultimo.filtro = f; setFiltroState(f) }
   const setVisao = (v) => { ultimo.visao = v; setVisaoState(v) }
 
-  if (oculto) return <p className="text-xs text-gray-500">Valores ocultos — toque no olho para mostrar.</p>
+  if (oculto) return <p className="text-xs text-texto-3">Valores ocultos — toque no olho para mostrar.</p>
 
   const props = { periodo, modo, grande: true, todas, onAlternarTodas: card ? undefined : () => setTodas(t => !t) }
   return (

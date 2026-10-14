@@ -1,9 +1,10 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, HardDrive, User, Building2, Gem,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import ThemeToggle from '../ThemeToggle'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -22,9 +23,9 @@ const NAV = [
 ]
 
 const STATUS_CONFIG = {
-  connecting: { icon: Loader,    color: 'text-gray-500',    label: 'Conectando...',  spin: true  },
-  connected:  { icon: Cloud,     color: 'text-emerald-500', label: 'Nuvem',          spin: false },
-  local:      { icon: HardDrive, color: 'text-blue-400',   label: 'Local',          spin: false },
+  connecting: { icon: Loader,    color: 'text-texto-3',    label: 'Conectando...',  spin: true  },
+  connected:  { icon: Cloud,     color: 'text-primary-fg', label: 'Nuvem',          spin: false },
+  local:      { icon: AlertTriangle, color: 'text-aviso',   label: 'Local',          spin: false },
 }
 
 function DbStatusBadge({ status }) {
@@ -42,13 +43,13 @@ export default function Sidebar({ active, setActive, alertCount }) {
   const { dbStatus } = useApp()
 
   return (
-    <aside className="hidden md:flex w-56 shrink-0 bg-gray-950 border-r border-gray-800 flex-col h-screen sticky top-0">
-      <div className="px-4 py-5 border-b border-gray-800">
+    <aside className="hidden md:flex w-56 shrink-0 bg-page border-r border-borda flex-col h-screen sticky top-0">
+      <div className="px-4 py-5 border-b border-borda">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#0F6E56' }}>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary">
             <TrendingUp size={14} className="text-white" />
           </div>
-          <span className="font-bold text-sm text-white">Finup</span>
+          <span className="font-bold text-sm text-texto-1">Finup</span>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
@@ -61,20 +62,22 @@ export default function Sidebar({ active, setActive, alertCount }) {
             <Icon size={16} className="shrink-0" />
             <span className="flex-1 text-left">{label}</span>
             {id === 'alerts' && alertCount > 0 && (
-              <span className="badge bg-red-600 text-white">{alertCount}</span>
+              <span className="badge bg-perigo-solido text-white">{alertCount}</span>
             )}
           </button>
         ))}
       </nav>
-      <div className="px-4 pt-3 pb-2 border-t border-gray-800 space-y-2.5">
+      <div className="px-4 pt-3 pb-2 border-t border-borda space-y-2.5">
         <div>
           <DbStatusBadge status={dbStatus} />
         </div>
 
+        <ThemeToggle compacto />
+
         {/* Identidade */}
-        <div className="border-t border-gray-800/60 pt-2">
-          <p className="text-xs text-gray-600 font-medium leading-tight">Gislaine &amp; Victor Moreira</p>
-          <p className="text-xs text-gray-700 leading-tight mt-0.5 italic">Transformando conhecimento em resultados.</p>
+        <div className="border-t border-borda/60 pt-2">
+          <p className="text-xs text-texto-3 font-medium leading-tight">Gislaine &amp; Victor Moreira</p>
+          <p className="text-xs text-texto-3 leading-tight mt-0.5 italic">Transformando conhecimento em resultados.</p>
         </div>
       </div>
     </aside>

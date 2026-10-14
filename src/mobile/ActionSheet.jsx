@@ -17,7 +17,7 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
     const Form = ativa.component
     return (
       <BottomSheet open={open} onClose={fechar} title={ativa.label}>
-        <button type="button" onClick={() => setAtiva(null)} className="-mt-2 flex items-center gap-1 text-xs text-gray-400 min-h-[44px]">
+        <button type="button" onClick={() => setAtiva(null)} className="-mt-2 flex items-center gap-1 text-xs text-texto-2 min-h-[44px]">
           <ChevronLeft size={14} /> Outras ações
         </button>
         <Form onClose={fechar} onToast={onToast} />
@@ -35,25 +35,25 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
               key={m.id}
               type="button"
               onClick={() => setAtiva(m)}
-              className="flex flex-col items-start gap-3 p-4 min-h-[96px] rounded-2xl bg-gray-800/70 border border-gray-700/60 active:bg-gray-800 text-left"
+              className="flex flex-col items-start gap-3 p-4 min-h-[96px] rounded-2xl bg-surface-2/70 border border-borda-forte/60 active:bg-surface-2 text-left"
             >
-              <span className="w-10 h-10 rounded-full flex items-center justify-center bg-[#0E6B4E]/20 text-emerald-400">
+              <span className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/20 text-primary-fg">
                 {Icon && <Icon size={20} />}
               </span>
-              <span className="text-sm font-semibold text-gray-100">{m.label}</span>
+              <span className="text-sm font-semibold text-texto-1">{m.label}</span>
             </button>
           )
         })}
       </div>
 
       {(outras.length > 0 || acaoDaTela) && (
-        <ul className="divide-y divide-gray-800 rounded-xl border border-gray-800 overflow-hidden">
+        <ul className="divide-y divide-borda rounded-xl border border-borda overflow-hidden">
           {acaoDaTela && (
             <li>
-              <button type="button" onClick={() => { fechar(); acaoDaTela() }} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-gray-200">
-                <Sparkles size={18} className="text-emerald-400" />
+              <button type="button" onClick={() => { fechar(); acaoDaTela() }} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
+                <Sparkles size={18} className="text-primary-fg" />
                 <span className="flex-1">Novo nesta tela</span>
-                <ChevronRight size={16} className="text-gray-600" />
+                <ChevronRight size={16} className="text-texto-3" />
               </button>
             </li>
           )}
@@ -61,10 +61,10 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
             const Icon = m.icon
             return (
               <li key={m.id}>
-                <button type="button" onClick={() => setAtiva(m)} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-gray-200">
-                  {Icon && <Icon size={18} className="text-gray-400" />}
+                <button type="button" onClick={() => setAtiva(m)} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
+                  {Icon && <Icon size={18} className="text-texto-2" />}
                   <span className="flex-1">{m.label}</span>
-                  <ChevronRight size={16} className="text-gray-600" />
+                  <ChevronRight size={16} className="text-texto-3" />
                 </button>
               </li>
             )

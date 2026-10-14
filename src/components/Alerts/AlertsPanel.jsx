@@ -86,22 +86,22 @@ function VencimentosPanel() {
   }, [notificationsEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const alertColor = (type) => {
-    if (type === 'overdue') return 'border-red-500/50 bg-red-500/5'
-    if (type === 'due_today') return 'border-amber-500/50 bg-amber-500/5'
-    return 'border-violet-500/30 bg-violet-500/5'
+    if (type === 'overdue') return 'border-perigo/50 bg-perigo/5'
+    if (type === 'due_today') return 'border-aviso/50 bg-aviso/5'
+    return 'border-borda-forte bg-surface-2/50'
   }
 
   const alertBadgeColor = (type) => {
-    if (type === 'overdue') return 'bg-red-500/20 text-red-400'
-    if (type === 'due_today') return 'bg-amber-500/20 text-amber-400'
-    return 'bg-violet-500/20 text-violet-400'
+    if (type === 'overdue') return 'bg-perigo-bg text-perigo'
+    if (type === 'due_today') return 'bg-aviso/15 text-aviso'
+    return 'bg-surface-2 text-texto-2'
   }
 
   const alertIcon = (alert) => {
-    if (alert.type === 'overdue') return <AlertTriangle size={18} className="text-red-400" />
-    if (alert.type === 'due_today') return <AlertTriangle size={18} className="text-amber-400" />
-    if (alert.kind === 'schedule') return <Calendar size={18} className="text-violet-400" />
-    return <Bell size={18} className="text-violet-400" />
+    if (alert.type === 'overdue') return <AlertTriangle size={18} className="text-perigo" />
+    if (alert.type === 'due_today') return <AlertTriangle size={18} className="text-aviso" />
+    if (alert.kind === 'schedule') return <Calendar size={18} className="text-texto-2" />
+    return <Bell size={18} className="text-texto-2" />
   }
 
   const alertLabel = (a) => {
@@ -114,13 +114,13 @@ function VencimentosPanel() {
     <div className="space-y-4">
       <div className="card flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-gray-300">Notificações do Navegador</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 className="text-sm font-semibold text-texto-2">Notificações do Navegador</h2>
+          <p className="text-xs text-texto-3 mt-0.5">
             {notificationsEnabled ? 'Ativadas — você receberá alertas de vencimento' : 'Desativadas — ative para receber alertas'}
           </p>
         </div>
         {notificationsEnabled ? (
-          <div className="flex items-center gap-2 text-emerald-400 text-sm">
+          <div className="flex items-center gap-2 text-primary-fg text-sm">
             <CheckCircle size={16} /> Ativo
           </div>
         ) : (
@@ -131,15 +131,15 @@ function VencimentosPanel() {
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold text-gray-300 mb-3">
+        <h2 className="text-sm font-semibold text-texto-2 mb-3">
           Alertas ({alerts.length})
         </h2>
 
         {alerts.length === 0 ? (
           <div className="card text-center py-12">
-            <CheckCircle size={32} className="text-emerald-600 mx-auto mb-3" />
-            <p className="text-gray-400">Nenhum alerta no momento</p>
-            <p className="text-xs text-gray-600 mt-1">Alertas aparecem conforme configurado em cada agendamento e cartão</p>
+            <CheckCircle size={32} className="text-primary-fg mx-auto mb-3" />
+            <p className="text-texto-2">Nenhum alerta no momento</p>
+            <p className="text-xs text-texto-3 mt-1">Alertas aparecem conforme configurado em cada agendamento e cartão</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -149,29 +149,29 @@ function VencimentosPanel() {
                   {alertIcon(alert)}
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-100">
+                      <p className="font-semibold text-texto-1">
                         {alert.kind === 'schedule' ? alert.schedule.description : alert.account.name}
                       </p>
                       <span className={`badge ${alertBadgeColor(alert.type)}`}>{alertLabel(alert)}</span>
                       {alert.kind === 'schedule' && (
-                        <span className="badge bg-violet-500/20 text-violet-400">Agendamento</span>
+                        <span className="badge bg-surface-2 text-texto-2">Agendamento</span>
                       )}
                       {alert.kind === 'credit' && (
-                        <span className="badge bg-gray-700/60 text-gray-400">Cartão</span>
+                        <span className="badge bg-surface-hover/60 text-texto-2">Cartão</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-texto-3 mt-1">
                       {alert.kind === 'schedule' ? (
                         <>
                           {alert.schedule.transactionType === 'income' ? 'Receita' : 'Despesa'}
                           {': '}
-                          <span className="text-gray-300 font-medium">{fmt(alert.amount)}</span>
+                          <span className="text-texto-2 font-medium">{fmt(alert.amount)}</span>
                           {' · '}Próximo: {format(alert.dueDate, 'dd/MM/yyyy')}
                           {alert.schedule.payee ? ` · ${alert.schedule.payee}` : ''}
                         </>
                       ) : (
                         <>
-                          Fatura: <span className="text-gray-300 font-medium">{fmt(alert.amount)}</span>
+                          Fatura: <span className="text-texto-2 font-medium">{fmt(alert.amount)}</span>
                           {' · '}Vencimento: {format(alert.dueDate, 'dd/MM/yyyy')}
                         </>
                       )}
@@ -180,7 +180,7 @@ function VencimentosPanel() {
                 </div>
                 <button
                   onClick={() => setDismissed(prev => [...prev, alert.id])}
-                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors shrink-0"
+                  className="text-xs text-texto-3 hover:text-texto-2 transition-colors shrink-0"
                 >
                   Dispensar
                 </button>
@@ -191,7 +191,7 @@ function VencimentosPanel() {
       </div>
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3">Calendário de Vencimentos — Cartões</h3>
+        <h3 className="text-sm font-semibold text-texto-2 mb-3">Calendário de Vencimentos — Cartões</h3>
         <div className="space-y-2">
           {accounts.filter(a => a.type === 'credit' && a.active !== false).map(acc => {
             const today = new Date()
@@ -199,35 +199,35 @@ function VencimentosPanel() {
             if (dueDate < today) dueDate = dueDateInMonth(today.getFullYear(), today.getMonth() + 1, acc.dueDay || 10)
             const days = differenceInDays(dueDate, today)
             return (
-              <div key={acc.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
+              <div key={acc.id} className="flex items-center justify-between bg-surface-2 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2">
-                  <CreditCard size={14} className="text-violet-400" />
-                  <span className="text-sm text-gray-300">{acc.name}</span>
+                  <CreditCard size={14} className="text-texto-2" />
+                  <span className="text-sm text-texto-2">{acc.name}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
-                  <span className="text-gray-500">{format(dueDate, 'dd/MM/yyyy')}</span>
-                  <span className={`font-medium ${days <= 0 ? 'text-red-400' : days <= 5 ? 'text-amber-400' : 'text-gray-400'}`}>
+                  <span className="text-texto-3">{format(dueDate, 'dd/MM/yyyy')}</span>
+                  <span className={`font-medium ${days <= 0 ? 'text-perigo' : days <= 5 ? 'text-aviso' : 'text-texto-2'}`}>
                     {days === 0 ? 'Hoje' : days < 0 ? `${Math.abs(days)}d atrasado` : `${days}d`}
                   </span>
-                  <span className="text-gray-400 font-medium">{fmt(acc.creditMonthBill || 0)}</span>
+                  <span className="text-texto-2 font-medium">{fmt(acc.creditMonthBill || 0)}</span>
                 </div>
               </div>
             )
           })}
           {accounts.filter(a => a.type === 'credit' && a.active !== false).length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-4">Nenhum cartão de crédito cadastrado</p>
+            <p className="text-xs text-texto-3 text-center py-4">Nenhum cartão de crédito cadastrado</p>
           )}
         </div>
       </div>
 
       <div className="card">
         <div className="flex items-center gap-2 mb-3">
-          <Zap size={14} className="text-emerald-400" />
-          <h3 className="text-sm font-semibold text-gray-300">Registro Automático</h3>
+          <Zap size={14} className="text-primary-fg" />
+          <h3 className="text-sm font-semibold text-texto-2">Registro Automático</h3>
         </div>
-        <p className="text-xs text-gray-500">
-          Agendamentos com <span className="text-gray-300">Registrar Automático</span> ativado são baixados automaticamente
-          na data de vencimento ao abrir o app. Agendamentos com <span className="text-gray-300">Lembrar com Antecedência</span> geram alertas
+        <p className="text-xs text-texto-3">
+          Agendamentos com <span className="text-texto-2">Registrar Automático</span> ativado são baixados automaticamente
+          na data de vencimento ao abrir o app. Agendamentos com <span className="text-texto-2">Lembrar com Antecedência</span> geram alertas
           acima X dias antes da próxima ocorrência.
         </p>
       </div>
@@ -246,9 +246,9 @@ export default function AlertsPanel({ setActivePage, integridadePendentes = 0 })
       <div className="flex gap-2">
         {abas.map(({ id, label, icon: Icon, qtd }) => (
           <button key={id} onClick={() => setAba(id)}
-            className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${aba === id ? 'bg-[#0F6E56] text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+            className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${aba === id ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:text-texto-1'}`}>
             <Icon size={14} /> {label}
-            {qtd > 0 && <span className="badge bg-red-600 text-white">{qtd}</span>}
+            {qtd > 0 && <span className="badge bg-perigo-solido text-white">{qtd}</span>}
           </button>
         ))}
       </div>

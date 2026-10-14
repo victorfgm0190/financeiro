@@ -103,7 +103,7 @@ export default function GlobalSearch({ open, onClose }) {
     const tdy = todayStr()
     if (next && next < tdy) return { label: 'Atrasado', cls: 'bg-despesa/20 text-despesa', next, registered }
     if (next) return { label: `Próxima ${fmtDate(next)}`, cls: 'bg-receita/15 text-receita', next, registered }
-    return { label: registered > 0 ? 'Concluído' : 'Sem ocorrências', cls: 'bg-gray-600/30 text-gray-300', next: null, registered }
+    return { label: registered > 0 ? 'Concluído' : 'Sem ocorrências', cls: 'bg-surface-2 text-texto-2', next: null, registered }
   }
 
   const buildResults = (txItems, scItems) => {
@@ -125,7 +125,7 @@ export default function GlobalSearch({ open, onClose }) {
         categoria: catLabel(t.categoryId),
         gerencial: (t.type === 'expense' && t.accountType === 'credit' && t.grupoGerencial) ? (gerById.get(t.grupoGerencial)?.name || null) : null,
         statusLabel: paid ? 'Registrado' : 'Pendente',
-        statusCls: paid ? 'bg-receita/15 text-receita' : 'bg-gray-600/30 text-gray-400',
+        statusCls: paid ? 'bg-receita/15 text-receita' : 'bg-surface-2 text-texto-2',
       })
     }
     for (const s of scItems) {
@@ -148,7 +148,7 @@ export default function GlobalSearch({ open, onClose }) {
         categoria: catLabel(s.categoryId),
         gerencial: null,
         statusLabel: pendente ? 'Pendente' : 'Registrado',
-        statusCls: pendente ? 'bg-gray-600/30 text-gray-400' : 'bg-receita/15 text-receita',
+        statusCls: pendente ? 'bg-surface-2 text-texto-2' : 'bg-receita/15 text-receita',
       })
     }
     out.sort((a, b) => (b.sortDate || '').localeCompare(a.sortDate || ''))
@@ -156,7 +156,7 @@ export default function GlobalSearch({ open, onClose }) {
   }
 
   const amountColor = (type) =>
-    type === 'income' ? 'text-receita' : type === 'expense' ? 'text-despesa' : 'text-gray-300'
+    type === 'income' ? 'text-receita' : type === 'expense' ? 'text-despesa' : 'text-texto-2'
 
   const handleClickResult = (r) => {
     if (r.kind === 'tx') setEditTx(r.obj)
@@ -168,32 +168,32 @@ export default function GlobalSearch({ open, onClose }) {
       key={`${r.kind}_${r.id}`}
       type="button"
       onClick={() => handleClickResult(r)}
-      className="w-full text-left card p-3 hover:bg-gray-800/60 transition-colors flex items-start gap-3 group"
+      className="w-full text-left card p-3 hover:bg-surface-hover/60 transition-colors flex items-start gap-3 group"
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${r.kind === 'tx' ? 'bg-indigo-500/15 text-indigo-300' : 'bg-amber-500/15 text-amber-300'}`}>
+          <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${r.kind === 'tx' ? 'bg-surface-2 text-texto-2' : 'bg-surface-2 text-texto-2'}`}>
             {r.kind === 'tx' ? 'Lançamento' : 'Agendamento'}
           </span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.statusCls}`}>{r.statusLabel}</span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-texto-3">
             {r.date ? fmtDate(r.date) : '—'}
-            {r.dateCartao && <span className="text-gray-600"> · cartão {fmtDate(r.dateCartao)}</span>}
+            {r.dateCartao && <span className="text-texto-3"> · cartão {fmtDate(r.dateCartao)}</span>}
           </span>
         </div>
-        <p className="text-sm text-gray-200 truncate mt-1">
+        <p className="text-sm text-texto-1 truncate mt-1">
           {r.desc || r.payee || '(sem descrição)'}
-          {r.payee && r.desc && <span className="text-gray-500"> · {r.payee}</span>}
+          {r.payee && r.desc && <span className="text-texto-3"> · {r.payee}</span>}
         </p>
-        <p className="text-xs text-gray-500 truncate mt-0.5">
+        <p className="text-xs text-texto-3 truncate mt-0.5">
           {r.conta}
           {r.categoria && <span> · {r.categoria}</span>}
-          {r.gerencial && <span className="text-purple-400"> · {r.gerencial}</span>}
+          {r.gerencial && <span className="text-reserva"> · {r.gerencial}</span>}
         </p>
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-bold ${amountColor(r.type)}`}>{fmt(r.amount)}</p>
-        <ArrowRight size={14} className="text-gray-600 group-hover:text-gray-300 ml-auto mt-1 transition-colors" />
+        <ArrowRight size={14} className="text-texto-3 group-hover:text-texto-2 ml-auto mt-1 transition-colors" />
       </div>
     </button>
   )
@@ -238,14 +238,14 @@ export default function GlobalSearch({ open, onClose }) {
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
+            <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
               {STATUS_OPTIONS.map(o => (
                 <button
                   key={o.id}
                   type="button"
                   onClick={() => setStatus(o.id)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    status === o.id ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'
+                    status === o.id ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'
                   }`}
                 >
                   {o.label}
@@ -268,16 +268,16 @@ export default function GlobalSearch({ open, onClose }) {
           return (
             <div className="mt-4">
               {results.length === 0 ? (
-                <p className="text-xs text-gray-500 mb-2">Nenhum resultado encontrado.</p>
+                <p className="text-xs text-texto-3 mb-2">Nenhum resultado encontrado.</p>
               ) : (
                 <>
                   {results.length === 50 && (
-                    <p className="text-[11px] text-gray-600 mb-2">Mostrando os 50 resultados mais recentes.</p>
+                    <p className="text-[11px] text-texto-3 mb-2">Mostrando os 50 resultados mais recentes.</p>
                   )}
                   <div className="space-y-4 max-h-[55vh] overflow-y-auto overscroll-contain">
                     {txResults.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-400 mb-1.5 sticky top-0 bg-surface py-1 z-10">
+                        <p className="text-xs font-semibold text-texto-2 mb-1.5 sticky top-0 bg-surface py-1 z-10">
                           Lançamentos ({txResults.length})
                         </p>
                         <div className="space-y-1.5">{txResults.map(renderItem)}</div>
@@ -285,7 +285,7 @@ export default function GlobalSearch({ open, onClose }) {
                     )}
                     {schedResults.length > 0 && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-400 mb-1.5 sticky top-0 bg-surface py-1 z-10">
+                        <p className="text-xs font-semibold text-texto-2 mb-1.5 sticky top-0 bg-surface py-1 z-10">
                           Agendamentos ({schedResults.length})
                         </p>
                         <div className="space-y-1.5">{schedResults.map(renderItem)}</div>

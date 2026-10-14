@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { MOBILE_MEDIA_QUERY as MOBILE_QUERY } from '../lib/breakpoints'
 
 // Detecta viewport mobile (<md do Tailwind = 768px) de forma reativa.
 // Usado para ocultar contas com hideOnMobile em listas/seletores no celular,
 // sem afetar dados/saldos (que continuam considerando todas as contas).
-const MOBILE_QUERY = '(max-width: 767.98px)'
+// A media query vem de src/lib/breakpoints.js (a mesma do useTheme e do index.html).
 
 export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() =>

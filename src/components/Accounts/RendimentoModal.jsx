@@ -77,15 +77,15 @@ export default function RendimentoModal({ account, onClose }) {
     <Modal open onClose={onClose} title={`Lançar Rendimento — ${account.name}`}>
       <div className="space-y-4">
         {/* Saldo de referência (somente leitura) */}
-        <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-          <p className="text-xs text-gray-500 mb-0.5">
+        <div className="p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
+          <p className="text-xs text-texto-3 mb-0.5">
             {isGrupo ? 'Saldo futuro do grupo' : 'Saldo futuro da conta'}
           </p>
-          <p className="text-xl font-bold text-gray-100">{fmt(saldoFuturoReal)}</p>
+          <p className="text-xl font-bold text-texto-1">{fmt(saldoFuturoReal)}</p>
           {isGrupo && (
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+            <p className="text-xs text-texto-3 mt-1 leading-relaxed">
               Soma de {contasDoEscopo.length} conta{contasDoEscopo.length !== 1 ? 's' : ''} do grupo.
-              O lançamento será feito em <span className="text-gray-300 font-medium">{account.name}</span>.
+              O lançamento será feito em <span className="text-texto-2 font-medium">{account.name}</span>.
             </p>
           )}
         </div>
@@ -108,14 +108,14 @@ export default function RendimentoModal({ account, onClose }) {
             (o usuário tem deficiência de visão de cores; ícone + texto acompanham a cor). */}
         {preenchido && (
           valido ? (
-            <div className="p-3 rounded-lg border border-[#85B7EB]/30 bg-[#85B7EB]/10">
-              <p className="text-xs text-gray-400 mb-0.5">Rendimento a lançar</p>
+            <div className="p-3 rounded-lg border border-receita/30 bg-receita/10">
+              <p className="text-xs text-texto-2 mb-0.5">Rendimento a lançar</p>
               <p className="text-lg font-bold text-receita flex items-center gap-1.5">
                 <Check size={16} /> {fmt(rendimento)}
               </p>
             </div>
           ) : (
-            <div className="p-3 rounded-lg border border-[#F0997B]/30 bg-[#F0997B]/10">
+            <div className="p-3 rounded-lg border border-despesa/30 bg-despesa/10">
               <p className="text-sm font-medium text-despesa flex items-center gap-1.5">
                 <AlertTriangle size={15} /> {fmt(rendimento)}
               </p>

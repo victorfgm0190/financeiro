@@ -63,15 +63,15 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-3 pt-1">
         <div>
-          <p className="text-xs text-gray-500 capitalize">{mes}</p>
-          <h1 className="text-xl font-bold text-gray-100">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
+          <p className="text-xs text-texto-3 capitalize">{mes}</p>
+          <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
         </div>
         <button
           type="button"
           onClick={alternarOcultar}
           aria-label={ocultar ? 'Mostrar valores' : 'Ocultar valores'}
           aria-pressed={ocultar}
-          className="w-11 h-11 rounded-full flex items-center justify-center text-gray-400 bg-gray-900 border border-gray-800"
+          className="w-11 h-11 rounded-full flex items-center justify-center text-texto-2 bg-surface border border-borda"
         >
           {ocultar ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
@@ -84,14 +84,14 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
         return (
           <section key={modulo.id} className="card p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-200">{modulo.cardTitle || modulo.label}</h2>
-              <button type="button" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-emerald-400 min-h-[44px] -my-3 px-1">
+              <h2 className="text-sm font-semibold text-texto-1">{modulo.cardTitle || modulo.label}</h2>
+              <button type="button" onClick={() => irPara(modulo.id)} className="flex items-center gap-0.5 text-xs text-primary-fg min-h-[44px] -my-3 px-1">
                 Ver tudo <ChevronRight size={14} />
               </button>
             </div>
             {carregando
               ? <SkeletonLinhas />
-              : Corpo ? <Corpo v={v} oculto={ocultar} card /> : <p className="text-xs text-gray-500">Abra {modulo.label} para ver os detalhes.</p>}
+              : Corpo ? <Corpo v={v} oculto={ocultar} card /> : <p className="text-xs text-texto-3">Abra {modulo.label} para ver os detalhes.</p>}
           </section>
         )
       })}
@@ -99,7 +99,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
       <button
         type="button"
         onClick={() => setPersonalizar(true)}
-        className="w-full flex items-center justify-center gap-2 min-h-[48px] rounded-xl border border-dashed border-gray-700 text-sm text-gray-400"
+        className="w-full flex items-center justify-center gap-2 min-h-[48px] rounded-xl border border-dashed border-borda-forte text-sm text-texto-2"
       >
         <SlidersHorizontal size={16} /> Personalizar cards do Início
       </button>
@@ -119,20 +119,20 @@ function ResumoCard({ saldosPrincipais, v: valor, carregando }) {
 
   return (
     <section className="rounded-2xl p-5 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #0E6B4E 0%, #0B5740 100%)' }}>
-      <p className="text-xs text-white/70">Saldo total</p>
+      <p className="text-xs text-white/80">Saldo total</p>
       <p className="text-3xl font-extrabold tracking-tight mt-0.5">{v(saldosPrincipais?.saldoAtual ?? 0, 'w-40 h-8')}</p>
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div>
-          <p className="text-[11px] text-white/70">Entradas do mês</p>
+          <p className="text-[11px] text-white/80">Entradas do mês</p>
           <p className="text-sm font-semibold">{v(income)}</p>
         </div>
         <div>
-          <p className="text-[11px] text-white/70">Saídas do mês</p>
+          <p className="text-[11px] text-white/80">Saídas do mês</p>
           <p className="text-sm font-semibold">{v(expense)}</p>
         </div>
       </div>
       <div className="mt-4 pt-3 border-t border-white/15 flex items-center justify-between">
-        <p className="text-xs text-white/70">Saldo previsto fim do mês</p>
+        <p className="text-xs text-white/80">Saldo previsto fim do mês</p>
         <p className="text-sm font-bold">{v(saldosPrincipais?.saldoFinalCiclo ?? 0)}</p>
       </div>
     </section>
@@ -146,7 +146,7 @@ function CardReservas({ v }) {
   const contas = (profileAccounts || []).filter(a => a.isReserva && a.active !== false)
   const total = contas.reduce((s, a) => s + (a.balance || 0), 0)
   const top = [...contas].sort((a, b) => (b.balance || 0) - (a.balance || 0)).slice(0, 2)
-  if (top.length === 0) return <p className="text-xs text-gray-500">Nenhuma conta de reserva.</p>
+  if (top.length === 0) return <p className="text-xs text-texto-3">Nenhuma conta de reserva.</p>
   return (
     <ul className="space-y-3">
       {top.map(a => {
@@ -154,11 +154,11 @@ function CardReservas({ v }) {
         return (
           <li key={a.id}>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-300 truncate">{a.apelido || a.name}</span>
-              <span className="text-gray-100 font-semibold">{v(a.balance || 0)}</span>
+              <span className="text-texto-2 truncate">{a.apelido || a.name}</span>
+              <span className="text-texto-1 font-semibold">{v(a.balance || 0)}</span>
             </div>
-            <div className="h-1.5 rounded-full bg-gray-800 mt-1.5 overflow-hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
+            <div className="h-1.5 rounded-full bg-surface-2 mt-1.5 overflow-hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
             </div>
           </li>
         )
@@ -175,17 +175,17 @@ function CardEnvelopes({ v }) {
   const dados = gastoEnvelopes(envelopes, profileTransactions, comp.year * 12 + comp.month0, startDay)
   const pctDe = (d) => (d.env.limitAmount > 0 ? d.spent / d.env.limitAmount : 0)
   const top = [...dados].sort((a, b) => pctDe(b) - pctDe(a)).slice(0, 3)
-  if (top.length === 0) return <p className="text-xs text-gray-500">Nenhum envelope criado.</p>
+  if (top.length === 0) return <p className="text-xs text-texto-3">Nenhum envelope criado.</p>
   return (
     <div className="grid grid-cols-3 gap-2">
       {top.map(d => {
         const estourado = d.spent > d.env.limitAmount
         const restante = d.env.limitAmount - d.spent
         return (
-          <div key={d.env.id} className={`rounded-xl p-2.5 border ${estourado ? 'bg-red-500/10 border-red-500/30' : 'bg-gray-800/50 border-gray-700/50'}`}>
-            <p className="text-[11px] text-gray-400 truncate">{d.env.name}</p>
-            <p className={`text-sm font-semibold mt-0.5 ${estourado ? 'text-red-400' : 'text-gray-100'}`}>{v(Math.abs(restante))}</p>
-            <p className={`text-[10px] ${estourado ? 'text-red-400/80' : 'text-gray-500'}`}>{estourado ? 'estourado' : 'restante'}</p>
+          <div key={d.env.id} className={`rounded-xl p-2.5 border ${estourado ? 'bg-perigo-bg border-perigo/30' : 'bg-surface-2/50 border-borda-forte/50'}`}>
+            <p className="text-[11px] text-texto-2 truncate">{d.env.name}</p>
+            <p className={`text-sm font-semibold mt-0.5 ${estourado ? 'text-perigo' : 'text-texto-1'}`}>{v(Math.abs(restante))}</p>
+            <p className={`text-[10px] ${estourado ? 'text-perigo' : 'text-texto-3'}`}>{estourado ? 'estourado' : 'restante'}</p>
           </div>
         )
       })}
@@ -208,19 +208,19 @@ function CardProximos({ v }) {
   }
   itens.sort((a, b) => a.date.localeCompare(b.date))
   const top = itens.slice(0, 3)
-  if (top.length === 0) return <p className="text-xs text-gray-500">Nada vence nos próximos 7 dias.</p>
+  if (top.length === 0) return <p className="text-xs text-texto-3">Nada vence nos próximos 7 dias.</p>
   return (
-    <ul className="divide-y divide-gray-800">
+    <ul className="divide-y divide-borda">
       {top.map(({ s, date, amount }) => {
         const atrasado = date < hoje
         const entrada = s.transactionType === 'income'
         return (
           <li key={s.id} className="flex items-center justify-between gap-3 py-2.5">
             <div className="min-w-0">
-              <p className="text-sm text-gray-200 truncate">{s.description || '(agendamento)'}</p>
-              <p className={`text-[11px] ${atrasado ? 'text-red-400' : 'text-gray-500'}`}>{atrasado ? `Atrasado · ${fmtDate(date)}` : fmtDate(date)}</p>
+              <p className="text-sm text-texto-1 truncate">{s.description || '(agendamento)'}</p>
+              <p className={`text-[11px] ${atrasado ? 'text-perigo' : 'text-texto-3'}`}>{atrasado ? `⚠ Atrasado · ${fmtDate(date)}` : fmtDate(date)}</p>
             </div>
-            <span className={`text-sm font-semibold whitespace-nowrap ${entrada ? 'text-blue-400' : 'text-orange-400'}`}>
+            <span className={`text-sm font-semibold whitespace-nowrap ${entrada ? 'text-receita' : 'text-despesa'}`}>
               {entrada ? '+' : '−'}{v(Number(amount) || 0)}
             </span>
           </li>
@@ -250,14 +250,14 @@ function PersonalizarCards({ onClose, cards, onSalvar }) {
 
   return (
     <BottomSheet open onClose={onClose} title="Personalizar cards do Início">
-      <ul className="divide-y divide-gray-800 rounded-xl border border-gray-800">
+      <ul className="divide-y divide-borda rounded-xl border border-borda">
         {lista.map((c, i) => (
           <li key={c.modulo.id} className="flex items-center gap-2 px-3 min-h-[56px]">
-            <span className="flex-1 text-sm text-gray-200">{c.modulo.cardTitle || c.modulo.label}</span>
-            <button type="button" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir" className="w-11 h-11 flex items-center justify-center text-gray-400 disabled:opacity-30">
+            <span className="flex-1 text-sm text-texto-1">{c.modulo.cardTitle || c.modulo.label}</span>
+            <button type="button" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir" className="w-11 h-11 flex items-center justify-center text-texto-2 disabled:opacity-30">
               <ChevronUp size={18} />
             </button>
-            <button type="button" onClick={() => mover(i, 1)} disabled={i === lista.length - 1} aria-label="Descer" className="w-11 h-11 flex items-center justify-center text-gray-400 disabled:opacity-30">
+            <button type="button" onClick={() => mover(i, 1)} disabled={i === lista.length - 1} aria-label="Descer" className="w-11 h-11 flex items-center justify-center text-texto-2 disabled:opacity-30">
               <ChevronDown size={18} />
             </button>
             <button
@@ -268,7 +268,7 @@ function PersonalizarCards({ onClose, cards, onSalvar }) {
               onClick={() => alternar(i)}
               className="w-14 h-11 flex items-center justify-center"
             >
-              <span className={`relative w-10 h-6 rounded-full transition-colors ${c.on ? 'bg-[#0E6B4E]' : 'bg-gray-700'}`}>
+              <span className={`relative w-10 h-6 rounded-full transition-colors ${c.on ? 'bg-primary' : 'bg-borda-campo'}`}>
                 <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${c.on ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
               </span>
             </button>

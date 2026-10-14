@@ -25,7 +25,7 @@ export function SkeletonLinhas({ linhas = 3 }) {
 export function TelaCarregando() {
   return (
     <div className="space-y-4" role="status" aria-label="Calculando saldos">
-      <p className="text-xs text-gray-500">Calculando saldos…</p>
+      <p className="text-xs text-texto-3">Calculando saldos…</p>
       {[0, 1, 2].map(i => (
         <div key={i} className="card p-4 space-y-3">
           <SkeletonVal className="w-32 h-7" />
@@ -41,13 +41,13 @@ export function TelaCarregando() {
 // regra de cálculo nova.
 export function AvisoDesatualizado() {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 mb-3 text-xs text-amber-300">
+    <div className="flex items-center gap-2 rounded-lg border border-aviso/30 bg-aviso/10 px-3 py-1.5 mb-3 text-xs text-aviso">
       <AlertTriangle size={14} className="shrink-0" />
       <span className="flex-1">Saldos podem estar desatualizados</span>
       <button
         type="button"
         onClick={() => window.location.reload()}
-        className="flex items-center gap-1 min-h-[44px] -my-2 px-2 font-medium text-amber-200"
+        className="flex items-center gap-1 min-h-[44px] -my-2 px-2 font-medium text-texto-1"
       >
         <RefreshCw size={13} /> Recalcular
       </button>

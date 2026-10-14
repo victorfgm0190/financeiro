@@ -4,6 +4,7 @@ import { dueDateInMonth } from './lib/fatura'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider } from './context/FabContext'
 import { useIsMobile } from './hooks/useIsMobile'
+import { useTheme } from './hooks/useTheme'
 import { useAutoBackup } from './hooks/useAutoBackup'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
@@ -205,7 +206,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-950">
+    <div className="flex h-screen overflow-hidden bg-page">
       <Sidebar active={activePage} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
@@ -231,6 +232,9 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
+  // Aplica o tema do contexto atual (mobile/desktop) no <html> — inclusive no Login e ao cruzar o
+  // breakpoint ou mudar o tema do sistema, mesmo sem nenhum ThemeToggle montado.
+  useTheme()
   return (
     <PrivateRoute>
       <AppProvider>

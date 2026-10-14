@@ -10,9 +10,9 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 
 // Paleta acessível (sem verde/vermelho): receita=azul, despesa=laranja, transferência=cinza.
 const TYPE_META = {
-  income:   { label: 'Receita',       Icon: ArrowDownCircle, color: 'text-blue-600',   bg: 'bg-blue-500/10' },
-  expense:  { label: 'Despesa',       Icon: ArrowUpCircle,   color: 'text-orange-600', bg: 'bg-orange-500/10' },
-  transfer: { label: 'Transferência', Icon: ArrowLeftRight,  color: 'text-gray-400',   bg: 'bg-gray-700/50' },
+  income:   { label: 'Receita',       Icon: ArrowDownCircle, color: 'text-receita',    bg: 'bg-receita/10' },
+  expense:  { label: 'Despesa',       Icon: ArrowUpCircle,   color: 'text-despesa',    bg: 'bg-despesa/10' },
+  transfer: { label: 'Transferência', Icon: ArrowLeftRight,  color: 'text-texto-2',   bg: 'bg-surface-hover/50' },
 }
 const metaOf = (t) => TYPE_META[t] || TYPE_META.expense
 
@@ -110,19 +110,19 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
       {/* ── Resumo (sempre visível no topo) ── */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="card py-2.5 px-3">
-          <p className="text-[10px] uppercase tracking-wide text-gray-500">Registros</p>
-          <p className="text-lg font-bold text-gray-100">{stats.count}</p>
+          <p className="text-[10px] uppercase tracking-wide text-texto-3">Registros</p>
+          <p className="text-lg font-bold text-texto-1">{stats.count}</p>
         </div>
         <div className="card py-2.5 px-3">
-          <p className="text-[10px] uppercase tracking-wide text-gray-500">Valor total</p>
-          <p className="text-lg font-bold text-gray-100">{fmt(stats.total)}</p>
+          <p className="text-[10px] uppercase tracking-wide text-texto-3">Valor total</p>
+          <p className="text-lg font-bold text-texto-1">{fmt(stats.total)}</p>
         </div>
         <div className="card py-2.5 px-3">
-          <p className="text-[10px] uppercase tracking-wide text-gray-500">Por tipo</p>
-          <p className="text-xs text-gray-300 mt-1 leading-tight">
-            <span className="text-orange-600 font-semibold">{stats.despesas}</span> Desp ·{' '}
-            <span className="text-blue-600 font-semibold">{stats.receitas}</span> Rec ·{' '}
-            <span className="text-gray-400 font-semibold">{stats.transferencias}</span> Transf
+          <p className="text-[10px] uppercase tracking-wide text-texto-3">Por tipo</p>
+          <p className="text-xs text-texto-2 mt-1 leading-tight">
+            <span className="text-despesa font-semibold">{stats.despesas}</span> Desp ·{' '}
+            <span className="text-receita font-semibold">{stats.receitas}</span> Rec ·{' '}
+            <span className="text-texto-2 font-semibold">{stats.transferencias}</span> Transf
           </p>
         </div>
       </div>
@@ -131,26 +131,26 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
       {stage === 'review' && (
         <>
           {items.length === 0 ? (
-            <p className="text-center text-sm text-gray-500 py-8">Nenhum registro na seleção.</p>
+            <p className="text-center text-sm text-texto-3 py-8">Nenhum registro na seleção.</p>
           ) : (
             <div className="space-y-1 max-h-[45vh] overflow-y-auto overscroll-contain mb-4">
               {items.map(t => {
                 const m = metaOf(t.type)
                 return (
-                  <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-gray-800/40">
+                  <div key={t.id} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-surface-hover/40">
                     <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${m.bg}`}>
                       <m.Icon size={14} className={m.color} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-gray-200 truncate">{t.description || t.payee || m.label}</p>
-                      <p className="text-xs text-gray-500">{fmtDate(t.date)}{t.payee && t.description ? ` · ${t.payee}` : ''}</p>
+                      <p className="text-sm text-texto-1 truncate">{t.description || t.payee || m.label}</p>
+                      <p className="text-xs text-texto-3">{fmtDate(t.date)}{t.payee && t.description ? ` · ${t.payee}` : ''}</p>
                     </div>
                     <span className={`text-sm font-semibold shrink-0 ${m.color}`}>{fmt(t.amount)}</span>
                     <button
                       type="button"
                       onClick={() => removeItem(t.id)}
                       title="Remover da seleção"
-                      className="p-1 rounded text-gray-600 hover:text-gray-200 hover:bg-gray-700 shrink-0"
+                      className="p-1 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover shrink-0"
                     >
                       <X size={14} />
                     </button>
@@ -170,7 +170,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
       {stage === 'edit' && (
         <>
           <div className="space-y-4 mb-4">
-            <p className="text-xs text-gray-500">Preencha apenas o que deseja alterar. Campos vazios são ignorados.</p>
+            <p className="text-xs text-texto-3">Preencha apenas o que deseja alterar. Campos vazios são ignorados.</p>
             <div>
               <label className="label">Data</label>
               <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} />
@@ -185,7 +185,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
                 placeholder="Selecione uma categoria..."
               />
               {hasTransfer && (
-                <p className="text-xs text-amber-400 mt-1.5 flex items-start gap-1.5">
+                <p className="text-xs text-aviso mt-1.5 flex items-start gap-1.5">
                   <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                   A seleção contém Transferências — não é possível alterar Categoria com tipos diferentes.
                 </p>
@@ -194,10 +194,10 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
             <div>
               <label className="label">Motivo da alteração (opcional)</label>
               <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: Reclassificação do mês" />
-              <p className="text-[11px] text-gray-500 mt-1">Fica no histórico de alterações de cada lançamento.</p>
+              <p className="text-[11px] text-texto-3 mt-1">Fica no histórico de alterações de cada lançamento.</p>
             </div>
           </div>
-          {error && <p className="text-xs text-amber-400 mb-3">{error}</p>}
+          {error && <p className="text-xs text-perigo mb-3">{error}</p>}
           <div className="flex gap-3">
             <button className="btn-secondary flex-1" onClick={() => setStage('review')}>Voltar</button>
             <button className="btn-primary flex-1" onClick={handleConfirmEdit}>Confirmar</button>
@@ -208,9 +208,9 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
       {/* ── STAGE: blocked (categoria em tipos mistos) ── */}
       {stage === 'blocked' && (
         <>
-          <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3 mb-4">
-            <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-200 leading-relaxed">
+          <div className="card border border-aviso/30 bg-aviso/5 flex items-start gap-3 mb-4">
+            <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
+            <p className="text-sm text-texto-1 leading-relaxed">
               Não é possível alterar Categoria para registros de tipos diferentes. Remova as Transferências
               (ou Receitas) da seleção e tente novamente.
             </p>
@@ -227,15 +227,15 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
         <>
           <div className="space-y-3 mb-4">
             {dateWarn && (
-              <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
-                <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-200 leading-relaxed">{dateAlertText}</p>
+              <div className="card border border-aviso/30 bg-aviso/5 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
+                <p className="text-sm text-texto-1 leading-relaxed">{dateAlertText}</p>
               </div>
             )}
             {catWarn && (
-              <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
-                <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-200 leading-relaxed">
+              <div className="card border border-aviso/30 bg-aviso/5 flex items-start gap-3">
+                <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
+                <p className="text-sm text-texto-1 leading-relaxed">
                   A categoria será aplicada a Despesas e Receitas ({stats.despesas} + {stats.receitas}). Deseja continuar?
                 </p>
               </div>

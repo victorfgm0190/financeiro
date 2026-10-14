@@ -20,11 +20,11 @@ const STATUS = [
 ]
 
 const LADO_COR = {
-  falta: 'bg-amber-500/20 text-amber-400',
-  sobra: 'bg-red-500/20 text-red-400',
-  divergência: 'bg-violet-500/20 text-violet-400',
-  fechamento: 'bg-sky-500/20 text-sky-400',
-  configuração: 'bg-gray-700/60 text-gray-300',
+  falta: 'bg-aviso/15 text-aviso',
+  sobra: 'bg-perigo-bg text-perigo',
+  divergência: 'bg-aviso/15 text-aviso',
+  fechamento: 'bg-surface-2 text-texto-2',
+  configuração: 'bg-surface-hover/60 text-texto-2',
 }
 
 // Campos escalares de esperado/encontrado lado a lado; o resto (listas, objetos) no detalhe.
@@ -132,11 +132,11 @@ export default function IntegridadePanel({ setActivePage }) {
     <div className="space-y-4">
       <div className="card flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-300">Motor de Integridade</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 className="text-sm font-semibold text-texto-2">Motor de Integridade</h2>
+          <p className="text-xs text-texto-3 mt-0.5">
             Compara fatura, etapas A, subcontas Ger. e resgates com as regras. Só detecta — nada é corrigido aqui.
           </p>
-          <p className="text-[11px] text-gray-600 mt-0.5 flex items-center gap-1">
+          <p className="text-[11px] text-texto-3 mt-0.5 flex items-center gap-1">
             <Lock size={10} /> Faturas fechadas não são avaliadas
           </p>
         </div>
@@ -147,11 +147,11 @@ export default function IntegridadePanel({ setActivePage }) {
       </div>
 
       {resumo && (
-        <div className="card text-xs text-gray-400">
+        <div className="card text-xs text-texto-2">
           Varredura de {resumo.hoje} (faturas desde {resumo.desde || 'o início'}):{' '}
-          <span className="text-amber-400 font-medium">{resumo.novas} nova(s)</span> ·{' '}
-          <span className="text-gray-300">{resumo.mantidas} mantida(s)</span> ·{' '}
-          <span className="text-emerald-400">{resumo.resolvidas} resolvida(s)</span>
+          <span className="text-aviso font-medium">{resumo.novas} nova(s)</span> ·{' '}
+          <span className="text-texto-2">{resumo.mantidas} mantida(s)</span> ·{' '}
+          <span className="text-primary-fg">{resumo.resolvidas} resolvida(s)</span>
           {resumo.ignoradas > 0 && <> · {resumo.ignoradas} ignorada(s) ainda presentes</>}
           {resumo.arquivadas > 0 && <> · {resumo.arquivadas} ignorada(s) por fatura fechada</>}
         </div>
@@ -160,12 +160,12 @@ export default function IntegridadePanel({ setActivePage }) {
       <div className="flex flex-wrap items-center gap-2">
         {STATUS.map(s => (
           <button key={s.id} onClick={() => trocarStatus(s.id)}
-            className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${status === s.id ? 'bg-[#0F6E56] text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+            className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${status === s.id ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:text-texto-1'}`}>
             {s.label}
           </button>
         ))}
         {status === 'pendente' && corrigiveis.length > 0 && (
-          <button className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
+          <button className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary-hover"
             title="Aplica todas as correções automáticas (religar parcelas, depois etapas A) e varre de novo"
             onClick={() => setAjustar({ pendencias: corrigiveis, todas: true })}>
             <Wrench size={12} /> Corrigir todas ({corrigiveis.length})
@@ -173,27 +173,27 @@ export default function IntegridadePanel({ setActivePage }) {
         )}
       </div>
 
-      {erro && <div className="card border border-red-500/40 text-sm text-red-400">{erro}</div>}
+      {erro && <div className="card border border-perigo/40 text-sm text-perigo">{erro}</div>}
 
       {carregando ? (
-        <div className="card flex items-center justify-center py-10 text-gray-500"><Loader2 size={18} className="animate-spin" /></div>
+        <div className="card flex items-center justify-center py-10 text-texto-3"><Loader2 size={18} className="animate-spin" /></div>
       ) : porRegra.length === 0 ? (
         <div className="card text-center py-12">
-          <ShieldCheck size={32} className="text-emerald-600 mx-auto mb-3" />
-          <p className="text-gray-400">Nenhuma pendência {status === 'pendente' ? 'aberta' : status === 'ignorada' ? 'ignorada' : 'resolvida'}</p>
-          {status === 'pendente' && <p className="text-xs text-gray-600 mt-1">Use "Varrer agora" para conferir os dados.</p>}
+          <ShieldCheck size={32} className="text-primary-fg mx-auto mb-3" />
+          <p className="text-texto-2">Nenhuma pendência {status === 'pendente' ? 'aberta' : status === 'ignorada' ? 'ignorada' : 'resolvida'}</p>
+          {status === 'pendente' && <p className="text-xs text-texto-3 mt-1">Use "Varrer agora" para conferir os dados.</p>}
         </div>
       ) : porRegra.map(([regra, itens]) => {
         const def = REGRAS_POR_CODIGO[regra]
         return (
           <div key={regra} className="card space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-200">{def?.descricao || regra}</h3>
-              <span className="badge bg-gray-700/60 text-gray-400 font-mono">{regra}</span>
+              <h3 className="text-sm font-semibold text-texto-1">{def?.descricao || regra}</h3>
+              <span className="badge bg-surface-hover/60 text-texto-2 font-mono">{regra}</span>
               {def?.lado && <span className={`badge ${LADO_COR[def.lado] || LADO_COR.configuração}`}>{def.lado}</span>}
-              <span className="text-xs text-gray-500 ml-auto">{itens.length}</span>
+              <span className="text-xs text-texto-3 ml-auto">{itens.length}</span>
               {itens.filter(podeCorrigirSozinho).length > 1 && (
-                <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                   onClick={() => setAjustar({ pendencias: itens.filter(podeCorrigirSozinho) })}>
                   <Wrench size={12} /> Corrigir as automáticas desta regra ({itens.filter(podeCorrigirSozinho).length})
                 </button>
@@ -204,25 +204,25 @@ export default function IntegridadePanel({ setActivePage }) {
               const lancId = lancamentoDa(p, txById)
               const linhas = linhasComparacao(p.esperado, p.encontrado)
               return (
-                <div key={p.id} className="bg-gray-800/60 rounded-lg p-3 space-y-2">
+                <div key={p.id} className="bg-surface-2/60 rounded-lg p-3 space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="text-sm text-gray-200 flex-1 min-w-0 break-words">{p.descricao}</p>
+                    <p className="text-sm text-texto-1 flex-1 min-w-0 break-words">{p.descricao}</p>
                     {ehProjecao(p) && (
-                      <span className="badge shrink-0 bg-sky-500/15 text-sky-400 border border-dashed border-sky-500/40"
+                      <span className="badge shrink-0 bg-surface-2 text-texto-2 border border-dashed border-borda-forte"
                         title="Parcela projetada (gerada pelo sistema, sem data do cartão) — ainda não confirmada pela importação da fatura">
                         projeção
                       </span>
                     )}
                     {qtdProjecoes(p) > 0 && (
-                      <span className="badge shrink-0 bg-sky-500/15 text-sky-400 border border-dashed border-sky-500/40">
+                      <span className="badge shrink-0 bg-surface-2 text-texto-2 border border-dashed border-borda-forte">
                         {qtdProjecoes(p)} projeção(ões)
                       </span>
                     )}
-                    <span className={`badge shrink-0 ${p.severidade === 'auto' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                    <span className={`badge shrink-0 ${p.severidade === 'auto' ? 'bg-primary/15 text-primary-fg' : 'bg-aviso/15 text-aviso'}`}>
                       {p.severidade === 'auto' ? 'automática' : 'requer aprovação'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                  <div className="flex flex-wrap gap-3 text-xs text-texto-3">
                     {card && <span className="flex items-center gap-1"><CreditCard size={11} />{card.apelido || card.name}</span>}
                     {p.fatura_ref && <span>Fatura {p.fatura_ref}</span>}
                     {p.status === 'ignorada' && p.resolvida_por === 'fatura_fechada' && (
@@ -233,7 +233,7 @@ export default function IntegridadePanel({ setActivePage }) {
                     <div className="overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead>
-                          <tr className="text-gray-500">
+                          <tr className="text-texto-3">
                             <th className="text-left font-normal pr-3"></th>
                             <th className="text-left font-normal pr-3">Esperado</th>
                             <th className="text-left font-normal">Encontrado</th>
@@ -242,9 +242,9 @@ export default function IntegridadePanel({ setActivePage }) {
                         <tbody>
                           {linhas.map(l => (
                             <tr key={l.k}>
-                              <td className="text-gray-500 pr-3 whitespace-nowrap">{l.k.replace(/_/g, ' ')}</td>
-                              <td className="text-gray-300 pr-3">{l.esperado}</td>
-                              <td className={l.esperado !== l.encontrado ? 'text-amber-300' : 'text-gray-300'}>{l.encontrado}</td>
+                              <td className="text-texto-3 pr-3 whitespace-nowrap">{l.k.replace(/_/g, ' ')}</td>
+                              <td className="text-texto-2 pr-3">{l.esperado}</td>
+                              <td className={l.esperado !== l.encontrado ? 'text-aviso' : 'text-texto-2'}>{l.encontrado}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -252,43 +252,43 @@ export default function IntegridadePanel({ setActivePage }) {
                     </div>
                   )}
                   <details className="text-xs">
-                    <summary className="text-gray-500 cursor-pointer hover:text-gray-300">Detalhes (ids)</summary>
-                    <pre className="mt-2 text-[11px] text-gray-400 whitespace-pre-wrap break-all">{JSON.stringify({ origem_id: p.origem_id, esperado: p.esperado, encontrado: p.encontrado }, null, 2)}</pre>
+                    <summary className="text-texto-3 cursor-pointer hover:text-texto-2">Detalhes (ids)</summary>
+                    <pre className="mt-2 text-[11px] text-texto-2 whitespace-pre-wrap break-all">{JSON.stringify({ origem_id: p.origem_id, esperado: p.esperado, encontrado: p.encontrado }, null, 2)}</pre>
                   </details>
                   <div className="flex flex-wrap gap-2 pt-1">
                     {podeAjustar(p) && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
                         onClick={() => setAjustar({ pendencias: [p] })}>
                         <Wrench size={12} /> Corrigir
                       </button>
                     )}
                     {p.regra === 'GER_SALDO_SUBCONTA' && p.status === 'pendente' && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         title="Grava um marco de saldo da subconta. Não cria lançamento e não altera saldo."
                         onClick={() => setAceitarSaldo(p)}>
                         <BadgeCheck size={12} /> Aceitar saldo atual como correto
                       </button>
                     )}
                     {lancId && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         onClick={() => setEditTx(txById.get(lancId))}>
                         <FileText size={12} /> Abrir lançamento
                       </button>
                     )}
                     {p.conta_id && accById.get(p.conta_id)?.type === 'credit' && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 hover:bg-gray-600"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         onClick={() => irParaFatura(p)}>
                         <ExternalLink size={12} /> Ir para a fatura
                       </button>
                     )}
                     {p.status === 'pendente' && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-gray-400 hover:text-gray-200"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'ignorar')}>
                         <EyeOff size={12} /> Ignorar
                       </button>
                     )}
                     {p.status === 'ignorada' && (
-                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-gray-400 hover:text-gray-200"
+                      <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'reabrir')}>
                         <RotateCcw size={12} /> Reabrir
                       </button>

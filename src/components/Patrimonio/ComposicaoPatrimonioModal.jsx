@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
-import { fmt } from '../shared/utils'
+import { fmt, fmtSinal } from '../shared/utils'
 import Modal from '../shared/Modal'
 
 // De onde vem cada número do Patrimônio. Lê os MESMOS totals/itens dos cards (usePatrimonioTotals)
@@ -13,12 +13,12 @@ import Modal from '../shared/Modal'
 // Navegação fica com quem abre: onAbrirConta(conta), onAbrirBem(conta), onAbrirFatura(cardId, mesAno).
 
 const META = {
-  bens:          { titulo: 'Bens e Ativos',          cor: 'text-teal-400',   chaves: ['bens'] },
-  investimentos: { titulo: 'Investimentos',          cor: 'text-blue-400',   chaves: ['investimentos'] },
+  bens:          { titulo: 'Bens e Ativos',          cor: 'text-receita',    chaves: ['bens'] },
+  investimentos: { titulo: 'Investimentos',          cor: 'text-receita',    chaves: ['investimentos'] },
   contas:        { titulo: 'Contas Financeiras',     cor: 'text-receita',    chaves: ['contas'] },
   dividas:       { titulo: 'Dívidas',                cor: 'text-despesa',    chaves: ['dividas'] },
   passivos:      { titulo: 'Dívidas e Passivos',     cor: 'text-despesa',    chaves: ['dividas', 'emprestimos'] },
-  cartao:        { titulo: 'Dívida Cartão de Crédito', cor: 'text-orange-400', chaves: ['cartao'] },
+  cartao:        { titulo: 'Dívida Cartão de Crédito', cor: 'text-despesa',    chaves: ['cartao'] },
   pl:            { titulo: 'Patrimônio Líquido',     cor: 'text-receita' },
 }
 
@@ -32,18 +32,18 @@ function LinhaItem({ nome, sub, valor, cor, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-gray-800/40 rounded-lg px-1 -mx-1 transition-colors group"
+      className="w-full flex items-center justify-between gap-3 py-2.5 text-left hover:bg-surface-hover/40 rounded-lg px-1 -mx-1 transition-colors group"
     >
       <div className="min-w-0 flex items-center gap-1.5">
         {children}
         <div className="min-w-0">
-          <p className="text-sm text-gray-200 truncate">{nome}</p>
-          {sub && <p className="text-xs text-gray-500 truncate">{sub}</p>}
+          <p className="text-sm text-texto-1 truncate">{nome}</p>
+          {sub && <p className="text-xs text-texto-3 truncate">{sub}</p>}
         </div>
       </div>
       <span className="flex items-center gap-1 shrink-0">
         <span className={`text-sm font-semibold ${cor}`}>{fmt(valor)}</span>
-        <ChevronRight size={13} className="text-gray-600 group-hover:text-gray-300" />
+        <ChevronRight size={13} className="text-texto-3 group-hover:text-texto-2" />
       </span>
     </button>
   )
@@ -56,12 +56,12 @@ function ListaCartoes({ itens, onAbrirFatura }) {
     const faturas = (creditUsageByCard[conta.id]?.faturas || []).filter(f => !zero(f.emAberto))
     const expandido = aberto === conta.id
     return (
-      <div key={conta.id} className="border-b border-gray-800/50 last:border-0">
+      <div key={conta.id} className="border-b border-borda/50 last:border-0">
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setAberto(expandido ? null : conta.id)}
-            className="p-1.5 -ml-1 rounded text-gray-500 hover:text-gray-200 hover:bg-gray-800"
+            className="p-1.5 -ml-1 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover"
             title={expandido ? 'Ocultar faturas' : 'Ver faturas em aberto'}
           >
             {expandido ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -71,7 +71,7 @@ function ListaCartoes({ itens, onAbrirFatura }) {
               nome={conta.apelido || conta.name}
               sub={`${faturas.length} fatura${faturas.length !== 1 ? 's' : ''} em aberto`}
               valor={valor}
-              cor="text-orange-400"
+              cor="text-despesa"
               onClick={() => onAbrirFatura(conta.id, faturas[0]?.billKey || null)}
             />
           </div>
@@ -83,19 +83,19 @@ function ListaCartoes({ itens, onAbrirFatura }) {
                 key={f.billKey}
                 type="button"
                 onClick={() => onAbrirFatura(conta.id, f.billKey)}
-                className="w-full text-left rounded-lg px-2 py-1.5 bg-gray-800/40 hover:bg-gray-800 transition-colors"
+                className="w-full text-left rounded-lg px-2 py-1.5 bg-surface-2/40 hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-200">
+                  <span className="text-xs text-texto-1">
                     {rotuloMes(f.billKey)}
-                    <span className={`ml-2 text-[11px] ${f.isFaturaParcial ? 'text-amber-500' : 'text-gray-500'}`}>{statusFatura(f)}</span>
+                    <span className={`ml-2 text-[11px] ${f.isFaturaParcial ? 'text-aviso' : 'text-texto-3'}`}>{statusFatura(f)}</span>
                   </span>
-                  <span className="text-xs font-semibold text-orange-400">{fmt(f.emAberto)}</span>
+                  <span className="text-xs font-semibold text-despesa">{fmt(f.emAberto)}</span>
                 </div>
-                <p className="text-[11px] text-gray-500">total {fmt(f.billTotal)} · pago {fmt(f.totalPago)}</p>
+                <p className="text-[11px] text-texto-3">total {fmt(f.billTotal)} · pago {fmt(f.totalPago)}</p>
               </button>
             ))}
-            {faturas.length === 0 && <p className="text-xs text-gray-500 px-2 py-1">Nenhuma fatura em aberto.</p>}
+            {faturas.length === 0 && <p className="text-xs text-texto-3 px-2 py-1">Nenhuma fatura em aberto.</p>}
           </div>
         )}
       </div>
@@ -152,7 +152,7 @@ export default function ComposicaoPatrimonioModal({ tipo: tipoInicial, onClose, 
       corpo = itens.map(({ conta, valor }) => {
         const grupo = accountGroups?.find(g => g.id === conta.accountGroupId)
         return (
-          <div key={conta.id} className="border-b border-gray-800/50 last:border-0">
+          <div key={conta.id} className="border-b border-borda/50 last:border-0">
             <LinhaItem
               nome={conta.apelido || conta.name}
               sub={[conta.bank, grupo?.name].filter(Boolean).join(' · ')}
@@ -164,21 +164,21 @@ export default function ComposicaoPatrimonioModal({ tipo: tipoInicial, onClose, 
         )
       })
     }
-    if (itens.length === 0) corpo = <p className="text-xs text-gray-500 text-center py-6">Nenhum item com valor.</p>
+    if (itens.length === 0) corpo = <p className="text-xs text-texto-3 text-center py-6">Nenhum item com valor.</p>
   }
 
   return (
     <Modal open onClose={onClose} title={meta.titulo} size="md">
       <div className="space-y-3">
         {tipo !== tipoInicial && (
-          <button type="button" onClick={() => setTipo(tipoInicial)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200">
+          <button type="button" onClick={() => setTipo(tipoInicial)} className="flex items-center gap-1 text-xs text-texto-2 hover:text-texto-1">
             <ArrowLeft size={13} /> {META[tipoInicial].titulo}
           </button>
         )}
         <div className="max-h-[60vh] md:max-h-96 overflow-y-auto overscroll-contain">{corpo}</div>
-        <div className="flex items-center justify-between pt-2 border-t border-gray-800">
-          <span className="text-xs text-gray-500 uppercase tracking-wide">{tipo === 'pl' ? '= Patrimônio Líquido' : 'Total'}</span>
-          <span className={`text-lg font-bold ${tipo === 'pl' && total < 0 ? 'text-despesa' : meta.cor}`}>{fmt(total)}</span>
+        <div className="flex items-center justify-between pt-2 border-t border-borda">
+          <span className="text-xs text-texto-3 uppercase tracking-wide">{tipo === 'pl' ? '= Patrimônio Líquido' : 'Total'}</span>
+          <span className={`text-lg font-bold ${tipo === 'pl' && total < 0 ? 'text-despesa' : meta.cor}`}>{fmtSinal(total)}</span>
         </div>
       </div>
     </Modal>

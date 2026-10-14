@@ -6,9 +6,9 @@ import BemComposicao from './BemComposicao'
 
 function Linha({ label, children, destaque }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-gray-800 last:border-0">
-      <span className="text-xs text-gray-500">{label}</span>
-      <span className={`text-sm text-right ${destaque || 'text-gray-200'}`}>{children}</span>
+    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-borda last:border-0">
+      <span className="text-xs text-texto-3">{label}</span>
+      <span className={`text-sm text-right ${destaque || 'text-texto-1'}`}>{children}</span>
     </div>
   )
 }
@@ -18,7 +18,7 @@ function Categoria({ label, categoria }) {
     <Linha label={label}>
       {categoria?.nome
         ? categoria.nome
-        : <span className="text-gray-600 italic text-xs">Não parametrizado</span>}
+        : <span className="text-texto-3 italic text-xs">Não parametrizado</span>}
     </Linha>
   )
 }
@@ -34,12 +34,12 @@ export default function BemInfoTab({
   return (
     <div className="space-y-4">
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <Landmark size={14} className="text-teal-400" /> Bem (Ativo)
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <Landmark size={14} className="text-receita" /> Bem (Ativo)
         </h3>
         <Linha label="Nome">{bem.nome}</Linha>
         <Linha label="Valor da Nota Fiscal">{fmt(bem.valor_nota_fiscal)}</Linha>
-        <Linha label="Saldo Atual" destaque="text-teal-400 font-semibold">{fmt(bem.saldo)}</Linha>
+        <Linha label="Saldo Atual" destaque="text-receita font-semibold">{fmt(bem.saldo)}</Linha>
         <Linha label="Status">
           {bem.foi_vendido
             ? <span className="text-despesa font-semibold">VENDIDO</span>
@@ -61,9 +61,9 @@ export default function BemInfoTab({
       )}
 
       {financiamento ? (
-        <div className="card border border-red-500/10">
-          <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-            <AlertTriangle size={14} className="text-red-400" /> Contas a Pagar
+        <div className="card border border-despesa/20">
+          <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+            <AlertTriangle size={14} className="text-despesa" /> Contas a Pagar
           </h3>
           <Linha label="Banco">{financiamento.banco || '—'}</Linha>
           <Linha label="Valor Financiado">{fmt(financiamento.valor_principal)}</Linha>
@@ -85,31 +85,31 @@ export default function BemInfoTab({
             </>
           )}
           {financiamento.analise?.desvio_juros > 0 && (
-            <Linha label="Juros não pagos" destaque="text-amber-400">
+            <Linha label="Juros não pagos" destaque="text-aviso">
               {fmt(financiamento.analise.desvio_juros)}
             </Linha>
           )}
         </div>
       ) : (
         <div className="card">
-          <p className="text-sm text-gray-400">Este bem ainda não tem financiamento.</p>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-sm text-texto-2">Este bem ainda não tem financiamento.</p>
+          <p className="text-xs text-texto-3 mt-1">
             Registre a entrada à vista e depois crie o financiamento do saldo restante.
           </p>
         </div>
       )}
 
       <div className="card">
-        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-          <Tag size={14} className="text-blue-400" /> Categorias Parametrizadas
+        <h3 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+          <Tag size={14} className="text-texto-2" /> Categorias Parametrizadas
         </h3>
         <Categoria label="Perda de Bem" categoria={categorias.perda} />
         <Categoria label="Ganho de Bem" categoria={categorias.ganho} />
         <Categoria label="Principal (Prestação)" categoria={categorias.prestacao} />
         <Categoria label="Juros (Taxa)" categoria={categorias.taxa_finan} />
         {semCategorias && (
-          <p className="text-xs text-amber-400/80 mt-3">
-            Nenhuma categoria parametrizada. Use “Parametrizar bem” para definir as quatro
+          <p className="text-xs text-aviso mt-3">
+            ⚠{' '}Nenhuma categoria parametrizada. Use “Parametrizar bem” para definir as quatro
             categorias antes de criar o financiamento.
           </p>
         )}

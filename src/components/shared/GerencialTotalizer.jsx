@@ -13,8 +13,8 @@ function token(g) {
 }
 function tokenColor(g) {
   if (g.number === 1) return 'text-reserva'
-  if (g.number === 'D') return 'text-gray-500'
-  return 'text-orange-500'
+  if (g.number === 'D') return 'text-texto-3'
+  return 'text-despesa'
 }
 
 // Totalizador discreto por grupo gerencial. Regras da fatura:
@@ -40,10 +40,10 @@ export default function GerencialTotalizer({ txs, gerencialGroups, showReconcile
   if (items.length === 0 && estornos === 0 && !hasRecon) return null
 
   return (
-    <div className="px-4 py-2.5 border-b border-gray-800 bg-surface/40 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-xs">
+    <div className="px-4 py-2.5 border-b border-borda bg-surface/40 flex items-center gap-x-3 gap-y-1.5 flex-wrap text-xs">
       {items.map(({ g, total, previsto }, i) => (
         <Fragment key={g.id}>
-          {i > 0 && <span className="text-gray-700 select-none">|</span>}
+          {i > 0 && <span className="text-texto-3 select-none">|</span>}
           <span
             className="inline-flex items-center gap-1.5 whitespace-nowrap"
             title={previsto > 0
@@ -51,14 +51,14 @@ export default function GerencialTotalizer({ txs, gerencialGroups, showReconcile
               : undefined}
           >
             <span className={`font-bold ${tokenColor(g)}`}>{token(g)}</span>
-            <span className="text-gray-500">· {g.name}:</span>
-            <span className="font-semibold text-gray-300">{fmt(total)}</span>
-            {previsto > 0 && <span className="text-amber-500/80 font-bold select-none">*</span>}
+            <span className="text-texto-3">· {g.name}:</span>
+            <span className="font-semibold text-texto-2">{fmt(total)}</span>
+            {previsto > 0 && <span className="text-texto-2 font-bold select-none">*</span>}
           </span>
         </Fragment>
       ))}
       {temPrevisto && (
-        <span className="text-[10px] text-amber-500/70 whitespace-nowrap">* inclui previstos</span>
+        <span className="text-[10px] text-texto-3 whitespace-nowrap">* inclui previstos</span>
       )}
       {hasRecon && <ReconciledTotals conciliado={conciliado} pendente={pendente} className="ml-auto" />}
       {estornos > 0 && (
@@ -66,7 +66,7 @@ export default function GerencialTotalizer({ txs, gerencialGroups, showReconcile
           {/* Quebra para linha própria, abaixo dos grupos gerenciais */}
           <span className="basis-full h-0" aria-hidden="true" />
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <span className="text-gray-500">Estornos:</span>
+            <span className="text-texto-3">Estornos:</span>
             <span className="font-semibold text-despesa">-{fmt(estornos)}</span>
           </span>
         </>

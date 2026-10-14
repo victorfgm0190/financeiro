@@ -13,20 +13,20 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" />
-      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="absolute inset-0 bg-overlay" />
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md">
 
         {/* Header */}
-        <div className="flex items-start gap-3 p-5 border-b border-gray-800">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-            <RefreshCw size={16} className="text-emerald-400" />
+        <div className="flex items-start gap-3 p-5 border-b border-borda">
+          <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+            <RefreshCw size={16} className="text-primary-fg" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-gray-100">Cobrança recorrente detectada</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Este lançamento corresponde a um agendamento ativo</p>
+            <h3 className="text-sm font-semibold text-texto-1">Cobrança recorrente detectada</h3>
+            <p className="text-xs text-texto-3 mt-0.5">Este lançamento corresponde a um agendamento ativo</p>
           </div>
           {remaining > 1 && (
-            <span className="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded-full shrink-0 self-start">
+            <span className="text-xs bg-surface-2 text-texto-2 px-2 py-1 rounded-full shrink-0 self-start">
               +{remaining - 1} restante{remaining - 1 > 1 ? 's' : ''}
             </span>
           )}
@@ -35,44 +35,44 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
         {/* Body */}
         <div className="p-5 space-y-3">
           {/* Transação do cartão */}
-          <div className="bg-gray-800/50 rounded-xl p-3.5">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Lançamento no cartão</p>
+          <div className="bg-surface-2/50 rounded-xl p-3.5">
+            <p className="text-[10px] font-semibold text-texto-3 uppercase tracking-wide mb-2">Lançamento no cartão</p>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm text-gray-200 font-medium truncate">
+                <p className="text-sm text-texto-1 font-medium truncate">
                   {tx.description || tx.payee || 'Sem descrição'}
                 </p>
                 {tx.payee && tx.description && (
-                  <p className="text-xs text-gray-500 mt-0.5">👤 {tx.payee}</p>
+                  <p className="text-xs text-texto-3 mt-0.5">👤 {tx.payee}</p>
                 )}
-                <p className="text-xs text-gray-500 mt-0.5">{fmtDate(tx.date)}</p>
+                <p className="text-xs text-texto-3 mt-0.5">{fmtDate(tx.date)}</p>
               </div>
               <p className="text-base font-bold text-despesa shrink-0">{fmt(tx.amount)}</p>
             </div>
           </div>
 
-          <div className="text-center text-xs text-gray-600 flex items-center gap-2">
-            <div className="flex-1 h-px bg-gray-800" />
+          <div className="text-center text-xs text-texto-3 flex items-center gap-2">
+            <div className="flex-1 h-px bg-surface-2" />
             corresponde a
-            <div className="flex-1 h-px bg-gray-800" />
+            <div className="flex-1 h-px bg-surface-2" />
           </div>
 
           {/* Agendamento */}
-          <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-xl p-3.5">
-            <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mb-2">Agendamento recorrente</p>
+          <div className="bg-primary/10 border border-primary/20 rounded-xl p-3.5">
+            <p className="text-[10px] font-semibold text-primary-fg uppercase tracking-wide mb-2">Agendamento recorrente</p>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-sm text-gray-200 font-medium truncate">{schedule.description}</p>
+                <p className="text-sm text-texto-1 font-medium truncate">{schedule.description}</p>
                 {schedule.payee && (
-                  <p className="text-xs text-gray-500 mt-0.5">👤 {schedule.payee}</p>
+                  <p className="text-xs text-texto-3 mt-0.5">👤 {schedule.payee}</p>
                 )}
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {cat && (
-                    <span className="text-[10px] bg-gray-800 text-gray-400 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] bg-surface-2 text-texto-2 px-1.5 py-0.5 rounded">
                       {cat.icon} {cat.name}
                     </span>
                   )}
-                  <span className="text-[10px] text-gray-600">
+                  <span className="text-[10px] text-texto-3">
                     {FREQ_LABELS[schedule.frequency] || schedule.frequency}
                   </span>
                 </div>
@@ -82,7 +82,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
           </div>
 
           {diff > 0.01 && (
-            <p className="text-xs text-amber-500/70 text-center bg-amber-500/5 rounded-lg py-1.5">
+            <p className="text-xs text-aviso text-center bg-aviso/5 rounded-lg py-1.5">
               Diferença de {fmt(diff)} em relação ao valor agendado
             </p>
           )}
@@ -103,7 +103,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
             Não, manter agendamento
           </button>
           <button
-            className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-600 hover:text-gray-400 transition-colors py-1.5 rounded-lg hover:bg-gray-800/40"
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-texto-3 hover:text-texto-2 transition-colors py-1.5 rounded-lg hover:bg-surface-hover/40"
             onClick={onNeverAsk}
           >
             <BellOff size={11} /> Não perguntar novamente para este favorecido

@@ -5,11 +5,43 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0F6E56" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#EEF1F6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#030712" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Finup" />
     <title>Finup</title>
+    <!--
+      Anti-flash de tema: aplica data-theme no <html> ANTES de pintar (antes do /src/main.jsx).
+      ATENÇÃO — valores repetidos de propósito (o index.html não importa módulos antes do React):
+        - media query de mobile  = MOBILE_MEDIA_QUERY em src/lib/breakpoints.js
+        - chaves do localStorage = CHAVES_TEMA em src/hooks/useTheme.js
+        - cores da barra         = THEME_COLOR em src/hooks/useTheme.js (= --color-page de cada tema)
+      Se mudar um, mude o outro: useIsMobile, useTheme e este script não podem discordar.
+    -->
+    <script>
+      (function () {
+        var MOBILE_MEDIA_QUERY = '(max-width: 767.98px)' // = src/lib/breakpoints.js
+        var CHAVES = { mobile: 'finup_tema_mobile', desktop: 'finup_tema_desktop' }
+        var THEME_COLOR = { dark: '#030712', light: '#EEF1F6' }
+        var tema = 'dark'
+        try {
+          var mm = window.matchMedia
+          var contexto = mm && mm(MOBILE_MEDIA_QUERY).matches ? 'mobile' : 'desktop'
+          var pref = null
+          try { pref = window.localStorage.getItem(CHAVES[contexto]) } catch (e) { pref = null }
+          if (pref === 'light') tema = 'light'
+          else if (pref === 'system') tema = mm && mm('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        } catch (e) {
+          tema = 'dark'
+        }
+        var html = document.documentElement
+        html.setAttribute('data-theme', tema)
+        html.style.colorScheme = tema
+        var metas = document.querySelectorAll('meta[name="theme-color"]')
+        for (var i = 0; i < metas.length; i++) metas[i].setAttribute('content', THEME_COLOR[tema])
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -7,8 +7,6 @@ import ActionSheet from './ActionSheet'
 import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { TelaCarregando, AvisoDesatualizado } from './Carregando'
 
-const VERDE = '#0E6B4E'
-const CINZA = '#5B6660'
 
 // Layout mobile: conteúdo com scroll + barra inferior [aba aba (+) aba aba]. Tudo vem de
 // modules.js; telas `page` são os MESMOS painéis do desktop (mapa `panels` do App).
@@ -59,8 +57,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
         type="button"
         onClick={() => ir(m.id)}
         aria-current={aceso ? 'page' : undefined}
-        className="flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] min-w-[44px]"
-        style={{ color: aceso ? VERDE : CINZA }}
+        className={`flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] min-w-[44px] ${aceso ? 'text-primary-fg' : 'text-texto-3'}`}
       >
         {Icon && <Icon size={22} strokeWidth={aceso ? 2.4 : 2} />}
         <span className={`text-[11px] leading-none ${aceso ? 'font-semibold' : ''}`}>{m.label}</span>
@@ -69,16 +66,19 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-950">
+    <div className="flex flex-col h-screen overflow-hidden bg-page">
+      {/* Faixa escura sob a status bar do iPhone no tema claro (Início/Mais não têm header).
+          Fixa, sem layout nem toque; altura = safe-area (0 fora do iOS standalone). index.css */}
+      <div className="faixa-status-ios" aria-hidden="true" />
       {modulo.id !== 'inicio' && modulo.id !== 'mais' && (
-        <header className="flex items-center gap-1 px-2 h-14 shrink-0 border-b border-gray-800 bg-gray-950" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <header className="faixa-safe-top flex items-center gap-1 px-2 h-14 shrink-0 border-b border-borda bg-page" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           {!ehAba ? (
-            <button type="button" onClick={() => ir('mais')} aria-label="Voltar para Mais" className="w-11 h-11 flex items-center justify-center text-gray-400">
+            <button type="button" onClick={() => ir('mais')} aria-label="Voltar para Mais" className="w-11 h-11 flex items-center justify-center text-texto-2">
               <ChevronLeft size={22} />
             </button>
           ) : <span className="w-2" />}
-          <h1 className="flex-1 text-base font-semibold text-gray-100 truncate">{modulo.label}</h1>
-          <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 flex items-center justify-center text-gray-400">
+          <h1 className="flex-1 text-base font-semibold text-texto-1 truncate">{modulo.label}</h1>
+          <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 flex items-center justify-center text-texto-2">
             <Search size={20} />
           </button>
         </header>
@@ -97,7 +97,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
 
       <nav
         aria-label="Navegação principal"
-        className="fixed bottom-0 inset-x-0 z-40 bg-gray-950/95 border-t border-gray-800 flex items-stretch"
+        className="fixed bottom-0 inset-x-0 z-40 bg-page/95 border-t border-borda flex items-stretch"
         style={{ height: 'calc(68px + env(safe-area-inset-bottom))', paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {tabs.slice(0, meio).map(botaoAba)}
@@ -106,8 +106,8 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
             type="button"
             onClick={() => setAcoesAbertas(true)}
             aria-label="Novo"
-            className="w-14 h-14 -mt-5 rounded-full flex items-center justify-center text-white shadow-lg"
-            style={{ backgroundColor: VERDE, boxShadow: '0 6px 18px rgba(14,107,78,0.45)' }}
+            className="w-14 h-14 -mt-5 rounded-full flex items-center justify-center bg-primary text-white shadow-lg"
+            style={{ boxShadow: '0 6px 18px rgba(14,107,78,0.45)' }}
           >
             <Plus size={26} />
           </button>

@@ -34,15 +34,15 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
       size="lg"
     >
       <div className="space-y-4">
-        <div className="text-xs text-gray-400">
-          <span className="text-gray-300 font-medium">{schedule?.description || 'Resgate Reserva'}</span>
+        <div className="text-xs text-texto-2">
+          <span className="text-texto-2 font-medium">{schedule?.description || 'Resgate Reserva'}</span>
           {faturaRef && (
-            <span className="ml-2 bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded font-medium">Fatura {faturaRef}</span>
+            <span className="ml-2 bg-surface-2 text-texto-2 px-1.5 py-0.5 rounded font-medium">Fatura {faturaRef}</span>
           )}
         </div>
 
         {recorte && !semFontes && (
-          <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500">
+          <div className="flex items-center justify-between gap-2 text-[11px] text-texto-3">
             <span>
               {faturaInteira
                 ? `Fatura inteira — todas as funções (${fmt(Number(schedule?.amount) || 0)})`
@@ -51,7 +51,7 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
             <button
               type="button"
               onClick={() => setFaturaInteira(v => !v)}
-              className="text-blue-500 hover:underline underline-offset-2 whitespace-nowrap"
+              className="text-primary-fg hover:underline underline-offset-2 whitespace-nowrap"
             >
               {faturaInteira ? `Só ${recorte.functionName}` : 'Ver fatura inteira'}
             </button>
@@ -59,14 +59,14 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
         )}
 
         {semFontes ? (
-          <p className="text-sm text-gray-500 py-8 text-center">Resgate sem composição detalhada.</p>
+          <p className="text-sm text-texto-3 py-8 text-center">Resgate sem composição detalhada.</p>
         ) : gastos.length === 0 ? (
-          <p className="text-sm text-gray-500 py-8 text-center">Nenhum gasto rastreado para este resgate.</p>
+          <p className="text-sm text-texto-3 py-8 text-center">Nenhum gasto rastreado para este resgate.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-400 border-b border-gray-800">
+                <tr className="text-left text-xs text-texto-2 border-b border-borda">
                   <th className="px-2 py-2 font-medium whitespace-nowrap">Data</th>
                   <th className="px-2 py-2 font-medium">Descrição</th>
                   <th className="px-2 py-2 font-medium hidden sm:table-cell">Categoria</th>
@@ -77,38 +77,38 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
                 {gastos.map(t => (
                   <tr
                     key={t.key}
-                    className={`border-b border-gray-800/50 transition-colors ${
+                    className={`border-b border-borda/50 transition-colors ${
                       t.previsto
-                        ? 'bg-amber-500/5 border-l-2 border-l-amber-500/70 hover:bg-amber-500/10'
-                        : 'hover:bg-gray-800/20'
+                        ? 'bg-surface-2/50 border-l-2 border-l-borda-forte border-dashed hover:bg-surface-hover/50'
+                        : 'hover:bg-surface-hover/20'
                     }`}
                   >
-                    <td className="px-2 py-2 whitespace-nowrap text-gray-300 text-xs">{fmtDate(t.date)}</td>
-                    <td className={`px-2 py-2 ${t.orfao ? 'text-gray-500 italic' : 'text-gray-200'}`}>{t.description}</td>
-                    <td className="px-2 py-2 text-gray-400 text-xs hidden sm:table-cell whitespace-nowrap">
+                    <td className="px-2 py-2 whitespace-nowrap text-texto-2 text-xs">{fmtDate(t.date)}</td>
+                    <td className={`px-2 py-2 ${t.orfao ? 'text-texto-3 italic' : 'text-texto-1'}`}>{t.description}</td>
+                    <td className="px-2 py-2 text-texto-2 text-xs hidden sm:table-cell whitespace-nowrap">
                       {t.previsto
-                        ? <span className="text-amber-500/90">⚡ Previsto</span>
+                        ? <span className="text-texto-2 outline-dashed outline-1 -outline-offset-1 outline-borda-forte px-1 rounded">⚡ Previsto</span>
                         : catName(t.categoryId)}
                     </td>
-                    <td className={`px-2 py-2 whitespace-nowrap text-right font-medium ${t.previsto ? 'text-amber-500/90' : 'text-gray-100'}`}>{fmt(t.valor)}</td>
+                    <td className={`px-2 py-2 whitespace-nowrap text-right font-medium ${t.previsto ? 'text-texto-2' : 'text-texto-1'}`}>{fmt(t.valor)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-gray-700">
-                  <td className="px-2 py-2.5 text-xs font-semibold text-gray-300" colSpan={3}>
+                <tr className="border-t border-borda-forte">
+                  <td className="px-2 py-2.5 text-xs font-semibold text-texto-2" colSpan={3}>
                     Total ({gastos.length} {gastos.length === 1 ? 'gasto' : 'gastos'})
                     {qtdPrevistos > 0 && (
-                      <span className="ml-1.5 font-normal text-amber-500/80">
+                      <span className="ml-1.5 font-normal text-texto-2">
                         · {qtdPrevistos} previsto{qtdPrevistos !== 1 ? 's' : ''}
                       </span>
                     )}
                   </td>
-                  <td className="px-2 py-2.5 text-right font-bold text-blue-500 whitespace-nowrap">{fmt(total)}</td>
+                  <td className="px-2 py-2.5 text-right font-bold text-texto-1 whitespace-nowrap">{fmt(total)}</td>
                 </tr>
                 {!fecha && (
                   <tr>
-                    <td className="px-2 pb-2 text-[11px] text-orange-500" colSpan={4}>
+                    <td className="px-2 pb-2 text-[11px] text-aviso" colSpan={4}>
                       Não fecha com o valor {recorteAtivo ? 'da linha' : 'do resgate'} ({fmt(amountResgate)}): diferença de {fmt(diferenca)}.
                     </td>
                   </tr>
@@ -121,7 +121,7 @@ export default function ResgateBreakdownModal({ schedule, transactions, schedule
         <div className="flex justify-end pt-1">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+            className="px-4 py-2 text-sm bg-surface-hover text-texto-1 rounded-lg hover:bg-surface-hover transition-colors font-medium"
           >
             Fechar
           </button>

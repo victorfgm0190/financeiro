@@ -57,21 +57,21 @@ export default function PagarParcelaModal({
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <div className="p-3 bg-gray-800/60 rounded-lg text-xs space-y-1">
-        <div className="flex justify-between"><span className="text-gray-500">Bem</span><span className="text-gray-200">{bem.nome}</span></div>
-        <div className="flex justify-between"><span className="text-gray-500">Parcela</span><span className="text-gray-200">{parcela.numero}/{financiamento?.num_parcelas}</span></div>
-        <div className="flex justify-between"><span className="text-gray-500">Vence</span><span className="text-gray-200">{fmtData(parcela.data_vencimento)}</span></div>
+      <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1">
+        <div className="flex justify-between"><span className="text-texto-3">Bem</span><span className="text-texto-1">{bem.nome}</span></div>
+        <div className="flex justify-between"><span className="text-texto-3">Parcela</span><span className="text-texto-1">{parcela.numero}/{financiamento?.num_parcelas}</span></div>
+        <div className="flex justify-between"><span className="text-texto-3">Vence</span><span className="text-texto-1">{fmtData(parcela.data_vencimento)}</span></div>
       </div>
 
-      <div className="p-3 bg-gray-800/60 rounded-lg text-xs space-y-1">
-        <p className="text-gray-400 font-medium mb-1.5">Provisionado</p>
-        <div className="flex justify-between"><span className="text-gray-500">Principal</span><span className="text-gray-200">{fmt(parcela.principal_provisioned)}</span></div>
-        <div className="flex justify-between"><span className="text-gray-500">Juros</span><span className="text-gray-200">{fmt(parcela.juros_provisioned)}</span></div>
-        <div className="flex justify-between"><span className="text-gray-500">Total</span><span className="text-gray-200 font-medium">{fmt(parcela.total_provisioned)}</span></div>
+      <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1">
+        <p className="text-texto-2 font-medium mb-1.5">Provisionado</p>
+        <div className="flex justify-between"><span className="text-texto-3">Principal</span><span className="text-texto-1">{fmt(parcela.principal_provisioned)}</span></div>
+        <div className="flex justify-between"><span className="text-texto-3">Juros</span><span className="text-texto-1">{fmt(parcela.juros_provisioned)}</span></div>
+        <div className="flex justify-between"><span className="text-texto-3">Total</span><span className="text-texto-1 font-medium">{fmt(parcela.total_provisioned)}</span></div>
         {parcela.total_pago > 0 && (
-          <div className="flex justify-between pt-1 border-t border-gray-700/60 mt-1">
-            <span className="text-gray-500">Já pago</span>
-            <span className="text-amber-400">{fmt(parcela.total_pago)}</span>
+          <div className="flex justify-between pt-1 border-t border-borda-forte/60 mt-1">
+            <span className="text-texto-3">Já pago</span>
+            <span className="text-texto-2">{fmt(parcela.total_pago)}</span>
           </div>
         )}
       </div>
@@ -100,16 +100,16 @@ export default function PagarParcelaModal({
       </div>
 
       {rateio && (
-        <div className="p-3 bg-gray-800/60 rounded-lg text-xs space-y-1 border border-gray-800">
-          <p className="text-gray-400 font-medium mb-1.5">Rateio (principal primeiro)</p>
-          <div className="flex justify-between"><span className="text-gray-500">Principal neste pagamento</span><span className="text-gray-200">{fmt(rateio.principalNeste)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Juros neste pagamento</span><span className="text-gray-200">{fmt(rateio.jurosNeste)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Juros em falta</span><span className={rateio.desvioJuros > 0 ? 'text-amber-400' : 'text-gray-200'}>{fmt(rateio.desvioJuros)}</span></div>
-          <div className="flex justify-between pt-1 border-t border-gray-700/60 mt-1">
-            <span className="text-gray-500">Total pago na parcela</span>
-            <span className="text-gray-200 font-medium">{fmt(rateio.totalAcumulado)}</span>
+        <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1 border border-borda">
+          <p className="text-texto-2 font-medium mb-1.5">Rateio (principal primeiro)</p>
+          <div className="flex justify-between"><span className="text-texto-3">Principal neste pagamento</span><span className="text-texto-1">{fmt(rateio.principalNeste)}</span></div>
+          <div className="flex justify-between"><span className="text-texto-3">Juros neste pagamento</span><span className="text-texto-1">{fmt(rateio.jurosNeste)}</span></div>
+          <div className="flex justify-between"><span className="text-texto-3">Juros em falta</span><span className={rateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>{fmt(rateio.desvioJuros)}</span></div>
+          <div className="flex justify-between pt-1 border-t border-borda-forte/60 mt-1">
+            <span className="text-texto-3">Total pago na parcela</span>
+            <span className="text-texto-1 font-medium">{fmt(rateio.totalAcumulado)}</span>
           </div>
-          <p className="text-gray-600 pt-1">
+          <p className="text-texto-3 pt-1">
             Serão criados até 2 lançamentos: prestação (principal) e taxa de financiamento (juros).
           </p>
         </div>

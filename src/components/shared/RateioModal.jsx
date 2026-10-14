@@ -36,14 +36,14 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
 
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-100">Rateio do lançamento</h3>
-          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={16} /></button>
+          <h3 className="text-sm font-semibold text-texto-1">Rateio do lançamento</h3>
+          <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2"><X size={16} /></button>
         </div>
-        <p className="text-xs text-gray-500">
-          Total do lançamento: <span className="text-gray-200 font-semibold">{fmt(total)}</span>
+        <p className="text-xs text-texto-3">
+          Total do lançamento: <span className="text-texto-1 font-semibold">{fmt(total)}</span>
         </p>
 
         <div className="space-y-2">
@@ -75,7 +75,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                 placeholder="Descrição (opcional)"
                 className="input flex-1 min-w-[90px] text-xs"
               />
-              <button type="button" onClick={() => removeRow(r._k)} title="Remover" className="p-2 text-gray-500 hover:text-red-400 shrink-0">
+              <button type="button" onClick={() => removeRow(r._k)} title="Remover" className="p-2 text-texto-3 hover:text-perigo shrink-0">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -86,20 +86,20 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
           <Plus size={12} /> Adicionar linha
         </button>
 
-        <div className="flex items-center justify-between text-xs border-t border-gray-800 pt-3 flex-wrap gap-3">
-          <span className="text-gray-400">
+        <div className="flex items-center justify-between text-xs border-t border-borda pt-3 flex-wrap gap-3">
+          <span className="text-texto-2">
             Total atribuído: <span className="font-semibold text-receita">{fmt(atribuido)}</span>
           </span>
-          <span className="text-gray-400">
+          <span className="text-texto-2">
             Não atribuído:{' '}
-            <span className={`font-semibold ${Math.abs(naoAtribuido) < 0.005 ? 'text-gray-400' : naoAtribuido < 0 ? 'text-despesa' : 'text-orange-400'}`}>
+            <span className={`font-semibold ${Math.abs(naoAtribuido) < 0.005 ? 'text-texto-2' : naoAtribuido < 0 ? 'text-despesa' : 'text-aviso'}`}>
               {fmt(naoAtribuido)}
             </span>
           </span>
         </div>
 
         <div className="flex gap-2 justify-end flex-wrap pt-1">
-          <button type="button" onClick={onDeleteAll} className="btn-secondary text-xs text-red-400 hover:text-red-300">
+          <button type="button" onClick={onDeleteAll} className="btn-secondary text-xs text-perigo hover:text-texto-1">
             Excluir Tudo e Sair
           </button>
           <button type="button" onClick={handleSave} className="btn-primary text-xs">

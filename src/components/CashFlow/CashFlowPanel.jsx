@@ -5,7 +5,7 @@ import {
   CheckCircle2, RotateCcw, CalendarClock, ChevronDown, ChevronRight, SlidersHorizontal, CheckCircle, Circle,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
 import { montarLinhasSimuladas, patchAplicarData, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from '../../lib/fluxoCaixaDatas'
 import {
@@ -18,6 +18,7 @@ import { hojeStr } from '../../lib/saldos'
 import { useFluxoConsultas } from '../../hooks/useFluxoConsultas'
 import { useFluxoProvisorios } from '../../hooks/useFluxoProvisorios'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useThemeColors } from '../../hooks/useTheme'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
@@ -52,23 +53,23 @@ function lerConsultasLembradas() {
 const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
 
 const BADGE = {
-  agendamento: 'bg-sky-500/15 text-sky-300',
-  'lançamento': 'bg-indigo-500/20 text-indigo-300',
-  envelope: 'bg-amber-500/20 text-amber-300',
-  'provisório': 'bg-purple-500/20 text-purple-300',
+  agendamento: 'bg-surface-2 text-texto-2',
+  'lançamento': 'bg-surface-2 text-texto-2',
+  envelope: 'bg-surface-2 text-texto-2',
+  'provisório': 'text-texto-2 outline-dashed outline-1 -outline-offset-1 outline-borda-forte',
 }
 const SITUACAO = {
-  atualizada: 'text-emerald-400',
-  recente: 'text-emerald-400',
-  parada: 'bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded',
-  sem: 'text-gray-500',
+  atualizada: 'text-primary-fg',
+  recente: 'text-primary-fg',
+  parada: 'bg-aviso/15 text-aviso px-1.5 py-0.5 rounded',
+  sem: 'text-texto-3',
 }
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-surface border border-gray-700 rounded-lg p-3 text-xs shadow-xl">
-      <p className="text-gray-400 mb-1">{label}</p>
+    <div className="bg-surface border border-borda-forte rounded-lg p-3 text-xs shadow-xl">
+      <p className="text-texto-2 mb-1">{label}</p>
       {payload.map(p => (
         <p key={p.name} style={{ color: p.color }} className="font-medium">{p.name}: {fmt(p.value)}</p>
       ))}
@@ -114,7 +115,7 @@ export default function CashFlowPanel({ setActivePage }) {
   }
   const statusCelula = (r, compacto = false) => {
     const st = statusConfirmacaoLinha(r, ctxDoc)
-    if (!st) return <span className="text-gray-600 text-xs">—</span>
+    if (!st) return <span className="text-texto-3 text-xs">—</span>
     const ok = st.status === STATUS_CONFIRMACAO.CONFIRMADO
     const rotulo = ok ? 'Confirmado' : 'A confirmar'
     const soIcone = compacto || isMobile
@@ -123,7 +124,7 @@ export default function CashFlowPanel({ setActivePage }) {
         <span
           title="Só o próximo vencimento pode ser confirmado"
           aria-label={rotulo}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-gray-700/40 text-gray-500 cursor-default"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap bg-surface-hover/40 text-texto-3 cursor-default"
         >
           <Circle size={10} />
           {!soIcone && rotulo}
@@ -137,7 +138,7 @@ export default function CashFlowPanel({ setActivePage }) {
         title={ok ? 'Confirmado — clique para marcar como A confirmar' : 'A confirmar — clique para marcar como Confirmado'}
         aria-label={rotulo}
         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap transition-colors ${
-          ok ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' : 'bg-gray-700/60 text-gray-400 hover:bg-gray-700'
+          ok ? 'bg-primary/15 text-primary-fg hover:bg-primary/25' : 'bg-surface-hover/60 text-texto-2 hover:bg-surface-hover'
         }`}
       >
         {ok ? <CheckCircle size={10} /> : <Circle size={10} />}
@@ -164,6 +165,7 @@ export default function CashFlowPanel({ setActivePage }) {
   }
   const consulta = useMemo(() => resolverConsultaAtiva(visiveis, ativaId), [visiveis, ativaId])
   const isMobile = useIsMobile()
+  const cor = useThemeColors()
   const [consultaExcluir, setConsultaExcluir] = useState(null)
   // Horizonte escolhido vale para a consulta em que foi escolhido; trocar de consulta volta ao
   // horizonte padrão dela. Mesmo esquema (derivado, sem efeito) para os overrides da tabela,
@@ -403,13 +405,13 @@ export default function CashFlowPanel({ setActivePage }) {
   }
 
   const semContas = contas.length === 0
-  const corSaldo = (v) => (v >= 0 ? 'text-blue-500' : 'text-orange-600')
+  const corSaldo = (v) => (v >= 0 ? 'text-receita' : 'text-despesa')
 
   // Consultas — "FC Principal" (virtual) sempre primeiro. No celular, vai para o sheet de filtros.
   const secaoConsultas = (
       <div className="space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Consultas</p>
+          <p className="text-xs text-texto-3 uppercase tracking-wide">Consultas</p>
           <div className="ml-auto flex gap-2">
             {!consulta.virtual && (
               <button type="button" onClick={() => setConsultaModal({ initial: consulta })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
@@ -456,7 +458,7 @@ export default function CashFlowPanel({ setActivePage }) {
   // Datas simuladas que caíram fora da janela (com o "voltar à data original").
   const avisosForaDoPeriodo = (
             foraDoPeriodo.length + dpForaDoPeriodo.length > 0 && (
-              <div className="px-4 py-2 border-b border-gray-800 text-xs text-amber-500/90 flex flex-wrap gap-x-3 gap-y-1">
+              <div className="px-4 py-2 border-b border-borda text-xs text-texto-2 flex flex-wrap gap-x-3 gap-y-1">
                 {dpForaDoPeriodo.map(d => (
                   <span key={d.id} className="inline-flex items-center gap-1">
                     {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
@@ -480,7 +482,7 @@ export default function CashFlowPanel({ setActivePage }) {
       {isMobile ? (
         <div className="card py-3 space-y-2">
           <div className="flex items-center gap-2">
-            <div className="flex-1 grid grid-cols-3 gap-1 bg-gray-800/60 rounded-lg p-1" role="tablist" aria-label="Horizonte">
+            <div className="flex-1 grid grid-cols-3 gap-1 bg-surface-2/60 rounded-lg p-1" role="tablist" aria-label="Horizonte">
               {HORIZONTES_MOBILE.map(({ dias, rotulo }) => (
                 <button
                   key={dias}
@@ -488,7 +490,7 @@ export default function CashFlowPanel({ setActivePage }) {
                   role="tab"
                   aria-selected={horizonte === dias}
                   onClick={() => setHorizonteSel({ consultaId: consulta.id, h: dias })}
-                  className={`min-h-[44px] rounded-md text-xs font-medium transition-colors ${horizonte === dias ? 'bg-[#0F6E56] text-white' : 'text-gray-400'}`}
+                  className={`min-h-[44px] rounded-md text-xs font-medium transition-colors ${horizonte === dias ? 'bg-primary text-white' : 'text-texto-2'}`}
                 >
                   {rotulo}
                 </button>
@@ -498,29 +500,29 @@ export default function CashFlowPanel({ setActivePage }) {
               type="button"
               onClick={() => setFiltrosAbertos(true)}
               aria-label="Filtros e consultas"
-              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-gray-800/60 text-gray-300"
+              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg bg-surface-2/60 text-texto-2"
             >
               <SlidersHorizontal size={18} />
             </button>
           </div>
-          <p className="text-xs text-gray-400">
-            <span className="text-gray-300 font-medium">{consulta.nome}</span> · {fmtDate(hoje)} → {fmtDate(fim)}
+          <p className="text-xs text-texto-2">
+            <span className="text-texto-2 font-medium">{consulta.nome}</span> · {fmtDate(hoje)} → {fmtDate(fim)}
           </p>
         </div>
       ) : (
       <div className="card flex items-center justify-between gap-3 flex-wrap py-3">
-        <p className="text-sm text-gray-300">
-          Hoje, <span className="font-semibold text-gray-100">{fmtDate(hoje)}</span>
-          <span className="text-gray-500"> → </span>
-          <span className="font-semibold text-gray-100">{fmtDate(fim)}</span>
+        <p className="text-sm text-texto-2">
+          Hoje, <span className="font-semibold text-texto-1">{fmtDate(hoje)}</span>
+          <span className="text-texto-3"> → </span>
+          <span className="font-semibold text-texto-1">{fmtDate(fim)}</span>
         </p>
-        <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1">
+        <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
           {HORIZONTES.map(h => (
             <button
               key={h}
               type="button"
               onClick={() => setHorizonteSel({ consultaId: consulta.id, h })}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${horizonte === h ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${horizonte === h ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'}`}
             >
               {h} dias
             </button>
@@ -532,20 +534,20 @@ export default function CashFlowPanel({ setActivePage }) {
       {!isMobile && secaoConsultas}
 
       {semContas ? (
-        <div className="card border border-amber-500/30 bg-amber-500/5 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+        <div className="card border border-aviso/30 bg-aviso/5 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-amber-300">
+            <p className="text-sm font-medium text-aviso">
               {consulta.modo === 'principais' ? 'Nenhuma conta marcada como Fluxo de Caixa Principal' : 'Esta consulta não tem contas'}
             </p>
-            <p className="text-xs text-amber-500 mt-0.5">
+            <p className="text-xs text-texto-2 mt-0.5">
               {consulta.modo === 'principais'
                 ? <>Ative a flag <span className="font-semibold">Fluxo de Caixa Principal</span> em pelo menos uma conta corrente ou poupança, ou crie uma consulta.</>
                 : 'Edite a consulta e selecione contas (ou grupos com contas) deste perfil.'}
             </p>
           </div>
           {consulta.modo === 'principais' && setActivePage && (
-            <button onClick={() => setActivePage('accounts')} className="text-xs text-amber-400 hover:text-amber-300 shrink-0 font-medium transition-colors">
+            <button onClick={() => setActivePage('accounts')} className="text-xs text-primary-fg hover:text-texto-1 shrink-0 font-medium transition-colors">
               Ir para Contas →
             </button>
           )}
@@ -554,11 +556,11 @@ export default function CashFlowPanel({ setActivePage }) {
         <>
           {/* Saldo inicial */}
           <div className="card p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-800 flex items-start gap-3">
-              <Wallet size={14} className="text-gray-400 mt-0.5 shrink-0" />
+            <div className="px-4 py-3 border-b border-borda flex items-start gap-3">
+              <Wallet size={14} className="text-texto-2 mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-gray-300">Saldo inicial · {consulta.nome}</h2>
-                <p className="text-xs text-gray-500">{rotuloModo(consulta.modo)} · soma de {contas.length} conta{contas.length !== 1 ? 's' : ''} · cada uma pelo seu último dia de saldo</p>
+                <h2 className="text-sm font-semibold text-texto-2">Saldo inicial · {consulta.nome}</h2>
+                <p className="text-xs text-texto-3">{rotuloModo(consulta.modo)} · soma de {contas.length} conta{contas.length !== 1 ? 's' : ''} · cada uma pelo seu último dia de saldo</p>
               </div>
               <p className={`ml-auto text-lg font-bold whitespace-nowrap ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</p>
             </div>
@@ -567,7 +569,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 type="button"
                 onClick={() => setSaldoContasAberto(o => !o)}
                 aria-expanded={saldoContasAberto}
-                className="w-full min-h-[44px] px-4 flex items-center gap-1.5 text-xs text-gray-400 border-b border-gray-800"
+                className="w-full min-h-[44px] px-4 flex items-center gap-1.5 text-xs text-texto-2 border-b border-borda"
               >
                 {saldoContasAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 {saldoContasAberto ? 'Ocultar saldo por conta' : 'Ver saldo por conta'}
@@ -577,20 +579,20 @@ export default function CashFlowPanel({ setActivePage }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: 520 }}>
                 <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Conta</th>
-                    <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium w-36">Último dia de saldo</th>
-                    <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium w-48">Situação</th>
-                    <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-32">Saldo</th>
+                  <tr className="border-b border-borda">
+                    <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium">Conta</th>
+                    <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium w-36">Último dia de saldo</th>
+                    <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium w-48">Situação</th>
+                    <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-32">Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
                   {saldoPorConta.map(({ conta: a, ultimo, situacao }) => (
-                    <tr key={a.id} className="border-b border-gray-800/40">
-                      <td className="px-4 py-2 text-xs text-gray-200">{a.apelido || a.name}</td>
-                      <td className="px-4 py-2 text-xs text-gray-400">{ultimo ? fmtDate(ultimo) : '—'}</td>
-                      <td className="px-4 py-2 text-xs"><span className={SITUACAO[situacao.tipo]}>{ultimo ? situacao.rotulo : '—'}</span></td>
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${(a.balance || 0) >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(a.balance || 0)}</td>
+                    <tr key={a.id} className="border-b border-borda/40">
+                      <td className="px-4 py-2 text-xs text-texto-1">{a.apelido || a.name}</td>
+                      <td className="px-4 py-2 text-xs text-texto-2">{ultimo ? fmtDate(ultimo) : '—'}</td>
+                      <td className="px-4 py-2 text-xs"><span className={SITUACAO[situacao.tipo]}>{ultimo ? (situacao.tipo === 'parada' ? '⚠ ' : situacao.tipo === 'sem' ? '' : '✓ ') + situacao.rotulo : '—'}</span></td>
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${(a.balance || 0) >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmt(a.balance || 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -602,30 +604,30 @@ export default function CashFlowPanel({ setActivePage }) {
           {/* Cards */}
           <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${temSimulacao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             <div className="card">
-              <div className="flex items-center gap-2 mb-1 text-gray-400"><Wallet size={14} /><p className="text-xs uppercase tracking-wide">Saldo inicial</p></div>
+              <div className="flex items-center gap-2 mb-1 text-texto-2"><Wallet size={14} /><p className="text-xs uppercase tracking-wide">Saldo inicial</p></div>
               <p className={`text-xl font-bold ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</p>
-              {atraso.length > 0 && <p className="text-[11px] text-gray-500 mt-0.5">+ em atraso: {fmt(atrasoTotal)}</p>}
+              {atraso.length > 0 && <p className="text-[11px] text-texto-3 mt-0.5">+ em atraso: {fmt(atrasoTotal)}</p>}
             </div>
             <div className="card">
-              <p className="text-xs text-gray-400 uppercase tracking-wide">Projetado ({horizonte}D)</p>
+              <p className="text-xs text-texto-2 uppercase tracking-wide">Projetado ({horizonte}D)</p>
               <p className={`text-xl font-bold mt-1 ${corSaldo(projetado)}`}>{fmt(projetado)}</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">em {fmtDate(fim)}</p>
+              <p className="text-[11px] text-texto-3 mt-0.5">em {fmtDate(fim)}</p>
             </div>
             <div className="card">
-              <p className="text-xs text-gray-400 uppercase tracking-wide">Mínimo projetado</p>
-              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-blue-500' : 'text-red-500'}`}>{fmt(minimo.valor)}</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">em {fmtDate(minimo.data)}</p>
+              <p className="text-xs text-texto-2 uppercase tracking-wide">Mínimo projetado</p>
+              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(minimo.valor)}</p>
+              <p className="text-[11px] text-texto-3 mt-0.5">em {fmtDate(minimo.data)}</p>
             </div>
             {temSimulacao && (
-              <div className="card border border-purple-500/30">
-                <p className="text-xs text-purple-300 uppercase tracking-wide">Simulação</p>
-                <p className="text-xs text-gray-300 mt-1">
+              <div className="card border border-dashed border-borda-forte">
+                <p className="text-xs text-texto-2 uppercase tracking-wide">Simulação</p>
+                <p className="text-xs text-texto-2 mt-1">
                   {qtdProvisorios} provisório{qtdProvisorios !== 1 ? 's' : ''} · {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''}
-                  {qtdDatas > 0 && <> · <button type="button" onClick={restaurarDatas} className="underline text-amber-400 hover:text-amber-300">restaurar datas</button></>}
+                  {qtdDatas > 0 && <> · <button type="button" onClick={restaurarDatas} className="underline text-primary-fg hover:text-texto-1">restaurar datas</button></>}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-texto-2 mt-1">
                   {qtdForaCalculo} linha{qtdForaCalculo !== 1 ? 's' : ''} fora do cálculo
-                  {qtdForaCalculo > 0 && <> · <button type="button" onClick={restaurarLinhas} className="underline text-amber-400 hover:text-amber-300">restaurar tudo</button></>}
+                  {qtdForaCalculo > 0 && <> · <button type="button" onClick={restaurarLinhas} className="underline text-primary-fg hover:text-texto-1">restaurar tudo</button></>}
                 </p>
               </div>
             )}
@@ -633,15 +635,15 @@ export default function CashFlowPanel({ setActivePage }) {
 
           {/* Gráfico */}
           <div className="card">
-            <h2 className="text-sm font-semibold text-gray-300 mb-4">Projeção de saldo — dia a dia</h2>
+            <h2 className="text-sm font-semibold text-texto-2 mb-4">Projeção de saldo — dia a dia</h2>
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={serie} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(serie.length / 8))} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" stroke={cor.chartGrade} />
+                <XAxis dataKey="label" tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(serie.length / 8))} />
+                <YAxis tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip content={<CustomTooltip />} />
-                <ReferenceLine y={0} stroke="#EA580C" strokeDasharray="4 4" strokeOpacity={0.5} />
-                <Line type="monotone" dataKey="balance" name="Saldo" stroke="#2563EB" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                <ReferenceLine y={0} stroke={cor.chartEixo} strokeDasharray="4 4" />
+                <Line type="monotone" dataKey="balance" name="Saldo" stroke={cor.receita} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -680,23 +682,23 @@ export default function CashFlowPanel({ setActivePage }) {
             </>
           ) : (
           <div className="card p-0 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-3 flex-wrap">
-              <Calendar size={14} className="text-gray-400" />
-              <h2 className="text-sm font-semibold text-gray-300">Eventos projetados</h2>
-              <span className="text-xs text-gray-500">{rowsView.length} evento{rowsView.length !== 1 ? 's' : ''}</span>
+            <div className="px-4 py-3 border-b border-borda flex items-center gap-3 flex-wrap">
+              <Calendar size={14} className="text-texto-2" />
+              <h2 className="text-sm font-semibold text-texto-2">Eventos projetados</h2>
+              <span className="text-xs text-texto-3">{rowsView.length} evento{rowsView.length !== 1 ? 's' : ''}</span>
               <div className="flex items-center gap-4 flex-wrap ml-auto">
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400" title="Override temporário da consulta">
-                  <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                  <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
                   Incluir envelopes
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400" title="Override temporário da consulta">
-                  <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
+                  <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
                   Ocultar reservas
                 </label>
                 <button
                   type="button"
                   onClick={() => setProvModal({ initial: null })}
-                  className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+                  className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 border-dashed border-borda-forte text-texto-2 hover:bg-surface-hover"
                 >
                   <Plus size={13} /> Provisório
                 </button>
@@ -708,28 +710,28 @@ export default function CashFlowPanel({ setActivePage }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: isMobile ? 960 : 1030 }}>
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-borda">
                     <th className="w-9 px-2 py-2.5" title="Desmarque um evento para tirá-lo do cálculo" />
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-28">Data</th>
-                    <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
-                    <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-32">Conta</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-blue-500 font-medium w-28">
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-28">Data</th>
+                    <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[100px]" title="Confirmado / A confirmar (agendamentos) — clique no badge para alternar">Status</th>
+                    <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium w-[70px]" title="Tipo de documento">Doc.</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Conta</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-receita font-medium w-28">
                       <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={11} /> Entrada</span>
                     </th>
-                    <th className="text-right px-3 py-2.5 text-xs text-orange-600 font-medium w-28">
+                    <th className="text-right px-3 py-2.5 text-xs text-despesa font-medium w-28">
                       <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={11} /> Saída</span>
                     </th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium w-32">Saldo</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-32">Ações</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Saldo</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-32">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-800/50 bg-gray-800/20">
+                  <tr className="border-b border-borda/50 bg-surface-2/20">
                     <td className="px-2 py-2" />
-                    <td className="px-3 py-2 text-xs text-gray-500">Hoje</td>
-                    <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={6}>
+                    <td className="px-3 py-2 text-xs text-texto-3">Hoje</td>
+                    <td className="px-3 py-2 text-xs text-texto-2 italic" colSpan={6}>
                       Saldo inicial ({contas.length} conta{contas.length !== 1 ? 's' : ''}, cada uma no seu último dia)
                     </td>
                     <td className={`px-3 py-2 text-right text-xs font-bold ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</td>
@@ -738,43 +740,43 @@ export default function CashFlowPanel({ setActivePage }) {
 
                   {atraso.length > 0 && (
                     <>
-                      <tr className={`border-b border-gray-800/50 bg-red-500/5 ${atrasoAtivas === 0 ? 'opacity-50' : ''}`}>
+                      <tr className={`border-b border-borda/50 bg-perigo/5 ${atrasoAtivas === 0 ? 'opacity-50' : ''}`}>
                         <td className="px-2 py-2 text-center">
                           <input
                             type="checkbox"
-                            className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer"
+                            className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer"
                             checked={atrasoAtivas > 0}
                             ref={el => { if (el) el.indeterminate = atrasoAtivas > 0 && atrasoAtivas < atraso.length }}
                             onChange={toggleAtraso}
                             title={atrasoAtivas > 0 ? 'Tirar as pendências em atraso do cálculo' : 'Voltar a considerar as pendências em atraso'}
                           />
                         </td>
-                        <td className="px-3 py-2 text-xs text-red-400">Hoje</td>
+                        <td className="px-3 py-2 text-xs text-perigo">Hoje</td>
                         <td className="px-3 py-2 text-xs" colSpan={4}>
-                          <button type="button" onClick={() => setAtrasoAberto(o => !o)} className="inline-flex items-center gap-1 text-red-300 hover:text-red-200">
+                          <button type="button" onClick={() => setAtrasoAberto(o => !o)} className="inline-flex items-center gap-1 text-perigo hover:text-texto-1">
                             {atrasoAberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                             Pendências em atraso ({atraso.length})
                           </button>
                         </td>
-                        <td className="px-3 py-2 text-right text-xs font-semibold text-blue-500">{atrasoTotal > 0 ? fmt(atrasoTotal) : ''}</td>
-                        <td className="px-3 py-2 text-right text-xs font-semibold text-orange-600">{atrasoTotal < 0 ? fmt(-atrasoTotal) : ''}</td>
+                        <td className="px-3 py-2 text-right text-xs font-semibold text-receita">{atrasoTotal > 0 ? fmt(atrasoTotal) : ''}</td>
+                        <td className="px-3 py-2 text-right text-xs font-semibold text-despesa">{atrasoTotal < 0 ? fmt(-atrasoTotal) : ''}</td>
                         <td className={`px-3 py-2 text-right text-xs font-bold ${corSaldo(base)}`}>{fmt(base)}</td>
                         <td />
                       </tr>
                       {atrasoAberto && atraso.map(r => {
                         const ativa = !excluidas.has(r._key)
                         return (
-                          <tr key={r._key} className={`border-b border-gray-800/30 bg-red-500/[0.03] ${ativa ? '' : 'opacity-40'}`}>
+                          <tr key={r._key} className={`border-b border-borda/30 bg-perigo/[0.03] ${ativa ? '' : 'opacity-40'}`}>
                             <td className="px-2 py-1.5 text-center">
-                              <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
+                              <input type="checkbox" className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer" checked={ativa} onChange={() => toggleLinha(r._key)} />
                             </td>
-                            <td className="px-3 py-1.5 text-[11px] text-red-400/80 pl-6">{fmtDate(r.date)}</td>
+                            <td className="px-3 py-1.5 text-[11px] text-perigo pl-6">{fmtDate(r.date)}</td>
                             <td className="px-2 py-1.5 w-[100px]">{statusCelula(r)}</td>
                             <td className="px-2 py-1.5 w-[70px]"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
-                            <td className={`px-3 py-1.5 text-[11px] ${ativa ? 'text-gray-300' : 'text-gray-500 line-through'}`}>{r.description}</td>
-                            <td className="px-3 py-1.5 text-[11px] text-gray-500">{accName(contaDaLinha(r, accountIds))}</td>
-                            <td className="px-3 py-1.5 text-right text-[11px] text-blue-500/80">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                            <td className="px-3 py-1.5 text-right text-[11px] text-orange-600/80">{r.saida > 0 ? fmt(r.saida) : ''}</td>
+                            <td className={`px-3 py-1.5 text-[11px] ${ativa ? 'text-texto-2' : 'text-texto-3 line-through'}`}>{r.description}</td>
+                            <td className="px-3 py-1.5 text-[11px] text-texto-3">{accName(contaDaLinha(r, accountIds))}</td>
+                            <td className="px-3 py-1.5 text-right text-[11px] text-receita">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
+                            <td className="px-3 py-1.5 text-right text-[11px] text-despesa">{r.saida > 0 ? fmt(r.saida) : ''}</td>
                             <td colSpan={2} />
                           </tr>
                         )
@@ -790,16 +792,16 @@ export default function CashFlowPanel({ setActivePage }) {
                     return (
                       <tr
                         key={r._key}
-                        className={`border-b border-gray-800/40 ${!r.ativa ? 'opacity-40' : ''} ${
-                          ehMinimo ? (minimoNeg ? 'bg-red-500/15 hover:bg-red-500/20' : 'bg-blue-500/10 hover:bg-blue-500/15')
-                            : r._provisorio ? 'bg-purple-500/10 hover:bg-purple-500/15'
-                            : 'hover:bg-gray-800/20'
+                        className={`border-b border-borda/40 ${!r.ativa ? 'opacity-40' : ''} ${
+                          ehMinimo ? (minimoNeg ? 'bg-despesa/15 hover:bg-despesa/20' : 'bg-receita/10 hover:bg-receita/15')
+                            : r._provisorio ? 'bg-surface-2/60 hover:bg-surface-hover/60'
+                            : 'hover:bg-surface-hover/20'
                         }`}
                       >
                         <td className="px-2 py-2.5 text-center">
                           <input
                             type="checkbox"
-                            className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer"
+                            className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer"
                             checked={r.ativa}
                             onChange={() => toggleLinha(r._key)}
                             title={r.ativa ? 'Tirar este evento do cálculo' : 'Voltar a considerar este evento'}
@@ -808,49 +810,49 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-3 py-2.5 text-xs whitespace-nowrap">
                           {r._dataOriginal ? (
                             <span className="inline-flex flex-col leading-tight">
-                              <span className="text-amber-400 font-semibold">{fmtDate(r.date)}</span>
-                              <span className="text-[10px] text-gray-500">era {ddmm(r._dataOriginal)}</span>
+                              <span className="text-texto-1 font-semibold underline decoration-dashed decoration-borda-campo underline-offset-2">{fmtDate(r.date)}</span>
+                              <span className="text-[10px] text-texto-3">era {ddmm(r._dataOriginal)}</span>
                             </span>
-                          ) : <span className="text-gray-400">{fmtDate(r.date)}</span>}
+                          ) : <span className="text-texto-2">{fmtDate(r.date)}</span>}
                         </td>
                         <td className="px-2 py-2.5 w-[100px] whitespace-nowrap">{statusCelula(r)}</td>
                         <td className="px-2 py-2.5 w-[70px] whitespace-nowrap"><TipoDocumentoBadge tipo={docDaLinha(r)} /></td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`} title={r.description}>{r.description}</span>
+                            <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</span>
                             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${BADGE[tipo]}`}>{tipo}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{accName(contaDaLinha(r, accountIds))}</td>
-                        <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-500 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                        <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
-                        <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-gray-600' : ehMinimo ? (minimoNeg ? 'text-red-400' : 'text-blue-500') : r.saldo >= 0 ? 'text-gray-100' : 'text-red-400'}`}>
+                        <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{accName(contaDaLinha(r, accountIds))}</td>
+                        <td className="px-3 py-2.5 text-right text-xs font-semibold text-receita whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
+                        <td className="px-3 py-2.5 text-right text-xs font-semibold text-despesa whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
+                        <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-texto-3' : ehMinimo ? (minimoNeg ? 'text-despesa' : 'text-receita') : r.saldo >= 0 ? 'text-texto-1' : 'text-despesa'}`}>
                           {ehMinimo && r.ativa && (
-                            <span className={`mr-1.5 align-middle text-[10px] font-normal px-1.5 py-0.5 rounded ${minimoNeg ? 'bg-red-500/15 text-red-300' : 'bg-blue-500/15 text-blue-300'}`}>mínimo</span>
+                            <span className={`mr-1.5 align-middle text-[10px] font-normal px-1.5 py-0.5 rounded ${minimoNeg ? 'bg-despesa/15 text-despesa' : 'bg-receita/15 text-receita'}`}>mínimo</span>
                           )}
                           {r.ativa ? fmt(r.saldo) : '—'}
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1">
                             {!r._provisorio && (
-                              <button type="button" onClick={() => setMudarData(r)} className="p-1 rounded text-gray-500 hover:text-amber-300 hover:bg-amber-500/10" title="Mudar data">
+                              <button type="button" onClick={() => setMudarData(r)} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Mudar data">
                                 <CalendarClock size={13} />
                               </button>
                             )}
                             {r._dataOriginal && (
-                              <button type="button" onClick={() => desfazerData(r)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-500/10 whitespace-nowrap" title={`Voltar para ${fmtDate(r._dataOriginal)}`}>
+                              <button type="button" onClick={() => desfazerData(r)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded text-ambar hover:bg-ambar/10 whitespace-nowrap" title={`Voltar para ${fmtDate(r._dataOriginal)}`}>
                                 <RotateCcw size={11} /> Desfazer data
                               </button>
                             )}
                             {r._provisorio && (
                               <>
-                                <button type="button" onClick={() => setEfetivar(r._provisorio)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10" title="Gravar como agendamento ou lançamento">
+                                <button type="button" onClick={() => setEfetivar(r._provisorio)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-primary/40 text-primary-fg hover:bg-primary/10" title="Gravar como agendamento ou lançamento">
                                   <CheckCircle2 size={11} /> Efetivar
                                 </button>
-                                <button type="button" onClick={() => setProvModal({ initial: r._provisorio })} className="p-1 rounded text-gray-500 hover:text-purple-300 hover:bg-purple-500/10" title="Editar provisório">
+                                <button type="button" onClick={() => setProvModal({ initial: r._provisorio })} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Editar provisório">
                                   <Pencil size={13} />
                                 </button>
-                                <button type="button" onClick={() => setProvExcluir(r._provisorio)} className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10" title="Excluir provisório">
+                                <button type="button" onClick={() => setProvExcluir(r._provisorio)} className="p-1 rounded text-texto-3 hover:text-perigo hover:bg-perigo-bg" title="Excluir provisório">
                                   <Trash2 size={13} />
                                 </button>
                               </>
@@ -861,7 +863,7 @@ export default function CashFlowPanel({ setActivePage }) {
                     )
                   })}
                   {rowsView.length === 0 && (
-                    <tr><td colSpan={10} className="text-center py-8 text-gray-500 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
+                    <tr><td colSpan={10} className="text-center py-8 text-texto-3 text-sm">Nenhum evento nos próximos {horizonte} dias.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -875,19 +877,19 @@ export default function CashFlowPanel({ setActivePage }) {
         <FluxoSheet open={filtrosAbertos} onClose={() => setFiltrosAbertos(false)} title="Filtros e consultas">
           {secaoConsultas}
           <div className="space-y-1">
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Eventos</p>
-            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-gray-300" title="Override temporário da consulta">
-              <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
+            <p className="text-xs text-texto-3 uppercase tracking-wide">Eventos</p>
+            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+              <input type="checkbox" className="accent-primary w-4 h-4" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
               Incluir envelopes
             </label>
-            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-gray-300" title="Override temporário da consulta">
-              <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
+            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-sm text-texto-2" title="Override temporário da consulta">
+              <input type="checkbox" className="accent-primary w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
               Ocultar reservas
             </label>
             <button
               type="button"
               onClick={() => { setFiltrosAbertos(false); setProvModal({ initial: null }) }}
-              className="btn-secondary min-h-[44px] w-full flex items-center justify-center gap-1.5 text-sm border-purple-500/40 text-purple-300"
+              className="btn-secondary min-h-[44px] w-full flex items-center justify-center gap-1.5 text-sm border-dashed border-borda-forte text-texto-2"
             >
               <Plus size={14} /> Novo provisório
             </button>

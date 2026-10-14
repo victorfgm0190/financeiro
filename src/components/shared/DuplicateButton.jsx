@@ -77,7 +77,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
         onClick={openPopover}
         title="Duplicar lançamento"
         aria-label="Duplicar"
-        className={className || 'p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors'}
+        className={className || 'p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors'}
       >
         <Copy size={iconSize} />
       </button>
@@ -86,24 +86,24 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
           {/* Overlay escuro: cobre a viewport e fecha ao clicar fora. */}
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
-            className="bg-black/60"
+            className="bg-overlay"
             onClick={() => setStep(null)}
           />
           {/* Modal centralizado — funciona igual em desktop e mobile (independe da posição do botão). */}
           <div
             ref={popRef}
             style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }}
-            className="bg-surface border border-gray-700 rounded-lg shadow-2xl p-3 w-[248px] max-w-[calc(100vw-2rem)]"
+            className="bg-surface border border-borda-forte rounded-lg shadow-2xl p-3 w-[248px] max-w-[calc(100vw-2rem)]"
             onClick={(e) => e.stopPropagation()}
           >
             {step === 'choice' ? (
               <>
-                <p className="text-xs text-gray-400 mb-2">Duplicar como...</p>
+                <p className="text-xs text-texto-2 mb-2">Duplicar como...</p>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={chooseLancamento}
-                    className="flex-1 flex flex-col items-center gap-1 px-2 py-2.5 text-xs font-medium text-gray-300 border border-gray-700 rounded-lg hover:border-emerald-500/60 hover:text-emerald-400 hover:bg-emerald-400/5 transition-colors"
+                    className="flex-1 flex flex-col items-center gap-1 px-2 py-2.5 text-xs font-medium text-texto-2 border border-borda-forte rounded-lg hover:border-primary/60 hover:text-primary-fg hover:bg-primary/5 transition-colors"
                   >
                     <span className="text-base leading-none">📋</span>
                     Criar Lançamento
@@ -111,7 +111,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
                   <button
                     type="button"
                     onClick={chooseAgendamento}
-                    className="flex-1 flex flex-col items-center gap-1 px-2 py-2.5 text-xs font-medium text-gray-300 border border-gray-700 rounded-lg hover:border-indigo-500/60 hover:text-indigo-400 hover:bg-indigo-400/5 transition-colors"
+                    className="flex-1 flex flex-col items-center gap-1 px-2 py-2.5 text-xs font-medium text-texto-2 border border-borda-forte rounded-lg hover:border-primary/60 hover:text-primary-fg hover:bg-primary/5 transition-colors"
                   >
                     <span className="text-base leading-none">🔔</span>
                     Criar Agendamento
@@ -120,7 +120,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
               </>
             ) : (
               <>
-                <label className="block text-xs text-gray-400 mb-1.5">Data da cópia</label>
+                <label className="block text-xs text-texto-2 mb-1.5">Data da cópia</label>
                 <input
                   type="date"
                   className="input w-full text-sm"
@@ -133,14 +133,14 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
                   <button
                     type="button"
                     onClick={() => setStep(null)}
-                    className="px-2.5 py-1 text-xs text-gray-400 hover:text-gray-200 rounded transition-colors"
+                    className="px-2.5 py-1 text-xs text-texto-2 hover:text-texto-1 rounded transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     onClick={confirm}
-                    className="px-3 py-1 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors"
+                    className="px-3 py-1 text-xs font-medium bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                   >
                     Duplicar
                   </button>

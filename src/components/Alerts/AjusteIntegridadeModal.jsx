@@ -112,38 +112,38 @@ export default function AjusteIntegridadeModal({ pendencias, todas = false, onCl
     <Modal open onClose={executando ? () => {} : onClose} title={titulo} size="lg">
       {!resultado ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-400">
-            {qtd('religar') > 0 && <>Serão religadas <span className="text-gray-100 font-medium">{qtd('religar')} parcela(s)</span> à série (sem mudar valor, data, fatura nem saldo). </>}
-            {qtd('criar') > 0 && <>Serão criadas <span className="text-gray-100 font-medium">{qtd('criar')} transferência(s)</span>, total <span className="text-gray-100 font-medium">{fmt(totalCriado)}</span>. </>}
+          <p className="text-sm text-texto-2">
+            {qtd('religar') > 0 && <>Serão religadas <span className="text-texto-1 font-medium">{qtd('religar')} parcela(s)</span> à série (sem mudar valor, data, fatura nem saldo). </>}
+            {qtd('criar') > 0 && <>Serão criadas <span className="text-texto-1 font-medium">{qtd('criar')} transferência(s)</span>, total <span className="text-texto-1 font-medium">{fmt(totalCriado)}</span>. </>}
             {qtd('atualizar') > 0 && <>{qtd('atualizar')} transferência(s) serão atualizadas. </>}
             {aplicaveis.length === 0 && !faltaEscolha && <>Nada a corrigir. </>}
             Ao final, a varredura completa roda sozinha.
           </p>
           <ul className="space-y-2">
             {planos.map(({ p, escolher, plano }) => (
-              <li key={p.id} className={`rounded-lg p-3 text-xs ${!plano || plano.ok ? 'bg-gray-800/70 text-gray-200' : 'bg-gray-800/30 text-gray-500'}`}>
+              <li key={p.id} className={`rounded-lg p-3 text-xs ${!plano || plano.ok ? 'bg-surface-2/70 text-texto-1' : 'bg-surface-2/30 text-texto-3'}`}>
                 {escolher && (
                   <div className="space-y-1.5 mb-2">
-                    <p className="text-gray-300">{p.descricao}</p>
+                    <p className="text-texto-2">{p.descricao}</p>
                     {(p.esperado?.opcoes || []).map(o => (
                       <button key={o.id} type="button" onClick={() => setEscolhas(e => ({ ...e, [p.id]: o.id }))}
                         className={`w-full text-left px-2 py-1.5 rounded border flex items-start gap-2 ${escolhas[p.id] === o.id
-                          ? 'border-[#0F6E56] bg-[#0F6E56]/20 text-gray-100'
-                          : o.recomendada ? 'border-emerald-600/60 bg-emerald-500/5 text-gray-100 hover:border-emerald-500' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}>
+                          ? 'border-primary bg-primary/20 text-texto-1'
+                          : o.recomendada ? 'border-primary/60 bg-primary/5 text-texto-1 hover:border-primary' : 'border-borda-forte text-texto-2 hover:border-borda-forte'}`}>
                         <span className="flex-1">{o.rotulo}</span>
-                        {o.recomendada && <span className="badge shrink-0 bg-emerald-500/15 text-emerald-400">mais provável</span>}
+                        {o.recomendada && <span className="badge shrink-0 bg-primary/15 text-primary-fg">mais provável</span>}
                       </button>
                     ))}
                   </div>
                 )}
                 {plano?.ok && <span className="font-mono break-all whitespace-pre-line">{plano.texto}</span>}
-                {plano && !plano.ok && <><span className="text-gray-400">{p.descricao}</span><br />Sem ação: {plano.motivo}</>}
+                {plano && !plano.ok && <><span className="text-texto-2">{p.descricao}</span><br />Sem ação: {plano.motivo}</>}
               </li>
             ))}
           </ul>
-          {erro && <p className="text-sm text-red-400">{erro}</p>}
+          {erro && <p className="text-sm text-perigo">{erro}</p>}
           <div className="flex items-center justify-end gap-2">
-            {etapa && <span className="text-xs text-gray-500 mr-auto flex items-center gap-1"><Loader2 size={12} className="animate-spin" />{etapa}</span>}
+            {etapa && <span className="text-xs text-texto-3 mr-auto flex items-center gap-1"><Loader2 size={12} className="animate-spin" />{etapa}</span>}
             <button className="btn-secondary" onClick={onClose} disabled={executando}>Cancelar</button>
             <button className="btn-primary flex items-center gap-2" onClick={confirmar} disabled={executando || aplicaveis.length === 0}>
               {executando ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />}
@@ -153,28 +153,28 @@ export default function AjusteIntegridadeModal({ pendencias, todas = false, onCl
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="text-sm bg-gray-800/60 rounded-lg p-3 text-gray-300">
-            <span className="text-emerald-400 font-medium">{resultado.corrigidas} corrigida(s)</span>
+          <div className="text-sm bg-surface-2/60 rounded-lg p-3 text-texto-2">
+            <span className="text-primary-fg font-medium">{resultado.corrigidas} corrigida(s)</span>
             {resultado.varredura && (
               <>
-                {' · '}<span className="text-amber-400 font-medium">{resultado.varredura.pendentes ?? '—'} ainda pendente(s)</span>
+                {' · '}<span className="text-aviso font-medium">{resultado.varredura.pendentes ?? '—'} ainda pendente(s)</span>
                 {' · '}varredura: {resultado.varredura.resolvidas} resolvida(s), {resultado.varredura.novas} nova(s)
               </>
             )}
             {resultado.falhaVarredura && (
-              <p className="text-amber-400 text-xs mt-1">A varredura automática não rodou ({resultado.falhaVarredura}). Use "Varrer agora".</p>
+              <p className="text-aviso text-xs mt-1">⚠ A varredura automática não rodou ({resultado.falhaVarredura}). Use "Varrer agora".</p>
             )}
           </div>
           {resultado.linhas.map(r => (
-            <div key={r.pendenciaId} className="flex items-start gap-2 text-xs bg-gray-800/60 rounded-lg p-3">
+            <div key={r.pendenciaId} className="flex items-start gap-2 text-xs bg-surface-2/60 rounded-lg p-3">
               {r.resolvida && r.gravada
-                ? <CheckCircle size={14} className="text-emerald-400 shrink-0 mt-0.5" />
-                : <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />}
-              <div className="text-gray-300 min-w-0 break-words">
+                ? <CheckCircle size={14} className="text-primary-fg shrink-0 mt-0.5" />
+                : <AlertTriangle size={14} className="text-aviso shrink-0 mt-0.5" />}
+              <div className="text-texto-2 min-w-0 break-words">
                 {r.aplicado ? <p className="font-mono break-all whitespace-pre-line">{r.aplicado.texto}</p> : <p>Nenhuma alteração: {r.ignorado?.motivo}</p>}
-                {r.resolvida && r.gravada && <p className="text-emerald-400 mt-1">Divergência sumiu — pendência resolvida pelo motor.</p>}
-                {r.resolvida && !r.gravada && <p className="text-amber-400 mt-1">Divergência sumiu, mas não foi possível marcar a pendência ({r.falha}). A próxima varredura resolve.</p>}
-                {!r.resolvida && <p className="text-amber-400 mt-1">Continua pendente: {r.motivo}</p>}
+                {r.resolvida && r.gravada && <p className="text-primary-fg mt-1">Divergência sumiu — pendência resolvida pelo motor.</p>}
+                {r.resolvida && !r.gravada && <p className="text-aviso mt-1">Divergência sumiu, mas não foi possível marcar a pendência ({r.falha}). A próxima varredura resolve.</p>}
+                {!r.resolvida && <p className="text-aviso mt-1">Continua pendente: {r.motivo}</p>}
               </div>
             </div>
           ))}

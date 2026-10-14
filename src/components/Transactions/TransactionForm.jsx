@@ -1050,17 +1050,17 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     return (
       <div className="space-y-5 py-2">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto">
-            <Repeat size={22} className="text-amber-400" />
+          <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mx-auto">
+            <Repeat size={22} className="text-texto-2" />
           </div>
-          <h3 className="font-semibold text-gray-100">Isto é uma parcela?</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">
+          <h3 className="font-semibold text-texto-1">Isto é uma parcela?</h3>
+          <p className="text-sm text-texto-2 leading-relaxed">
             A descrição contém{' '}
-            <span className="text-white font-semibold">{num}/{total}</span> e o campo
+            <span className="text-texto-1 font-semibold">{num}/{total}</span> e o campo
             “Parcelado” não está marcado. Deseja registrar este lançamento como{' '}
-            <span className="text-white font-semibold">parcela {num} de {total}</span>?
+            <span className="text-texto-1 font-semibold">parcela {num} de {total}</span>?
           </p>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-texto-3">
             “Sim” apenas marca a parcela neste lançamento (não cria as demais). “Não” lança como está.
           </p>
         </div>
@@ -1088,23 +1088,23 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     return (
       <div className="space-y-5 py-2">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto">
-            <Repeat size={22} className="text-amber-400" />
+          <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center mx-auto">
+            <Repeat size={22} className="text-texto-2" />
           </div>
-          <h3 className="font-semibold text-gray-100">Gerar parcelas futuras</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">
-            Serão criadas <span className="text-white font-semibold">{missing.length}</span> parcela{missing.length !== 1 ? 's' : ''} faltante{missing.length !== 1 ? 's' : ''} desta série
+          <h3 className="font-semibold text-texto-1">Gerar parcelas futuras</h3>
+          <p className="text-sm text-texto-2 leading-relaxed">
+            Serão criadas <span className="text-texto-1 font-semibold">{missing.length}</span> parcela{missing.length !== 1 ? 's' : ''} faltante{missing.length !== 1 ? 's' : ''} desta série
             (herdando categoria, grupo gerencial, favorecido e função de reserva da parcela mais próxima):
           </p>
         </div>
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700/60 divide-y divide-gray-800">
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-borda-forte/60 divide-y divide-borda">
           {missing.map(p => (
             <div key={p.num} className="px-3 py-2 text-sm flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-gray-200 truncate">{p.description}</div>
-                <div className="text-xs text-gray-500">parcela {p.num}/{p.total} · {p.date} · fatura {p.faturaMonthYear}</div>
+                <div className="text-texto-1 truncate">{p.description}</div>
+                <div className="text-xs text-texto-3">parcela {p.num}/{p.total} · {p.date} · fatura {p.faturaMonthYear}</div>
               </div>
-              <div className="text-gray-100 font-semibold whitespace-nowrap">{fmt(p.amount)}</div>
+              <div className="text-texto-1 font-semibold whitespace-nowrap">{fmt(p.amount)}</div>
             </div>
           ))}
         </div>
@@ -1123,15 +1123,15 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     return (
       <div className="space-y-5 py-2">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-indigo-500/15 flex items-center justify-center mx-auto">
-            <PiggyBank size={22} className="text-indigo-400" />
+          <div className="w-12 h-12 rounded-full bg-reserva/15 flex items-center justify-center mx-auto">
+            <PiggyBank size={22} className="text-reserva" />
           </div>
-          <h3 className="font-semibold text-gray-100">Excluir agendamento de resgate?</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">
+          <h3 className="font-semibold text-texto-1">Excluir agendamento de resgate?</h3>
+          <p className="text-sm text-texto-2 leading-relaxed">
             A despesa não está mais vinculada a uma reserva. Deseja excluir o agendamento{' '}
-            <span className="text-white font-semibold">{linkedSch.description}</span> de{' '}
-            <span className="text-white font-semibold">{fmt(linkedSch.amount)}</span> em{' '}
-            <span className="text-white font-semibold">{fmtDate(linkedSch.startDate)}</span>?
+            <span className="text-texto-1 font-semibold">{linkedSch.description}</span> de{' '}
+            <span className="text-texto-1 font-semibold">{fmt(linkedSch.amount)}</span> em{' '}
+            <span className="text-texto-1 font-semibold">{fmtDate(linkedSch.startDate)}</span>?
           </p>
         </div>
         <div className="flex gap-3 pt-2">
@@ -1151,18 +1151,18 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     return (
       <div className="space-y-5 py-2">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-full bg-indigo-500/15 flex items-center justify-center mx-auto">
-            <PiggyBank size={22} className="text-indigo-400" />
+          <div className="w-12 h-12 rounded-full bg-reserva/15 flex items-center justify-center mx-auto">
+            <PiggyBank size={22} className="text-reserva" />
           </div>
-          <h3 className="font-semibold text-gray-100">Criar agendamento de resgate?</h3>
-          <p className="text-sm text-gray-400 leading-relaxed">
+          <h3 className="font-semibold text-texto-1">Criar agendamento de resgate?</h3>
+          <p className="text-sm text-texto-2 leading-relaxed">
             Deseja agendar o resgate de{' '}
-            <span className="text-white font-semibold">{fmt(resgateInfo.amount)}</span> da reserva{' '}
-            <span className="text-white font-semibold">{resgateInfo.contaResgate.apelido || resgateInfo.contaResgate.name}</span>
-            {contaPrincipal ? (<> → <span className="text-white font-semibold">{contaPrincipal.apelido || contaPrincipal.name}</span></>) : null}?
+            <span className="text-texto-1 font-semibold">{fmt(resgateInfo.amount)}</span> da reserva{' '}
+            <span className="text-texto-1 font-semibold">{resgateInfo.contaResgate.apelido || resgateInfo.contaResgate.name}</span>
+            {contaPrincipal ? (<> → <span className="text-texto-1 font-semibold">{contaPrincipal.apelido || contaPrincipal.name}</span></>) : null}?
           </p>
           {resgateInfo.funcaoNome && (
-            <p className="text-xs text-indigo-400">Função: {resgateInfo.funcaoNome}</p>
+            <p className="text-xs text-reserva">Função: {resgateInfo.funcaoNome}</p>
           )}
         </div>
         <div>
@@ -1186,7 +1186,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const saida = form.type !== 'income'
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex rounded-xl overflow-hidden border border-gray-700" role="group" aria-label="Tipo">
+        <div className="flex rounded-xl overflow-hidden border border-borda-forte" role="group" aria-label="Tipo">
           {[{ v: 'expense', l: 'Saída' }, { v: 'income', l: 'Entrada' }].map(t => (
             <button
               type="button"
@@ -1195,8 +1195,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               aria-pressed={form.type === t.v}
               className={`flex-1 min-h-[44px] text-sm font-semibold transition-colors ${
                 form.type === t.v
-                  ? (t.v === 'income' ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white')
-                  : 'bg-gray-800 text-gray-400'
+                  ? (t.v === 'income' ? 'bg-receita text-page' : 'bg-despesa text-page')
+                  : 'bg-surface-2 text-texto-2'
               }`}
             >
               {t.l}
@@ -1205,8 +1205,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </div>
 
         <div className="text-center py-2">
-          <label htmlFor="valor-rapido" className="text-xs text-gray-500">Valor</label>
-          <div className={`flex items-baseline justify-center gap-1 ${saida ? 'text-orange-400' : 'text-blue-400'}`}>
+          <label htmlFor="valor-rapido" className="text-xs text-texto-3">Valor</label>
+          <div className={`flex items-baseline justify-center gap-1 ${saida ? 'text-despesa' : 'text-receita'}`}>
             <span className="text-xl font-semibold">R$</span>
             <input
               id="valor-rapido"
@@ -1221,7 +1221,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 set('amount', Number.isFinite(n) && n > 0 ? String(n) : '')
               }}
               placeholder="0,00"
-              className="w-44 bg-transparent text-center text-4xl font-bold outline-none placeholder:text-gray-700"
+              className="w-44 bg-transparent text-center text-4xl font-bold outline-none placeholder:text-texto-3"
               required
             />
           </div>
@@ -1268,7 +1268,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           />
         )}
 
-        <button type="button" onClick={() => setMaisOpcoes(true)} className="text-sm text-emerald-400 min-h-[44px]">
+        <button type="button" onClick={() => setMaisOpcoes(true)} className="text-sm text-primary-fg min-h-[44px]">
           + Mais opções (data, parcelas, envelope)
         </button>
 
@@ -1281,9 +1281,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     <form onSubmit={handleSubmit} className="space-y-4">
       {initial?.id && (
         <div className="flex justify-end -mb-2">
-          <button type="button" onClick={() => setStep('historico')} className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5" title="Histórico de alterações">
+          <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
             <History size={13} /> Histórico
-            {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+            {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
           </button>
         </div>
       )}
@@ -1301,7 +1301,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
       <div>
         <label className="label">Tipo</label>
-        <div className="flex rounded-lg overflow-hidden border border-gray-700">
+        <div className="flex rounded-lg overflow-hidden border border-borda-forte">
           {TYPE_OPTIONS.map(t => (
             <button
               type="button"
@@ -1309,10 +1309,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               onClick={() => set('type', t.value)}
               className={`flex-1 py-2 text-sm font-medium transition-colors ${
                 form.type === t.value
-                  ? t.value === 'income' ? 'bg-blue-600 text-white'
-                    : t.value === 'expense' ? 'bg-orange-600 text-white'
-                    : 'bg-purple-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  ? t.value === 'income' ? 'bg-receita text-page'
+                    : t.value === 'expense' ? 'bg-despesa text-page'
+                    : 'bg-transferencia text-page'
+                  : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
               }`}
             >
               {t.label}
@@ -1374,14 +1374,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               {faturaPreview && (() => {
                 const { billTotal, pagando, dif } = faturaPreview
                 const txt = dif > 0.01 ? `pago a mais ${fmt(dif)}` : dif < -0.01 ? `falta pagar ${fmt(-dif)}` : 'quitada totalmente'
-                const color = dif > 0.01 ? 'text-blue-400' : dif < -0.01 ? 'text-amber-500' : 'text-gray-400'
+                const color = dif > 0.01 ? 'text-receita' : dif < -0.01 ? 'text-aviso' : 'text-texto-2'
                 return (
-                  <p className="text-xs text-gray-500 mt-1.5">
+                  <p className="text-xs text-texto-3 mt-1.5">
                     Fatura {fmt(billTotal)} · pagando {fmt(pagando)} → <span className={`font-medium ${color}`}>{txt}</span>
                   </p>
                 )
               })()}
-              <p className="text-xs text-gray-600 mt-1">Vincular abate a dívida da fatura e conta como pagamento real.</p>
+              <p className="text-xs text-texto-3 mt-1">Vincular abate a dívida da fatura e conta como pagamento real.</p>
             </div>
           )}
           {(() => {
@@ -1391,7 +1391,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             const hasPlan = !!toAcc?.debtPlan
             const isEmp = toGroup.behavior === 'emprestimo'
             return (
-              <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${hasPlan ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-amber-500/10 border-amber-500/20 text-amber-300'}`}>
+              <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-xs ${hasPlan ? 'bg-primary/10 border-primary/20 text-primary-fg' : 'bg-aviso/10 border-aviso/20 text-aviso'}`}>
                 <span className="shrink-0 mt-0.5">{hasPlan ? '✓' : '⚠'}</span>
                 {hasPlan
                   ? `Pagamento de ${isEmp ? 'empréstimo' : 'dívida'} — plano de ${toAcc.debtPlan.installments} parcelas ativo`
@@ -1401,8 +1401,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             )
           })()}
           {(isDepositToReserva || isWithdrawFromReserva) && !form.reservaFuncaoId && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
-              <p className="text-xs font-medium text-amber-400 flex items-center gap-1.5">
+            <div className="p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2">
+              <p className="text-xs font-medium text-reserva flex items-center gap-1.5">
                 📂 {isDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
               </p>
               {/* Categoria sempre editável (inclusive em reserva especifica/função única):
@@ -1417,10 +1417,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 ungroupedLabel="Sem grupo"
               />
               {needsReservaCategorySelect && !reservaFuncaoUnica && !form.reservaExpenseCategoryId && (
-                <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
+                <p className="text-xs text-aviso">⚠ Obrigatório para reserva livre</p>
               )}
               {(!needsReservaCategorySelect || reservaFuncaoUnica) && !form.reservaExpenseCategoryId && (
-                <p className="text-xs text-amber-300/70">
+                <p className="text-xs text-texto-2">
                   Sem seleção, usa {isDepositToReserva ? 'a despesa' : 'a categoria'} padrão:{' '}
                   <span className="font-semibold">
                     {reservaLinkedCat ? `${reservaLinkedCat.icon} ${reservaLinkedCat.name}` : '🏦 Reservas Gerais'}
@@ -1440,7 +1440,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 <option value="">— Selecionar —</option>
                 {reservaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
-              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+              <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
                 {isDepositToReserva ? 'Função de reserva deste depósito.' : 'Função de reserva deste resgate.'}
               </p>
             </div>
@@ -1457,7 +1457,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 ungroupedLast
                 ungroupedLabel="Sem grupo"
               />
-              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+              <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
                 Opcional — preencha apenas se quiser classificar o aporte. Com categoria, o
                 lançamento aparece nos relatórios como saída; em branco, é uma transferência
                 comum (invisível nos relatórios).
@@ -1477,7 +1477,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   ungroupedLast
                   ungroupedLabel="Sem grupo"
                 />
-                {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
+                {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
               </div>
               <div>
                 <label className="label">Favorecido</label>
@@ -1486,7 +1486,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   onChange={onPayeeChange}
                   suggestions={sortedPayees}
                 />
-                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
                   Esta transferência é a entrada à vista de um bem — por isso carrega categoria e
                   favorecido, ao contrário de uma transferência comum.
                 </p>
@@ -1494,8 +1494,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </>
           )}
           {isInterProfileTransfer && (
-            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-3">
-              <p className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
+            <div className="p-3 bg-surface-2 border border-borda-forte rounded-lg space-y-3">
+              <p className="text-xs font-medium text-texto-2 flex items-center gap-1.5">
                 🔁 Transferência entre perfis — categorize a movimentação em cada visão (opcional)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1526,7 +1526,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   />
                 </div>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="text-xs text-texto-3 leading-relaxed">
                 Opcional — usado em Relatórios e KPIs quando um perfil está selecionado: a saída
                 do perfil entra como despesa e a entrada como receita, na categoria da respectiva visão.
               </p>
@@ -1552,7 +1552,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <div>
           <label className="label">Data Banco</label>
           <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} />
-          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+          <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
             Data original do extrato do cartão. Em branco para lançamentos manuais — preencha
             só para corrigir quando o banco enviou a data errada.
           </p>
@@ -1565,9 +1565,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <label className="label">Categoria</label>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
-                <div className="input flex-1 flex items-center justify-between text-xs text-gray-300">
+                <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
                   <span>{rateioRows.length} Categorias Separadas</span>
-                  <span className="text-gray-500">Total: {fmt(rateioTotal)}</span>
+                  <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
                 </div>
               ) : (
                 <div className="flex-1 min-w-0">
@@ -1580,7 +1580,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                     ungroupedLast
                     ungroupedLabel="Sem grupo"
                   />
-                  {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
+                  {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
                 </div>
               )}
               <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
@@ -1594,7 +1594,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <label className="label">Favorecido</label>
               {initial?.id && (initial.payee || '').trim() && (
                 <button type="button" onClick={() => setRenomearFav(true)}
-                  className="text-[11px] text-gray-400 hover:text-gray-200 min-h-[32px] px-1"
+                  className="text-[11px] text-texto-2 hover:text-texto-1 min-h-[32px] px-1"
                   title="Troca este favorecido em todos os lançamentos, agendamentos e regras (com prévia)">
                   Renomear em todos
                 </button>
@@ -1647,7 +1647,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {/* Item 6: card "Parcela N de M" editável (override manual) + irmãs + geração das faltantes. */}
       {eligivelParcela && (
-        <div className={`p-3 rounded-lg space-y-2 border ${parcelaSeries ? 'bg-amber-500/5 border-amber-500/20' : 'bg-gray-800/40 border-gray-700/50'}`}>
+        <div className={`p-3 rounded-lg space-y-2 border ${parcelaSeries ? 'bg-surface-2 border-borda-forte' : 'bg-surface-2/40 border-borda-forte/50'}`}>
           <div className="flex items-center justify-between gap-2">
             {editInst ? (
               <div className="flex items-center gap-1.5 flex-1">
@@ -1659,30 +1659,30 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   placeholder="N/M (ex: 2/3)"
                   className="input py-1 text-sm w-28"
                 />
-                <button type="button" onClick={confirmInstEdit} title="Confirmar" className="p-1 text-emerald-400 hover:bg-emerald-500/15 rounded">
+                <button type="button" onClick={confirmInstEdit} title="Confirmar" className="p-1 text-primary-fg hover:bg-primary/15 rounded">
                   <Check size={14} />
                 </button>
-                <button type="button" onClick={() => setEditInst(false)} title="Cancelar" className="p-1 text-gray-400 hover:bg-gray-700 rounded">
+                <button type="button" onClick={() => setEditInst(false)} title="Cancelar" className="p-1 text-texto-2 hover:bg-surface-hover rounded">
                   <X size={14} />
                 </button>
                 {effInstTotal != null && (
-                  <button type="button" onClick={clearInst} className="text-[11px] text-gray-400 hover:text-gray-200 ml-1">↩ à vista</button>
+                  <button type="button" onClick={clearInst} className="text-[11px] text-texto-2 hover:text-texto-1 ml-1">↩ à vista</button>
                 )}
               </div>
             ) : (
               <>
                 <div className="flex items-center gap-1.5">
-                  <span className={`text-sm font-semibold ${parcelaSeries ? 'text-amber-300' : 'text-gray-300'}`}>
+                  <span className={`text-sm font-semibold ${parcelaSeries ? 'text-texto-1' : 'text-texto-2'}`}>
                     {parcelaSeries ? `Parcela ${effInstNum} de ${effInstTotal}` : 'À vista'}
                   </span>
-                  <button type="button" onClick={openInstEditor} title={parcelaSeries ? 'Editar parcelamento' : 'Marcar como parcelado'} className="p-0.5 text-gray-500 hover:text-gray-200">
+                  <button type="button" onClick={openInstEditor} title={parcelaSeries ? 'Editar parcelamento' : 'Marcar como parcelado'} className="p-0.5 text-texto-3 hover:text-texto-1">
                     <Pencil size={12} />
                   </button>
                 </div>
                 {parcelaSeries
-                  ? <span className="text-xs text-gray-500">{parcelaSeries.presentes}/{parcelaSeries.total} no histórico</span>
+                  ? <span className="text-xs text-texto-3">{parcelaSeries.presentes}/{parcelaSeries.total} no histórico</span>
                   : (
-                    <button type="button" onClick={openInstEditor} className="text-xs text-amber-400 hover:text-amber-300">
+                    <button type="button" onClick={openInstEditor} className="text-xs text-ambar hover:text-texto-1">
                       Marcar como parcelado
                     </button>
                   )}
@@ -1691,13 +1691,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </div>
           {parcelaSeries && (
             <>
-              <div className="rounded-md border border-gray-700/50 divide-y divide-gray-800 max-h-40 overflow-y-auto">
+              <div className="rounded-md border border-borda-forte/50 divide-y divide-borda max-h-40 overflow-y-auto">
                 {parcelaSeries.siblings.map(s => (
-                  <div key={s.id} className={`px-2.5 py-1.5 text-xs flex items-center justify-between gap-2 ${s.id === initial.id ? 'bg-amber-500/10' : ''}`}>
-                    <span className="text-gray-300 whitespace-nowrap">{s._num}/{parcelaSeries.total}</span>
-                    <span className="text-gray-500 truncate flex-1">fatura {s.faturaMonthYear || '—'}</span>
-                    <span className="text-gray-200 whitespace-nowrap">{fmt(s.amount)}</span>
-                    {s.id === initial.id && <span className="text-amber-400">atual</span>}
+                  <div key={s.id} className={`px-2.5 py-1.5 text-xs flex items-center justify-between gap-2 ${s.id === initial.id ? 'bg-surface-hover' : ''}`}>
+                    <span className="text-texto-2 whitespace-nowrap">{s._num}/{parcelaSeries.total}</span>
+                    <span className="text-texto-3 truncate flex-1">fatura {s.faturaMonthYear || '—'}</span>
+                    <span className="text-texto-1 whitespace-nowrap">{fmt(s.amount)}</span>
+                    {s.id === initial.id && <span className="text-texto-1 font-medium">atual</span>}
                   </div>
                 ))}
               </div>
@@ -1706,10 +1706,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   Gerar parcelas futuras ({parcelaSeries.missing.length} faltando)
                 </button>
               ) : parcelaSeries.completa ? (
-                <p className="text-xs text-gray-600">Série completa — nenhuma parcela faltando.</p>
+                <p className="text-xs text-texto-3">Série completa — nenhuma parcela faltando.</p>
               ) : (
-                <p className="text-xs text-amber-500/80">
-                  {parcelaSeries.total - parcelaSeries.presentes} parcela{parcelaSeries.total - parcelaSeries.presentes !== 1 ? 's' : ''} fora do histórico.
+                <p className="text-xs text-aviso">
+                  ⚠ {parcelaSeries.total - parcelaSeries.presentes} parcela{parcelaSeries.total - parcelaSeries.presentes !== 1 ? 's' : ''} fora do histórico.
                 </p>
               )}
             </>
@@ -1723,7 +1723,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       </div>
 
       {form.type === 'expense' && reservaAccounts.length > 0 && !reservaFuncaoMode && (
-        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg space-y-3">
+        <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
@@ -1744,13 +1744,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 }}
                 className="sr-only peer"
               />
-              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-indigo-600 transition-colors" />
+              <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-reserva transition-colors" />
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
-            <PiggyBank size={14} className="text-indigo-400 shrink-0" />
-            <span className="text-sm text-indigo-300 select-none">Será pago com reserva</span>
+            <PiggyBank size={14} className="text-reserva shrink-0" />
+            <span className="text-sm text-reserva select-none">Será pago com reserva</span>
             {matchingSpecificReserva && !form.useReserva && !reservaFuncaoMode && (
-              <span className="text-xs text-indigo-500 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
+              <span className="text-xs text-texto-2 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
             )}
           </label>
           {form.useReserva && (
@@ -1767,14 +1767,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                       <option value="">Selecione a função...</option>
                       {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
-                    <p className="text-xs text-indigo-400 leading-relaxed">
+                    <p className="text-xs text-texto-2 leading-relaxed">
                       De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sairá
                       o resgate desta despesa. O agendamento de resgate é gerado no vencimento de cada fatura afetada.
                     </p>
                   </>
                 ) : (
-                  <p className="text-xs text-amber-400 leading-relaxed">
-                    Nenhuma função de reserva configurada para {reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'a conta de reserva'} deste grupo.
+                  <p className="text-xs text-aviso leading-relaxed">
+                    ⚠ Nenhuma função de reserva configurada para {reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'a conta de reserva'} deste grupo.
                   </p>
                 )}
               </div>
@@ -1807,7 +1807,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   </>
                 )}
                 {form.reservaAccountId && (
-                  <p className="text-xs text-indigo-400 leading-relaxed">
+                  <p className="text-xs text-texto-2 leading-relaxed">
                     {initialResgate
                       ? 'A despesa registra o vínculo com a reserva. O agendamento de resgate vinculado será atualizado ao salvar.'
                       : 'A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o resgate desta reserva para a conta principal.'}
@@ -1820,7 +1820,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       {isCredit && form.type === 'expense' && !initial?.id && (
-        <div className="p-3 bg-gray-800/60 border border-gray-700 rounded-lg space-y-3">
+        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
@@ -1829,14 +1829,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 onChange={e => set('installments', e.target.checked ? 2 : 1)}
                 className="sr-only peer"
               />
-              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-gray-600 transition-colors" />
+              <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
-            <span className="text-sm text-gray-300 select-none">Parcelado</span>
+            <span className="text-sm text-texto-2 select-none">Parcelado</span>
           </label>
           {form.installments > 1 && (
             <div className="flex items-center gap-3">
-              <label className="text-xs text-gray-400 shrink-0">Parcelas:</label>
+              <label className="text-xs text-texto-2 shrink-0">Parcelas:</label>
               <input
                 className="input w-20 text-center"
                 type="number"
@@ -1846,7 +1846,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 onChange={e => set('installments', Math.max(2, Math.min(48, Number(e.target.value) || 2)))}
               />
               {form.amount && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-texto-3">
                   {fmt(Math.round(Number(form.amount) / form.installments * 100) / 100)} por parcela
                 </span>
               )}
@@ -1868,7 +1868,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+          <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
             Opcional — em branco, a fatura é calculada automaticamente pelo dia de
             fechamento do cartão.
           </p>
@@ -1876,7 +1876,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       {showGerencial && (
-        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg space-y-3">
+        <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
           <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
           <GerencialSelect
             value={form.grupoGerencial}
@@ -1887,7 +1887,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           {form.grupoGerencial && (() => {
             const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
             if (!g || g.number === 'D') return (
-              <p className="text-xs text-gray-500">Lançamento registrado como despesa normal.</p>
+              <p className="text-xs text-texto-3">Lançamento registrado como despesa normal.</p>
             )
 
             if (g.number === 1) {
@@ -1901,7 +1901,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               return (
                 <div className="space-y-2">
                   <div>
-                    <label className="label text-xs uppercase tracking-wide text-purple-400">Conta Destino</label>
+                    <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino</label>
                     <select
                       className="input"
                       value={gerencialContaId}
@@ -1921,18 +1921,18 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   </div>
                   {contaDestino ? (
                     <div className="space-y-1">
-                      <p className="text-xs text-purple-300 leading-relaxed">
+                      <p className="text-xs text-texto-2 leading-relaxed">
                         Transferência automática será criada para a subconta{' '}
-                        <strong className="text-purple-200">"Ger. {subcontaApelido}"</strong>{' '}
-                        a partir de <strong className="text-purple-200">{contaDestino.name}</strong>.
+                        <strong className="text-texto-1">"Ger. {subcontaApelido}"</strong>{' '}
+                        a partir de <strong className="text-texto-1">{contaDestino.name}</strong>.
                       </p>
-                      <p className="text-xs text-purple-400">
+                      <p className="text-xs text-texto-2">
                         📅 Fatura {faturaRef} · Agendamento de devolução em {fmtDate(scheduleDate)}
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs text-amber-400">
-                      Selecione a conta corrente de origem da transferência.
+                    <p className="text-xs text-aviso">
+                      ⚠ Selecione a conta corrente de origem da transferência.
                     </p>
                   )}
                 </div>
@@ -1948,17 +1948,17 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <div className="space-y-2">
                 {acc ? (
                   <div className="space-y-1">
-                    <p className="text-xs text-blue-300 leading-relaxed">
+                    <p className="text-xs text-texto-2 leading-relaxed">
                       Agendamento de resgate automático:{' '}
-                      <strong className="text-blue-200">{acc.apelido || acc.name}</strong> → conta corrente principal.
+                      <strong className="text-texto-1">{acc.apelido || acc.name}</strong> → conta corrente principal.
                     </p>
-                    <p className="text-xs text-blue-400">
+                    <p className="text-xs text-texto-2">
                       📅 Fatura {faturaRef3} · Resgate em {fmtDate(dueDate3)}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-400">
-                    Configure uma conta padrão neste grupo para ativar o resgate automático.
+                  <p className="text-xs text-aviso">
+                    ⚠ Configure uma conta padrão neste grupo para ativar o resgate automático.
                   </p>
                 )}
 
@@ -1966,7 +1966,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                     tem MAIS DE 1 função; com 1 única, o resgate usa a conta do grupo automaticamente. */}
                 {showFuncaoReservaSelect && (
                   <div>
-                    <label className="label text-xs uppercase tracking-wide text-blue-400">Função de Reserva</label>
+                    <label className="label text-xs uppercase tracking-wide text-reserva">Função de Reserva</label>
                     <select
                       className="input"
                       value={form.reservaFuncaoId || ''}
@@ -1975,7 +1975,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                       <option value="">Sem função específica</option>
                       {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    <p className="text-xs text-texto-3 mt-1 leading-relaxed">
                       De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
                       o resgate desta despesa.
                     </p>
@@ -1989,7 +1989,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {/* Repetir este lançamento — só no formulário de NOVO lançamento */}
       {!initial?.id && (
-        <div className="p-3 bg-gray-800/60 border border-gray-700 rounded-lg space-y-3">
+        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
@@ -1998,11 +1998,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 onChange={e => set('repeat', e.target.checked)}
                 className="sr-only peer"
               />
-              <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+              <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
-            <Repeat size={14} className="text-gray-300 shrink-0" />
-            <span className="text-sm text-gray-300 select-none">Repetir este lançamento</span>
+            <Repeat size={14} className="text-texto-2 shrink-0" />
+            <span className="text-sm text-texto-2 select-none">Repetir este lançamento</span>
           </label>
 
           {form.repeat && (
@@ -2028,14 +2028,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
                     <label className="label">Tipo</label>
-                    <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                    <div className="flex rounded-lg overflow-hidden border border-borda-forte">
                       {[['continuous', 'Contínuo'], ['installment', 'Por parcelas']].map(([v, l]) => (
                         <button
                           type="button"
                           key={v}
                           onClick={() => set('repeatOccurrenceType', v)}
                           className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                            form.repeatOccurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                            form.repeatOccurrenceType === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                           }`}
                         >
                           {l}
@@ -2060,7 +2060,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               )}
 
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-gray-300">Lembrete</span>
+                <span className="text-sm text-texto-2">Lembrete</span>
                 <div className="flex items-center gap-2">
                   {form.repeatRemindDaysBefore > 0 && (
                     <>
@@ -2072,20 +2072,20 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                         onChange={e => set('repeatRemindDaysBefore', Math.max(1, Number(e.target.value) || 1))}
                         className="w-14 input text-center text-xs py-1"
                       />
-                      <span className="text-xs text-gray-500 whitespace-nowrap">dias antes</span>
+                      <span className="text-xs text-texto-3 whitespace-nowrap">dias antes</span>
                     </>
                   )}
                   <button
                     type="button"
                     onClick={() => set('repeatRemindDaysBefore', form.repeatRemindDaysBefore > 0 ? 0 : 3)}
-                    className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${form.repeatRemindDaysBefore > 0 ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                    className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${form.repeatRemindDaysBefore > 0 ? 'bg-primary' : 'bg-borda-campo'}`}
                   >
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.repeatRemindDaysBefore > 0 ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
               </div>
 
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="text-xs text-texto-3 leading-relaxed">
                 Um agendamento será criado em "Agendamentos" com estes dados, começando em {fmtDate(form.date)}.
               </p>
             </div>

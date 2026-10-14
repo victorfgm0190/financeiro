@@ -20,8 +20,9 @@ import PerfisMultiSelect from './PerfisMultiSelect'
 import { categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
 import { compararNoGrupo } from '../../lib/ordemCategorias'
 import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
+import { CORES_PERFIL } from '../../lib/chartPalette'
 
-const PROFILE_COLORS = ['#6366f1', '#0F6E56', '#3b82f6', '#8b5cf6', '#f97316', '#ec4899', '#06b6d4', '#f59e0b']
+const PROFILE_COLORS = CORES_PERFIL
 
 function maskDoc(raw, type) {
   const d = raw.replace(/\D/g, '')
@@ -368,16 +369,16 @@ export default function SettingsPanel() {
   const ordDragEnd = () => { setOrdDrag(null); setOrdDragOver(null) }
   const ordHandle = (title) => (
     <span
-      className={`select-none text-base leading-none shrink-0 ${ordemLivre ? 'text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing' : 'text-gray-800 cursor-not-allowed'}`}
+      className={`select-none text-base leading-none shrink-0 ${ordemLivre ? 'text-texto-3 hover:text-texto-2 cursor-grab active:cursor-grabbing' : 'text-texto-3 cursor-not-allowed'}`}
       title={ordemLivre ? title : 'Ordenação disponível só em "Todos os perfis"'}
     >⠿</span>
   )
   const ordSetas = (onUp, onDown, primeiro, ultimo) => (
     <div className="flex gap-0.5 shrink-0">
       <button type="button" onClick={onUp} disabled={!ordemLivre || primeiro} title="Mover para cima"
-        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"><ArrowUp size={11} /></button>
+        className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors"><ArrowUp size={11} /></button>
       <button type="button" onClick={onDown} disabled={!ordemLivre || ultimo} title="Mover para baixo"
-        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"><ArrowDown size={11} /></button>
+        className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors"><ArrowDown size={11} /></button>
     </div>
   )
 
@@ -393,17 +394,17 @@ export default function SettingsPanel() {
       onDrop={e => ordDrop(e, { kind: 'cat', id: cat.id, group: cat.group || null })}
       onDragEnd={ordDragEnd}
       className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 border transition-all ${
-        ordDrag?.id === cat.id ? 'opacity-40 border-transparent bg-gray-800' :
-        ordDragOver === cat.id ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
-        'border-transparent bg-gray-800'
+        ordDrag?.id === cat.id ? 'opacity-40 border-transparent bg-surface-2' :
+        ordDragOver === cat.id ? 'border-primary bg-primary/10' :
+        'border-transparent bg-surface-2'
       }`}
     >
       <div className="flex items-center gap-2 min-w-0">
         {ordHandle('Arrastar para reordenar dentro do grupo')}
         {ordSetas(() => moveCategory(cat.id, 'up'), () => moveCategory(cat.id, 'down'), i === 0, i === lista.length - 1)}
         <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cat.color }} />
-        <span className="text-sm text-gray-200 truncate">{cat.icon} {cat.name}</span>
-        <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0">
+        <span className="text-sm text-texto-1 truncate">{cat.icon} {cat.name}</span>
+        <span className="badge bg-surface-hover text-texto-2 text-xs shrink-0">
           {cat.type === 'income' ? 'Receita' : cat.type === 'expense' ? 'Despesa' : 'Ambos'}
         </span>
       </div>
@@ -454,7 +455,7 @@ export default function SettingsPanel() {
           onClick={() => updateCategory(cat.id, { geraEspelho: !cat.geraEspelho })}
           title={cat.geraEspelho ? 'Espelho ativo — clique para desativar' : 'Espelho inativo — clique para ativar'}
           className={`shrink-0 inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wide font-bold px-1.5 py-1 rounded transition-colors ${
-            cat.geraEspelho ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : 'bg-gray-700/50 text-gray-500 hover:bg-gray-600/60'
+            cat.geraEspelho ? 'bg-primary/15 text-primary-fg hover:bg-primary/25' : 'bg-surface-hover/50 text-texto-3 hover:bg-surface-hover/60'
           }`}
         >
           {cat.geraEspelho ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
@@ -471,7 +472,7 @@ export default function SettingsPanel() {
             {accounts.map(a => <option key={a.id} value={a.id}>{a.apelido || a.name}</option>)}
           </select>
         )}
-        <button onClick={() => deleteCategory(cat.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
+        <button onClick={() => deleteCategory(cat.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
           <Trash2 size={12} />
         </button>
       </div>
@@ -590,26 +591,26 @@ export default function SettingsPanel() {
     <div className="space-y-4">
       {/* Cabeçalho: título, breadcrumb e abas. Aba/seção ativas vivem no hash (#config/aba/seção). */}
       <div>
-        <h1 className="text-lg font-semibold text-gray-100">Configurações</h1>
-        <nav aria-label="Você está em" className="text-xs text-gray-500 mt-0.5 flex items-center gap-1 flex-wrap">
+        <h1 className="text-lg font-semibold text-texto-1">Configurações</h1>
+        <nav aria-label="Você está em" className="text-xs text-texto-3 mt-0.5 flex items-center gap-1 flex-wrap">
           <span>Configurações</span>
           <ChevronRight size={12} />
-          <span className={abaAtual.perigo ? 'text-red-400' : 'text-gray-400'}>{abaAtual.label}</span>
+          <span className={abaAtual.perigo ? 'text-perigo' : 'text-texto-2'}>{abaAtual.label}</span>
           {temSubmenu && (
             <>
               <ChevronRight size={12} />
-              <span className="text-gray-300">{secaoAtual.label}</span>
+              <span className="text-texto-2">{secaoAtual.label}</span>
             </>
           )}
         </nav>
       </div>
 
-      <div role="tablist" className="flex overflow-x-auto border-b border-gray-800 -mx-4 px-4 md:mx-0 md:px-0">
+      <div role="tablist" className="flex overflow-x-auto border-b border-borda -mx-4 px-4 md:mx-0 md:px-0">
         {abas.map(a => {
           const ativa = a.id === abaAtual.id
           const cor = a.perigo
-            ? (ativa ? 'text-red-400 border-red-500' : 'text-red-400/70 border-transparent hover:text-red-400')
-            : (ativa ? 'text-gray-100 border-emerald-500' : 'text-gray-400 border-transparent hover:text-gray-200')
+            ? (ativa ? 'text-perigo border-perigo' : 'text-perigo border-transparent hover:text-texto-1')
+            : (ativa ? 'text-texto-1 border-primary' : 'text-texto-2 border-transparent hover:text-texto-1')
           return (
             <button
               key={a.id}
@@ -627,7 +628,7 @@ export default function SettingsPanel() {
 
       <div className={temSubmenu ? 'flex flex-col md:flex-row gap-4 md:items-start' : ''}>
         {temSubmenu && (
-          <nav className="bg-surface border border-gray-800 rounded-xl p-2 w-full md:w-56 md:shrink-0 flex flex-row flex-wrap md:flex-col gap-1">
+          <nav className="bg-surface border border-borda rounded-xl p-2 w-full md:w-56 md:shrink-0 flex flex-row flex-wrap md:flex-col gap-1">
             {abaAtual.secoes.map(s => (
               <button
                 key={s.id}
@@ -635,11 +636,11 @@ export default function SettingsPanel() {
                 onClick={() => irPara(abaAtual.id, s.id)}
                 aria-current={s.id === secao ? 'page' : undefined}
                 className={`min-h-[44px] px-3 rounded-lg text-sm text-left flex items-center gap-2 transition-colors ${
-                  s.id === secao ? 'bg-[#12302a] text-emerald-300' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
+                  s.id === secao ? 'bg-primary/15 text-primary-fg' : 'text-texto-2 hover:bg-surface-hover hover:text-texto-1'
                 }`}
               >
                 {s.label}
-                {s.novo && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">novo</span>}
+                {s.novo && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg font-medium">novo</span>}
               </button>
             ))}
           </nav>
@@ -648,34 +649,34 @@ export default function SettingsPanel() {
       {/* Período Financeiro */}
       {secao === 'periodo' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1">Período Financeiro</h2>
-        <p className="text-xs text-gray-500 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Período Financeiro</h2>
+        <p className="text-xs text-texto-3 mb-4">Como receitas e despesas são agrupadas no Dashboard e relatórios.</p>
 
         <div className="space-y-2.5 mb-4">
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="radio"
               name="finMode"
-              className="mt-0.5 accent-[#0F6E56] cursor-pointer shrink-0"
+              className="mt-0.5 accent-primary cursor-pointer shrink-0"
               checked={monthMode === 'calendar'}
               onChange={() => setMonthMode('calendar')}
             />
-            <span className="text-sm text-gray-200">
+            <span className="text-sm text-texto-1">
               Mês corrido
-              <span className="block text-xs text-gray-500">Período sempre do dia 01 ao último dia do mês calendário (ignora o dia de início).</span>
+              <span className="block text-xs text-texto-3">Período sempre do dia 01 ao último dia do mês calendário (ignora o dia de início).</span>
             </span>
           </label>
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
               type="radio"
               name="finMode"
-              className="mt-0.5 accent-[#0F6E56] cursor-pointer shrink-0"
+              className="mt-0.5 accent-primary cursor-pointer shrink-0"
               checked={monthMode === 'custom'}
               onChange={() => setMonthMode('custom')}
             />
-            <span className="text-sm text-gray-200">
+            <span className="text-sm text-texto-1">
               Mês personalizado
-              <span className="block text-xs text-gray-500">Período começa no dia de início abaixo (ex.: dia 15 → 15/05 a 14/06 = “Maio”).</span>
+              <span className="block text-xs text-texto-3">Período começa no dia de início abaixo (ex.: dia 15 → 15/05 a 14/06 = “Maio”).</span>
             </span>
           </label>
         </div>
@@ -692,7 +693,7 @@ export default function SettingsPanel() {
               onChange={e => setStartDay(e.target.value)}
               disabled={monthMode === 'calendar'}
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-texto-3 mt-1">
               {monthMode === 'calendar'
                 ? 'Sem efeito no modo “Mês corrido”.'
                 : 'Ex: dia 5 = período vai do dia 5 ao dia 4 do mês seguinte'}
@@ -708,8 +709,8 @@ export default function SettingsPanel() {
       {/* Estornos de Cartão */}
       {secao === 'estornos' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1">Estornos de Cartão</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Estornos de Cartão</h2>
+        <p className="text-xs text-texto-3 mb-4">
           Estornos detectados na importação/conciliação de fatura (receitas que não são pagamento
           nem anuidade) podem receber uma categoria padrão automaticamente, no grupo D · Despesa.
         </p>
@@ -721,10 +722,10 @@ export default function SettingsPanel() {
               onChange={e => updateSettings({ estornoCartaoEnabled: e.target.checked })}
               className="sr-only peer"
             />
-            <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+            <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
             <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
           </div>
-          <span className="text-sm text-gray-300 select-none">Aplicar categoria padrão para estornos de cartão</span>
+          <span className="text-sm text-texto-2 select-none">Aplicar categoria padrão para estornos de cartão</span>
         </label>
         {settings.estornoCartaoEnabled && (
           <div>
@@ -744,15 +745,15 @@ export default function SettingsPanel() {
       {secao === 'perfis' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-300">Perfis CPF / CNPJ</h2>
+          <h2 className="text-sm font-semibold text-texto-2">Perfis CPF / CNPJ</h2>
           <button className="btn-primary text-xs py-1.5 flex items-center gap-1.5" onClick={() => { setEditingProfile(null); setShowProfileForm(true) }}>
             <Plus size={12} /> Novo Perfil
           </button>
         </div>
-        <p className="text-xs text-gray-500 -mt-2 mb-4">Perfis CPF / CNPJ que separam contas, lançamentos e relatórios.</p>
+        <p className="text-xs text-texto-3 -mt-2 mb-4">Perfis CPF / CNPJ que separam contas, lançamentos e relatórios.</p>
 
         {profiles.length === 0 && !showProfileForm && (
-          <p className="text-xs text-gray-600 italic">Nenhum perfil cadastrado. Adicione um perfil para ativar o filtro na barra superior.</p>
+          <p className="text-xs text-texto-3 italic">Nenhum perfil cadastrado. Adicione um perfil para ativar o filtro na barra superior.</p>
         )}
 
         <div className="space-y-2 mb-3">
@@ -761,20 +762,20 @@ export default function SettingsPanel() {
             const rawDoc = p.document || ''
             const fmtDoc = rawDoc ? maskDoc(rawDoc, p.type) : '—'
             return (
-              <div key={p.id} className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: p.color }}>
-                  <Icon size={14} className="text-white" />
+              <div key={p.id} className="flex items-center gap-3 bg-surface-2 rounded-lg px-3 py-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-surface-2 ring-2 ring-inset" style={{ '--tw-ring-color': p.color }}>
+                  <Icon size={14} className="text-texto-1" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-200 font-medium truncate">{p.name}</span>
-                    {p.isDefault && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0F6E56]/20 text-[#0F6E56] font-medium shrink-0">Principal</span>}
+                    <span className="text-sm text-texto-1 font-medium truncate">{p.name}</span>
+                    {p.isDefault && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary-fg font-medium shrink-0">Principal</span>}
                   </div>
-                  <p className="text-xs text-gray-500">{p.type === 'pf' ? 'CPF' : 'CNPJ'}: {fmtDoc}</p>
+                  <p className="text-xs text-texto-3">{p.type === 'pf' ? 'CPF' : 'CNPJ'}: {fmtDoc}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button className="p-1 text-gray-500 hover:text-gray-300 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
-                  <button className="p-1 text-gray-500 hover:text-red-400 transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
+                  <button className="p-1 text-texto-3 hover:text-texto-2 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
+                  <button className="p-1 text-texto-3 hover:text-perigo transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
                 </div>
               </div>
             )
@@ -782,16 +783,16 @@ export default function SettingsPanel() {
         </div>
 
         {showProfileForm && (
-          <form onSubmit={handleProfileSubmit} className="border-t border-gray-700 pt-4 space-y-3">
-            <p className="text-xs font-medium text-gray-400">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
+          <form onSubmit={handleProfileSubmit} className="border-t border-borda-forte pt-4 space-y-3">
+            <p className="text-xs font-medium text-texto-2">{editingProfile ? 'Editar perfil' : 'Novo perfil'}</p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Tipo</label>
-                <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                <div className="flex rounded-lg overflow-hidden border border-borda-forte">
                   {[['pf', 'Pessoa Física'], ['pj', 'Pessoa Jurídica']].map(([v, l]) => (
                     <button type="button" key={v} onClick={() => setProfileField('type', v)}
-                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileForm.type === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${profileForm.type === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'}`}>
                       {l}
                     </button>
                   ))}
@@ -819,7 +820,7 @@ export default function SettingsPanel() {
               <div className="flex gap-2 flex-wrap">
                 {PROFILE_COLORS.map(c => (
                   <button type="button" key={c} onClick={() => setProfileField('color', c)}
-                    className={`w-7 h-7 rounded-full transition-all ${profileForm.color === c ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white scale-110' : 'hover:scale-105'}`}
+                    className={`w-7 h-7 rounded-full transition-all ${profileForm.color === c ? 'ring-2 ring-offset-2 ring-offset-surface ring-borda-forte scale-110' : 'hover:scale-105'}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -829,10 +830,10 @@ export default function SettingsPanel() {
             <label className="flex items-center gap-2.5 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={profileForm.isDefault} onChange={e => setProfileField('isDefault', e.target.checked)} className="sr-only peer" />
-                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-gray-300 select-none">Perfil principal</span>
+              <span className="text-sm text-texto-2 select-none">Perfil principal</span>
             </label>
 
             <div className="flex gap-2 pt-1">
@@ -856,9 +857,9 @@ export default function SettingsPanel() {
       {secao === 'categorias' && (
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-300">Categorias ({categories.length})</h2>
+          <h2 className="text-sm font-semibold text-texto-2">Categorias ({categories.length})</h2>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-texto-3">{categoryGroups.length} grupo{categoryGroups.length !== 1 ? 's' : ''}</span>
             <button
               className="btn-secondary flex items-center gap-1.5 text-xs"
               onClick={() => setConfirmOrdemPadrao(true)}
@@ -868,7 +869,7 @@ export default function SettingsPanel() {
             </button>
           </div>
         </div>
-        <p className="text-xs text-gray-500 -mt-2 mb-4">
+        <p className="text-xs text-texto-3 -mt-2 mb-4">
           Categorias de receita e despesa, organizadas em grupos. Arraste ⠿ ou use ↑↓ para definir a ordem
           de grupos e categorias exibida em todos os seletores.
         </p>
@@ -895,19 +896,19 @@ export default function SettingsPanel() {
 
         {profiles.length > 0 && (
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-gray-500">Mostrar categorias de:</span>
+            <span className="text-xs text-texto-3">Mostrar categorias de:</span>
             <select className="input w-auto text-xs py-1" value={filtroPerfilCat} onChange={e => setFiltroPerfilCat(e.target.value)}>
               <option value="">Todos os perfis</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            {filtroPerfilCat && <span className="text-[11px] text-gray-600">inclui as categorias de todos os perfis · para reordenar, volte para "Todos os perfis"</span>}
+            {filtroPerfilCat && <span className="text-[11px] text-texto-3">inclui as categorias de todos os perfis · para reordenar, volte para "Todos os perfis"</span>}
           </div>
         )}
 
         {/* Lista de grupos com categorias aninhadas */}
         <div className="space-y-3 mb-4 max-h-80 overflow-y-auto">
           {catsByGroup.map(({ group, cats }) => (
-            <div key={group} className="rounded-lg border border-gray-800">
+            <div key={group} className="rounded-lg border border-borda">
               <div
                 draggable={ordemLivre && editingCatGroup !== group}
                 onDragStart={e => ordDragStart(e, { kind: 'grp', id: group })}
@@ -915,9 +916,9 @@ export default function SettingsPanel() {
                 onDrop={e => ordDrop(e, { kind: 'grp', id: group })}
                 onDragEnd={ordDragEnd}
                 className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-t-lg border transition-all ${
-                  ordDrag?.id === group ? 'opacity-40 border-transparent bg-gray-800/60' :
-                  ordDragOver === group ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
-                  'border-transparent bg-gray-800/60'
+                  ordDrag?.id === group ? 'opacity-40 border-transparent bg-surface-2/60' :
+                  ordDragOver === group ? 'border-primary bg-primary/10' :
+                  'border-transparent bg-surface-2/60'
                 }`}
               >
                 {editingCatGroup === group ? (
@@ -929,8 +930,8 @@ export default function SettingsPanel() {
                       onChange={e => setCatGroupDraft(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') commitRenameGroup(); if (e.key === 'Escape') { setEditingCatGroup(null); setCatGroupDraft('') } }}
                     />
-                    <button onClick={commitRenameGroup} className="p-1 text-emerald-400 hover:text-emerald-300"><Check size={13} /></button>
-                    <button onClick={() => { setEditingCatGroup(null); setCatGroupDraft('') }} className="p-1 text-gray-500 hover:text-gray-300"><X size={13} /></button>
+                    <button onClick={commitRenameGroup} className="p-1 text-primary-fg hover:text-texto-1"><Check size={13} /></button>
+                    <button onClick={() => { setEditingCatGroup(null); setCatGroupDraft('') }} className="p-1 text-texto-3 hover:text-texto-2"><X size={13} /></button>
                   </div>
                 ) : (
                   <>
@@ -940,17 +941,17 @@ export default function SettingsPanel() {
                         () => moveCatGroup(group, 'up'), () => moveCatGroup(group, 'down'),
                         categoryGroups.indexOf(group) === 0, categoryGroups.indexOf(group) === categoryGroups.length - 1,
                       )}
-                      <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide truncate">
-                        {group} <span className="text-gray-600 font-normal normal-case">· {cats.length}</span>
+                      <span className="text-xs font-semibold text-texto-2 uppercase tracking-wide truncate">
+                        {group} <span className="text-texto-3 font-normal normal-case">· {cats.length}</span>
                       </span>
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-gray-500 hover:text-gray-300"><Edit2 size={12} /></button>
+                      <button onClick={() => startRenameGroup(group)} title="Renomear grupo" className="p-1 text-texto-3 hover:text-texto-2"><Edit2 size={12} /></button>
                       <button
                         onClick={() => handleDeleteGroup(group)}
                         title={cats.length > 0 ? 'Esvazie o grupo para excluí-lo' : 'Excluir grupo'}
                         disabled={cats.length > 0}
-                        className={`p-1 ${cats.length > 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-red-400'}`}
+                        className={`p-1 ${cats.length > 0 ? 'text-texto-3 cursor-not-allowed' : 'text-texto-3 hover:text-perigo'}`}
                       >
                         <Trash2 size={12} />
                       </button>
@@ -960,20 +961,20 @@ export default function SettingsPanel() {
               </div>
               <div className="p-2 space-y-1.5">
                 {cats.length === 0
-                  ? <p className="text-xs text-gray-600 px-1 py-1">Grupo vazio</p>
+                  ? <p className="text-xs text-texto-3 px-1 py-1">Grupo vazio</p>
                   : cats.map(renderCategoryRow)}
               </div>
               {groupDeleteErr === group && (
-                <p className="text-xs text-red-400 px-3 pb-2">Não é possível excluir: há categorias vinculadas.</p>
+                <p className="text-xs text-perigo px-3 pb-2">Não é possível excluir: há categorias vinculadas.</p>
               )}
             </div>
           ))}
 
           {ungroupedCats.length > 0 && (
-            <div className="rounded-lg border border-gray-800">
-              <div className="px-3 py-1.5 bg-gray-800/60 rounded-t-lg">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  Sem grupo <span className="text-gray-600 font-normal normal-case">· {ungroupedCats.length}</span>
+            <div className="rounded-lg border border-borda">
+              <div className="px-3 py-1.5 bg-surface-2/60 rounded-t-lg">
+                <span className="text-xs font-semibold text-texto-2 uppercase tracking-wide">
+                  Sem grupo <span className="text-texto-3 font-normal normal-case">· {ungroupedCats.length}</span>
                 </span>
               </div>
               <div className="p-2 space-y-1.5">
@@ -1011,30 +1012,30 @@ export default function SettingsPanel() {
           />
           <button type="submit" className="btn-secondary flex items-center gap-1"><Plus size={13} /> Adicionar</button>
         </form>
-        <p className="text-[11px] text-gray-600 mt-1.5">O campo <span className="text-gray-400">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
+        <p className="text-[11px] text-texto-3 mt-1.5">O campo <span className="text-texto-2">Grupo</span> é obrigatório — selecione um existente ou digite um novo para criá-lo junto.</p>
       </div>
       )}
 
       {/* Regras de Classificação */}
       {secao === 'classificacao' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1">Regras de Classificação ({classificationRules.length})</h2>
-        <p className="text-xs text-gray-500 mb-4">Categoria, favorecido e grupo aplicados automaticamente pela descrição do lançamento.</p>
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Regras de Classificação ({classificationRules.length})</h2>
+        <p className="text-xs text-texto-3 mb-4">Categoria, favorecido e grupo aplicados automaticamente pela descrição do lançamento.</p>
         <div className="space-y-2 mb-4">
           {classificationRules.length === 0 && (
-            <p className="text-xs text-gray-500">Nenhuma regra. Regras são criadas automaticamente ao classificar importações.</p>
+            <p className="text-xs text-texto-3">Nenhuma regra. Regras são criadas automaticamente ao classificar importações.</p>
           )}
           {classificationRules.map(rule => {
             const cat = categories.find(c => c.id === rule.categoryId)
             return (
-              <div key={rule.id} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2 text-sm">
-                <span className="text-gray-300">
-                  Contém <span className="text-[#0F6E56] font-medium">"{rule.contains}"</span>
+              <div key={rule.id} className="flex items-center justify-between bg-surface-2 rounded-lg px-3 py-2 text-sm">
+                <span className="text-texto-2">
+                  Contém <span className="text-primary-fg font-medium">"{rule.contains}"</span>
                   {' → '}
-                  <span className="text-gray-200">{cat ? `${cat.icon} ${cat.name}` : rule.categoryId}</span>
-                  {rule.payee && <span className="text-gray-500 text-xs ml-1">({rule.payee})</span>}
+                  <span className="text-texto-1">{cat ? `${cat.icon} ${cat.name}` : rule.categoryId}</span>
+                  {rule.payee && <span className="text-texto-3 text-xs ml-1">({rule.payee})</span>}
                 </span>
-                <button onClick={() => deleteRule(rule.id)} className="p-1 text-gray-600 hover:text-red-400 transition-colors rounded">
+                <button onClick={() => deleteRule(rule.id)} className="p-1 text-texto-3 hover:text-perigo transition-colors rounded">
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -1057,11 +1058,11 @@ export default function SettingsPanel() {
       {/* Regras de Grupo Gerencial */}
       {secao === 'grupo-gerencial' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1">Regras de Grupo Gerencial ({gerencialRules.length})</h2>
-        <p className="text-xs text-gray-500 mb-4">Testadas em ordem — a primeira que bater é aplicada na importação de fatura.</p>
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Regras de Grupo Gerencial ({gerencialRules.length})</h2>
+        <p className="text-xs text-texto-3 mb-4">Testadas em ordem — a primeira que bater é aplicada na importação de fatura.</p>
         <div className="space-y-2 mb-4">
           {gerencialRules.length === 0 && (
-            <p className="text-xs text-gray-500">Nenhuma regra cadastrada.</p>
+            <p className="text-xs text-texto-3">Nenhuma regra cadastrada.</p>
           )}
           {[...gerencialRules].sort((a, b) => a.order - b.order).map((rule, idx, arr) => {
             const grupo = gerencialGroups.find(g => g.id === rule.grupoGerencialId)
@@ -1070,25 +1071,25 @@ export default function SettingsPanel() {
               ? [rule.minAmount != null ? `min R$${rule.minAmount}` : null, rule.maxAmount != null ? `max R$${rule.maxAmount}` : null].filter(Boolean).join(', ')
               : null
             return (
-              <div key={rule.id} className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
-                <span className="text-xs text-gray-500 w-5 text-center shrink-0">{idx + 1}</span>
+              <div key={rule.id} className="flex items-center gap-2 bg-surface-2 rounded-lg px-3 py-2">
+                <span className="text-xs text-texto-3 w-5 text-center shrink-0">{idx + 1}</span>
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm text-gray-300">
-                    Contém <span className="text-[#0F6E56] font-medium">"{rule.contains}"</span>
-                    {labelParc && <span className="text-gray-500 ml-1">· {labelParc}</span>}
-                    {labelVal && <span className="text-gray-500 ml-1">· {labelVal}</span>}
+                  <span className="text-sm text-texto-2">
+                    Contém <span className="text-primary-fg font-medium">"{rule.contains}"</span>
+                    {labelParc && <span className="text-texto-3 ml-1">· {labelParc}</span>}
+                    {labelVal && <span className="text-texto-3 ml-1">· {labelVal}</span>}
                     {' → '}
-                    <span className="text-gray-200">{grupo ? `${grupo.number} · ${grupo.name}` : rule.grupoGerencialId}</span>
+                    <span className="text-texto-1">{grupo ? `${grupo.number} · ${grupo.name}` : rule.grupoGerencialId}</span>
                   </span>
                 </div>
                 <div className="flex gap-0.5 shrink-0">
-                  <button onClick={() => moveGerencialRule(rule.id, 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-500 transition-colors">
+                  <button onClick={() => moveGerencialRule(rule.id, 'up')} disabled={idx === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-3 transition-colors">
                     <ArrowUp size={12} />
                   </button>
-                  <button onClick={() => moveGerencialRule(rule.id, 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-500 transition-colors">
+                  <button onClick={() => moveGerencialRule(rule.id, 'down')} disabled={idx === arr.length - 1} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-3 transition-colors">
                     <ArrowDown size={12} />
                   </button>
-                  <button onClick={() => deleteGerencialRule(rule.id)} className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-red-400 transition-colors">
+                  <button onClick={() => deleteGerencialRule(rule.id)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -1176,11 +1177,11 @@ export default function SettingsPanel() {
       {/* Centros de Custo */}
       {secao === 'centros-custo' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1">Centros de Custo</h2>
-        <p className="text-xs text-gray-500 mb-4">Rótulos livres para separar lançamentos por finalidade.</p>
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Centros de Custo</h2>
+        <p className="text-xs text-texto-3 mb-4">Rótulos livres para separar lançamentos por finalidade.</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {costCenters.map(cc => (
-            <span key={cc} className="badge bg-gray-800 text-gray-300 px-3 py-1 text-xs">{cc}</span>
+            <span key={cc} className="badge bg-surface-2 text-texto-2 px-3 py-1 text-xs">{cc}</span>
           ))}
         </div>
         <div className="flex gap-2">
@@ -1200,8 +1201,8 @@ export default function SettingsPanel() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-300">Grupos de Contas</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Arraste ⠿ ou use ↑↓ para definir a ordem exibida em todos os seletores</p>
+            <h2 className="text-sm font-semibold text-texto-2">Grupos de Contas</h2>
+            <p className="text-xs text-texto-3 mt-0.5">Arraste ⠿ ou use ↑↓ para definir a ordem exibida em todos os seletores</p>
           </div>
           <button
             className="btn-secondary flex items-center gap-1.5 text-xs"
@@ -1222,20 +1223,20 @@ export default function SettingsPanel() {
               onDrop={e => handleAgDrop(e, g.id)}
               onDragEnd={handleAgDragEnd}
               className={`flex items-center gap-2 px-2.5 py-2 rounded-lg transition-all border ${
-                agDragId === g.id ? 'opacity-40 border-transparent bg-gray-800' :
-                agDragOverId === g.id ? 'border-[#0F6E56] bg-[#0F6E56]/10' :
-                'border-transparent bg-gray-800 hover:bg-gray-750'
+                agDragId === g.id ? 'opacity-40 border-transparent bg-surface-2' :
+                agDragOverId === g.id ? 'border-primary bg-primary/10' :
+                'border-transparent bg-surface-2 hover:bg-surface-hover'
               }`}
             >
               {/* Drag handle */}
               <span
-                className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing select-none text-base leading-none shrink-0"
+                className="text-texto-3 hover:text-texto-2 cursor-grab active:cursor-grabbing select-none text-base leading-none shrink-0"
                 title="Arrastar para reordenar"
               >⠿</span>
 
               {/* Type badge */}
               <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                g.type === 'financeiro' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
+                g.type === 'financeiro' ? 'bg-surface-2 text-texto-2' : 'bg-surface-2 text-texto-2'
               }`}>
                 {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
               </span>
@@ -1272,19 +1273,19 @@ export default function SettingsPanel() {
                 </>
               ) : (
                 <>
-                  <span className={`flex-1 text-sm min-w-0 truncate ${g.inibido ? 'text-gray-500 line-through' : 'text-gray-200'}`}>{g.name}</span>
+                  <span className={`flex-1 text-sm min-w-0 truncate ${g.inibido ? 'text-texto-3 line-through' : 'text-texto-1'}`}>{g.name}</span>
                   {g.anchorAccountId && !g.inibido && (
-                    <span className="flex items-center gap-0.5 text-xs text-gray-500 shrink-0" title={`Âncora: ${accounts.find(a => a.id === g.anchorAccountId)?.apelido || accounts.find(a => a.id === g.anchorAccountId)?.name || '?'}`}>
+                    <span className="flex items-center gap-0.5 text-xs text-texto-3 shrink-0" title={`Âncora: ${accounts.find(a => a.id === g.anchorAccountId)?.apelido || accounts.find(a => a.id === g.anchorAccountId)?.name || '?'}`}>
                       <Anchor size={10} />
                     </span>
                   )}
                   {g.behavior && !g.inibido && (
-                    <span className="text-xs text-gray-600 shrink-0 italic">
+                    <span className="text-xs text-texto-3 shrink-0 italic">
                       {g.behavior === 'divida' ? 'dívidas' : 'empréstimos'}
                     </span>
                   )}
                   {g.inibido && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-500 shrink-0 font-medium">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3 shrink-0 font-medium">
                       Inibido
                     </span>
                   )}
@@ -1293,14 +1294,14 @@ export default function SettingsPanel() {
                       <button
                         onClick={() => moveAccountGroup(g.id, 'up')}
                         disabled={i === 0}
-                        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                        className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors"
                       >
                         <ArrowUp size={11} />
                       </button>
                       <button
                         onClick={() => moveAccountGroup(g.id, 'down')}
                         disabled={i === sortedAccountGroups.length - 1}
-                        className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400 transition-colors"
+                        className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors"
                       >
                         <ArrowDown size={11} />
                       </button>
@@ -1311,7 +1312,7 @@ export default function SettingsPanel() {
                     <button
                       onClick={() => updateAccountGroup(g.id, { inibido: false })}
                       title="Reativar grupo"
-                      className="p-1 rounded hover:bg-gray-700 text-emerald-600 hover:text-emerald-400 transition-colors shrink-0"
+                      className="p-1 rounded hover:bg-surface-hover text-primary-fg hover:text-texto-1 transition-colors shrink-0"
                     >
                       <Eye size={11} />
                     </button>
@@ -1319,7 +1320,7 @@ export default function SettingsPanel() {
                     <button
                       onClick={() => updateAccountGroup(g.id, { inibido: true })}
                       title="Inibir grupo (ocultar do app)"
-                      className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-amber-400 transition-colors shrink-0"
+                      className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-ambar transition-colors shrink-0"
                     >
                       <EyeOff size={11} />
                     </button>
@@ -1329,14 +1330,14 @@ export default function SettingsPanel() {
                       {/* Edit */}
                       <button
                         onClick={() => { setAgEditId(g.id); setAgEditName(g.name); setAgEditAnchorId(g.anchorAccountId || '') }}
-                        className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-300 transition-colors shrink-0"
+                        className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors shrink-0"
                       >
                         <Edit2 size={11} />
                       </button>
                       {/* Delete */}
                       <button
                         onClick={() => setAgConfirmDeleteId(g.id)}
-                        className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                        className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors shrink-0"
                       >
                         <Trash2 size={11} />
                       </button>
@@ -1349,7 +1350,7 @@ export default function SettingsPanel() {
         </div>
 
         {/* Add new group */}
-        <div className="flex gap-2 pt-2 border-t border-gray-700">
+        <div className="flex gap-2 pt-2 border-t border-borda-forte">
           <select
             className="input w-36 text-sm"
             value={agNewType}
@@ -1400,8 +1401,8 @@ export default function SettingsPanel() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-sm font-semibold text-gray-300">Controle Gerencial de Cartão</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Grupos usados para classificação gerencial das contas</p>
+            <h2 className="text-sm font-semibold text-texto-2">Controle Gerencial de Cartão</h2>
+            <p className="text-xs text-texto-3 mt-0.5">Grupos usados para classificação gerencial das contas</p>
           </div>
           {!showGroupForm && (
             <button
@@ -1415,8 +1416,8 @@ export default function SettingsPanel() {
 
         {/* Formulário inline de criação/edição */}
         {showGroupForm && (
-          <form onSubmit={handleGroupSubmit} className="mb-4 p-4 bg-gray-800 rounded-xl border border-gray-700 space-y-3">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+          <form onSubmit={handleGroupSubmit} className="mb-4 p-4 bg-surface-2 rounded-xl border border-borda-forte space-y-3">
+            <p className="text-xs font-semibold text-texto-2 uppercase tracking-wide">
               {editingGroup ? `Editar Grupo ${editingGroup.number}` : `Novo Grupo ${nextGroupNumber}`}
             </p>
             <div className="grid grid-cols-3 gap-3">
@@ -1471,18 +1472,18 @@ export default function SettingsPanel() {
           {gerencialGroups.map(group => (
             <div
               key={group.id}
-              className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${group.fixed ? 'bg-gray-800/50' : 'bg-gray-800'}`}
+              className={`flex items-center justify-between rounded-lg px-3 py-2.5 ${group.fixed ? 'bg-surface-2/50' : 'bg-surface-2'}`}
             >
               <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gray-700 text-xs font-bold text-gray-300">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-surface-hover text-xs font-bold text-texto-2">
                   {group.number}
                 </span>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-200">{group.name}</span>
-                    <span className="badge bg-gray-700 text-gray-400 text-xs">{group.alias}</span>
+                    <span className="text-sm font-medium text-texto-1">{group.name}</span>
+                    <span className="badge bg-surface-hover text-texto-2 text-xs">{group.alias}</span>
                     {group.fixed && (
-                      <span className="badge bg-gray-700/50 text-gray-600 text-xs flex items-center gap-1">
+                      <span className="badge bg-surface-hover/50 text-texto-3 text-xs flex items-center gap-1">
                         <Lock size={9} /> fixo
                       </span>
                     )}
@@ -1490,7 +1491,7 @@ export default function SettingsPanel() {
                   {group.defaultAccountId && (() => {
                     const acc = accounts.find(a => a.id === group.defaultAccountId)
                     return acc ? (
-                      <p className="text-xs text-gray-500 mt-0.5">Resgate: {acc.name}{acc.apelido ? ` (${acc.apelido})` : ''}</p>
+                      <p className="text-xs text-texto-3 mt-0.5">Resgate: {acc.name}{acc.apelido ? ` (${acc.apelido})` : ''}</p>
                     ) : null
                   })()}
                 </div>
@@ -1499,13 +1500,13 @@ export default function SettingsPanel() {
                 <div className="flex gap-1">
                   <button
                     onClick={() => openGroupEdit(group)}
-                    className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-700 rounded transition-colors"
+                    className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                   >
                     <Edit2 size={12} />
                   </button>
                   <button
                     onClick={() => setConfirmDeleteGroup(group)}
-                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                    className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -1521,26 +1522,26 @@ export default function SettingsPanel() {
       {secao === 'backup' && (
       <div className="card space-y-4">
         <div className="flex items-center gap-2">
-          <ShieldCheck size={15} className="text-emerald-400" />
-          <h2 className="text-sm font-semibold text-gray-300">Backup de Dados</h2>
+          <ShieldCheck size={15} className="text-primary-fg" />
+          <h2 className="text-sm font-semibold text-texto-2">Backup de Dados</h2>
         </div>
-        <p className="text-xs text-gray-500 -mt-3">Exporte ou restaure todos os dados do app.</p>
+        <p className="text-xs text-texto-3 -mt-3">Exporte ou restaure todos os dados do app.</p>
 
         {/* Status */}
         {(() => {
           const ts = getLastBackupTs()
           return ts ? (
-            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-800/60 rounded-lg px-3 py-2">
-              <Clock size={12} className="text-emerald-500 shrink-0" />
+            <div className="flex items-center gap-2 text-xs text-texto-3 bg-surface-2/60 rounded-lg px-3 py-2">
+              <Clock size={12} className="text-primary-fg shrink-0" />
               <span>
                 Último backup baixado:{' '}
-                <span className="text-gray-300">
+                <span className="text-texto-2">
                   {new Date(ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                 </span>
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-xs text-amber-500/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-aviso bg-aviso/5 border border-aviso/20 rounded-lg px-3 py-2">
               <AlertTriangle size={12} className="shrink-0" />
               <span>Nenhum backup baixado ainda. Recomendamos exportar regularmente.</span>
             </div>
@@ -1554,9 +1555,9 @@ export default function SettingsPanel() {
             ['Lançamentos', data.transactions?.length ?? 0],
             ['Agendamentos', data.schedules?.length ?? 0],
           ].map(([label, count]) => (
-            <div key={label} className="bg-gray-800 rounded-lg py-2 px-1">
-              <p className="text-gray-200 font-bold text-base">{count}</p>
-              <p className="text-gray-500">{label}</p>
+            <div key={label} className="bg-surface-2 rounded-lg py-2 px-1">
+              <p className="text-texto-1 font-bold text-base">{count}</p>
+              <p className="text-texto-3">{label}</p>
             </div>
           ))}
         </div>
@@ -1577,13 +1578,13 @@ export default function SettingsPanel() {
         </div>
 
         {importing && (
-          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-primary-fg bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
             <RefreshCw size={12} className="shrink-0 animate-spin" />
             <span>Restaurando backup no servidor… não feche a aba.</span>
           </div>
         )}
 
-        <p className="text-xs text-gray-600 leading-relaxed">
+        <p className="text-xs text-texto-3 leading-relaxed">
           Os dados são salvos automaticamente no navegador a cada alteração.
           O backup periódico (a cada 24h com o app aberto) é baixado automaticamente para a pasta Downloads.
           Download ao fechar a aba não é suportado pelos navegadores — use o botão acima antes de sair.
@@ -1599,15 +1600,15 @@ export default function SettingsPanel() {
       {/* Manutenção */}
       {secao === 'manutencao' && (
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-1 flex items-center gap-2">
-          <RefreshCw size={14} className="text-gray-500" /> Manutenção
+        <h2 className="text-sm font-semibold text-texto-2 mb-1 flex items-center gap-2">
+          <RefreshCw size={14} className="text-texto-3" /> Manutenção
         </h2>
-        <p className="text-xs text-gray-500 mb-4">Ferramentas para corrigir inconsistências nos dados.</p>
+        <p className="text-xs text-texto-3 mb-4">Ferramentas para corrigir inconsistências nos dados.</p>
 
-        <div className="bg-gray-800 rounded-xl p-4 space-y-3">
+        <div className="bg-surface-2 rounded-xl p-4 space-y-3">
           <div>
-            <p className="text-sm text-gray-200 font-medium">Recalcular todos os saldos</p>
-            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+            <p className="text-sm text-texto-1 font-medium">Recalcular todos os saldos</p>
+            <p className="text-xs text-texto-3 mt-0.5 leading-relaxed">
               Recalcula o saldo atual de cada conta a partir do saldo inicial e dos lançamentos até hoje.
               Útil para corrigir inconsistências causadas por importações ou edições manuais.
             </p>
@@ -1615,26 +1616,26 @@ export default function SettingsPanel() {
 
           {recalcStatus.running && (
             <div className="space-y-1.5">
-              <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-2 bg-surface-hover rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
+                  className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
                   style={{ width: `${recalcStatus.total > 0 ? Math.round((recalcStatus.done / recalcStatus.total) * 100) : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-400">Recalculando... {recalcStatus.done} / {recalcStatus.total} contas</p>
+              <p className="text-xs text-texto-2">Recalculando... {recalcStatus.done} / {recalcStatus.total} contas</p>
             </div>
           )}
 
           {recalcStatus.done > 0 && !recalcStatus.running && (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <div className="flex items-center gap-2 text-xs text-primary-fg">
                 <Check size={13} />
                 <span>{recalcStatus.done} conta{recalcStatus.done !== 1 ? 's' : ''} recalculada{recalcStatus.done !== 1 ? 's' : ''} com sucesso.</span>
               </div>
-              <div className="text-xs text-gray-400 pl-5 space-y-0.5">
-                <p>Saldo atual total: <span className="text-white/80 font-medium">{fmt(recalcStatus.totalBalance)}</span></p>
+              <div className="text-xs text-texto-2 pl-5 space-y-0.5">
+                <p>Saldo atual total: <span className="text-texto-1 font-medium">{fmt(recalcStatus.totalBalance)}</span></p>
                 {Math.abs(recalcStatus.totalProjected - recalcStatus.totalBalance) >= 0.005 && (
-                  <p>Saldo projetado total: <span className="text-sky-300 font-medium">{fmt(recalcStatus.totalProjected)}</span></p>
+                  <p>Saldo projetado total: <span className="text-texto-1 font-medium">{fmt(recalcStatus.totalProjected)}</span></p>
                 )}
               </div>
             </div>
@@ -1649,12 +1650,12 @@ export default function SettingsPanel() {
             {recalcStatus.running ? 'Recalculando...' : 'Recalcular todos os saldos'}
           </button>
 
-          <div className="border-t border-gray-800 pt-4">
-            <p className="text-xs text-gray-500 mb-2">
+          <div className="border-t border-borda pt-4">
+            <p className="text-xs text-texto-3 mb-2">
               Corrige transferências e agendamentos gerenciais do Grupo G: elimina provisões imediatas erradas de parcelados e reconstrói agendamentos com datas corretas.
             </p>
             {corrigirStatus === 'done' && (
-              <p className="text-xs text-green-400 mb-2">Dados gerenciais corrigidos com sucesso.</p>
+              <p className="text-xs text-primary-fg mb-2">Dados gerenciais corrigidos com sucesso.</p>
             )}
             <button
               className="btn-secondary flex items-center gap-2"
@@ -1665,10 +1666,10 @@ export default function SettingsPanel() {
             </button>
           </div>
 
-          <div className="border-t border-gray-800 pt-4 space-y-3">
+          <div className="border-t border-borda pt-4 space-y-3">
             <div>
-              <p className="text-sm text-gray-200 font-medium">Recalcular Agendamentos de Faturas</p>
-              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+              <p className="text-sm text-texto-1 font-medium">Recalcular Agendamentos de Faturas</p>
+              <p className="text-xs text-texto-3 mt-0.5 leading-relaxed">
                 Reconstrói os agendamentos acumulativos (devolução gerencial, resgate de reserva e
                 pagamento da fatura) de cada cartão de crédito, dos últimos 12 aos próximos 12 meses.
                 Remove agendamentos legados que foram substituídos pelo novo modelo.
@@ -1677,18 +1678,18 @@ export default function SettingsPanel() {
 
             {faturaStatus.running && (
               <div className="space-y-1.5">
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div className="h-2 bg-surface-hover rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-300 ease-out"
+                    className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
                     style={{ width: `${faturaStatus.total > 0 ? Math.round((faturaStatus.done / faturaStatus.total) * 100) : 0}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-400">Recalculando faturas... {faturaStatus.done} / {faturaStatus.total}</p>
+                <p className="text-xs text-texto-2">Recalculando faturas... {faturaStatus.done} / {faturaStatus.total}</p>
               </div>
             )}
 
             {faturaStatus.finished && !faturaStatus.running && (
-              <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <div className="flex items-center gap-2 text-xs text-primary-fg">
                 <Check size={13} />
                 <span>Agendamentos de faturas recalculados com sucesso ({faturaStatus.total} faturas).</span>
               </div>
@@ -1704,12 +1705,12 @@ export default function SettingsPanel() {
             </button>
           </div>
 
-          <div className="border-t border-gray-800 pt-4 space-y-3">
+          <div className="border-t border-borda pt-4 space-y-3">
             <div>
-              <p className="text-sm text-gray-200 font-medium flex items-center gap-1.5">
-                <Calculator size={13} className="text-gray-500" /> Ajuste de Saldo por Grupo
+              <p className="text-sm text-texto-1 font-medium flex items-center gap-1.5">
+                <Calculator size={13} className="text-texto-3" /> Ajuste de Saldo por Grupo
               </p>
-              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+              <p className="text-xs text-texto-3 mt-0.5 leading-relaxed">
                 Corrige o saldo inicial da conta âncora do grupo para que o saldo calculado bata com o saldo real informado.
               </p>
             </div>
@@ -1730,11 +1731,11 @@ export default function SettingsPanel() {
               </div>
 
               {ajusteGrupoId && !(accountGroups || []).find(g => g.id === ajusteGrupoId)?.anchorAccountId && (
-                <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                <p className="text-xs text-aviso flex items-center gap-1.5">
                   <AlertTriangle size={12} />
                   <span>
                     Este grupo não tem conta âncora definida. Configure em{' '}
-                    <a href="#config/cadastros/grupos-contas" className="underline hover:text-amber-300">Configurações → Grupos de Contas</a>{' '}
+                    <a href="#config/cadastros/grupos-contas" className="underline hover:text-texto-1">Configurações → Grupos de Contas</a>{' '}
                     antes de prosseguir.
                   </span>
                 </p>
@@ -1777,31 +1778,31 @@ export default function SettingsPanel() {
 
             {ajusteResult && (
               <div className="bg-surface rounded-lg p-3 space-y-1.5 text-xs">
-                <p className="font-medium text-gray-300 mb-2">Resumo do ajuste</p>
+                <p className="font-medium text-texto-2 mb-2">Resumo do ajuste</p>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Saldo calculado pelo sistema</span>
-                  <span className="text-gray-200">{fmt(ajusteResult.calculatedBalance)}</span>
+                  <span className="text-texto-3">Saldo calculado pelo sistema</span>
+                  <span className="text-texto-1">{fmt(ajusteResult.calculatedBalance)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Saldo informado</span>
-                  <span className="text-gray-200">{fmt(ajusteResult.expected)}</span>
+                  <span className="text-texto-3">Saldo informado</span>
+                  <span className="text-texto-1">{fmt(ajusteResult.expected)}</span>
                 </div>
-                <div className="flex justify-between border-t border-gray-700 pt-1.5 mt-1">
-                  <span className="text-gray-500">Diferença</span>
-                  <span className={ajusteResult.difference === 0 ? 'text-gray-400' : ajusteResult.difference > 0 ? 'text-receita' : 'text-despesa'}>
+                <div className="flex justify-between border-t border-borda-forte pt-1.5 mt-1">
+                  <span className="text-texto-3">Diferença</span>
+                  <span className={ajusteResult.difference === 0 ? 'text-texto-2' : ajusteResult.difference > 0 ? 'text-receita' : 'text-despesa'}>
                     {ajusteResult.difference > 0 ? '+' : ''}{fmt(ajusteResult.difference)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Conta âncora</span>
-                  <span className="text-gray-200">{ajusteResult.anchorAccount?.apelido || ajusteResult.anchorAccount?.name}</span>
+                  <span className="text-texto-3">Conta âncora</span>
+                  <span className="text-texto-1">{ajusteResult.anchorAccount?.apelido || ajusteResult.anchorAccount?.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Novo saldo inicial da âncora</span>
-                  <span className={ajusteResult.newInitialBalance < 0 ? 'text-despesa' : 'text-sky-300'}>{fmt(ajusteResult.newInitialBalance)}</span>
+                  <span className="text-texto-3">Novo saldo inicial da âncora</span>
+                  <span className={ajusteResult.newInitialBalance < 0 ? 'text-despesa' : 'text-receita'}>{fmt(ajusteResult.newInitialBalance)}</span>
                 </div>
                 {ajusteResult.difference === 0 ? (
-                  <p className="text-gray-500 italic text-xs pt-1">Nenhum ajuste necessário — saldos já coincidem.</p>
+                  <p className="text-texto-3 italic text-xs pt-1">Nenhum ajuste necessário — saldos já coincidem.</p>
                 ) : (
                   <button
                     className="btn-primary flex items-center gap-2 mt-2 w-full justify-center"
@@ -1814,25 +1815,25 @@ export default function SettingsPanel() {
             )}
 
             {ajusteDone && (
-              <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+              <p className="text-xs text-primary-fg flex items-center gap-1.5">
                 <Check size={12} /> Saldo inicial ajustado e contas recalculadas com sucesso.
               </p>
             )}
           </div>
 
           {data.settings?.lastBalanceSnapshot && (
-            <div className="border-t border-gray-700 pt-4 space-y-2">
+            <div className="border-t border-borda-forte pt-4 space-y-2">
               <div>
-                <p className="text-sm text-gray-200 font-medium flex items-center gap-1.5">
-                  <RotateCcw size={13} className="text-amber-400" /> Desfazer último ajuste de saldo
+                <p className="text-sm text-texto-1 font-medium flex items-center gap-1.5">
+                  <RotateCcw size={13} className="text-ambar" /> Desfazer último ajuste de saldo
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-texto-3 mt-0.5">
                   {data.settings.lastBalanceSnapshot.reason} · {data.settings.lastBalanceSnapshot.date}
                   {' · '}{data.settings.lastBalanceSnapshot.accounts?.length} conta{data.settings.lastBalanceSnapshot.accounts?.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <button
-                className="btn-secondary flex items-center gap-2 text-amber-400 border-amber-900/40 hover:bg-amber-900/20"
+                className="btn-secondary flex items-center gap-2 text-ambar border-ambar/40 hover:bg-ambar/10"
                 onClick={restoreBalanceSnapshot}
               >
                 <RotateCcw size={13} /> Restaurar saldo anterior
@@ -1845,11 +1846,11 @@ export default function SettingsPanel() {
 
       {/* Zona de Perigo */}
       {secao === 'zona-perigo' && (
-      <div className="card border border-red-900/40">
-        <h2 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
+      <div className="card border border-perigo/40">
+        <h2 className="text-sm font-semibold text-perigo mb-2 flex items-center gap-2">
           <AlertTriangle size={14} /> Zona de Perigo
         </h2>
-        <p className="text-xs text-gray-500 mb-3">Apagar todos os dados do aplicativo. Esta ação é irreversível.</p>
+        <p className="text-xs text-texto-3 mb-3">Apagar todos os dados do aplicativo. Esta ação é irreversível.</p>
         <button className="btn-danger" onClick={() => setConfirmReset(true)}>Apagar Todos os Dados</button>
       </div>
       )}
@@ -1887,9 +1888,9 @@ export default function SettingsPanel() {
       />
 
       {/* Identidade — visível apenas no mobile (sidebar já mostra no desktop) */}
-      <div className="md:hidden border-t border-gray-800 pt-4 text-center space-y-0.5">
-        <p className="text-xs text-gray-600 font-medium">Gislaine &amp; Victor Moreira</p>
-        <p className="text-xs text-gray-700 italic">Transformando conhecimento em resultados.</p>
+      <div className="md:hidden border-t border-borda pt-4 text-center space-y-0.5">
+        <p className="text-xs text-texto-3 font-medium">Gislaine &amp; Victor Moreira</p>
+        <p className="text-xs text-texto-3 italic">Transformando conhecimento em resultados.</p>
       </div>
     </div>
   )

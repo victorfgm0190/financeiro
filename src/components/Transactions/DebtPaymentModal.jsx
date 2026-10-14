@@ -45,9 +45,9 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
   if (!plan) {
     return (
       <div className="space-y-4 text-center py-6">
-        <AlertCircle size={32} className="text-amber-400 mx-auto" />
-        <p className="text-sm text-gray-300">Esta conta não tem um plano de pagamento configurado.</p>
-        <p className="text-xs text-gray-500">Registre a transferência normalmente e configure o plano depois.</p>
+        <AlertCircle size={32} className="text-aviso mx-auto" />
+        <p className="text-sm text-texto-2">Esta conta não tem um plano de pagamento configurado.</p>
+        <p className="text-xs text-texto-3">Registre a transferência normalmente e configure o plano depois.</p>
         <button className="btn-secondary w-full" onClick={onClose}>Fechar</button>
       </div>
     )
@@ -56,13 +56,13 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-        <TrendingDown size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+        <TrendingDown size={15} className="text-primary-fg shrink-0 mt-0.5" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-emerald-300">
+          <p className="text-sm font-medium text-primary-fg">
             {isEmprestimo ? 'Recebimento de parcela' : 'Pagamento de parcela'}
           </p>
-          <p className="text-xs text-emerald-400/70 mt-0.5 truncate">
+          <p className="text-xs text-texto-2 mt-0.5 truncate">
             {nextInstallment?.description || account.name}
           </p>
         </div>
@@ -71,15 +71,15 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
       {/* Plan status KPIs */}
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="card py-2.5">
-          <p className="text-xs text-gray-500">Parcela</p>
-          <p className="text-base font-bold text-gray-200">{installmentsDone}/{totalInstallments}</p>
+          <p className="text-xs text-texto-3">Parcela</p>
+          <p className="text-base font-bold text-texto-1">{installmentsDone}/{totalInstallments}</p>
         </div>
         <div className="card py-2.5">
-          <p className="text-xs text-gray-500">Saldo devedor</p>
+          <p className="text-xs text-texto-3">Saldo devedor</p>
           <p className="text-base font-bold text-despesa">{fmt(account.balance || 0)}</p>
         </div>
         <div className="card py-2.5">
-          <p className="text-xs text-gray-500">Após pagar</p>
+          <p className="text-xs text-texto-3">Após pagar</p>
           <p className="text-base font-bold text-receita">{fmt(remainingAfter)}</p>
         </div>
       </div>
@@ -88,7 +88,7 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
       <div className="space-y-3">
         <div>
           <label className="label">Valor pago</label>
-          <div className="input bg-surface text-gray-400 pointer-events-none">{fmt(amount)}</div>
+          <div className="input bg-surface text-texto-2 pointer-events-none">{fmt(amount)}</div>
         </div>
 
         <div>
@@ -102,46 +102,46 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
             value={principal}
             onChange={e => setPrincipal(e.target.value)}
           />
-          <p className="text-xs text-gray-600 mt-0.5">
+          <p className="text-xs text-texto-3 mt-0.5">
             Parcela padrão: {fmt(plan.installmentAmount)}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
+        <div className="flex items-center gap-3 p-3 bg-surface-2 rounded-lg">
           <div className="flex-1">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-texto-3">
               Juros{interestCategory ? ` · ${interestCategory.icon} ${interestCategory.name}` : ''}
             </p>
-            <p className={`text-sm font-semibold mt-0.5 ${interest > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+            <p className={`text-sm font-semibold mt-0.5 ${interest > 0 ? 'text-aviso' : 'text-texto-3'}`}>
               {fmt(interest)}
             </p>
           </div>
-          {interest === 0 && <CheckCircle size={15} className="text-emerald-500 shrink-0" />}
+          {interest === 0 && <CheckCircle size={15} className="text-primary-fg shrink-0" />}
         </div>
       </div>
 
       {/* Preview of what will be created */}
-      <div className="p-3 bg-gray-800/60 rounded-lg space-y-2">
-        <p className="text-xs text-gray-500 uppercase tracking-wide">O que será lançado</p>
+      <div className="p-3 bg-surface-2/60 rounded-lg space-y-2">
+        <p className="text-xs text-texto-3 uppercase tracking-wide">O que será lançado</p>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-400">Saída da conta corrente</span>
+          <span className="text-texto-2">Saída da conta corrente</span>
           <span className="text-despesa font-medium">−{fmt(amount)}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-400">Redução da dívida ({account.name})</span>
+          <span className="text-texto-2">Redução da dívida ({account.name})</span>
           <span className="text-receita font-medium">−{fmt(Number(principal) || 0)}</span>
         </div>
         {interest > 0 && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">
+            <span className="text-texto-2">
               {interestCategory ? `${interestCategory.icon} ${interestCategory.name}` : 'Juros'}
             </span>
-            <span className="text-amber-400 font-medium">+{fmt(interest)}</span>
+            <span className="text-aviso font-medium">+{fmt(interest)}</span>
           </div>
         )}
         {nextInstallment && (
-          <div className="flex items-center gap-1.5 pt-1 text-xs text-gray-600 border-t border-gray-700">
-            <CheckCircle size={11} className="text-emerald-600 shrink-0" />
+          <div className="flex items-center gap-1.5 pt-1 text-xs text-texto-3 border-t border-borda-forte">
+            <CheckCircle size={11} className="text-primary-fg shrink-0" />
             Parcela {nextInstallment.installmentNumber}/{nextInstallment.totalInstallments} marcada como paga
           </div>
         )}

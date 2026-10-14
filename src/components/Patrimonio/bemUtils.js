@@ -73,10 +73,10 @@ export function montarAjustesEntrada({ transacoes, escolhidas, favorecido, bemId
 }
 
 export const ESTILO_STATUS = {
-  paga: { label: 'PAGO', texto: 'text-receita', fundo: 'bg-emerald-500/10', borda: 'border-emerald-500/20' },
-  parcial: { label: 'PARCIAL', texto: 'text-amber-400', fundo: 'bg-amber-500/10', borda: 'border-amber-500/20' },
-  vencida: { label: 'VENCIDA', texto: 'text-despesa', fundo: 'bg-red-500/10', borda: 'border-red-500/20' },
-  aberta: { label: 'ABERTA', texto: 'text-gray-400', fundo: 'bg-gray-800/60', borda: 'border-gray-800' },
+  paga: { label: 'PAGO', texto: 'text-primary-fg', fundo: 'bg-primary/10', borda: 'border-primary/20' },
+  parcial: { label: 'PARCIAL', texto: 'text-aviso', fundo: 'bg-aviso/10', borda: 'border-aviso/20' },
+  vencida: { label: 'VENCIDA', texto: 'text-perigo', fundo: 'bg-perigo-bg', borda: 'border-perigo/20' },
+  aberta: { label: 'ABERTA', texto: 'text-texto-2', fundo: 'bg-surface-2/60', borda: 'border-borda' },
 }
 
 // Contas que podem ser BANCO FAVORECIDO de um financiamento — quem recebe as parcelas. Bem e

@@ -64,8 +64,8 @@ export default function FavorecidosPanel() {
     <div className="card space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-300">Favorecidos ({data.payees.length})</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Renomeie e junte favorecidos em lançamentos, agendamentos e regras.</p>
+          <h2 className="text-sm font-semibold text-texto-2">Favorecidos ({data.payees.length})</h2>
+          <p className="text-xs text-texto-3 mt-0.5">Renomeie e junte favorecidos em lançamentos, agendamentos e regras.</p>
         </div>
         <button type="button" className="btn-secondary min-h-[44px] flex items-center gap-2 text-sm" onClick={abrirSync} disabled={faltando.length === 0}
           title="Inclui no cadastro os nomes usados em lançamentos, agendamentos e regras que ainda não estão nele">
@@ -74,23 +74,23 @@ export default function FavorecidosPanel() {
       </div>
 
       {sync && (
-        <div className="rounded-xl border border-gray-700 p-3 space-y-3">
+        <div className="rounded-xl border border-borda-forte p-3 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-gray-200">{faltando.length} nome{faltando.length !== 1 ? 's' : ''} em uso fora do cadastro</p>
-            <label className="flex items-center gap-2 text-xs text-gray-400 min-h-[44px] cursor-pointer">
-              <input type="checkbox" className="accent-[#0F6E56] w-4 h-4"
+            <p className="text-sm text-texto-1">{faltando.length} nome{faltando.length !== 1 ? 's' : ''} em uso fora do cadastro</p>
+            <label className="flex items-center gap-2 text-xs text-texto-2 min-h-[44px] cursor-pointer">
+              <input type="checkbox" className="accent-primary w-4 h-4"
                 checked={sync.size === faltando.length}
                 onChange={e => setSync(e.target.checked ? new Set(faltando.map(f => f.nome)) : new Set())} />
               Todos
             </label>
           </div>
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-800 divide-y divide-gray-800">
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-borda divide-y divide-borda">
             {faltando.map(f => (
-              <label key={f.nome} className="flex items-center gap-2 px-2.5 py-2 text-xs cursor-pointer hover:bg-gray-800/40">
-                <input type="checkbox" className="accent-[#0F6E56] w-4 h-4 shrink-0" checked={sync.has(f.nome)}
+              <label key={f.nome} className="flex items-center gap-2 px-2.5 py-2 text-xs cursor-pointer hover:bg-surface-hover/40">
+                <input type="checkbox" className="accent-primary w-4 h-4 shrink-0" checked={sync.has(f.nome)}
                   onChange={() => setSync(prev => { const n = new Set(prev); if (n.has(f.nome)) n.delete(f.nome); else n.add(f.nome); return n })} />
-                <span className="text-gray-200 truncate flex-1">{f.nome}</span>
-                <span className="text-gray-500 whitespace-nowrap">{f.usos} uso{f.usos !== 1 ? 's' : ''}</span>
+                <span className="text-texto-1 truncate flex-1">{f.nome}</span>
+                <span className="text-texto-3 whitespace-nowrap">{f.usos} uso{f.usos !== 1 ? 's' : ''}</span>
               </label>
             ))}
           </div>
@@ -104,20 +104,20 @@ export default function FavorecidosPanel() {
       )}
 
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
         <input className="input pl-9 min-h-[44px]" placeholder="Buscar favorecido" value={busca} onChange={e => setBusca(e.target.value)} />
       </div>
 
       {selecionados.length >= 2 && (
-        <div className="rounded-xl border border-emerald-800/50 bg-[#12302a]/40 p-3 space-y-3">
-          <p className="text-sm text-gray-200 flex items-center gap-2"><Merge size={14} /> Mesclar {selecionados.length} nomes em um só</p>
+        <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 space-y-3">
+          <p className="text-sm text-texto-1 flex items-center gap-2"><Merge size={14} /> Mesclar {selecionados.length} nomes em um só</p>
           <div>
             <label className="label" htmlFor="fav-mescla-nome">Novo nome</label>
             <input id="fav-mescla-nome" className="input min-h-[44px]" value={novoNomeMescla || sugestaoMescla}
               onChange={e => setNovoNomeMescla(e.target.value)} />
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-300 min-h-[44px] cursor-pointer">
-            <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={aliasMescla} onChange={e => setAliasMescla(e.target.checked)} />
+          <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
+            <input type="checkbox" className="accent-primary w-4 h-4" checked={aliasMescla} onChange={e => setAliasMescla(e.target.checked)} />
             Usar esse nome nas próximas importações
           </label>
           <div className="flex gap-2 justify-end">
@@ -133,26 +133,26 @@ export default function FavorecidosPanel() {
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-800 divide-y divide-gray-800">
+      <div className="rounded-lg border border-borda divide-y divide-borda">
         {filtrada.slice(0, LIMITE_LISTA).map(f => (
           <div key={f.nome} className="flex items-center gap-2 px-2.5 py-1">
-            <input type="checkbox" className="accent-[#0F6E56] w-4 h-4 shrink-0" checked={marcados.has(f.nome)}
+            <input type="checkbox" className="accent-primary w-4 h-4 shrink-0" checked={marcados.has(f.nome)}
               onChange={() => alternar(f.nome)} aria-label={`Selecionar ${f.nome}`} />
-            <span className="text-sm text-gray-200 truncate flex-1">{f.nome}</span>
-            {!f.noCadastro && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 whitespace-nowrap">fora do cadastro</span>}
+            <span className="text-sm text-texto-1 truncate flex-1">{f.nome}</span>
+            {!f.noCadastro && <span className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap">⚠ fora do cadastro</span>}
             {f.usos.total === 0
-              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-400 whitespace-nowrap">sem uso</span>
-              : <span className="text-xs text-gray-500 whitespace-nowrap hidden sm:inline">{resumoUso(f.usos)}</span>}
-            <button type="button" className="min-h-[44px] px-2 text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1"
+              ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-2 whitespace-nowrap">sem uso</span>
+              : <span className="text-xs text-texto-3 whitespace-nowrap hidden sm:inline">{resumoUso(f.usos)}</span>}
+            <button type="button" className="min-h-[44px] px-2 text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1"
               onClick={() => setModal({ nomes: [f.nome], nomeInicial: f.nome, alias: true, titulo: 'Renomear favorecido' })}>
               <Pencil size={12} /> Renomear
             </button>
           </div>
         ))}
-        {filtrada.length === 0 && <p className="px-3 py-4 text-center text-xs text-gray-500">Nenhum favorecido encontrado.</p>}
+        {filtrada.length === 0 && <p className="px-3 py-4 text-center text-xs text-texto-3">Nenhum favorecido encontrado.</p>}
       </div>
       {filtrada.length > LIMITE_LISTA && (
-        <p className="text-xs text-gray-500">Mostrando {LIMITE_LISTA} de {filtrada.length} — use a busca para encontrar os demais.</p>
+        <p className="text-xs text-texto-3">Mostrando {LIMITE_LISTA} de {filtrada.length} — use a busca para encontrar os demais.</p>
       )}
 
       {modal && (

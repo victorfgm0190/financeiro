@@ -23,7 +23,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
   return (
     <div className={`rounded-xl border p-3 ${estilo.borda} ${estilo.fundo}`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-gray-200">
+        <p className="text-sm font-medium text-texto-1">
           Parcela {parcela.numero}/{numParcelas}
         </p>
         <span className={`text-xs font-semibold flex items-center gap-1 ${estilo.texto}`}>
@@ -31,49 +31,49 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
         </span>
       </div>
 
-      <p className="text-xs text-gray-500 mt-1">Vence: {fmtData(parcela.data_vencimento)}</p>
+      <p className="text-xs text-texto-3 mt-1">Vence: {fmtData(parcela.data_vencimento)}</p>
 
       <div className="grid grid-cols-4 gap-2 mt-2.5 text-xs">
         <div>
-          <p className="text-gray-600">Principal</p>
-          <p className="text-gray-300">{fmt(parcela.principal_provisioned)}</p>
+          <p className="text-texto-3">Principal</p>
+          <p className="text-texto-2">{fmt(parcela.principal_provisioned)}</p>
         </div>
         <div>
-          <p className="text-gray-600">Juros</p>
-          <p className="text-gray-300">{fmt(parcela.juros_provisioned)}</p>
+          <p className="text-texto-3">Juros</p>
+          <p className="text-texto-2">{fmt(parcela.juros_provisioned)}</p>
         </div>
         <div>
-          <p className="text-gray-600">Total</p>
-          <p className="text-gray-200 font-medium">{fmt(parcela.total_provisioned)}</p>
+          <p className="text-texto-3">Total</p>
+          <p className="text-texto-1 font-medium">{fmt(parcela.total_provisioned)}</p>
         </div>
         <div>
-          <p className="text-gray-600">Saldo Restante</p>
+          <p className="text-texto-3">Saldo Restante</p>
           {/* Zerado = quitada; num pagamento parcial é o que ainda falta daquela parcela. */}
-          <p className={saldo > 0 ? 'text-amber-400 font-medium' : 'text-teal-400 font-medium'}>
+          <p className={saldo > 0 ? 'text-despesa font-medium' : 'text-primary-fg font-medium'}>
             {fmt(saldo)}
           </p>
         </div>
       </div>
 
       {parcela.total_pago > 0 && (
-        <div className="mt-2.5 pt-2.5 border-t border-gray-800/80 text-xs space-y-0.5">
+        <div className="mt-2.5 pt-2.5 border-t border-borda/80 text-xs space-y-0.5">
           <div className="flex justify-between">
-            <span className="text-gray-600">Pago</span>
-            <span className="text-gray-300">
+            <span className="text-texto-3">Pago</span>
+            <span className="text-texto-2">
               {fmt(parcela.total_pago)}
               {parcela.data_pagamento && ` em ${fmtData(parcela.data_pagamento)}`}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Principal / Juros</span>
-            <span className="text-gray-400">
+            <span className="text-texto-3">Principal / Juros</span>
+            <span className="text-texto-2">
               {fmt(parcela.principal_pago)} / {fmt(parcela.juros_pago)}
             </span>
           </div>
           {parcela.desvio_juros > 0 && (
             <div className="flex justify-between">
-              <span className="text-gray-600">Juros em falta</span>
-              <span className="text-amber-400">{fmt(parcela.desvio_juros)}</span>
+              <span className="text-texto-3">Juros em falta</span>
+              <span className="text-aviso">{fmt(parcela.desvio_juros)}</span>
             </div>
           )}
         </div>
@@ -98,8 +98,8 @@ export default function BemParcelasTab({
   if (!financiamento) {
     return (
       <div className="card text-center py-10">
-        <p className="text-sm text-gray-500">Este bem ainda não tem financiamento.</p>
-        <p className="text-xs text-gray-600 mt-1">Crie o financiamento na aba Informações.</p>
+        <p className="text-sm text-texto-3">Este bem ainda não tem financiamento.</p>
+        <p className="text-xs text-texto-3 mt-1">Crie o financiamento na aba Informações.</p>
       </div>
     )
   }
@@ -120,13 +120,13 @@ export default function BemParcelasTab({
     <div className="space-y-4">
       <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-gray-600">Favorecido das parcelas</p>
-          <p className="text-sm text-gray-200 flex items-center gap-1.5 mt-0.5 truncate">
-            <Building2 size={13} className="text-gray-500 shrink-0" />
-            {favorecido || <span className="text-gray-500">Nenhum favorecido definido</span>}
+          <p className="text-xs text-texto-3">Favorecido das parcelas</p>
+          <p className="text-sm text-texto-1 flex items-center gap-1.5 mt-0.5 truncate">
+            <Building2 size={13} className="text-texto-3 shrink-0" />
+            {favorecido || <span className="text-texto-3">Nenhum favorecido definido</span>}
           </p>
           {contaVinculada && contaVinculada !== favorecido && (
-            <p className="text-xs text-gray-600 mt-0.5 truncate">Conta vinculada: {contaVinculada}</p>
+            <p className="text-xs text-texto-3 mt-0.5 truncate">Conta vinculada: {contaVinculada}</p>
           )}
         </div>
         <div className="flex gap-2 shrink-0">
@@ -157,34 +157,34 @@ export default function BemParcelasTab({
 
       <div className="card">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-300 font-medium">
+          <span className="text-sm text-texto-2 font-medium">
             {pagas}/{total} parcelas pagas
           </span>
-          <span className="text-sm text-teal-400 font-semibold">{pct.toFixed(0)}%</span>
+          <span className="text-sm text-primary-fg font-semibold">{pct.toFixed(0)}%</span>
         </div>
-        <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-          <div className="h-2 bg-teal-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        <div className="h-2 bg-surface-2 rounded-full overflow-hidden">
+          <div className="h-2 bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
         </div>
         <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
           <div>
-            <p className="text-gray-600">Pago</p>
-            <p className="text-gray-200">{fmt(financiamento.realizado?.total)}</p>
+            <p className="text-texto-3">Pago</p>
+            <p className="text-texto-1">{fmt(financiamento.realizado?.total)}</p>
           </div>
           <div>
-            <p className="text-gray-600">Saldo Restante</p>
-            <p className="text-gray-200">
+            <p className="text-texto-3">Saldo Restante</p>
+            <p className="text-texto-1">
               {fmt(financiamento.analise?.saldo_restante ?? financiamento.analise?.total_restante)}
             </p>
           </div>
           <div>
-            <p className="text-gray-600">Valor Total</p>
-            <p className="text-gray-200">{fmt(financiamento.valor_total)}</p>
+            <p className="text-texto-3">Valor Total</p>
+            <p className="text-texto-1">{fmt(financiamento.valor_total)}</p>
           </div>
         </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-10 text-gray-500 gap-2 text-sm">
+        <div className="flex items-center justify-center py-10 text-texto-3 gap-2 text-sm">
           <Loader2 size={16} className="animate-spin" /> Carregando parcelas...
         </div>
       ) : (
@@ -204,7 +204,7 @@ export default function BemParcelasTab({
           >
             <ChevronLeft size={13} /> Anterior
           </button>
-          <span className="text-xs text-gray-500">Página {page} de {totalPages}</span>
+          <span className="text-xs text-texto-3">Página {page} de {totalPages}</span>
           <button
             className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1 disabled:opacity-40"
             onClick={() => onPage(page + 1)}

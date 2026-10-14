@@ -42,8 +42,8 @@ export default function EfetivarModal({ prov, onConfirmar, onClose }) {
 
   const opcao = (id, titulo, desc) => (
     <label className="flex items-start gap-2 cursor-pointer">
-      <input type="radio" className="mt-0.5 accent-[#0F6E56]" checked={modo === id} onChange={() => setModo(id)} />
-      <span className="text-sm text-gray-200">{titulo}<span className="block text-xs text-gray-500">{desc}</span></span>
+      <input type="radio" className="mt-0.5 accent-primary" checked={modo === id} onChange={() => setModo(id)} />
+      <span className="text-sm text-texto-1">{titulo}<span className="block text-xs text-texto-3">{desc}</span></span>
     </label>
   )
 
@@ -51,8 +51,8 @@ export default function EfetivarModal({ prov, onConfirmar, onClose }) {
     <Modal open onClose={onClose} title="Efetivar provisório">
       <div className="space-y-4">
         <div className="text-sm">
-          <p className="text-gray-200 font-medium">{prov.description}</p>
-          <p className="text-gray-400">{entrada ? 'Entrada' : 'Saída'} de {fmt(prov.amount)} em {fmtDate(prov.date)}</p>
+          <p className="text-texto-1 font-medium">{prov.description}</p>
+          <p className="text-texto-2">{entrada ? 'Entrada' : 'Saída'} de {fmt(prov.amount)} em {fmtDate(prov.date)}</p>
         </div>
         <div className="space-y-2">
           {opcao('agendamento', `Agendamento (${entrada ? 'a receber' : 'a pagar'})`, 'Vira um agendamento "Uma vez" na data do provisório; o saldo da conta não muda até ele ser registrado.')}
@@ -76,7 +76,7 @@ export default function EfetivarModal({ prov, onConfirmar, onClose }) {
             ungroupedLabel="Sem grupo"
           />
         </div>
-        {erro && <p className="text-xs text-red-400">{erro}</p>}
+        {erro && <p className="text-xs text-perigo">{erro}</p>}
         <div className="flex gap-3 pt-1">
           <button type="button" className="btn-secondary flex-1" disabled={salvando} onClick={onClose}>Cancelar</button>
           <button type="button" className="btn-primary flex-1" disabled={salvando} onClick={confirmar}>{salvando ? 'Gravando...' : 'Efetivar'}</button>

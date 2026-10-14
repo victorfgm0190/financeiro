@@ -74,8 +74,8 @@ function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
-  else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
-  else cls += ' bg-orange-500/20 text-orange-600'
+  else if (grupo.number === 'D') cls += ' bg-surface-hover/60 text-texto-3'
+  else cls += ' bg-despesa/20 text-despesa'
   return <span className={cls}>{grupo.alias}</span>
 }
 
@@ -94,7 +94,7 @@ function CopyIdBadge({ id }) {
       type="button"
       onClick={copy}
       title="Clique para copiar o ID"
-      className="mt-0.5 inline-block font-mono text-[9px] text-gray-500 hover:text-gray-300 bg-gray-800/60 hover:bg-gray-700/60 px-1 py-0.5 rounded transition-colors"
+      className="mt-0.5 inline-block font-mono text-[9px] text-texto-3 hover:text-texto-2 bg-surface-2/60 hover:bg-surface-hover/60 px-1 py-0.5 rounded transition-colors"
     >
       {copied ? 'copiado!' : id}
     </button>
@@ -106,7 +106,7 @@ function CopyIdBadge({ id }) {
 function InstallmentBadge({ num, total }) {
   if (!num || num <= 0) return null
   return (
-    <span className="mt-0.5 mr-1.5 inline-block bg-yellow-500/20 text-yellow-400 text-xs px-1.5 py-0.5 rounded font-medium">
+    <span className="mt-0.5 mr-1.5 inline-block bg-surface-2 text-texto-2 text-xs px-1.5 py-0.5 rounded font-medium">
       {num}/{total || '?'}
     </span>
   )
@@ -118,9 +118,9 @@ function InstallmentBadge({ num, total }) {
 // Sempre par cor+ícone (sem verde/vermelho). Tolerância de 1 centavo evita "pago a mais R$0,00".
 function DiferencaPagamento({ diferenca, compact = false, className = '' }) {
   let label, color, Icon
-  if (diferenca > 0.01) { label = `Pago a mais ${fmt(diferenca)}`; color = 'text-blue-400'; Icon = ArrowUpCircle }
-  else if (diferenca < -0.01) { label = `Falta pagar ${fmt(-diferenca)}`; color = 'text-amber-500'; Icon = AlertTriangle }
-  else { label = 'Quitada totalmente'; color = 'text-gray-400'; Icon = CheckCircle2 }
+  if (diferenca > 0.01) { label = `Pago a mais ${fmt(diferenca)}`; color = 'text-receita'; Icon = ArrowUpCircle }
+  else if (diferenca < -0.01) { label = `Falta pagar ${fmt(-diferenca)}`; color = 'text-aviso'; Icon = AlertTriangle }
+  else { label = 'Quitada totalmente'; color = 'text-texto-2'; Icon = CheckCircle2 }
   return (
     <span className={`inline-flex items-center gap-1 font-medium ${compact ? 'text-[11px]' : 'text-xs'} ${color} ${className}`}>
       <Icon size={compact ? 11 : 13} className="shrink-0" />
@@ -130,18 +130,18 @@ function DiferencaPagamento({ diferenca, compact = false, className = '' }) {
 }
 
 const ACAO_META = {
-  REMOVER_GERENCIAL:  { icon: Trash2,    color: 'text-red-400',     bg: 'bg-red-500/10',     label: 'Remover transferência gerencial' },
-  CRIAR_GERENCIAL:    { icon: Plus,      color: 'text-emerald-400', bg: 'bg-emerald-500/10', label: 'Criar transferência gerencial' },
-  ATUALIZAR_GERENCIAL:{ icon: RotateCcw, color: 'text-amber-400',   bg: 'bg-amber-500/10',   label: 'Atualizar transferência gerencial' },
+  REMOVER_GERENCIAL:  { icon: Trash2,    color: 'text-perigo',      bg: 'bg-perigo-bg',     label: 'Remover transferência gerencial' },
+  CRIAR_GERENCIAL:    { icon: Plus,      color: 'text-primary-fg',  bg: 'bg-primary/10', label: 'Criar transferência gerencial' },
+  ATUALIZAR_GERENCIAL:{ icon: RotateCcw, color: 'text-ambar',       bg: 'bg-ambar/10',   label: 'Atualizar transferência gerencial' },
   CRIAR_RESGATE:      { icon: Plus,      color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Criar resgate de reserva' },
   ATUALIZAR_RESGATE:  { icon: RotateCcw, color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Atualizar resgate de reserva' },
-  REMOVER_RESGATE:    { icon: Trash2,    color: 'text-red-400',     bg: 'bg-red-500/10',     label: 'Remover resgate de reserva' },
+  REMOVER_RESGATE:    { icon: Trash2,    color: 'text-perigo',      bg: 'bg-perigo-bg',     label: 'Remover resgate de reserva' },
   ATUALIZAR_DEVOLUCAO:{ icon: RotateCcw, color: 'text-reserva',     bg: 'bg-reserva/10',     label: 'Atualizar devolução gerencial' },
-  ATUALIZAR_PAGAMENTO:{ icon: RotateCcw, color: 'text-gray-300',    bg: 'bg-gray-700/30',    label: 'Atualizar pagamento da fatura' },
+  ATUALIZAR_PAGAMENTO:{ icon: RotateCcw, color: 'text-texto-2',    bg: 'bg-surface-hover/30',    label: 'Atualizar pagamento da fatura' },
 }
 
 function AcaoRow({ a }) {
-  const meta = ACAO_META[a.tipo] || { icon: RotateCcw, color: 'text-gray-300', bg: 'bg-gray-700/30', label: a.tipo }
+  const meta = ACAO_META[a.tipo] || { icon: RotateCcw, color: 'text-texto-2', bg: 'bg-surface-hover/30', label: a.tipo }
   const Icon = meta.icon
   const isGer = a.tipo.endsWith('_GERENCIAL')
   return (
@@ -151,8 +151,8 @@ function AcaoRow({ a }) {
         <p className={`text-xs font-semibold ${meta.color}`}>{meta.label}</p>
         {isGer ? (
           <>
-            <p className="text-sm text-gray-200 truncate">{a.descricao || '—'}</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-sm text-texto-1 truncate">{a.descricao || '—'}</p>
+            <p className="text-xs text-texto-3">
               {a.valor != null ? fmt(a.valor) : `${fmt(a.valor_anterior)} → ${fmt(a.valor_novo)}`}
               {a.data ? ` · ${fmtDate(a.data)}` : ''}
               {a.de && a.para ? ` · ${a.de} → ${a.para}` : ''}
@@ -160,8 +160,8 @@ function AcaoRow({ a }) {
           </>
         ) : (
           <>
-            <p className="text-sm text-gray-200 truncate">{a.grupo || 'Fatura'}</p>
-            <p className="text-xs text-gray-500">{fmt(a.valor_anterior)} → {fmt(a.valor_novo)}</p>
+            <p className="text-sm text-texto-1 truncate">{a.grupo || 'Fatura'}</p>
+            <p className="text-xs text-texto-3">{fmt(a.valor_anterior)} → {fmt(a.valor_novo)}</p>
           </>
         )}
       </div>
@@ -596,9 +596,9 @@ export default function CreditCardPanel() {
   if (creditCards.length === 0) {
     return (
       <div className="card text-center py-16">
-        <CreditCard size={40} className="text-gray-700 mx-auto mb-4" />
-        <p className="text-gray-400 mb-2">Nenhum cartão de crédito cadastrado</p>
-        <p className="text-gray-600 text-sm">Adicione um cartão na seção Contas</p>
+        <CreditCard size={40} className="text-texto-3 mx-auto mb-4" />
+        <p className="text-texto-2 mb-2">Nenhum cartão de crédito cadastrado</p>
+        <p className="text-texto-3 text-sm">Adicione um cartão na seção Contas</p>
       </div>
     )
   }
@@ -607,7 +607,7 @@ export default function CreditCardPanel() {
     return (
       <div className="space-y-4">
         <button
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors"
           onClick={() => { saveScroll(); setShowExtrato(false) }}
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
@@ -621,7 +621,7 @@ export default function CreditCardPanel() {
     return (
       <div className="space-y-4">
         <button
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto-1 transition-colors"
           onClick={() => { saveScroll(); setShowRelatorio(false) }}
         >
           <ArrowLeft size={14} /> Voltar ao Cartão
@@ -637,15 +637,15 @@ export default function CreditCardPanel() {
 
       {/* ── Header (seletor + KPIs) — fixo no topo ao rolar apenas no desktop (md+);
              no mobile rola normalmente para liberar a tela à lista ── */}
-      <div className="space-y-4 md:sticky md:top-0 md:z-20 md:bg-gray-950 md:pb-2 md:-mb-2">
+      <div className="space-y-4 md:sticky md:top-0 md:z-20 md:bg-page md:pb-2 md:-mb-2">
 
       {/* ── Seletor de cartão + navegador de fatura ── */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Dropdown de cartão */}
         <div className="flex items-center gap-2 flex-1 min-w-[180px]">
-          <CreditCard size={15} className="text-purple-400 shrink-0" />
+          <CreditCard size={15} className="text-texto-2 shrink-0" />
           <select
-            className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none w-full"
+            className="bg-surface-2 border border-borda-campo text-texto-1 rounded-lg px-3 py-2 text-sm focus:outline-none w-full"
             value={selectedCardId}
             onChange={e => handleCardChange(e.target.value)}
           >
@@ -656,19 +656,19 @@ export default function CreditCardPanel() {
         </div>
 
         {/* Navegador de fatura */}
-        <div className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-lg px-1 py-1 shrink-0">
+        <div className="flex items-center gap-1 bg-surface-2 border border-borda-forte rounded-lg px-1 py-1 shrink-0">
           <button
             onClick={() => { exitSelect(); setBillKey(k => offsetBillKey(k, -1)) }}
-            className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
+            className="p-1.5 text-texto-2 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="text-sm font-medium text-gray-200 px-3 whitespace-nowrap min-w-[160px] text-center">
+          <span className="text-sm font-medium text-texto-1 px-3 whitespace-nowrap min-w-[160px] text-center">
             {getBillLabel(billKey)}
           </span>
           <button
             onClick={() => { exitSelect(); setBillKey(k => offsetBillKey(k, +1)) }}
-            className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
+            className="p-1.5 text-texto-2 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"
           >
             <ChevronRight size={14} />
           </button>
@@ -695,8 +695,8 @@ export default function CreditCardPanel() {
       </div>
 
       {/* Diferença de pagamento — compacta no header (mobile; rola junto com o cabeçalho) */}
-      <div className="md:hidden flex items-center justify-between gap-2 bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-1.5">
-        <span className="text-[11px] uppercase tracking-wide text-gray-500">Diferença</span>
+      <div className="md:hidden flex items-center justify-between gap-2 bg-surface-2/60 border border-borda-forte rounded-lg px-3 py-1.5">
+        <span className="text-[11px] uppercase tracking-wide text-texto-3">Diferença</span>
         <DiferencaPagamento diferenca={diferencaPagamento} compact />
       </div>
 
@@ -705,50 +705,50 @@ export default function CreditCardPanel() {
         {/* Fatura Selecionada ocupa a linha inteira no mobile (col-span-2) p/ os "previstos"/
             "total" caberem — no grid estreito de 2 colunas ficavam apertados/cortados. */}
         <div className="card col-span-2 sm:col-span-1">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
+          <div className="flex items-center gap-2 mb-2 text-texto-2">
             <Calendar size={13} />
             <span className="text-xs uppercase tracking-wide">Fatura Selecionada</span>
           </div>
-          <p className="text-2xl font-bold text-orange-600">{fmt(billTotal)}</p>
-          <p className="text-xs text-gray-500 mt-1">{billLancamentos.length} lançamento{billLancamentos.length !== 1 ? 's' : ''}</p>
+          <p className="text-2xl font-bold text-despesa">{fmt(billTotal)}</p>
+          <p className="text-xs text-texto-3 mt-1">{billLancamentos.length} lançamento{billLancamentos.length !== 1 ? 's' : ''}</p>
           {totalPrevisto > 0 && (
             <>
-              <p className="text-xs text-gray-400 mt-1">
-                + <span className="text-purple-400">{fmt(totalPrevisto)} previstos</span>
+              <p className="text-xs text-texto-2 mt-1">
+                + <span className="text-texto-2">{fmt(totalPrevisto)} previstos</span>
               </p>
-              <p className="text-sm font-semibold text-gray-100 mt-0.5">
+              <p className="text-sm font-semibold text-texto-1 mt-0.5">
                 = {fmt(billTotal + totalPrevisto)} total
               </p>
             </>
           )}
         </div>
         <div className="card">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
+          <div className="flex items-center gap-2 mb-2 text-texto-2">
             <DollarSign size={13} />
             <span className="text-xs uppercase tracking-wide">Limite Disponível</span>
           </div>
           <p className="text-2xl font-bold text-receita">
             {fmt((selectedCard?.creditLimit || 0) - usoLimite)}
           </p>
-          <p className="text-xs text-gray-500 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
+          <p className="text-xs text-texto-3 mt-1">de {fmt(selectedCard?.creditLimit || 0)}</p>
         </div>
         <div className="card">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
+          <div className="flex items-center gap-2 mb-2 text-texto-2">
             <CreditCard size={13} />
             <span className="text-xs uppercase tracking-wide">Dívida Total</span>
           </div>
-          <p className="text-2xl font-bold text-gray-200">{fmt(usoLimite)}</p>
-          <p className="text-xs text-gray-500 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
+          <p className="text-2xl font-bold text-texto-1">{fmt(usoLimite)}</p>
+          <p className="text-xs text-texto-3 mt-1">Fecha dia {selectedCard?.closingDay || '—'} · Vence dia {selectedCard?.dueDay || '—'}</p>
         </div>
         <div className="card">
-          <div className="flex items-center gap-2 mb-2 text-gray-400">
+          <div className="flex items-center gap-2 mb-2 text-texto-2">
             <CheckCircle2 size={13} />
             <span className="text-xs uppercase tracking-wide">{totalPago === 0 ? 'Saldo a Pagar' : 'Valor Pago'}</span>
           </div>
-          <p className={`text-2xl font-bold ${isFaturaPaga ? 'text-emerald-400' : isFaturaParcial ? 'text-orange-500' : 'text-gray-200'}`}>
+          <p className={`text-2xl font-bold ${isFaturaPaga ? 'text-primary-fg' : isFaturaParcial ? 'text-aviso' : 'text-texto-1'}`}>
             {fmt(totalPago === 0 ? saldoAPagarComPrevistos : totalPago)}
           </p>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-texto-3 mt-1">
             de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
           <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
@@ -756,8 +756,8 @@ export default function CreditCardPanel() {
             onClick={faturaFechada ? handleAbrirFatura : handleFecharFatura}
             className={`mt-2 inline-block text-xs rounded px-3 py-1 border transition-colors ${
               faturaFechada
-                ? 'text-emerald-400 border-emerald-600 hover:bg-emerald-500/10'
-                : 'text-orange-400 border-orange-600 hover:bg-orange-500/10'
+                ? 'text-primary-fg border-primary/40 hover:bg-primary/10'
+                : 'text-perigo border-perigo/40 bg-perigo-bg hover:bg-perigo/20'
             }`}
           >
             {faturaFechada ? '🔓 Abrir Fatura' : '🔒 Fechar Fatura'}
@@ -803,7 +803,7 @@ export default function CreditCardPanel() {
           </button>
           {!isMobile && (
             <button
-              className="flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 disabled:opacity-50 transition-colors py-1"
+              className="flex items-center justify-center gap-1.5 text-xs text-texto-3 hover:text-texto-2 disabled:opacity-50 transition-colors py-1"
               onClick={handleReconciliarGerencial}
               disabled={reconciling}
               title="Reconcilia agendamentos gerenciais e saldos das contas Ger. deste cartão"
@@ -819,28 +819,28 @@ export default function CreditCardPanel() {
       {/* ── Tabela de lançamentos da fatura ── */}
       <div className="card p-0 overflow-hidden">
         {/* Linha de resumo no topo do extrato da fatura */}
-        <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs text-gray-500">
-            Fatura <span className="text-gray-300 font-medium">{fmt(billTotal)}</span>
-            {' · '}Pago <span className="text-gray-300 font-medium">{fmt(totalPago)}</span>
+        <div className="px-4 py-2 border-b border-borda flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-xs text-texto-3">
+            Fatura <span className="text-texto-2 font-medium">{fmt(billTotal)}</span>
+            {' · '}Pago <span className="text-texto-2 font-medium">{fmt(totalPago)}</span>
           </span>
           <DiferencaPagamento diferenca={diferencaPagamento} />
         </div>
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-gray-300">
+        <div className="px-4 py-3 border-b border-borda flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-texto-2">
             {getBillLabel(billKey)}
             {faturaFechada && (
-              <span className="ml-2 text-xs bg-orange-900 text-orange-300 px-2 py-0.5 rounded font-medium align-middle">
+              <span className="ml-2 text-xs bg-surface-2 text-texto-2 px-2 py-0.5 rounded font-medium align-middle">
                 FECHADA
               </span>
             )}
           </h3>
           <div className="flex items-center gap-3">
             {hasGer && (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
+              <div className="flex items-center gap-2 text-xs text-texto-3">
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-reserva/20 text-reserva text-xs font-bold">G</span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-600 text-xs font-bold">2+</span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-500 text-xs font-bold">D</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-despesa/20 text-despesa text-xs font-bold">2+</span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-3 text-xs font-bold">D</span>
               </div>
             )}
             {billLancamentos.length > 0 && (
@@ -870,8 +870,8 @@ export default function CreditCardPanel() {
 
         {billLancamentos.length === 0 ? (
           <div className="text-center py-12">
-            <Calendar size={28} className="text-gray-700 mx-auto mb-2" />
-            <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
+            <Calendar size={28} className="text-texto-3 mx-auto mb-2" />
+            <p className="text-texto-3 text-sm">Nenhum lançamento nesta fatura</p>
             <button
               onClick={() => setShowNewTx(true)}
               disabled={faturaFechada}
@@ -896,7 +896,7 @@ export default function CreditCardPanel() {
                 />
               ))}
               {displayBillTxs.length === 0 ? (
-                <p className="text-center py-8 text-gray-500 text-xs">Nenhum lançamento corresponde aos filtros</p>
+                <p className="text-center py-8 text-texto-3 text-xs">Nenhum lançamento corresponde aos filtros</p>
               ) : displayBillTxs.map(tx => (
                 // Estorno abate da fatura → valor exibido com sinal negativo (fmt formata
                 // o negativo dentro do TxMobileItem). Só exibição: tx.amount segue positivo.
@@ -913,7 +913,7 @@ export default function CreditCardPanel() {
                     selectMode ? (
                       <input
                         type="checkbox"
-                        className="accent-[#0F6E56] shrink-0"
+                        className="accent-primary shrink-0"
                         checked={selectedIds.has(tx.id)}
                         onChange={() => toggleSelect(tx.id)}
                         onClick={e => e.stopPropagation()}
@@ -934,50 +934,50 @@ export default function CreditCardPanel() {
             <div className="overflow-x-auto hidden md:block">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-borda">
                     {selectMode && (
                       <th className="px-3 py-3 w-8">
                         <input
                           type="checkbox"
-                          className="accent-[#0F6E56]"
+                          className="accent-primary"
                           checked={allVisibleSelected}
                           onChange={toggleSelectAllVisible}
                           title="Selecionar todos os visíveis"
                         />
                       </th>
                     )}
-                    <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Data</th>
-                    <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Descrição</th>
-                    <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-                    {hasGer && <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Ger.</th>}
-                    <th className="text-right px-4 py-3 text-xs text-gray-400 font-medium">Valor</th>
+                    <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Data</th>
+                    <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Descrição</th>
+                    <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
+                    {hasGer && <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Ger.</th>}
+                    <th className="text-right px-4 py-3 text-xs text-texto-2 font-medium">Valor</th>
                     <th className="px-4 py-3 w-16" />
-                    <th className="px-2 py-3 text-center text-xs text-gray-400 font-medium w-10" title="Reconciliado">R</th>
+                    <th className="px-2 py-3 text-center text-xs text-texto-2 font-medium w-10" title="Reconciliado">R</th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* Pagamentos da fatura (credit_payment) — linhas destacadas no topo */}
                   {billPayments.map(p => (
-                    <tr key={p.id} className="border-b border-gray-800/50 bg-green-900/30">
+                    <tr key={p.id} className="border-b border-borda/50 bg-primary/10">
                       {selectMode && <td className="px-3 py-3" />}
-                      <td className="px-4 py-3 text-gray-300 text-xs whitespace-nowrap">{fmtDate(p.date)}</td>
+                      <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">{fmtDate(p.date)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
-                          <span className="text-emerald-300 text-sm font-medium">Pagamento de Fatura</span>
-                          <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">PAGAMENTO</span>
+                          <CheckCircle2 size={13} className="text-primary-fg shrink-0" />
+                          <span className="text-primary-fg text-sm font-medium">Pagamento de Fatura</span>
+                          <span className="text-[10px] font-bold bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded">PAGAMENTO</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell" />
                       {hasGer && <td className="px-4 py-3" />}
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-400 whitespace-nowrap text-sm">{fmt(p.amount)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-primary-fg whitespace-nowrap text-sm">{fmt(p.amount)}</td>
                       <td className="px-4 py-3" />
                       <td className="px-2 py-3" />
                     </tr>
                   ))}
                   {displayBillTxs.length === 0 && (
                     <tr>
-                      <td colSpan={(hasGer ? 7 : 6) + (selectMode ? 1 : 0)} className="text-center py-8 text-gray-500 text-xs">
+                      <td colSpan={(hasGer ? 7 : 6) + (selectMode ? 1 : 0)} className="text-center py-8 text-texto-3 text-xs">
                         Nenhum lançamento corresponde aos filtros
                       </td>
                     </tr>
@@ -992,24 +992,24 @@ export default function CreditCardPanel() {
                       <tr
                         key={tx.id}
                         onClick={selectMode ? () => toggleSelect(tx.id) : undefined}
-                        className={`border-b border-gray-800/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-blue-500/10' : 'hover:bg-gray-800/30'}`}
+                        className={`border-b border-borda/50 transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && isSelected ? 'bg-primary/10' : 'hover:bg-surface-hover/30'}`}
                       >
                         {selectMode && (
                           <td className="px-3 py-3">
                             <input
                               type="checkbox"
-                              className="accent-[#0F6E56]"
+                              className="accent-primary"
                               checked={isSelected}
                               onChange={() => toggleSelect(tx.id)}
                               onClick={e => e.stopPropagation()}
                             />
                           </td>
                         )}
-                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                        <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">
                           {tx.dateCartao && tx.dateCartao !== tx.date ? (
                             <>
                               <span className="block">Sistema: {fmtDate(tx.date)}</span>
-                              <span className="block text-[10px] text-gray-600">Cartão: {fmtDate(tx.dateCartao)}</span>
+                              <span className="block text-[10px] text-texto-3">Cartão: {fmtDate(tx.dateCartao)}</span>
                             </>
                           ) : (
                             fmtDate(tx.date)
@@ -1017,18 +1017,18 @@ export default function CreditCardPanel() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <p className={`text-sm ${tx.reconciled ? 'text-gray-200' : 'text-white font-medium'}`}>{tx.description}</p>
+                            <p className={`text-sm ${tx.reconciled ? 'text-texto-1' : 'text-texto-1 font-medium'}`}>{tx.description}</p>
                             {isEstorno && (
-                              <span className="text-[10px] font-bold bg-blue-500/20 text-receita px-1.5 py-0.5 rounded shrink-0">ESTORNO</span>
+                              <span className="text-[10px] font-bold bg-receita/20 text-receita px-1.5 py-0.5 rounded shrink-0">ESTORNO</span>
                             )}
                           </div>
-                          {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                          {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
                           <InstallmentBadge num={tx.installmentNum} total={tx.installmentTotal} />
                           <CopyIdBadge id={tx.id} />
                         </td>
                         <td className="px-4 py-3 hidden md:table-cell">
                           {cat && (
-                            <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">
+                            <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2">
                               {cat.icon} {cat.name}
                             </span>
                           )}
@@ -1037,10 +1037,10 @@ export default function CreditCardPanel() {
                           <td className="px-4 py-3">
                             {tx.grupoGerencial
                               ? <GerBadge grupoId={tx.grupoGerencial} gerencialGroups={gerencialGroups} />
-                              : <span className="text-gray-700 text-xs">—</span>}
+                              : <span className="text-texto-3 text-xs">—</span>}
                           </td>
                         )}
-                        <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${isEstorno ? 'text-receita' : tx.reconciled ? 'text-orange-600' : 'text-orange-400'}`}>
+                        <td className={`px-4 py-3 text-right font-semibold whitespace-nowrap text-sm ${isEstorno ? 'text-receita' : 'text-despesa'}`}>
                           {isEstorno ? `-${fmt(tx.amount)}` : fmt(tx.amount)}
                         </td>
                         <td className="px-4 py-3">
@@ -1048,7 +1048,7 @@ export default function CreditCardPanel() {
                             <button
                               onClick={(e) => { e.stopPropagation(); setEditTx(tx) }}
                               title="Editar"
-                              className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
+                              className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                             >
                               <Edit2 size={11} />
                             </button>
@@ -1056,12 +1056,12 @@ export default function CreditCardPanel() {
                               onConfirm={(date) => handleDuplicate(tx, date)}
                               sourceTx={tx}
                               iconSize={11}
-                              className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                              className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
                             />
                             <button
                               onClick={(e) => { e.stopPropagation(); setConfirmDelete(tx) }}
                               title="Excluir"
-                              className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                              className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
                             >
                               <Trash2 size={11} />
                             </button>
@@ -1079,9 +1079,9 @@ export default function CreditCardPanel() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t-2 border-gray-700 bg-surface/30 flex items-center justify-between">
-              <span className="text-sm font-bold text-gray-300">Total da Fatura</span>
-              <span className="text-sm font-bold text-orange-600">{fmt(billTotal)}</span>
+            <div className="px-4 py-3 border-t-2 border-borda-forte bg-surface/30 flex items-center justify-between">
+              <span className="text-sm font-bold text-texto-2">Total da Fatura</span>
+              <span className="text-sm font-bold text-despesa">{fmt(billTotal)}</span>
             </div>
           </>
         )}
@@ -1089,30 +1089,30 @@ export default function CreditCardPanel() {
 
       {/* ── Agendamentos previstos (despesas agendadas que ainda vão entrar nesta fatura) ── */}
       {agendamentosPrevistos.length > 0 && (
-        <div className="mt-4 border border-dashed border-gray-600 rounded-lg">
+        <div className="mt-4 border border-dashed border-borda-forte rounded-lg">
           <button
             onClick={() => setShowPrevistos(p => !p)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300"
+            className="w-full flex items-center justify-between px-4 py-3 text-sm text-texto-2"
           >
             <span>
               📅 Agendamentos previstos ({agendamentosPrevistos.length})
-              <span className="ml-2 text-purple-400">+ {fmt(totalPrevisto)}</span>
+              <span className="ml-2 text-texto-2">+ {fmt(totalPrevisto)}</span>
             </span>
-            <span className="text-gray-500">{showPrevistos ? '▲' : '▼'}</span>
+            <span className="text-texto-3">{showPrevistos ? '▲' : '▼'}</span>
           </button>
 
           {showPrevistos && (
             <div className="px-4 pb-3 space-y-2">
               {agendamentosPrevistos.map(a => (
-                <div key={a.key} className="flex items-center justify-between py-2 border-t border-gray-700 opacity-75">
+                <div key={a.key} className="flex items-center justify-between py-2 border-t border-borda-forte opacity-75">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs text-gray-400 shrink-0">
+                    <span className="text-xs text-texto-2 shrink-0">
                       {new Date(a.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                     </span>
-                    <span className="text-sm text-gray-200 truncate">{a.description}</span>
-                    <span className="text-xs bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded shrink-0">Previsto</span>
+                    <span className="text-sm text-texto-1 truncate">{a.description}</span>
+                    <span className="text-xs text-texto-2 outline-dashed outline-1 -outline-offset-1 outline-borda-forte px-1.5 py-0.5 rounded shrink-0">Previsto</span>
                   </div>
-                  <span className="text-sm text-orange-400 shrink-0">{fmt(a.amount)}</span>
+                  <span className="text-sm text-despesa shrink-0">{fmt(a.amount)}</span>
                 </div>
               ))}
             </div>
@@ -1147,7 +1147,7 @@ export default function CreditCardPanel() {
           size="lg"
         >
           {revisarState.loading ? (
-            <div className="py-10 text-center text-gray-400 text-sm">
+            <div className="py-10 text-center text-texto-2 text-sm">
               <RotateCcw size={20} className="animate-spin mx-auto mb-2" /> Analisando movimentos…
             </div>
           ) : (() => {
@@ -1157,8 +1157,8 @@ export default function CreditCardPanel() {
             const busy = revisarState.executando
             if (acoes.length + fantasmas.length + agendamentos.length === 0) return (
               <div className="py-10 text-center">
-                <CheckCircle2 size={28} className="text-emerald-400 mx-auto mb-2" />
-                <p className="text-gray-300 text-sm">✅ Nenhuma inconsistência encontrada</p>
+                <CheckCircle2 size={28} className="text-primary-fg mx-auto mb-2" />
+                <p className="text-texto-2 text-sm">✅ Nenhuma inconsistência encontrada</p>
               </div>
             )
             return (
@@ -1167,8 +1167,8 @@ export default function CreditCardPanel() {
                 {acoes.length > 0 && (
                   <section className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Transferências Gerenciais</h4>
-                      <span className="text-xs text-gray-500">{acoes.length} ajuste{acoes.length !== 1 ? 's' : ''}</span>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Transferências Gerenciais</h4>
+                      <span className="text-xs text-texto-3">{acoes.length} ajuste{acoes.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="space-y-2">{acoes.map((a, i) => <AcaoRow key={i} a={a} />)}</div>
                     <button className="btn-primary w-full text-sm" onClick={handleExecutarRevisar} disabled={busy}>
@@ -1179,14 +1179,14 @@ export default function CreditCardPanel() {
                 {/* SEÇÃO 2 — Lançamentos sem origem reconhecida (fantasmas) */}
                 {fantasmas.length > 0 && (
                   <section className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Lançamentos sem origem reconhecida</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Lançamentos sem origem reconhecida</h4>
                     <div className="space-y-2">
                       {fantasmas.map(tx => (
-                        <div key={tx.id} className="flex items-start gap-3 rounded-lg p-3 bg-amber-500/10">
-                          <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
+                        <div key={tx.id} className="flex items-start gap-3 rounded-lg p-3 bg-aviso/10">
+                          <AlertTriangle size={16} className="text-aviso mt-0.5 shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-200 truncate">{tx.description || '—'}</p>
-                            <p className="text-xs text-gray-500">{fmt(Number(tx.amount) || 0)}{tx.date ? ` · ${fmtDate(tx.date)}` : ''}</p>
+                            <p className="text-sm text-texto-1 truncate">{tx.description || '—'}</p>
+                            <p className="text-xs text-texto-3">{fmt(Number(tx.amount) || 0)}{tx.date ? ` · ${fmtDate(tx.date)}` : ''}</p>
                           </div>
                         </div>
                       ))}
@@ -1199,17 +1199,17 @@ export default function CreditCardPanel() {
                 {/* SEÇÃO 3 — Agendamentos de resgate (divergência / detalhamento) */}
                 {agendamentos.length > 0 && (
                   <section className="space-y-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Agendamentos de resgate</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Agendamentos de resgate</h4>
                     <div className="space-y-2">
                       {agendamentos.map((ag, i) => (
-                        <div key={i} className="flex items-start gap-3 rounded-lg p-3 bg-sky-500/10">
-                          <RotateCcw size={16} className="text-sky-400 mt-0.5 shrink-0" />
+                        <div key={i} className="flex items-start gap-3 rounded-lg p-3 bg-reserva/10">
+                          <RotateCcw size={16} className="text-reserva mt-0.5 shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm text-gray-200">
+                            <p className="text-sm text-texto-1">
                               {ag.tipo === 'resgate_reserva' ? 'Resgate Reserva' : 'Devolução Gerencial'}
                               {ag.fatura ? ` · Fatura ${ag.fatura}` : ''}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-texto-3">
                               {ag.motivo === 'sem_detalhamento' ? 'Sem detalhamento · ' : ''}
                               esperado {fmt(ag.esperado)} · soma atual {fmt(ag.soma)}
                             </p>
@@ -1226,7 +1226,7 @@ export default function CreditCardPanel() {
             )
           })()}
           {!revisarState.loading && (
-            <div className="flex gap-2 pt-4 mt-4 border-t border-gray-800">
+            <div className="flex gap-2 pt-4 mt-4 border-t border-borda">
               <button className="btn-secondary flex-1" onClick={() => setRevisarState(null)} disabled={revisarState.executando}>
                 Fechar
               </button>
@@ -1242,8 +1242,8 @@ export default function CreditCardPanel() {
       {/* ── Barra de ações (modo Selecionar) — acima da barra inferior do mobile ── */}
       {selectMode && (
         <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
-          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-gray-700 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
-            <span className="text-sm text-gray-300 font-medium">
+          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-borda-forte rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-texto-2 font-medium">
               {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-2 ml-auto flex-wrap">

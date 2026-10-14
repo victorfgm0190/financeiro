@@ -17,11 +17,11 @@ const ABAS = [
 ]
 
 const PILL = {
-  atrasado:   { label: 'Atrasado',   cls: 'bg-red-500/15 text-red-400' },
-  pendente:   { label: 'Pendente',   cls: 'bg-amber-500/15 text-amber-400' },
-  pago:       { label: 'Pago',       cls: 'bg-emerald-500/15 text-emerald-400' },
-  concluido:  { label: 'Concluído',  cls: 'bg-gray-700/60 text-gray-400' },
-  confirmado: { label: 'Confirmado', cls: 'bg-blue-500/20 text-blue-400' },
+  atrasado:   { label: '⚠ Atrasado', cls: 'bg-perigo-bg text-perigo' },
+  pendente:   { label: 'Pendente',   cls: 'bg-surface-2 text-texto-2' },
+  pago:       { label: '✓ Pago',     cls: 'bg-primary/15 text-primary-fg' },
+  concluido:  { label: 'Concluído',  cls: 'bg-surface-hover/60 text-texto-2' },
+  confirmado: { label: 'Confirmado', cls: 'bg-primary/15 text-primary-fg' },
 }
 
 // Mesma regra do canConfirm de Agendamentos: automação pura não tem confirmação.
@@ -35,27 +35,27 @@ function Pill({ tipo }) {
 function corValor(s) {
   if (s.transactionType === 'income') return 'text-receita'
   if (s.transactionType === 'expense') return 'text-despesa'
-  return 'text-gray-300'
+  return 'text-texto-2'
 }
 
 function Item({ id, aberto, onToggle, descricao, data, valor, schedule, pills, detalhe }) {
   return (
-    <div className="border-b border-gray-800/60 last:border-0">
+    <div className="border-b border-borda/60 last:border-0">
       <button
         type="button"
         onClick={() => onToggle(id)}
         aria-expanded={aberto}
-        className="w-full min-h-[52px] flex items-center gap-3 px-3 py-2 text-left active:bg-gray-800/40"
+        className="w-full min-h-[52px] flex items-center gap-3 px-3 py-2 text-left active:bg-surface-hover/40"
       >
-        <span className="w-10 shrink-0 text-xs text-gray-400 tabular-nums">{data ? fmtDate(data).slice(0, 5) : '—'}</span>
+        <span className="w-10 shrink-0 text-xs text-texto-2 tabular-nums">{data ? fmtDate(data).slice(0, 5) : '—'}</span>
         <span className="flex-1 min-w-0">
-          <span className="block text-sm text-gray-200 truncate">{descricao}</span>
+          <span className="block text-sm text-texto-1 truncate">{descricao}</span>
           <span className="flex flex-wrap gap-1 mt-0.5">{pills.map(p => <Pill key={p} tipo={p} />)}</span>
         </span>
         <span className={`shrink-0 text-sm font-semibold tabular-nums ${corValor(schedule)}`}>{fmt(valor)}</span>
-        {aberto ? <ChevronDown size={16} className="text-gray-500 shrink-0" /> : <ChevronRight size={16} className="text-gray-500 shrink-0" />}
+        {aberto ? <ChevronDown size={16} className="text-texto-3 shrink-0" /> : <ChevronRight size={16} className="text-texto-3 shrink-0" />}
       </button>
-      {aberto && <div className="bg-gray-900/40 border-t border-gray-800/60 overflow-x-auto">{detalhe}</div>}
+      {aberto && <div className="bg-surface/40 border-t border-borda/60 overflow-x-auto">{detalhe}</div>}
     </div>
   )
 }
@@ -95,7 +95,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
 
   const semanas = (lista, atrasado) => agruparPorSemana(lista, r => r.displayDate).map(sem => (
     <section key={sem.key} className="card p-0 overflow-hidden">
-      <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-800/60">{sem.label}</h3>
+      <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
       {sem.items.map(r => itemPendente(r, atrasado))}
     </section>
   ))
@@ -112,7 +112,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
         {grupos.length === 0 && <Vazio texto="Nenhum pagamento nos últimos 60 dias." />}
         {grupos.map(sem => (
           <section key={sem.key} className="card p-0 overflow-hidden">
-            <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-800/60">{sem.label}</h3>
+            <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
             {sem.items.map(p => {
               const id = `pago:${p.schedule.id}@${p.date}`
               return (
@@ -128,7 +128,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
         ))}
         {concluidos.length > 0 && (
           <section className="card p-0 overflow-hidden">
-            <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-800/60">Concluídos ({concluidos.length})</h3>
+            <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">Concluídos ({concluidos.length})</h3>
             {concluidos.map(r => {
               const id = `fim:${r.schedule.id}`
               return (
@@ -150,7 +150,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
     <div className="space-y-3">
       <div className="card flex items-center justify-between gap-3 py-3">
         <div>
-          <p className="text-[11px] uppercase tracking-wide text-gray-500">Total a pagar no mês</p>
+          <p className="text-[11px] uppercase tracking-wide text-texto-3">Total a pagar no mês</p>
           <p className="text-xl font-bold text-despesa tabular-nums">{fmt(totalMes)}</p>
         </div>
         {onSelecionar && (
@@ -160,7 +160,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
         )}
       </div>
 
-      <div role="tablist" className="grid grid-cols-3 gap-1 p-1 bg-gray-900 rounded-xl border border-gray-800">
+      <div role="tablist" className="grid grid-cols-3 gap-1 p-1 bg-surface rounded-xl border border-borda">
         {ABAS.map(t => (
           <button
             key={t.id}
@@ -169,12 +169,12 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
             aria-selected={aba === t.id}
             onClick={() => { setAba(t.id); setAberto(null) }}
             className={`min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-              aba === t.id ? 'bg-[#0E6B4E] text-white' : 'text-gray-400'
+              aba === t.id ? 'bg-primary text-white' : 'text-texto-2'
             }`}
           >
             {t.label}
             {contagem[t.id] > 0 && (
-              <span className={`ml-1 text-[11px] ${aba === t.id ? 'text-white/80' : t.id === 'atrasados' ? 'text-red-400' : 'text-gray-500'}`}>
+              <span className={`ml-1 text-[11px] ${aba === t.id ? 'text-white/80' : t.id === 'atrasados' ? 'text-perigo' : 'text-texto-3'}`}>
                 ({contagem[t.id]})
               </span>
             )}
@@ -188,5 +188,5 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
 }
 
 function Vazio({ texto }) {
-  return <div className="card text-center py-8 text-sm text-gray-500">{texto}</div>
+  return <div className="card text-center py-8 text-sm text-texto-3">{texto}</div>
 }

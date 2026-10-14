@@ -65,9 +65,9 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="flex items-start gap-2 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-        <Info size={14} className="text-purple-400 shrink-0 mt-0.5" />
-        <p className="text-xs text-purple-300/90 leading-snug">
+      <div className="flex items-start gap-2 p-3 bg-surface-2 border border-dashed border-borda-forte rounded-lg">
+        <Info size={14} className="text-texto-2 shrink-0 mt-0.5" />
+        <p className="text-xs text-texto-2 leading-snug">
           Um provisório é uma simulação: entra no saldo acumulado, nos totais e no projetado
           do <strong>Fluxo de Caixa</strong> (relatório e tela Fluxo de Caixa Futuro) e em mais
           nada — não vira agendamento e não mexe no saldo da conta. Dá para efetivá-lo depois.
@@ -108,7 +108,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Tipo *</label>
-          <div className="flex rounded-lg overflow-hidden border border-gray-700">
+          <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {[['entrada', 'Entrada'], ['saida', 'Saída']].map(([v, l]) => (
               <button
                 type="button"
@@ -116,8 +116,8 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
                 onClick={() => setForm(f => ({ ...f, type: v, category_id: '' }))}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.type === v
-                    ? (v === 'entrada' ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white')
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    ? (v === 'entrada' ? 'bg-receita text-page' : 'bg-despesa text-page')
+                    : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                 }`}
               >
                 {l}
@@ -150,7 +150,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
         />
       </div>
 
-      {erro && <p className="text-xs text-red-400">{erro}</p>}
+      {erro && <p className="text-xs text-perigo">{erro}</p>}
 
       <div className="flex gap-3 justify-end pt-1">
         <button type="button" className="btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>

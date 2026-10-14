@@ -90,10 +90,10 @@ export default function FinanciamentoModal({
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <div className="p-3 bg-gray-800/60 rounded-lg text-xs text-gray-400 space-y-1">
-        <div className="flex justify-between"><span>Bem</span><span className="text-gray-200">{bem.nome}</span></div>
-        <div className="flex justify-between"><span>Valor da nota fiscal</span><span className="text-gray-200">{fmt(bem.valor_nota_fiscal)}</span></div>
-        <div className="flex justify-between"><span>Saldo atual (entrada já paga)</span><span className="text-gray-200">{fmt(bem.saldo)}</span></div>
+      <div className="p-3 bg-surface-2/60 rounded-lg text-xs text-texto-2 space-y-1">
+        <div className="flex justify-between"><span>Bem</span><span className="text-texto-1">{bem.nome}</span></div>
+        <div className="flex justify-between"><span>Valor da nota fiscal</span><span className="text-texto-1">{fmt(bem.valor_nota_fiscal)}</span></div>
+        <div className="flex justify-between"><span>Saldo atual (entrada já paga)</span><span className="text-texto-1">{fmt(bem.saldo)}</span></div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -135,8 +135,8 @@ export default function FinanciamentoModal({
             {sugestoes.map(b => <option key={b} value={b} />)}
           </datalist>
           {tocouFavorecido && favorecidoVazio
-            ? <p className="text-xs text-red-400 mt-1">Favorecido é obrigatório.</p>
-            : <p className="text-xs text-gray-500 mt-1">Quem recebe as parcelas. Vai para o favorecido dos 
+            ? <p className="text-xs text-perigo mt-1">⚠ Favorecido é obrigatório.</p>
+            : <p className="text-xs text-texto-3 mt-1">Quem recebe as parcelas. Vai para o favorecido dos 
               agendamentos e pode ser trocado depois na aba Parcelas.</p>}
         </div>
         <div>
@@ -149,7 +149,7 @@ export default function FinanciamentoModal({
             <option value="">Nenhum — usar só o texto acima</option>
             {favorecidosElegiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-texto-3 mt-1">
             Quem RECEBE as parcelas. O nome da conta vira o favorecido dos agendamentos; sem
             conta, vale o texto do campo Banco. Dá para trocar depois na aba Parcelas.
           </p>
@@ -176,12 +176,12 @@ export default function FinanciamentoModal({
       </div>
 
       {preview && (
-        <div className={`p-3 rounded-lg text-xs space-y-1 border ${preview.invalido ? 'bg-red-950/40 border-red-800' : 'bg-gray-800/60 border-gray-800'}`}>
-          <p className="text-gray-400 font-medium mb-1.5">Prévia</p>
-          <div className="flex justify-between"><span className="text-gray-500">Juros Totais</span><span className={preview.invalido ? 'text-despesa' : 'text-gray-200'}>{fmt(preview.jurosTotais)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Valor Total</span><span className="text-gray-200">{fmt(preview.valorTotal)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Principal / Parcela</span><span className="text-gray-200">{fmt(preview.principalPorParcela)}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Juros / Parcela</span><span className="text-gray-200">{fmt(preview.jurosPorParcela)}</span></div>
+        <div className={`p-3 rounded-lg text-xs space-y-1 border ${preview.invalido ? 'bg-perigo-bg border-perigo/40' : 'bg-surface-2/60 border-borda'}`}>
+          <p className="text-texto-2 font-medium mb-1.5">Prévia</p>
+          <div className="flex justify-between"><span className="text-texto-3">Juros Totais</span><span className={preview.invalido ? 'text-despesa' : 'text-texto-1'}>{fmt(preview.jurosTotais)}</span></div>
+          <div className="flex justify-between"><span className="text-texto-3">Valor Total</span><span className="text-texto-1">{fmt(preview.valorTotal)}</span></div>
+          <div className="flex justify-between"><span className="text-texto-3">Principal / Parcela</span><span className="text-texto-1">{fmt(preview.principalPorParcela)}</span></div>
+          <div className="flex justify-between"><span className="text-texto-3">Juros / Parcela</span><span className="text-texto-1">{fmt(preview.jurosPorParcela)}</span></div>
           {preview.invalido && (
             <p className="text-despesa pt-1">
               O total das parcelas é menor que o valor financiado — revise o valor da parcela.
@@ -190,7 +190,7 @@ export default function FinanciamentoModal({
         </div>
       )}
 
-      <p className="text-xs text-gray-600">
+      <p className="text-xs text-texto-3">
         Serão criadas {form.num_parcelas || 0} parcelas e {form.num_parcelas || 0} agendamentos de
         transferência para a conta de dívida, um por vencimento — cada um já rateado em Principal
         (categoria de prestação) e Juros (categoria de taxa de financiamento).

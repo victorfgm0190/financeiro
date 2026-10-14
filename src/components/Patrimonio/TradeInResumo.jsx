@@ -12,8 +12,8 @@ import { fmtData } from './bemUtils'
 function Linha({ label, children, cor }) {
   return (
     <div className="flex justify-between gap-3 text-xs">
-      <span className="text-gray-500">{label}</span>
-      <span className={cor || 'text-gray-300'}>{children}</span>
+      <span className="text-texto-3">{label}</span>
+      <span className={cor || 'text-texto-2'}>{children}</span>
     </div>
   )
 }
@@ -36,23 +36,23 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
   const saldoAtualDe = (id) => contas.find(c => c.id === id)?.balance
 
   return (
-    <div className="card border border-teal-500/20 bg-teal-500/[0.03] space-y-3">
+    <div className="card border border-receita/20 bg-receita/[0.03] space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Package size={15} className="text-teal-400" />
+          <Package size={15} className="text-receita" />
           <div>
-            <h3 className="text-sm font-semibold text-teal-300">Entrada registrada</h3>
-            <p className="text-xs text-gray-600">{fmtData(data)}</p>
+            <h3 className="text-sm font-semibold text-receita">Entrada registrada</h3>
+            <p className="text-xs text-texto-3">{fmtData(data)}</p>
           </div>
         </div>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/20 shrink-0">
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-receita/10 text-receita border border-receita/20 shrink-0">
           ATIVA
         </span>
       </div>
 
       {transferencias.length > 0 && (
-        <div className="rounded-lg border border-gray-800 p-2.5 space-y-1">
-          <p className="text-[11px] font-semibold text-blue-400 mb-1.5">
+        <div className="rounded-lg border border-borda p-2.5 space-y-1">
+          <p className="text-[11px] font-semibold text-transferencia mb-1.5">
             Transferências vinculadas ({transferencias.length})
           </p>
           {transferencias.map(m => (
@@ -60,8 +60,8 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
               {fmt(m.valor)}
             </Linha>
           ))}
-          <div className="pt-1.5 mt-1.5 border-t border-gray-800">
-            <Linha label="Total" cor="text-blue-400 font-semibold">{fmt(totalTransferencias)}</Linha>
+          <div className="pt-1.5 mt-1.5 border-t border-borda">
+            <Linha label="Total" cor="text-transferencia font-semibold">{fmt(totalTransferencias)}</Linha>
           </div>
         </div>
       )}
@@ -69,8 +69,8 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
       {tradeIns.map(m => {
         const saldoAgora = saldoAtualDe(m.bem_origem_id)
         return (
-          <div key={m.movimentacao_id} className="rounded-lg border border-gray-800 p-2.5 space-y-1">
-            <p className="text-[11px] font-semibold text-amber-400 mb-1.5">Bem dado na troca</p>
+          <div key={m.movimentacao_id} className="rounded-lg border border-borda p-2.5 space-y-1">
+            <p className="text-[11px] font-semibold text-texto-2 mb-1.5">Bem dado na troca</p>
             <Linha label="Bem">{m.bem_origem || '—'}</Linha>
             {m.saldo_origem_anterior != null && (
               <Linha label="Valia antes">{fmt(m.saldo_origem_anterior)}</Linha>
@@ -87,7 +87,7 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
             )}
             {m.categoria && <Linha label="Categoria">{m.categoria}</Linha>}
             {m.saldo_origem_anterior == null && (
-              <p className="text-[11px] text-amber-400/80 flex items-start gap-1.5 pt-1">
+              <p className="text-[11px] text-aviso flex items-start gap-1.5 pt-1">
                 <AlertTriangle size={12} className="shrink-0 mt-px" />
                 Esta entrada é anterior ao registro do saldo original. No estorno o saldo do bem
                 volta pela nota fiscal — confira o valor depois.
@@ -97,8 +97,8 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
         )
       })}
 
-      <div className="rounded-lg bg-gray-800/60 p-2.5 space-y-1">
-        <Linha label="Total da entrada" cor="text-teal-400 font-semibold text-sm">
+      <div className="rounded-lg bg-surface-2/60 p-2.5 space-y-1">
+        <Linha label="Total da entrada" cor="text-receita font-semibold text-sm">
           {fmt(totalTransferencias + totalTradeIn)}
         </Linha>
         <Linha label="Saldo atual do bem">{fmt(saldoBem)}</Linha>
@@ -121,7 +121,7 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
         {estornando ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
         {estornando ? 'Estornando...' : 'Estornar entrada'}
       </button>
-      <p className="text-[11px] text-gray-600 text-center">
+      <p className="text-[11px] text-texto-3 text-center">
         Desfaz o trade-in e desvincula as transferências. As transferências em si continuam no
         Extrato.
       </p>

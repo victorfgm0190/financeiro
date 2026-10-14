@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
-import { fmt, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Modal from '../shared/Modal'
@@ -28,8 +28,8 @@ function ResumoLinha({ label, value, color }) {
   const zero = !(value > 0)
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-gray-500">{label}</span>
-      <span className={`font-semibold ${zero ? 'text-gray-600' : color}`}>{zero ? '—' : fmt(value)}</span>
+      <span className="text-texto-3">{label}</span>
+      <span className={`font-semibold ${zero ? 'text-texto-3' : color}`}>{zero ? '—' : fmt(value)}</span>
     </div>
   )
 }
@@ -223,11 +223,11 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
   let badge = null
   if (todayStr && tx.date > todayStr) {
     if (tx.grupoGerencial)
-      badge = { label: 'Gerencial', cls: 'bg-violet-500/20 text-violet-400' }
+      badge = { label: 'Gerencial', cls: 'bg-reserva/20 text-reserva' }
     else if (tx.reservaAuto)
       badge = { label: 'Reserva', cls: 'bg-reserva/20 text-reserva' }
     else
-      badge = { label: 'Futuro', cls: 'bg-gray-500/20 text-gray-400' }
+      badge = { label: 'Futuro', cls: 'bg-surface-2 text-texto-2' }
     badge.title = tx.scheduleId || tx.origin === 'agendamento' || tx.origin === 'agendamento_auto'
       ? 'Lançamento efetivado, gerado a partir de um agendamento. Já conta no Saldo Futuro.'
       : 'Lançamento efetivado com data futura. Já conta no Saldo Futuro.'
@@ -235,7 +235,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
 
   return (
     <tr
-      className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer group ${selectMode && selected ? 'bg-blue-500/10' : ''}`}
+      className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors cursor-pointer group ${selectMode && selected ? 'bg-primary/10' : ''}`}
       onClick={() => selectMode ? onToggleSelect(tx.id) : (onEdit && onEdit(tx))}
     >
       {selectMode && (
@@ -245,25 +245,25 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
             checked={!!selected}
             onChange={() => onToggleSelect(tx.id)}
             onClick={e => e.stopPropagation()}
-            className="w-4 h-4 rounded accent-blue-500 cursor-pointer align-middle"
+            className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
           />
         </td>
       )}
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
+      <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
       <td className="px-3 py-1.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
           {isTransfer
-            ? <ArrowLeftRight size={12} className="text-gray-500 shrink-0" />
+            ? <ArrowLeftRight size={12} className="text-texto-3 shrink-0" />
             : isIn
-              ? <ArrowDownCircle size={12} className="text-blue-600 shrink-0" />
-              : <ArrowUpCircle size={12} className="text-orange-600 shrink-0" />
+              ? <ArrowDownCircle size={12} className="text-receita shrink-0" />
+              : <ArrowUpCircle size={12} className="text-despesa shrink-0" />
           }
-          <span className="text-xs text-gray-200 truncate" title={historico}>{historico}</span>
+          <span className="text-xs text-texto-1 truncate" title={historico}>{historico}</span>
           {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">
               {tx.faturaRef && (
-                <span className="text-[10px] px-1 py-0.5 rounded bg-gray-800/60 text-gray-500 font-medium">
+                <span className="text-[10px] px-1 py-0.5 rounded bg-surface-2/60 text-texto-3 font-medium">
                   Fatura {tx.faturaRef}
                 </span>
               )}
@@ -272,7 +272,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
                   type="button"
                   onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(tx.sourceExpenseId) }}
                   title={`Despesa origem: ${tx.sourceExpenseId} (clique para copiar)`}
-                  className="font-mono text-[9px] px-1 py-0.5 rounded bg-gray-800/60 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="font-mono text-[9px] px-1 py-0.5 rounded bg-surface-2/60 text-texto-3 hover:text-texto-2 transition-colors"
                 >
                   orig: {tx.sourceExpenseId}
                 </button>
@@ -281,16 +281,16 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           )}
         </div>
       </td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={tx.payee || undefined}>{tx.payee || ''}</td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={deText || undefined}>{deText}</td>
-      <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={paraText || undefined}>{paraText}</td>
-      <td className="px-3 py-1.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">
+      <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={tx.payee || undefined}>{tx.payee || ''}</td>
+      <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={deText || undefined}>{deText}</td>
+      <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={paraText || undefined}>{paraText}</td>
+      <td className="px-3 py-1.5 text-right text-xs font-semibold text-receita whitespace-nowrap">
         {isIn ? fmt(Math.abs(delta)) : ''}
       </td>
-      <td className="px-3 py-1.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">
+      <td className="px-3 py-1.5 text-right text-xs font-semibold text-despesa whitespace-nowrap">
         {!isIn ? fmt(Math.abs(delta)) : ''}
       </td>
-      <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
+      <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-texto-2' : 'text-despesa'}`}>
         {fmt(balance)}
       </td>
       <td className="px-2 py-1.5">
@@ -323,7 +323,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               onClick={(e) => { e.stopPropagation(); onDelete(tx) }}
               title="Excluir lançamento"
               aria-label="Excluir"
-              className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
+              className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg"
             >
               <Trash2 size={14} />
             </button>
@@ -353,41 +353,41 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
   return (
     <>
       <tr
-        className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors cursor-pointer select-none bg-indigo-500/5 ${!allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
+        className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors cursor-pointer select-none bg-transferencia/5 ${!allReconciled ? '[&>td:not(:last-child)]:opacity-40' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
         {selectMode && <td className="px-2 py-1.5" title="Transferências não são alteráveis em lote" />}
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={fmtDate(row.date) || undefined}>{fmtDate(row.date)}</td>
+        <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={fmtDate(row.date) || undefined}>{fmtDate(row.date)}</td>
         <td className="px-3 py-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-            <ArrowLeftRight size={12} className="text-indigo-400 shrink-0" />
-            <span className="text-xs text-gray-200 truncate" title="Transf. líquida">Transf. líquida</span>
-            <span className="text-xs text-indigo-400 ml-1 shrink-0">({txs.length} mov.)</span>
+            <ArrowLeftRight size={12} className="text-transferencia shrink-0" />
+            <span className="text-xs text-texto-1 truncate" title="Transf. líquida">Transf. líquida</span>
+            <span className="text-xs text-transferencia ml-1 shrink-0">({txs.length} mov.)</span>
             {row.caIncoming && (
-              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
+              <span className="text-xs bg-transferencia/20 text-transferencia px-1.5 py-0.5 rounded shrink-0 font-medium">
                 {otherName} · netizado
               </span>
             )}
             {row.bidirectional && (
-              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded shrink-0 font-medium">
+              <span className="text-xs bg-transferencia/20 text-transferencia px-1.5 py-0.5 rounded shrink-0 font-medium">
                 {thisName} ↔ {otherName} · netizado
               </span>
             )}
           </div>
         </td>
         <td />
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={isIn ? otherName : thisName}>{isIn ? otherName : thisName}</td>
-        <td className="px-3 py-1.5 text-xs text-gray-400 truncate" title={isIn ? thisName : otherName}>{isIn ? thisName : otherName}</td>
+        <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={isIn ? otherName : thisName}>{isIn ? otherName : thisName}</td>
+        <td className="px-3 py-1.5 text-xs text-texto-2 truncate" title={isIn ? thisName : otherName}>{isIn ? thisName : otherName}</td>
         {/* Transferência netizada = movimento neutro → valor em cinza (paleta: transferência = cinza),
             independente da direção. Fica na coluna Entrada/Saída por alinhamento, mas sem a cor
             receita/despesa (azul/laranja). */}
-        <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-texto-2 whitespace-nowrap">
           {isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
-        <td className="px-3 py-1.5 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">
+        <td className="px-3 py-1.5 text-right text-xs font-semibold text-texto-2 whitespace-nowrap">
           {!isIn ? fmt(Math.abs(netFlow)) : ''}
         </td>
-        <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>
+        <td className={`px-3 py-1.5 text-right text-xs font-bold whitespace-nowrap ${balance >= 0 ? 'text-texto-2' : 'text-despesa'}`}>
           {fmt(balance)}
         </td>
         <td className="px-2 py-1.5">
@@ -397,12 +397,12 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                 onClick={(e) => { e.stopPropagation(); onDeleteGroup(row) }}
                 title="Excluir grupo netizado (todas as transferências)"
                 aria-label="Excluir"
-                className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
+                className="btn-amber w-[26px] h-[26px] p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg"
               >
                 <Trash2 size={14} />
               </button>
             )}
-            {open ? <ChevronUp size={12} className="text-indigo-400" /> : <ChevronDown size={12} className="text-indigo-400" />}
+            {open ? <ChevronUp size={12} className="text-texto-3" /> : <ChevronDown size={12} className="text-texto-3" />}
           </div>
         </td>
         <td className="px-1 py-1.5 text-center">
@@ -420,23 +420,23 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         const fromName = fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'
         const toName = toAcc ? (toAcc.apelido || toAcc.name) : '—'
         return (
-          <tr key={tx.id} className="border-b border-gray-800/30 bg-indigo-500/5">
+          <tr key={tx.id} className="border-b border-borda/30 bg-transferencia/5">
             {selectMode && <td className="px-2 py-1.5" />}
-            <td className="px-3 py-1.5 pl-8 text-xs text-gray-600 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
-            <td className="px-3 py-1.5 pl-2 text-xs text-gray-500 italic truncate" title={tx.description || 'Transferência'}>
+            <td className="px-3 py-1.5 pl-8 text-xs text-texto-3 truncate" title={fmtDate(tx.date) || undefined}>{fmtDate(tx.date)}</td>
+            <td className="px-3 py-1.5 pl-2 text-xs text-texto-3 italic truncate" title={tx.description || 'Transferência'}>
               {tx.description || 'Transferência'}
             </td>
             <td />
-            <td className="px-3 py-1.5 text-xs text-gray-500 truncate" title={fromAcc ? fromName : undefined}>
+            <td className="px-3 py-1.5 text-xs text-texto-3 truncate" title={fromAcc ? fromName : undefined}>
               {fromName}
             </td>
-            <td className="px-3 py-1.5 text-xs text-gray-500 truncate" title={toAcc ? toName : undefined}>
+            <td className="px-3 py-1.5 text-xs text-texto-3 truncate" title={toAcc ? toName : undefined}>
               {toName}
             </td>
-            <td className="px-3 py-1.5 text-right text-xs text-gray-400/70 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-right text-xs text-texto-2/70 whitespace-nowrap">
               {isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
-            <td className="px-3 py-1.5 text-right text-xs text-gray-400/70 whitespace-nowrap">
+            <td className="px-3 py-1.5 text-right text-xs text-texto-2/70 whitespace-nowrap">
               {!isInSub ? fmt(Math.abs(delta)) : ''}
             </td>
             <td className="px-3 py-1.5" />
@@ -467,7 +467,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
                     onClick={() => onDeleteTx(tx)}
                     title="Excluir transferência"
                     aria-label="Excluir"
-                    className="btn-amber w-[25px] h-[25px] p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15"
+                    className="btn-amber w-[25px] h-[25px] p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg"
                   >
                     <Trash2 size={13} />
                   </button>
@@ -1030,31 +1030,31 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     <div>
       {/* ── Bloco sticky (apenas desktop md+): title · filters · KPIs · table header.
              No mobile rola normalmente para liberar a tela à lista. ── */}
-      <div className="md:sticky md:top-0 md:z-10 md:bg-gray-950">
+      <div className="md:sticky md:top-0 md:z-10 md:bg-page">
         <div className="space-y-3 pb-3">
           {/* Title row */}
           <div className="flex items-center gap-3">
             {backButton && onClose && (
               <button
                 onClick={onClose}
-                className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors shrink-0"
+                className="flex items-center gap-1.5 text-sm text-texto-2 hover:text-texto-1 transition-colors shrink-0"
               >
                 <ChevronLeft size={16} /> Voltar
               </button>
             )}
-            <h2 className="text-sm font-semibold text-gray-200 truncate min-w-0 shrink">
+            <h2 className="text-sm font-semibold text-texto-1 truncate min-w-0 shrink">
               {account.apelido || account.name}
               {isAplicacao && (
-                <span className="ml-2 text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
+                <span className="ml-2 text-xs bg-surface-2 text-texto-2 px-2 py-0.5 rounded font-normal">Aplicação · netizado</span>
               )}
             </h2>
             {/* Seletor de mês — entre o nome da conta e os botões (destaque sutil) */}
-            <div className="flex items-center gap-0.5 shrink-0 rounded-md border border-gray-700 bg-gray-800/60 px-0.5 py-0.5">
-              <button onClick={prevMonth} aria-label="Mês anterior" className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
+            <div className="flex items-center gap-0.5 shrink-0 rounded-md border border-borda-forte bg-surface-2/60 px-0.5 py-0.5">
+              <button onClick={prevMonth} aria-label="Mês anterior" className="p-1 rounded hover:bg-surface-hover text-texto-2 hover:text-texto-1 transition-colors">
                 <ChevronLeft size={14} />
               </button>
-              <span className="text-xs font-medium text-gray-200 min-w-[74px] text-center">{monthLabel}</span>
-              <button onClick={nextMonth} aria-label="Próximo mês" className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors">
+              <span className="text-xs font-medium text-texto-1 min-w-[74px] text-center">{monthLabel}</span>
+              <button onClick={nextMonth} aria-label="Próximo mês" className="p-1 rounded hover:bg-surface-hover text-texto-2 hover:text-texto-1 transition-colors">
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -1063,22 +1063,22 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
             {faturaTotals && (
               <div className="hidden lg:flex items-stretch min-w-0 text-xs">
                 {[faturaTotals.anterior, faturaTotals.atual].filter(Boolean).map((f, i) => (
-                  <div key={f.ref} className={`min-w-0 ${i > 0 ? 'border-l border-gray-700 pl-3 ml-3' : ''}`}>
+                  <div key={f.ref} className={`min-w-0 ${i > 0 ? 'border-l border-borda-forte pl-3 ml-3' : ''}`}>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-400 font-medium">Fatura {f.ref}</span>
+                      <span className="text-texto-2 font-medium">Fatura {f.ref}</span>
                       <span className={`font-bold ${
-                        f.liquido === 0 ? 'text-gray-500' : f.liquido > 0 ? 'text-blue-600' : 'text-orange-600'
+                        f.liquido === 0 ? 'text-texto-3' : f.liquido > 0 ? 'text-receita' : 'text-despesa'
                       }`}>{fmt(f.liquido)}</span>
                     </div>
                     <div className="space-y-0.5 text-[11px] mt-0.5">
-                      <ResumoLinha label="Mês anterior"  value={f.mesAnt}       color="text-blue-600" />
-                      <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-blue-600" />
-                      <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-orange-600" />
-                      <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-yellow-400" />
+                      <ResumoLinha label="Mês anterior"  value={f.mesAnt}       color="text-receita" />
+                      <ResumoLinha label="Este mês"       value={f.esteMes}      color="text-receita" />
+                      <ResumoLinha label="Resgate"        value={f.resgateExec}  color="text-despesa" />
+                      <ResumoLinha label="Resgate agend." value={f.resgateAgend} color="text-texto-2" />
                       {f.ajuste !== 0 && (
                         <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-500">Ajuste</span>
-                          <span className={`font-semibold flex items-center gap-1 ${f.ajuste < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                          <span className="text-texto-3">Ajuste</span>
+                          <span className={`font-semibold flex items-center gap-1 ${f.ajuste < 0 ? 'text-despesa' : 'text-receita'}`}>
                             {f.ajuste < 0
                               ? <ArrowUpCircle size={11} className="shrink-0" />
                               : <ArrowDownCircle size={11} className="shrink-0" />}
@@ -1133,7 +1133,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </button>
               )}
               {!backButton && onClose && (
-                <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
+                <button onClick={onClose} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
                   <X size={14} />
                 </button>
               )}
@@ -1142,61 +1142,61 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
           {/* KPIs (compactos) */}
           <div className={`grid grid-cols-1 gap-1.5 ${hasFuturoKpi ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
-            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
-              <p className="text-[10px] text-gray-400 uppercase tracking-wide">Saldo Atual</p>
-              <p className={`text-xl font-bold ${saldoAtualKpi >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAtualKpi)}</p>
+            <div className="rounded-lg border border-borda bg-surface px-3 py-2">
+              <p className="text-[10px] text-texto-2 uppercase tracking-wide">Saldo Atual</p>
+              <p className={`text-xl font-bold ${saldoAtualKpi >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmtSinal(saldoAtualKpi)}</p>
             </div>
             {hasFuturoKpi && (
               <div
-                className="rounded-lg border border-gray-800 bg-surface px-3 py-2"
+                className="rounded-lg border border-borda bg-surface px-3 py-2"
                 title="Lançamentos já efetivados com data posterior a hoje. Somado ao Saldo Atual, dá o saldo depois que todos entrarem."
               >
-                <p className="text-[10px] text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
-                <p className={`text-xl font-bold ${saldoFuturoKpi >= 0 ? 'text-sky-400' : 'text-orange-600'}`}>{fmt(saldoFuturoKpi)}</p>
+                <p className="text-[10px] text-texto-2 uppercase tracking-wide">Saldo Futuro</p>
+                <p className={`text-xl font-bold ${saldoFuturoKpi >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(saldoFuturoKpi)}</p>
               </div>
             )}
-            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
-              <div className="flex items-center gap-1.5 text-blue-600"><ArrowDownCircle size={12} /><p className="text-[10px] text-gray-400 uppercase tracking-wide">Entradas</p></div>
-              <p className="text-xl font-bold text-blue-600">{fmt(totals.entrada)}</p>
+            <div className="rounded-lg border border-borda bg-surface px-3 py-2">
+              <div className="flex items-center gap-1.5 text-receita"><ArrowDownCircle size={12} /><p className="text-[10px] text-texto-2 uppercase tracking-wide">Entradas</p></div>
+              <p className="text-xl font-bold text-receita">{fmt(totals.entrada)}</p>
             </div>
-            <div className="rounded-lg border border-gray-800 bg-surface px-3 py-2">
-              <div className="flex items-center gap-1.5 text-orange-600"><ArrowUpCircle size={12} /><p className="text-[10px] text-gray-400 uppercase tracking-wide">Saídas</p></div>
-              <p className="text-xl font-bold text-orange-600">{fmt(totals.saida)}</p>
+            <div className="rounded-lg border border-borda bg-surface px-3 py-2">
+              <div className="flex items-center gap-1.5 text-despesa"><ArrowUpCircle size={12} /><p className="text-[10px] text-texto-2 uppercase tracking-wide">Saídas</p></div>
+              <p className="text-xl font-bold text-despesa">{fmt(totals.saida)}</p>
             </div>
           </div>
         </div>
 
         {/* Table column header (desktop) */}
-        <div className="hidden md:block bg-surface border-x border-t border-gray-800 rounded-t-xl overflow-hidden">
+        <div className="hidden md:block bg-surface border-x border-t border-borda rounded-t-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <thead>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-borda">
                 {selectMode && (
                   <th className="px-2 py-1 text-center">
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={toggleSelectAllVisible}
-                      className="w-4 h-4 rounded accent-blue-500 cursor-pointer align-middle"
+                      className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       title="Selecionar todos os visíveis"
                     />
                   </th>
                 )}
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium">Histórico</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Favorecido">Favorecido</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Conta De">Conta De</th>
-                <th className="text-left px-3 py-1 text-xs text-gray-400 font-medium truncate overflow-hidden" title="Conta Para">Conta Para</th>
-                <th className="text-right px-3 py-1 text-xs text-blue-600 font-medium whitespace-nowrap">
+                <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium">Histórico</th>
+                <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium truncate overflow-hidden" title="Favorecido">Favorecido</th>
+                <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium truncate overflow-hidden" title="Conta De">Conta De</th>
+                <th className="text-left px-3 py-1 text-xs text-texto-2 font-medium truncate overflow-hidden" title="Conta Para">Conta Para</th>
+                <th className="text-right px-3 py-1 text-xs text-receita font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowDownCircle size={10} /> Entrada</span>
                 </th>
-                <th className="text-right px-3 py-1 text-xs text-orange-600 font-medium whitespace-nowrap">
+                <th className="text-right px-3 py-1 text-xs text-despesa font-medium whitespace-nowrap">
                   <span className="flex items-center justify-end gap-1"><ArrowUpCircle size={10} /> Saída</span>
                 </th>
-                <th className="text-right px-3 py-1 text-xs text-gray-400 font-medium whitespace-nowrap">Saldo</th>
+                <th className="text-right px-3 py-1 text-xs text-texto-2 font-medium whitespace-nowrap">Saldo</th>
                 <th className="w-8" />
-                <th className="text-center px-1 py-1 text-xs text-gray-400 font-medium" title="Reconciliado">R</th>
+                <th className="text-center px-1 py-1 text-xs text-texto-2 font-medium" title="Reconciliado">R</th>
               </tr>
             </thead>
           </table>
@@ -1204,11 +1204,11 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
         {/* Filtros — DESKTOP: em tabela com o MESMO colGroup do header → cada input exatamente
             sob sua coluna. Espaçamento vertical mínimo (py-1) coladinho ao cabeçalho. */}
-        <div className="hidden md:block border-x border-gray-800 bg-surface/60">
+        <div className="hidden md:block border-x border-borda bg-surface/60">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-borda">
                 {selectMode && <td className="px-2 py-1" />}
                 {[
                   { key: 'data', ph: 'DD/MM/AAAA' },
@@ -1223,19 +1223,19 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                       value={filtros[c.key] || ''}
                       onChange={e => setFiltros(f => ({ ...f, [c.key]: e.target.value }))}
                       placeholder={c.ph}
-                      className="w-full bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-gray-500 placeholder:text-gray-600"
+                      className="w-full bg-surface-2 border border-borda-campo text-texto-1 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-primary placeholder:text-texto-3"
                     />
                   </td>
                 ))}
                 <td className="px-1 py-1">
-                  <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-blue-500" />
+                  <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" />
                 </td>
                 <td className="px-1 py-1">
-                  <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-orange-500" />
+                  <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" />
                 </td>
                 <td colSpan={3} className="px-2 py-1">
                   <div className="flex items-center justify-end gap-2">
-                    <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
+                    <div className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                       {[
                         { v: 'todos', label: 'Todos' },
                         { v: 'conciliados', label: '✓ Conc.' },
@@ -1245,10 +1245,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                           key={o.v}
                           type="button"
                           onClick={() => setReconFilter(o.v)}
-                          className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
+                          className={`px-2 py-1 text-xs transition-colors border-l border-borda-forte first:border-l-0 ${
                             reconFilter === o.v
-                              ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
-                              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                              ? o.v === 'conciliados' ? 'bg-primary/15 text-primary-fg' : 'bg-surface-hover text-texto-1'
+                              : 'text-texto-3 hover:text-texto-2 hover:bg-surface-hover'
                           }`}
                         >
                           {o.label}
@@ -1262,8 +1262,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                       title="Limpar todos os filtros"
                       className={`shrink-0 p-1.5 rounded-md transition-colors ${
                         hasLancFiltros(filtros)
-                          ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800'
-                          : 'text-gray-700 cursor-not-allowed'
+                          ? 'text-texto-2 hover:text-texto-1 hover:bg-surface-hover bg-surface-2'
+                          : 'text-texto-3 cursor-not-allowed'
                       }`}
                     >
                       <X size={14} />
@@ -1276,15 +1276,15 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         </div>
 
         {/* Filtros — MOBILE: barra flex compacta (componente compartilhado). */}
-        <div className="md:hidden border-x border-gray-800 bg-surface">
+        <div className="md:hidden border-x border-borda bg-surface">
           <LancamentoFiltros
             filtros={filtros}
             setFiltros={setFiltros}
             extra={
               <>
-                <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-blue-500" />
-                <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-orange-500" />
-                <div className="flex items-center rounded-md border border-gray-700 overflow-hidden shrink-0">
+                <ValueFilterDropdown label="Entrada" values={entradaValues} selected={selEntradas} onChange={setSelEntradas} iconColor="text-receita" />
+                <ValueFilterDropdown label="Saída" values={saidaValues} selected={selSaidas} onChange={setSelSaidas} iconColor="text-despesa" />
+                <div className="flex items-center rounded-md border border-borda-forte overflow-hidden shrink-0">
                   {[
                     { v: 'todos', label: 'Todos' },
                     { v: 'conciliados', label: '✓ Conciliados' },
@@ -1294,10 +1294,10 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                       key={o.v}
                       type="button"
                       onClick={() => setReconFilter(o.v)}
-                      className={`px-2 py-1 text-xs transition-colors border-l border-gray-700 first:border-l-0 ${
+                      className={`px-2 py-1 text-xs transition-colors border-l border-borda-forte first:border-l-0 ${
                         reconFilter === o.v
-                          ? o.v === 'conciliados' ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-100'
-                          : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+                          ? o.v === 'conciliados' ? 'bg-primary/15 text-primary-fg' : 'bg-surface-hover text-texto-1'
+                          : 'text-texto-3 hover:text-texto-2 hover:bg-surface-hover'
                       }`}
                     >
                       {o.label}
@@ -1312,7 +1312,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         {/* Conciliados/Pendentes (lançamentos visíveis). O resumo de faturas foi movido para o
             card fixo no topo do extrato. */}
         {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
-          <div className="border-x border-gray-800 bg-surface/40 px-4 py-1.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-4 gap-y-2 text-xs">
+          <div className="border-x border-borda bg-surface/40 px-4 py-1.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-4 gap-y-2 text-xs">
             <ReconciledTotals
               conciliado={reconciledTotals.conciliado}
               pendente={reconciledTotals.pendente}
@@ -1323,24 +1323,24 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       </div>
 
       {/* ── Table body (desktop) ── */}
-      <div className="hidden md:block bg-surface border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
+      <div className="hidden md:block bg-surface border-x border-b border-borda rounded-b-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             {colGroup}
             <tbody>
               {/* Starting balance row (compacto) */}
-              <tr className="border-b border-gray-800/50">
+              <tr className="border-b border-borda/50">
                 {selectMode && <td className="px-2 py-0.5" />}
-                <td className="px-3 py-0.5 text-[11px] text-gray-600">{fmtDate(from)}</td>
-                <td className="px-3 py-0.5 text-[11px] text-gray-500" colSpan={6}>Saldo inicial do período</td>
-                <td className={`px-3 py-0.5 text-right text-[11px] font-semibold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>
+                <td className="px-3 py-0.5 text-[11px] text-texto-3">{fmtDate(from)}</td>
+                <td className="px-3 py-0.5 text-[11px] text-texto-3" colSpan={6}>Saldo inicial do período</td>
+                <td className={`px-3 py-0.5 text-right text-[11px] font-semibold ${startBalance >= 0 ? 'text-texto-2' : 'text-despesa'}`}>
                   {fmt(startBalance)}
                 </td>
                 <td colSpan={2} />
               </tr>
               {displayRows.length === 0 && (
                 <tr>
-                  <td colSpan={selectMode ? 11 : 10} className="text-center py-10 text-gray-500 text-xs">
+                  <td colSpan={selectMode ? 11 : 10} className="text-center py-10 text-texto-3 text-xs">
                     {hasLancFiltros(filtros) || reconFilter !== 'todos' ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
                   </td>
                 </tr>
@@ -1373,19 +1373,19 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       </div>
 
       {/* ── Lista mobile (cards estilo app bancário) ── */}
-      <div className="md:hidden bg-surface border-x border-b border-gray-800 rounded-b-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-800/20 border-b border-gray-800/60">
-          <span className="text-xs text-gray-500 italic">Saldo inicial · {fmtDate(from)}</span>
-          <span className={`text-xs font-bold ${startBalance >= 0 ? 'text-gray-400' : 'text-orange-600'}`}>{fmt(startBalance)}</span>
+      <div className="md:hidden bg-surface border-x border-b border-borda rounded-b-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2/20 border-b border-borda/60">
+          <span className="text-xs text-texto-3 italic">Saldo inicial · {fmtDate(from)}</span>
+          <span className={`text-xs font-bold ${startBalance >= 0 ? 'text-texto-2' : 'text-despesa'}`}>{fmtSinal(startBalance)}</span>
         </div>
         {displayRows.length === 0 ? (
-          <p className="text-center py-10 text-gray-500 text-xs">
+          <p className="text-center py-10 text-texto-3 text-xs">
             {hasLancFiltros(filtros) || reconFilter !== 'todos' ? 'Nenhum lançamento corresponde aos filtros' : 'Nenhum lançamento no período'}
           </p>
         ) : displayRows.map((row, i) => {
           const saldoNode = (
-            <p className={`text-[11px] mt-0.5 ${row.runningBalance >= 0 ? 'text-gray-500' : 'text-orange-600'}`}>
-              Saldo {fmt(row.runningBalance)}
+            <p className={`text-[11px] mt-0.5 ${row.runningBalance >= 0 ? 'text-texto-3' : 'text-despesa'}`}>
+              Saldo {fmtSinal(row.runningBalance)}
             </p>
           )
           if (row.kind === 'netted') {
@@ -1434,7 +1434,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     checked={isSelected}
                     onChange={() => toggleSelect(tx.id)}
                     onClick={e => e.stopPropagation()}
-                    className="w-5 h-5 rounded accent-blue-500 cursor-pointer shrink-0"
+                    className="w-5 h-5 rounded accent-primary cursor-pointer shrink-0"
                   />
                 ) : (
                   <ReconcileBadge
@@ -1474,7 +1474,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           return (
             <>
               ⚠️ Este lançamento possui um agendamento de resgate vinculado:<br /><br />
-              <span className="text-gray-100 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
+              <span className="text-texto-1 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
               Ambos serão excluídos. Deseja continuar?
             </>
           )
@@ -1494,31 +1494,31 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
       />
 
       <Modal open={showBulkDelete} onClose={() => setShowBulkDelete(false)} title="Excluir lançamentos" size="sm">
-        <p className="text-gray-300 text-sm mb-4">
+        <p className="text-texto-2 text-sm mb-4">
           Deseja realmente excluir {selectedIds.size} lançamento{selectedIds.size !== 1 ? 's' : ''}?
         </p>
         <div className="space-y-1.5 mb-6 text-sm">
           {bulkDeleteSummary.gerencial > 0 && (
-            <div className="flex justify-between text-gray-300"><span>Transferências gerenciais</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.gerencial}</span></div>
+            <div className="flex justify-between text-texto-2"><span>Transferências gerenciais</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.gerencial}</span></div>
           )}
           {bulkDeleteSummary.transfer > 0 && (
-            <div className="flex justify-between text-gray-300"><span>Transferências</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.transfer}</span></div>
+            <div className="flex justify-between text-texto-2"><span>Transferências</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.transfer}</span></div>
           )}
           {bulkDeleteSummary.expense > 0 && (
-            <div className="flex justify-between text-gray-300"><span>Despesas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.expense}</span></div>
+            <div className="flex justify-between text-texto-2"><span>Despesas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.expense}</span></div>
           )}
           {bulkDeleteSummary.income > 0 && (
-            <div className="flex justify-between text-gray-300"><span>Receitas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.income}</span></div>
+            <div className="flex justify-between text-texto-2"><span>Receitas</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.income}</span></div>
           )}
           {bulkDeleteSummary.outros > 0 && (
-            <div className="flex justify-between text-gray-300"><span>Outros</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.outros}</span></div>
+            <div className="flex justify-between text-texto-2"><span>Outros</span><span className="font-semibold tabular-nums">{bulkDeleteSummary.outros}</span></div>
           )}
         </div>
-        <p className="text-orange-600/90 text-xs mb-6">Esta ação não pode ser desfeita.</p>
+        <p className="text-perigo text-xs mb-6">Esta ação não pode ser desfeita.</p>
         <div className="flex gap-3 justify-end">
           <button className="btn-secondary" onClick={() => setShowBulkDelete(false)}>Cancelar</button>
           <button
-            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+            className="bg-perigo-solido hover:bg-perigo-solido-hover text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
             onClick={handleBulkDelete}
           >
             Excluir tudo
@@ -1553,8 +1553,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           Acima da barra inferior do mobile (MobileShell); rente à base no desktop. */}
       {selectMode && (
         <div className="fixed bottom-[calc(68px+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-[45] px-3 pb-3 pointer-events-none">
-          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-gray-700 rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
-            <span className="text-sm text-gray-300 font-medium">
+          <div className="pointer-events-auto mx-auto max-w-3xl bg-surface border border-borda-forte rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-texto-2 font-medium">
               {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
@@ -1589,7 +1589,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               <button
                 onClick={() => setShowBulkDelete(true)}
                 disabled={selectedIds.size === 0}
-                className="bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="bg-perigo-bg hover:bg-perigo/20 text-perigo rounded-lg font-medium transition-colors flex items-center gap-1.5 text-xs px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Excluir lançamentos selecionados"
               >
                 <Trash2 size={12} /> Excluir

@@ -5483,13 +5483,13 @@ export function AppProvider({ children }) {
   // ── Loading screen (só aparece se localStorage também estiver vazio) ─────────
   if (!initialized) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950">
+      <div className="flex items-center justify-center h-screen bg-page">
         <div className="text-center">
           <div
             className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-3"
-            style={{ borderColor: '#0F6E56', borderTopColor: 'transparent' }}
+            style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }}
           />
-          <p className="text-gray-500 text-xs">Iniciando...</p>
+          <p className="text-texto-3 text-xs">Iniciando...</p>
         </div>
       </div>
     )

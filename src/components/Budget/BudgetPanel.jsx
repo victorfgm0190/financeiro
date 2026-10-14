@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Trash2, Edit2, TrendingUp, AlertTriangle, Ban } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt } from '../shared/utils'
+import { fmt, fmtSinal } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
@@ -61,23 +61,23 @@ export default function BudgetPanel() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Total Orçado</p>
-          <p className="text-xl font-bold text-indigo-400 mt-1">{fmt(totalBudgeted)}</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Total Orçado</p>
+          <p className="text-xl font-bold text-texto-1 mt-1">{fmt(totalBudgeted)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Total Gasto</p>
-          <p className="text-xl font-bold text-orange-600 mt-1">{fmt(totalSpent)}</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Total Gasto</p>
+          <p className="text-xl font-bold text-despesa mt-1">{fmt(totalSpent)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo do Orçamento</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Saldo do Orçamento</p>
           <p className={`text-xl font-bold mt-1 ${totalBudgeted - totalSpent >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(totalBudgeted - totalSpent)}
+            {fmtSinal(totalBudgeted - totalSpent)}
           </p>
         </div>
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-300">Orçamentos por Categoria</h2>
+        <h2 className="text-sm font-semibold text-texto-2">Orçamentos por Categoria</h2>
         <button className="btn-primary flex items-center gap-2" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
           <Plus size={14} /> Novo Orçamento
         </button>
@@ -85,8 +85,8 @@ export default function BudgetPanel() {
 
       {budgets.length === 0 ? (
         <div className="card text-center py-12">
-          <TrendingUp size={32} className="text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500">Nenhum orçamento cadastrado</p>
+          <TrendingUp size={32} className="text-texto-3 mx-auto mb-3" />
+          <p className="text-texto-3">Nenhum orçamento cadastrado</p>
           <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Criar orçamento</button>
         </div>
       ) : (
@@ -99,41 +99,41 @@ export default function BudgetPanel() {
             const nearLimit = pct >= 80 && !overBudget
 
             return (
-              <div key={budget.id} className={`card border ${overBudget ? 'border-red-500/40' : nearLimit ? 'border-amber-500/30' : 'border-gray-800'}`}>
+              <div key={budget.id} className={`card border ${overBudget ? 'border-perigo/40' : nearLimit ? 'border-aviso/30' : 'border-borda'}`}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">{cat?.icon || '📌'}</span>
                     <div>
-                      <p className="font-medium text-gray-200 text-sm">{cat?.name || budget.categoryId}</p>
-                      <p className="text-xs text-gray-500">{fmt(spent)} de {fmt(budget.amount)}</p>
+                      <p className="font-medium text-texto-1 text-sm">{cat?.name || budget.categoryId}</p>
+                      <p className="text-xs text-texto-3">{fmt(spent)} de {fmt(budget.amount)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {overBudget && (
-                      <span className="flex items-center gap-1 text-red-400">
+                      <span className="flex items-center gap-1 text-perigo">
                         <Ban size={14} />
                         <span className="text-[11px] font-semibold uppercase tracking-wide">Estourado</span>
                       </span>
                     )}
-                    {nearLimit && <AlertTriangle size={14} className="text-amber-400" />}
-                    <span className={`text-sm font-bold ${overBudget ? 'text-red-400' : nearLimit ? 'text-amber-400' : 'text-gray-300'}`}>
+                    {nearLimit && <AlertTriangle size={14} className="text-aviso" />}
+                    <span className={`text-sm font-bold ${overBudget ? 'text-perigo' : nearLimit ? 'text-aviso' : 'text-texto-2'}`}>
                       {pct.toFixed(0)}%
                     </span>
-                    <button onClick={() => openEdit(budget)} className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors">
+                    <button onClick={() => openEdit(budget)} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
                       <Edit2 size={12} />
                     </button>
-                    <button onClick={() => setConfirmDelete(budget)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors">
+                    <button onClick={() => setConfirmDelete(budget)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
                       <Trash2 size={12} />
                     </button>
                   </div>
                 </div>
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-2 bg-surface-2 rounded-full overflow-hidden">
                   <div
-                    className={`h-2 rounded-full transition-all ${overBudget ? 'bg-red-500' : nearLimit ? 'bg-amber-500' : 'bg-blue-500'}`}
+                    className={`h-2 rounded-full transition-all ${overBudget ? 'bg-perigo' : nearLimit ? 'bg-aviso' : 'bg-primary'}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-xs text-gray-600 mt-1">
+                <div className="flex justify-between text-xs text-texto-3 mt-1">
                   <span>Restante: {fmt(budget.amount - spent)}</span>
                   <span>Orçado: {fmt(budget.amount)}</span>
                 </div>

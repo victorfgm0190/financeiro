@@ -7,7 +7,7 @@ import {
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
@@ -65,15 +65,15 @@ const VIEW_FILTERS = [
 function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupoId) {
     return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/20 text-blue-400">G</span>
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-reserva/15 text-reserva">G</span>
     )
   }
   const grupo = gerencialGroups.find(g => g.id === grupoId)
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
-  else if (grupo.number === 'D') cls += ' bg-gray-700/50 text-gray-500'
-  else cls += ' bg-orange-500/20 text-orange-600'
+  else if (grupo.number === 'D') cls += ' bg-surface-hover/50 text-texto-3'
+  else cls += ' bg-despesa/20 text-despesa'
   const label = grupo.number === 1 ? '1' : grupo.alias
   return <span className={cls}>{label}</span>
 }
@@ -83,12 +83,12 @@ function TabButton({ active, onClick, children, badge }) {
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-        active ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-gray-500 hover:text-gray-300'
+        active ? 'border-primary text-primary-fg' : 'border-transparent text-texto-3 hover:text-texto-2'
       }`}
     >
       {children}
       {badge > 0 && (
-        <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${active ? 'bg-[#0F6E56]/20 text-[#0F6E56]' : 'bg-gray-700 text-gray-400'}`}>
+        <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${active ? 'bg-primary/20 text-primary-fg' : 'bg-surface-hover text-texto-2'}`}>
           {badge}
         </span>
       )}
@@ -107,12 +107,12 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <GerBadge grupoId={payable.grupoGerencialId} gerencialGroups={gerencialGroups} />
-            {card && <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{card.apelido || card.name}</span>}
-            {payable.status === 'paid' && <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-medium">Pago</span>}
+            {card && <span className="text-xs text-texto-3 bg-surface-2 px-2 py-0.5 rounded-full">{card.apelido || card.name}</span>}
+            {payable.status === 'paid' && <span className="text-xs bg-primary/15 text-primary-fg px-2 py-0.5 rounded-full font-medium">✓ Pago</span>}
           </div>
-          <h3 className="font-semibold text-gray-100">{payable.description}</h3>
+          <h3 className="font-semibold text-texto-1">{payable.description}</h3>
           <div className="flex items-center gap-2 mt-1">
-            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-400' : isDueSoon ? 'text-amber-400' : 'text-gray-500'}`}>
+            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-perigo' : isDueSoon ? 'text-aviso' : 'text-texto-3'}`}>
               <Clock size={10} />
               Vence {fmtDate(payable.dueDate)}
               {isOverdue && ' · Vencida'}
@@ -121,14 +121,14 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <p className="text-lg font-bold text-orange-600">{fmt(payable.amount)}</p>
+          <p className="text-lg font-bold text-despesa">{fmt(payable.amount)}</p>
           <div className="flex gap-1">
             {payable.status === 'pending' && (
-              <button onClick={() => onMarkPaid(payable.id)} className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500/20 text-blue-600 rounded-lg hover:bg-blue-500/30 transition-colors">
+              <button onClick={() => onMarkPaid(payable.id)} className="flex items-center gap-1 px-2 py-1 text-xs bg-receita/15 text-receita rounded-lg hover:bg-receita/25 transition-colors">
                 <CheckCircle size={11} /> Marcar Pago
               </button>
             )}
-            <button onClick={() => onDelete(payable.id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors">
+            <button onClick={() => onDelete(payable.id)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
               <Trash2 size={12} />
             </button>
           </div>
@@ -140,11 +140,11 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
 
 function SectionHeader({ label, count, variant = 'default', cols = 8 }) {
   const colors = {
-    overdue:  'text-red-400 bg-red-500/10 border-red-500/20',
-    soon:     'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    month:    'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    default:  'text-gray-400 bg-gray-800/60 border-gray-700/50',
-    history:  'text-gray-500 bg-gray-800/30 border-gray-700/20',
+    overdue:  'text-perigo bg-perigo-bg border-perigo/30',
+    soon:     'text-aviso bg-aviso/10 border-aviso/20',
+    month:    'text-primary-fg bg-primary/10 border-primary/20',
+    default:  'text-texto-2 bg-surface-2/60 border-borda-forte/50',
+    history:  'text-texto-3 bg-surface-2/30 border-borda-forte/20',
   }
   return (
     <tr>
@@ -397,29 +397,29 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
-            <h3 className="font-semibold text-gray-100">
+            <h3 className="font-semibold text-texto-1">
               {parcelaFin ? 'Pagar Parcela de Financiamento' : 'Registrar Agendamento'}
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]">{schedule.description}</p>
+            <p className="text-xs text-texto-3 mt-0.5 truncate max-w-[280px]">{schedule.description}</p>
             {(schedule.faturaRef || schedule.overrides?._gerencial?.faturaRef) && (
-              <p className="text-xs text-indigo-400 mt-0.5">Fatura: {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}</p>
+              <p className="text-xs text-texto-2 mt-0.5">Fatura: {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}</p>
             )}
           </div>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
 
         {!parcelaFin && (
-          <div className="flex border-b border-gray-800 shrink-0">
+          <div className="flex border-b border-borda shrink-0">
             {['pagamento', 'recebimento', 'transferencia'].map(t => (
               <button key={t} onClick={() => setTab(t)}
                 className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-                  tab === t ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-gray-500 hover:text-gray-300'
+                  tab === t ? 'border-primary text-primary-fg' : 'border-transparent text-texto-3 hover:text-texto-2'
                 }`}
               >
                 {TAB_LABELS[t]}
@@ -431,21 +431,21 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {parcelaFin && (
             <>
-              <div className="rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2.5">
-                <p className="text-xs text-gray-400 mb-1.5">Desdobramento da parcela</p>
+              <div className="rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5">
+                <p className="text-xs text-texto-2 mb-1.5">Desdobramento da parcela</p>
                 <div className="space-y-0.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Principal</span>
-                    <span className="text-gray-200">{fmt(parcelaFin.principal)}</span>
+                    <span className="text-texto-2">Principal</span>
+                    <span className="text-texto-1">{fmt(parcelaFin.principal)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Juros</span>
-                    <span className="text-gray-200">{fmt(parcelaFin.juros)}</span>
+                    <span className="text-texto-2">Juros</span>
+                    <span className="text-texto-1">{fmt(parcelaFin.juros)}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
-                  <span className="text-xs font-semibold text-gray-300">Total</span>
-                  <span className="text-xs font-bold text-gray-100">{fmt(parcelaFin.total)}</span>
+                <div className="flex items-center justify-between border-t border-borda-forte mt-1.5 pt-1.5">
+                  <span className="text-xs font-semibold text-texto-2">Total</span>
+                  <span className="text-xs font-bold text-texto-1">{fmt(parcelaFin.total)}</span>
                 </div>
               </div>
               <div>
@@ -464,30 +464,30 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
 
               {finRateio && !finExcede && (
-                <div className="rounded-lg border border-gray-800 bg-gray-800/40 px-3 py-2.5 text-xs space-y-0.5">
-                  <p className="text-gray-400 mb-1.5">Rateio deste pagamento (principal primeiro)</p>
+                <div className="rounded-lg border border-borda bg-surface-2/40 px-3 py-2.5 text-xs space-y-0.5">
+                  <p className="text-texto-2 mb-1.5">Rateio deste pagamento (principal primeiro)</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Principal neste pagamento</span>
-                    <span className="text-gray-200">{fmt(finRateio.principalPago)}</span>
+                    <span className="text-texto-3">Principal neste pagamento</span>
+                    <span className="text-texto-1">{fmt(finRateio.principalPago)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Juros neste pagamento</span>
-                    <span className="text-gray-200">{fmt(finRateio.jurosPago)}</span>
+                    <span className="text-texto-3">Juros neste pagamento</span>
+                    <span className="text-texto-1">{fmt(finRateio.jurosPago)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-500">Juros em falta</span>
-                    <span className={finRateio.desvioJuros > 0 ? 'text-amber-400' : 'text-gray-200'}>
+                    <span className="text-texto-3">Juros em falta</span>
+                    <span className={finRateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>
                       {fmt(finRateio.desvioJuros)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
-                    <span className="text-gray-400 font-semibold">Total pago na parcela</span>
-                    <span className="text-gray-100 font-bold">{fmt(finValorNum)}</span>
+                  <div className="flex items-center justify-between border-t border-borda-forte mt-1.5 pt-1.5">
+                    <span className="text-texto-2 font-semibold">Total pago na parcela</span>
+                    <span className="text-texto-1 font-bold">{fmt(finValorNum)}</span>
                   </div>
                 </div>
               )}
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-texto-3">
                 Serão criados até dois lançamentos na mesma data e na mesma conta de origem, cada
                 um na categoria parametrizada do bem (prestação e taxa de financiamento). Pagando
                 menos que a parcela ela fica parcial e o saldo continua em aberto.
@@ -527,8 +527,8 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className={`input ${valorOk ? '' : '!border-red-500'}`} type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
+                <input className={`input ${valorOk ? '' : '!border-perigo'}`} type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -566,8 +566,8 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className={`input ${valorOk ? '' : '!border-red-500'}`} type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
-                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
+                <input className={`input ${valorOk ? '' : '!border-perigo'}`} type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -587,20 +587,20 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
           {!parcelaFin && tab === 'transferencia' && (
             <>
               {hasDetalhe && (
-                <div className="rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2.5">
-                  <p className="text-xs text-gray-400 mb-1.5">Detalhamento por função</p>
+                <div className="rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5">
+                  <p className="text-xs text-texto-2 mb-1.5">Detalhamento por função</p>
                   <ul className="space-y-0.5">
                     {reservaDetalhe.map((det, i) => (
-                      <li key={i} className="text-xs text-gray-300 flex items-center gap-1.5">
-                        <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                      <li key={i} className="text-xs text-texto-2 flex items-center gap-1.5">
+                        <span className="text-texto-3">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
                         <span className="flex-1 truncate">{det.name}</span>
-                        <span className="font-medium text-gray-200">{fmt(det.valor)}</span>
+                        <span className="font-medium text-texto-1">{fmt(det.valor)}</span>
                       </li>
                     ))}
                   </ul>
-                  <div className="flex items-center justify-between border-t border-gray-700 mt-1.5 pt-1.5">
-                    <span className="text-xs font-semibold text-gray-300">Total</span>
-                    <span className="text-xs font-bold text-gray-100">{fmt(detalheTotal)}</span>
+                  <div className="flex items-center justify-between border-t border-borda-forte mt-1.5 pt-1.5">
+                    <span className="text-xs font-semibold text-texto-2">Total</span>
+                    <span className="text-xs font-bold text-texto-1">{fmt(detalheTotal)}</span>
                   </div>
                 </div>
               )}
@@ -619,7 +619,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               <div>
                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
                 <input
-                  className={`input ${valorOk ? '' : '!border-red-500'}`}
+                  className={`input ${valorOk ? '' : '!border-perigo'}`}
                   type="text"
                   inputMode="decimal"
                   value={hasDetalhe ? valorParaInput(detalheTotal) : trfAmount}
@@ -627,7 +627,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
                   disabled={hasDetalhe}
                   readOnly={hasDetalhe}
                 />
-                {!valorOk && <p className="text-xs text-red-400 mt-1">Valor inválido</p>}
+                {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               <div>
                 <label className="label">Data</label>
@@ -641,7 +641,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
           )}
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose} disabled={finLoading}>Cancelar</button>
           {parcelaFin ? (
             <button
@@ -667,41 +667,41 @@ function EstornarModal({ schedule, nextDate, accounts, onClose, onConfirm }) {
   const acc = accounts.find(a => a.id === schedule.accountId)
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-          <h3 className="font-semibold text-gray-100">Estornar Ocorrência</h3>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda">
+          <h3 className="font-semibold text-texto-1">Estornar Ocorrência</h3>
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
         <div className="px-5 py-4 space-y-3">
-          <div className="bg-gray-800/60 rounded-lg p-3 space-y-2">
+          <div className="bg-surface-2/60 rounded-lg p-3 space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Favorecido</span>
-              <span className="text-gray-200">{schedule.payee || '—'}</span>
+              <span className="text-texto-3">Favorecido</span>
+              <span className="text-texto-1">{schedule.payee || '—'}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Valor</span>
-              <span className="text-gray-200 font-bold">{fmt(schedule.amount)}</span>
+              <span className="text-texto-3">Valor</span>
+              <span className="text-texto-1 font-bold">{fmt(schedule.amount)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Data</span>
-              <span className="text-gray-200">{nextDate ? fmtDate(nextDate) : '—'}</span>
+              <span className="text-texto-3">Data</span>
+              <span className="text-texto-1">{nextDate ? fmtDate(nextDate) : '—'}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Conta</span>
-              <span className="text-gray-200">{acc?.apelido || acc?.name || '—'}</span>
+              <span className="text-texto-3">Conta</span>
+              <span className="text-texto-1">{acc?.apelido || acc?.name || '—'}</span>
             </div>
           </div>
-          <p className="text-xs text-amber-400 bg-amber-400/10 rounded-lg px-3 py-2">
-            Esta ação não pode ser desfeita. Deseja confirmar?
+          <p className="text-xs text-aviso bg-aviso/10 rounded-lg px-3 py-2">
+            ⚠ Esta ação não pode ser desfeita. Deseja confirmar?
           </p>
         </div>
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-despesa/15 text-despesa hover:bg-despesa/25 rounded-lg transition-colors"
             onClick={onConfirm}
           >
             <RotateCcw size={14} /> Confirmar
@@ -715,41 +715,41 @@ function EstornarModal({ schedule, nextDate, accounts, onClose, onConfirm }) {
 function ExcluirModal({ schedule, nextDate, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-          <h3 className="font-semibold text-gray-100">Excluir Agendamento</h3>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda">
+          <h3 className="font-semibold text-texto-1">Excluir Agendamento</h3>
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
         <div className="px-5 py-4 space-y-3">
-          <div className="bg-gray-800/60 rounded-lg p-3 space-y-2">
+          <div className="bg-surface-2/60 rounded-lg p-3 space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Favorecido</span>
-              <span className="text-gray-200">{schedule.payee || '—'}</span>
+              <span className="text-texto-3">Favorecido</span>
+              <span className="text-texto-1">{schedule.payee || '—'}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Valor</span>
-              <span className="text-gray-200 font-bold">{fmt(schedule.amount)}</span>
+              <span className="text-texto-3">Valor</span>
+              <span className="text-texto-1 font-bold">{fmt(schedule.amount)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Frequência</span>
-              <span className="text-gray-200">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
+              <span className="text-texto-3">Frequência</span>
+              <span className="text-texto-1">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Próxima data</span>
-              <span className="text-gray-200">{nextDate ? fmtDate(nextDate) : '—'}</span>
+              <span className="text-texto-3">Próxima data</span>
+              <span className="text-texto-1">{nextDate ? fmtDate(nextDate) : '—'}</span>
             </div>
           </div>
-          <p className="text-xs text-red-400 bg-red-400/10 rounded-lg px-3 py-2">
-            Esta ação não pode ser desfeita. Deseja confirmar?
+          <p className="text-xs text-perigo bg-perigo-bg rounded-lg px-3 py-2">
+            ⚠ Esta ação não pode ser desfeita. Deseja confirmar?
           </p>
         </div>
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-perigo-solido text-white hover:bg-perigo-solido-hover rounded-lg transition-colors"
             onClick={onConfirm}
           >
             <Trash2 size={14} /> Confirmar
@@ -881,7 +881,7 @@ function ScheduleRow({
 
   return (
     <>
-      <tr className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors group ${daysLate > 0 ? 'bg-red-500/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-indigo-500/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-blue-500 bg-blue-500/[0.03]' : ''}`}>
+      <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
@@ -891,7 +891,7 @@ function ScheduleRow({
                 checked={isSelected}
                 onChange={() => onToggleSelect(schedule.id)}
                 onClick={e => e.stopPropagation()}
-                className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+                className="w-4 h-4 rounded accent-primary cursor-pointer"
               />
             ) : (
               <div className="w-4 h-4" />
@@ -903,9 +903,9 @@ function ScheduleRow({
         <td className="px-3 py-3 whitespace-nowrap">
           {nextDate ? (
             <div>
-              <p className="text-xs text-gray-300 font-medium">{fmtDate(displayDueDate)}</p>
+              <p className="text-xs text-texto-2 font-medium">{fmtDate(displayDueDate)}</p>
               {daysLate > 0 && (
-                <span className="inline-flex items-center gap-0.5 mt-0.5 text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded font-medium">
+                <span className="inline-flex items-center gap-0.5 mt-0.5 text-xs bg-perigo-bg text-perigo px-1.5 py-0.5 rounded font-medium">
                   <AlertTriangle size={9} />
                   {daysLate}d em atraso
                 </span>
@@ -913,8 +913,8 @@ function ScheduleRow({
             </div>
           ) : (
             <div>
-              <p className="text-xs text-gray-600 font-medium">{displayDate ? fmtDate(displayDate) : '—'}</p>
-              <span className="text-xs text-gray-700">Concluído</span>
+              <p className="text-xs text-texto-3 font-medium">{displayDate ? fmtDate(displayDate) : '—'}</p>
+              <span className="text-xs text-texto-3">Concluído</span>
             </div>
           )}
         </td>
@@ -935,32 +935,32 @@ function ScheduleRow({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggleExpand() }}
                 title={expanded ? 'Recolher' : hasFuture ? `Ver ${futureItems.length} ocorrência(s) seguinte(s) e histórico` : 'Ver histórico de pagamentos'}
-                className="inline-flex items-center gap-0.5 -ml-1 p-0.5 text-gray-500 hover:text-gray-200 transition-colors shrink-0"
+                className="inline-flex items-center gap-0.5 -ml-1 p-0.5 text-texto-3 hover:text-texto-1 transition-colors shrink-0"
               >
                 {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 {hasFuture && <span className="text-[10px] font-semibold">{futureItems.length}</span>}
                 {/* Série de fatura: o valor da linha é o da fatura mais próxima (meses diferentes não
                     somam); o texto deixa claro que há outras faturas dentro do "› N". */}
                 {detalheMobile && isSerie && hasFuture && (
-                  <span className="text-[10px] font-normal text-gray-500 whitespace-nowrap ml-0.5">
+                  <span className="text-[10px] font-normal text-texto-3 whitespace-nowrap ml-0.5">
                     {rotuloFaturasSeguintes(futureItems.length)}
                   </span>
                 )}
               </button>
             )}
-            <p className="text-xs text-gray-200 font-medium whitespace-normal break-words min-w-0 flex-1" title={occ.description}>{occ.description}{comHistorico && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400/80 align-middle" title="Tem histórico de alterações" />}</p>
+            <p className="text-xs text-texto-1 font-medium whitespace-normal break-words min-w-0 flex-1" title={occ.description}>{occ.description}{comHistorico && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
           </div>
           {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {/* Série de fatura (desktop): o "+ N faturas seguintes" fica aqui, fora da linha do título,
                 para não espremer a descrição. */}
             {!detalheMobile && isSerie && hasFuture && (
-              <span className="shrink-0 text-[10px] bg-gray-700/40 text-gray-400 px-1.5 py-0.5 rounded whitespace-nowrap">
+              <span className="shrink-0 text-[10px] bg-surface-hover/40 text-texto-2 px-1.5 py-0.5 rounded whitespace-nowrap">
                 {rotuloFaturasSeguintes(futureItems.length)}
               </span>
             )}
             {isProvisao && !schedule.provisaoEfetivada && (
-              <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
+              <span className="inline-flex items-center gap-1 text-xs bg-surface-2 text-texto-2 outline-dashed outline-1 -outline-offset-1 outline-borda-forte px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title={schedule.frequency === 'once' ? 'Despesa provisionada — valor/data estimados' : 'Provisão recorrente — valor/data estimados por ocorrência'}>
                 <Hourglass size={9} /> Provisão{schedule.frequency !== 'once' ? ' recorrente' : ''}
               </span>
             )}
@@ -968,7 +968,7 @@ function ScheduleRow({
               <GerBadge grupoId={schedule.grupoGerencial} gerencialGroups={gerencialGroups} />
             )}
             {(schedule.faturaRef || schedule.overrides?._gerencial?.faturaRef) && (
-              <span className="text-xs bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title="Fatura de referência">
+              <span className="text-xs bg-surface-2 text-texto-2 px-1.5 py-0.5 rounded whitespace-nowrap font-medium" title="Fatura de referência">
                 {schedule.faturaRef || schedule.overrides._gerencial.faturaRef}
               </span>
             )}
@@ -977,13 +977,13 @@ function ScheduleRow({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setShowBreakdown(true) }}
                 title="Ver os gastos que compõem este resgate"
-                className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-500 px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-blue-500/25 transition-colors"
+                className="inline-flex items-center gap-1 text-xs bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-primary/25 transition-colors"
               >
                 <List size={10} /> Ver gastos
               </button>
             )}
             {isInstallment && (
-              <span className="text-xs bg-gray-700/60 text-gray-400 px-1 py-0.5 rounded whitespace-nowrap">
+              <span className="text-xs bg-surface-hover/60 text-texto-2 px-1 py-0.5 rounded whitespace-nowrap">
                 {totalDone}/{schedule.installments}x
               </span>
             )}
@@ -996,8 +996,8 @@ function ScheduleRow({
                   : 'Marcar valor como confirmado para o próximo vencimento'}
                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap transition-colors ${
                   schedule.confirmado
-                    ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-                    : 'bg-gray-700/60 text-gray-400 hover:bg-gray-700'
+                    ? 'bg-primary/15 text-primary-fg hover:bg-primary/25'
+                    : 'bg-surface-hover/60 text-texto-2 hover:bg-surface-hover'
                 }`}
               >
                 {schedule.confirmado ? <CheckCircle size={10} /> : <Circle size={10} />}
@@ -1005,7 +1005,7 @@ function ScheduleRow({
               </button>
             )}
             {schedule.transactionType === 'income' ? (
-              <span className="inline-flex items-center gap-1 text-xs bg-blue-500/15 text-blue-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-xs bg-receita/15 text-receita px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowDownCircle size={10} /> Receita
               </span>
             ) : isDepositoReserva ? (
@@ -1013,15 +1013,15 @@ function ScheduleRow({
                 <ArrowDownCircle size={10} /> Depósito Reserva
               </span>
             ) : isResgateReserva ? (
-              <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-xs bg-despesa/15 text-despesa px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowUpCircle size={10} /> Resgate Reserva
               </span>
             ) : schedule.transactionType === 'transfer' ? (
-              <span className="inline-flex items-center gap-1 text-xs bg-purple-500/15 text-purple-400 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-xs bg-transferencia/15 text-transferencia px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowLeftRight size={10} /> Transferência
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs bg-orange-500/15 text-orange-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 text-xs bg-despesa/15 text-despesa px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
                 <ArrowUpCircle size={10} /> Despesa
               </span>
             )}
@@ -1029,10 +1029,10 @@ function ScheduleRow({
           {reservaDetalhe && reservaDetalhe.length > 0 && (
             <ul className="mt-1 space-y-0.5" title="Detalhamento por função de reserva">
               {reservaDetalhe.map((det, i) => (
-                <li key={i} className="text-[10px] text-gray-500 flex items-center gap-1 whitespace-nowrap">
-                  <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                <li key={i} className="text-[10px] text-texto-3 flex items-center gap-1 whitespace-nowrap">
+                  <span className="text-texto-3">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
                   <span className="truncate">{det.name}:</span>
-                  <span className="text-gray-400 font-medium">{fmt(det.valor)}</span>
+                  <span className="text-texto-2 font-medium">{fmt(det.valor)}</span>
                 </li>
               ))}
             </ul>
@@ -1042,52 +1042,52 @@ function ScheduleRow({
               {rateioDetalhe.map((r, i) => {
                 const catRateio = categories.find(c => c.id === r.categoriaId)
                 return (
-                  <li key={r.id} className="text-[10px] text-gray-500 flex items-center gap-1 whitespace-nowrap">
-                    <span className="text-gray-600">{i === rateioDetalhe.length - 1 ? '└' : '├'}</span>
+                  <li key={r.id} className="text-[10px] text-texto-3 flex items-center gap-1 whitespace-nowrap">
+                    <span className="text-texto-3">{i === rateioDetalhe.length - 1 ? '└' : '├'}</span>
                     {/* A descrição ("Principal"/"Juros") vem do rateio; a categoria é o que
                         importa para o relatório, então as duas aparecem. */}
                     <span className="truncate">
                       {r.descricao || catRateio?.name || 'Rateio'}
                       {catRateio ? ` · ${catRateio.icon} ${catRateio.name}` : ''}:
                     </span>
-                    <span className="text-gray-400 font-medium">{fmt(r.valor)}</span>
+                    <span className="text-texto-2 font-medium">{fmt(r.valor)}</span>
                   </li>
                 )
               })}
             </ul>
           )}
           {schedule.transactionType === 'transfer' ? (
-            <p className="text-xs text-gray-600 mt-0.5 whitespace-normal break-words">
-              <span className="text-purple-400">↔</span>{' '}
+            <p className="text-xs text-texto-3 mt-0.5 whitespace-normal break-words">
+              <span className="text-transferencia">↔</span>{' '}
               {acc?.apelido || acc?.name || '?'} → {toAcc?.apelido || toAcc?.name || '?'}
             </p>
           ) : acc ? (
-            <p className="text-xs text-gray-600 mt-0.5 whitespace-normal break-words">{acc.apelido || acc.name}</p>
+            <p className="text-xs text-texto-3 mt-0.5 whitespace-normal break-words">{acc.apelido || acc.name}</p>
           ) : null}
         </td>
 
         {/* Categoria */}
         <td className="px-3 py-3 hidden md:table-cell">
           {cat
-            ? <span className="text-xs text-gray-400 whitespace-nowrap">{cat.icon} {cat.name}</span>
-            : <span className="text-gray-700 text-xs">—</span>}
+            ? <span className="text-xs text-texto-2 whitespace-nowrap">{cat.icon} {cat.name}</span>
+            : <span className="text-texto-3 text-xs">—</span>}
         </td>
 
         {/* Favorecido */}
         <td className="px-3 py-3 hidden lg:table-cell">
-          <span className="text-xs text-gray-400 truncate max-w-[120px] block">{schedule.payee || <span className="text-gray-700">—</span>}</span>
+          <span className="text-xs text-texto-2 truncate max-w-[120px] block">{schedule.payee || <span className="text-texto-3">—</span>}</span>
         </td>
 
         {/* Valor */}
         <td className="px-3 py-3 whitespace-nowrap text-right">
-          <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-receita' : isDepositoReserva ? 'text-reserva' : isResgateReserva ? 'text-despesa' : schedule.transactionType === 'transfer' ? 'text-purple-400' : 'text-despesa'}`}>
+          <span className={`text-sm font-bold ${schedule.transactionType === 'income' ? 'text-receita' : isDepositoReserva ? 'text-reserva' : isResgateReserva ? 'text-despesa' : schedule.transactionType === 'transfer' ? 'text-transferencia' : 'text-despesa'}`}>
             {fmt(effAmount)}
           </span>
         </td>
 
         {/* Frequência */}
         <td className="px-3 py-3 w-px whitespace-nowrap hidden sm:table-cell">
-          <span className="text-xs text-gray-500">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
+          <span className="text-xs text-texto-3">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
         </td>
 
         {/* Ações */}
@@ -1099,7 +1099,7 @@ function ScheduleRow({
               <button
                 onClick={() => setShowEfetivar(true)}
                 title="Efetivar Provisão — informar valor e data reais"
-                className="flex items-center gap-1 h-7 px-2.5 text-xs bg-amber-500/20 text-amber-400 rounded-md hover:bg-amber-500/30 transition-colors font-medium"
+                className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
               >
                 <Hourglass size={12} /> Efetivar Provisão
               </button>
@@ -1107,15 +1107,15 @@ function ScheduleRow({
             {nCobertas > 0 && (
               <>
                 <span
-                  className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 whitespace-nowrap"
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap"
                   title={`Já lançado no cartão: ${[...cobertas.keys()].map(d => fmtDate(d)).join(', ')}. Fica fora do fluxo e dos previstos.`}
                 >
-                  Duplicado – já no cartão{nCobertas > 1 ? ` (${nCobertas})` : ''}
+                  ⚠ Duplicado – já no cartão{nCobertas > 1 ? ` (${nCobertas})` : ''}
                 </span>
                 <button
                   onClick={() => { const n = baixarComoJaNoCartao(schedule.id); if (n) onToast?.(`${n} ocorrência${n !== 1 ? 's' : ''} baixada${n !== 1 ? 's' : ''} como já no cartão`) }}
                   title="Marca as ocorrências cobertas como baixadas (tipo 'já no cartão'), apontando o lançamento do cartão — não cria lançamento"
-                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-amber-500/20 text-amber-400 rounded-md hover:bg-amber-500/30 transition-colors font-medium"
+                  className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> Baixar como já no cartão
                 </button>
@@ -1130,7 +1130,7 @@ function ScheduleRow({
                   onClick={() => setShowPay(true)}
                   title="Pagar"
                   aria-label="Pagar"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-blue-500/20 text-blue-600 rounded-md hover:bg-blue-500/30 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-receita/15 text-receita rounded-md hover:bg-receita/25 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
                 </button>
@@ -1138,7 +1138,7 @@ function ScheduleRow({
                   onClick={() => setShowEstornar(true)}
                   title="Estornar"
                   aria-label="Estornar"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-orange-500/15 text-orange-600 rounded-md hover:bg-orange-500/25 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-despesa/15 text-despesa rounded-md hover:bg-despesa/25 transition-colors font-medium"
                 >
                   <RotateCcw size={12} /> <span className="hidden 2xl:inline">Estornar</span>
                 </button>
@@ -1146,7 +1146,7 @@ function ScheduleRow({
                   onClick={handlePular}
                   title={isRecorrente ? 'Pular esta ocorrência (avança para a próxima)' : 'Pular (cancela o agendamento único)'}
                   aria-label="Pular"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-gray-500/15 text-gray-300 rounded-md hover:bg-gray-500/25 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 rounded-md hover:bg-surface-hover transition-colors font-medium"
                 >
                   <SkipForward size={12} /> <span className="hidden 2xl:inline">Pular</span>
                 </button>
@@ -1154,12 +1154,12 @@ function ScheduleRow({
             )}
             <button onClick={() => setShowHistorico(true)} className="btn-amber w-7 h-7 p-0 justify-center relative" title="Histórico de alterações" aria-label="Histórico">
               <History size={13} />
-              {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+              {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>
             <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-7 h-7 p-0 justify-center" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
             </button>
-            <button onClick={() => setShowExcluir(true)} className="btn-amber w-7 h-7 p-0 justify-center hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/15" title="Excluir agendamento" aria-label="Excluir">
+            <button onClick={() => setShowExcluir(true)} className="btn-amber w-7 h-7 p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
             </button>
           </div>
@@ -1170,17 +1170,17 @@ function ScheduleRow({
       {/* Painel inline: ocorrências futuras seguintes (faturas futuras com valor dinâmico,
           ou próximas ocorrências de recorrente com valor fixo). Somente visual. */}
       {expanded && canExpand && (
-        <tr className="bg-gray-900/40 border-b border-gray-800/50">
+        <tr className="bg-surface/40 border-b border-borda/50">
           <td colSpan={cols} className="px-3 py-2">
             <div className="pl-6 space-y-3">
               {hasFuture && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">Próximas ocorrências</p>
+                  <p className="text-[10px] uppercase tracking-wide text-texto-3 mb-1">Próximas ocorrências</p>
                   <ul className="space-y-0.5 max-w-md">
                     {futureItems.map((it, i) => (
-                      <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-gray-800/30 last:border-0">
-                        <span className="text-gray-400">{fmtDate(it.date)}</span>
-                        <span className="text-gray-300 font-medium">{fmt(it.amount)}</span>
+                      <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-borda/30 last:border-0">
+                        <span className="text-texto-2">{fmtDate(it.date)}</span>
+                        <span className="text-texto-2 font-medium">{fmt(it.amount)}</span>
                       </li>
                     ))}
                   </ul>
@@ -1188,13 +1188,13 @@ function ScheduleRow({
               )}
               {hasHistory && (
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-1">
-                    Histórico de Pagamentos <span className="text-gray-600">({paymentHistory.length})</span>
+                  <p className="text-[10px] uppercase tracking-wide text-texto-3 mb-1">
+                    Histórico de Pagamentos <span className="text-texto-3">({paymentHistory.length})</span>
                   </p>
                   <div className="max-w-lg overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-[10px] uppercase tracking-wide text-gray-600">
+                        <tr className="text-[10px] uppercase tracking-wide text-texto-3">
                           <th className="text-left font-medium py-0.5 pr-4">Prevista</th>
                           <th className="text-left font-medium py-0.5 pr-4">Paga em</th>
                           <th className="text-right font-medium py-0.5">Valor pago</th>
@@ -1202,10 +1202,10 @@ function ScheduleRow({
                       </thead>
                       <tbody>
                         {paymentHistory.map((h, i) => (
-                          <tr key={i} className="border-b border-gray-800/30 last:border-0">
-                            <td className="text-gray-400 py-0.5 pr-4 whitespace-nowrap">{fmtDate(h.prevista)}</td>
-                            <td className="text-gray-300 py-0.5 pr-4 whitespace-nowrap">{h.efetiva ? fmtDate(h.efetiva) : '—'}</td>
-                            <td className="text-gray-300 font-medium py-0.5 text-right whitespace-nowrap">{fmt(h.valor)}</td>
+                          <tr key={i} className="border-b border-borda/30 last:border-0">
+                            <td className="text-texto-2 py-0.5 pr-4 whitespace-nowrap">{fmtDate(h.prevista)}</td>
+                            <td className="text-texto-2 py-0.5 pr-4 whitespace-nowrap">{h.efetiva ? fmtDate(h.efetiva) : '—'}</td>
+                            <td className="text-texto-2 font-medium py-0.5 text-right whitespace-nowrap">{fmt(h.valor)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1308,23 +1308,23 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-          <h3 className="font-semibold text-gray-100 flex items-center gap-2">
-            <Hourglass size={15} className="text-amber-400" /> Efetivar Provisão
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda">
+          <h3 className="font-semibold text-texto-1 flex items-center gap-2">
+            <Hourglass size={15} className="text-texto-2" /> Efetivar Provisão
           </h3>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           <div>
-            <p className="text-xs text-gray-500">Provisão</p>
-            <p className="text-sm text-gray-200 font-medium">{schedule.description}</p>
+            <p className="text-xs text-texto-3">Provisão</p>
+            <p className="text-sm text-texto-1 font-medium">{schedule.description}</p>
             {!isOnce && occDate && (
-              <p className="text-xs text-amber-400/90 mt-1">
+              <p className="text-xs text-texto-2 mt-1">
                 Ocorrência de {fmtDate(occDate)} · {FREQ_LABELS[schedule.frequency] || schedule.frequency}
               </p>
             )}
@@ -1349,26 +1349,26 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
           </div>
 
           {func ? (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-300/90 leading-snug">
+            <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg text-xs text-texto-2 leading-snug">
               Será criado um resgate (transferência) de{' '}
               <span className="font-semibold">{contaReserva?.apelido || contaReserva?.name || 'conta da reserva'}</span>{' '}
               → conta principal, vinculado à função <span className="font-semibold">{func.name}</span>.
             </div>
           ) : (
-            <p className="text-xs text-gray-500 leading-snug">
+            <p className="text-xs text-texto-3 leading-snug">
               Sem reserva vinculada — apenas o valor e a data serão atualizados.
             </p>
           )}
 
           {!isOnce && (
-            <p className="text-xs text-gray-500 leading-snug">
+            <p className="text-xs text-texto-3 leading-snug">
               A série continua: as próximas ocorrências permanecem como provisão e poderão ser
               efetivadas depois.
             </p>
           )}
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
@@ -1425,14 +1425,14 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
-          <h3 className="font-semibold text-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
+          <h3 className="font-semibold text-texto-1">
             Registrar {selectedRows.length} agendamento{selectedRows.length !== 1 ? 's' : ''}
           </h3>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -1447,29 +1447,29 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
               value={date}
               onChange={e => onDataGeral(e.target.value)}
             />
-            <p className="text-[11px] text-gray-600 mt-1">Aplicada a todos os itens cuja data não foi alterada individualmente.</p>
+            <p className="text-[11px] text-texto-3 mt-1">Aplicada a todos os itens cuja data não foi alterada individualmente.</p>
           </div>
 
           {/* List of selected items */}
-          <div className="rounded-lg border border-gray-800 overflow-hidden">
+          <div className="rounded-lg border border-borda overflow-hidden">
             {selectedRows.map((r) => {
               const { schedule, nextDate } = r
               const acc = accounts.find(a => a.id === schedule.accountId)
-              const valueColor = schedule.transactionType === 'income' ? 'text-blue-400'
-                : schedule.transactionType === 'transfer' ? 'text-purple-400'
-                : 'text-orange-500'
+              const valueColor = schedule.transactionType === 'income' ? 'text-receita'
+                : schedule.transactionType === 'transfer' ? 'text-transferencia'
+                : 'text-despesa'
               const it = itens[schedule.id]
               const detalhado = comDetalhe.has(schedule.id)
               const ruim = invalido(r)
               return (
                 <div
                   key={schedule.id}
-                  className={`px-3 py-2.5 border-b border-gray-800/80 last:border-0 space-y-2 ${ruim ? 'bg-red-500/10 border-l-2 border-l-red-500' : 'hover:bg-gray-800/30'}`}
+                  className={`px-3 py-2.5 border-b border-borda/80 last:border-0 space-y-2 ${ruim ? 'bg-perigo-bg border-l-2 border-l-perigo' : 'hover:bg-surface-hover/30'}`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-gray-200 truncate">{schedule.description}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">
+                      <p className="text-xs font-medium text-texto-1 truncate">{schedule.description}</p>
+                      <p className="text-xs text-texto-3 mt-0.5">
                         {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
                       </p>
                     </div>
@@ -1479,11 +1479,11 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                       </span>
                     ) : (
                       <div className="relative shrink-0 w-28">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 pointer-events-none">R$</span>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-texto-3 pointer-events-none">R$</span>
                         <input
                           type="text"
                           inputMode="decimal"
-                          className={`input !py-1 !pl-7 !pr-2 text-xs text-right font-bold ${valueColor} ${ruim ? '!border-red-500' : ''}`}
+                          className={`input !py-1 !pl-7 !pr-2 text-xs text-right font-bold ${valueColor} ${ruim ? '!border-perigo' : ''}`}
                           value={it?.valor ?? ''}
                           onChange={e => setItem(schedule.id, { valor: e.target.value })}
                           onBlur={() => {
@@ -1497,7 +1497,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                     )}
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span className={`text-[11px] ${ruim ? 'text-red-400' : 'text-gray-600'}`}>
+                    <span className={`text-[11px] ${ruim ? 'text-perigo' : 'text-texto-3'}`}>
                       {ruim ? (it?.date ? 'Informe um valor maior que zero.' : 'Informe a data.') : detalhado ? 'Valor do detalhamento por função' : 'Data do lançamento'}
                     </span>
                     <DateInput
@@ -1512,14 +1512,14 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
           </div>
 
           {/* Total */}
-          <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800/60 rounded-lg">
-            <span className="text-sm text-gray-400 font-medium">Total</span>
-            <span className="text-base font-bold text-gray-100">{fmt(total)}</span>
+          <div className="flex items-center justify-between px-3 py-2.5 bg-surface-2/60 rounded-lg">
+            <span className="text-sm text-texto-2 font-medium">Total</span>
+            <span className="text-base font-bold text-texto-1">{fmt(total)}</span>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
@@ -1536,8 +1536,8 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
 
 function Toast({ message }) {
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-surface border border-emerald-500/30 text-gray-100 text-sm px-4 py-3 rounded-xl shadow-2xl pointer-events-none">
-      <CheckCircle size={16} className="text-emerald-400 shrink-0" />
+    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 bg-surface border border-primary/30 text-texto-1 text-sm px-4 py-3 rounded-xl shadow-2xl pointer-events-none">
+      <CheckCircle size={16} className="text-primary-fg shrink-0" />
       {message}
     </div>
   )
@@ -1546,10 +1546,10 @@ function Toast({ message }) {
 // Totalizador da seleção múltipla: metadados de exibição por grupo de movimentação.
 const SELECTION_GROUP_META = {
   aplicacao: { glyph: '↑', label: 'Aplicação', cls: 'text-reserva' },
-  resgate:   { glyph: '↓', label: 'Resgate',   cls: 'text-orange-500' },
-  despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-orange-500' },
-  receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-blue-400' },
-  fatura:    { glyph: '🧾', label: 'Fatura',    cls: 'text-indigo-400' },
+  resgate:   { glyph: '↓', label: 'Resgate',   cls: 'text-despesa' },
+  despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-despesa' },
+  receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-receita' },
+  fatura:    { glyph: '🧾', label: 'Fatura',    cls: 'text-texto-2' },
 }
 const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
 
@@ -1745,8 +1745,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   if (schedules.length === 0) {
     return (
       <div className="card text-center py-12">
-        <Calendar size={32} className="text-gray-700 mx-auto mb-3" />
-        <p className="text-gray-500">Nenhum agendamento encontrado</p>
+        <Calendar size={32} className="text-texto-3 mx-auto mb-3" />
+        <p className="text-texto-3">Nenhum agendamento encontrado</p>
         <button className="btn-primary mt-4" onClick={onNewSchedule}>Criar primeiro agendamento</button>
       </div>
     )
@@ -1797,9 +1797,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     <>
       {/* Selection action bar */}
       {selectionMode && (
-        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+        <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 bg-primary/10 border border-primary/20 rounded-xl">
           <div className="space-y-1.5">
-            <span className="text-sm font-medium text-indigo-300">
+            <span className="text-sm font-medium text-primary-fg">
               {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
             </span>
             {/* Totalizador por movimentação (apenas grupos com itens selecionados) */}
@@ -1813,13 +1813,13 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                     <div key={key}>
                       <div className="flex items-center gap-1.5">
                         <span className={meta.cls}>{meta.glyph}</span>
-                        <span className="text-gray-300 font-medium">{meta.label}:</span>
+                        <span className="text-texto-2 font-medium">{meta.label}:</span>
                         <span className={`font-semibold ${meta.cls}`}>{fmt(grp.total)}</span>
                       </div>
                       {grp.items.length > 1 && (
                         <div className="ml-4 mt-0.5 flex flex-col gap-0.5">
                           {grp.items.map((it, i) => (
-                            <div key={i} className="flex items-center justify-between gap-3 text-gray-500">
+                            <div key={i} className="flex items-center justify-between gap-3 text-texto-3">
                               <span className="truncate max-w-[180px]">{it.description}</span>
                               <span className="shrink-0">{fmt(it.amount)}</span>
                             </div>
@@ -1830,10 +1830,10 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                   )
                 })}
                 {selectionTotals.showSaldo && (
-                  <div className="flex items-center gap-1.5 pt-1 mt-0.5 border-t border-indigo-500/20">
-                    <span className="text-gray-400">=</span>
-                    <span className="text-gray-300 font-medium">Saldo:</span>
-                    <span className={`font-bold ${selectionTotals.saldo < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(selectionTotals.saldo)}</span>
+                  <div className="flex items-center gap-1.5 pt-1 mt-0.5 border-t border-primary/20">
+                    <span className="text-texto-2">=</span>
+                    <span className="text-texto-2 font-medium">Saldo:</span>
+                    <span className={`font-bold ${selectionTotals.saldo < 0 ? 'text-despesa' : 'text-receita'}`}>{fmtSinal(selectionTotals.saldo)}</span>
                   </div>
                 )}
               </div>
@@ -1843,19 +1843,19 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
             <button
               onClick={() => setShowBatchRegister(true)}
               disabled={selectedRows.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-receita/15 text-receita hover:bg-receita/25 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <CheckCircle size={12} /> Registrar selecionados
             </button>
             <button
               onClick={() => setShowBatchSkip(true)}
               disabled={selectedRows.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 hover:bg-surface-hover rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <SkipForward size={12} /> Pular selecionados
             </button>
             {/* Definir tipo de documento (em massa) */}
-            <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-indigo-500/20">
+            <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-primary/20">
               <select
                 className="input py-1 text-xs w-44"
                 value={tipoMassa}
@@ -1881,14 +1881,14 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
               <button
                 onClick={aplicarTipoMassa}
                 disabled={!tipoMassa || selectedIds.length === 0 || aplicandoTipo}
-                className="px-3 py-1.5 text-xs font-medium bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs font-medium bg-primary/15 text-primary-fg hover:bg-primary/25 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {aplicandoTipo ? 'Aplicando…' : 'Aplicar'}
               </button>
             </div>
             <button
               onClick={cancelSelection}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-hover text-texto-2 hover:bg-surface-hover rounded-lg transition-colors"
             >
               <X size={12} /> Cancelar seleção
             </button>
@@ -1911,26 +1911,26 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-borda">
                 {selectionMode && (
                   <th className="px-3 py-2.5 w-8">
                     <input
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+                      className="w-4 h-4 rounded accent-primary cursor-pointer"
                       title="Selecionar todos"
                     />
                   </th>
                 )}
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-2 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-full min-w-[220px]">Descrição</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden lg:table-cell">Favorecido</th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden sm:table-cell whitespace-nowrap w-px">Frequência</th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap w-px">Ações</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-full min-w-[220px]">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden lg:table-cell">Favorecido</th>
+                <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden sm:table-cell whitespace-nowrap w-px">Frequência</th>
+                <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-px">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -2121,21 +2121,21 @@ function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financ
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
-            <h3 className="font-semibold text-gray-100">Executar Provisões Gerenciais</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Transferência imediata Conta Principal → Ger. para cada parcela marcada</p>
+            <h3 className="font-semibold text-texto-1">Executar Provisões Gerenciais</h3>
+            <p className="text-xs text-texto-3 mt-0.5">Transferência imediata Conta Principal → Ger. para cada parcela marcada</p>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"><X size={16} /></button>
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors"><X size={16} /></button>
         </div>
 
         {/* Filtros (fatura + cartão) — aplicados em tempo real na lista */}
-        <div className="px-5 py-3 border-b border-gray-800 shrink-0 space-y-2.5">
+        <div className="px-5 py-3 border-b border-borda shrink-0 space-y-2.5">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Fatura</label>
+              <label className="block text-xs text-texto-3 mb-1">Fatura</label>
               <select
                 className="input text-sm py-1.5"
                 value={faturaFiltro}
@@ -2148,7 +2148,7 @@ function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financ
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Cartão</label>
+              <label className="block text-xs text-texto-3 mb-1">Cartão</label>
               <select
                 className="input text-sm py-1.5"
                 value={cartaoFiltro}
@@ -2166,43 +2166,43 @@ function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financ
               type="checkbox"
               checked={mostrarExecutadas}
               onChange={e => handleMostrarExecutadas(e.target.checked)}
-              className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer shrink-0"
+              className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
             />
-            <span className="text-xs text-gray-400">Mostrar já executadas</span>
+            <span className="text-xs text-texto-2">Mostrar já executadas</span>
           </label>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
           {visibleProvisoes.length === 0 ? (
-            <p className="text-center text-xs text-gray-600 py-8">Nenhuma provisão para os filtros selecionados</p>
+            <p className="text-center text-xs text-texto-3 py-8">Nenhuma provisão para os filtros selecionados</p>
           ) : visibleProvisoes.map(p => (
-            <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-800 hover:bg-gray-800/30 cursor-pointer">
+            <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-borda hover:bg-surface-hover/30 cursor-pointer">
               <input
                 type="checkbox"
                 checked={selected.has(p.id)}
                 onChange={() => toggle(p.id)}
-                className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer shrink-0"
+                className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-gray-200 truncate">{p.description}</p>
-                <p className="text-xs text-gray-600 mt-0.5 truncate">
+                <p className="text-xs font-medium text-texto-1 truncate">{p.description}</p>
+                <p className="text-xs text-texto-3 mt-0.5 truncate">
                   Fatura {faturaLabel(p.faturaMonthYear)} · {accName(p.contaOrigemId)} → {accName(p.contaDestinoId)}
                 </p>
-                <p className="text-xs text-gray-600 mt-0.5">
+                <p className="text-xs text-texto-3 mt-0.5">
                   Data do lançamento: {fmtDate(dataLancamentoProvisao(p, financialMonthStartDay))}
                 </p>
               </div>
-              <span className="text-xs font-bold text-orange-600 shrink-0">{fmt(p.amount)}</span>
+              <span className="text-xs font-bold text-despesa shrink-0">{fmt(p.amount)}</span>
             </label>
           ))}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
-          <span className="text-sm text-gray-400">{selCount} selecionada{selCount !== 1 ? 's' : ''}</span>
-          <span className="text-base font-bold text-gray-100">{fmt(total)}</span>
+        <div className="px-5 py-3 border-t border-borda flex items-center justify-between shrink-0">
+          <span className="text-sm text-texto-2">{selCount} selecionada{selCount !== 1 ? 's' : ''}</span>
+          <span className="text-base font-bold text-texto-1">{fmt(total)}</span>
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-800 shrink-0">
+        <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2501,8 +2501,8 @@ export default function SchedulePanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-gray-300">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
+          <h2 className="text-sm font-semibold text-texto-2">Agendamentos & Contas a Pagar</h2>
+          <p className="text-xs text-texto-3 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
         </div>
         <div className="flex items-center gap-2">
           {provisoesPendentes.length > 0 && (
@@ -2523,7 +2523,7 @@ export default function SchedulePanel() {
         </div>
       </div>
 
-      <div className="border-b border-gray-800 flex items-center gap-0 overflow-x-auto">
+      <div className="border-b border-borda flex items-center gap-0 overflow-x-auto">
         <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={allPending.length}>
           <Calendar size={14} /> Agendamentos
         </TabButton>
@@ -2539,7 +2539,7 @@ export default function SchedulePanel() {
         <button
           onClick={() => setShowZeroed(v => !v)}
           className={`ml-auto flex items-center gap-1.5 px-3 py-2.5 text-xs whitespace-nowrap transition-colors shrink-0 ${
-            showZeroed ? 'text-[#0F6E56]' : 'text-gray-600 hover:text-gray-400'
+            showZeroed ? 'text-primary-fg' : 'text-texto-3 hover:text-texto-2'
           }`}
         >
           <Eye size={11} /> {showZeroed ? 'Ocultar zerados' : 'Mostrar zerados'}
@@ -2556,8 +2556,8 @@ export default function SchedulePanel() {
                 onClick={() => setViewFilter(f.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
                   viewFilter === f.id
-                    ? 'bg-[#0F6E56] text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    ? 'bg-primary text-white'
+                    : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
                 }`}
               >
                 {f.id === 'history' && <History size={11} />}
@@ -2608,7 +2608,7 @@ export default function SchedulePanel() {
                 <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
               </div>
               {hasActiveFilter && (
-                <button onClick={clearFilters} title="Limpar filtros" className="p-1.5 mb-0.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors shrink-0">
+                <button onClick={clearFilters} title="Limpar filtros" className="p-1.5 mb-0.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors shrink-0">
                   <X size={14} />
                 </button>
               )}
@@ -2638,7 +2638,7 @@ export default function SchedulePanel() {
         <div className="space-y-3">
           {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) && cartoesDisponiveis.length > 0 && (
             <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500 shrink-0">Cartão:</label>
+              <label className="text-xs text-texto-3 shrink-0">Cartão:</label>
               <select
                 className="input py-1.5 text-xs max-w-xs"
                 value={cartaoFiltroId}
@@ -2654,13 +2654,13 @@ export default function SchedulePanel() {
 
           {viewInvoice.length === 0 && viewFaturaPayments.length === 0 ? (
             <div className="card text-center py-12">
-              <CreditCard size={32} className="text-gray-700 mx-auto mb-3" />
+              <CreditCard size={32} className="text-texto-3 mx-auto mb-3" />
               {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) ? (
-                <p className="text-gray-500 text-sm">Nenhuma fatura para o cartão selecionado</p>
+                <p className="text-texto-3 text-sm">Nenhuma fatura para o cartão selecionado</p>
               ) : (
                 <>
-                  <p className="text-gray-500 text-sm">Nenhuma fatura gerada</p>
-                  <p className="text-gray-600 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
+                  <p className="text-texto-3 text-sm">Nenhuma fatura gerada</p>
+                  <p className="text-texto-3 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
                 </>
               )}
             </div>
@@ -2693,9 +2693,9 @@ export default function SchedulePanel() {
       {activeTab === 'gerencial' && (
         displayGerencial.length === 0 ? (
           <div className="card text-center py-12">
-            <BarChart3 size={32} className="text-gray-700 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhum resgate gerencial agendado</p>
-            <p className="text-gray-600 text-xs mt-1">Lançamentos no Grupo Gerencial (1) geram agendamentos de devolução das subcontas "Ger." para a conta principal</p>
+            <BarChart3 size={32} className="text-texto-3 mx-auto mb-3" />
+            <p className="text-texto-3 text-sm">Nenhum resgate gerencial agendado</p>
+            <p className="text-texto-3 text-xs mt-1">Lançamentos no Grupo Gerencial (1) geram agendamentos de devolução das subcontas "Ger." para a conta principal</p>
           </div>
         ) : (
           <SchedulesTable
@@ -2718,9 +2718,9 @@ export default function SchedulePanel() {
       {activeTab === 'anuais' && (
         displayContasAnuais.length === 0 ? (
           <div className="card text-center py-12">
-            <ArrowLeftRight size={32} className="text-gray-700 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhuma movimentação anual agendada</p>
-            <p className="text-gray-600 text-xs mt-1">Depósitos (aplicações) e resgates das contas poupança aparecem aqui</p>
+            <ArrowLeftRight size={32} className="text-texto-3 mx-auto mb-3" />
+            <p className="text-texto-3 text-sm">Nenhuma movimentação anual agendada</p>
+            <p className="text-texto-3 text-xs mt-1">Depósitos (aplicações) e resgates das contas poupança aparecem aqui</p>
           </div>
         ) : (
           <SchedulesTable

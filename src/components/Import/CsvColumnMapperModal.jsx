@@ -25,24 +25,24 @@ export default function CsvColumnMapperModal({ headers = [], previewRows = [], i
   return (
     <Modal open onClose={onClose} title="Mapear colunas do CSV" size="lg">
       <div className="space-y-4">
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-texto-2">
           Este CSV não foi reconhecido automaticamente. Indique quais colunas correspondem a cada campo.
           O mapeamento fica salvo para os próximos arquivos com o mesmo formato.
         </p>
 
         {/* Prévia das primeiras linhas */}
         {previewRows.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-gray-800">
+          <div className="overflow-x-auto rounded-lg border border-borda">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-gray-800 text-left text-gray-400">
+                <tr className="border-b border-borda text-left text-texto-2">
                   {headers.map(h => <th key={h} className="px-2 py-1.5 font-medium whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {previewRows.map((r, i) => (
-                  <tr key={i} className="border-b border-gray-800/50">
-                    {headers.map(h => <td key={h} className="px-2 py-1.5 text-gray-300 whitespace-nowrap truncate max-w-[160px]">{String(r[h] ?? '')}</td>)}
+                  <tr key={i} className="border-b border-borda/50">
+                    {headers.map(h => <td key={h} className="px-2 py-1.5 text-texto-2 whitespace-nowrap truncate max-w-[160px]">{String(r[h] ?? '')}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -56,15 +56,15 @@ export default function CsvColumnMapperModal({ headers = [], previewRows = [], i
           {colSelect('Qual coluna é a Descrição?', 'descCol')}
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-texto-2 cursor-pointer">
           <input
             type="checkbox"
-            className="w-4 h-4 rounded accent-[#0F6E56]"
+            className="w-4 h-4 rounded accent-primary"
             checked={map.negativeIsExpense !== false}
             onChange={e => set('negativeIsExpense', e.target.checked)}
           />
           Valor negativo = despesa
-          <span className="text-xs text-gray-500">(desmarque se o banco lista despesas como valores positivos)</span>
+          <span className="text-xs text-texto-3">(desmarque se o banco lista despesas como valores positivos)</span>
         </label>
 
         <div className="flex justify-end gap-2 pt-1">

@@ -57,7 +57,7 @@ export default function ConsultaCard({
       type="button"
       disabled={disabled}
       onClick={() => executar(acao)}
-      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 disabled:opacity-40 disabled:hover:bg-transparent ${danger ? 'text-red-400' : 'text-gray-200'}`}
+      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent ${danger ? 'text-perigo' : 'text-texto-1'}`}
     >
       {label}
     </button>
@@ -66,7 +66,7 @@ export default function ConsultaCard({
   return (
     <div
       className={`relative group flex items-start gap-1 pl-3 pr-1 py-2 rounded-lg border transition-colors min-w-[170px] max-w-full cursor-pointer ${
-        ativa ? 'border-[#0F6E56] bg-[#0F6E56]/15' : 'border-gray-800 bg-surface hover:border-gray-600'
+        ativa ? 'border-primary bg-primary/10' : 'border-borda bg-surface hover:border-borda-forte'
       }`}
       onClick={() => { if (editando == null) onSelecionar() }}
     >
@@ -75,7 +75,7 @@ export default function ConsultaCard({
           <div onClick={e => e.stopPropagation()}>
             <input
               autoFocus
-              className={`input py-0.5 px-1.5 text-sm w-full ${erro || erroSalvar ? 'border-red-500/70' : ''}`}
+              className={`input py-0.5 px-1.5 text-sm w-full ${erro || erroSalvar ? 'border-perigo' : ''}`}
               value={editando}
               maxLength={NOME_MAX}
               autoComplete="off"
@@ -87,23 +87,23 @@ export default function ConsultaCard({
                 if (e.key === 'Escape') { e.stopPropagation(); cancelouRef.current = true; setEditando(null) }
               }}
             />
-            {(erro || erroSalvar) && <p className="text-[11px] text-red-400 mt-0.5 max-w-[220px]">{erro || erroSalvar}</p>}
+            {(erro || erroSalvar) && <p className="text-[11px] text-perigo mt-0.5 max-w-[220px]">{erro || erroSalvar}</p>}
           </div>
         ) : (
           <span className="flex items-center gap-1.5">
             <span
-              className={`text-sm font-medium truncate ${ativa ? 'text-white' : 'text-gray-200'}`}
+              className={`text-sm font-medium truncate ${ativa ? 'text-primary-fg' : 'text-texto-1'}`}
               onDoubleClick={e => { e.stopPropagation(); abrirRenomear() }}
               title={renomeavel ? 'Duplo clique para renomear' : undefined}
             >
               {c.nome}
             </span>
-            {padrao && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0F6E56]/30 text-emerald-300 shrink-0">padrão</span>}
+            {padrao && <span className={`text-[10px] px-1.5 py-0.5 rounded ${ativa ? 'bg-surface' : 'bg-primary/15'} text-primary-fg shrink-0`}>padrão</span>}
             {renomeavel && (
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); abrirRenomear() }}
-                className="p-0.5 rounded text-gray-600 hover:text-gray-300 opacity-60 group-hover:opacity-100 shrink-0"
+                className="p-0.5 rounded text-texto-3 hover:text-texto-2 opacity-60 group-hover:opacity-100 shrink-0"
                 title="Renomear"
               >
                 <Pencil size={11} />
@@ -111,20 +111,20 @@ export default function ConsultaCard({
             )}
           </span>
         )}
-        <span className="block text-[11px] text-gray-500 mt-0.5">{rotuloModo(c.modo)} · {nContas} conta{nContas !== 1 ? 's' : ''}</span>
+        <span className="block text-[11px] text-texto-3 mt-0.5">{rotuloModo(c.modo)} · {nContas} conta{nContas !== 1 ? 's' : ''}</span>
       </div>
 
       <div className="relative shrink-0" ref={menuRef} onClick={e => e.stopPropagation()}>
-        <button type="button" onClick={() => setMenu(m => !m)} className="p-1 rounded text-gray-500 hover:text-gray-200 hover:bg-gray-800" title="Opções da consulta">
+        <button type="button" onClick={() => setMenu(m => !m)} className="p-1 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover" title="Opções da consulta">
           <MoreHorizontal size={14} />
         </button>
         {menu && (
-          <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-surface border border-gray-700 rounded-lg shadow-2xl py-1">
+          <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-surface border border-borda-forte rounded-lg shadow-2xl py-1">
             {renomeavel && item('Renomear', 'renomear')}
             {renomeavel && item('Editar', 'editar')}
             {renomeavel && item('Duplicar', 'duplicar')}
             {item(padrao ? 'Já é a padrão' : 'Definir como padrão', 'padrao', { disabled: padrao })}
-            {renomeavel && <div className="border-t border-gray-800 my-1" />}
+            {renomeavel && <div className="border-t border-borda my-1" />}
             {renomeavel && item('Excluir', 'excluir', { danger: true })}
           </div>
         )}

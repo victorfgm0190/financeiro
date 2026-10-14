@@ -392,14 +392,14 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
   }, [visible, hasGroups])
 
   const renderItem = (item) => (
-    <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-gray-800 rounded-lg cursor-pointer">
+    <label key={item.id} className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-surface-hover rounded-lg cursor-pointer">
       <input
         type="checkbox"
         checked={selected.includes(item.id)}
         onChange={() => toggle(item.id)}
-        className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+        className="accent-primary w-3.5 h-3.5 shrink-0"
       />
-      <span className="text-xs text-gray-300 truncate">{item.label}</span>
+      <span className="text-xs text-texto-2 truncate">{item.label}</span>
     </label>
   )
 
@@ -416,31 +416,31 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
         {open ? <ChevronDown size={12} className="shrink-0" /> : <ChevronRight size={12} className="shrink-0" />}
       </button>
       {open && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-xl shadow-xl max-h-52 flex flex-col">
-          <div className="flex gap-2 px-3 py-2 border-b border-gray-800 shrink-0 items-center">
-            <button type="button" onClick={all} className="text-xs text-blue-400 hover:text-blue-300">Todos</button>
-            <span className="text-gray-700">·</span>
-            <button type="button" onClick={none} className="text-xs text-gray-500 hover:text-gray-300">Nenhum</button>
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-borda-forte rounded-xl shadow-xl max-h-52 flex flex-col">
+          <div className="flex gap-2 px-3 py-2 border-b border-borda shrink-0 items-center">
+            <button type="button" onClick={all} className="text-xs text-primary-fg hover:text-texto-1">Todos</button>
+            <span className="text-texto-3">·</span>
+            <button type="button" onClick={none} className="text-xs text-texto-3 hover:text-texto-2">Nenhum</button>
             <input
               ref={searchRef}
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar..."
-              className="ml-auto bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-gray-200 placeholder:text-gray-600 outline-none w-24"
+              className="ml-auto bg-surface-2 border border-borda-campo rounded px-2 py-0.5 text-xs text-texto-1 placeholder:text-texto-3 outline-none w-24"
             />
           </div>
           <div className="overflow-y-auto flex-1 px-1 py-1">
             {sections.map(([groupName, groupItems]) => (
               <div key={groupName || '_'}>
                 {groupName && (
-                  <div className="px-2 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">{groupName}</div>
+                  <div className="px-2 pt-1.5 pb-0.5 text-[10px] text-texto-3 uppercase tracking-wider font-medium">{groupName}</div>
                 )}
                 {groupItems.map(renderItem)}
               </div>
             ))}
             {visible.length === 0 && (
-              <p className="px-2 py-3 text-xs text-gray-600 text-center">Nada encontrado</p>
+              <p className="px-2 py-3 text-xs text-texto-3 text-center">Nada encontrado</p>
             )}
           </div>
         </div>
@@ -453,11 +453,11 @@ function MultiSelectPanel({ label, items, selected, onChange }) {
 
 function SectionHeader({ label, total, isExpense }) {
   return (
-    <tr className="bg-gray-800/60 border-y border-gray-700">
-      <td className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${isExpense ? 'text-orange-500' : 'text-blue-500'}`} colSpan={2}>
+    <tr className="bg-surface-2/60 border-y border-borda-forte">
+      <td className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${isExpense ? 'text-despesa' : 'text-receita'}`} colSpan={2}>
         {label}
       </td>
-      <td className={`px-4 py-2 text-right text-sm font-bold ${isExpense ? 'text-orange-500' : 'text-blue-500'}`}>
+      <td className={`px-4 py-2 text-right text-sm font-bold ${isExpense ? 'text-despesa' : 'text-receita'}`}>
         {fmt(total)}
       </td>
     </tr>
@@ -466,18 +466,18 @@ function SectionHeader({ label, total, isExpense }) {
 
 function GroupRow({ name, total }) {
   return (
-    <tr className="border-b border-gray-800/40">
-      <td className="pl-6 pr-3 py-2 text-sm font-semibold text-gray-200" colSpan={2}>{name}</td>
-      <td className="px-4 py-2 text-right text-sm font-semibold text-gray-200">{fmt(total)}</td>
+    <tr className="border-b border-borda/40">
+      <td className="pl-6 pr-3 py-2 text-sm font-semibold text-texto-1" colSpan={2}>{name}</td>
+      <td className="px-4 py-2 text-right text-sm font-semibold text-texto-1">{fmt(total)}</td>
     </tr>
   )
 }
 
 function SubcatRow({ name, total }) {
   return (
-    <tr className="border-b border-gray-800/30">
-      <td className="pl-12 pr-3 py-1.5 text-xs text-gray-400" colSpan={2}>{name}</td>
-      <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(total)}</td>
+    <tr className="border-b border-borda/30">
+      <td className="pl-12 pr-3 py-1.5 text-xs text-texto-2" colSpan={2}>{name}</td>
+      <td className="px-4 py-1.5 text-right text-xs text-texto-2">{fmt(total)}</td>
     </tr>
   )
 }
@@ -486,14 +486,14 @@ function TxRow({ tx, indent }) {
   // Resgate de reserva (receita de compensação) aparece em azul com sinal +.
   const isComp = tx.type === 'income' && isResgateReservaSombra(tx)
   return (
-    <tr className="border-b border-gray-800/20 hover:bg-gray-800/20 transition-colors">
-      <td className="py-1 pr-3 text-xs text-gray-600 whitespace-nowrap" style={{ paddingLeft: indent }}>
+    <tr className="border-b border-borda/20 hover:bg-surface-hover/20 transition-colors">
+      <td className="py-1 pr-3 text-xs text-texto-3 whitespace-nowrap" style={{ paddingLeft: indent }}>
         {fmtDate(tx.date)}
       </td>
-      <td className="px-2 py-1 text-xs text-gray-500 truncate max-w-0" style={{ maxWidth: 260 }}>
+      <td className="px-2 py-1 text-xs text-texto-3 truncate max-w-0" style={{ maxWidth: 260 }}>
         {tx.description || '—'}{tx.payee ? ` · ${tx.payee}` : ''}
       </td>
-      <td className={`px-4 py-1 text-right text-xs ${isComp ? 'text-blue-400' : 'text-gray-600'}`}>
+      <td className={`px-4 py-1 text-right text-xs ${isComp ? 'text-receita' : 'text-texto-3'}`}>
         {isComp ? '+' : ''}{fmt(tx.amount)}
       </td>
     </tr>
@@ -663,43 +663,43 @@ export default function DemonstrativoFinanceiro() {
       {/* Filter panel */}
       <div className="card space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <FileSpreadsheet size={14} className="text-gray-400" />
+          <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
+            <FileSpreadsheet size={14} className="text-texto-2" />
             Demonstrativo Financeiro
           </h3>
           <div className="flex items-center gap-4 flex-wrap">
-            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setIncludeInterProfile(v => !v)}
-                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${includeInterProfile ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${includeInterProfile ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${includeInterProfile ? 'left-4' : 'left-0.5'}`} />
               </div>
-              <ArrowLeftRight size={13} className="text-gray-400" />
+              <ArrowLeftRight size={13} className="text-texto-2" />
               Incluir transferências entre perfis (CPF/CNPJ)
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHideReserva(v => !v)}
-                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hideReserva ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hideReserva ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hideReserva ? 'left-4' : 'left-0.5'}`} />
               </div>
               Ocultar movimentos de reserva
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setHidePatrimonio(v => !v)}
-                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${hidePatrimonio ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${hidePatrimonio ? 'left-4' : 'left-0.5'}`} />
               </div>
               Ocultar movimentos de patrimônio
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer select-none">
               <div
                 onClick={() => setShowTxDraft(v => !v)}
-                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${showTxDraft ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+                className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${showTxDraft ? 'bg-primary' : 'bg-borda-campo'}`}
               >
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${showTxDraft ? 'left-4' : 'left-0.5'}`} />
               </div>
@@ -717,7 +717,7 @@ export default function DemonstrativoFinanceiro() {
                 key={o.value}
                 type="button"
                 onClick={() => handlePeriod(o.value)}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${months === o.value ? 'bg-gray-700 text-gray-100 font-medium' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'}`}
+                className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${months === o.value ? 'bg-surface-hover text-texto-1 font-medium' : 'text-texto-3 hover:text-texto-2 hover:bg-surface-hover'}`}
               >
                 {o.label}
               </button>
@@ -763,7 +763,7 @@ export default function DemonstrativoFinanceiro() {
         <div className="flex gap-3 pt-1">
           <button
             onClick={handleAtualizar}
-            className={`btn-primary flex items-center gap-2 ${isDirty ? 'ring-2 ring-[#0F6E56]/50' : ''}`}
+            className={`btn-primary flex items-center gap-2 ${isDirty ? 'ring-2 ring-primary/50' : ''}`}
           >
             <RefreshCw size={13} /> Atualizar
           </button>
@@ -792,10 +792,10 @@ export default function DemonstrativoFinanceiro() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 420 }}>
               <thead>
-                <tr className="border-b border-gray-700 bg-surface/60">
-                  <th className="text-left px-4 py-2.5 text-xs text-gray-500 font-medium w-28">Data</th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
-                  <th className="text-right px-4 py-2.5 text-xs text-gray-500 font-medium">Valor</th>
+                <tr className="border-b border-borda-forte bg-surface/60">
+                  <th className="text-left px-4 py-2.5 text-xs text-texto-3 font-medium w-28">Data</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Descrição</th>
+                  <th className="text-right px-4 py-2.5 text-xs text-texto-3 font-medium">Valor</th>
                 </tr>
               </thead>
               <tbody>
@@ -843,11 +843,11 @@ export default function DemonstrativoFinanceiro() {
                 {(report.expenses.length > 0 || report.income.length > 0) && (() => {
                   const result = report.totalIncome - report.totalExpense
                   return (
-                    <tr className="border-t-2 border-gray-600 bg-gray-800/40">
-                      <td className="px-4 py-3 text-sm font-bold text-gray-100" colSpan={2}>
-                        RESULTADO  <span className="text-xs font-normal text-gray-500 ml-2">Receitas − Despesas</span>
+                    <tr className="border-t-2 border-borda-forte bg-surface-2/40">
+                      <td className="px-4 py-3 text-sm font-bold text-texto-1" colSpan={2}>
+                        RESULTADO  <span className="text-xs font-normal text-texto-3 ml-2">Receitas − Despesas</span>
                       </td>
-                      <td className={`px-4 py-3 text-right text-lg font-extrabold ${result >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
+                      <td className={`px-4 py-3 text-right text-lg font-extrabold ${result >= 0 ? 'text-receita' : 'text-despesa'}`}>
                         {result >= 0 ? '+' : ''}{fmt(result)}
                       </td>
                     </tr>
@@ -858,34 +858,34 @@ export default function DemonstrativoFinanceiro() {
                 {report.hasReservas && (
                   <>
                     <SectionHeader label="Reservas" total={report.liquidoReservas} isExpense={report.liquidoReservas < 0} />
-                    <tr className="border-b border-gray-800/40">
-                      <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Feitas</td>
-                      <td className="px-4 py-2 text-right text-sm font-semibold text-orange-500">{fmt(-report.totalReservasFeitas)}</td>
+                    <tr className="border-b border-borda/40">
+                      <td className="pl-6 pr-3 py-2 text-sm text-texto-1" colSpan={2}>Reservas Feitas</td>
+                      <td className="px-4 py-2 text-right text-sm font-semibold text-despesa">{fmt(-report.totalReservasFeitas)}</td>
                     </tr>
                     {applied.showTx && report.reservasFeitasTxs.map(tx => (
                       <TxRow key={tx.id} tx={tx} indent={48} />
                     ))}
-                    <tr className="border-b border-gray-800/40">
-                      <td className="pl-6 pr-3 py-2 text-sm text-gray-200" colSpan={2}>Reservas Utilizadas</td>
-                      <td className="px-4 py-2 text-right text-sm font-semibold text-blue-400">+{fmt(report.totalReservasUtilizadas)}</td>
+                    <tr className="border-b border-borda/40">
+                      <td className="pl-6 pr-3 py-2 text-sm text-texto-1" colSpan={2}>Reservas Utilizadas</td>
+                      <td className="px-4 py-2 text-right text-sm font-semibold text-receita">+{fmt(report.totalReservasUtilizadas)}</td>
                     </tr>
                     {applied.showTx && report.reservasUtilizadasTxs.map(tx => (
                       <TxRow key={tx.id} tx={tx} indent={48} />
                     ))}
-                    <tr className="border-b border-gray-800/40">
-                      <td className="pl-6 pr-3 py-2 text-sm font-semibold text-gray-200" colSpan={2}>Líquido de Reservas</td>
-                      <td className={`px-4 py-2 text-right text-sm font-semibold ${report.liquidoReservas >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
+                    <tr className="border-b border-borda/40">
+                      <td className="pl-6 pr-3 py-2 text-sm font-semibold text-texto-1" colSpan={2}>Líquido de Reservas</td>
+                      <td className={`px-4 py-2 text-right text-sm font-semibold ${report.liquidoReservas >= 0 ? 'text-receita' : 'text-despesa'}`}>
                         {report.liquidoReservas >= 0 ? '+' : ''}{fmt(report.liquidoReservas)}
                       </td>
                     </tr>
                     {(() => {
                       const liquidoGeral = (report.totalIncome - report.totalExpense) + report.liquidoReservas
                       return (
-                        <tr className="border-t-2 border-gray-600 bg-gray-800/40">
-                          <td className="px-4 py-3 text-sm font-bold text-gray-100" colSpan={2}>
-                            LÍQUIDO GERAL  <span className="text-xs font-normal text-gray-500 ml-2">Resultado + Reservas</span>
+                        <tr className="border-t-2 border-borda-forte bg-surface-2/40">
+                          <td className="px-4 py-3 text-sm font-bold text-texto-1" colSpan={2}>
+                            LÍQUIDO GERAL  <span className="text-xs font-normal text-texto-3 ml-2">Resultado + Reservas</span>
                           </td>
-                          <td className={`px-4 py-3 text-right text-lg font-extrabold ${liquidoGeral >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
+                          <td className={`px-4 py-3 text-right text-lg font-extrabold ${liquidoGeral >= 0 ? 'text-receita' : 'text-despesa'}`}>
                             {liquidoGeral >= 0 ? '+' : ''}{fmt(liquidoGeral)}
                           </td>
                         </tr>
@@ -896,7 +896,7 @@ export default function DemonstrativoFinanceiro() {
 
                 {report.expenses.length === 0 && report.income.length === 0 && !report.hasReservas && (
                   <tr>
-                    <td colSpan={3} className="text-center py-12 text-gray-500 text-sm">
+                    <td colSpan={3} className="text-center py-12 text-texto-3 text-sm">
                       Nenhum lançamento encontrado no período com os filtros aplicados.
                     </td>
                   </tr>

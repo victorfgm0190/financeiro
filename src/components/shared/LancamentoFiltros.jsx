@@ -13,7 +13,7 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
   const set = (k, v) => setFiltros(f => ({ ...f, [k]: v }))
   const active = hasLancFiltros(filtros)
 
-  const inputCls = 'bg-gray-800 border border-gray-700 text-gray-100 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-gray-500 placeholder:text-gray-600'
+  const inputCls = 'bg-surface-2 border border-borda-campo text-texto-1 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-primary placeholder:text-texto-3'
 
   const textInputs = [
     { key: 'data', placeholder: 'DD/MM/AAAA', w: 'w-28' },
@@ -40,7 +40,7 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
   const catLabel = c => `${c.icon ? c.icon + ' ' : ''}${c.name}`
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800 bg-surface/60 flex-wrap">
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-borda bg-surface/60 flex-wrap">
       {textInputs.map(i => (
         <input
           key={i.key}
@@ -106,8 +106,8 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
         title="Limpar todos os filtros"
         className={`shrink-0 p-1.5 rounded-md transition-colors ${
           active
-            ? 'text-gray-300 hover:text-white hover:bg-gray-700 bg-gray-800'
-            : 'text-gray-700 cursor-not-allowed'
+            ? 'text-texto-2 hover:text-texto-1 hover:bg-surface-hover bg-surface-2'
+            : 'text-texto-3 cursor-not-allowed'
         }`}
       >
         <X size={14} />

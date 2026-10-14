@@ -72,7 +72,7 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
   return (
     <Modal open onClose={encerrar} title="Virar Saldo" size="sm">
       {step === null && (
-        <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+        <div className="flex items-center gap-2 text-sm text-texto-2 py-4">
           <Loader2 size={14} className="animate-spin" /> Lendo o razão diário…
         </div>
       )}
@@ -80,19 +80,19 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
       {step === STEP_MULTI && (
         <div className="space-y-4">
           <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-orange-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-300">
+            <AlertTriangle size={16} className="text-aviso shrink-0 mt-0.5" />
+            <p className="text-sm text-texto-2">
               O razão diário tem registros de <strong>{months.length} meses</strong>:{' '}
-              <span className="text-gray-400">{months.join(', ')}</span>.
+              <span className="text-texto-2">{months.join(', ')}</span>.
             </p>
           </div>
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-xs text-texto-3 leading-relaxed">
             Uma virada fecha um período só. Com vários meses acumulados você pode encadear
             viradas — escolher um corte por vez, sem fechar esta janela, até chegar em hoje.
           </p>
           <div className="flex gap-3 pt-1">
             <button type="button" className="btn-secondary flex-1" onClick={encerrar}>Não, cancelar</button>
-            <button type="button" className="btn-primary flex-1 bg-emerald-700 hover:bg-emerald-600" onClick={() => setStep(STEP_DATA)}>
+            <button type="button" className="btn-primary flex-1" onClick={() => setStep(STEP_DATA)}>
               Sim, encadear
             </button>
           </div>
@@ -101,11 +101,11 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
 
       {step === STEP_DATA && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-texto-2">
             {feitas === 0 ? 'Informe a data de corte:' : `Data de corte da ${feitas + 1}ª virada:`}
           </p>
           <div>
-            <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">
+            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">
               <Calendar size={11} /> Data de corte
             </label>
             <input
@@ -116,7 +116,7 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
               className="input w-full text-sm"
             />
           </div>
-          <p className="text-xs text-gray-600 leading-relaxed">
+          <p className="text-xs text-texto-3 leading-relaxed">
             O novo período começa nesta data. O Saldo Inicial de cada função vem do{' '}
             <strong>último dia anterior a ela</strong> registrado no razão diário — corte em
             14/08 usa o fechamento de 13/08. Sem razão anterior ao corte, cai no Saldo
@@ -129,7 +129,7 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
             </button>
             <button
               type="button"
-              className="btn-primary flex-1 bg-emerald-700 hover:bg-emerald-600"
+              className="btn-primary flex-1"
               onClick={virar}
               disabled={busy || !data}
             >
@@ -142,38 +142,38 @@ export default function ViradaModal({ defaultDate, todayStr, loadMonths, onVirar
       {step === STEP_FEITO && ultima && (
         <div className="space-y-4">
           <div className="flex items-start gap-2">
-            <CheckCircle size={16} className="text-emerald-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-gray-200">
+            <CheckCircle size={16} className="text-primary-fg shrink-0 mt-0.5" />
+            <p className="text-sm text-texto-1">
               Virada criada — <strong>{ultima.count}</strong> {ultima.count === 1 ? 'função' : 'funções'}.
             </p>
           </div>
-          <dl className="text-xs space-y-1.5 bg-gray-800/30 rounded-lg p-3">
+          <dl className="text-xs space-y-1.5 bg-surface-2/30 rounded-lg p-3">
             <div className="flex justify-between gap-3">
-              <dt className="text-gray-500">Novo período começa em</dt>
-              <dd className="text-gray-200 font-medium">{fmtDate(ultima.dataCorte)}</dd>
+              <dt className="text-texto-3">Novo período começa em</dt>
+              <dd className="text-texto-1 font-medium">{fmtDate(ultima.dataCorte)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-gray-500">Saldo usado (razão diário)</dt>
-              <dd className={ultima.fallback ? 'text-orange-500 font-medium' : 'text-gray-200 font-medium'}>
+              <dt className="text-texto-3">Saldo usado (razão diário)</dt>
+              <dd className={ultima.fallback ? 'text-aviso font-medium' : 'text-texto-1 font-medium'}>
                 {ultima.fallback ? 'Saldo Atualizado de hoje' : fmtDate(ultima.ledgerDate)}
               </dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-gray-500">Hoje</dt>
-              <dd className="text-gray-200 font-medium">{fmtDate(todayStr)}</dd>
+              <dt className="text-texto-3">Hoje</dt>
+              <dd className="text-texto-1 font-medium">{fmtDate(todayStr)}</dd>
             </div>
           </dl>
           {ultima.fallback && (
-            <p className="text-xs text-orange-500/90 leading-relaxed">
+            <p className="text-xs text-aviso leading-relaxed">
               Não havia registro no razão diário antes de {fmtDate(ultima.dataCorte)} — foi usado
               o Saldo Atualizado de hoje. O razão só cobre os últimos meses.
             </p>
           )}
-          <p className="text-sm text-gray-300">Deseja realizar mais uma virada?</p>
+          <p className="text-sm text-texto-2">Deseja realizar mais uma virada?</p>
           {erro && <p className="text-xs text-despesa">{erro}</p>}
           <div className="flex gap-3 pt-1">
             <button type="button" className="btn-secondary flex-1" onClick={encerrar}>Não, encerrar</button>
-            <button type="button" className="btn-primary flex-1 bg-emerald-700 hover:bg-emerald-600" onClick={proxima}>
+            <button type="button" className="btn-primary flex-1" onClick={proxima}>
               Sim, mais uma
             </button>
           </div>

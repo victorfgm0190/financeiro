@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate, accountsForView } from '../shared/utils'
 import { fetchReserveFunctionTransactions, fetchReserveLedgerMonths, fetchReserveLedgerBefore } from '../../lib/db'
 import { reserveMovOf, activePeriodByFunction } from '../../lib/reserveDailyLedger'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -67,14 +67,14 @@ function localDateStr(d) {
 // abre o modal de origem com os lançamentos que compõem o valor (via onClick → openOrigem).
 // Cores: azul (entradas) / laranja (saídas) / cinza (zero). Sem edição manual / selos AUTO.
 function MovValue({ value, tipo, onClick }) {
-  const color = value !== 0 ? (tipo === 'entradas' ? 'text-blue-600' : 'text-orange-600') : 'text-gray-500'
+  const color = value !== 0 ? (tipo === 'entradas' ? 'text-receita' : 'text-despesa') : 'text-texto-3'
   return (
     <button
       onClick={onClick}
       title="Ver lançamentos que compõem este valor"
       className={`text-right text-xs font-semibold hover:underline cursor-pointer ${color}`}
     >
-      {value !== 0 ? fmt(value) : <span className="text-gray-700">0,00</span>}
+      {value !== 0 ? fmt(value) : <span className="text-texto-3">0,00</span>}
     </button>
   )
 }
@@ -92,8 +92,8 @@ function DespesaToggle({ on, onToggle }) {
         : 'Ignorada nos totais de despesa — clique para contar como despesa'}
       className={`shrink-0 text-[9px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded transition-colors ${
         on
-          ? 'bg-orange-500/20 text-orange-500 hover:bg-orange-500/30'
-          : 'bg-gray-700/50 text-gray-500 hover:bg-gray-600/60'
+          ? 'bg-despesa/20 text-despesa hover:bg-despesa/30'
+          : 'bg-surface-hover/50 text-texto-3 hover:bg-surface-hover/60'
       }`}
     >
       Despesa
@@ -245,20 +245,20 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           <label className="label">Despesa Anual (R$)</label>
           <input className="input" type="number" step="0.01" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
-            ? <p className="text-xs text-gray-600 mt-1">Calculado dos lançamentos: {fmt(suggestions.despesaAnual)}
-                <button type="button" onClick={() => set('despesaAnual', suggestions.despesaAnual)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+            ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.despesaAnual)}
+                <button type="button" onClick={() => set('despesaAnual', suggestions.despesaAnual)} className="text-primary-fg hover:underline ml-1.5 font-medium">Usar valor calculado</button>
               </p>
-            : <p className="text-xs text-gray-600 mt-1">Dados insuficientes para calcular</p>
+            : <p className="text-xs text-texto-3 mt-1">Dados insuficientes para calcular</p>
           )}
         </div>
         <div>
           <label className="label">Depósito Mensal (R$)</label>
           <input className="input" type="number" step="0.01" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
-            ? <p className="text-xs text-gray-600 mt-1">Calculado dos lançamentos: {fmt(suggestions.depositoMensal)} / mês
-                <button type="button" onClick={() => set('depositoMensal', suggestions.depositoMensal)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+            ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.depositoMensal)} / mês
+                <button type="button" onClick={() => set('depositoMensal', suggestions.depositoMensal)} className="text-primary-fg hover:underline ml-1.5 font-medium">Usar valor calculado</button>
               </p>
-            : <p className="text-xs text-gray-600 mt-1">Dados insuficientes para calcular</p>
+            : <p className="text-xs text-texto-3 mt-1">Dados insuficientes para calcular</p>
           )}
         </div>
       </div>
@@ -268,10 +268,10 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           <option value="">Rateio mensal (÷ 12)</option>
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
-        <p className="text-xs text-gray-600 mt-1">Quando não definido, a despesa anual é dividida em 12 parcelas mensais</p>
+        <p className="text-xs text-texto-3 mt-1">Quando não definido, a despesa anual é dividida em 12 parcelas mensais</p>
         {suggestions && suggestions.enough && suggestions.mesVencimento && (
-          <p className="text-xs text-gray-600 mt-1">Maior volume em: {MONTH_LABELS[suggestions.mesVencimento - 1]}
-            <button type="button" onClick={() => set('mesVencimento', suggestions.mesVencimento)} className="text-blue-600 hover:underline ml-1.5 font-medium">Usar valor calculado</button>
+          <p className="text-xs text-texto-3 mt-1">Maior volume em: {MONTH_LABELS[suggestions.mesVencimento - 1]}
+            <button type="button" onClick={() => set('mesVencimento', suggestions.mesVencimento)} className="text-primary-fg hover:underline ml-1.5 font-medium">Usar valor calculado</button>
           </p>
         )}
       </div>
@@ -281,19 +281,19 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
           <option value="">Sem categoria vinculada</option>
           {categoryOpts.map(c => <option key={c.id} value={c.id}>{`${c.icon || ''} ${c.name}`.trim()}</option>)}
         </select>
-        <p className="text-xs text-gray-600 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo</p>
+        <p className="text-xs text-texto-3 mt-1">As sombras de reserva (depósitos e resgates) herdam esta categoria no Demonstrativo</p>
       </div>
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
-            className="accent-[#0F6E56]"
+            className="accent-primary"
             checked={!!form.exibirComoDespesa}
             onChange={e => set('exibirComoDespesa', e.target.checked)}
           />
-          <span className="text-sm text-gray-200">Contar como despesa</span>
+          <span className="text-sm text-texto-1">Contar como despesa</span>
         </label>
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-xs text-texto-3 mt-1">
           Marcado: as transferências desta função (depósitos e resgates) entram nos totais de
           despesa do Dashboard e Relatórios. Desmarcado: são ignoradas (ex.: poupança/receita).
         </p>
@@ -337,9 +337,9 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
   if (reservaAccounts.length === 0) {
     return (
       <div className="card text-center py-12">
-        <PiggyBank size={32} className="text-gray-700 mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">Nenhuma conta marcada como reserva</p>
-        <p className="text-xs text-gray-600 mt-1">Ative "É conta de reserva" no cadastro de uma conta para ela aparecer aqui.</p>
+        <PiggyBank size={32} className="text-texto-3 mx-auto mb-3" />
+        <p className="text-texto-3 text-sm">Nenhuma conta marcada como reserva</p>
+        <p className="text-xs text-texto-3 mt-1">Ative "É conta de reserva" no cadastro de uma conta para ela aparecer aqui.</p>
       </div>
     )
   }
@@ -350,16 +350,16 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
           grid-cols-3 garante 3 cards de largura igual; min-w-0 evita que o número estoure a célula. */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
-          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Total Reservado</p>
-          <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] ${totalSaldo >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>{fmt(totalSaldo)}</p>
+          <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Total Reservado</p>
+          <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] ${totalSaldo >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(totalSaldo)}</p>
         </div>
         <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
-          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Depósitos no Mês</p>
-          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-receita">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-gray-700">—</span>}</p>
+          <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Depósitos no Mês</p>
+          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-receita">{totalEntradas > 0 ? fmt(totalEntradas) : <span className="text-texto-3">—</span>}</p>
         </div>
         <div className="card min-w-0 py-3 px-2 sm:px-4 text-center">
-          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Resgates no Mês</p>
-          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-orange-400">{totalSaidas > 0 ? fmt(totalSaidas) : <span className="text-gray-700">—</span>}</p>
+          <p className="text-[10px] sm:text-xs text-texto-3 uppercase tracking-wide mb-1">Resgates no Mês</p>
+          <p className="font-bold tabular-nums whitespace-nowrap text-[clamp(0.72rem,3.6vw,1.25rem)] text-despesa">{totalSaidas > 0 ? fmt(totalSaidas) : <span className="text-texto-3">—</span>}</p>
         </div>
       </div>
 
@@ -370,13 +370,13 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
             <div className="flex items-start justify-between gap-2 sm:gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span className="text-sm font-semibold text-gray-200 break-words min-w-0">{acc.apelido || acc.name}</span>
+                  <span className="text-sm font-semibold text-texto-1 break-words min-w-0">{acc.apelido || acc.name}</span>
                   {acc.reservaType === 'especifica' ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-reserva/15 text-reserva shrink-0">
                       {cat ? `${cat.icon} ${cat.name}` : 'Específica'}
                     </span>
                   ) : (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface-hover text-texto-2 shrink-0">
                       🏦 Geral
                     </span>
                   )}
@@ -384,20 +384,20 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
                 <div className="flex gap-x-4 gap-y-1 flex-wrap text-xs">
                   {entradas > 0
                     ? <span className="flex items-center gap-1 text-receita whitespace-nowrap"><ArrowDownCircle size={11} className="shrink-0" /> +{fmt(entradas)}</span>
-                    : <span className="text-gray-700">Sem depósitos no mês</span>
+                    : <span className="text-texto-3">Sem depósitos no mês</span>
                   }
                   {saidas > 0 && (
-                    <span className="flex items-center gap-1 text-orange-400 whitespace-nowrap"><ArrowUpCircle size={11} className="shrink-0" /> −{fmt(saidas)}</span>
+                    <span className="flex items-center gap-1 text-despesa whitespace-nowrap"><ArrowUpCircle size={11} className="shrink-0" /> −{fmt(saidas)}</span>
                   )}
                 </div>
               </div>
               <div className="flex flex-col items-end text-right shrink-0">
-                <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.85rem,4vw,1.25rem)] ${(acc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
-                  {fmt(acc.balance || 0)}
+                <p className={`font-bold tabular-nums whitespace-nowrap text-[clamp(0.85rem,4vw,1.25rem)] ${(acc.balance || 0) >= 0 ? 'text-texto-1' : 'text-despesa'}`}>
+                  {fmtSinal(acc.balance || 0)}
                 </p>
                 <button
                   onClick={() => setExtratoAcc(acc)}
-                  className="text-xs text-gray-600 hover:text-indigo-400 transition-colors mt-0.5 whitespace-nowrap"
+                  className="text-xs text-texto-3 hover:text-primary-fg transition-colors mt-0.5 whitespace-nowrap"
                 >
                   Ver Extrato →
                 </button>
@@ -411,29 +411,29 @@ function ContasReservaTab({ reservaAccounts, transactions, categories, periodSta
       {extratoAcc && extratoData && (
         <Modal open onClose={() => setExtratoAcc(null)} title={`Extrato — ${extratoAcc.apelido || extratoAcc.name}`} size="md">
           <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 border-b border-gray-800">
-              <span className="text-xs text-gray-500 uppercase tracking-wide">Saldo atual</span>
-              <span className={`text-lg font-bold ${(extratoAcc.balance || 0) >= 0 ? 'text-gray-100' : 'text-orange-400'}`}>
-                {fmt(extratoAcc.balance || 0)}
+            <div className="flex items-center justify-between py-2 border-b border-borda">
+              <span className="text-xs text-texto-3 uppercase tracking-wide">Saldo atual</span>
+              <span className={`text-lg font-bold ${(extratoAcc.balance || 0) >= 0 ? 'text-texto-1' : 'text-despesa'}`}>
+                {fmtSinal(extratoAcc.balance || 0)}
               </span>
             </div>
             {extratoData.txsExtrato.length === 0 ? (
-              <p className="text-center text-gray-500 text-sm py-6">Nenhuma movimentação registrada</p>
+              <p className="text-center text-texto-3 text-sm py-6">Nenhuma movimentação registrada</p>
             ) : (
               <div className="max-h-80 overflow-y-auto space-y-0">
                 {extratoData.txsExtrato.map(tx => {
                   const isEntrada = tx.toAccountId === extratoAcc.id
                   const d = tx.date
                   return (
-                    <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-gray-800/50 last:border-0">
+                    <div key={tx.id} className="flex items-center justify-between py-2.5 border-b border-borda/50 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
                         {isEntrada
                           ? <ArrowDownCircle size={13} className="text-receita shrink-0" />
-                          : <ArrowUpCircle size={13} className="text-orange-400 shrink-0" />
+                          : <ArrowUpCircle size={13} className="text-despesa shrink-0" />
                         }
                         <div className="min-w-0">
-                          <p className="text-sm text-gray-200 truncate">{tx.description || (isEntrada ? 'Depósito' : 'Resgate')}</p>
-                          <p className="text-xs text-gray-500">{d.slice(8)}/{d.slice(5,7)}/{d.slice(0,4)}</p>
+                          <p className="text-sm text-texto-1 truncate">{tx.description || (isEntrada ? 'Depósito' : 'Resgate')}</p>
+                          <p className="text-xs text-texto-3">{d.slice(8)}/{d.slice(5,7)}/{d.slice(0,4)}</p>
                         </div>
                       </div>
                       <span className={`text-sm font-semibold shrink-0 ml-3 ${isEntrada ? 'text-receita' : 'text-despesa'}`}>
@@ -472,12 +472,12 @@ function ObsIndicator({ text }) {
         onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
         title={text}
         aria-label="Ver observação do ajuste"
-        className="text-gray-500 hover:text-gray-300 transition-colors"
+        className="text-texto-3 hover:text-texto-2 transition-colors"
       >
         <MessageSquare size={11} />
       </button>
       {open && (
-        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-48 max-w-[60vw] rounded-lg border border-gray-700 bg-surface px-2.5 py-2 text-[11px] font-normal normal-case leading-snug text-left text-gray-200 shadow-xl whitespace-pre-wrap">
+        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-full mt-1 w-48 max-w-[60vw] rounded-lg border border-borda-forte bg-surface px-2.5 py-2 text-[11px] font-normal normal-case leading-snug text-left text-texto-1 shadow-xl whitespace-pre-wrap">
           {text}
         </span>
       )}
@@ -507,7 +507,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
     }
   }
   // Cor do valor de ajuste: azul (+), laranja (−), cinza (0).
-  const ajusteColor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-600'
+  const ajusteColor = (v) => v > 0 ? 'text-receita' : v < 0 ? 'text-despesa' : 'text-texto-3'
   const groups = useMemo(() => {
     const byAccount = {}
     functions.forEach(f => {
@@ -558,11 +558,11 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
           depender de ml-auto, que empurrava "Total reservado:" para fora da borda esquerda. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0 shrink-0">
-          <span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">Total reservado:</span>
-          <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(grandTotal)}</span>
+          <span className="text-xs text-texto-3 uppercase tracking-wide whitespace-nowrap">Total reservado:</span>
+          <span className={`text-lg font-bold ${grandTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(grandTotal)}</span>
         </div>
         {lastFechamento && (
-          <span className="text-xs text-gray-600 hidden sm:inline">Último fechamento: {fmtDate(lastFechamento)}</span>
+          <span className="text-xs text-texto-3 hidden sm:inline">Último fechamento: {fmtDate(lastFechamento)}</span>
         )}
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto flex-wrap justify-end">
           {functions.length > 0 && (
@@ -575,7 +575,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
             </button>
           )}
-          <button onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5 bg-emerald-700 hover:bg-emerald-600">
+          <button onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
             <CheckCircle size={12} /> <span className="hidden sm:inline">Virar Saldo</span><span className="sm:hidden">Virar</span>
           </button>
           <button onClick={onAdd} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
@@ -586,8 +586,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
 
       {functions.length === 0 && (
         <div className="card text-center py-12">
-          <Layers size={32} className="text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500">Nenhuma função de reserva cadastrada</p>
+          <Layers size={32} className="text-texto-3 mx-auto mb-3" />
+          <p className="text-texto-3">Nenhuma função de reserva cadastrada</p>
           <button className="btn-primary mt-4" onClick={onAdd}>Cadastrar Função</button>
         </div>
       )}
@@ -610,19 +610,19 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               {/* Group header */}
               <div className="flex items-center gap-3 px-1">
                 {accLabel
-                  ? <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">{accLabel}</span>
-                  : <span className="text-xs font-semibold text-gray-500 italic uppercase tracking-wide">Sem conta vinculada</span>
+                  ? <span className="text-xs font-semibold text-texto-2 uppercase tracking-wide">{accLabel}</span>
+                  : <span className="text-xs font-semibold text-texto-3 italic uppercase tracking-wide">Sem conta vinculada</span>
                 }
-                <div className="flex-1 h-px bg-gray-800" />
+                <div className="flex-1 h-px bg-surface-2" />
                 <span className={`text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
-                  {fmt(totalAtualizado)}
+                  {fmtSinal(totalAtualizado)}
                 </span>
               </div>
 
               {/* Saldo Real input on mobile (for linked accounts) */}
               {accountId && (
                 <div className="card py-2 px-3 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-gray-500 shrink-0">Saldo real da conta:</span>
+                  <span className="text-xs text-texto-3 shrink-0">Saldo real da conta:</span>
                   {/* input + diferença ficam juntos: em telas estreitas quebram como bloco abaixo do label */}
                   <div className="flex items-center gap-2 flex-1 min-w-[8rem]">
                     <input
@@ -633,8 +633,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       onChange={e => onSetAccountBalance(accountId, e.target.value)}
                     />
                     {diff !== null && diff !== 0 && (
-                      <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                      <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                        {diff > 0 ? '+' : ''}{fmtSinal(diff)}
                       </span>
                     )}
                   </div>
@@ -656,68 +656,68 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     className={`card py-3 px-3 space-y-2 ${dragId === f.id ? 'opacity-40' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-200 inline-flex items-center gap-1.5 min-w-0">
-                        <GripVertical size={12} className="text-gray-700 cursor-grab shrink-0" />
+                      <span className="text-sm font-medium text-texto-1 inline-flex items-center gap-1.5 min-w-0">
+                        <GripVertical size={12} className="text-texto-3 cursor-grab shrink-0" />
                         <span className="truncate">{f.name}</span>
                         <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
                         {/* Categoria só aparece quando difere do nome da função (evita "IPVA … IPVA" duplicado) */}
-                        {catNameOf(f.categoryId) && catNameOf(f.categoryId) !== f.name && <span className="text-xs text-gray-400 truncate">{catNameOf(f.categoryId)}</span>}
+                        {catNameOf(f.categoryId) && catNameOf(f.categoryId) !== f.name && <span className="text-xs text-texto-2 truncate">{catNameOf(f.categoryId)}</span>}
                       </span>
                       {accLabel && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-surface-2 text-texto-2 shrink-0">{account.apelido || account.name.slice(0, 8)}</span>
                       )}
                     </div>
                     <div className={`text-lg font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
-                      {fmt(atualizado)}
+                      {fmtSinal(atualizado)}
                     </div>
                     <div className="flex items-center justify-between text-xs gap-3">
-                      <button onClick={() => setMovFn(f)} className="text-gray-500 hover:underline whitespace-nowrap">
+                      <button onClick={() => setMovFn(f)} className="text-texto-3 hover:underline whitespace-nowrap">
                         Mov. Futuros:
-                        <span className={`ml-1 font-semibold ${liquido > 0 ? 'text-blue-600' : liquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}>
+                        <span className={`ml-1 font-semibold ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
                           {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : '0,00'}
                         </span>
                       </button>
-                      <span className="text-gray-500 whitespace-nowrap">
-                        Saldo Futuro: <span className={`font-semibold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>{fmt(saldoFuturo)}</span>
+                      <span className="text-texto-3 whitespace-nowrap">
+                        Saldo Futuro: <span className={`font-semibold ${saldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>{fmtSinal(saldoFuturo)}</span>
                       </span>
                     </div>
-                    <div className="h-px bg-gray-800" />
+                    <div className="h-px bg-surface-2" />
                     {/* Duas linhas no mobile: (1) Entradas + Saídas  (2) Ajuste à esq., botões à dir.
                         Garante que os botões editar/excluir nunca saiam da tela e que os selos
                         AUTO/MANUAL não sejam truncados. */}
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-gray-500 shrink-0">Saldo inicial:</span>
+                        <span className="text-texto-3 shrink-0">Saldo inicial:</span>
                         <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} />
                       </div>
                       <div className="flex items-center gap-4 text-xs">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className="text-gray-500 shrink-0">Entradas:</span>
+                          <span className="text-texto-3 shrink-0">Entradas:</span>
                           <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
                         </div>
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <span className="text-gray-500 shrink-0">Saídas:</span>
+                          <span className="text-texto-3 shrink-0">Saídas:</span>
                           <MovValue value={f.saidas} tipo="saidas" onClick={() => openOrigem(f, 'saidas')} />
                         </div>
                       </div>
                       <div className="flex items-center justify-between gap-4 text-xs">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-gray-500 shrink-0">Ajuste:</span>
+                          <span className="text-texto-3 shrink-0">Ajuste:</span>
                           <button
                             onClick={() => setAdjFn(f)}
                             className={`inline-flex items-center gap-1 font-semibold hover:underline ${ajusteColor(f.ajuste)}`}
                             title="Ver histórico de ajustes"
                           >
-                            {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                            {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
                           </button>
-                          <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-gray-500 hover:text-blue-600 shrink-0"><Plus size={12} /></button>
+                          <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={12} /></button>
                           {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
-                          <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
+                          <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                             <Edit2 size={12} />
                           </button>
-                          <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
+                          <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -731,16 +731,16 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
             {/* ── Desktop table layout (hidden below md) ── */}
             <div className="hidden md:block card p-0 overflow-hidden">
               {/* Account header */}
-              <div className="px-4 py-3 border-b border-gray-800 bg-gray-800/30 flex items-center gap-4 flex-wrap">
+              <div className="px-4 py-3 border-b border-borda bg-surface-2/30 flex items-center gap-4 flex-wrap">
                 {account ? (
                   <>
-                    <span className="text-sm font-semibold text-gray-200">{account.apelido || account.name}</span>
-                    <span className="text-xs text-gray-600">{fns.length} {fns.length === 1 ? 'função' : 'funções'}</span>
-                    <span className="text-xs text-gray-500">
-                      Σ saldos: <span className="text-gray-300 font-medium">{fmt(totalSaldo)}</span>
+                    <span className="text-sm font-semibold text-texto-1">{account.apelido || account.name}</span>
+                    <span className="text-xs text-texto-3">{fns.length} {fns.length === 1 ? 'função' : 'funções'}</span>
+                    <span className="text-xs text-texto-3">
+                      Σ saldos: <span className="text-texto-2 font-medium">{fmt(totalSaldo)}</span>
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
-                      <label className="text-xs text-gray-500 shrink-0">Saldo Real:</label>
+                      <label className="text-xs text-texto-3 shrink-0">Saldo Real:</label>
                       <input
                         className="input w-32 text-xs py-1 text-right"
                         type="number"
@@ -749,30 +749,30 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                         onChange={e => onSetAccountBalance(accountId, e.target.value)}
                       />
                       {diff !== null && diff !== 0 && (
-                        <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                          {diff > 0 ? '+' : ''}{fmt(diff)}
+                        <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-receita' : 'text-despesa'}`}>
+                          {diff > 0 ? '+' : ''}{fmtSinal(diff)}
                         </span>
                       )}
                     </div>
                   </>
                 ) : (
-                  <span className="text-sm font-semibold text-gray-500 italic">Sem conta vinculada</span>
+                  <span className="text-sm font-semibold text-texto-3 italic">Sem conta vinculada</span>
                 )}
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm" style={{ minWidth: 700 }}>
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Despesa Anual</th>
-                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
-                      <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
-                      <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
-                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
-                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
+                    <tr className="border-b border-borda">
+                      <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium">Despesa Anual</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo Inicial</th>
+                      <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28">Entradas (+)</th>
+                      <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
-                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Mov. Futuros</th>
-                      <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Futuro</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Mov. Futuros</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo Futuro</th>
                       <th className="w-14" />
                     </tr>
                   </thead>
@@ -789,17 +789,17 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragId(f.id) }}
                           onDragOver={e => e.preventDefault()}
                           onDrop={e => { e.preventDefault(); handleDropOn(f) }}
-                          className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors ${dragId === f.id ? 'opacity-40' : ''}`}
+                          className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors ${dragId === f.id ? 'opacity-40' : ''}`}
                         >
-                          <td className="px-4 py-2 text-xs text-gray-200">
+                          <td className="px-4 py-2 text-xs text-texto-1">
                             <span className="inline-flex items-center gap-1.5">
-                              <GripVertical size={11} className="text-gray-700 cursor-grab shrink-0" />
+                              <GripVertical size={11} className="text-texto-3 cursor-grab shrink-0" />
                               {f.name}
                               <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
-                              {catNameOf(f.categoryId) && <span className="text-xs text-gray-400">{catNameOf(f.categoryId)}</span>}
+                              {catNameOf(f.categoryId) && <span className="text-xs text-texto-2">{catNameOf(f.categoryId)}</span>}
                             </span>
                           </td>
-                          <td className="px-4 py-2 text-right text-xs text-gray-400">
+                          <td className="px-4 py-2 text-right text-xs text-texto-2">
                             <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} align="right" />
                           </td>
                           <td className="px-4 py-2 text-right">
@@ -815,13 +815,13 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                                 title="Ver histórico de ajustes"
                                 className={`inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer ${ajusteColor(f.ajuste)}`}
                               >
-                                {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-gray-700">0,00</span>}
+                                {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
                               </button>
-                              <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-gray-500 hover:text-blue-600 shrink-0"><Plus size={11} /></button>
+                              <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={11} /></button>
                               {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                             </span>
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
+                          <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
                             {fmt(saldo)}
                           </td>
                           <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
@@ -831,20 +831,20 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             <button
                               onClick={() => setMovFn(f)}
                               title="Ver movimentos futuros previstos"
-                              className={`hover:underline cursor-pointer ${liquido > 0 ? 'text-blue-600' : liquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}
+                              className={`hover:underline cursor-pointer ${liquido > 0 ? 'text-receita' : liquido < 0 ? 'text-despesa' : 'text-texto-3'}`}
                             >
-                              {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : <span className="text-gray-700">0,00</span>}
+                              {liquido !== 0 ? (liquido > 0 ? '+' : '') + fmt(liquido) : <span className="text-texto-3">0,00</span>}
                             </button>
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
                             {fmt(saldoFuturo)}
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-end gap-0.5">
-                              <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-gray-300 transition-colors">
+                              <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                                 <Edit2 size={11} />
                               </button>
-                              <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-gray-700 text-gray-600 hover:text-orange-400 transition-colors">
+                              <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                                 <Trash2 size={11} />
                               </button>
                             </div>
@@ -853,32 +853,32 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       )
                     })}
                     {/* Totals row */}
-                    <tr className="border-t border-gray-700 bg-gray-800/20">
-                      <td className="px-4 py-2 text-xs font-semibold text-gray-500">Total</td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-gray-400">
+                    <tr className="border-t border-borda-forte bg-surface-2/20">
+                      <td className="px-4 py-2 text-xs font-semibold text-texto-3">Total</td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">
                         {fmt(fns.reduce((s, f) => s + f.saldoInicial, 0))}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
                         {fmt(fns.reduce((s, f) => s + f.entradas, 0))}
                       </td>
-                      <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-despesa">
                         {fmt(fns.reduce((s, f) => s + f.saidas, 0))}
                       </td>
                       {(() => { const ta = fns.reduce((s, f) => s + (f.ajuste || 0), 0); return (
                         <td className={`px-4 py-2 text-right text-xs font-semibold ${ajusteColor(ta)}`}>
-                          {ta !== 0 ? (ta > 0 ? '+' : '') + fmt(ta) : <span className="text-gray-700">0,00</span>}
+                          {ta !== 0 ? (ta > 0 ? '+' : '') + fmt(ta) : <span className="text-texto-3">0,00</span>}
                         </td>
                       ) })()}
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
                         {fmt(totalSaldo)}
                       </td>
                       <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
                         {fmt(totalAtualizado)}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalLiquido > 0 ? 'text-blue-600' : totalLiquido < 0 ? 'text-orange-600' : 'text-gray-500'}`}>
-                        {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmt(totalLiquido) : <span className="text-gray-700">0,00</span>}
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${totalLiquido > 0 ? 'text-receita' : totalLiquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
+                        {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmt(totalLiquido) : <span className="text-texto-3">0,00</span>}
                       </td>
-                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalSaldoFuturo < 0 ? 'text-despesa' : 'text-receita'}`}>
                         {fmt(totalSaldoFuturo)}
                       </td>
                       <td />
@@ -923,15 +923,15 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
     <div>
       <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${cor}`}>{titulo}</p>
       {items.length === 0 ? (
-        <p className="text-sm text-gray-500 py-3 text-center">{vazio}</p>
+        <p className="text-sm text-texto-3 py-3 text-center">{vazio}</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+        <div className="overflow-x-auto rounded-lg border border-borda-forte/60">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-left">
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Descrição</th>
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+              <tr className="border-b border-borda text-left">
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Data</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Descrição</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -940,7 +940,7 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
                 return (
                   <tr
                     key={i}
-                    className={`border-b border-gray-800/40 ${clicavel ? 'group cursor-pointer hover:bg-gray-800/30 transition-colors' : ''}`}
+                    className={`border-b border-borda/40 ${clicavel ? 'group cursor-pointer hover:bg-surface-hover/30 transition-colors' : ''}`}
                     {...(clicavel ? {
                       role: 'button',
                       tabIndex: 0,
@@ -949,16 +949,16 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
                       onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAbrirResgate(it) } },
                     } : {})}
                   >
-                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(it.date)}</td>
+                    <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{fmtDate(it.date)}</td>
                     {clicavel ? (
-                      <td className="px-3 py-2 text-xs text-gray-300 max-w-xs">
+                      <td className="px-3 py-2 text-xs text-texto-2 max-w-xs">
                         <span className="flex items-center gap-1">
                           <span className="truncate group-hover:underline underline-offset-2">{it.label}</span>
-                          <ChevronRight size={12} className="shrink-0 text-gray-500 group-hover:text-gray-300" />
+                          <ChevronRight size={12} className="shrink-0 text-texto-3 group-hover:text-texto-2" />
                         </span>
                       </td>
                     ) : (
-                      <td className="px-3 py-2 text-xs text-gray-300 max-w-xs truncate" title={it.label}>{it.label}</td>
+                      <td className="px-3 py-2 text-xs text-texto-2 max-w-xs truncate" title={it.label}>{it.label}</td>
                     )}
                     <td className={`px-3 py-2 text-xs text-right font-medium whitespace-nowrap ${cor}`}>{fmt(it.amount)}</td>
                   </tr>
@@ -966,8 +966,8 @@ function MovFuturosSecao({ titulo, cor, items, total, vazio, onAbrirResgate }) {
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t border-gray-700 bg-gray-800/20">
-                <td className="px-3 py-2 text-xs font-semibold text-gray-500">TOTAL</td>
+              <tr className="border-t border-borda-forte bg-surface-2/20">
+                <td className="px-3 py-2 text-xs font-semibold text-texto-3">TOTAL</td>
                 <td />
                 <td className={`px-3 py-2 text-right text-xs font-bold ${cor}`}>{fmt(total)}</td>
               </tr>
@@ -1011,7 +1011,7 @@ function FluxoCelulaModal({ detalhe, onClose }) {
       <div className="space-y-5">
         <MovFuturosSecao
           titulo={entradas ? 'Entradas previstas' : 'Saídas previstas'}
-          cor={entradas ? 'text-blue-600' : 'text-orange-600'}
+          cor={entradas ? 'text-receita' : 'text-despesa'}
           items={items}
           total={total}
           vazio={entradas ? 'Nenhuma entrada prevista neste mês' : 'Nenhuma saída prevista neste mês'}
@@ -1053,11 +1053,11 @@ function MovFuturosModal({ fn, data, onClose }) {
   return (
     <Modal open onClose={onClose} title={`Movimentos Futuros — ${fn.name}`} size="lg">
       <div className="space-y-5">
-        <MovFuturosSecao titulo="Entradas previstas" cor="text-blue-600" items={deps} total={totalDeps} vazio="Nenhuma entrada prevista" />
-        <MovFuturosSecao titulo="Saídas previstas" cor="text-orange-600" items={ress} total={totalRess} vazio="Nenhuma saída prevista" />
-        <div className="flex items-center justify-between border-t border-gray-800 pt-3">
-          <span className="text-sm font-semibold text-gray-300">LÍQUIDO</span>
-          <span className={`text-lg font-bold ${liquido < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+        <MovFuturosSecao titulo="Entradas previstas" cor="text-receita" items={deps} total={totalDeps} vazio="Nenhuma entrada prevista" />
+        <MovFuturosSecao titulo="Saídas previstas" cor="text-despesa" items={ress} total={totalRess} vazio="Nenhuma saída prevista" />
+        <div className="flex items-center justify-between border-t border-borda pt-3">
+          <span className="text-sm font-semibold text-texto-2">LÍQUIDO</span>
+          <span className={`text-lg font-bold ${liquido < 0 ? 'text-despesa' : 'text-receita'}`}>
             {(liquido > 0 ? '+' : '') + fmt(liquido)}
           </span>
         </div>
@@ -1098,27 +1098,27 @@ function OrigemModal({ origem, onClose }) {
     <Modal open onClose={onClose} title={titulo} size="lg">
       <div className="space-y-4">
         {loading ? (
-          <p className="text-sm text-gray-500 py-6 text-center">Carregando…</p>
+          <p className="text-sm text-texto-3 py-6 text-center">Carregando…</p>
         ) : error ? (
-          <p className="text-sm text-orange-500 py-6 text-center">Erro ao buscar os lançamentos.</p>
+          <p className="text-sm text-perigo py-6 text-center">Erro ao buscar os lançamentos.</p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-gray-500 py-6 text-center">Nenhum lançamento encontrado neste período</p>
+          <p className="text-sm text-texto-3 py-6 text-center">Nenhum lançamento encontrado neste período</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+          <div className="overflow-x-auto rounded-lg border border-borda-forte/60">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-left">
-                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
-                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Descrição</th>
-                  <th className="px-3 py-2 text-xs text-gray-400 font-medium">Conta</th>
-                  <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
+                <tr className="border-b border-borda text-left">
+                  <th className="px-3 py-2 text-xs text-texto-2 font-medium">Data</th>
+                  <th className="px-3 py-2 text-xs text-texto-2 font-medium">Descrição</th>
+                  <th className="px-3 py-2 text-xs text-texto-2 font-medium">Conta</th>
+                  <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(t => (
-                  <tr key={t.id} className="border-b border-gray-800/40">
-                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{fmtDate(t.date)}</td>
-                    <td className="px-3 py-2 text-xs text-gray-300 max-w-xs">
+                  <tr key={t.id} className="border-b border-borda/40">
+                    <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{fmtDate(t.date)}</td>
+                    <td className="px-3 py-2 text-xs text-texto-2 max-w-xs">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate" title={t.description}>{t.description || '—'}</span>
                         {tipo === 'saidas' && resgateSchedOf(t) && (
@@ -1126,15 +1126,15 @@ function OrigemModal({ origem, onClose }) {
                             type="button"
                             onClick={() => setBreakdownSched(resgateSchedOf(t))}
                             title="Ver os gastos que compõem este resgate"
-                            className="inline-flex items-center gap-1 text-[11px] bg-blue-500/15 text-blue-500 px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-blue-500/25 transition-colors shrink-0"
+                            className="inline-flex items-center gap-1 text-[11px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap font-medium hover:bg-primary/25 transition-colors shrink-0"
                           >
                             <List size={10} /> Ver gastos
                           </button>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-400 truncate">{contaLabel(t)}</td>
-                    <td className={`px-3 py-2 text-xs text-right whitespace-nowrap font-medium ${tipo === 'entradas' ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(t.amount)}</td>
+                    <td className="px-3 py-2 text-xs text-texto-2 truncate">{contaLabel(t)}</td>
+                    <td className={`px-3 py-2 text-xs text-right whitespace-nowrap font-medium ${tipo === 'entradas' ? 'text-receita' : 'text-despesa'}`}>{fmt(t.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1203,19 +1203,19 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
       <button
         onClick={openPopover}
         title={activePeriod ? `Período desde ${fmtDate(activePeriod.data_inicio)} — clique para definir um novo` : 'Definir saldo inicial com data de referência'}
-        className="inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer text-gray-300"
+        className="inline-flex items-center gap-1 text-xs font-semibold hover:underline cursor-pointer text-texto-2"
       >
         {fmt(f.saldoInicial ?? 0)}
-        <Edit2 size={10} className="text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        <Edit2 size={10} className="text-texto-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
       </button>
       {open && (
-        <div className={`absolute z-40 top-full mt-1 w-56 rounded-lg border border-gray-700 bg-surface p-3 shadow-xl text-left space-y-2.5 normal-case ${align === 'right' ? 'right-0' : 'left-0'}`}>
+        <div className={`absolute z-40 top-full mt-1 w-56 rounded-lg border border-borda-forte bg-surface p-3 shadow-xl text-left space-y-2.5 normal-case ${align === 'right' ? 'right-0' : 'left-0'}`}>
           <div>
-            <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data de referência</label>
+            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data de referência</label>
             <input type="date" value={data} onChange={e => setData(e.target.value)} className="input w-full text-xs py-1" />
           </div>
           <div>
-            <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">💰 Valor</label>
+            <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor</label>
             <input type="number" step="0.01" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00 (aceita negativo)" className="input w-full text-xs py-1 text-right" />
           </div>
           <div className="flex gap-2 pt-0.5">
@@ -1242,7 +1242,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
   const [confirmDelId, setConfirmDelId] = useState(null)
 
   // Azul (+), laranja (−), cinza (0) — nunca verde/vermelho como único diferenciador.
-  const valorColor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-500'
+  const valorColor = (v) => v > 0 ? 'text-receita' : v < 0 ? 'text-despesa' : 'text-texto-3'
   const fmtSigned = (v) => (v > 0 ? '+' : '') + fmt(v)
 
   const inPeriod = (a) => !activePeriod || a.data >= activePeriod.data_inicio
@@ -1279,33 +1279,33 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
     <Modal open onClose={onClose} title={`Ajustes — ${fn.name}`} size="lg">
       <div className="space-y-4">
         {activePeriod && (
-          <p className="text-xs text-gray-500">
-            Período ativo desde <span className="text-gray-300">{fmtDate(activePeriod.data_inicio)}</span> — o total considera os ajustes a partir desta data.
+          <p className="text-xs text-texto-3">
+            Período ativo desde <span className="text-texto-2">{fmtDate(activePeriod.data_inicio)}</span> — o total considera os ajustes a partir desta data.
           </p>
         )}
 
-        <div className="overflow-x-auto rounded-lg border border-gray-700/60">
+        <div className="overflow-x-auto rounded-lg border border-borda-forte/60">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-left">
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Data</th>
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right">Valor</th>
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium">Observação</th>
-                <th className="px-3 py-2 text-xs text-gray-400 font-medium text-right w-20">Ações</th>
+              <tr className="border-b border-borda text-left">
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Data</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right">Valor</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium">Observação</th>
+                <th className="px-3 py-2 text-xs text-texto-2 font-medium text-right w-20">Ações</th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-500 text-sm">Nenhum ajuste registrado</td></tr>
+                <tr><td colSpan={4} className="px-3 py-6 text-center text-texto-3 text-sm">Nenhum ajuste registrado</td></tr>
               )}
               {sorted.map(a => {
                 const editing = editId === a.id
                 const fora = !inPeriod(a)
                 return (
-                  <tr key={a.id} className={`border-b border-gray-800/40 ${fora ? 'opacity-40' : ''}`}>
-                    <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">
+                  <tr key={a.id} className={`border-b border-borda/40 ${fora ? 'opacity-40' : ''}`}>
+                    <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">
                       {fmtDate(a.data)}
-                      {fora && <span className="ml-1 text-[9px] uppercase text-gray-600" title="Fora do período ativo — não entra no total">(fora)</span>}
+                      {fora && <span className="ml-1 text-[9px] uppercase text-texto-3" title="Fora do período ativo — não entra no total">(fora)</span>}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {editing
@@ -1313,29 +1313,29 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
                         : <span className={`text-xs font-semibold ${valorColor(Number(a.valor))}`}>{fmtSigned(Number(a.valor) || 0)}</span>
                       }
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-300">
+                    <td className="px-3 py-2 text-xs text-texto-2">
                       {editing
                         ? <input type="text" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Observação" className="input w-full text-xs py-1" />
-                        : <span className="truncate" title={a.observacao || ''}>{a.observacao || <span className="text-gray-600">—</span>}</span>
+                        : <span className="truncate" title={a.observacao || ''}>{a.observacao || <span className="text-texto-3">—</span>}</span>
                       }
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1">
                         {editing ? (
                           <>
-                            <button onClick={saveEdit} disabled={busy} className="text-xs text-blue-600 hover:underline px-1">Salvar</button>
-                            <button onClick={() => setEditId(null)} className="text-xs text-gray-500 hover:underline px-1">✕</button>
+                            <button onClick={saveEdit} disabled={busy} className="text-xs text-primary-fg hover:underline px-1">Salvar</button>
+                            <button onClick={() => setEditId(null)} className="text-xs text-texto-3 hover:underline px-1">✕</button>
                           </>
                         ) : confirmDelId === a.id ? (
                           <>
-                            <span className="text-[10px] text-gray-400">Excluir?</span>
-                            <button onClick={() => confirmDelete(a.id)} disabled={busy} className="text-xs text-orange-500 hover:underline px-1">Sim</button>
-                            <button onClick={() => setConfirmDelId(null)} className="text-xs text-gray-500 hover:underline px-1">Não</button>
+                            <span className="text-[10px] text-texto-2">Excluir?</span>
+                            <button onClick={() => confirmDelete(a.id)} disabled={busy} className="text-xs text-perigo hover:underline px-1">Sim</button>
+                            <button onClick={() => setConfirmDelId(null)} className="text-xs text-texto-3 hover:underline px-1">Não</button>
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEdit(a)} title="Editar" className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-200"><Edit2 size={12} /></button>
-                            <button onClick={() => setConfirmDelId(a.id)} title="Excluir" className="p-1 rounded hover:bg-gray-700 text-gray-500 hover:text-orange-400"><Trash2 size={12} /></button>
+                            <button onClick={() => startEdit(a)} title="Editar" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-1"><Edit2 size={12} /></button>
+                            <button onClick={() => setConfirmDelId(a.id)} title="Excluir" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo"><Trash2 size={12} /></button>
                           </>
                         )}
                       </div>
@@ -1345,9 +1345,9 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t border-gray-700 bg-gray-800/20">
-                <td className="px-3 py-2 text-xs font-semibold text-gray-400">TOTAL</td>
-                <td className={`px-3 py-2 text-right text-xs font-bold ${valorColor(total)}`}>{total !== 0 ? fmtSigned(total) : <span className="text-gray-600">0,00</span>}</td>
+              <tr className="border-t border-borda-forte bg-surface-2/20">
+                <td className="px-3 py-2 text-xs font-semibold text-texto-2">TOTAL</td>
+                <td className={`px-3 py-2 text-right text-xs font-bold ${valorColor(total)}`}>{total !== 0 ? fmtSigned(total) : <span className="text-texto-3">0,00</span>}</td>
                 <td colSpan={2} />
               </tr>
             </tfoot>
@@ -1355,19 +1355,19 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
         </div>
 
         {/* Novo ajuste */}
-        <div className="rounded-lg border border-gray-700/60 p-3 space-y-2.5">
-          <p className="text-xs font-semibold text-gray-300">+ Novo Ajuste</p>
+        <div className="rounded-lg border border-borda-forte/60 p-3 space-y-2.5">
+          <p className="text-xs font-semibold text-texto-2">+ Novo Ajuste</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
-              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📅 Data</label>
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📅 Data</label>
               <input type="date" value={newData} onChange={e => setNewData(e.target.value)} className="input w-full text-xs py-1" />
             </div>
             <div>
-              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">💰 Valor (±)</label>
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor (±)</label>
               <input type="number" step="0.01" value={newValor} onChange={e => setNewValor(e.target.value)} placeholder="0,00" className="input w-full text-xs py-1 text-right" />
             </div>
             <div>
-              <label className="text-[11px] text-gray-400 flex items-center gap-1 mb-1">📝 Observação</label>
+              <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📝 Observação</label>
               <input type="text" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Opcional" className="input w-full text-xs py-1" />
             </div>
           </div>
@@ -1376,7 +1376,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
           </div>
         </div>
 
-        <p className="text-xs text-gray-600 leading-relaxed">
+        <p className="text-xs text-texto-3 leading-relaxed">
           Cada ajuste entra no saldo (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores negativos
           (ex.: -50). Positivos em azul, negativos em laranja.
         </p>
@@ -1582,9 +1582,9 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   if (linked.length === 0) {
     return (
       <div className="card text-center py-12">
-        <Layers size={32} className="text-gray-700 mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">Nenhuma função vinculada a uma conta.</p>
-        <p className="text-xs text-gray-600 mt-1">Edite as funções na aba Resumo para vincular uma conta.</p>
+        <Layers size={32} className="text-texto-3 mx-auto mb-3" />
+        <p className="text-texto-3 text-sm">Nenhuma função vinculada a uma conta.</p>
+        <p className="text-xs text-texto-3 mt-1">Edite as funções na aba Resumo para vincular uma conta.</p>
       </div>
     )
   }
@@ -1619,21 +1619,21 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
     <div className="space-y-4">
       {/* KPI bar */}
       <div className="card py-2.5 px-4 flex items-center gap-4 flex-wrap">
-        <Layers size={13} className="text-gray-400" />
-        <span className="text-xs text-gray-500">Total investido:</span>
-        <span className={`text-sm font-bold ${totalInvested >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(totalInvested)}</span>
+        <Layers size={13} className="text-texto-2" />
+        <span className="text-xs text-texto-3">Total investido:</span>
+        <span className={`text-sm font-bold ${totalInvested >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(totalInvested)}</span>
         {alertCount > 0 && (
-          <span className="flex items-center gap-1 text-xs text-orange-600 ml-2">
+          <span className="flex items-center gap-1 text-xs text-despesa ml-2">
             <AlertTriangle size={12} /> {alertCount} {alertCount === 1 ? 'função ficará negativa' : 'funções ficarão negativas'}
           </span>
         )}
         {hasProvisao && (
-          <span className="text-xs text-orange-400/70 italic ml-2" title="Resgates projetados a partir de provisões de despesa ainda não efetivadas">
+          <span className="text-xs text-texto-2 italic ml-2" title="Resgates projetados a partir de provisões de despesa ainda não efetivadas">
             ~ resgate provisório (provisão)
           </span>
         )}
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-gray-600">{rangeLabel}</span>
+          <span className="text-xs text-texto-3">{rangeLabel}</span>
           <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
             <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
           </button>
@@ -1647,17 +1647,17 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
           <button
             onClick={() => setMobilePage(p => Math.max(0, p - 1))}
             disabled={mobilePage === 0}
-            className="p-1.5 rounded bg-gray-800 text-gray-400 disabled:opacity-30 hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded bg-surface-2 text-texto-2 disabled:opacity-30 hover:bg-surface-hover transition-colors"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-xs text-gray-400 font-medium">
+          <span className="text-xs text-texto-2 font-medium">
             {visibleMonths.map(mi => `${windowMonths[mi].label}/${yy(windowMonths[mi].year)}`).join(' · ')}
           </span>
           <button
             onClick={() => setMobilePage(p => Math.min(9, p + 1))}
             disabled={mobilePage >= 9}
-            className="p-1.5 rounded bg-gray-800 text-gray-400 disabled:opacity-30 hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded bg-surface-2 text-texto-2 disabled:opacity-30 hover:bg-surface-hover transition-colors"
           >
             <ChevronRight size={16} />
           </button>
@@ -1665,28 +1665,28 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
 
         {/* Cards per function */}
         {projections.map(({ f, account, monthly, hasAlert }) => (
-          <div key={f.id} className={`card p-0 overflow-hidden ${hasAlert ? 'border border-orange-500/30' : ''}`}>
+          <div key={f.id} className={`card p-0 overflow-hidden ${hasAlert ? 'border border-aviso/30' : ''}`}>
             {/* Card header */}
-            <div className="px-3 py-2.5 border-b border-gray-800 flex items-center gap-2">
-              {hasAlert && <AlertTriangle size={11} className="text-orange-600 shrink-0" />}
-              <span className="text-sm font-medium text-gray-200 flex-1 truncate">{f.name}</span>
+            <div className="px-3 py-2.5 border-b border-borda flex items-center gap-2">
+              {hasAlert && <AlertTriangle size={11} className="text-aviso shrink-0" />}
+              <span className="text-sm font-medium text-texto-1 flex-1 truncate">{f.name}</span>
               {account && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 shrink-0">
                   {account.apelido || account.name.slice(0, 8)}
                 </span>
               )}
-              <span className={`text-xs font-semibold shrink-0 ${(saldosAtualizados[f.id] || 0) < 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                {fmt(saldosAtualizados[f.id] || 0)}
+              <span className={`text-xs font-semibold shrink-0 ${(saldosAtualizados[f.id] || 0) < 0 ? 'text-despesa' : 'text-texto-2'}`}>
+                {fmtSinal(saldosAtualizados[f.id] || 0)}
               </span>
             </div>
 
             {/* 3 month columns */}
-            <div className="grid grid-cols-3 divide-x divide-gray-800">
+            <div className="grid grid-cols-3 divide-x divide-borda">
               {visibleMonths.map(mi => {
                 const d = monthly[mi]
                 return (
-                  <div key={mi} className={`px-2 py-2.5 ${d.neg ? 'bg-orange-500/10' : ''} ${d.isYearStart ? 'border-l-2 border-l-emerald-700' : ''}`}>
-                    <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1.5">
+                  <div key={mi} className={`px-2 py-2.5 ${d.neg ? 'bg-despesa/10' : ''} ${d.isYearStart ? 'border-l-2 border-l-primary' : ''}`}>
+                    <p className="text-[10px] text-texto-3 font-semibold uppercase mb-1.5">
                       {d.label}{d.isYearStart || mi === 0 ? ` ${yy(d.year)}` : ''}
                     </p>
                     {celulaClicavel(mi, d.dep) ? (
@@ -1694,12 +1694,12 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                         type="button"
                         onClick={() => abrirCelula(f, mi, 'deps')}
                         title="Ver os agendamentos que compõem este valor"
-                        className="text-xs text-blue-600 hover:underline cursor-pointer block text-left"
+                        className="text-xs text-receita hover:underline cursor-pointer block text-left"
                       >
                         ↓ {fmt(d.dep)}
                       </button>
                     ) : (
-                      <p className={`text-xs ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
+                      <p className={`text-xs ${d.dep > 0 ? 'text-receita' : 'text-texto-3'}`}>
                         ↓ {d.dep > 0 ? fmt(d.dep) : '—'}
                       </p>
                     )}
@@ -1708,22 +1708,22 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                         type="button"
                         onClick={() => abrirCelula(f, mi, 'ress')}
                         title="Ver os agendamentos que compõem este valor"
-                        className="text-xs text-orange-600 hover:underline cursor-pointer block text-left"
+                        className="text-xs text-despesa hover:underline cursor-pointer block text-left"
                       >
                         ↑ {fmt(d.res)}
                       </button>
                     ) : (
-                      <p className={`text-xs ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
+                      <p className={`text-xs ${d.res > 0 ? 'text-despesa' : 'text-texto-3'}`}>
                         ↑ {d.res > 0 ? fmt(d.res) : '—'}
                       </p>
                     )}
                     {d.prov > 0 && (
-                      <p className="text-[11px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
+                      <p className="text-[11px] italic text-texto-2" title="Resgate futuro (provisão) — estimativa">
                         ↑ ~{fmt(d.prov)}
                       </p>
                     )}
-                    <p className={`text-xs font-semibold mt-1 ${d.neg ? 'text-orange-400' : d.saldo === 0 ? 'text-gray-600' : 'text-gray-300'}`}>
-                      {fmt(d.saldo)}
+                    <p className={`text-xs font-semibold mt-1 ${d.neg ? 'text-despesa' : d.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
+                      {fmtSinal(d.saldo)}
                     </p>
                   </div>
                 )
@@ -1738,51 +1738,51 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse" style={{ minWidth: 'max-content' }}>
             <thead>
-              <tr className="border-b border-gray-800 bg-surface">
-                <th className="text-left px-3 py-2.5 text-gray-400 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
-                <th className="text-left px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 80 }}>Conta</th>
-                <th className="text-right px-3 py-2.5 text-gray-400 font-medium" style={{ minWidth: 100 }}>Total Investido</th>
+              <tr className="border-b border-borda bg-surface">
+                <th className="text-left px-3 py-2.5 text-texto-2 font-medium whitespace-nowrap" style={{ minWidth: 160 }}>Função</th>
+                <th className="text-left px-3 py-2.5 text-texto-2 font-medium" style={{ minWidth: 80 }}>Conta</th>
+                <th className="text-right px-3 py-2.5 text-texto-2 font-medium" style={{ minWidth: 100 }}>Total Investido</th>
                 {windowMonths.map((wm, i) => (
                   <th
                     key={i}
                     colSpan={3}
-                    className={`text-center px-1 py-2 font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-emerald-700 text-emerald-300' : 'border-l border-gray-800 text-gray-400'}`}
+                    className={`text-center px-1 py-2 font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-primary text-primary-fg' : 'border-l border-borda text-texto-2'}`}
                     style={{ minWidth: 190 }}
                   >
                     {wm.label}{wm.isYearStart || i === 0 ? ` ${wm.year}` : ''}
                   </th>
                 ))}
               </tr>
-              <tr className="border-b border-gray-700 bg-surface/80">
+              <tr className="border-b border-borda-forte bg-surface/80">
                 <th /><th /><th />
                 {windowMonths.map((wm, i) => (
                   <Fragment key={i}>
-                    <th className={`text-right px-2 py-1.5 text-blue-600/70 font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-emerald-700' : 'border-l border-gray-800'}`} style={{ minWidth: 62 }}>Dep</th>
-                    <th className="text-right px-2 py-1.5 text-orange-600/70 font-medium whitespace-nowrap" style={{ minWidth: 62 }}>Res</th>
-                    <th className="text-right px-2 py-1.5 text-gray-500 font-medium whitespace-nowrap" style={{ minWidth: 66 }}>Saldo</th>
+                    <th className={`text-right px-2 py-1.5 text-receita font-medium whitespace-nowrap ${wm.isYearStart ? 'border-l-2 border-l-primary' : 'border-l border-borda'}`} style={{ minWidth: 62 }}>Dep</th>
+                    <th className="text-right px-2 py-1.5 text-despesa font-medium whitespace-nowrap" style={{ minWidth: 62 }}>Res</th>
+                    <th className="text-right px-2 py-1.5 text-texto-3 font-medium whitespace-nowrap" style={{ minWidth: 66 }}>Saldo</th>
                   </Fragment>
                 ))}
               </tr>
             </thead>
             <tbody>
               {projections.map(({ f, account, monthly, hasAlert }) => (
-                <tr key={f.id} className={`border-b border-gray-800/50 hover:bg-gray-800/20 transition-colors ${hasAlert ? 'bg-orange-500/5' : ''}`}>
-                  <td className="px-3 py-2 text-gray-200 whitespace-nowrap">
-                    {hasAlert && <AlertTriangle size={10} className="inline text-orange-600 mr-1" />}
+                <tr key={f.id} className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors ${hasAlert ? 'bg-aviso/5' : ''}`}>
+                  <td className="px-3 py-2 text-texto-1 whitespace-nowrap">
+                    {hasAlert && <AlertTriangle size={10} className="inline text-aviso mr-1" />}
                     {f.name}
                   </td>
                   <td className="px-3 py-2">
                     {account
-                      ? <span className="px-1.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400">{account.apelido || account.name.slice(0, 8)}</span>
-                      : <span className="text-gray-600">—</span>
+                      ? <span className="px-1.5 py-0.5 rounded text-xs bg-surface-2 text-texto-2">{account.apelido || account.name.slice(0, 8)}</span>
+                      : <span className="text-texto-3">—</span>
                     }
                   </td>
-                  <td className={`px-3 py-2 text-right font-semibold ${(saldosAtualizados[f.id] || 0) < 0 ? 'text-orange-600' : 'text-gray-300'}`}>
+                  <td className={`px-3 py-2 text-right font-semibold ${(saldosAtualizados[f.id] || 0) < 0 ? 'text-despesa' : 'text-texto-2'}`}>
                     {fmt(saldosAtualizados[f.id] || 0)}
                   </td>
                   {monthly.map((d, mi) => (
                     <Fragment key={mi}>
-                      <td className={`px-2 py-2 text-right ${d.isYearStart ? 'border-l-2 border-l-emerald-700' : 'border-l border-gray-800'} ${d.dep > 0 ? 'text-blue-600' : 'text-gray-700'}`}>
+                      <td className={`px-2 py-2 text-right ${d.isYearStart ? 'border-l-2 border-l-primary' : 'border-l border-borda'} ${d.dep > 0 ? 'text-receita' : 'text-texto-3'}`}>
                         {celulaClicavel(mi, d.dep) ? (
                           <button
                             type="button"
@@ -1794,7 +1794,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                           </button>
                         ) : (d.dep > 0 ? fmt(d.dep) : '—')}
                       </td>
-                      <td className={`px-2 py-2 text-right ${d.res > 0 ? 'text-orange-600' : 'text-gray-700'}`}>
+                      <td className={`px-2 py-2 text-right ${d.res > 0 ? 'text-despesa' : 'text-texto-3'}`}>
                         {celulaClicavel(mi, d.res) ? (
                           <button
                             type="button"
@@ -1806,12 +1806,12 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
                           </button>
                         ) : (d.res > 0 ? fmt(d.res) : '—')}
                         {d.prov > 0 && (
-                          <span className="block text-[10px] italic text-orange-400/70" title="Resgate futuro (provisão) — estimativa">
+                          <span className="block text-[10px] italic text-texto-2" title="Resgate futuro (provisão) — estimativa">
                             ~{fmt(d.prov)}
                           </span>
                         )}
                       </td>
-                      <td className={`px-2 py-2 text-right font-semibold ${d.neg ? 'text-orange-400 bg-orange-500/15' : d.saldo === 0 ? 'text-gray-600' : 'text-gray-300'}`}>
+                      <td className={`px-2 py-2 text-right font-semibold ${d.neg ? 'text-despesa bg-despesa/15' : d.saldo === 0 ? 'text-texto-3' : 'text-texto-2'}`}>
                         {fmt(d.saldo)}
                       </td>
                     </Fragment>
@@ -1831,7 +1831,7 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
 // ── Tab 3: Histórico (snapshots das viradas) ────────────────────────────────
 function HistoricoTab({ snapshots, selFim, onSelFim }) {
   const num = (v) => Number(v) || 0
-  const ajCor = (v) => v > 0 ? 'text-blue-600' : v < 0 ? 'text-orange-600' : 'text-gray-500'
+  const ajCor = (v) => v > 0 ? 'text-receita' : v < 0 ? 'text-despesa' : 'text-texto-3'
   const iniLabel = (d) => d && d !== '0001-01-01' ? fmtDate(d) : '(início)'
 
   // Agrupa por data_fim (cada virada). data_inicio para o rótulo = a mais antiga do grupo.
@@ -1854,9 +1854,9 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
   if (!snapshots || snapshots.length === 0) {
     return (
       <div className="card text-center py-12">
-        <RotateCcw size={32} className="text-gray-700 mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">Nenhuma virada registrada ainda.</p>
-        <p className="text-xs text-gray-600 mt-1">Ao usar "Virar Saldo" no Resumo, o período fechado fica guardado aqui.</p>
+        <RotateCcw size={32} className="text-texto-3 mx-auto mb-3" />
+        <p className="text-texto-3 text-sm">Nenhuma virada registrada ainda.</p>
+        <p className="text-xs text-texto-3 mt-1">Ao usar "Virar Saldo" no Resumo, o período fechado fica guardado aqui.</p>
       </div>
     )
   }
@@ -1873,7 +1873,7 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-xs text-gray-500 uppercase tracking-wide shrink-0">Período fechado:</label>
+        <label className="text-xs text-texto-3 uppercase tracking-wide shrink-0">Período fechado:</label>
         <select
           className="input py-1.5 text-xs max-w-[280px]"
           value={sel?.dataFim || ''}
@@ -1889,38 +1889,38 @@ function HistoricoTab({ snapshots, selFim, onSelFim }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ minWidth: 640 }}>
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-2 text-xs text-gray-400 font-medium">Função</th>
-                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo Inicial</th>
-                <th className="text-right px-4 py-2 text-xs text-blue-600 font-medium w-28">Entradas (+)</th>
-                <th className="text-right px-4 py-2 text-xs text-orange-600 font-medium w-28">Saídas (−)</th>
-                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-24">Ajuste</th>
-                <th className="text-right px-4 py-2 text-xs text-gray-400 font-medium w-28">Saldo</th>
+              <tr className="border-b border-borda">
+                <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium">Função</th>
+                <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo Inicial</th>
+                <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28">Entradas (+)</th>
+                <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
+                <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
+                <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
                 <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
               </tr>
             </thead>
             <tbody>
               {(sel?.snaps || []).map(s => (
-                <tr key={s.id} className="border-b border-gray-800/50">
-                  <td className="px-4 py-2 text-xs text-gray-200">{s.function_name}</td>
-                  <td className="px-4 py-2 text-right text-xs text-gray-400">{fmt(num(s.saldo_inicial))}</td>
-                  <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">{num(s.entradas) !== 0 ? fmt(num(s.entradas)) : <span className="text-gray-700">0,00</span>}</td>
-                  <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">{num(s.saidas) !== 0 ? fmt(num(s.saidas)) : <span className="text-gray-700">0,00</span>}</td>
+                <tr key={s.id} className="border-b border-borda/50">
+                  <td className="px-4 py-2 text-xs text-texto-1">{s.function_name}</td>
+                  <td className="px-4 py-2 text-right text-xs text-texto-2">{fmt(num(s.saldo_inicial))}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-receita">{num(s.entradas) !== 0 ? fmt(num(s.entradas)) : <span className="text-texto-3">0,00</span>}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-despesa">{num(s.saidas) !== 0 ? fmt(num(s.saidas)) : <span className="text-texto-3">0,00</span>}</td>
                   <td className={`px-4 py-2 text-right text-xs font-semibold ${ajCor(num(s.ajuste))}`}>
-                    {num(s.ajuste) !== 0 ? (num(s.ajuste) > 0 ? '+' : '') + fmt(num(s.ajuste)) : <span className="text-gray-700">0,00</span>}
+                    {num(s.ajuste) !== 0 ? (num(s.ajuste) > 0 ? '+' : '') + fmt(num(s.ajuste)) : <span className="text-texto-3">0,00</span>}
                   </td>
-                  <td className={`px-4 py-2 text-right text-xs font-semibold ${num(s.saldo) < 0 ? 'text-orange-600' : 'text-gray-200'}`}>{fmt(num(s.saldo))}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${num(s.saldo) < 0 ? 'text-despesa' : 'text-texto-1'}`}>{fmt(num(s.saldo))}</td>
                   <td className={`px-4 py-2 text-right text-xs font-bold ${num(s.saldo_atualizado) < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(num(s.saldo_atualizado))}</td>
                 </tr>
               ))}
               {t && (
-                <tr className="border-t border-gray-700 bg-gray-800/20">
-                  <td className="px-4 py-2 text-xs font-semibold text-gray-500">Total</td>
-                  <td className="px-4 py-2 text-right text-xs font-semibold text-gray-400">{fmt(t.saldoInicial)}</td>
-                  <td className="px-4 py-2 text-right text-xs font-semibold text-blue-600">{fmt(t.entradas)}</td>
-                  <td className="px-4 py-2 text-right text-xs font-semibold text-orange-600">{fmt(t.saidas)}</td>
-                  <td className={`px-4 py-2 text-right text-xs font-semibold ${ajCor(t.ajuste)}`}>{t.ajuste !== 0 ? (t.ajuste > 0 ? '+' : '') + fmt(t.ajuste) : <span className="text-gray-700">0,00</span>}</td>
-                  <td className={`px-4 py-2 text-right text-xs font-semibold ${t.saldo < 0 ? 'text-orange-600' : 'text-gray-200'}`}>{fmt(t.saldo)}</td>
+                <tr className="border-t border-borda-forte bg-surface-2/20">
+                  <td className="px-4 py-2 text-xs font-semibold text-texto-3">Total</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">{fmt(t.saldoInicial)}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-receita">{fmt(t.entradas)}</td>
+                  <td className="px-4 py-2 text-right text-xs font-semibold text-despesa">{fmt(t.saidas)}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${ajCor(t.ajuste)}`}>{t.ajuste !== 0 ? (t.ajuste > 0 ? '+' : '') + fmt(t.ajuste) : <span className="text-texto-3">0,00</span>}</td>
+                  <td className={`px-4 py-2 text-right text-xs font-semibold ${t.saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>{fmt(t.saldo)}</td>
                   <td className={`px-4 py-2 text-right text-xs font-bold ${t.atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>{fmt(t.atualizado)}</td>
                 </tr>
               )}
@@ -2225,7 +2225,7 @@ export default function ReservasPanel() {
   return (
     <div className="space-y-4">
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-800 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 border-b border-borda overflow-x-auto scrollbar-none">
         {[
           { id: 'contas', label: 'Contas Reserva' },
           { id: 'resumo', label: 'Resumo' },
@@ -2238,8 +2238,8 @@ export default function ReservasPanel() {
             onClick={() => setTab(t.id)}
             className={`px-3 sm:px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               tab === t.id
-                ? 'border-[#0F6E56] text-[#0F6E56]'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+                ? 'border-primary text-primary-fg'
+                : 'border-transparent text-texto-3 hover:text-texto-2'
             }`}
           >
             {t.label}

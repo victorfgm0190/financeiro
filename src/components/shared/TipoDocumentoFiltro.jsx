@@ -33,21 +33,21 @@ export default function TipoDocumentoFiltro({ tipos = [], selected, onChange, ex
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`input py-1.5 text-xs flex items-center gap-1.5 text-left ${count > 0 ? 'border-emerald-700 text-emerald-300' : 'text-gray-400'}`}
+        className={`input py-1.5 text-xs flex items-center gap-1.5 text-left ${count > 0 ? 'border-primary text-primary-fg' : 'text-texto-2'}`}
         title="Filtrar por tipo de documento"
       >
         <ListFilter size={12} className="shrink-0" />
         <span className="truncate flex-1">{count > 0 ? `${count} selecionado${count !== 1 ? 's' : ''}` : 'Todos'}</span>
         {count > 0 && (
-          <X size={12} className="shrink-0 hover:text-white" role="button" aria-label="Limpar"
+          <X size={12} className="shrink-0 hover:text-texto-1" role="button" aria-label="Limpar"
             onClick={(e) => { e.stopPropagation(); onChange(new Set()) }} />
         )}
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 left-0 w-56 max-h-72 overflow-y-auto bg-surface border border-gray-700 rounded-lg shadow-xl py-1">
+        <div className="absolute z-30 mt-1 left-0 w-56 max-h-72 overflow-y-auto bg-surface border border-borda-forte rounded-lg shadow-xl py-1">
           {opcoes.map(o => (
-            <label key={o.value} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-800 cursor-pointer">
-              <input type="checkbox" checked={selected?.has(o.value) || false} onChange={() => toggle(o.value)} className="accent-[#0F6E56] shrink-0" />
+            <label key={o.value} className="flex items-center gap-2 px-3 py-1.5 text-xs text-texto-2 hover:bg-surface-hover cursor-pointer">
+              <input type="checkbox" checked={selected?.has(o.value) || false} onChange={() => toggle(o.value)} className="accent-primary shrink-0" />
               <span className="w-10 shrink-0"><TipoDocumentoBadge tipo={o.tipo} /></span>
               <span className="truncate">{o.label}</span>
             </label>

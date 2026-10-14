@@ -5,8 +5,9 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import { NATUREZAS, SIGLA_MAX, normalizarSigla, moverTipo, soltarTipo } from '../../lib/tiposDocumento'
+import { CORES_TIPO_DOCUMENTO } from '../../lib/chartPalette'
 
-const CORES = ['#6366f1', '#8b5cf6', '#f59e0b', '#0ea5e9', '#14b8a6', '#a855f7', '#ef4444', '#64748b', '#10b981', '#f97316', '#9ca3af', '#ec4899']
+const CORES = CORES_TIPO_DOCUMENTO
 const rotuloNatureza = (n) => NATUREZAS.find(x => x.id === n)?.label || n
 const VAZIO = { nome: '', sigla: '', natureza: 'ambos', cor: CORES[0] }
 
@@ -22,7 +23,7 @@ function TipoForm({ inicial, onSalvar, onCancelar, salvando }) {
     try { await onSalvar({ ...f, nome: f.nome.trim(), sigla: normalizarSigla(f.sigla) }) } catch (err) { setErro(err?.message || 'Falha ao salvar.') }
   }
   return (
-    <form onSubmit={salvar} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_130px] gap-2 items-end p-3 rounded-lg bg-gray-800/60 border border-gray-700">
+    <form onSubmit={salvar} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_130px] gap-2 items-end p-3 rounded-lg bg-surface-2/60 border border-borda-forte">
       <div className="col-span-2 sm:col-span-1">
         <label className="label text-xs">Nome</label>
         <input autoFocus className="input py-1.5 text-sm" value={f.nome} maxLength={60} onChange={e => set('nome', e.target.value)} placeholder="Ex.: Boleto" />
@@ -38,10 +39,10 @@ function TipoForm({ inicial, onSalvar, onCancelar, salvando }) {
         </select>
       </div>
       <div className="col-span-2 sm:col-span-3 flex flex-wrap items-center gap-1.5">
-        <span className="text-xs text-gray-400 mr-1">Cor</span>
+        <span className="text-xs text-texto-2 mr-1">Cor</span>
         {CORES.map(c => (
           <button key={c} type="button" onClick={() => set('cor', c)} title={c}
-            className={`w-6 h-6 rounded-full border-2 ${f.cor === c ? 'border-white' : 'border-transparent'}`} style={{ background: c }} />
+            className={`w-6 h-6 rounded-full border-2 ${f.cor === c ? 'border-texto-1' : 'border-transparent'}`} style={{ background: c }} />
         ))}
         <input type="color" value={f.cor || '#9ca3af'} onChange={e => set('cor', e.target.value)} className="w-7 h-7 bg-transparent cursor-pointer" title="Outra cor" />
         <span className="ml-2"><TipoDocumentoBadge tipo={{ sigla: normalizarSigla(f.sigla) || '—', nome: f.nome, cor: f.cor }} /></span>
@@ -50,7 +51,7 @@ function TipoForm({ inicial, onSalvar, onCancelar, salvando }) {
           <button type="submit" disabled={salvando} className="btn-primary text-xs py-1.5 flex items-center gap-1"><Check size={12} /> Salvar</button>
         </div>
       </div>
-      {erro && <p className="col-span-2 sm:col-span-3 text-[11px] text-red-400">{erro}</p>}
+      {erro && <p className="col-span-2 sm:col-span-3 text-[11px] text-perigo">{erro}</p>}
     </form>
   )
 }
@@ -106,12 +107,12 @@ export default function TiposDocumentoPanel() {
   return (
     <div className="card space-y-3">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-gray-300">Tipos de documento ({tiposDocumento.length})</h2>
+        <h2 className="text-sm font-semibold text-texto-2">Tipos de documento ({tiposDocumento.length})</h2>
         <button type="button" onClick={() => setEditando('novo')} className="ml-auto btn-secondary text-xs py-1.5 flex items-center gap-1.5">
           <Plus size={12} /> Novo tipo
         </button>
       </div>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-texto-3">
         Classificam agendamentos e lançamentos (coluna "Doc." no Fluxo de Caixa e em Agendamentos). Arraste ⠿ ou use ↑↓
         para ordenar. Um tipo em uso não é excluído — é inativado (some dos formulários, mas continua nos registros).
       </p>
@@ -130,37 +131,37 @@ export default function TiposDocumentoPanel() {
             onDrop={e => { e.preventDefault(); if (arrastando) reordenar(soltarTipo(ids, arrastando, t.id)); setArrastando(null); setSobre(null) }}
             onDragEnd={() => { setArrastando(null); setSobre(null) }}
             className={`flex items-center gap-2 rounded-lg px-3 py-2 border transition-all ${
-              arrastando === t.id ? 'opacity-40 border-transparent bg-gray-800'
-                : sobre === t.id ? 'border-[#0F6E56] bg-[#0F6E56]/10'
-                  : 'border-transparent bg-gray-800'
+              arrastando === t.id ? 'opacity-40 border-transparent bg-surface-2'
+                : sobre === t.id ? 'border-primary bg-primary/10'
+                  : 'border-transparent bg-surface-2'
             } ${t.ativo ? '' : 'opacity-60'}`}
           >
-            <span className="select-none text-base leading-none text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing shrink-0" title="Arrastar para reordenar">⠿</span>
+            <span className="select-none text-base leading-none text-texto-3 hover:text-texto-2 cursor-grab active:cursor-grabbing shrink-0" title="Arrastar para reordenar">⠿</span>
             <div className="flex gap-0.5 shrink-0">
               <button type="button" onClick={() => reordenar(moverTipo(ids, t.id, 'up'))} disabled={i === 0} title="Mover para cima"
-                className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400"><ArrowUp size={11} /></button>
+                className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2"><ArrowUp size={11} /></button>
               <button type="button" onClick={() => reordenar(moverTipo(ids, t.id, 'down'))} disabled={i === tiposDocumento.length - 1} title="Mover para baixo"
-                className="p-1 rounded hover:bg-gray-700 disabled:opacity-25 text-gray-400"><ArrowDown size={11} /></button>
+                className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2"><ArrowDown size={11} /></button>
             </div>
             <span className="w-12 shrink-0"><TipoDocumentoBadge tipo={t} /></span>
-            <span className="text-sm text-gray-200 truncate min-w-0">{t.nome}</span>
-            {t.sistema && <span title="Tipo do sistema: não pode ser excluído"><Lock size={11} className="text-gray-500 shrink-0" /></span>}
-            <span className="badge bg-gray-700 text-gray-400 text-xs shrink-0 hidden sm:inline">{rotuloNatureza(t.natureza)}</span>
-            {usos.get(t.id) > 0 && <span className="text-[11px] text-gray-500 shrink-0 hidden md:inline">{usos.get(t.id)} uso{usos.get(t.id) !== 1 ? 's' : ''}</span>}
+            <span className="text-sm text-texto-1 truncate min-w-0">{t.nome}</span>
+            {t.sistema && <span title="Tipo do sistema: não pode ser excluído"><Lock size={11} className="text-texto-3 shrink-0" /></span>}
+            <span className="badge bg-surface-hover text-texto-2 text-xs shrink-0 hidden sm:inline">{rotuloNatureza(t.natureza)}</span>
+            {usos.get(t.id) > 0 && <span className="text-[11px] text-texto-3 shrink-0 hidden md:inline">{usos.get(t.id)} uso{usos.get(t.id) !== 1 ? 's' : ''}</span>}
             <div className="ml-auto flex items-center gap-1 shrink-0">
               <button type="button" onClick={() => alternarAtivo(t)}
-                className={`text-[11px] px-2 py-0.5 rounded border ${t.ativo ? 'border-emerald-600/50 text-emerald-300' : 'border-gray-600 text-gray-400'}`}
+                className={`text-[11px] px-2 py-0.5 rounded border ${t.ativo ? 'border-primary/50 text-primary-fg' : 'border-borda-forte text-texto-2'}`}
                 title={t.ativo ? 'Inativar (some dos formulários)' : 'Ativar'}>
                 {t.ativo ? 'Ativo' : 'Inativo'}
               </button>
-              <button type="button" onClick={() => setEditando(t.id)} className="p-1.5 rounded text-gray-400 hover:text-gray-200 hover:bg-gray-700" title="Editar"><Pencil size={12} /></button>
+              <button type="button" onClick={() => setEditando(t.id)} className="p-1.5 rounded text-texto-2 hover:text-texto-1 hover:bg-surface-hover" title="Editar"><Pencil size={12} /></button>
               {!t.sistema && (
-                <button type="button" onClick={() => setExcluir(t)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-gray-700" title="Excluir"><Trash2 size={12} /></button>
+                <button type="button" onClick={() => setExcluir(t)} className="p-1.5 rounded text-texto-3 hover:text-perigo hover:bg-surface-hover" title="Excluir"><Trash2 size={12} /></button>
               )}
             </div>
           </div>
         ))}
-        {tiposDocumento.length === 0 && <p className="text-xs text-gray-600 text-center py-6">Nenhum tipo cadastrado (o banco ainda não respondeu?).</p>}
+        {tiposDocumento.length === 0 && <p className="text-xs text-texto-3 text-center py-6">Nenhum tipo cadastrado (o banco ainda não respondeu?).</p>}
       </div>
 
       <ConfirmDialog

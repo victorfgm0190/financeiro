@@ -15,7 +15,7 @@ export default function TipoDocumentoSelect({ value, onChange, tipoMov, required
     <div>
       <label className="label">{label}{required ? ' *' : ''}</label>
       <select
-        className={`input ${erro ? 'border-red-500/70' : ''}`}
+        className={`input ${erro ? 'border-perigo' : ''}`}
         value={value || ''}
         onChange={e => onChange(e.target.value || null)}
       >
@@ -26,7 +26,7 @@ export default function TipoDocumentoSelect({ value, onChange, tipoMov, required
           </option>
         ))}
       </select>
-      {erro && <p className="text-[11px] text-red-400 mt-1">{erro}</p>}
+      {erro && <p className="text-[11px] text-perigo mt-1">{erro}</p>}
     </div>
   )
 }

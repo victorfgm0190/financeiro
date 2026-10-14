@@ -76,16 +76,16 @@ export default function MonthStartModal() {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={handleDismiss} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div className="absolute inset-0 bg-overlay" onClick={handleDismiss} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
-            <h3 className="font-semibold text-gray-100">Transferências do início do mês</h3>
-            <p className="text-xs text-gray-500 mt-0.5 capitalize">{monthLabel}</p>
+            <h3 className="font-semibold text-texto-1">Transferências do início do mês</h3>
+            <p className="text-xs text-texto-3 mt-0.5 capitalize">{monthLabel}</p>
           </div>
-          <button onClick={handleDismiss} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+          <button onClick={handleDismiss} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -103,8 +103,8 @@ export default function MonthStartModal() {
                 onClick={() => toggleSelect(sch.id)}
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                   isSelected
-                    ? 'bg-emerald-500/10 border-emerald-500/20'
-                    : 'bg-gray-800/40 border-gray-700/50 opacity-50'
+                    ? 'bg-primary/10 border-primary/20'
+                    : 'bg-surface-2/40 border-borda-forte/50 opacity-50'
                 }`}
               >
                 <input
@@ -112,27 +112,27 @@ export default function MonthStartModal() {
                   checked={isSelected}
                   onChange={() => toggleSelect(sch.id)}
                   onClick={e => e.stopPropagation()}
-                  className="w-4 h-4 rounded accent-[#0F6E56] shrink-0 cursor-pointer"
+                  className="w-4 h-4 rounded accent-primary shrink-0 cursor-pointer"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-300 font-medium truncate">{sch.description}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-texto-2 font-medium truncate">{sch.description}</p>
+                  <p className="text-xs text-texto-3 mt-0.5">
                     {fromAcc?.apelido || fromAcc?.name || '?'}
                     {' → '}
                     {toAcc?.apelido || toAcc?.name || '?'}
-                    {nextDate && <span className="ml-2 text-gray-600">· {fmtDate(nextDate)}</span>}
+                    {nextDate && <span className="ml-2 text-texto-3">· {fmtDate(nextDate)}</span>}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-purple-400 shrink-0">{fmt(nextDate ? occEfetiva(sch, nextDate).amount : sch.amount)}</span>
+                <span className="text-sm font-bold text-transferencia shrink-0">{fmt(nextDate ? occEfetiva(sch, nextDate).amount : sch.amount)}</span>
               </div>
             )
           })}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-800 space-y-3 shrink-0">
+        <div className="px-5 py-4 border-t border-borda space-y-3 shrink-0">
           {selectedSet.size > 0 && selectedSet.size < pendingSchedules.length && (
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-texto-3 text-center">
               {selectedSet.size} de {pendingSchedules.length} selecionadas · {fmt(selectedTotal)}
             </p>
           )}
@@ -141,7 +141,7 @@ export default function MonthStartModal() {
               Agora não
             </button>
             <button
-              className="flex-1 py-2 px-3 text-sm font-medium bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 py-2 px-3 text-sm font-medium bg-surface-hover text-texto-1 rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               onClick={handleExecuteSelected}
               disabled={selectedSet.size === 0}
             >

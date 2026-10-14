@@ -1,21 +1,132 @@
 @import "tailwindcss";
 
-/* ─── Design tokens (Tailwind v4 @theme) ──────────────────────────────────────
-   Gera utilitários (bg-page, bg-surface, text-receita, bg-reserva/20, …) e expõe
-   as variáveis CSS em :root. Cores semânticas de valor financeiro: o usuário tem
-   deficiência de visão de cores — verde/vermelho NUNCA distinguem receita/despesa.
-   Receita = azul · Despesa = laranja/coral · Reserva = roxo · Transferência = cinza. */
-@theme {
-  /* Hierarquia de superfície */
-  --color-page: #0F172A;          /* fundo geral da página */
-  --color-surface: #1A2438;       /* cards, painéis, KPIs, modais, linhas alternadas */
-  --color-surface-hover: #212C45; /* hover de superfícies */
+/* ─── Design tokens (Tailwind v4 @theme) — temas claro e escuro ────────────────
+   Gera utilitários (bg-page, bg-surface, text-receita, bg-reserva/20, border-borda …) que
+   apontam para var(--color-*). Mapeamento classe → token: _tema/mapeamento.md.
 
-  /* Cores semânticas — valores financeiros */
-  --color-receita: #85B7EB;       /* azul claro — receita / entrada / saldo positivo */
-  --color-despesa: #F0997B;       /* laranja/coral — despesa / saída / saldo negativo */
-  --color-reserva: #AFA9EC;       /* roxo claro — reserva / gerencial */
-  --color-transferencia: #B4B2A9; /* cinza claro — transferência / neutro */
+   - @theme static define os tokens com os valores do TEMA ESCURO (= visual original do app).
+     "static" faz o Tailwind emitir TODAS as variáveis em :root, mesmo as que nenhuma classe usa
+     ainda — o useThemeColors() (src/hooks/useTheme.js) lê os tokens via getComputedStyle.
+   - [data-theme="light"] no <html> sobrescreve as mesmas variáveis; as classes trocam de valor
+     sozinhas. Nenhuma variante dark: é necessária. Sem atributo vale o escuro.
+   - Quem grava data-theme: o script anti-flash do index.html (antes de pintar) e o useTheme.
+
+   Acessibilidade: o usuário tem deficiência de visão de cores — verde/vermelho NUNCA distinguem
+   receita/despesa. Receita = azul · Despesa = laranja/coral · Reserva = roxo · Transferência =
+   cinza, nos dois temas, sempre com ícone e/ou sinal (+/−). Contraste dos tokens de texto sobre
+   page, surface, surface-2 e surface-hover ≥ 4,5:1 nos dois temas. */
+@theme static {
+  /* Superfícies */
+  --color-page: #030712;           /* fundo de página / shell (hoje bg-gray-950) */
+  --color-surface: #1A2438;        /* cards, painéis, KPIs, modais (hoje bg-surface / .card / bg-gray-900) */
+  --color-surface-2: #1E2939;      /* superfície elevada / bloco interno de card e modal (hoje bg-gray-800) */
+  --color-surface-hover: #212C45;  /* hover de linha, item de menu, dropdown */
+  --color-borda: #1E2939;          /* bordas e divisores (hoje border-gray-800) */
+  --color-borda-forte: #364153;    /* bordas decorativas, botão "bs", badge neutro (hoje border-gray-700) */
+  --color-borda-campo: #6A7282;    /* SÓ borda de input/select/textarea/DateInput — 3,21:1 sobre surface */
+  --color-input: #1E2939;          /* fundo de input/select (hoje .input bg-gray-800) */
+  --color-overlay: rgb(0 0 0 / 0.6); /* fundo atrás de modal (hoje bg-black/60) */
+
+  /* Texto */
+  --color-texto-1: #F3F4F6;        /* principal — títulos, valores (gray-100/200, white) */
+  --color-texto-2: #C8CED8;        /* secundário — rótulos, subtítulos (gray-300/400) */
+  --color-texto-3: #9AA3B5;        /* terciário — legendas, datas, placeholders (gray-500/600/700) */
+
+  /* Marca / ação */
+  --color-primary: #0F6E56;        /* fundo de botão primário, FAB, toggles ligados (texto branco 6,2:1) */
+  --color-primary-hover: #0B5C47;  /* hover do primário — texto branco 7,97:1. Igual nos dois temas */
+  --color-primary-fg: #3CC29B;     /* a cor da marca usada como TEXTO/ÍCONE: links, item ativo, nav */
+  --color-ambar: #FBBF24;          /* ação secundária de destaque (.btn-amber, "Selecionar", ícones) — nunca borda de campo */
+
+  /* Semântica financeira */
+  --color-receita: #85B7EB;        /* azul — receita / entrada / saldo positivo */
+  --color-despesa: #F0997B;        /* laranja/coral — despesa / saída / saldo negativo */
+  --color-reserva: #AFA9EC;        /* roxo — reserva / gerencial */
+  --color-reserva-bg: #2B2E55;     /* fundo de chip/linha de reserva */
+  --color-transferencia: #B4B2A9;  /* cinza quente — transferência / neutro */
+
+  /* Estados */
+  --color-aviso: #FCD34D;          /* validação de campo e status de alerta, sempre com ⚠ + texto (NÃO é despesa) */
+  --color-perigo: #FF8E8E;         /* texto/ícone de ação destrutiva, erro, "Em atraso" */
+  --color-perigo-bg: #3B1D27;      /* botão que ABRE ação destrutiva / faixa "Em atraso" (com text-perigo) */
+  --color-perigo-solido: #A32D2D;  /* .btn-danger, confirmação em modal de exclusão, badge de Alertas — texto branco 7,07:1. Igual nos dois temas */
+  --color-perigo-solido-hover: #8A2424; /* hover do perigo-solido — texto branco 8,90:1. Igual nos dois temas */
+
+  /* Destaque */
+  --color-destaque: #1D4ED8;       /* card azul em Contas — texto branco 6,70:1. Igual nos dois temas */
+
+  /* Gráficos */
+  --color-chart-eixo: #9AA3B5;     /* ticks e rótulos de eixo */
+  --color-chart-grade: #303B55;    /* grade (CartesianGrid) — 1,39:1 sobre surface */
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-page: #EEF1F6;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F5F7FB;
+  --color-surface-hover: #E8EDF5;
+  --color-borda: #D5DCE6;
+  --color-borda-forte: #C5CDD8;
+  --color-borda-campo: #858F9E;    /* 3,27:1 sobre surface, 3,05 sobre surface-2 */
+  --color-input: #FFFFFF;
+  --color-overlay: rgb(15 23 42 / 0.45);
+
+  --color-texto-1: #111827;
+  --color-texto-2: #374151;
+  --color-texto-3: #5B6474;
+
+  --color-primary: #0F6E56;
+  --color-primary-fg: #0A664F;
+  --color-ambar: #824C07;
+
+  --color-receita: #1C58A1;
+  --color-despesa: #953D18;
+  --color-reserva: #5845BC;
+  --color-reserva-bg: #ECEAFB;
+  --color-transferencia: #5C5952;
+
+  --color-aviso: #804D00;
+  --color-perigo: #A62020;
+  --color-perigo-bg: #FDECEC;
+  /* primary-hover, perigo-solido(-hover) e destaque não mudam no claro (herdam do @theme) */
+
+  --color-chart-eixo: #5B6474;
+  --color-chart-grade: #E2E8F0;
+}
+
+/* Faixa da safe-area superior no tema claro (iPhone PWA).
+   A status bar continua "black-translucent" (texto branco — commit ec1aedc, não mexer). No claro,
+   pinta só a faixa env(safe-area-inset-top) do header fixo com fundo escuro fixo, para o texto
+   branco da barra continuar legível. É uma camada de background-image: não muda altura, padding
+   nem layout. Fora do iOS standalone o inset é 0 → faixa de altura 0 (no-op).
+   .header-safe-top = Header.jsx; .faixa-safe-top = classe-marcador do <header> do MobileShell. */
+[data-theme="light"] .header-safe-top,
+[data-theme="light"] .faixa-safe-top {
+  background-image: linear-gradient(#111827, #111827);
+  background-repeat: no-repeat;
+  background-size: 100% env(safe-area-inset-top, 0px);
+}
+/* Mesma faixa para as telas do mobile SEM header (Início, Mais): elemento fixo no topo do
+   MobileShell, só no tema claro. Altura = inset (0 fora do iOS standalone → invisível), não
+   participa do layout (fixed) nem recebe toque (pointer-events: none). O conteúdo rolado passa
+   por baixo dela. z-index acima do conteúdo e da barra inferior (z-40), abaixo de modais. */
+.faixa-status-ios { display: none; }
+[data-theme="light"] .faixa-status-ios {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #111827;
+  pointer-events: none;
+  z-index: 45;
 }
 
 :root {
@@ -34,52 +145,52 @@
   body {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--color-page);
-    color: #f9fafb;
+    color: var(--color-texto-1);
   }
 }
 
 @layer components {
   .card {
-    @apply bg-surface rounded-xl border border-gray-800 p-4;
+    @apply bg-surface rounded-xl border border-borda p-4;
   }
   .btn-primary {
     @apply text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm;
-    background-color: #0F6E56;
+    background-color: var(--color-primary);
   }
   .btn-primary:hover:not(:disabled) {
-    background-color: #0b5c47;
+    background-color: var(--color-primary-hover);
   }
   .btn-secondary {
-    @apply bg-gray-800 hover:bg-gray-700 text-gray-100 px-4 py-2 rounded-lg font-medium transition-colors text-sm;
+    @apply bg-surface-2 hover:bg-surface-hover text-texto-1 px-4 py-2 rounded-lg font-medium transition-colors text-sm;
   }
-  /* Botão secundário amarelo (contraste no tema escuro). Utilities sobrescrevem:
+  /* Botão secundário âmbar (ação secundária de destaque — token ambar). Utilities sobrescrevem:
      ex. ícone quadrado com "w-7 h-7 p-0", ou hover vermelho em ação destrutiva. */
   .btn-amber {
-    @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-amber-400 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 transition-colors;
+    @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm text-ambar border border-ambar/40 bg-ambar/10 hover:bg-ambar/20 transition-colors;
   }
   .btn-danger {
     @apply text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm;
-    background-color: #A32D2D;
+    background-color: var(--color-perigo-solido);
   }
   .btn-danger:hover {
-    background-color: #8a2424;
+    background-color: var(--color-perigo-solido-hover);
   }
   .input {
-    @apply bg-gray-800 border border-gray-700 text-gray-100 rounded-lg px-3 py-2 w-full focus:outline-none text-sm;
+    @apply bg-input border border-borda-campo text-texto-1 rounded-lg px-3 py-2 w-full focus:outline-none text-sm;
   }
   .input:focus {
-    border-color: #0F6E56;
-    box-shadow: 0 0 0 1px #0F6E56;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
   }
   .label {
-    @apply text-xs font-medium text-gray-400 mb-1 block uppercase tracking-wide;
+    @apply text-xs font-medium text-texto-2 mb-1 block uppercase tracking-wide;
   }
   .nav-item {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition-colors cursor-pointer text-sm font-medium w-full;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors cursor-pointer text-sm font-medium w-full;
   }
   .nav-active {
-    color: #0F6E56!important;
-    background-color: color-mix(in srgb, #0F6E56 15%, transparent)!important;
+    color: var(--color-primary-fg)!important;
+    background-color: color-mix(in srgb, var(--color-primary) 15%, transparent)!important;
   }
   .badge {
     @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold;
@@ -94,7 +205,7 @@
 }
 .skeleton {
   border-radius: 4px;
-  background: linear-gradient(90deg, #1e2531 25%, #2a3244 50%, #1e2531 75%);
+  background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-surface-hover) 50%, var(--color-surface-2) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
   display: inline-block;

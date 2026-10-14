@@ -86,7 +86,7 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-texto-3">
         Define a nota fiscal e as categorias que o módulo usa para lançar prestação, juros e
         perda/ganho na venda. O valor da nota fiscal é imutável depois de gravado.
       </p>

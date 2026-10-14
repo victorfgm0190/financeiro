@@ -4,7 +4,7 @@ import { fmt } from './utils'
 
 // Dropdown multiselect de valores reais. `values` = números distintos já ordenados
 // (maior → menor). `selected` = Set<number>. `onChange(novoSet)`. Fecha ao clicar fora.
-export default function ValueFilterDropdown({ label = 'Valor', values = [], selected, onChange, iconColor = 'text-gray-500' }) {
+export default function ValueFilterDropdown({ label = 'Valor', values = [], selected, onChange, iconColor = 'text-texto-3' }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -31,8 +31,8 @@ export default function ValueFilterDropdown({ label = 'Valor', values = [], sele
         onClick={() => setOpen(o => !o)}
         className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md border transition-colors ${
           count > 0
-            ? 'border-emerald-700 bg-emerald-900/20 text-emerald-300'
-            : 'border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+            ? 'border-primary bg-primary/10 text-primary-fg'
+            : 'border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
         }`}
         title={`Filtrar por valor — ${label}`}
       >
@@ -42,23 +42,23 @@ export default function ValueFilterDropdown({ label = 'Valor', values = [], sele
           <X
             size={12}
             onClick={clear}
-            className="hover:text-white"
+            className="hover:text-texto-1"
             role="button"
             aria-label="Limpar seleção"
           />
         )}
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 right-0 w-44 max-h-64 overflow-y-auto bg-surface border border-gray-700 rounded-lg shadow-xl py-1">
+        <div className="absolute z-30 mt-1 right-0 w-44 max-h-64 overflow-y-auto bg-surface border border-borda-forte rounded-lg shadow-xl py-1">
           {values.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-gray-600">Nenhum valor no período</p>
+            <p className="px-3 py-2 text-xs text-texto-3">Nenhum valor no período</p>
           ) : values.map(v => (
-            <label key={v} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-800 cursor-pointer">
+            <label key={v} className="flex items-center gap-2 px-3 py-1.5 text-xs text-texto-2 hover:bg-surface-hover cursor-pointer">
               <input
                 type="checkbox"
                 checked={selected?.has(v) || false}
                 onChange={() => toggle(v)}
-                className="accent-[#0F6E56] shrink-0"
+                className="accent-primary shrink-0"
               />
               <span className="tabular-nums">{fmt(v)}</span>
             </label>

@@ -384,7 +384,7 @@ export default function BemDetail({ conta, onClose }) {
     <>
       <Modal open onClose={onClose} title={bem?.nome || conta.name} size="xl">
         {loading && (
-          <div className="flex items-center justify-center py-14 text-gray-500 gap-2 text-sm">
+          <div className="flex items-center justify-center py-14 text-texto-3 gap-2 text-sm">
             <Loader2 size={18} className="animate-spin" /> Carregando bem...
           </div>
         )}
@@ -399,10 +399,10 @@ export default function BemDetail({ conta, onClose }) {
         {!loading && !erro && bem && (
           <div className="space-y-4">
             {naoParametrizado && (
-              <div className="card border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3">
+              <div className="card border border-aviso/20 bg-aviso/5 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm text-amber-300">Bem ainda não parametrizado</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-sm text-aviso">⚠ Bem ainda não parametrizado</p>
+                  <p className="text-xs text-texto-3 mt-0.5">
                     Defina a nota fiscal e as 4 categorias para poder criar o financiamento.
                   </p>
                 </div>
@@ -425,8 +425,8 @@ export default function BemDetail({ conta, onClose }) {
             {movimentacoes !== null && !temEntrada && !bem.foi_vendido && (
               <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm text-gray-400">Nenhuma entrada registrada neste bem.</p>
-                  <p className="text-xs text-gray-600 mt-0.5">
+                  <p className="text-sm text-texto-2">Nenhuma entrada registrada neste bem.</p>
+                  <p className="text-xs text-texto-3 mt-0.5">
                     Vincule as transferências da entrada e, se houve troca, o bem antigo — a
                     perda ou o ganho é calculado sozinho.
                   </p>
@@ -440,7 +440,7 @@ export default function BemDetail({ conta, onClose }) {
               </div>
             )}
 
-            <div className="flex gap-1 border-b border-gray-800">
+            <div className="flex gap-1 border-b border-borda">
               {ABAS.map(aba => {
                 const Icone = aba.icone
                 const ativa = abaAtiva === aba.id
@@ -450,8 +450,8 @@ export default function BemDetail({ conta, onClose }) {
                     onClick={() => setAbaAtiva(aba.id)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
                       ativa
-                        ? 'border-teal-500 text-teal-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-300'
+                        ? 'border-primary text-primary-fg'
+                        : 'border-transparent text-texto-3 hover:text-texto-2'
                     }`}
                   >
                     <Icone size={13} /> {aba.label}
@@ -461,7 +461,7 @@ export default function BemDetail({ conta, onClose }) {
               {!naoParametrizado && (
                 <button
                   onClick={() => setModal('parametrizar')}
-                  className="ml-auto text-xs text-gray-600 hover:text-gray-400 px-2"
+                  className="ml-auto text-xs text-texto-3 hover:text-texto-2 px-2"
                   title="Reparametrizar categorias"
                 >
                   <Settings2 size={13} />

@@ -5,7 +5,7 @@ import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2, RotateCcw, Pin } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
 import {
   montarLinhasSimuladas, opcoesAplicarData, patchAplicarData,
@@ -348,10 +348,10 @@ export default function FluxoCaixaPorConta() {
   }
 
   const statusBadge = (status) => {
-    if (status === 'Registrada') return 'bg-gray-600/30 text-gray-300'
+    if (status === 'Registrada') return 'bg-surface-2 text-texto-2'
     if (status === 'A receber')  return 'bg-receita/20 text-receita'
-    if (status === 'Projetado')  return 'bg-indigo-500/20 text-indigo-400'
-    if (status === 'Provisório') return 'bg-purple-500/20 text-purple-300'
+    if (status === 'Projetado')  return 'bg-surface-2 text-texto-2'
+    if (status === 'Provisório') return 'text-texto-2 outline-dashed outline-1 -outline-offset-1 outline-borda-forte'
     return 'bg-despesa/20 text-despesa' // A pagar
   }
 
@@ -442,13 +442,13 @@ export default function FluxoCaixaPorConta() {
       <div className="card space-y-3 md:sticky md:top-0 md:z-20">
         {/* Visão (toggle) + criação de provisório */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1 bg-gray-800/60 rounded-lg p-1 w-full sm:w-auto">
+          <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1 w-full sm:w-auto">
             {VISOES.map(v => (
               <button
                 key={v.id}
                 onClick={() => setVisao(v.id)}
                 className={`flex-1 sm:flex-none px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  visao === v.id ? 'bg-[#0F6E56] text-white' : 'text-gray-400 hover:text-gray-200'
+                  visao === v.id ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'
                 }`}
               >
                 {v.label}
@@ -458,7 +458,7 @@ export default function FluxoCaixaPorConta() {
           <button
             type="button"
             onClick={() => setProvModal({ initial: null })}
-            className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 sm:ml-auto border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
+            className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 sm:ml-auto border-dashed border-borda-forte text-texto-2 hover:bg-surface-hover"
             title="Adicionar uma entrada/saída de simulação a este fluxo"
           >
             <Plus size={13} /> Provisório
@@ -472,38 +472,38 @@ export default function FluxoCaixaPorConta() {
               <button
                 type="button"
                 onClick={() => setContaDropOpen(o => !o)}
-                className={`input flex items-center justify-between gap-2 text-left w-full ${selectedAccountIds.length === 0 ? 'text-gray-500' : ''}`}
+                className={`input flex items-center justify-between gap-2 text-left w-full ${selectedAccountIds.length === 0 ? 'text-texto-3' : ''}`}
               >
                 <span className="truncate min-w-0">{contaLabel}</span>
-                <ChevronDown size={14} className={`text-gray-500 shrink-0 transition-transform ${contaDropOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={14} className={`text-texto-3 shrink-0 transition-transform ${contaDropOpen ? 'rotate-180' : ''}`} />
               </button>
               {contaDropOpen && (
-                <div className="absolute z-30 left-0 right-0 mt-1 bg-surface border border-gray-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto overscroll-contain">
-                  <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-800 sticky top-0 bg-surface">
-                    <button type="button" onClick={() => setSelectedAccountIds(pickableAccounts.map(a => a.id))} className="text-xs text-[#0F6E56] hover:underline">Todas</button>
-                    <span className="text-gray-700">·</span>
-                    <button type="button" onClick={() => setSelectedAccountIds([])} className="text-xs text-gray-500 hover:text-gray-300">Nenhuma</button>
+                <div className="absolute z-30 left-0 right-0 mt-1 bg-surface border border-borda-forte rounded-lg shadow-2xl max-h-60 overflow-y-auto overscroll-contain">
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-borda sticky top-0 bg-surface">
+                    <button type="button" onClick={() => setSelectedAccountIds(pickableAccounts.map(a => a.id))} className="text-xs text-primary-fg hover:underline">Todas</button>
+                    <span className="text-texto-3">·</span>
+                    <button type="button" onClick={() => setSelectedAccountIds([])} className="text-xs text-texto-3 hover:text-texto-2">Nenhuma</button>
                   </div>
                   {pickableGroups.map(({ group, accounts: groupAccs }) => (
                     <div key={group?.id || 'sem-grupo'}>
-                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide font-semibold text-gray-500 border-t border-gray-800/60 first:border-t-0">
+                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide font-semibold text-texto-3 border-t border-borda/60 first:border-t-0">
                         {group?.name || 'Sem grupo'}
                       </p>
                       {groupAccs.map(a => (
-                        <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-800 cursor-pointer">
+                        <label key={a.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-surface-hover cursor-pointer">
                           <input
                             type="checkbox"
-                            className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+                            className="accent-primary w-3.5 h-3.5 shrink-0"
                             checked={selectedAccountIds.includes(a.id)}
                             onChange={() => toggleAccount(a.id)}
                           />
-                          <span className="text-sm text-gray-300 truncate">{a.apelido || a.name}</span>
+                          <span className="text-sm text-texto-2 truncate">{a.apelido || a.name}</span>
                         </label>
                       ))}
                     </div>
                   ))}
                   {pickableAccounts.length === 0 && (
-                    <p className="text-xs text-gray-600 px-3 py-3 text-center">Nenhuma conta</p>
+                    <p className="text-xs text-texto-3 px-3 py-3 text-center">Nenhuma conta</p>
                   )}
                 </div>
               )}
@@ -520,9 +520,9 @@ export default function FluxoCaixaPorConta() {
           )}
           {visao === 'principais' && (
             <div className="lg:col-span-2 flex items-end">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-texto-3">
                 Soma automática das contas do Fluxo de Caixa Principal (FC):{' '}
-                <span className="text-gray-300">{selectedAccounts.length} conta{selectedAccounts.length !== 1 ? 's' : ''}</span>
+                <span className="text-texto-2">{selectedAccounts.length} conta{selectedAccounts.length !== 1 ? 's' : ''}</span>
               </p>
             </div>
           )}
@@ -541,46 +541,46 @@ export default function FluxoCaixaPorConta() {
             <label className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={includeSchedules} onChange={e => setIncludeSchedules(e.target.checked)} className="sr-only peer" />
-                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-gray-300 select-none">Incluir agendamentos (transações futuras)</span>
+              <span className="text-sm text-texto-2 select-none">Incluir agendamentos (transações futuras)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hideReserva} onChange={e => setHideReserva(e.target.checked)} className="sr-only peer" />
-                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-gray-300 select-none">Ocultar movimentos de reserva</span>
+              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de reserva</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <div className="relative shrink-0">
                 <input type="checkbox" checked={hidePatrimonio} onChange={e => setHidePatrimonio(e.target.checked)} className="sr-only peer" />
-                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+                <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
                 <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
-              <span className="text-sm text-gray-300 select-none">Ocultar movimentos de patrimônio</span>
+              <span className="text-sm text-texto-2 select-none">Ocultar movimentos de patrimônio</span>
             </label>
           </div>
           {!noSelection && qtdDatas > 0 && (
-            <span className="inline-flex items-center gap-2 flex-wrap text-xs text-amber-500/90">
+            <span className="inline-flex items-center gap-2 flex-wrap text-xs text-texto-2">
               {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''} provisoriamente
-              <button type="button" onClick={restaurarTodas} className="underline hover:text-amber-400">
+              <button type="button" onClick={restaurarTodas} className="underline hover:text-texto-1">
                 restaurar todas
               </button>
               {dpForaDoPeriodo.map(d => (
-                <span key={d.id} className="inline-flex items-center gap-1 text-amber-500/70" title={`Data original: ${fmtDate(d.data_original)} · Provisória desde ${fmtDdMm(d.created_at)}`}>
+                <span key={d.id} className="inline-flex items-center gap-1 text-texto-2 underline decoration-dashed decoration-borda-campo underline-offset-2" title={`Data original: ${fmtDate(d.data_original)} · Provisória desde ${fmtDdMm(d.created_at)}`}>
                   · {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
-                  <button type="button" onClick={() => restaurarPersistida(d.id)} className="hover:text-amber-400" title="Voltar à data original">
+                  <button type="button" onClick={() => restaurarPersistida(d.id)} className="hover:text-texto-1" title="Voltar à data original">
                     <RotateCcw size={11} />
                   </button>
                 </span>
               ))}
               {foraDoPeriodo.map(r => (
-                <span key={r._key} className="inline-flex items-center gap-1 text-amber-500/70" title={tituloDataOriginal(r)}>
+                <span key={r._key} className="inline-flex items-center gap-1 text-texto-2 underline decoration-dashed decoration-borda-campo underline-offset-2" title={tituloDataOriginal(r)}>
                   · {r.description} → {fmtDate(r.date)} (fora do período)
-                  <button type="button" onClick={() => setDataTela(r._key, null)} className="hover:text-amber-400" title="Voltar à data original">
+                  <button type="button" onClick={() => setDataTela(r._key, null)} className="hover:text-texto-1" title="Voltar à data original">
                     <RotateCcw size={11} />
                   </button>
                 </span>
@@ -588,20 +588,20 @@ export default function FluxoCaixaPorConta() {
             </span>
           )}
           {!noSelection && qtdExcluidas > 0 && (
-            <span className="inline-flex items-center gap-2 text-xs text-amber-500/90">
+            <span className="inline-flex items-center gap-2 text-xs text-texto-2">
               {qtdExcluidas} linha{qtdExcluidas !== 1 ? 's' : ''} fora do cálculo
-              <button type="button" onClick={limparExcluidas} className="underline hover:text-amber-400">
+              <button type="button" onClick={limparExcluidas} className="underline hover:text-texto-1">
                 restaurar todas
               </button>
             </span>
           )}
           {!noSelection && (
-            <span className="inline-flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-gray-500">
+            <span className="inline-flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-texto-3">
               <span className="inline-flex items-center gap-1.5">
-                <Wallet size={13} /> Saldo anterior realizado: <span className="font-semibold text-gray-200">{fmt(saldoAnteriorRealizado)}</span>
+                <Wallet size={13} /> Saldo anterior realizado: <span className="font-semibold text-texto-1">{fmt(saldoAnteriorRealizado)}</span>
               </span>
               <span className="inline-flex items-center gap-1.5">
-                c/ agendamentos: <span className="font-bold text-blue-400">{fmt(saldoAnteriorComAgendamentos)}</span>
+                c/ agendamentos: <span className="font-bold text-receita">{fmt(saldoAnteriorComAgendamentos)}</span>
               </span>
             </span>
           )}
@@ -612,33 +612,33 @@ export default function FluxoCaixaPorConta() {
       {!noSelection && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="card">
-            <div className="flex items-center gap-2 mb-1 text-blue-600"><ArrowDownCircle size={14} /><p className="text-xs text-gray-400 uppercase tracking-wide">Entradas</p></div>
-            <p className="text-xl font-bold text-blue-600">{fmt(totalEntrada)}</p>
+            <div className="flex items-center gap-2 mb-1 text-receita"><ArrowDownCircle size={14} /><p className="text-xs text-texto-2 uppercase tracking-wide">Entradas</p></div>
+            <p className="text-xl font-bold text-receita">{fmt(totalEntrada)}</p>
           </div>
           <div className="card">
-            <div className="flex items-center gap-2 mb-1 text-orange-600"><ArrowUpCircle size={14} /><p className="text-xs text-gray-400 uppercase tracking-wide">Saídas</p></div>
-            <p className="text-xl font-bold text-orange-600">{fmt(totalSaida)}</p>
+            <div className="flex items-center gap-2 mb-1 text-despesa"><ArrowUpCircle size={14} /><p className="text-xs text-texto-2 uppercase tracking-wide">Saídas</p></div>
+            <p className="text-xl font-bold text-despesa">{fmt(totalSaida)}</p>
           </div>
           <div className="card">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Projetado</p>
-            <p className={`text-xl font-bold mt-1 ${saldoFinal >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{fmt(saldoFinal)}</p>
+            <p className="text-xs text-texto-2 uppercase tracking-wide">Saldo Projetado</p>
+            <p className={`text-xl font-bold mt-1 ${saldoFinal >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(saldoFinal)}</p>
           </div>
         </div>
       )}
 
       {!noSelection && (
-        <p className="text-xs text-gray-600 leading-relaxed">
-          O <span className="text-gray-400">saldo</span> parte do <span className="text-gray-400">saldo anterior</span> (dia imediatamente anterior à data inicial)
-          e acumula todos os movimentos do período — tanto os já <span className="text-gray-400">Registrados</span> quanto os projetados (agendamentos/envelopes).
+        <p className="text-xs text-texto-3 leading-relaxed">
+          O <span className="text-texto-2">saldo</span> parte do <span className="text-texto-2">saldo anterior</span> (dia imediatamente anterior à data inicial)
+          e acumula todos os movimentos do período — tanto os já <span className="text-texto-2">Registrados</span> quanto os projetados (agendamentos/envelopes).
         </p>
       )}
 
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-3">
-          <Calendar size={14} className="text-gray-400" />
-          <h2 className="text-sm font-semibold text-gray-300">Movimentações</h2>
-          <span className="text-xs text-gray-500 ml-auto">{rowsView.length} linha{rowsView.length !== 1 ? 's' : ''}</span>
+        <div className="px-4 py-3 border-b border-borda flex items-center gap-3">
+          <Calendar size={14} className="text-texto-2" />
+          <h2 className="text-sm font-semibold text-texto-2">Movimentações</h2>
+          <span className="text-xs text-texto-3 ml-auto">{rowsView.length} linha{rowsView.length !== 1 ? 's' : ''}</span>
           {!noSelection && rows.length > 0 && (
             <button onClick={handleExport} className="btn-secondary flex items-center gap-1.5 text-xs py-1">
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
@@ -647,22 +647,22 @@ export default function FluxoCaixaPorConta() {
         </div>
 
         {noSelection ? (
-          <div className="text-center py-10 text-gray-500 text-sm">
+          <div className="text-center py-10 text-texto-3 text-sm">
             {visao === 'principais' ? 'Nenhuma conta marcada como Fluxo de Caixa Principal (FC).' : 'Selecione uma conta/grupo para ver o fluxo.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 920 }}>
               <thead>
-                <tr className="border-b border-gray-800">
+                <tr className="border-b border-borda">
                   <th className="w-9 px-2 py-2.5" title="Desmarque uma linha para tirá-la do cálculo" />
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-24">Data</th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Movimentação</th>
-                  <th className="text-right px-3 py-2.5 text-xs text-orange-600 font-medium w-28">Pagamento</th>
-                  <th className="text-right px-3 py-2.5 text-xs text-blue-600 font-medium w-28">Depósito</th>
-                  <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium w-28">Saldo</th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium w-24">Status</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Data</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Movimentação</th>
+                  <th className="text-right px-3 py-2.5 text-xs text-despesa font-medium w-28">Pagamento</th>
+                  <th className="text-right px-3 py-2.5 text-xs text-receita font-medium w-28">Depósito</th>
+                  <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium w-28">Saldo</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-24">Status</th>
                   {/* Só as linhas provisórias têm ações — as demais vêm de lançamentos/agendamentos
                       e se editam nas telas delas. */}
                   <th className="min-w-20 px-2 py-2.5" />
@@ -670,19 +670,19 @@ export default function FluxoCaixaPorConta() {
               </thead>
               <tbody>
                 {/* Saldo anterior REALIZADO (só lançamentos registrados/conciliados antes da data inicial) */}
-                <tr className="border-b border-gray-800/40 bg-gray-800/10">
+                <tr className="border-b border-borda/40 bg-surface-2/10">
                   <td className="px-2 py-2" />
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
-                  <td className="px-3 py-2 text-xs text-gray-400 italic" colSpan={4}>Saldo anterior realizado</td>
-                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorRealizado >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoAnteriorRealizado)}</td>
+                  <td className="px-3 py-2 text-xs text-texto-3 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
+                  <td className="px-3 py-2 text-xs text-texto-2 italic" colSpan={4}>Saldo anterior realizado</td>
+                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorRealizado >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmt(saldoAnteriorRealizado)}</td>
                   <td className="px-3 py-2" colSpan={2} />
                 </tr>
                 {/* Saldo anterior C/ AGENDAMENTOS (realizado + pendentes/a pagar/provisões antes da data inicial) — base do acumulador */}
-                <tr className="border-b border-gray-800/50 bg-blue-500/5">
+                <tr className="border-b border-borda/50 bg-surface-2/50">
                   <td className="px-2 py-2" />
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
-                  <td className="px-3 py-2 text-xs text-blue-300 italic font-medium" colSpan={4}>Saldo anterior c/ agendamentos</td>
-                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorComAgendamentos >= 0 ? 'text-blue-400' : 'text-orange-600'}`}>{fmt(saldoAnteriorComAgendamentos)}</td>
+                  <td className="px-3 py-2 text-xs text-texto-3 whitespace-nowrap">{prevDayStr ? fmtDate(prevDayStr) : '—'}</td>
+                  <td className="px-3 py-2 text-xs text-texto-2 italic font-medium" colSpan={4}>Saldo anterior c/ agendamentos</td>
+                  <td className={`px-3 py-2 text-right text-xs font-bold ${saldoAnteriorComAgendamentos >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(saldoAnteriorComAgendamentos)}</td>
                   <td className="px-3 py-2" colSpan={2} />
                 </tr>
                 {rowsView.map(r => (
@@ -690,19 +690,19 @@ export default function FluxoCaixaPorConta() {
                     key={r._key}
                     // Provisório tem cor própria (roxo + borda tracejada à esquerda) para não se
                     // confundir com o projetado/agendado: ele não existe fora deste relatório.
-                    className={`border-b border-gray-800/40 ${
-                      r._provisorio ? 'border-l-2 border-l-purple-500 border-dashed' : ''
+                    className={`border-b border-borda/40 ${
+                      r._provisorio ? 'border-l-2 border-l-borda-forte border-dashed' : ''
                     } ${
                       !r.ativa ? 'opacity-40'
-                        : r._provisorio ? 'bg-purple-500/10 hover:bg-purple-500/20'
-                        : r.real ? 'hover:bg-gray-800/20'
-                        : 'bg-indigo-500/5 hover:bg-indigo-500/10'
+                        : r._provisorio ? 'bg-surface-2/60 hover:bg-surface-hover/60'
+                        : r.real ? 'hover:bg-surface-hover/20'
+                        : 'bg-surface-2/30 hover:bg-surface-hover/30'
                     }`}
                   >
                     <td className="px-2 py-2.5 text-center">
                       <input
                         type="checkbox"
-                        className="accent-[#0F6E56] w-3.5 h-3.5 align-middle cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        className="accent-primary w-3.5 h-3.5 align-middle cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                         checked={r.ativa}
                         disabled={!simulavel(r)}
                         onChange={() => toggleLinha(r)}
@@ -730,7 +730,7 @@ export default function FluxoCaixaPorConta() {
                           <button
                             type="button"
                             onClick={() => { cancelouDataRef.current = false; setEditandoData({ key: r._key, valor: r.date, original: r._dataOriginal || r.date, linha: r }) }}
-                            className={`hover:underline ${r._dataOriginal ? 'text-amber-400 font-semibold' : 'text-gray-400'}`}
+                            className={`hover:underline ${r._dataOriginal ? 'text-texto-1 font-semibold underline decoration-dashed decoration-borda-campo underline-offset-2' : 'text-texto-2'}`}
                             title={r._dataOriginal ? `${tituloDataOriginal(r)} — clique para alterar` : 'Alterar a data provisoriamente'}
                           >
                             {fmtDate(r.date)}
@@ -739,7 +739,7 @@ export default function FluxoCaixaPorConta() {
                             <button
                               type="button"
                               onClick={() => restaurarLinha(r)}
-                              className="text-amber-500/80 hover:text-amber-300"
+                              className="text-texto-3 hover:text-texto-1"
                               title={`${tituloDataOriginal(r)} — voltar`}
                             >
                               <RotateCcw size={11} />
@@ -747,14 +747,14 @@ export default function FluxoCaixaPorConta() {
                           )}
                         </span>
                       ) : (
-                        <span className="text-gray-400">{fmtDate(r.date)}</span>
+                        <span className="text-texto-2">{fmtDate(r.date)}</span>
                       )}
                     </td>
-                    <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-gray-200' : 'text-gray-500 line-through'}`} title={r.description}>{r.description}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{movimentacao(r)}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-orange-600 whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-blue-600 whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-gray-600' : r.saldo >= 0 ? 'text-gray-300' : 'text-orange-600'}`}>{r.ativa ? fmt(r.saldo) : '—'}</td>
+                    <td className={`px-3 py-2.5 text-xs max-w-xs truncate ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</td>
+                    <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{movimentacao(r)}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-despesa whitespace-nowrap">{r.saida > 0 ? fmt(r.saida) : ''}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-receita whitespace-nowrap">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-bold whitespace-nowrap ${!r.ativa ? 'text-texto-3' : r.saldo >= 0 ? 'text-texto-2' : 'text-despesa'}`}>{r.ativa ? fmt(r.saldo) : '—'}</td>
                     <td className="px-3 py-2.5">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
@@ -763,7 +763,7 @@ export default function FluxoCaixaPorConta() {
                         <button
                           type="button"
                           onClick={() => abrirAplicar(r)}
-                          className="inline-flex items-center gap-1 text-[11px] whitespace-nowrap px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                          className="inline-flex items-center gap-1 text-[11px] whitespace-nowrap px-1.5 py-0.5 rounded border border-ambar/40 text-ambar hover:bg-ambar/10"
                           title="Gravar esta data no agendamento real"
                         >
                           <Pin size={11} /> Aplicar data
@@ -774,7 +774,7 @@ export default function FluxoCaixaPorConta() {
                           <button
                             type="button"
                             onClick={() => setProvModal({ initial: r._provisorio })}
-                            className="p-1 rounded text-gray-500 hover:text-purple-300 hover:bg-purple-500/10"
+                            className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10"
                             title="Editar provisório"
                           >
                             <Pencil size={13} />
@@ -782,7 +782,7 @@ export default function FluxoCaixaPorConta() {
                           <button
                             type="button"
                             onClick={() => setProvConfirm({ acao: 'efetivar', prov: r._provisorio })}
-                            className="p-1 rounded text-gray-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            className="p-1 rounded text-texto-3 hover:text-primary-fg hover:bg-primary/10"
                             title="Efetivar: transformar em agendamento"
                           >
                             <CheckCircle2 size={13} />
@@ -790,7 +790,7 @@ export default function FluxoCaixaPorConta() {
                           <button
                             type="button"
                             onClick={() => setProvConfirm({ acao: 'excluir', prov: r._provisorio })}
-                            className="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                            className="p-1 rounded text-texto-3 hover:text-perigo hover:bg-perigo-bg"
                             title="Excluir provisório"
                           >
                             <Trash2 size={13} />
@@ -801,16 +801,16 @@ export default function FluxoCaixaPorConta() {
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={9} className="text-center py-8 text-gray-500 text-sm">Nenhuma movimentação no período.</td></tr>
+                  <tr><td colSpan={9} className="text-center py-8 text-texto-3 text-sm">Nenhuma movimentação no período.</td></tr>
                 )}
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
-                  <tr className="border-t border-gray-700 bg-gray-800/20">
-                    <td colSpan={4} className="px-3 py-2.5 text-xs font-semibold text-gray-400">Total</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-bold text-orange-600">{fmt(totalSaida)}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-bold text-blue-600">{fmt(totalEntrada)}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-bold ${saldoFinal >= 0 ? 'text-gray-200' : 'text-orange-600'}`}>{fmt(saldoFinal)}</td>
+                  <tr className="border-t border-borda-forte bg-surface-2/20">
+                    <td colSpan={4} className="px-3 py-2.5 text-xs font-semibold text-texto-2">Total</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-bold text-despesa">{fmt(totalSaida)}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-bold text-receita">{fmt(totalEntrada)}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-bold ${saldoFinal >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmt(saldoFinal)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -856,36 +856,36 @@ export default function FluxoCaixaPorConta() {
         {aplicar && (
           <div className="space-y-4">
             <div className="text-sm space-y-1">
-              <p className="text-gray-200 font-medium">{aplicar.linha.description}</p>
-              <p className="text-gray-400">
+              <p className="text-texto-1 font-medium">{aplicar.linha.description}</p>
+              <p className="text-texto-2">
                 {fmt(aplicar.linha.saida || aplicar.linha.entrada)} ·{' '}
-                <span className="text-gray-300">{fmtDate(aplicar.linha._dataOriginal)}</span> →{' '}
-                <span className="text-amber-400 font-semibold">{fmtDate(aplicar.linha.date)}</span>
+                <span className="text-texto-2">{fmtDate(aplicar.linha._dataOriginal)}</span> →{' '}
+                <span className="text-texto-1 font-semibold underline decoration-dashed decoration-borda-campo underline-offset-2">{fmtDate(aplicar.linha.date)}</span>
               </p>
             </div>
 
             {aplicar.op.bloqueio ? (
-              <p className="text-xs p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 leading-relaxed">{aplicar.op.bloqueio}</p>
+              <p className="text-xs p-3 rounded-lg bg-aviso/10 border border-aviso/30 text-aviso leading-relaxed">{aplicar.op.bloqueio}</p>
             ) : aplicar.op.once ? (
-              <p className="text-xs text-gray-400">Agendamento <span className="text-gray-200">Única</span>: a data dele passa a ser {fmtDate(aplicar.linha.date)}.</p>
+              <p className="text-xs text-texto-2">Agendamento <span className="text-texto-1">Única</span>: a data dele passa a ser {fmtDate(aplicar.linha.date)}.</p>
             ) : (
               <div className="space-y-2">
                 <label className="flex items-start gap-2 cursor-pointer">
-                  <input type="radio" className="mt-0.5 accent-[#0F6E56]" checked={aplicar.modo === 'ocorrencia'} onChange={() => setAplicar(a => ({ ...a, modo: 'ocorrencia' }))} />
-                  <span className="text-sm text-gray-200">Só esta ocorrência
-                    <span className="block text-xs text-gray-500">Exceção desta ocorrência (a mesma de "Próximas ocorrências" no agendamento); a série não muda.</span>
+                  <input type="radio" className="mt-0.5 accent-primary" checked={aplicar.modo === 'ocorrencia'} onChange={() => setAplicar(a => ({ ...a, modo: 'ocorrencia' }))} />
+                  <span className="text-sm text-texto-1">Só esta ocorrência
+                    <span className="block text-xs text-texto-3">Exceção desta ocorrência (a mesma de "Próximas ocorrências" no agendamento); a série não muda.</span>
                   </span>
                 </label>
                 <label className={`flex items-start gap-2 ${aplicar.op.serie.ok ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
-                  <input type="radio" className="mt-0.5 accent-[#0F6E56]" disabled={!aplicar.op.serie.ok} checked={aplicar.modo === 'serie'} onChange={() => setAplicar(a => ({ ...a, modo: 'serie' }))} />
-                  <span className="text-sm text-gray-200">Esta e as próximas (move a série)
-                    <span className="block text-xs text-gray-500">
+                  <input type="radio" className="mt-0.5 accent-primary" disabled={!aplicar.op.serie.ok} checked={aplicar.modo === 'serie'} onChange={() => setAplicar(a => ({ ...a, modo: 'serie' }))} />
+                  <span className="text-sm text-texto-1">Esta e as próximas (move a série)
+                    <span className="block text-xs text-texto-3">
                       {aplicar.op.serie.ok ? 'A série passa a partir desta nova data.' : aplicar.op.serie.motivo}
                     </span>
                   </span>
                 </label>
                 {aplicar.modo === 'serie' && aplicar.op.avisos.map((a, i) => (
-                  <p key={i} className="text-xs p-2 rounded bg-amber-500/10 text-amber-300">{a}</p>
+                  <p key={i} className="text-xs p-2 rounded bg-aviso/10 text-aviso">{a}</p>
                 ))}
               </div>
             )}

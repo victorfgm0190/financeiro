@@ -1,12 +1,13 @@
-// Badge da coluna "Doc.": sigla na cor do tipo, nome completo no tooltip. `tipo` é o resultado de
+// Badge da coluna "Doc.": sigla em texto neutro com a cor do tipo num filete interno à esquerda
+// (box-shadow inset: não ocupa espaço), nome completo no tooltip. `tipo` é o resultado de
 // resolverTipoDocumento (null → "—"). Fallback (CC/ENV/RES não gravados) sai com borda tracejada.
 // `compacto`: versão menor da linha do Fluxo no celular (11px, ~16px de altura).
 const HEX = /^#[0-9a-f]{6}$/i
 
 export default function TipoDocumentoBadge({ tipo, compacto = false }) {
-  if (!tipo) return <span className="text-[11px] text-gray-600">—</span>
+  if (!tipo) return <span className="text-[11px] text-texto-3">—</span>
   const cor = HEX.test(tipo.cor || '') ? tipo.cor : null
-  const style = cor ? { color: cor, backgroundColor: `${cor}26`, borderColor: `${cor}66` } : undefined
+  const style = cor ? { boxShadow: `inset 2px 0 0 ${cor}` } : undefined
   const titulo = tipo.fallback ? `${tipo.nome} (automático — sem tipo gravado)` : tipo.nome
   return (
     <span
@@ -15,7 +16,7 @@ export default function TipoDocumentoBadge({ tipo, compacto = false }) {
       className={`${compacto
         ? 'inline-flex items-center h-4 text-[11px] px-[5px] align-middle'
         : 'inline-block text-[10px] px-1.5 py-1'} font-semibold leading-none rounded border whitespace-nowrap ${
-        cor ? '' : 'text-gray-300 bg-gray-700/40 border-gray-600'
+        cor ? 'text-texto-1 bg-surface-2 border-borda-forte' : 'text-texto-2 bg-surface-hover/40 border-borda-forte'
       } ${tipo.fallback ? 'border-dashed' : ''}`}
     >
       {tipo.sigla}

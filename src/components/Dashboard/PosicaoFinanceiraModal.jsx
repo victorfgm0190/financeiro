@@ -1,7 +1,7 @@
 import { Fragment, useState, useMemo } from 'react'
 import { ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtDate } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 
 export default function PosicaoFinanceiraModal() {
   const { accounts, schedules, getOccurrencesProjecao: getNextOccurrences } = useApp()
@@ -35,9 +35,9 @@ export default function PosicaoFinanceiraModal() {
 
   if (rows.length === 0) {
     return (
-      <p className="text-center text-gray-500 text-sm py-10">
+      <p className="text-center text-texto-3 text-sm py-10">
         Nenhuma conta marcada como fluxo de caixa principal.<br />
-        <span className="text-gray-600 text-xs mt-1 block">Configure em Contas → editar conta → ativar "Fluxo de Caixa Principal".</span>
+        <span className="text-texto-3 text-xs mt-1 block">Configure em Contas → editar conta → ativar "Fluxo de Caixa Principal".</span>
       </p>
     )
   }
@@ -46,53 +46,53 @@ export default function PosicaoFinanceiraModal() {
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-700">
-            <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Conta</th>
-            <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Saldo Atual</th>
-            <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Líquido (agend.)</th>
-            <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Saldo Final</th>
+          <tr className="border-b border-borda-forte">
+            <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Conta</th>
+            <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Saldo Atual</th>
+            <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Líquido (agend.)</th>
+            <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Saldo Final</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(({ account, saldoAtual, liquido, saldoFinal, items }) => (
             <Fragment key={account.id}>
-              <tr className="border-b border-gray-800/60 hover:bg-gray-800/20 transition-colors">
-                <td className="px-3 py-3 text-gray-200 font-medium">{account.apelido || account.name}</td>
+              <tr className="border-b border-borda/60 hover:bg-surface-hover/20 transition-colors">
+                <td className="px-3 py-3 text-texto-1 font-medium">{account.apelido || account.name}</td>
                 <td className="px-3 py-3 text-right">
                   <span className={`font-semibold ${saldoAtual >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                    {fmt(saldoAtual)}
+                    {fmtSinal(saldoAtual)}
                   </span>
                 </td>
                 <td className="px-3 py-3 text-right">
                   {items.length > 0 ? (
                     <button
                       onClick={() => setExpanded(e => ({ ...e, [account.id]: !e[account.id] }))}
-                      className={`inline-flex items-center gap-1 font-semibold hover:opacity-75 transition-opacity ${liquido >= 0 ? 'text-blue-400' : 'text-orange-500'}`}
+                      className={`inline-flex items-center gap-1 font-semibold hover:opacity-75 transition-opacity ${liquido >= 0 ? 'text-receita' : 'text-despesa'}`}
                     >
                       {expanded[account.id] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                      {liquido >= 0 ? '+' : '-'}{fmt(Math.abs(liquido))}
+                      {liquido >= 0 ? '+' : '−'}{fmt(Math.abs(liquido))}
                     </button>
                   ) : (
-                    <span className="text-gray-600">—</span>
+                    <span className="text-texto-3">—</span>
                   )}
                 </td>
                 <td className={`px-3 py-3 text-right font-bold ${saldoFinal >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {fmt(saldoFinal)}
+                  {fmtSinal(saldoFinal)}
                 </td>
               </tr>
               {expanded[account.id] && items.map((item, i) => (
-                <tr key={`${account.id}-${i}`} className="bg-indigo-500/5 border-b border-gray-800/30">
-                  <td className="pl-8 pr-3 py-1.5 text-xs text-gray-400">
+                <tr key={`${account.id}-${i}`} className="bg-surface-2/50 border-b border-borda/30">
+                  <td className="pl-8 pr-3 py-1.5 text-xs text-texto-2">
                     <div className="flex items-center gap-1.5">
                       {item.type === 'income'
-                        ? <ArrowDownCircle size={10} className="text-blue-400 shrink-0" />
-                        : <ArrowUpCircle size={10} className="text-orange-500 shrink-0" />}
+                        ? <ArrowDownCircle size={10} className="text-receita shrink-0" />
+                        : <ArrowUpCircle size={10} className="text-despesa shrink-0" />}
                       <span className="truncate max-w-[200px]">{item.description}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 text-right text-xs text-gray-500">{fmtDate(item.date)}</td>
-                  <td className={`px-3 py-1.5 text-right text-xs font-medium ${item.type === 'income' ? 'text-blue-400' : 'text-orange-500'}`}>
-                    {item.type === 'income' ? '+' : '-'}{fmt(item.amount)}
+                  <td className="px-3 py-1.5 text-right text-xs text-texto-3">{fmtDate(item.date)}</td>
+                  <td className={`px-3 py-1.5 text-right text-xs font-medium ${item.type === 'income' ? 'text-receita' : 'text-despesa'}`}>
+                    {item.type === 'income' ? '+' : '−'}{fmt(item.amount)}
                   </td>
                   <td className="px-3 py-1.5" />
                 </tr>
@@ -101,16 +101,16 @@ export default function PosicaoFinanceiraModal() {
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t-2 border-gray-700 bg-surface/40">
-            <td className="px-3 py-3 text-sm font-bold text-gray-100">Total</td>
+          <tr className="border-t-2 border-borda-forte bg-surface/40">
+            <td className="px-3 py-3 text-sm font-bold text-texto-1">Total</td>
             <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoAtual >= 0 ? 'text-receita' : 'text-despesa'}`}>
-              {fmt(totals.saldoAtual)}
+              {fmtSinal(totals.saldoAtual)}
             </td>
-            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.liquido >= 0 ? 'text-blue-400' : 'text-orange-500'}`}>
-              {totals.liquido >= 0 ? '+' : '-'}{fmt(Math.abs(totals.liquido))}
+            <td className={`px-3 py-3 text-right text-sm font-bold ${totals.liquido >= 0 ? 'text-receita' : 'text-despesa'}`}>
+              {totals.liquido >= 0 ? '+' : '−'}{fmt(Math.abs(totals.liquido))}
             </td>
             <td className={`px-3 py-3 text-right text-sm font-bold ${totals.saldoFinal >= 0 ? 'text-receita' : 'text-despesa'}`}>
-              {fmt(totals.saldoFinal)}
+              {fmtSinal(totals.saldoFinal)}
             </td>
           </tr>
         </tfoot>

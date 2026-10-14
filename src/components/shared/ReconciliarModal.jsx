@@ -45,20 +45,20 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
-          <h3 className="font-semibold text-gray-100 flex items-center gap-2">
-            <CheckCircle size={16} className="text-emerald-400" /> Reconciliar Transações
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
+          <h3 className="font-semibold text-texto-1 flex items-center gap-2">
+            <CheckCircle size={16} className="text-primary-fg" /> Reconciliar Transações
           </h3>
-          <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors">
+          <button onClick={onClose} className="p-1 text-texto-3 hover:text-texto-2 rounded transition-colors">
             <X size={16} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {visibleItems.length === 0 ? (
-            <p className="text-center text-sm text-gray-500 py-10">
+            <p className="text-center text-sm text-texto-3 py-10">
               {operation === 'reconciliar'
                 ? 'Nenhum lançamento pendente de reconciliação neste período.'
                 : 'Nenhum lançamento conciliado neste período.'}
@@ -66,26 +66,26 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface">
-                <tr className="border-b border-gray-800">
+                <tr className="border-b border-borda">
                   <th className="px-3 py-2.5 w-10 text-center">
                     <input
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleAll}
-                      className="w-4 h-4 rounded accent-emerald-500 cursor-pointer align-middle"
+                      className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       title="Selecionar todos"
                     />
                   </th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                  <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Histórico</th>
-                  <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Valor</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                  <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Histórico</th>
+                  <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Valor</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleItems.map(t => (
                   <tr
                     key={t.id}
-                    className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
+                    className="border-b border-borda/50 hover:bg-surface-hover/30 transition-colors cursor-pointer"
                     onClick={() => toggle(t.id)}
                   >
                     <td className="px-3 py-2.5 text-center">
@@ -94,14 +94,14 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
                         checked={selected.has(t.id)}
                         onChange={() => toggle(t.id)}
                         onClick={e => e.stopPropagation()}
-                        className="w-4 h-4 rounded accent-emerald-500 cursor-pointer align-middle"
+                        className="w-4 h-4 rounded accent-primary cursor-pointer align-middle"
                       />
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{fmtDate(t.date)}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-200 truncate max-w-0">
+                    <td className="px-3 py-2.5 text-xs text-texto-2 whitespace-nowrap">{fmtDate(t.date)}</td>
+                    <td className="px-3 py-2.5 text-xs text-texto-1 truncate max-w-0">
                       {t.description || 'Lançamento'}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-gray-200 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right text-xs font-semibold text-texto-1 whitespace-nowrap">
                       {fmt(t.amount)}
                     </td>
                   </tr>
@@ -112,31 +112,31 @@ export default function ReconciliarModal({ items, onApply, onClose, onAlterar })
         </div>
 
         {items.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-800 space-y-3 shrink-0">
+          <div className="px-5 py-3 border-t border-borda space-y-3 shrink-0">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                <label className="flex items-center gap-1.5 cursor-pointer text-sm text-texto-2">
                   <input
                     type="radio"
                     name="recOp"
                     checked={operation === 'reconciliar'}
                     onChange={() => changeOperation('reconciliar')}
-                    className="accent-emerald-500 cursor-pointer"
+                    className="accent-primary cursor-pointer"
                   />
                   Reconciliar
                 </label>
-                <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-300">
+                <label className="flex items-center gap-1.5 cursor-pointer text-sm text-texto-2">
                   <input
                     type="radio"
                     name="recOp"
                     checked={operation === 'nao'}
                     onChange={() => changeOperation('nao')}
-                    className="accent-emerald-500 cursor-pointer"
+                    className="accent-primary cursor-pointer"
                   />
                   Não reconciliar
                 </label>
               </div>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-texto-3">
                 {selected.size} selecionado{selected.size !== 1 ? 's' : ''} · {fmt(total)}
               </span>
             </div>

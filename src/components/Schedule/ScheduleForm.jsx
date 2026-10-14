@@ -72,12 +72,12 @@ function Tooltip({ text }) {
         onMouseEnter={handleEnter}
         onMouseLeave={() => setShow(false)}
       >
-        <Info size={12} className="text-gray-600 hover:text-gray-400 transition-colors" />
+        <Info size={12} className="text-texto-3 hover:text-texto-2 transition-colors" />
       </span>
       {show && rect && (
         <div
           style={{ position: 'fixed', left: rect.right + 8, top: rect.top - 6, zIndex: 9999 }}
-          className="bg-surface border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
+          className="bg-surface border border-borda-forte text-texto-2 text-xs rounded-lg px-2.5 py-1.5 w-52 leading-snug shadow-2xl pointer-events-none"
         >
           {text}
         </div>
@@ -101,7 +101,7 @@ function Toggle({ value, onChange }) {
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-[#0F6E56]' : 'bg-gray-700'}`}
+      className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-borda-campo'}`}
     >
       <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-5' : 'translate-x-0.5'}`} />
     </button>
@@ -117,11 +117,11 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-xl shadow-2xl w-64 p-4">
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-64 p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-gray-200">Ocorrência de {fmtD(originalDate)}</p>
-          <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-300 p-0.5 rounded transition-colors">
+          <p className="text-xs font-semibold text-texto-1">Ocorrência de {fmtD(originalDate)}</p>
+          <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2 p-0.5 rounded transition-colors">
             <X size={14} />
           </button>
         </div>
@@ -131,9 +131,9 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
             type="checkbox"
             checked={skip}
             onChange={e => setSkip(e.target.checked)}
-            className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+            className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
-          <span className="text-sm text-gray-300">Pular esta ocorrência</span>
+          <span className="text-sm text-texto-2">Pular esta ocorrência</span>
         </label>
 
         {!skip && (
@@ -624,14 +624,14 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
         {initial?.id && (
           <div className="col-span-2 flex items-center justify-end -mb-2">
-            <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1.5" title="Histórico de alterações">
+            <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
               <History size={13} /> Histórico
-              {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+              {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>
           </div>
         )}
         {avisoMotor && (
-          <div className="col-span-2 flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+          <div className="col-span-2 flex items-start gap-2 text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
             Este agendamento é recalculado pelo motor da fatura; alterações manuais podem ser sobrescritas
           </div>
@@ -652,7 +652,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Movimentação */}
         <div className="col-span-2">
           <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
-          <div className="flex rounded-lg overflow-hidden border border-gray-700">
+          <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {['expense', 'income', 'transfer'].map(t => (
               <button
                 type="button"
@@ -660,10 +660,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 onClick={() => set('transactionType', t)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.transactionType === t
-                    ? t === 'income' ? 'bg-blue-600 text-white'
-                    : t === 'transfer' ? 'bg-purple-600 text-white'
-                    : 'bg-orange-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    ? t === 'income' ? 'bg-receita text-page'
+                    : t === 'transfer' ? 'bg-transferencia text-page'
+                    : 'bg-despesa text-page'
+                    : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                 }`}
               >
                 {t === 'income' ? 'Receita' : t === 'transfer' ? 'Transferência' : 'Despesa'}
@@ -683,7 +683,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             required
             readOnly={ehFinanciamento}
           />
-          {ehFinanciamento && <p className="text-[11px] text-gray-500 mt-1">Parcela de financiamento: a descrição do lançamento vem do bem ("Parcela n/N"), por isso não é editável aqui.</p>}
+          {ehFinanciamento && <p className="text-[11px] text-texto-3 mt-1">Parcela de financiamento: a descrição do lançamento vem do bem ("Parcela n/N"), por isso não é editável aqui.</p>}
         </div>
 
         {/* Conta */}
@@ -714,9 +714,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             required
             readOnly={ehFinanciamento}
           />
-          {ehFinanciamento && <p className="text-[11px] text-gray-500 mt-1">O pagamento usa principal + juros da parcela; o valor não é editável aqui.</p>}
+          {ehFinanciamento && <p className="text-[11px] text-texto-3 mt-1">O pagamento usa principal + juros da parcela; o valor não é editável aqui.</p>}
           {hasNextDiff && !occInicial && (
-            <p className="text-xs text-gray-400 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
+            <p className="text-xs text-texto-2 mt-1">Próximo vencimento: {fmt(nextOccAmount)}</p>
           )}
           {/* Divisão do valor em categorias. Mesmo padrão da listagem (SchedulePanel).
               Fica AQUI, colada no valor, e não junto do editor de rateio, porque o editor
@@ -725,18 +725,18 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               que o modal dela mostrava só o total: a divisão existia e não tinha onde aparecer. */}
           {rateioRows.length > 0 && (
             <div className="mt-2">
-              <p className="text-xs text-gray-500">Divisão</p>
+              <p className="text-xs text-texto-3">Divisão</p>
               <ul className="mt-1 space-y-0.5">
                 {rateioRows.map((r, i) => {
                   const catRateio = categories.find(c => c.id === r.categoriaId)
                   return (
-                    <li key={i} className="text-[11px] text-gray-500 flex items-center gap-1">
-                      <span className="text-gray-600">{i === rateioRows.length - 1 ? '└' : '├'}</span>
+                    <li key={i} className="text-[11px] text-texto-3 flex items-center gap-1">
+                      <span className="text-texto-3">{i === rateioRows.length - 1 ? '└' : '├'}</span>
                       <span className="truncate flex-1">
                         {r.descricao || catRateio?.name || 'Rateio'}
                         {catRateio ? ` · ${catRateio.icon} ${catRateio.name}` : ''}
                       </span>
-                      <span className="text-gray-400 font-medium">{fmt(r.valor)}</span>
+                      <span className="text-texto-2 font-medium">{fmt(r.valor)}</span>
                     </li>
                   )
                 })}
@@ -746,7 +746,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 // transferência, então um campo editável aqui seria descartado no Salvar. Na
                 // parcela de financiamento os valores vêm do próprio financiamento (principal e
                 // juros da parcela) — editá-los à mão faria a previsão discordar da parcela.
-                <p className="text-[11px] text-gray-600 mt-1.5">
+                <p className="text-[11px] text-texto-3 mt-1.5">
                   Somente leitura — vem do financiamento da parcela.
                 </p>
               )}
@@ -772,8 +772,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Reserva category — quando transferência envolve conta reserva */}
         {form.transactionType === 'transfer' && (schIsDepositToReserva || schIsWithdrawFromReserva) && (
-          <div className="col-span-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-2">
-            <p className="text-xs font-medium text-amber-400">
+          <div className="col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-reserva">
               📂 {schIsDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
             </p>
             {schNeedsReservaCategorySelect ? (
@@ -788,11 +788,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                   ungroupedLabel="Sem grupo"
                 />
                 {!form.reservaExpenseCategoryId && (
-                  <p className="text-xs text-amber-500">Obrigatório para reserva livre</p>
+                  <p className="text-xs text-aviso">⚠ Obrigatório para reserva livre</p>
                 )}
               </>
             ) : (
-              <p className="text-xs text-amber-300">
+              <p className="text-xs text-texto-2">
                 {schIsDepositToReserva ? 'Despesa em:' : 'Categoria:'}{' '}
                 <span className="font-semibold">
                   {schReservaLinkedCat ? `${schReservaLinkedCat.icon} ${schReservaLinkedCat.name}` : '🏦 Reservas Gerais'}
@@ -805,7 +805,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 exibimos a árvore somente-leitura abaixo. */}
             {!hasReservaDetalhe && (
               <div>
-                <label className="label text-amber-400">Função de Reserva</label>
+                <label className="label text-reserva">Função de Reserva</label>
                 <select
                   className="input"
                   value={form.reservaFuncaoId}
@@ -817,7 +817,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                   ))}
                 </select>
                 {reservaFuncoesDaConta.length === 0 && (
-                  <p className="text-xs text-gray-500 mt-1">Nenhuma função vinculada a esta conta de reserva.</p>
+                  <p className="text-xs text-texto-3 mt-1">Nenhuma função vinculada a esta conta de reserva.</p>
                 )}
               </div>
             )}
@@ -826,18 +826,18 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Detalhamento por função de reserva (somente leitura) — resgate com múltiplas funções */}
         {form.transactionType === 'transfer' && hasReservaDetalhe && (
-          <div className="col-span-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <p className="text-xs font-medium text-amber-400 mb-1.5">Detalhamento por função de reserva</p>
+          <div className="col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg">
+            <p className="text-xs font-medium text-reserva mb-1.5">Detalhamento por função de reserva</p>
             <ul className="space-y-0.5">
               {reservaDetalhe.map((det, i) => (
-                <li key={i} className="text-xs text-gray-300 flex items-center gap-1.5">
-                  <span className="text-gray-600">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
+                <li key={i} className="text-xs text-texto-2 flex items-center gap-1.5">
+                  <span className="text-texto-3">{i === reservaDetalhe.length - 1 ? '└' : '├'}</span>
                   <span className="flex-1 truncate">{det.name}</span>
-                  <span className="font-medium text-gray-200">{fmt(det.valor)}</span>
+                  <span className="font-medium text-texto-1">{fmt(det.valor)}</span>
                 </li>
               ))}
             </ul>
-            <p className="text-[11px] text-gray-500 mt-1.5">Calculado a partir dos lançamentos da fatura — somente leitura.</p>
+            <p className="text-[11px] text-texto-3 mt-1.5">Calculado a partir dos lançamentos da fatura — somente leitura.</p>
           </div>
         )}
 
@@ -847,9 +847,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             <LabelTip tip={TIPS.category}>Categoria</LabelTip>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
-                <div className="input flex-1 flex items-center justify-between text-xs text-gray-300">
+                <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
                   <span>{rateioRows.length} Categorias Separadas</span>
-                  <span className="text-gray-500">Total: {fmt(rateioTotal)}</span>
+                  <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
                 </div>
               ) : (
                 <div className="flex-1 min-w-0">
@@ -862,7 +862,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     ungroupedLast
                     ungroupedLabel="Sem grupo"
                   />
-                  {categoriaForaDoPerfil && <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>}
+                  {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
                 </div>
               )}
               <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
@@ -927,11 +927,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               value={form.nextOccurrence || ''}
               onChange={e => { set('nextOccurrence', e.target.value); setAncoraTocada(true) }}
             />
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-[11px] text-texto-3 mt-1">
               Próxima ocorrência. Altere o dia (ex.: 20 → 30) para mudar as próximas; a Data de Início é preservada.
             </p>
             {faturaCalculada && (
-              <p className="text-xs text-purple-400 mt-1">
+              <p className="text-xs text-texto-2 mt-1">
                 📅 Entrará na fatura {faturaCalculada}
               </p>
             )}
@@ -944,7 +944,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           return (
             <div className={form.occurrenceType === 'installment' && !occDisabled ? '' : 'col-span-2'}>
               <LabelTip tip={TIPS.occurrence}>Ocorrência</LabelTip>
-              <div className={`flex rounded-lg overflow-hidden border border-gray-700 ${occDisabled ? 'opacity-40' : ''}`}>
+              <div className={`flex rounded-lg overflow-hidden border border-borda-forte ${occDisabled ? 'opacity-40' : ''}`}>
                 {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
                   <button
                     type="button"
@@ -952,7 +952,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     disabled={occDisabled}
                     onClick={() => set('occurrenceType', v)}
                     className={`flex-1 py-2 text-sm font-medium transition-colors ${occDisabled ? 'cursor-not-allowed' : ''} ${
-                      form.occurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      form.occurrenceType === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                     }`}
                   >
                     {l}
@@ -978,11 +978,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         )}
 
         {/* Automações */}
-        <div className="col-span-2 bg-gray-800/40 rounded-xl p-3.5 space-y-3">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">Automações</p>
+        <div className="col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+          <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider">Automações</p>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-gray-300 inline-flex items-center">
+            <span className="text-sm text-texto-2 inline-flex items-center">
               Lembrar com Antecedência<Tooltip text={TIPS.remindDaysBefore} />
             </span>
             <div className="flex items-center gap-2">
@@ -996,7 +996,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     onChange={e => set('remindDaysBefore', Math.max(1, Number(e.target.value)))}
                     className="w-14 input text-center text-xs py-1"
                   />
-                  <span className="text-xs text-gray-500 whitespace-nowrap">dias antes</span>
+                  <span className="text-xs text-texto-3 whitespace-nowrap">dias antes</span>
                 </>
               )}
               <Toggle
@@ -1007,7 +1007,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-gray-300 inline-flex items-center">
+            <span className="text-sm text-texto-2 inline-flex items-center">
               Registrar Automático<Tooltip text={TIPS.autoRegister} />
             </span>
             <Toggle value={form.autoRegister} onChange={v => set('autoRegister', v)} />
@@ -1016,8 +1016,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Classificação Gerencial */}
         {form.transactionType === 'expense' && (
-          <div className="col-span-2 bg-gray-800/40 rounded-xl p-3.5 space-y-2">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider flex items-center">
+          <div className="col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
+            <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider flex items-center">
               Classificação Gerencial <Tooltip text={TIPS.gerencial} />
             </p>
             <select
@@ -1038,16 +1038,16 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
               if (!g) return null
               if (g.number === 'D') return (
-                <p className="text-xs text-gray-500 leading-snug">Apenas registra o lançamento, sem movimentar saldo.</p>
+                <p className="text-xs text-texto-3 leading-snug">Apenas registra o lançamento, sem movimentar saldo.</p>
               )
               if (g.number === 1) return (
-                <p className="text-xs text-reserva/70 leading-snug">
+                <p className="text-xs text-reserva leading-snug">
                   Ao efetivar, transferirá para a conta de reserva do grupo.
                 </p>
               )
               const contaR = accounts.find(a => a.id === g.defaultAccountId)
               return (
-                <p className="text-xs text-orange-500/70 leading-snug">
+                <p className="text-xs text-despesa leading-snug">
                   Ao efetivar, resgatará automaticamente{contaR ? ` de "${contaR.name}"` : ''} para a conta principal.
                 </p>
               )
@@ -1056,7 +1056,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             {/* Função de reserva do bucket a resgatar — só p/ despesa em cartão com grupo numerado */}
             {showFuncaoReserva && (
               <div>
-                <label className="label text-xs uppercase tracking-wide text-orange-400" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                <label className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>Função de Reserva</label>
                 <select
                   className="input"
                   value={form.reservaFuncaoId || ''}
@@ -1067,7 +1067,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                <p className="text-xs text-texto-3 mt-1 leading-relaxed">
                   De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
                   o resgate ao registrar este agendamento.
                 </p>
@@ -1081,7 +1081,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           <div className="col-span-2">
             <label className="label">
               Prévia das próximas ocorrências
-              <span className="ml-1.5 text-gray-600 text-[10px] normal-case font-normal">— clique para editar</span>
+              <span className="ml-1.5 text-texto-3 text-[10px] normal-case font-normal">— clique para editar</span>
             </label>
             <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
               {preview.map((date, i) => {
@@ -1098,25 +1098,25 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     title="Clique para editar esta ocorrência"
                     className={`text-center p-2 rounded-lg text-xs transition-all cursor-pointer ${
                       isSkipped
-                        ? 'bg-gray-800/40 text-gray-600 ring-1 ring-gray-800'
+                        ? 'bg-surface-2/40 text-texto-3 ring-1 ring-borda-forte'
                         : override
-                        ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30'
+                        ? 'bg-surface-hover text-texto-1 ring-1 ring-borda-campo'
                         : i === 0
-                        ? 'bg-indigo-500/20 text-indigo-400 font-medium'
-                        : 'bg-gray-800 text-gray-400'
-                    } hover:ring-1 hover:ring-gray-500`}
+                        ? 'bg-primary/15 text-primary-fg font-medium'
+                        : 'bg-surface-2 text-texto-2'
+                    } hover:ring-1 hover:ring-borda-forte`}
                   >
                     <span className={isSkipped ? 'line-through opacity-40' : ''}>{displayDate}</span>
                     {isSkipped && (
-                      <span className="block text-[9px] text-gray-600 mt-0.5">Pulado</span>
+                      <span className="block text-[9px] text-texto-3 mt-0.5">Pulado</span>
                     )}
                     {hasCustomAmount && (
-                      <span className="block text-[9px] text-blue-500 mt-0.5">
+                      <span className="block text-[9px] text-texto-2 mt-0.5">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(override.amount)}
                       </span>
                     )}
                     {override && !isSkipped && !hasCustomAmount && override.date !== date && (
-                      <span className="block text-[9px] text-blue-500 mt-0.5">Editado</span>
+                      <span className="block text-[9px] text-texto-2 mt-0.5">Editado</span>
                     )}
                   </button>
                 )
@@ -1127,8 +1127,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 exceção vale só para a ocorrência editada. Quem quer mover a série de verdade
                 tem o campo "Data de Vencimento Atual", que é a âncora. */}
             {deslocPrevia !== 0 && (
-              <p className="text-xs text-amber-400/80 mt-1.5 leading-relaxed">
-                As datas seguintes aparecem deslocadas junto com a exceção, mas a série continua
+              <p className="text-xs text-aviso mt-1.5 leading-relaxed">
+                ⚠ As datas seguintes aparecem deslocadas junto com a exceção, mas a série continua
                 ancorada na data original — só a ocorrência editada mudou de fato. Para mover o
                 vencimento de todas, use <strong>Data de Vencimento Atual</strong>.
               </p>

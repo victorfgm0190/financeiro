@@ -6,6 +6,8 @@ import { useDespesasPorCategoria } from '../../hooks/useDespesasPorCategoria'
 import CategoriaLancamentos from '../shared/CategoriaLancamentos'
 import { montarBlocos, corDaCategoria, OUTRAS_ID, SEM_CATEGORIA_ID, TOP_CATEGORIAS } from '../../lib/despesasPorCategoria'
 import { fmt } from '../shared/utils'
+import { useThemeColors } from '../../hooks/useTheme'
+import { estiloTooltip } from '../../lib/chartPalette'
 
 // Blocos "Maiores Despesas" (pizza) e "Ranking por Categoria" — os mesmos no Painel (desktop) e no
 // mobile. Valores, % e a lista do clique saem de UM resultado de despesasPorCategoria (src/lib) via
@@ -19,7 +21,7 @@ import { fmt } from '../shared/utils'
 // `grande`: alvos de 44px (mobile).
 export function Segmentado({ opcoes, valor, onChange, grande = false, rotulo }) {
   return (
-    <div role="group" aria-label={rotulo} className={`flex gap-1 ${grande ? 'p-1 rounded-xl bg-gray-900 border border-gray-800' : ''}`}>
+    <div role="group" aria-label={rotulo} className={`flex gap-1 ${grande ? 'p-1 rounded-xl bg-surface border border-borda' : ''}`}>
       {opcoes.map(o => (
         <button
           key={o.value}
@@ -28,8 +30,8 @@ export function Segmentado({ opcoes, valor, onChange, grande = false, rotulo }) 
           aria-pressed={valor === o.value}
           title={o.title}
           className={grande
-            ? `flex-1 min-h-[44px] rounded-lg text-xs font-medium transition-colors ${valor === o.value ? 'bg-gray-700 text-gray-100' : 'text-gray-500'}`
-            : `text-xs px-2 py-1 rounded transition-colors ${valor === o.value ? 'bg-gray-700 text-gray-200' : 'text-gray-600 hover:text-gray-400'}`}
+            ? `flex-1 min-h-[44px] rounded-lg text-xs font-medium transition-colors ${valor === o.value ? 'bg-primary/15 text-primary-fg' : 'text-texto-3'}`
+            : `text-xs px-2 py-1 rounded transition-colors ${valor === o.value ? 'bg-primary/15 text-primary-fg' : 'text-texto-3 hover:text-texto-2'}`}
         >
           {o.label}
         </button>
@@ -65,7 +67,7 @@ function BotaoTodas({ total, todas, onAlternar, grande }) {
       type="button"
       onClick={onAlternar}
       aria-expanded={todas}
-      className={`w-full mt-2 text-xs text-emerald-400 hover:text-emerald-300 rounded-lg ${grande ? 'min-h-[44px]' : 'py-1.5'}`}
+      className={`w-full mt-2 text-xs text-primary-fg hover:text-texto-1 rounded-lg ${grande ? 'min-h-[44px]' : 'py-1.5'}`}
     >
       {todas ? 'Mostrar menos' : `Ver todas (${total})`}
     </button>
@@ -80,13 +82,13 @@ function LinhaLegenda({ c, indice, sel, esmaecer, onClick, grande }) {
       type="button"
       onClick={onClick}
       aria-expanded={sel}
-      className={`w-full flex items-center justify-between px-2 rounded-lg transition-colors text-left group cursor-pointer ${grande ? 'min-h-[44px]' : 'py-1.5'} ${sel ? 'bg-gray-800/70' : 'hover:bg-gray-800/60'} ${esmaecer ? 'opacity-50' : ''}`}
+      className={`w-full flex items-center justify-between px-2 rounded-lg transition-colors text-left group cursor-pointer ${grande ? 'min-h-[44px]' : 'py-1.5'} ${sel ? 'bg-surface-hover/70' : 'hover:bg-surface-hover/60'} ${esmaecer ? 'opacity-50' : ''}`}
     >
       <div className="flex items-center gap-2 min-w-0">
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: corDaCategoria(c.categoryId, indice) }} />
-        <span className="text-xs text-gray-300 truncate group-hover:text-white transition-colors">{nomeCat(categories, c.categoryId)}</span>
+        <span className="text-xs text-texto-2 truncate group-hover:text-texto-1 transition-colors">{nomeCat(categories, c.categoryId)}</span>
       </div>
-      <span className="text-xs text-gray-500 shrink-0 ml-2 tabular-nums">
+      <span className="text-xs text-texto-3 shrink-0 ml-2 tabular-nums">
         {pctTxt(c.pct)} — {fmt(c.valor)}
       </span>
     </button>
@@ -98,9 +100,9 @@ function LinhaLegenda({ c, indice, sel, esmaecer, onClick, grande }) {
 function OutrasLista({ outras, inicio, periodo, modo, grande }) {
   const [aberta, setAberta] = useState(null)
   return (
-    <div className="rounded-lg border border-gray-800 bg-gray-900/40 px-2 py-2 space-y-1">
-      <p className="text-xs text-gray-300 px-2 pb-1">
-        <span className="font-semibold text-gray-100">Outras ({outras.membros.length})</span> · {fmt(outras.valor)}
+    <div className="rounded-lg border border-borda bg-surface-2/40 px-2 py-2 space-y-1">
+      <p className="text-xs text-texto-2 px-2 pb-1">
+        <span className="font-semibold text-texto-1">Outras ({outras.membros.length})</span> · {fmt(outras.valor)}
       </p>
       {outras.membros.map((c, i) => (
         <div key={c.categoryId}>
@@ -126,13 +128,14 @@ function OutrasLista({ outras, inicio, periodo, modo, grande }) {
 // (mesmo item fecha; outro troca). A categoria aberta sobrevive à troca de período/modo.
 export function PizzaDespesas({ periodo, modo, grande = false, todas = false, onAlternarTodas }) {
   const { categories } = useApp()
+  const cor = useThemeColors()
   const { pizza, lista, total, aberta, alternar } = useBloco(periodo, modo, todas)
   const { fatias, outras } = pizza
 
   if (fatias.length === 0) {
     return (
       <div>
-        <p className="text-xs text-gray-500 text-center py-10">Sem despesas no período</p>
+        <p className="text-xs text-texto-3 text-center py-10">Sem despesas no período</p>
         {aberta && aberta !== OUTRAS_ID && <CategoriaLancamentos categoriaId={aberta} periodo={periodo} modo={modo} />}
       </div>
     )
@@ -158,7 +161,7 @@ export function PizzaDespesas({ periodo, modo, grande = false, todas = false, on
                 key={c.categoryId}
                 fill={corDaCategoria(c.categoryId, i)}
                 fillOpacity={aberta && aberta !== c.categoryId ? 0.3 : 1}
-                stroke={aberta === c.categoryId ? '#e5e7eb' : 'transparent'}
+                stroke={aberta === c.categoryId ? cor.texto1 : 'transparent'}
                 strokeWidth={aberta === c.categoryId ? 2 : 0}
               />
             ))}
@@ -168,7 +171,8 @@ export function PizzaDespesas({ periodo, modo, grande = false, todas = false, on
               const p = item?.payload
               return [fmt(v), p?.outras ? `Outras (${p.membros.length})` : nomeCat(categories, p?.categoryId)]
             }}
-            contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 12 }}
+            {...estiloTooltip(cor)}
+            itemStyle={{ color: cor.texto1 }}
           />
         </PieChart>
       </ResponsiveContainer>
@@ -207,7 +211,7 @@ export function RankingDespesas({ periodo, modo, grande = false, todas = false, 
   const { categories } = useApp()
   const { lista, total, aberta, alternar } = useBloco(periodo, modo, todas)
 
-  if (lista.length === 0) return <p className="text-xs text-gray-500 text-center py-4">Sem despesas no período</p>
+  if (lista.length === 0) return <p className="text-xs text-texto-3 text-center py-4">Sem despesas no período</p>
 
   return (
     <div>
@@ -222,16 +226,16 @@ export function RankingDespesas({ periodo, modo, grande = false, todas = false, 
                 type="button"
                 onClick={() => alternar(c.categoryId)}
                 aria-expanded={sel}
-                className={`w-full text-left cursor-pointer rounded-lg px-1 -mx-1 hover:bg-gray-800/40 ${grande ? 'min-h-[44px] py-1.5' : ''}`}
+                className={`w-full text-left cursor-pointer rounded-lg px-1 -mx-1 hover:bg-surface-hover/40 ${grande ? 'min-h-[44px] py-1.5' : ''}`}
               >
                 <div className="flex justify-between text-xs mb-0.5">
-                  <span className="text-gray-300 flex items-center gap-1">
-                    <Seta size={12} className="text-gray-600" />
+                  <span className="text-texto-2 flex items-center gap-1">
+                    <Seta size={12} className="text-texto-3" />
                     {nomeCat(categories, c.categoryId)}
                   </span>
-                  <span className="text-gray-400">{fmt(c.valor)} <span className="text-gray-600">({pctTxt(c.pct)})</span></span>
+                  <span className="text-texto-2">{fmt(c.valor)} <span className="text-texto-3">({pctTxt(c.pct)})</span></span>
                 </div>
-                <div className="h-1.5 bg-gray-800 rounded-full">
+                <div className="h-1.5 bg-surface-2 rounded-full">
                   <div className="h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, c.pct)}%`, background: cat?.color || corDaCategoria(c.categoryId, i) }} />
                 </div>
               </button>

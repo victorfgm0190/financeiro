@@ -104,30 +104,30 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
         <span className="truncate min-w-0">
           {selectedCat
             ? <>{selectedCat.icon} {selectedCat.name}</>
-            : <span className="text-gray-500">{placeholder}</span>}
+            : <span className="text-texto-3">{placeholder}</span>}
         </span>
-        <svg className="shrink-0 text-gray-500" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+        <svg className="shrink-0 text-texto-3" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
           <path d="M1 3l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
         </svg>
       </button>
 
       {open && createPortal(
         <div id="cat-select-portal" style={dropdownStyle}
-          className="bg-surface border border-gray-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+          className="bg-surface border border-borda-forte rounded-lg shadow-2xl overflow-hidden flex flex-col"
         >
-          <div className="p-1.5 border-b border-gray-800 shrink-0">
-            <div className="flex items-center gap-1.5 bg-gray-800 rounded px-2 py-1">
-              <Search size={11} className="text-gray-500 shrink-0" />
+          <div className="p-1.5 border-b border-borda shrink-0">
+            <div className="flex items-center gap-1.5 bg-surface-2 rounded px-2 py-1">
+              <Search size={11} className="text-texto-3 shrink-0" />
               <input
                 ref={inputRef}
                 type="text"
-                className="bg-transparent text-xs text-gray-200 outline-none placeholder-gray-600 w-full"
+                className="bg-transparent text-xs text-texto-1 outline-none placeholder-texto-3 w-full"
                 placeholder="Buscar categoria..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
               {query && (
-                <button type="button" className="text-gray-600 hover:text-gray-400 shrink-0" onClick={() => setQuery('')}>
+                <button type="button" className="text-texto-3 hover:text-texto-2 shrink-0" onClick={() => setQuery('')}>
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M2 2l6 6M8 2l-6 6" />
                   </svg>
@@ -139,7 +139,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
           <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: 220 }}>
             {!query && (
               <button type="button"
-                className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-800"
+                className="w-full text-left px-3 py-1.5 text-xs text-texto-3 hover:bg-surface-hover"
                 onClick={() => select('')}
               >
                 {placeholder}
@@ -148,10 +148,10 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
 
             {matchGroups.map(groupName => (
               <div key={groupName}>
-                <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">{groupName}</div>
+                <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-texto-3 uppercase tracking-wider font-medium">{groupName}</div>
                 {matchGrouped[groupName].map(c => (
                   <button key={c.id} type="button"
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 ${c.id === value ? 'text-[#0F6E56] font-medium' : 'text-gray-200'}`}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover ${c.id === value ? 'text-primary-fg font-medium' : 'text-texto-1'}`}
                     onClick={() => select(c.id)}
                   >
                     {c.icon} {c.name}
@@ -164,11 +164,11 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
             {matchUngrouped.length > 0 && (
               <>
                 {matchGroups.length > 0 && (
-                  <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-gray-600 uppercase tracking-wider font-medium">Sem grupo</div>
+                  <div className="px-3 pt-1.5 pb-0.5 text-[10px] text-texto-3 uppercase tracking-wider font-medium">Sem grupo</div>
                 )}
                 {matchUngrouped.map(c => (
                   <button key={c.id} type="button"
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 ${c.id === value ? 'text-[#0F6E56] font-medium' : 'text-gray-200'}`}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover ${c.id === value ? 'text-primary-fg font-medium' : 'text-texto-1'}`}
                     onClick={() => select(c.id)}
                   >
                     {c.icon} {c.name}
@@ -178,7 +178,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
             )}
 
             {!hasResults && (
-              <p className="px-3 py-3 text-xs text-gray-600 text-center">Nenhuma categoria encontrada</p>
+              <p className="px-3 py-3 text-xs text-texto-3 text-center">Nenhuma categoria encontrada</p>
             )}
           </div>
         </div>,
@@ -213,7 +213,7 @@ export default function CategorySelect({
   const selecionada = value ? categoriesProp?.find(c => c.id === value) : null
   const deOutroPerfil = !!selecionada && !categoriaDisponivelParaPerfil(selecionada, perfil)
   const aviso = deOutroPerfil && (
-    <p className="text-[11px] text-amber-400/80 mt-0.5">Categoria de outro perfil</p>
+    <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>
   )
 
   if (searchable) {

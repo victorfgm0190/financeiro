@@ -131,9 +131,9 @@ export default function ProvisaoForm({ initial, onClose }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-        <Info size={14} className="text-amber-400 shrink-0 mt-0.5" />
-        <p className="text-xs text-amber-300/90 leading-snug">
+      <div className="flex items-start gap-2 p-3 bg-surface-2 border border-borda-forte rounded-lg">
+        <Info size={14} className="text-texto-2 shrink-0 mt-0.5" />
+        <p className="text-xs text-texto-2 leading-snug">
           Uma provisão é uma despesa futura estimada. Pode ser Única ou recorrente
           (Contínua/Parcelada). Aparece no Fluxo de Caixa Principal e pode ser efetivada depois,
           ocorrência a ocorrência, com o valor e a data reais.
@@ -197,14 +197,14 @@ export default function ProvisaoForm({ initial, onClose }) {
         {isRecorrente && (
           <div className={form.occurrenceType === 'installment' ? '' : 'col-span-1'}>
             <label className="label">Ocorrência</label>
-            <div className="flex rounded-lg overflow-hidden border border-gray-700">
+            <div className="flex rounded-lg overflow-hidden border border-borda-forte">
               {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
                 <button
                   type="button"
                   key={v}
                   onClick={() => set('occurrenceType', v)}
                   className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    form.occurrenceType === v ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    form.occurrenceType === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                   }`}
                 >
                   {l}
@@ -238,7 +238,7 @@ export default function ProvisaoForm({ initial, onClose }) {
               <div
                 key={date}
                 className={`text-center p-2 rounded-lg text-xs ${
-                  i === 0 ? 'bg-indigo-500/20 text-indigo-400 font-medium' : 'bg-gray-800 text-gray-400'
+                  i === 0 ? 'bg-primary/15 text-primary-fg font-medium' : 'bg-surface-2 text-texto-2'
                 }`}
               >
                 {date.split('-').reverse().join('/')}
@@ -246,7 +246,7 @@ export default function ProvisaoForm({ initial, onClose }) {
             ))}
           </div>
           {form.occurrenceType === 'installment' && (
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-texto-3 mt-1.5">
               {preview.length} parcela{preview.length !== 1 ? 's' : ''}.
             </p>
           )}
@@ -268,20 +268,20 @@ export default function ProvisaoForm({ initial, onClose }) {
       </div>
 
       {/* Será pago com reserva */}
-      <div className="bg-gray-800/40 rounded-xl p-3.5 space-y-3">
+      <div className="bg-surface-2/40 rounded-xl p-3.5 space-y-3">
         <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={form.comReserva}
             onChange={e => setForm(f => ({ ...f, comReserva: e.target.checked, reservaFuncaoId: e.target.checked ? f.reservaFuncaoId : '' }))}
-            className="w-4 h-4 rounded accent-[#0F6E56] cursor-pointer"
+            className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
-          <span className="text-sm text-gray-300">Será pago com reserva</span>
+          <span className="text-sm text-texto-2">Será pago com reserva</span>
         </label>
 
         {form.comReserva && (
           <div>
-            <label className="label text-amber-400">Função de Reserva *</label>
+            <label className="label text-reserva">Função de Reserva *</label>
             <select
               className="input"
               value={form.reservaFuncaoId}
@@ -293,9 +293,9 @@ export default function ProvisaoForm({ initial, onClose }) {
               ))}
             </select>
             {funcoesReserva.length === 0 && (
-              <p className="text-xs text-gray-500 mt-1">Nenhuma função de reserva vinculada a uma conta.</p>
+              <p className="text-xs text-texto-3 mt-1">Nenhuma função de reserva vinculada a uma conta.</p>
             )}
-            <p className="text-xs text-gray-500 mt-1.5 leading-snug">
+            <p className="text-xs text-texto-3 mt-1.5 leading-snug">
               A provisão entrará como resgate projetado no Fluxo Futuro desta reserva.
             </p>
           </div>

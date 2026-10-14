@@ -95,7 +95,7 @@ export default function DateInput({
         tabIndex={-1}
         onClick={openPicker}
         disabled={disabled}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 disabled:opacity-40"
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-texto-3 hover:text-texto-2 disabled:opacity-40"
         aria-label="Abrir calendário"
       >
         <Calendar size={14} />

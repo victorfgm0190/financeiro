@@ -69,15 +69,15 @@ export default function RenomearFavorecidoModal({
     const todos = lista.every(x => marcado(tabela, x.id))
     return (
       <div className="space-y-1">
-        <label className="flex items-center gap-2 text-xs font-medium text-gray-300 min-h-[44px] cursor-pointer">
-          <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={todos}
+        <label className="flex items-center gap-2 text-xs font-medium text-texto-2 min-h-[44px] cursor-pointer">
+          <input type="checkbox" className="accent-primary w-4 h-4" checked={todos}
             onChange={e => alternarTodos(tabela, lista, e.target.checked)} />
           {tituloGrupo} ({lista.filter(x => marcado(tabela, x.id)).length}/{lista.length})
         </label>
-        <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-800 divide-y divide-gray-800">
+        <div className="max-h-44 overflow-y-auto rounded-lg border border-borda divide-y divide-borda">
           {lista.map(x => (
-            <label key={x.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-gray-800/40">
-              <input type="checkbox" className="accent-[#0F6E56] w-3.5 h-3.5 shrink-0"
+            <label key={x.id} className="flex items-center gap-2 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-surface-hover/40">
+              <input type="checkbox" className="accent-primary w-3.5 h-3.5 shrink-0"
                 checked={marcado(tabela, x.id)} onChange={() => alternar(tabela, x.id)} />
               {render(x)}
             </label>
@@ -91,18 +91,18 @@ export default function RenomearFavorecidoModal({
     <Modal open={open} onClose={onClose} title={titulo || 'Renomear favorecido'} size="lg">
       <div className="space-y-4">
         {nomes && nomes.length > 1 && (
-          <p className="text-xs text-gray-400">
-            Mesclar: {nomes.map(n => <span key={n} className="inline-block bg-gray-800 rounded px-1.5 py-0.5 mr-1 mb-1">{n}</span>)}
+          <p className="text-xs text-texto-2">
+            Mesclar: {nomes.map(n => <span key={n} className="inline-block bg-surface-2 rounded px-1.5 py-0.5 mr-1 mb-1">{n}</span>)}
           </p>
         )}
         {nomeBase && (
           <div className="space-y-1">
             <p className="label">Aplicar em</p>
-            <label className="flex items-center gap-2 text-sm text-gray-300 min-h-[44px] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
               <input type="radio" name="crit" checked={criterio === 'exato'} onChange={() => setCriterio('exato')} />
               Exatamente &ldquo;{nomeFavorecido(nomeBase)}&rdquo;
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-300 min-h-[44px] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
               <input type="radio" name="crit" checked={criterio === 'comecaCom'} onChange={() => setCriterio('comecaCom')} disabled={!base} />
               Todos que começam com &ldquo;{base}&rdquo;
             </label>
@@ -112,37 +112,37 @@ export default function RenomearFavorecidoModal({
           <label className="label" htmlFor="fav-novo-nome">Novo nome</label>
           <input id="fav-novo-nome" className="input" value={para} onChange={e => setPara(e.target.value)} autoFocus />
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-300 min-h-[44px] cursor-pointer">
-          <input type="checkbox" className="accent-[#0F6E56] w-4 h-4" checked={alias} onChange={e => setAlias(e.target.checked)} />
+        <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[44px] cursor-pointer">
+          <input type="checkbox" className="accent-primary w-4 h-4" checked={alias} onChange={e => setAlias(e.target.checked)} />
           Usar esse nome nas próximas importações
         </label>
 
         <div className="space-y-3">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-texto-3">
             Prévia — {totalSel} registro{totalSel !== 1 ? 's' : ''} {novo ? <>passa{totalSel !== 1 ? 'm' : ''} a ter o favorecido &ldquo;{novo}&rdquo;</> : 'selecionado(s)'}. A descrição não muda.
           </p>
           {grupo('lancamentos', 'Lançamentos', alvos.lancamentos, t => (
             <>
-              <span className="text-gray-500 whitespace-nowrap">{fmtDate(t.date)}</span>
-              <span className="text-gray-300 truncate flex-1">{t.description}</span>
-              <span className="text-gray-500 truncate max-w-[30%]">{t.payee}</span>
-              <span className="text-gray-300 whitespace-nowrap">{fmt(t.amount)}</span>
+              <span className="text-texto-3 whitespace-nowrap">{fmtDate(t.date)}</span>
+              <span className="text-texto-2 truncate flex-1">{t.description}</span>
+              <span className="text-texto-3 truncate max-w-[30%]">{t.payee}</span>
+              <span className="text-texto-2 whitespace-nowrap">{fmt(t.amount)}</span>
             </>
           ))}
           {grupo('agendamentos', 'Agendamentos', alvos.agendamentos, s => (
             <>
-              <span className="text-gray-300 truncate flex-1">{s.description}</span>
-              <span className="text-gray-500 truncate max-w-[40%]">{s.payee}</span>
+              <span className="text-texto-2 truncate flex-1">{s.description}</span>
+              <span className="text-texto-3 truncate max-w-[40%]">{s.payee}</span>
             </>
           ))}
           {grupo('regras', 'Regras de classificação', alvos.regras, r => (
             <>
-              <span className="text-gray-300 truncate flex-1">contém &ldquo;{r.contains}&rdquo;</span>
-              <span className="text-gray-500 truncate max-w-[40%]">{r.payee}</span>
+              <span className="text-texto-2 truncate flex-1">contém &ldquo;{r.contains}&rdquo;</span>
+              <span className="text-texto-3 truncate max-w-[40%]">{r.payee}</span>
             </>
           ))}
           {alvos.lancamentos.length + alvos.agendamentos.length + alvos.regras.length === 0 && (
-            <p className="text-xs text-gray-500">Nenhum lançamento, agendamento ou regra usa este nome.</p>
+            <p className="text-xs text-texto-3">Nenhum lançamento, agendamento ou regra usa este nome.</p>
           )}
         </div>
 

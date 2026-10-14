@@ -76,18 +76,18 @@ export default function EditarFavorecidoModal({
 
   return (
     <form onSubmit={enviar} className="space-y-4">
-      <div className="rounded-lg border border-gray-800 bg-gray-800/40 px-3 py-2.5">
-        <p className="text-xs text-gray-500">Favorecido atual</p>
-        <p className="text-sm text-gray-200 flex items-center gap-1.5 mt-0.5">
-          <Building2 size={13} className="text-gray-500 shrink-0" />
+      <div className="rounded-lg border border-borda bg-surface-2/40 px-3 py-2.5">
+        <p className="text-xs text-texto-3">Favorecido atual</p>
+        <p className="text-sm text-texto-1 flex items-center gap-1.5 mt-0.5">
+          <Building2 size={13} className="text-texto-3 shrink-0" />
           {atualNome || 'Nenhum favorecido definido'}
         </p>
         {contaVinculada && contaVinculada !== atualNome && (
-          <p className="text-xs text-gray-600 mt-0.5">Conta vinculada: {contaVinculada}</p>
+          <p className="text-xs text-texto-3 mt-0.5">Conta vinculada: {contaVinculada}</p>
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-gray-800">
+      <div className="flex gap-1 border-b border-borda">
         {[
           { id: 'existente', label: 'Favorecido existente' },
           { id: 'novo', label: 'Criar novo banco' },
@@ -96,8 +96,8 @@ export default function EditarFavorecidoModal({
             key={t.id} type="button" onClick={() => setModo(t.id)}
             className={`px-3 py-2 text-xs border-b-2 -mb-px transition-colors ${
               modo === t.id
-                ? 'border-teal-500 text-teal-400'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+                ? 'border-primary text-primary-fg'
+                : 'border-transparent text-texto-3 hover:text-texto-2'
             }`}
           >
             {t.label}
@@ -119,9 +119,9 @@ export default function EditarFavorecidoModal({
               {sugestoes.map(f => <option key={f} value={f} />)}
             </datalist>
             {textoVazio
-              ? <p className="text-xs text-red-400 mt-1">Favorecido é obrigatório.</p>
+              ? <p className="text-xs text-perigo mt-1">⚠ Favorecido é obrigatório.</p>
               : (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-texto-3 mt-1">
                   Quem recebe as parcelas. Vale para as {financiamento.num_parcelas || 'N'} parcelas
                   do financiamento, inclusive as já pagas.
                 </p>
@@ -137,7 +137,7 @@ export default function EditarFavorecidoModal({
               <option value="">Nenhuma conta vinculada</option>
               {elegiveis.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-texto-3 mt-1">
               Opcional — o vínculo contábil, usado na descrição da conta de dívida. Escolher uma
               conta preenche o Favorecido com o nome dela; o que as parcelas exibem é sempre o
               texto acima.
@@ -152,7 +152,7 @@ export default function EditarFavorecidoModal({
               className="input" type="text" autoFocus value={nomeNovo}
               onChange={e => setNomeNovo(e.target.value)} placeholder="Ex: BANCO SAFRA"
             />
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-texto-3 mt-1">
               Se já existir uma conta com este nome, ela é reaproveitada em vez de duplicada.
             </p>
           </div>

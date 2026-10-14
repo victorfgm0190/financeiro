@@ -4,6 +4,12 @@ export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
 }
 
+// Só para EXIBIÇÃO de valor com sinal (decisão 10 do tema: negativo = "−R$" + text-despesa):
+// troca o hífen do fmt pelo sinal de menos tipográfico (−). Não usar em exportação/CSV/Excel.
+export function fmtSinal(value, currency = 'BRL') {
+  return fmt(value, currency).replace(/^-/, '−')
+}
+
 // Soma os valores (absolutos) dos lançamentos, separados por status de conciliação.
 export function computeReconciledTotals(txs) {
   let conciliado = 0, pendente = 0

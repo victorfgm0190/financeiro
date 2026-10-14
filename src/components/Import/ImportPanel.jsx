@@ -112,7 +112,7 @@ function EstornoConfigModal({ count, categories, updateSettings, onDecide, onClo
     <Modal open onClose={onClose} title="Estornos detectados" size="sm">
       {step === 'ask' ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-texto-2">
             Foram detectados <span className="font-semibold">{count}</span> lançamento{count !== 1 ? 's' : ''} de estorno nesta fatura.
             Deseja aplicar uma categoria padrão para eles automaticamente?
           </p>
@@ -161,9 +161,9 @@ function isDuplicate(row, existing) {
 // Badge do nível de cruzamento (reconciliação).
 function CrossBadge({ level }) {
   const map = {
-    certeza:  { cls: 'bg-red-500/20 text-red-400',       label: '🔴 Já no sistema' },
-    provavel: { cls: 'bg-orange-500/20 text-orange-400', label: '🟠 Provável duplicata' },
-    possivel: { cls: 'bg-yellow-500/20 text-yellow-500', label: '🟡 Possível duplicata' },
+    certeza:  { cls: 'bg-perigo-bg text-perigo',       label: '🔴 Já no sistema' },
+    provavel: { cls: 'bg-aviso/15 text-aviso', label: '🟠 Provável duplicata' },
+    possivel: { cls: 'bg-surface-2 text-texto-2', label: '🟡 Possível duplicata' },
   }
   const m = map[level]
   if (!m) return null
@@ -179,10 +179,10 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
     <div
       className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors outline-none ${
         disabled
-          ? 'border-gray-800 opacity-40 cursor-not-allowed select-none'
+          ? 'border-borda opacity-40 cursor-not-allowed select-none'
           : dragging
-            ? 'border-blue-500 bg-blue-500/5 animate-pulse cursor-copy'
-            : 'border-gray-700 cursor-pointer hover:border-[#0F6E56]'
+            ? 'border-primary bg-primary/5 animate-pulse cursor-copy'
+            : 'border-borda-forte cursor-pointer hover:border-primary'
       }`}
       onClick={() => !disabled && ref.current?.click()}
       tabIndex={disabled ? undefined : 0}
@@ -192,9 +192,9 @@ function DropZone({ onFile, label, subtitle, accept = '.xlsx,.xls', disabled = f
       onDrop={(e) => { e.preventDefault(); setDragging(false); takeFiles(e.dataTransfer?.files) }}
       onPaste={(e) => { if (e.clipboardData?.files?.length) { e.preventDefault(); takeFiles(e.clipboardData.files) } }}
     >
-      <Upload size={28} className={`mx-auto mb-2 ${dragging ? 'text-blue-400' : 'text-gray-600'}`} />
-      <p className="text-sm text-gray-400">{dragging ? 'Solte o arquivo aqui' : (label || 'Clique, arraste ou cole um arquivo')}</p>
-      <p className="text-xs text-gray-600 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
+      <Upload size={28} className={`mx-auto mb-2 ${dragging ? 'text-primary-fg' : 'text-texto-3'}`} />
+      <p className="text-sm text-texto-2">{dragging ? 'Solte o arquivo aqui' : (label || 'Clique, arraste ou cole um arquivo')}</p>
+      <p className="text-xs text-texto-3 mt-1">{subtitle || 'Formato Dindin exportação'}</p>
       <input ref={ref} type="file" accept={accept} disabled={disabled} className="hidden"
         onChange={e => { if (e.target.files[0]) onFile(e.target.files[0]) }} />
     </div>
@@ -218,15 +218,15 @@ function WizardSteps({ step }) {
           <div key={s.n} className="flex items-start gap-1 sm:gap-2">
             <div className="flex flex-col items-center gap-1 w-24 sm:w-32">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-                current ? 'bg-blue-600 text-white'
-                  : done ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                    : 'bg-gray-800 text-gray-500 border border-gray-700'
+                current ? 'bg-primary text-white'
+                  : done ? 'bg-primary/15 text-primary-fg border border-primary/40'
+                    : 'bg-surface-2 text-texto-3 border border-borda-forte'
               }`}>
                 {done ? <Check size={14} /> : s.n}
               </div>
-              <span className={`text-[11px] text-center leading-tight ${current ? 'text-blue-400 font-medium' : done ? 'text-gray-400' : 'text-gray-600'}`}>{s.label}</span>
+              <span className={`text-[11px] text-center leading-tight ${current ? 'text-primary-fg font-medium' : done ? 'text-texto-2' : 'text-texto-3'}`}>{s.label}</span>
             </div>
-            {i < steps.length - 1 && <div className={`w-8 sm:w-14 h-px mt-3.5 ${step > s.n ? 'bg-blue-500/50' : 'bg-gray-700'}`} />}
+            {i < steps.length - 1 && <div className={`w-8 sm:w-14 h-px mt-3.5 ${step > s.n ? 'bg-primary/50' : 'bg-borda-forte'}`} />}
           </div>
         )
       })}
@@ -304,20 +304,20 @@ function generateMonthOptions(card, transactions, isFaturaFechada, accounts) {
 function SummaryBar({ found, toImport, duplicates, ignored = 0 }) {
   return (
     <div className="flex items-center gap-4 flex-wrap text-xs">
-      <span className="text-gray-400">{found} encontrado{found !== 1 ? 's' : ''}</span>
-      <span className="text-gray-600">·</span>
-      <span className="text-blue-600 font-medium">{toImport} serão importados</span>
-      <span className="text-gray-600">·</span>
-      <span className="text-orange-600">{duplicates} já existem</span>
-      {ignored > 0 && <><span className="text-gray-600">·</span><span className="text-gray-500">{ignored} ignorados</span></>}
+      <span className="text-texto-2">{found} encontrado{found !== 1 ? 's' : ''}</span>
+      <span className="text-texto-3">·</span>
+      <span className="text-primary-fg font-medium">{toImport} serão importados</span>
+      <span className="text-texto-3">·</span>
+      <span className="text-aviso">{duplicates} já existem</span>
+      {ignored > 0 && <><span className="text-texto-3">·</span><span className="text-texto-3">{ignored} ignorados</span></>}
     </div>
   )
 }
 
 const TYPE_ICON = {
-  income: { icon: ArrowDownCircle, color: 'text-blue-600', label: 'Receita' },
-  expense: { icon: ArrowUpCircle, color: 'text-orange-600', label: 'Despesa' },
-  transfer: { icon: ArrowLeftRight, color: 'text-blue-400', label: 'Transferência' },
+  income: { icon: ArrowDownCircle, color: 'text-receita', label: 'Receita' },
+  expense: { icon: ArrowUpCircle, color: 'text-despesa', label: 'Despesa' },
+  transfer: { icon: ArrowLeftRight, color: 'text-transferencia', label: 'Transferência' },
 }
 
 // ─── ABA 1: CONTA CORRENTE ────────────────────────────────────────────────────
@@ -442,10 +442,10 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
 
   if (result !== null) {
     return (
-      <div className="card flex items-center gap-3 text-emerald-400">
+      <div className="card flex items-center gap-3 text-primary-fg">
         <Check size={20} />
         <span className="font-medium">{result} lançamento{result !== 1 ? 's' : ''} importado{result !== 1 ? 's' : ''} com sucesso.</span>
-        <button className="ml-auto text-xs text-gray-500 hover:text-gray-300" onClick={() => setResult(null)}>Importar outro arquivo</button>
+        <button className="ml-auto text-xs text-texto-3 hover:text-texto-2" onClick={() => setResult(null)}>Importar outro arquivo</button>
       </div>
     )
   }
@@ -454,7 +454,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
     return (
       <div className="space-y-4">
         <DropZone onFile={handleFile} label="Selecionar arquivo de Conta Corrente (XLS/XLSX)" />
-        {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
+        {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
       </div>
     )
   }
@@ -464,12 +464,12 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
       {/* Account mapping */}
       {accountNames.length > 0 && (
         <div className="card">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Mapeamento de Contas</h3>
+          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">Mapeamento de Contas</h3>
           <div className="space-y-2">
             {accountNames.map(name => (
               <div key={name} className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs text-gray-300 min-w-32">{name}</span>
-                <ArrowRight size={12} className="text-gray-600 shrink-0" />
+                <span className="text-xs text-texto-2 min-w-32">{name}</span>
+                <ArrowRight size={12} className="text-texto-3 shrink-0" />
                 <select
                   className="input flex-1 text-xs py-1 min-w-40"
                   value={accountMapping[name] || ''}
@@ -505,18 +505,18 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-borda">
                 <th className="px-3 py-2.5 w-8">
-                  <input type="checkbox" className="accent-[#0F6E56]"
+                  <input type="checkbox" className="accent-primary"
                     checked={resolvedRows.filter(r => !r._isDuplicate).every(r => r.selected)}
                     onChange={e => toggleAll(e.target.checked)} />
                 </th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Tipo</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Conta</th>
-                <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Status</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Tipo</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Conta</th>
+                <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -525,15 +525,15 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                 const TIcon = tConf.icon
                 const acc = accounts.find(a => a.id === row.accountId)
                 return (
-                  <tr key={row._id} className={`border-b border-gray-800/50 transition-colors ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-orange-500/5' : ''}`}>
+                  <tr key={row._id} className={`border-b border-borda/50 transition-colors ${!row.selected ? 'opacity-40' : ''} ${row._isDuplicate ? 'bg-aviso/5' : ''}`}>
                     <td className="px-3 py-2">
-                      <input type="checkbox" className="accent-[#0F6E56]"
+                      <input type="checkbox" className="accent-primary"
                         checked={row.selected}
                         disabled={row._isDuplicate}
                         onChange={() => toggleRow(row._id)} />
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{row.date?.split('-').reverse().join('/')}</td>
-                    <td className="px-3 py-2 text-xs text-gray-200 max-w-xs truncate">{row.description}</td>
+                    <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{row.date?.split('-').reverse().join('/')}</td>
+                    <td className="px-3 py-2 text-xs text-texto-1 max-w-xs truncate">{row.description}</td>
                     <td className="px-3 py-2">
                       <span className={`flex items-center gap-1 text-xs ${tConf.color}`}>
                         <TIcon size={11} /> {tConf.label}
@@ -541,22 +541,22 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {acc
-                        ? <span className="text-gray-300">{acc.apelido || acc.name}</span>
-                        : <span className="text-orange-600">Sem conta</span>
+                        ? <span className="text-texto-2">{acc.apelido || acc.name}</span>
+                        : <span className="text-aviso">⚠ Sem conta</span>
                       }
                       {row.type === 'transfer' && row.toAccountId && (
-                        <span className="text-gray-600 ml-1">→ {accounts.find(a => a.id === row.toAccountId)?.name}</span>
+                        <span className="text-texto-3 ml-1">→ {accounts.find(a => a.id === row.toAccountId)?.name}</span>
                       )}
                     </td>
-                    <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                    <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.type === 'income' ? 'text-receita' : 'text-despesa'}`}>
                       {fmt(row.amount)}
                     </td>
                     <td className="px-3 py-2">
                       {row._isDuplicate
-                        ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-500">Duplicado</span>
+                        ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Duplicado</span>
                         : row._isIgnored
-                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-500">Ignorado</span>
-                          : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">Ignorado</span>
+                          : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
                       }
                     </td>
                   </tr>
@@ -823,9 +823,9 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
   const showFuncs = funcs.length > 1
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-100">Preencher em Lote</h3>
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-texto-1">Preencher em Lote</h3>
         <div className="space-y-3">
           <div>
             <label className="label">Descrição contém</label>
@@ -865,10 +865,10 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
             </div>
           )}
         </div>
-        <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300 select-none">
+        <label className="flex items-center gap-2 cursor-pointer text-xs text-texto-2 select-none">
           <input
             type="checkbox"
-            className="accent-[#0F6E56] w-4 h-4 shrink-0"
+            className="accent-primary w-4 h-4 shrink-0"
             checked={apenasDespesas}
             onChange={e => setApenasDespesas(e.target.checked)}
           />
@@ -914,22 +914,22 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-100">Categoria → Gerencial</h3>
-        <p className="text-xs text-gray-500">Trocar o grupo de uma categoria aplica em todos os lançamentos dela nesta importação.</p>
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
+      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-texto-1">Categoria → Gerencial</h3>
+        <p className="text-xs text-texto-3">Trocar o grupo de uma categoria aplica em todos os lançamentos dela nesta importação.</p>
         <div className="max-h-[60vh] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-xs text-gray-400">
+              <tr className="border-b border-borda text-xs text-texto-2">
                 <th className="text-left px-2 py-2 font-medium">Categoria</th>
                 <th className="text-left px-2 py-2 font-medium">Grupo Gerencial</th>
               </tr>
             </thead>
             <tbody>
               {assoc.map(item => (
-                <tr key={item.catId || '__none__'} className="border-b border-gray-800/50">
-                  <td className="px-2 py-1.5 text-gray-200 truncate max-w-[220px]" title={item.name}>{item.name}</td>
+                <tr key={item.catId || '__none__'} className="border-b border-borda/50">
+                  <td className="px-2 py-1.5 text-texto-1 truncate max-w-[220px]" title={item.name}>{item.name}</td>
                   <td className="px-2 py-1.5">
                     <select
                       className="input text-xs py-1"
@@ -942,7 +942,7 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
                 </tr>
               ))}
               {assoc.length === 0 && (
-                <tr><td colSpan={2} className="px-2 py-4 text-center text-gray-600 text-xs">Nenhum lançamento.</td></tr>
+                <tr><td colSpan={2} className="px-2 py-4 text-center text-texto-3 text-xs">Nenhum lançamento.</td></tr>
               )}
             </tbody>
           </table>
@@ -1106,33 +1106,33 @@ function InstallmentControl({ installment, description, onChange }) {
         onClick={() => (open ? setOpen(false) : openEditor())}
         title={installment ? 'Editar parcelamento' : 'Marcar como parcelado'}
         className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${
-          installment ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          installment ? 'bg-primary/15 text-primary-fg hover:bg-primary/25' : 'bg-surface-hover text-texto-2 hover:bg-surface-hover'
         }`}
       >
         <Layers size={9} />
         {installment ? `Parcela ${installment.num} de ${installment.total}` : 'À vista'}
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 right-0 bg-surface border border-gray-700 rounded-lg shadow-xl p-2.5 w-44 space-y-2">
+        <div className="absolute z-50 mt-1 right-0 bg-surface border border-borda-forte rounded-lg shadow-xl p-2.5 w-44 space-y-2">
           <div className="flex items-end gap-1.5">
-            <label className="text-[10px] text-gray-400 flex-1">
+            <label className="text-[10px] text-texto-2 flex-1">
               Nº da parcela
               <input type="number" min="1" max="99" value={num} onChange={e => setNum(e.target.value)}
-                className="mt-0.5 w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-xs text-gray-200 focus:outline-none" />
+                className="mt-0.5 w-full bg-surface-2 border border-borda-campo rounded px-1.5 py-1 text-xs text-texto-1 focus:outline-none" />
             </label>
-            <span className="text-gray-500 text-xs pb-1.5">/</span>
-            <label className="text-[10px] text-gray-400 flex-1">
+            <span className="text-texto-3 text-xs pb-1.5">/</span>
+            <label className="text-[10px] text-texto-2 flex-1">
               Total
               <input type="number" min="2" max="99" value={total} onChange={e => setTotal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') confirm() }}
-                className="mt-0.5 w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-xs text-gray-200 focus:outline-none" />
+                className="mt-0.5 w-full bg-surface-2 border border-borda-campo rounded px-1.5 py-1 text-xs text-texto-1 focus:outline-none" />
             </label>
           </div>
           <div className="flex items-center justify-between gap-2">
             {installment
-              ? <button type="button" onClick={clear} className="text-[10px] text-gray-400 hover:text-gray-200">↩ À vista</button>
+              ? <button type="button" onClick={clear} className="text-[10px] text-texto-2 hover:text-texto-1">↩ À vista</button>
               : <span />}
-            <button type="button" onClick={confirm} className="text-[10px] px-2 py-1 rounded bg-[#0F6E56] text-white hover:bg-[#0c5a47]">Confirmar</button>
+            <button type="button" onClick={confirm} className="text-[10px] px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover">Confirmar</button>
           </div>
         </div>
       )}
@@ -1152,9 +1152,9 @@ const TOLERANCIA_CONFERENCIA = 0.01
 function ConferenciaLinha({ label, valor, sub, tone }) {
   return (
     <div className="flex-1 min-w-[8rem]">
-      <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={`text-sm font-semibold ${tone || 'text-gray-200'}`}>{valor}</div>
-      {sub && <div className="text-[11px] text-gray-500">{sub}</div>}
+      <div className="text-[11px] uppercase tracking-wide text-texto-3">{label}</div>
+      <div className={`text-sm font-semibold ${tone || 'text-texto-1'}`}>{valor}</div>
+      {sub && <div className="text-[11px] text-texto-3">{sub}</div>}
     </div>
   )
 }
@@ -1168,27 +1168,27 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
 
   return (
     <div className={`card space-y-3 border ${
-      status === 'divergente' ? 'border-red-500/40' : status === 'ok' ? 'border-emerald-500/40' : 'border-gray-800'
+      status === 'divergente' ? 'border-perigo/40' : status === 'ok' ? 'border-primary/40' : 'border-borda'
     }`}>
       <div className="flex items-center gap-2">
-        {status === 'ok' && <Check size={18} className="text-emerald-400" />}
-        {status === 'divergente' && <AlertCircle size={18} className="text-red-400" />}
+        {status === 'ok' && <Check size={18} className="text-primary-fg" />}
+        {status === 'divergente' && <AlertCircle size={18} className="text-perigo" />}
         <span className="font-medium text-sm">
           {status === 'pendente' && 'Conferindo a fatura no banco…'}
           {status === 'ok' && 'Fatura confere com o arquivo'}
           {status === 'divergente' && 'Fatura NÃO confere com o arquivo'}
           {status === 'erro' && 'Não foi possível conferir a fatura'}
         </span>
-        <span className="text-xs text-gray-500">· {faturaMYLabel(conferencia.faturaMonthYear) || conferencia.faturaMonthYear}</span>
+        <span className="text-xs text-texto-3">· {faturaMYLabel(conferencia.faturaMonthYear) || conferencia.faturaMonthYear}</span>
         <div className="ml-auto flex items-center gap-3">
-          <button className="text-xs text-gray-500 hover:text-gray-300" onClick={onReconferir} disabled={status === 'pendente'}>
+          <button className="text-xs text-texto-3 hover:text-texto-2" onClick={onReconferir} disabled={status === 'pendente'}>
             Reconferir
           </button>
-          <button className="text-xs text-gray-500 hover:text-gray-300" onClick={onClose}>Fechar</button>
+          <button className="text-xs text-texto-3 hover:text-texto-2" onClick={onClose}>Fechar</button>
         </div>
       </div>
 
-      {status === 'erro' && <p className="text-xs text-red-400">{erro}</p>}
+      {status === 'erro' && <p className="text-xs text-perigo">{erro}</p>}
 
       <div className="flex flex-wrap gap-4">
         <ConferenciaLinha
@@ -1206,7 +1206,7 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
         <ConferenciaLinha
           label="Diferença"
           valor={diff == null ? '—' : fmt(diff)}
-          tone={diff == null ? '' : Math.abs(diff) > TOLERANCIA_CONFERENCIA ? 'text-red-400' : 'text-emerald-400'}
+          tone={diff == null ? '' : Math.abs(diff) > TOLERANCIA_CONFERENCIA ? 'text-perigo' : 'text-primary-fg'}
           sub={diff == null ? '' : Math.abs(diff) > TOLERANCIA_CONFERENCIA
             ? (diff < 0 ? 'faltam lançamentos no banco' : 'há lançamentos a mais no banco')
             : 'dentro da tolerância de R$ 0,01'}
@@ -1214,7 +1214,7 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
       </div>
 
       {diffParse != null && (
-        <p className={`text-xs ${parseOk ? 'text-gray-500' : 'text-amber-400'}`}>
+        <p className={`text-xs ${parseOk ? 'text-texto-3' : 'text-aviso'}`}>
           {parseOk
             ? `Leitura do arquivo conferida: bate com o total de ${fmt(totalDeclarado)} declarado pelo Itaú no cabeçalho.`
             : `Atenção: o Itaú declara ${fmt(totalDeclarado)} no cabeçalho, mas as linhas lidas somam ${fmt(arquivo.total)} (${fmt(diffParse)} de diferença). Há linha no arquivo que o leitor não interpretou.`}
@@ -1222,7 +1222,7 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
       )}
 
       {status === 'divergente' && banco && (
-        <p className="text-xs text-red-400">
+        <p className="text-xs text-perigo">
           {banco.qtd !== arquivo.qtd
             ? `O banco tem ${banco.qtd} lançamento${banco.qtd !== 1 ? 's' : ''} contra ${arquivo.qtd} do arquivo`
             : 'A quantidade bate, mas os valores divergem'}
@@ -3033,11 +3033,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       <div className="space-y-4">
         {/* Cabeçalho */}
         <div className="card flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-blue-400">
+          <div className="flex items-center gap-2 text-primary-fg">
             <ArrowLeftRight size={16} />
             <span className="text-sm font-semibold">Conciliação de Fatura</span>
           </div>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-texto-3">
             {selectedAcc?.apelido || selectedAcc?.name} · {faturaMonthYear?.split('-').reverse().join('/')}
             {filename ? ` · ${filename}` : ''}
           </span>
@@ -3049,23 +3049,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         {/* Totalizador */}
         <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="text-xs text-gray-500">Total CSV Itaú:</span>
-            <span className="text-sm font-semibold text-gray-200">{fmt(concTotais.csv)}</span>
+            <span className="text-xs text-texto-3">Total CSV Itaú:</span>
+            <span className="text-sm font-semibold text-texto-1">{fmt(concTotais.csv)}</span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-xs text-gray-500">Total sistema (após ações):</span>
-            <span className="text-sm font-semibold text-gray-200">{fmt(concTotais.sistema)}</span>
+            <span className="text-xs text-texto-3">Total sistema (após ações):</span>
+            <span className="text-sm font-semibold text-texto-1">{fmt(concTotais.sistema)}</span>
           </div>
           <div className="flex items-baseline gap-2 sm:ml-auto">
-            <span className="text-xs text-gray-400">Diferença:</span>
-            <span className={`text-lg font-bold ${diffZero ? 'text-blue-400' : 'text-orange-500'}`}>
+            <span className="text-xs text-texto-2">Diferença:</span>
+            <span className={`text-lg font-bold ${diffZero ? 'text-primary-fg' : 'text-aviso'}`}>
               {fmt(concTotais.diff)}
             </span>
-            {diffZero && <Check size={16} className="text-blue-400" />}
+            {diffZero && <Check size={16} className="text-primary-fg" />}
           </div>
         </div>
 
-        {concError && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {concError}</div>}
+        {concError && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {concError}</div>}
 
         {/* Toggle "Fatura encerrada" — só quando há parcelas de série em "Só no sistema" */}
         {hasParcelaSistema && (
@@ -3073,16 +3073,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                className="accent-[#0F6E56]"
+                className="accent-primary"
                 checked={faturaEncerrada}
                 onChange={e => setFaturaEncerrada(e.target.checked)}
               />
-              <span className="text-sm font-medium text-gray-200">Fatura encerrada (o fechamento já passou)</span>
+              <span className="text-sm font-medium text-texto-1">Fatura encerrada (o fechamento já passou)</span>
             </label>
             {faturaEncerrada && (
               parcelasEmpurraveis.length > 0 ? (
                 <div className="pl-6 space-y-1">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-texto-3">
                     {parcelasEmpurraveis.length} parcela{parcelasEmpurraveis.length !== 1 ? 's' : ''} ausente{parcelasEmpurraveis.length !== 1 ? 's' : ''} será{parcelasEmpurraveis.length !== 1 ? 'ão' : ''} empurrada{parcelasEmpurraveis.length !== 1 ? 's' : ''} para o mês seguinte ao confirmar:
                   </p>
                   {parcelasEmpurraveis.map(p => {
@@ -3090,15 +3090,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                     const newMY = addMonthToFatura(oldMY, 1)
                     const fmtMY = (my) => my?.split('-').reverse().join('/')
                     return (
-                      <div key={p.id} className="text-xs text-gray-300">
+                      <div key={p.id} className="text-xs text-texto-2">
                         📦 {p.description} — {fmt(p.amount)}
-                        <span className="text-gray-500"> → movida de {fmtMY(oldMY)} para {fmtMY(newMY)}</span>
+                        <span className="text-texto-3"> → movida de {fmtMY(oldMY)} para {fmtMY(newMY)}</span>
                       </div>
                     )
                   })}
                 </div>
               ) : (
-                <p className="pl-6 text-xs text-gray-500">
+                <p className="pl-6 text-xs text-texto-3">
                   Nenhuma parcela ausente elegível (à vista e a última parcela de cada série não são empurradas).
                 </p>
               )
@@ -3108,7 +3108,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
         {/* Ação */}
         <div className="flex items-center justify-end gap-2">
-          <span className="text-xs text-gray-500 mr-auto">
+          <span className="text-xs text-texto-3 mr-auto">
             {concMatched.length} conciliado{concMatched.length !== 1 ? 's' : ''} ·
             {' '}{importarCount} a importar · {excluirCount} a excluir
           </span>
@@ -3124,24 +3124,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
         {/* SEÇÃO B — Só no Itaú */}
         <div className="card p-0 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-gray-800 bg-emerald-950/30 flex items-center gap-2 flex-wrap">
-            <ArrowDownCircle size={13} className="text-emerald-400 shrink-0" />
-            <h3 className="text-xs font-semibold text-emerald-300">Só no Itaú — falta no sistema</h3>
-            <span className="text-[10px] text-gray-500">{concSoItau.length} item{concSoItau.length !== 1 ? 's' : ''}</span>
+          <div className="px-3 py-2.5 border-b border-borda bg-primary/10 flex items-center gap-2 flex-wrap">
+            <ArrowDownCircle size={13} className="text-primary-fg shrink-0" />
+            <h3 className="text-xs font-semibold text-primary-fg">Só no Itaú — falta no sistema</h3>
+            <span className="text-[10px] text-texto-3">{concSoItau.length} item{concSoItau.length !== 1 ? 's' : ''}</span>
           </div>
           {concSoItau.length === 0 ? (
-            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item exclusivo do Itaú.</p>
+            <p className="text-xs text-texto-3 px-4 py-4">Nenhum item exclusivo do Itaú.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Ger.</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 font-medium">Ação</th>
+                  <tr className="border-b border-borda">
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Ger.</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3151,26 +3151,26 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       id={`concrow-${item._id}`}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(item.description) }}
                       title="Ver histórico do fornecedor"
-                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
+                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${item.acao !== 'importar' ? 'opacity-40' : ''}`}
                     >
                       {/* Data do extrato + a data de SISTEMA que será gravada quando as duas
                           divergirem (parcela N > 1 provisiona no ciclo anterior à fatura).
                           Mesmo padrão "Sistema/Cartão" da tabela da fatura. */}
-                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">
+                      <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">
                         {(() => {
                           const sis = concSaveDate(item)
                           const dt = (s) => (s || '').split('-').reverse().join('/')
                           return sis && sis !== item.date ? (
                             <>
                               <span className="block">Sistema: {dt(sis)}</span>
-                              <span className="block text-[10px] text-gray-600">Cartão: {dt(item.date)}</span>
+                              <span className="block text-[10px] text-texto-3">Cartão: {dt(item.date)}</span>
                             </>
                           ) : dt(item.date)
                         })()}
                       </td>
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex flex-col gap-1">
-                          <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
+                          <span className="text-xs text-texto-1 truncate" title={item.description}>{item.description}</span>
                           <div className="flex items-center gap-1.5">
                             <InstallmentControl
                               installment={item._installment}
@@ -3185,7 +3185,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         <CategorySelect
                           categories={categories}
                           perfilId={perfilCategorias}
-                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
+                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-36"
                           value={item.categoryId}
                           onChange={e => setItauField(item._id, { categoryId: e.target.value })}
                           searchable
@@ -3193,7 +3193,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
                         <select
-                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={item.grupoGerencial}
                           onChange={e => setItauField(item._id, { grupoGerencial: e.target.value, _reservaFuncaoId: null })}
                         >
@@ -3208,7 +3208,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           return (
                             <>
                               <select
-                                className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
+                                className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-2 rounded px-2 py-1 text-xs focus:outline-none w-24`}
                                 value={item._reservaFuncaoId || ''}
                                 onChange={e => setItauField(item._id, { _reservaFuncaoId: e.target.value || null })}
                                 title="Função de reserva do resgate"
@@ -3216,25 +3216,25 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                                 <option value="">— Selecionar —</option>
                                 {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                               </select>
-                              {pendente && <p className="text-[10px] text-orange-500 mt-0.5">Selecione a função</p>}
+                              {pendente && <p className="text-[10px] text-aviso mt-0.5">⚠ Selecione a função</p>}
                             </>
                           )
                         })()}
                       </td>
-                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-receita' : 'text-despesa'}`}>
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-3 text-xs">
                           <label className="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" className="accent-[#0F6E56]" name={`itau_${item._id}`}
+                            <input type="radio" className="accent-primary" name={`itau_${item._id}`}
                               checked={item.acao === 'importar'} onChange={() => setItauField(item._id, { acao: 'importar' })} />
-                            <span className="text-emerald-400">Importar</span>
+                            <span className="text-primary-fg">Importar</span>
                           </label>
                           <label className="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" className="accent-gray-500" name={`itau_${item._id}`}
+                            <input type="radio" className="accent-texto-3" name={`itau_${item._id}`}
                               checked={item.acao === 'ignorar'} onChange={() => setItauField(item._id, { acao: 'ignorar' })} />
-                            <span className="text-gray-400">Ignorar</span>
+                            <span className="text-texto-2">Ignorar</span>
                           </label>
                         </div>
                       </td>
@@ -3248,22 +3248,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
         {/* SEÇÃO C — Só no sistema */}
         <div className="card p-0 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-gray-800 bg-orange-950/30 flex items-center gap-2 flex-wrap">
-            <ArrowUpCircle size={13} className="text-orange-400 shrink-0" />
-            <h3 className="text-xs font-semibold text-orange-300">Só no sistema — não está no CSV do Itaú</h3>
-            <span className="text-[10px] text-gray-500">{concSoSistema.length} item{concSoSistema.length !== 1 ? 's' : ''}</span>
+          <div className="px-3 py-2.5 border-b border-borda bg-aviso/10 flex items-center gap-2 flex-wrap">
+            <ArrowUpCircle size={13} className="text-aviso shrink-0" />
+            <h3 className="text-xs font-semibold text-aviso">Só no sistema — não está no CSV do Itaú</h3>
+            <span className="text-[10px] text-texto-3">{concSoSistema.length} item{concSoSistema.length !== 1 ? 's' : ''}</span>
           </div>
           {concSoSistema.length === 0 ? (
-            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item exclusivo do sistema.</p>
+            <p className="text-xs text-texto-3 px-4 py-4">Nenhum item exclusivo do sistema.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-400 font-medium">Ação</th>
+                  <tr className="border-b border-borda">
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3272,29 +3272,29 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       key={item.id}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(item.description) }}
                       title="Ver histórico do fornecedor"
-                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${item.acao === 'excluir' ? 'opacity-40 bg-orange-500/5' : ''}`}
+                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${item.acao === 'excluir' ? 'opacity-40 bg-perigo/5' : ''}`}
                     >
-                      <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
+                      <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{item.date?.split('-').reverse().join('/')}</td>
                       <td className="px-3 py-2 max-w-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-gray-200 truncate" title={item.description}>{item.description}</span>
+                          <span className="text-xs text-texto-1 truncate" title={item.description}>{item.description}</span>
                           <CrossBadge level={item._crossLevel} />
                         </div>
                       </td>
-                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-blue-600' : 'text-orange-600'}`}>
+                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-receita' : 'text-despesa'}`}>
                         {fmt(item.amount)}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-3 text-xs">
                           <label className="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" className="accent-[#0F6E56]" name={`sys_${item.id}`}
+                            <input type="radio" className="accent-primary" name={`sys_${item.id}`}
                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
-                            <span className="text-gray-300">Manter</span>
+                            <span className="text-texto-2">Manter</span>
                           </label>
                           <label className="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" className="accent-orange-500" name={`sys_${item.id}`}
+                            <input type="radio" className="accent-perigo" name={`sys_${item.id}`}
                               checked={item.acao === 'excluir'} onChange={() => setSistemaAcao(item.id, 'excluir')} />
-                            <span className="text-orange-400">Excluir</span>
+                            <span className="text-perigo">Excluir</span>
                           </label>
                         </div>
                       </td>
@@ -3308,23 +3308,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
         {/* SEÇÃO A — Conciliados */}
         <div className="card p-0 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-gray-800 bg-gray-800/40 flex items-center gap-2 flex-wrap">
-            <Check size={13} className="text-gray-400 shrink-0" />
-            <h3 className="text-xs font-semibold text-gray-300">Conciliados</h3>
-            <span className="text-[10px] text-gray-500">{concMatched.length} item{concMatched.length !== 1 ? 's' : ''} · sem ação necessária</span>
+          <div className="px-3 py-2.5 border-b border-borda bg-surface-2/40 flex items-center gap-2 flex-wrap">
+            <Check size={13} className="text-texto-2 shrink-0" />
+            <h3 className="text-xs font-semibold text-texto-2">Conciliados</h3>
+            <span className="text-[10px] text-texto-3">{concMatched.length} item{concMatched.length !== 1 ? 's' : ''} · sem ação necessária</span>
           </div>
           {concMatched.length === 0 ? (
-            <p className="text-xs text-gray-600 px-4 py-4">Nenhum item conciliado.</p>
+            <p className="text-xs text-texto-3 px-4 py-4">Nenhum item conciliado.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Data</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor Itaú</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor sistema</th>
-                    <th className="text-center px-3 py-2.5 text-xs text-gray-500 font-medium w-10">Ações</th>
+                  <tr className="border-b border-borda">
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Data</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Descrição</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-3 font-medium">Valor Itaú</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-3 font-medium">Valor sistema</th>
+                    <th className="text-center px-3 py-2.5 text-xs text-texto-3 font-medium w-10">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3333,7 +3333,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       key={m.sys.id}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(m.csv.description) }}
                       title="Ver histórico do fornecedor"
-                      className="border-b border-gray-800/40 text-gray-400 cursor-pointer hover:bg-gray-800/30"
+                      className="border-b border-borda/40 text-texto-2 cursor-pointer hover:bg-surface-hover/30"
                     >
                       <td className="px-3 py-2 text-xs whitespace-nowrap">{m.csv.date?.split('-').reverse().join('/')}</td>
                       <td className="px-3 py-2 text-xs max-w-xs truncate" title={m.csv.description}>{m.csv.description}</td>
@@ -3344,7 +3344,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           type="button"
                           onClick={() => setConcEditTx(m.sys)}
                           title="Editar lançamento"
-                          className="p-1 text-gray-500 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
+                          className="p-1 text-texto-3 hover:text-texto-1 hover:bg-surface-hover rounded transition-colors"
                         >
                           <Pencil size={12} />
                         </button>
@@ -3426,36 +3426,36 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {showCorrigirDatas && editingImport && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowCorrigirDatas(false)} />
-          <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
-            <div className="px-5 py-4 border-b border-gray-800">
-              <h3 className="text-sm font-semibold text-gray-100">
+          <div className="absolute inset-0 bg-overlay" onClick={() => setShowCorrigirDatas(false)} />
+          <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-borda">
+              <h3 className="text-sm font-semibold text-texto-1">
                 Correção de datas — {corrigirPreview.length} lançamento{corrigirPreview.length !== 1 ? 's' : ''}
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-texto-3 mt-1">
                 A data de cada lançamento vai para o dia de fechamento ({selectedAcc?.closingDay || '—'}) do mês da fatura. A data original do banco é preservada.
               </p>
             </div>
             <div className="overflow-y-auto flex-1">
               {corrigirPreview.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-10">Nenhum lançamento elegível neste lote.</p>
+                <p className="text-sm text-texto-3 text-center py-10">Nenhum lançamento elegível neste lote.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-surface">
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
-                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Data atual</th>
-                      <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">Data corrigida</th>
+                    <tr className="border-b border-borda">
+                      <th className="text-left px-4 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-texto-2 font-medium">Fatura</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-texto-2 font-medium">Data atual</th>
+                      <th className="text-left px-4 py-2.5 text-xs text-texto-2 font-medium">Data corrigida</th>
                     </tr>
                   </thead>
                   <tbody>
                     {corrigirPreview.map(p => (
-                      <tr key={p.id} className={`border-b border-gray-800/50 ${p.changed ? '' : 'text-gray-600'}`}>
+                      <tr key={p.id} className={`border-b border-borda/50 ${p.changed ? '' : 'text-texto-3'}`}>
                         <td className="px-4 py-2 max-w-xs truncate" title={p.description}>{p.description}</td>
                         <td className="px-4 py-2 text-xs whitespace-nowrap">{p.faturaRef ? p.faturaRef.split('-').reverse().join('/') : '—'}</td>
                         <td className="px-4 py-2 text-xs whitespace-nowrap">{fmtDate(p.dataAtual)}</td>
-                        <td className={`px-4 py-2 text-xs whitespace-nowrap ${p.changed ? 'text-emerald-400 font-medium' : ''}`}>
+                        <td className={`px-4 py-2 text-xs whitespace-nowrap ${p.changed ? 'text-primary-fg font-medium' : ''}`}>
                           {p.changed ? fmtDate(p.dataCorrigida) : '—'}
                         </td>
                       </tr>
@@ -3464,8 +3464,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </table>
               )}
             </div>
-            <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-between gap-3">
-              <span className="text-xs text-gray-400">
+            <div className="px-5 py-4 border-t border-borda flex items-center justify-between gap-3">
+              <span className="text-xs text-texto-2">
                 {corrigirChangedCount} data{corrigirChangedCount !== 1 ? 's' : ''} ser{corrigirChangedCount !== 1 ? 'ão' : 'á'} corrigida{corrigirChangedCount !== 1 ? 's' : ''}
               </span>
               <div className="flex gap-3">
@@ -3479,11 +3479,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {matchQueue.length > 0 && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative bg-surface border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
-            <h3 className="text-sm font-semibold text-gray-100">Parcela correspondente encontrada</h3>
-            <p className="text-xs text-gray-400">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
-            {matchQueue.length > 1 && <p className="text-[11px] text-gray-500">{matchQueue.length} correspondências pendentes</p>}
+          <div className="absolute inset-0 bg-overlay" />
+          <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4">
+            <h3 className="text-sm font-semibold text-texto-1">Parcela correspondente encontrada</h3>
+            <p className="text-xs text-texto-2">Parcela {matchQueue[0].installInfo.num}/{matchQueue[0].installInfo.total} de "{matchQueue[0].installInfo.base}"</p>
+            {matchQueue.length > 1 && <p className="text-[11px] text-texto-3">{matchQueue.length} correspondências pendentes</p>}
             <div className="flex gap-3">
               <button className="btn-secondary flex-1" onClick={() => resolveMatch(false)}>Ignorar</button>
               <button className="btn-primary flex-1" onClick={() => resolveMatch(true, matchQueue[0].existingTx.categoryId, matchQueue[0].existingTx.payee)}>
@@ -3526,13 +3526,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       )}
 
       {result !== null && scheduleMatchQueue.length === 0 && (
-        <div className="card flex items-center gap-3 text-emerald-400">
+        <div className="card flex items-center gap-3 text-primary-fg">
           <Check size={20} />
           <span className="font-medium">{result} lançamento{result !== 1 ? 's' : ''} importado{result !== 1 ? 's' : ''} com sucesso.</span>
           {baixasResult > 0 && (
-            <span className="text-sm text-emerald-300/80">{baixasResult} ocorrência{baixasResult !== 1 ? 's' : ''} de agendamento baixada{baixasResult !== 1 ? 's' : ''}</span>
+            <span className="text-sm text-primary-fg">{baixasResult} ocorrência{baixasResult !== 1 ? 's' : ''} de agendamento baixada{baixasResult !== 1 ? 's' : ''}</span>
           )}
-          <button className="ml-auto text-xs text-gray-500 hover:text-gray-300" onClick={() => { setResult(null); setBaixasResult(0) }}>Importar outro</button>
+          <button className="ml-auto text-xs text-texto-3 hover:text-texto-2" onClick={() => { setResult(null); setBaixasResult(0) }}>Importar outro</button>
         </div>
       )}
 
@@ -3580,13 +3580,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             >
               <ArrowLeftRight size={12} /> Conciliar Fatura
             </button>
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-texto-3">
               Compara o CSV ou XLS/XLSX do Itaú com os lançamentos já existentes na fatura selecionada.
             </span>
           </div>
 
-          {error && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {error}</div>}
-          {concError && <div className="flex items-center gap-2 text-orange-600 text-sm"><AlertCircle size={14} /> {concError}</div>}
+          {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
+          {concError && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {concError}</div>}
         </div>
       )}
 
@@ -3594,12 +3594,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         <>
           <div className="card">
             {editingImport && (
-              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs">
+              <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-surface-2 border border-borda-forte text-texto-2 text-xs">
                 <Pencil size={12} />
                 <span>Modo de reedição — {editingImport.filename || 'importação anterior'} · {editingImport.count} lançamento{editingImport.count !== 1 ? 's' : ''}</span>
                 <div className="ml-auto flex items-center gap-3">
-                  <button className="text-blue-300 hover:text-blue-100 font-medium" onClick={() => setShowCorrigirDatas(true)}>🗓 Corrigir Datas</button>
-                  <button className="text-blue-500 hover:text-blue-300" onClick={() => { setEditingImport(null); setRows([]) }}>Cancelar</button>
+                  <button className="text-primary-fg hover:text-texto-1 font-medium" onClick={() => setShowCorrigirDatas(true)}>🗓 Corrigir Datas</button>
+                  <button className="text-texto-2 hover:text-texto-1" onClick={() => { setEditingImport(null); setRows([]) }}>Cancelar</button>
                 </div>
               </div>
             )}
@@ -3618,17 +3618,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 </select>
               </div>
               <div className="flex items-end gap-4 pb-1">
-                {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-gray-200">{cardInfo.cardName}</p></div>}
-                {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-gray-200">{cardInfo.faturaStr}</p></div>}
+                {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-texto-1">{cardInfo.cardName}</p></div>}
+                {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-texto-1">{cardInfo.faturaStr}</p></div>}
               </div>
             </div>
           </div>
 
           {/* Item 4 — aviso (não bloqueia) de dia de fechamento possivelmente errado */}
           {showClosingDayWarn && (
-            <div className="card flex items-start gap-3 py-3 border border-amber-500/30 bg-amber-500/10">
-              <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-300/90 leading-relaxed flex-1">
+            <div className="card flex items-start gap-3 py-3 border border-aviso/30 bg-aviso/10">
+              <AlertCircle size={16} className="text-aviso shrink-0 mt-0.5" />
+              <p className="text-xs text-texto-2 leading-relaxed flex-1">
                 ⚠️ {outOfPeriod.count} de {outOfPeriod.total} lançamento{outOfPeriod.count !== 1 ? 's' : ''} à vista
                 {outOfPeriod.count !== 1 ? ' parecem' : ' parece'} estar fora do período da fatura selecionada.
                 Verifique se o dia de fechamento do cartão (dia {outOfPeriod.closingDay}) está correto.
@@ -3636,7 +3636,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <button
                 type="button"
                 onClick={() => setClosingDayWarnDismissed(true)}
-                className="text-amber-400/70 hover:text-amber-200 shrink-0"
+                className="text-texto-3 hover:text-texto-1 shrink-0"
                 title="Dispensar aviso"
               >
                 <X size={14} />
@@ -3647,27 +3647,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           {/* Totalizador da fatura */}
           <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
             <div className="flex items-baseline gap-2">
-              <span className="text-xs text-gray-500">Total a ser importado:</span>
+              <span className="text-xs text-texto-3">Total a ser importado:</span>
               <span className="text-sm font-semibold text-receita">{fmt(totais.importar)}</span>
             </div>
-            <span className="text-gray-600 font-medium">+</span>
+            <span className="text-texto-3 font-medium">+</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-xs text-gray-500">Já existem:</span>
-              <span className="text-sm font-semibold text-orange-500">{fmt(totais.jaExistem)}</span>
+              <span className="text-xs text-texto-3">Já existem:</span>
+              <span className="text-sm font-semibold text-aviso">{fmt(totais.jaExistem)}</span>
             </div>
             {totais.estornos > 0 && (
               <>
-                <span className="text-gray-600 font-medium">−</span>
+                <span className="text-texto-3 font-medium">−</span>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-gray-500">Estornos:</span>
+                  <span className="text-xs text-texto-3">Estornos:</span>
                   <span className="text-sm font-semibold text-despesa">{fmt(totais.estornos)}</span>
                 </div>
               </>
             )}
-            <span className="text-gray-600 font-medium">=</span>
+            <span className="text-texto-3 font-medium">=</span>
             <div className="flex items-baseline gap-2 sm:ml-auto">
-              <span className="text-xs text-gray-400">Total da fatura:</span>
-              <span className="text-lg font-bold text-gray-100">{fmt(totais.total)}</span>
+              <span className="text-xs text-texto-2">Total da fatura:</span>
+              <span className="text-lg font-bold text-texto-1">{fmt(totais.total)}</span>
             </div>
           </div>
 
@@ -3707,20 +3707,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-borda">
                     <th className="px-3 py-2.5 w-8">
-                      <input type="checkbox" className="accent-[#0F6E56]"
+                      <input type="checkbox" className="accent-primary"
                         checked={(() => { const sel = resolvedRows.filter(r => !r._dupLevel && !r._collisionTx); return sel.length > 0 && sel.every(r => r.selected) })()}
                         onChange={e => toggleAll(e.target.checked)} />
                     </th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Sistema</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Data Cartão</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Fatura</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Descrição</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Categoria</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium hidden md:table-cell">Ger.</th>
-                    <th className="text-right px-3 py-2.5 text-xs text-gray-400 font-medium">Valor</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-gray-400 font-medium">Status</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data Sistema</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data Cartão</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Fatura</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Ger.</th>
+                    <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
+                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3730,30 +3730,30 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       id={`ccrow-${row._id}`}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
                       title="Ver histórico do fornecedor"
-                      className={`border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30 ${!row.selected ? 'opacity-40' : ''} ${row._dupLevel === 'certeza' ? 'bg-red-500/5' : row._dupLevel ? 'bg-amber-500/5' : ''} ${row._collisionTx ? 'bg-amber-500/5' : ''}`}
+                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${!row.selected ? 'opacity-40' : ''} ${row._dupLevel === 'certeza' ? 'bg-perigo/5' : row._dupLevel ? 'bg-aviso/5' : ''} ${row._collisionTx ? 'bg-aviso/5' : ''}`}
                     >
                       <td className="px-3 py-2">
-                        <input type="checkbox" className="accent-[#0F6E56]"
+                        <input type="checkbox" className="accent-primary"
                           checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
                           onChange={() => { (row._dupLevel === 'provavel' || row._dupLevel === 'possivel') ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <DateInput
-                          className="bg-gray-800 border border-gray-700 text-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
+                          className="bg-surface-2 border border-borda-campo text-texto-2 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row.date || ''}
                           onChange={e => updateRow(row._id, { date: e.target.value })}
                         />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <DateInput
-                          className="bg-gray-800 border border-gray-700 text-gray-400 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
+                          className="bg-surface-2 border border-borda-campo text-texto-2 rounded px-1.5 py-0.5 text-xs focus:outline-none w-32"
                           value={row._dateCartao || ''}
                           onChange={e => updateRow(row._id, { _dateCartao: e.target.value || null })}
                         />
                       </td>
                       <td className="px-3 py-2">
                         <select
-                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none"
+                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-1.5 py-0.5 text-xs focus:outline-none"
                           value={row.faturaMonthYear || ''}
                           onChange={e => updateRow(row._id, { faturaMonthYear: e.target.value })}
                         >
@@ -3763,9 +3763,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           ))}
                         </select>
                       </td>
-                      <td className="px-3 py-2 text-gray-200 max-w-xs">
+                      <td className="px-3 py-2 text-texto-1 max-w-xs">
                         <div className="flex items-center gap-1.5">
-                          <input className="bg-transparent text-xs focus:outline-none focus:bg-gray-800 rounded px-1 min-w-0 flex-1"
+                          <input className="bg-transparent text-xs focus:outline-none focus:bg-surface-hover rounded px-1 min-w-0 flex-1"
                             value={row.description}
                             onChange={e => updateRow(row._id, { description: e.target.value })} />
                           <InstallmentControl
@@ -3781,18 +3781,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               categoria REAL do lançamento salvo, sem edição. Colisão segue editável
                               (a classificação nova é gravada no UPDATE), com o valor do banco à vista. */}
                           {row._dbTx && !row._collisionTx ? (
-                            <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
+                            <span className="text-xs text-texto-2 bg-surface-hover/40 border border-borda-forte rounded px-2 py-1 w-36 inline-block truncate" title="Categoria do lançamento já salvo no banco (não editável aqui)">
                               {(() => { const c = categories.find(x => x.id === row._dbTx.categoryId); return c ? `${c.icon} ${c.name}` : '—' })()}
                             </span>
                           ) : row._rateios?.length > 0 ? (
-                            <span className="text-xs text-gray-300 bg-gray-700/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
+                            <span className="text-xs text-texto-2 bg-surface-hover/50 rounded px-2 py-1 whitespace-nowrap w-36 inline-block truncate" title={`${row._rateios.length} categorias separadas`}>
                               {row._rateios.length} separadas
                             </span>
                           ) : (
                             <CategorySelect
                               categories={categories}
                               perfilId={perfilCategorias}
-                              className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-36"
+                              className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-36"
                               value={row.categoryId}
                               onChange={e => {
                                 const newCat = e.target.value
@@ -3820,13 +3820,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                                 if (row.categoryId) learnClassification(row.description, row.categoryId, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
                                 updateRow(row._id, { _suggestedCategory: false, _manualEdit: true })
                               }}
-                              className="inline-flex items-center gap-0.5 text-[10px] bg-blue-500/15 text-blue-400 px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-blue-500/25 shrink-0"
+                              className="inline-flex items-center gap-0.5 text-[10px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap hover:bg-primary/25 shrink-0"
                             >
                               💡 Sugerido ✓
                             </button>
                           )}
                           {(!row._dbTx || row._collisionTx) && (
-                            <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-indigo-400 hover:text-indigo-300 shrink-0">Separar</button>
+                            <button type="button" onClick={() => setRateioRow(row)} title="Separar em categorias" className="text-[10px] text-primary-fg hover:text-texto-1 shrink-0">Separar</button>
                           )}
                         </div>
                       </td>
@@ -3834,12 +3834,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                         {/* Duplicata "certeza": badge com o grupo gerencial REAL do lançamento salvo —
                             o mesmo que aparece no extrato —, somente leitura (a linha nunca é gravada). */}
                         {row._dbTx && !row._collisionTx ? (
-                          <span className="text-xs text-gray-300 bg-gray-700/40 border border-gray-700 rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (linha não será importada)">
+                          <span className="text-xs text-texto-2 bg-surface-hover/40 border border-borda-forte rounded px-2 py-1 w-24 inline-block truncate" title="Grupo gerencial já salvo no banco (linha não será importada)">
                             {(() => { const g = gerencialGroups.find(x => x.id === row._dbTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
                           </span>
                         ) : (
                         <select
-                          className="bg-gray-800 border border-gray-700 text-gray-200 rounded px-2 py-1 text-xs focus:outline-none w-24"
+                          className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={row.grupoGerencial}
                           onChange={e => {
                             const g = e.target.value
@@ -3855,8 +3855,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                             lado o grupo que está gravado hoje, quando diferente — evita achar que o
                             valor exibido é o do extrato. */}
                         {row._collisionTx && row._collisionTx.grupoGerencial !== row.grupoGerencial && (
-                          <p className="text-[10px] text-amber-500/80 mt-0.5 truncate" title="Grupo gerencial atualmente salvo no banco — será substituído se a atualização for aplicada">
-                            banco: {(() => { const g = gerencialGroups.find(x => x.id === row._collisionTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
+                          <p className="text-[10px] text-aviso mt-0.5 truncate" title="Grupo gerencial atualmente salvo no banco — será substituído se a atualização for aplicada">
+                            ⚠ banco: {(() => { const g = gerencialGroups.find(x => x.id === row._collisionTx.grupoGerencial); return g ? `${g.number} · ${g.name}` : '—' })()}
                           </p>
                         )}
                         {(!row._dbTx || row._collisionTx) && (() => {
@@ -3868,7 +3868,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           return (
                             <>
                               <select
-                                className={`mt-1 block bg-gray-800 border ${pendente ? 'border-orange-500' : 'border-gray-700'} text-gray-300 rounded px-2 py-1 text-xs focus:outline-none w-24`}
+                                className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-2 rounded px-2 py-1 text-xs focus:outline-none w-24`}
                                 value={row._reservaFuncaoId || ''}
                                 onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
                                 title="Função de reserva do resgate"
@@ -3876,27 +3876,27 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                                 <option value="">— Selecionar —</option>
                                 {funcs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                               </select>
-                              {pendente && <p className="text-[10px] text-orange-500 mt-0.5">Selecione a função</p>}
-                              {row._suggestedReserva && !pendente && <p className="text-[10px] text-blue-400 mt-0.5">💡 Sugerido</p>}
+                              {pendente && <p className="text-[10px] text-aviso mt-0.5">⚠ Selecione a função</p>}
+                              {row._suggestedReserva && !pendente && <p className="text-[10px] text-primary-fg mt-0.5">💡 Sugerido</p>}
                             </>
                           )
                         })()}
                       </td>
-                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.isDeposit ? 'text-blue-600' : 'text-orange-600'}`}>
+                      <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${row.isDeposit ? 'text-receita' : 'text-despesa'}`}>
                         {fmt(row.amount)}
                       </td>
                       <td className="px-3 py-2">
                         {row._collisionTx
-                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400" title="Já existe no banco (mesma installment_key) — ver seção 'atualizar?'">No banco ↻</span>
+                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Já existe no banco (mesma installment_key) — ver seção 'atualizar?'">No banco ↻</span>
                           : row._dupLevel === 'certeza'
-                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400" title="date_cartao + valor + descrição idênticos — já existe na fatura">🔴 Já existe</span>
+                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-perigo-bg text-perigo" title="date_cartao + valor + descrição idênticos — já existe na fatura">🔴 Já existe</span>
                             : row._dupLevel === 'provavel'
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400" title="date_cartao + valor iguais e descrição similar — pode importar marcando">🟠 Provável duplicata</span>
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="date_cartao + valor iguais e descrição similar — pode importar marcando">🟠 Provável duplicata</span>
                               : row._dupLevel === 'possivel'
-                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-500" title="valor e descrição similares (data ignorada) — pode importar marcando">🟡 Possível duplicata</span>
+                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2" title="valor e descrição similares (data ignorada) — pode importar marcando">🟡 Possível duplicata</span>
                                 : row._estornoHerdado
-                                  ? <span className="text-xs px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
-                                  : <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Novo</span>
+                                  ? <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
+                                  : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
                         }
                         {(() => {
                           const baixa = baixasPorLinha.get(row._id)
@@ -3908,10 +3908,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               <label className="flex items-center gap-1 cursor-pointer" title={jaNoCartao
                                 ? 'O lançamento já está no cartão: ao confirmar, a ocorrência do agendamento é baixada apontando para ele, sem criar nada.'
                                 : 'Ao confirmar, o lançamento quita esta ocorrência do agendamento (mesmo efeito do botão Pagar) e as parcelas futuras da série quitam as ocorrências das faturas delas. Desmarque para importar como lançamento avulso.'}>
-                                <input type="checkbox" className="accent-[#0F6E56] w-3 h-3 shrink-0"
+                                <input type="checkbox" className="accent-primary w-3 h-3 shrink-0"
                                   checked={baixa.ativa} disabled={!c}
                                   onChange={e => updateRow(row._id, { _baixaOff: !e.target.checked })} />
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 truncate max-w-[16rem]">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2 truncate max-w-[16rem]">
                                   {jaNoCartao ? 'Já no cartão – baixa agendamento ' : 'Baixa agendamento: '}
                                   {c ? `${c.description} (${fmtDate(c.occurrenceDate)})` : '—'}
                                   {!jaNoCartao && baixa.ativa && baixa.coberturas.length > 0 && ` + cobre ${baixa.coberturas.length} ocorrência${baixa.coberturas.length !== 1 ? 's' : ''} futura${baixa.coberturas.length !== 1 ? 's' : ''}`}
@@ -3919,7 +3919,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                               </label>
                               {baixa.candidatos.length > 1 && (
                                 <select
-                                  className="block bg-gray-800 border border-gray-700 text-gray-300 rounded px-1 py-0.5 text-[10px] focus:outline-none max-w-[14rem]"
+                                  className="block bg-surface-2 border border-borda-campo text-texto-2 rounded px-1 py-0.5 text-[10px] focus:outline-none max-w-[14rem]"
                                   value={c ? baixaKey(c) : ''}
                                   onChange={e => updateRow(row._id, { _baixaEscolha: e.target.value, _baixaOff: false })}
                                 >
@@ -3943,15 +3943,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               antes/depois e confirmação item a item; aplicar = UPDATE, não INSERT. */}
           {collisionRows.length > 0 && (
             <div className="card p-0 overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-gray-800 bg-amber-950/30 flex items-center gap-2 flex-wrap">
-                <Layers size={13} className="text-amber-400 shrink-0" />
-                <h3 className="text-xs font-semibold text-amber-300">Parcelas já no banco — atualizar?</h3>
-                <span className="text-[10px] text-gray-500">
+              <div className="px-3 py-2.5 border-b border-borda bg-aviso/10 flex items-center gap-2 flex-wrap">
+                <Layers size={13} className="text-aviso shrink-0" />
+                <h3 className="text-xs font-semibold text-aviso">Parcelas já no banco — atualizar?</h3>
+                <span className="text-[10px] text-texto-3">
                   {collisionRows.length} colisã{collisionRows.length !== 1 ? 'ões' : 'o'} (mesma installment_key)
                   {' · '}{collisionsToApplyCount} marcada{collisionsToApplyCount !== 1 ? 's' : ''} p/ atualizar
                 </span>
               </div>
-              <div className="divide-y divide-gray-800">
+              <div className="divide-y divide-borda">
                 {collisionRows.map(r => {
                   const tx = r._collisionTx
                   const apply = !collisionSkip.has(r._id)
@@ -3974,14 +3974,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   return (
                     <div key={r._id} className={`px-3 py-2.5 ${apply ? '' : 'opacity-50'}`}>
                       <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                        <input type="checkbox" checked={apply} onChange={() => toggleCollision(r._id)} className="accent-amber-500" />
-                        <span className="text-xs text-gray-300 truncate">{r.description}</span>
+                        <input type="checkbox" checked={apply} onChange={() => toggleCollision(r._id)} className="accent-primary" />
+                        <span className="text-xs text-texto-2 truncate">{r.description}</span>
                         {r._installment && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">{r._installment.num}/{r._installment.total}</span>
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">{r._installment.num}/{r._installment.total}</span>
                         )}
                         {valorCsvDiverge && (
                           <span
-                            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-gray-700/60 text-gray-400"
+                            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-2"
                             title="O extrato traz um valor diferente em centavos (dentro da tolerância de R$ 0,50). O valor do banco é mantido."
                           >
                             CSV {fmt(r.amount)}
@@ -3993,14 +3993,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           const changed = before !== after
                           return (
                             <div key={label} className="text-[11px] min-w-0">
-                              <div className="text-gray-600">{label}</div>
+                              <div className="text-texto-3">{label}</div>
                               {changed ? (
                                 <div className="flex items-center gap-1 flex-wrap">
-                                  <span className="text-gray-500 line-through truncate">{before}</span>
-                                  <span className="text-amber-300 truncate">→ {after}</span>
+                                  <span className="text-texto-3 line-through truncate">{before}</span>
+                                  <span className="text-texto-1 truncate">→ {after}</span>
                                 </div>
                               ) : (
-                                <div className="text-gray-400 truncate">{before}</div>
+                                <div className="text-texto-2 truncate">{before}</div>
                               )}
                             </div>
                           )
@@ -4016,10 +4016,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           {/* Parcelas de faturas futuras — somente informativo (não importadas agora) */}
           {futureParcelas.length > 0 && (
             <div className="card p-0 overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-gray-800 bg-indigo-950/30 flex items-center gap-2 flex-wrap">
-                <Layers size={13} className="text-indigo-400 shrink-0" />
-                <h3 className="text-xs font-semibold text-indigo-300">Parcelas de faturas futuras — não serão importadas agora</h3>
-                <span className="text-[10px] text-gray-500">
+              <div className="px-3 py-2.5 border-b border-borda bg-surface-2 flex items-center gap-2 flex-wrap">
+                <Layers size={13} className="text-texto-2 shrink-0" />
+                <h3 className="text-xs font-semibold text-texto-2">Parcelas de faturas futuras — não serão importadas agora</h3>
+                <span className="text-[10px] text-texto-3">
                   {futureParcelas.length} parcela{futureParcelas.length !== 1 ? 's' : ''}
                   {' · '}{futureParcelas.filter(f => !f._exists).length} a criar
                   {' · '}{futureParcelas.filter(f => f._exists).length} já existe{futureParcelas.filter(f => f._exists).length !== 1 ? 'm' : ''}
@@ -4028,14 +4028,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Data</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Fatura</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Descrição</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Categoria</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium hidden md:table-cell">Ger.</th>
-                      <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Valor</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Status</th>
+                    <tr className="border-b border-borda">
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Data</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Fatura</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Descrição</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Categoria</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium hidden md:table-cell">Ger.</th>
+                      <th className="text-right px-3 py-2.5 text-xs text-texto-3 font-medium">Valor</th>
+                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4043,22 +4043,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       const cat = categories.find(c => c.id === fp.categoryId)
                       const ger = gerencialGroups.find(g => g.id === fp.grupoGerencial)
                       return (
-                        <tr key={fp._id} className="border-b border-gray-800/40 opacity-70">
-                          <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{fp.date?.split('-').reverse().join('/')}</td>
-                          <td className="px-3 py-2 text-xs text-gray-400 whitespace-nowrap">{fp.faturaMonthYear?.split('-').reverse().join('/')}</td>
-                          <td className="px-3 py-2 text-gray-300 max-w-xs">
+                        <tr key={fp._id} className="border-b border-borda/40 opacity-70">
+                          <td className="px-3 py-2 text-xs text-texto-3 whitespace-nowrap">{fp.date?.split('-').reverse().join('/')}</td>
+                          <td className="px-3 py-2 text-xs text-texto-2 whitespace-nowrap">{fp.faturaMonthYear?.split('-').reverse().join('/')}</td>
+                          <td className="px-3 py-2 text-texto-2 max-w-xs">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate text-xs">{fp.description}</span>
-                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400">{fp.num}/{fp.total}</span>
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">{fp.num}/{fp.total}</span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-400">{cat ? `${cat.icon} ${cat.name}` : <span className="text-gray-600">—</span>}</td>
-                          <td className="px-3 py-2 text-xs text-gray-400 hidden md:table-cell">{ger ? `${ger.number} · ${ger.name}` : <span className="text-gray-600">—</span>}</td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold text-gray-400 whitespace-nowrap">{fmt(fp.amount)}</td>
+                          <td className="px-3 py-2 text-xs text-texto-2">{cat ? `${cat.icon} ${cat.name}` : <span className="text-texto-3">—</span>}</td>
+                          <td className="px-3 py-2 text-xs text-texto-2 hidden md:table-cell">{ger ? `${ger.number} · ${ger.name}` : <span className="text-texto-3">—</span>}</td>
+                          <td className="px-3 py-2 text-right text-xs font-semibold text-texto-2 whitespace-nowrap">{fmt(fp.amount)}</td>
                           <td className="px-3 py-2">
                             {fp._exists
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400">Já existe</span>
-                              : <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">Será criada</span>
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Já existe</span>
+                              : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Será criada</span>
                             }
                           </td>
                         </tr>
@@ -4073,16 +4073,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           {/* Classification rules */}
           {classificationRules.length > 0 && (
             <div className="card">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Regras de Classificação ({classificationRules.length})</h3>
+              <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">Regras de Classificação ({classificationRules.length})</h3>
               <div className="space-y-1.5">
                 {classificationRules.map(rule => {
                   const cat = categories.find(c => c.id === rule.categoryId)
                   return (
-                    <div key={rule.id} className="flex items-center gap-2 text-xs text-gray-400">
-                      <FileText size={10} className="text-gray-600 shrink-0" />
-                      Contém <span className="text-[#0F6E56] mx-1">"{rule.contains}"</span>
+                    <div key={rule.id} className="flex items-center gap-2 text-xs text-texto-2">
+                      <FileText size={10} className="text-texto-3 shrink-0" />
+                      Contém <span className="text-primary-fg mx-1">"{rule.contains}"</span>
                       → {cat ? `${cat.icon} ${cat.name}` : rule.categoryId}
-                      {rule.payee && <span className="text-gray-600">({rule.payee})</span>}
+                      {rule.payee && <span className="text-texto-3">({rule.payee})</span>}
                     </div>
                   )
                 })}
@@ -4095,7 +4095,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       {/* Histórico de importações */}
       {cardImports.length > 0 && (
         <div className="card">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+          <h3 className="text-xs font-semibold text-texto-2 uppercase tracking-wide mb-3">
             Histórico de Importações
           </h3>
           <div className="space-y-1.5">
@@ -4108,22 +4108,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
               return (
                 <div
                   key={imp.id}
-                  className="flex items-center gap-3 text-xs py-1.5 border-b border-gray-800/50 last:border-0 cursor-pointer hover:bg-gray-800/30 rounded px-1 -mx-1 transition-colors"
+                  className="flex items-center gap-3 text-xs py-1.5 border-b border-borda/50 last:border-0 cursor-pointer hover:bg-surface-hover/30 rounded px-1 -mx-1 transition-colors"
                   onClick={() => loadImportForEdit(imp)}
                 >
-                  <span className="text-gray-500 shrink-0 w-32">{dateStr}</span>
-                  <span className="text-gray-300 truncate flex-1 min-w-0" title={imp.filename}>{imp.filename || '—'}</span>
-                  <span className="text-gray-400 shrink-0">{imp.count} lançamento{imp.count !== 1 ? 's' : ''}</span>
-                  <span className="text-gray-500 shrink-0">{mesAnoFmt}</span>
-                  <span className="text-gray-500 shrink-0 hidden sm:inline">{acc?.apelido || acc?.name || '—'}</span>
+                  <span className="text-texto-3 shrink-0 w-32">{dateStr}</span>
+                  <span className="text-texto-2 truncate flex-1 min-w-0" title={imp.filename}>{imp.filename || '—'}</span>
+                  <span className="text-texto-2 shrink-0">{imp.count} lançamento{imp.count !== 1 ? 's' : ''}</span>
+                  <span className="text-texto-3 shrink-0">{mesAnoFmt}</span>
+                  <span className="text-texto-3 shrink-0 hidden sm:inline">{acc?.apelido || acc?.name || '—'}</span>
                   <button
-                    className="shrink-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-400 border border-blue-500/30 hover:border-blue-400/50 rounded px-2 py-0.5 transition-colors"
+                    className="shrink-0 flex items-center gap-1 text-xs text-ambar hover:text-texto-1 border border-ambar/40 hover:border-ambar/60 rounded px-2 py-0.5 transition-colors"
                     onClick={e => { e.stopPropagation(); loadImportForEdit(imp) }}
                   >
                     <Pencil size={11} /> Editar
                   </button>
                   <button
-                    className="shrink-0 flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400 border border-orange-500/30 hover:border-orange-400/50 rounded px-2 py-0.5 transition-colors"
+                    className="shrink-0 flex items-center gap-1 text-xs text-despesa hover:text-texto-1 border border-despesa/30 hover:border-despesa/50 rounded px-2 py-0.5 transition-colors"
                     onClick={e => { e.stopPropagation(); setConfirmRevertId(imp.id) }}
                   >
                     <RotateCcw size={11} /> Estornar
@@ -4153,9 +4153,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       {/* ITEM 6 — propagar classificação p/ linhas do mesmo fornecedor (some em 5s) */}
       {applyAllToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] flex items-center gap-3 bg-surface border border-blue-500/40 rounded-xl shadow-2xl px-4 py-3 max-w-[92vw]">
-          <span className="text-sm text-gray-200">
-            Aplicar a <span className="font-semibold text-blue-400">{applyAllToast.count}</span> lançamento{applyAllToast.count !== 1 ? 's' : ''} do mesmo fornecedor?
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[120] flex items-center gap-3 bg-surface border border-primary/40 rounded-xl shadow-2xl px-4 py-3 max-w-[92vw]">
+          <span className="text-sm text-texto-1">
+            Aplicar a <span className="font-semibold text-primary-fg">{applyAllToast.count}</span> lançamento{applyAllToast.count !== 1 ? 's' : ''} do mesmo fornecedor?
           </span>
           <button type="button" onClick={applyToAll} className="btn-primary text-xs py-1.5 px-3 whitespace-nowrap">
             Aplicar a todos ({applyAllToast.count})
@@ -4163,7 +4163,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           <button
             type="button"
             onClick={() => { if (applyAllTimerRef.current) clearTimeout(applyAllTimerRef.current); setApplyAllToast(null) }}
-            className="text-gray-500 hover:text-gray-300 shrink-0"
+            className="text-texto-3 hover:text-texto-2 shrink-0"
             title="Dispensar"
           >
             <X size={14} />
@@ -4230,7 +4230,7 @@ export default function ImportPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-1 border-b border-gray-800">
+      <div className="flex items-center gap-1 border-b border-borda">
         {[
           { id: 'corrente', label: 'Conta Corrente' },
           { id: 'cartao', label: 'Cartão de Crédito' },
@@ -4239,7 +4239,7 @@ export default function ImportPanel() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`px-4 pb-3 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              tab === t.id ? 'border-[#0F6E56] text-[#0F6E56]' : 'border-transparent text-gray-500 hover:text-gray-300'
+              tab === t.id ? 'border-primary text-primary-fg' : 'border-transparent text-texto-3 hover:text-texto-2'
             }`}
           >
             {t.label}

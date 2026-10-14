@@ -3,27 +3,27 @@ import { fmt } from '../shared/utils'
 import { fmtData } from './bemUtils'
 
 const TIPOS = {
-  entrada_trade_in: { rotulo: 'Entrada (Trade-in)', icone: Repeat, cor: 'text-receita', pino: 'bg-emerald-500' },
-  entrada_venda: { rotulo: 'Entrada à Vista', icone: ArrowDownLeft, cor: 'text-blue-400', pino: 'bg-blue-500' },
-  pagamento_parcela: { rotulo: 'Pagamento de Parcela', icone: CreditCard, cor: 'text-orange-400', pino: 'bg-orange-500' },
+  entrada_trade_in: { rotulo: 'Entrada (Trade-in)', icone: Repeat, cor: 'text-receita', pino: 'bg-receita' },
+  entrada_venda: { rotulo: 'Entrada à Vista', icone: ArrowDownLeft, cor: 'text-receita', pino: 'bg-receita' },
+  pagamento_parcela: { rotulo: 'Pagamento de Parcela', icone: CreditCard, cor: 'text-despesa', pino: 'bg-despesa' },
 }
 
 function Campo({ label, children, cor }) {
   return (
     <div className="flex justify-between gap-3 text-xs">
-      <span className="text-gray-600">{label}</span>
-      <span className={cor || 'text-gray-300'}>{children}</span>
+      <span className="text-texto-3">{label}</span>
+      <span className={cor || 'text-texto-2'}>{children}</span>
     </div>
   )
 }
 
 function Item({ mov, ultimo }) {
-  const meta = TIPOS[mov.tipo] || { rotulo: mov.tipo, icone: ArrowDownLeft, cor: 'text-gray-400', pino: 'bg-gray-600' }
+  const meta = TIPOS[mov.tipo] || { rotulo: mov.tipo, icone: ArrowDownLeft, cor: 'text-texto-2', pino: 'bg-borda-forte' }
   const Icone = meta.icone
 
   return (
     <div className="relative pl-8 pb-4">
-      {!ultimo && <div className="absolute left-[11px] top-6 bottom-0 w-px bg-gray-800" />}
+      {!ultimo && <div className="absolute left-[11px] top-6 bottom-0 w-px bg-surface-2" />}
       <div className={`absolute left-0 top-1 w-[23px] h-[23px] rounded-full flex items-center justify-center ${meta.pino}/15`}>
         <Icone size={12} className={meta.cor} />
       </div>
@@ -31,9 +31,9 @@ function Item({ mov, ultimo }) {
       <div className="card py-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className={`text-xs font-semibold ${meta.cor}`}>{meta.rotulo}</span>
-          <span className="text-xs text-gray-600">{fmtData(mov.data)}</span>
+          <span className="text-xs text-texto-3">{fmtData(mov.data)}</span>
         </div>
-        <p className="text-sm text-gray-200 mt-0.5">{mov.descricao}</p>
+        <p className="text-sm text-texto-1 mt-0.5">{mov.descricao}</p>
 
         <div className="mt-2 space-y-1">
           {mov.tipo === 'entrada_trade_in' && (
@@ -77,7 +77,7 @@ function Item({ mov, ultimo }) {
 export default function BemHistoricoTab({ movimentacoes, loading, erro }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-10 text-gray-500 gap-2 text-sm">
+      <div className="flex items-center justify-center py-10 text-texto-3 gap-2 text-sm">
         <Loader2 size={16} className="animate-spin" /> Carregando histórico...
       </div>
     )
@@ -88,8 +88,8 @@ export default function BemHistoricoTab({ movimentacoes, loading, erro }) {
   if (!movimentacoes?.length) {
     return (
       <div className="card text-center py-10">
-        <p className="text-sm text-gray-500">Nenhuma movimentação registrada.</p>
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-sm text-texto-3">Nenhuma movimentação registrada.</p>
+        <p className="text-xs text-texto-3 mt-1">
           Entradas, trade-ins e pagamentos de parcela aparecem aqui.
         </p>
       </div>

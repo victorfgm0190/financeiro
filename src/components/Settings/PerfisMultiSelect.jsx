@@ -50,7 +50,7 @@ export default function PerfisMultiSelect({ value, onChange, profiles, className
         type="button"
         onClick={() => (open ? setOpen(false) : abrir())}
         title="Perfis em que esta categoria aparece nas listas de escolha (nenhum = todos)"
-        className={`input w-auto text-xs py-1 text-left truncate ${ids.length ? 'text-indigo-300' : 'text-gray-400'} ${className}`}
+        className={`input w-auto text-xs py-1 text-left truncate ${ids.length ? 'text-primary-fg' : 'text-texto-2'} ${className}`}
       >
         Perfis: {rotulo}
       </button>
@@ -59,29 +59,29 @@ export default function PerfisMultiSelect({ value, onChange, profiles, className
           ref={panelRef}
           style={style}
           onClick={e => e.stopPropagation()}
-          className="bg-surface border border-gray-700 rounded-lg shadow-2xl py-1"
+          className="bg-surface border border-borda-forte rounded-lg shadow-2xl py-1"
         >
           <button
             type="button"
             onClick={() => onChange([])}
-            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-800 ${ids.length === 0 ? 'text-indigo-300 font-medium' : 'text-gray-300'}`}
+            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-hover ${ids.length === 0 ? 'text-primary-fg font-medium' : 'text-texto-2'}`}
           >
             Todos os perfis
           </button>
-          <div className="border-t border-gray-800 my-1" />
+          <div className="border-t border-borda my-1" />
           {(profiles || []).length === 0 && (
-            <p className="px-3 py-1.5 text-xs text-gray-600">Nenhum perfil cadastrado.</p>
+            <p className="px-3 py-1.5 text-xs text-texto-3">Nenhum perfil cadastrado.</p>
           )}
           {(profiles || []).map(p => (
-            <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-800 cursor-pointer">
+            <label key={p.id} className="flex items-center gap-2 px-3 py-1.5 text-xs text-texto-1 hover:bg-surface-hover cursor-pointer">
               <input
                 type="checkbox"
-                className="accent-indigo-500 shrink-0"
+                className="accent-primary shrink-0"
                 checked={ids.includes(p.id)}
                 onChange={() => toggle(p.id)}
               />
               <span className="truncate flex-1">{p.name}</span>
-              <span className="text-[10px] text-gray-500 shrink-0">{p.type === 'pj' ? 'CNPJ' : 'CPF'}</span>
+              <span className="text-[10px] text-texto-3 shrink-0">{p.type === 'pj' ? 'CNPJ' : 'CPF'}</span>
             </label>
           ))}
         </div>,

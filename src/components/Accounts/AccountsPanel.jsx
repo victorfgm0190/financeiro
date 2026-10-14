@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye, Scale, TrendingUp,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
+import { fmt, fmtSinal, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { valorPatrimonial } from '../../lib/patrimonio'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
@@ -43,11 +43,11 @@ const MONTH_NAMES = [
 ]
 
 const TYPE_COLORS = {
-  checking: 'from-blue-600 to-blue-800',
-  savings: 'from-emerald-600 to-emerald-800',
+  checking: 'from-destaque to-destaque', // D5 do tema: azul de destaque, igual nos dois temas
+  savings: 'from-emerald-700 to-emerald-800', // início -700: texto branco ≥ 4,5:1
   credit: 'from-purple-600 to-purple-800',
-  cash: 'from-amber-600 to-amber-800',
-  asset: 'from-teal-600 to-teal-800',
+  cash: 'from-amber-700 to-amber-800',
+  asset: 'from-teal-700 to-teal-800',
   liability: 'from-rose-700 to-rose-900',
 }
 
@@ -79,8 +79,8 @@ function UpdateValueModal({ account, onClose }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {lastEntry && (
-        <div className="p-3 bg-gray-800 rounded-lg text-xs text-gray-400">
-          Último valor: <span className="text-gray-200 font-medium">{fmt(lastEntry.value)}</span> em {lastEntry.date}
+        <div className="p-3 bg-surface-2 rounded-lg text-xs text-texto-2">
+          Último valor: <span className="text-texto-1 font-medium">{fmt(lastEntry.value)}</span> em {lastEntry.date}
           {lastEntry.note && <span className="ml-1 italic">— {lastEntry.note}</span>}
         </div>
       )}
@@ -137,7 +137,7 @@ function GroupManager({ groups }) {
     <div className="space-y-4">
       <div className="space-y-1">
         {active.map((g, i) => (
-          <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800">
+          <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2">
             {editId === g.id ? (
               <>
                 <input
@@ -155,21 +155,21 @@ function GroupManager({ groups }) {
               </>
             ) : (
               <>
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${g.type === 'financeiro' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${g.type === 'financeiro' ? 'bg-surface-2 text-texto-2' : 'bg-surface-2 text-texto-2'}`}>
                   {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
                 </span>
-                <span className="flex-1 text-sm text-gray-200">{g.name}</span>
+                <span className="flex-1 text-sm text-texto-1">{g.name}</span>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => moveAccountGroup(g.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-400 transition-colors">
+                  <button onClick={() => moveAccountGroup(g.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
                     <ArrowUp size={12} />
                   </button>
-                  <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === active.length - 1} className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 text-gray-400 transition-colors">
+                  <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === active.length - 1} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
                     <ArrowDown size={12} />
                   </button>
-                  <button onClick={() => { setEditId(g.id); setEditName(g.name) }} className="p-1 rounded hover:bg-gray-700 text-gray-400 transition-colors">
+                  <button onClick={() => { setEditId(g.id); setEditName(g.name) }} className="p-1 rounded hover:bg-surface-hover text-texto-2 transition-colors">
                     <Edit2 size={12} />
                   </button>
-                  <button onClick={() => setConfirmDeleteId(g.id)} className="p-1 rounded hover:bg-gray-700 text-red-400 transition-colors">
+                  <button onClick={() => setConfirmDeleteId(g.id)} className="p-1 rounded hover:bg-surface-hover text-perigo transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -179,25 +179,25 @@ function GroupManager({ groups }) {
         ))}
         {inibidos.length > 0 && (
           <div className="pt-2 space-y-1">
-            <p className="text-xs text-gray-600 px-1">Grupos inibidos ({inibidos.length})</p>
+            <p className="text-xs text-texto-3 px-1">Grupos inibidos ({inibidos.length})</p>
             {inibidos.map(g => (
-              <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-gray-800/50 opacity-50">
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${g.type === 'financeiro' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+              <div key={g.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-surface-2/50 opacity-50">
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${g.type === 'financeiro' ? 'bg-surface-2 text-texto-2' : 'bg-surface-2 text-texto-2'}`}>
                   {g.type === 'financeiro' ? 'Fin.' : 'Pat.'}
                 </span>
-                <span className="flex-1 text-sm text-gray-400 line-through">{g.name}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-500 shrink-0">Inibido</span>
-                <EyeOff size={11} className="text-gray-600 shrink-0" />
+                <span className="flex-1 text-sm text-texto-2 line-through">{g.name}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3 shrink-0">Inibido</span>
+                <EyeOff size={11} className="text-texto-3 shrink-0" />
               </div>
             ))}
           </div>
         )}
         {sorted.length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-4">Nenhum grupo cadastrado</p>
+          <p className="text-sm text-texto-3 text-center py-4">Nenhum grupo cadastrado</p>
         )}
       </div>
 
-      <div className="flex gap-2 pt-2 border-t border-gray-700">
+      <div className="flex gap-2 pt-2 border-t border-borda-forte">
         <select className="input w-36 text-sm" value={newType} onChange={e => setNewType(e.target.value)}>
           <option value="financeiro">Financeiro</option>
           <option value="patrimonial">Patrimonial</option>
@@ -261,7 +261,9 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           ? { label: 'Parcialmente paga', cls: 'bg-orange-400/30 text-orange-50' }
           : { label: 'Não paga', cls: 'bg-sky-400/25 text-sky-50' })
     : null
-  const gradient = TYPE_COLORS[account.type] || 'from-gray-600 to-gray-800'
+  const gradient = TYPE_COLORS[account.type] || 'from-[#4A5565] to-[#1E2939]' // cinza literal: igual nos dois temas
+  // Degradês claros (emerald/amber/teal) e roxo/rosa (cartão, dívida): texto secundário em branco puro para ≥ 4,5:1.
+  const txtSec = ['savings', 'cash', 'asset', 'credit', 'liability'].includes(account.type) ? 'text-white' : 'text-white/80'
   const idx = siblings.findIndex(a => a.id === account.id)
   const isAsset = account.type === 'asset'
   const isInactive = account.active === false
@@ -302,11 +304,11 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
       if (Math.abs(val - last) < 0.005) return
       rows.push({ key, label, val, cls }); last = val
     }
-    push('finalCiclo', 'Final Ciclo', saldos.saldoFinalCiclo, 'text-purple-300/70')
-    push('projetado', 'Projetado', saldos.saldoProjetado, 'text-sky-300/70')
+    push('finalCiclo', 'Final Ciclo', saldos.saldoFinalCiclo, 'text-purple-200')
+    push('projetado', 'Projetado', saldos.saldoProjetado, 'text-sky-200')
     if (saldos.mode === 'custom') {
-      push('atualCal', 'Atual Calendário', saldos.saldoAtualCalendario, 'text-amber-300/70')
-      push('finalCal', 'Final Calendário', saldos.saldoFinalCalendario, 'text-amber-200/60')
+      push('atualCal', 'Atual Calendário', saldos.saldoAtualCalendario, 'text-amber-200')
+      push('finalCal', 'Final Calendário', saldos.saldoFinalCalendario, 'text-amber-200')
     }
     return rows
   }, [saldos])
@@ -338,24 +340,24 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 mb-1">
             <Icon size={13} className="opacity-80 shrink-0" />
-            <span className="text-xs opacity-70">{ACCOUNT_LABELS[account.type] || account.type}</span>
+            <span className={`text-xs ${txtSec}`}>{ACCOUNT_LABELS[account.type] || account.type}</span>
           </div>
           <h3 className="font-semibold text-sm truncate">{account.name}</h3>
           <div className="flex flex-wrap gap-1 mt-1">
             {account.apelido && (
-              <span className="px-1.5 py-0.5 rounded text-xs bg-white/10 text-white/60">{account.apelido}</span>
+              <span className={`px-1.5 py-0.5 rounded text-xs bg-white/10 ${txtSec}`}>{account.apelido}</span>
             )}
             {account.fluxoCaixaPrincipal && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-blue-200">FC</span>
+              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-white">FC</span>
             )}
             {account.isInvestimento && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-500/30 text-purple-200">INV</span>
             )}
             {account.contaCorrentePrincipal && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-emerald-200">CC</span>
+              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-white">CC</span>
             )}
             {isInactive && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-gray-500/40 text-gray-200">Inativa</span>
+              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-white/20 text-white">Inativa</span>
             )}
           </div>
         </div>
@@ -407,18 +409,18 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <p className="font-bold" style={{ fontSize: '22px', lineHeight: 1.1 }}>{fmt(creditInfo?.current.billTotal || 0)}</p>
               {statusBadge
                 ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>{statusBadge.label}</span>
-                : <span className="text-xs opacity-75">a pagar</span>}
+                : <span className={`text-xs ${txtSec}`}>a pagar</span>}
             </div>
             {creditInfo && creditInfo.nextTotal > 0.005 && (
-              <p className="text-xs opacity-75 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
+              <p className={`text-xs ${txtSec} mt-0.5`}>{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
             )}
-            <p className="text-xs opacity-70 mt-0.5">Dívida total: {fmt(creditUsage(account.id))}</p>
-            <div className="flex gap-3 text-xs opacity-60 mt-1">
+            <p className={`text-xs ${txtSec} mt-0.5`}>Dívida total: {fmt(creditUsage(account.id))}</p>
+            <div className={`flex gap-3 text-xs ${txtSec} mt-1`}>
               <span>Fecha dia {account.closingDay}</span>
               <span>Vence dia {account.dueDay}</span>
             </div>
             {account.creditLimit > 0 && (
-              <p className="text-xs opacity-50 mt-1">Limite: {fmt(account.creditLimit)}</p>
+              <p className={`text-xs ${txtSec} mt-1`}>Limite: {fmt(account.creditLimit)}</p>
             )}
           </div>
         ) : (
@@ -428,13 +430,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <p className="text-lg font-bold">{fmt(creditInfo?.current.billTotal || 0)}</p>
               {statusBadge
                 ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.cls}`}>{statusBadge.label}</span>
-                : <span className="text-xs opacity-60">fatura</span>}
+                : <span className={`text-xs ${txtSec}`}>fatura</span>}
             </div>
             {creditInfo && creditInfo.nextTotal > 0.005 && (
-              <p className="text-xs opacity-60 mt-0.5">{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
+              <p className={`text-xs ${txtSec} mt-0.5`}>{creditInfo.nextLabel}: {fmt(creditInfo.nextTotal)} em aberto</p>
             )}
-            <p className="text-xs opacity-60 mt-0.5">Dívida total: {fmt(creditUsage(account.id))}</p>
-            <div className="flex gap-3 text-xs opacity-60 mt-1">
+            <p className={`text-xs ${txtSec} mt-0.5`}>Dívida total: {fmt(creditUsage(account.id))}</p>
+            <div className={`flex gap-3 text-xs ${txtSec} mt-1`}>
               <span>Fecha dia {account.closingDay}</span>
               <span>Vence dia {account.dueDay}</span>
             </div>
@@ -446,7 +448,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
                     style={{ width: `${Math.min(100, (creditUsage(account.id) / account.creditLimit) * 100)}%` }}
                   />
                 </div>
-                <p className="text-xs opacity-50 mt-0.5">Limite: {fmt(account.creditLimit)}</p>
+                <p className={`text-xs ${txtSec} mt-0.5`}>Limite: {fmt(account.creditLimit)}</p>
               </div>
             )}
           </div>
@@ -455,11 +457,11 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         <div>
           {saldoRows ? (
             <>
-              <p className="text-xs opacity-70 mb-0.5">Saldo Atual</p>
+              <p className={`text-xs ${txtSec} mb-0.5`}>Saldo Atual</p>
               <p className="text-xl font-bold">{fmt(saldoRows[0].val)}</p>
               {hasFuturo && (
                 <div className="mt-1.5 pt-1.5 border-t border-white/20">
-                  <p className="text-xs opacity-70 mb-0.5">Saldo Futuro</p>
+                  <p className={`text-xs ${txtSec} mb-0.5`}>Saldo Futuro</p>
                   <p className="text-base font-semibold text-sky-200">{fmt(saldoFuturoTotal)}</p>
                 </div>
               )}
@@ -469,12 +471,12 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             </>
           ) : (
             <>
-              <p className="text-xs opacity-70 mb-0.5">{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
+              <p className={`text-xs ${txtSec} mb-0.5`}>{account.type === 'liability' ? 'Saldo Devedor' : 'Saldo Principal'}</p>
               <p className="text-xl font-bold">{fmt(account.balance || 0)}</p>
             </>
           )}
           {account.acquisitionValue != null && (
-            <p className="text-xs opacity-50 mt-0.5">
+            <p className={`text-xs ${txtSec} mt-0.5`}>
               Aquisição: {fmt(account.acquisitionValue)}
               {account.balance && account.acquisitionValue
                 ? ` (${account.balance >= account.acquisitionValue ? '+' : ''}${fmt(account.balance - account.acquisitionValue)})`
@@ -484,7 +486,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           {isAsset && (
             <button
               onClick={(e) => { e.stopPropagation(); onUpdateValue(account) }}
-              className="mt-1.5 text-xs flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity"
+              className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
             >
               <RefreshCw size={10} /> Atualizar Valor
             </button>
@@ -492,7 +494,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           {!isAsset && account.type !== 'liability' && (
             <button
               onClick={(e) => { e.stopPropagation(); recalcularSaldo(account.id) }}
-              className="mt-1.5 text-xs flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
+              className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
             >
               <RefreshCw size={10} /> Recalcular
             </button>
@@ -502,7 +504,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
 
       <button
         onClick={(e) => { e.stopPropagation(); setMainAccount(account.id) }}
-        className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
+        className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
       >
         <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
         {account.isMain ? 'Conta principal' : 'Definir como principal'}
@@ -540,7 +542,7 @@ function saldosDe(account, getAccountSaldos, creditUsage) {
 function balColor(amount) {
   if (amount > 0.005) return 'text-receita'
   if (amount < -0.005) return 'text-despesa'
-  return 'text-gray-300'
+  return 'text-texto-2'
 }
 
 // Soma atual/futuro das contas dadas, lendo o mapa accountId → saldos montado uma única vez no
@@ -566,40 +568,40 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
   const { atual: total, futuro: deltaFuturo, futuroTotal } = useMemo(() => sumSaldos(accounts, saldosByAccount), [accounts, saldosByAccount])
   const hasFuturo = Math.abs(deltaFuturo) >= 0.005
   const typeBadge = group.type === 'financeiro'
-    ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">Financeiro</span>
-    : <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">Patrimonial</span>
+    ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Financeiro</span>
+    : <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Patrimonial</span>
 
   return (
     <div
-      className={`space-y-3 rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-emerald-500/50 bg-emerald-500/5' : ''}`}
+      className={`space-y-3 rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
       onDragOver={e => { e.preventDefault(); onDragOverGroup?.() }}
       onDragLeave={e => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) onDragLeaveGroup?.() }}
       onDrop={e => { e.preventDefault(); onDropAccount?.(e.dataTransfer.getData('text/plain')) }}
     >
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="flex items-center gap-2.5 w-full text-left rounded-xl bg-white/5 border border-white/10 py-3 px-4 hover:bg-white/8 transition-colors"
+        className="flex items-center gap-2.5 w-full text-left rounded-xl bg-surface-2/50 border border-borda py-3 px-4 hover:bg-surface-hover/50 transition-colors"
       >
         {collapsed
-          ? <ChevronRight size={14} className="text-gray-400 shrink-0" />
-          : <ChevronDown size={14} className="text-gray-400 shrink-0" />}
-        <span className="font-semibold text-sm text-gray-100">{group.name}</span>
+          ? <ChevronRight size={14} className="text-texto-2 shrink-0" />
+          : <ChevronDown size={14} className="text-texto-2 shrink-0" />}
+        <span className="font-semibold text-sm text-texto-1">{group.name}</span>
         {typeBadge}
-        <span className="text-xs text-gray-600 ml-2">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
+        <span className="text-xs text-texto-3 ml-2">{accounts.length} conta{accounts.length !== 1 ? 's' : ''}</span>
         <span className="ml-auto text-right shrink-0">
-          <span className={`block font-bold text-base ${balColor(total)}`}>{fmt(total)}</span>
+          <span className={`block font-bold text-base ${balColor(total)}`}>{fmtSinal(total)}</span>
           {hasFuturo && (
             <span
-              className="block text-xs font-semibold text-sky-300"
+              className="block text-xs font-semibold text-texto-2"
               title="Saldo do grupo depois que entrarem os lançamentos já efetivados com data posterior a hoje."
             >
-              Futuro: {fmt(futuroTotal)}
+              Futuro: {fmtSinal(futuroTotal)}
             </span>
           )}
         </span>
       </button>
       {!collapsed && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pl-2 border-l border-gray-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pl-2 border-l border-borda">
           {accounts.map(a => (
             <AccountCard
               key={a.id}
@@ -614,7 +616,7 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
             />
           ))}
           {accounts.length === 0 && (
-            <p className="text-gray-600 text-sm py-2 col-span-3">Nenhuma conta neste grupo</p>
+            <p className="text-texto-3 text-sm py-2 col-span-3">Nenhuma conta neste grupo</p>
           )}
         </div>
       )}
@@ -751,30 +753,30 @@ export default function AccountsPanel({ setActivePage }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Total em Contas</p>
-          <p className="text-2xl font-bold text-receita mt-1">{fmt(totalAssets)}</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Total em Contas</p>
+          <p className="text-2xl font-bold text-texto-1 mt-1">{fmtSinal(totalAssets)}</p>
         </div>
         <div
           className="card"
           title="Soma das contas visíveis. Saldo Atual: até hoje. Saldo Futuro: como fica depois que entrarem os lançamentos já efetivados com data posterior a hoje. Confere com a soma dos cabeçalhos de grupo."
         >
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Atual</p>
-          <p className={`text-2xl font-bold mt-1 ${resumo.atual >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmt(resumo.atual)}</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Saldo Atual</p>
+          <p className={`text-2xl font-bold mt-1 ${resumo.atual >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(resumo.atual)}</p>
           {hasResumoFuturo && (
-            <div className="mt-1.5 pt-1.5 border-t border-gray-800">
-              <p className="text-xs text-gray-400 uppercase tracking-wide">Saldo Futuro</p>
-              <p className={`text-xl font-bold ${resumo.futuroTotal >= 0 ? 'text-sky-400' : 'text-despesa'}`}>{fmt(resumo.futuroTotal)}</p>
+            <div className="mt-1.5 pt-1.5 border-t border-borda">
+              <p className="text-xs text-texto-2 uppercase tracking-wide">Saldo Futuro</p>
+              <p className={`text-xl font-bold ${resumo.futuroTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(resumo.futuroTotal)}</p>
             </div>
           )}
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Dívida Cartão</p>
-          <p className="text-2xl font-bold text-despesa mt-1">{fmt(totalCredit)}</p>
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Dívida Cartão</p>
+          <p className="text-2xl font-bold text-texto-1 mt-1">{fmt(totalCredit)}</p>
         </div>
-        <button type="button" onClick={() => setShowComposicaoPL(true)} className="card text-left hover:bg-gray-800/40 transition-colors">
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Patrimônio Líquido</p>
+        <button type="button" onClick={() => setShowComposicaoPL(true)} className="card text-left hover:bg-surface-hover/40 transition-colors">
+          <p className="text-xs text-texto-2 uppercase tracking-wide">Patrimônio Líquido</p>
           <p className={`text-2xl font-bold mt-1 ${patrimonio.pl >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(patrimonio.pl)}
+            {fmtSinal(patrimonio.pl)}
           </p>
         </button>
       </div>
@@ -790,7 +792,7 @@ export default function AccountsPanel({ setActivePage }) {
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-300">Contas ({accounts.length})</h2>
+        <h2 className="text-sm font-semibold text-texto-2">Contas ({accounts.length})</h2>
         <div className="flex gap-2">
           <button className="btn-secondary flex items-center gap-1.5 text-sm" onClick={() => setShowGroupManager(true)}>
             <Settings size={13} /> Grupos
@@ -803,15 +805,15 @@ export default function AccountsPanel({ setActivePage }) {
 
       {accounts.length === 0 && sortedGroups.length === 0 ? (
         <div className="card text-center py-12">
-          <Landmark size={32} className="text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500">Nenhuma conta cadastrada</p>
+          <Landmark size={32} className="text-texto-3 mx-auto mb-3" />
+          <p className="text-texto-3">Nenhuma conta cadastrada</p>
           <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Adicionar primeira conta</button>
         </div>
       ) : (
         <div className="space-y-8">
           {financialGroups.length > 0 && (
             <div className="space-y-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-800 pb-1.5">Financeiro</p>
+              <p className="text-xs text-texto-3 uppercase tracking-wider font-semibold border-b border-borda pb-1.5">Financeiro</p>
               <div className="space-y-5">
                 {financialGroups.map(g => (
                   <GroupSection
@@ -837,7 +839,7 @@ export default function AccountsPanel({ setActivePage }) {
 
           {patrimonialGroups.length > 0 && (
             <div className="space-y-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-800 pb-1.5">Patrimonial</p>
+              <p className="text-xs text-texto-3 uppercase tracking-wider font-semibold border-b border-borda pb-1.5">Patrimonial</p>
               <div className="space-y-5">
                 {patrimonialGroups.map(g => (
                   <GroupSection
@@ -863,20 +865,20 @@ export default function AccountsPanel({ setActivePage }) {
 
           {(ungrouped.length > 0 || sortedGroups.length > 0) && (
             <div
-              className={`space-y-3 rounded-xl transition-colors ${dragOverGroup === 'ungrouped' ? 'ring-2 ring-gray-500/50 bg-gray-500/5' : ''}`}
+              className={`space-y-3 rounded-xl transition-colors ${dragOverGroup === 'ungrouped' ? 'ring-2 ring-borda-forte/50 bg-surface-2/50' : ''}`}
               onDragOver={e => { e.preventDefault(); setDragOverGroup('ungrouped') }}
               onDragLeave={e => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) setDragOverGroup(null) }}
               onDrop={e => { e.preventDefault(); handleDropAccount(null, e.dataTransfer.getData('text/plain')) }}
             >
-              <div className="flex items-center gap-2.5 rounded-xl bg-white/5 border border-white/10 py-3 px-4">
-                <span className="font-semibold text-sm text-gray-100">Sem Grupo</span>
-                <span className="text-xs text-gray-600 ml-2">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2.5 rounded-xl bg-surface-2/50 border border-borda py-3 px-4">
+                <span className="font-semibold text-sm text-texto-1">Sem Grupo</span>
+                <span className="text-xs text-texto-3 ml-2">{ungrouped.length} conta{ungrouped.length !== 1 ? 's' : ''}</span>
                 {ungrouped.length > 0 && (
                   <span className="ml-auto text-right shrink-0">
                     <span className={`block font-bold text-base ${balColor(saldosUngrouped.atual)}`}>{fmt(saldosUngrouped.atual)}</span>
                     {Math.abs(saldosUngrouped.futuro) >= 0.005 && (
                       <span
-                        className="block text-xs font-semibold text-sky-300"
+                        className="block text-xs font-semibold text-texto-2"
                         title="Saldo destas contas depois que entrarem os lançamentos já efetivados com data posterior a hoje."
                       >
                         Futuro: {fmt(saldosUngrouped.futuroTotal)}
@@ -902,8 +904,8 @@ export default function AccountsPanel({ setActivePage }) {
                   ))}
                 </div>
               ) : dragOverGroup === 'ungrouped' ? (
-                <div className="h-16 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center">
-                  <p className="text-xs text-gray-500">Soltar aqui para remover do grupo</p>
+                <div className="h-16 border-2 border-dashed border-borda-forte rounded-xl flex items-center justify-center">
+                  <p className="text-xs text-texto-3">Soltar aqui para remover do grupo</p>
                 </div>
               ) : null}
             </div>
@@ -911,8 +913,8 @@ export default function AccountsPanel({ setActivePage }) {
 
           {accounts.length === 0 && (
             <div className="card text-center py-8">
-              <Landmark size={28} className="text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Nenhuma conta cadastrada</p>
+              <Landmark size={28} className="text-texto-3 mx-auto mb-3" />
+              <p className="text-texto-3 text-sm">Nenhuma conta cadastrada</p>
               <button className="btn-primary mt-3" onClick={() => { setEditAccount(null); setShowForm(true) }}>Adicionar primeira conta</button>
             </div>
           )}

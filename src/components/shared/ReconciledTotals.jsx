@@ -8,15 +8,15 @@ export default function ReconciledTotals({ conciliado, pendente, className = '' 
   return (
     <span className={`inline-flex items-center gap-x-3 whitespace-nowrap ${className}`}>
       <span className="inline-flex items-center gap-1.5">
-        <CheckCircle size={13} className="text-blue-600" />
-        <span className="text-gray-500">Conciliados:</span>
-        <span className="font-semibold text-gray-300">{fmt(conciliado)}</span>
+        <CheckCircle size={13} className="text-primary-fg" />
+        <span className="text-texto-3">Conciliados:</span>
+        <span className="font-semibold text-texto-2">{fmt(conciliado)}</span>
       </span>
-      <span className="text-gray-700 select-none">|</span>
+      <span className="text-texto-3 select-none">|</span>
       <span className="inline-flex items-center gap-1.5">
-        <Circle size={13} className="text-gray-500" />
-        <span className="text-gray-500">Pendentes:</span>
-        <span className="font-semibold text-gray-300">{fmt(pendente)}</span>
+        <Circle size={13} className="text-texto-3" />
+        <span className="text-texto-3">Pendentes:</span>
+        <span className="font-semibold text-texto-2">{fmt(pendente)}</span>
       </span>
     </span>
   )

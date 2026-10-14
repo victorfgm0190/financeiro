@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
-import { fmt, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
+import { fmt, fmtSinal, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
@@ -60,20 +60,20 @@ function AccountPickerButton({ a, onSelect }) {
   return (
     <button
       onClick={() => onSelect(a)}
-      className="w-full flex items-center justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-colors text-left group mb-1"
+      className="w-full flex items-center justify-between p-3 bg-surface-2 hover:bg-surface-hover rounded-xl transition-colors text-left group mb-1"
     >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-gray-700 group-hover:bg-gray-600 flex items-center justify-center transition-colors shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-surface-hover group-hover:bg-surface-hover flex items-center justify-center transition-colors shrink-0">
           {a.type === 'credit'
-            ? <CreditCard size={14} className="text-purple-400" />
-            : <Wallet size={14} className="text-emerald-400" />}
+            ? <CreditCard size={14} className="text-texto-2" />
+            : <Wallet size={14} className="text-texto-2" />}
         </div>
         <div>
-          <p className="text-sm text-gray-200 font-medium">{a.apelido || a.name}</p>
-          <p className="text-xs text-gray-500">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
+          <p className="text-sm text-texto-1 font-medium">{a.apelido || a.name}</p>
+          <p className="text-xs text-texto-3">{a.type === 'credit' ? 'Cartão de Crédito' : 'Conta Bancária'}</p>
         </div>
       </div>
-      <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-purple-400' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
+      <span className={`text-sm font-semibold shrink-0 ml-2 ${a.type === 'credit' ? 'text-texto-1' : (a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
         {a.type === 'credit' ? fmt(creditUsage(a.id)) : fmt(a.balance || 0)}
       </span>
     </button>
@@ -89,12 +89,12 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 
   return (
     <div className="space-y-1">
-      <p className="text-sm text-gray-400 mb-3">Selecione a conta para o lançamento:</p>
+      <p className="text-sm text-texto-2 mb-3">Selecione a conta para o lançamento:</p>
       {visible.map(a => <AccountPickerButton key={a.id} a={a} onSelect={onSelect} />)}
       {!showAll && rest.length > 0 && (
         <button
           onClick={() => setShowAll(true)}
-          className="w-full text-xs text-gray-500 hover:text-gray-300 py-2 border border-dashed border-gray-700 hover:border-gray-600 rounded-xl transition-colors"
+          className="w-full text-xs text-texto-3 hover:text-texto-2 py-2 border border-dashed border-borda-forte hover:border-borda-forte rounded-xl transition-colors"
         >
           Ver todas — {rest.length} conta{rest.length !== 1 ? 's' : ''} oculta{rest.length !== 1 ? 's' : ''}
         </button>
@@ -162,19 +162,19 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   return (
     <div className="space-y-4">
       {/* Breadcrumb — fixo no topo ao rolar apenas no desktop (md+); no mobile rola normal */}
-      <div className="flex items-center gap-2 flex-wrap md:sticky md:top-0 md:z-20 md:bg-gray-950 md:py-2 md:-my-2">
+      <div className="flex items-center gap-2 flex-wrap md:sticky md:top-0 md:z-20 md:bg-page md:py-2 md:-my-2">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-texto-2 hover:text-texto-1 transition-colors"
         >
           <ArrowLeft size={14} /> Lançamentos
         </button>
-        <ChevronRight size={12} className="text-gray-600" />
-        <span className="text-sm text-gray-400">{card.apelido || card.name}</span>
-        <ChevronRight size={12} className="text-gray-600" />
-        <span className="text-sm text-gray-200">Fatura {label}</span>
+        <ChevronRight size={12} className="text-texto-3" />
+        <span className="text-sm text-texto-2">{card.apelido || card.name}</span>
+        <ChevronRight size={12} className="text-texto-3" />
+        <span className="text-sm text-texto-1">Fatura {label}</span>
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-base font-bold text-orange-600">{fmt(total)}</span>
+          <span className="text-base font-bold text-despesa">{fmt(total)}</span>
           {txs.length > 0 && !isMobile && (
             <button
               onClick={() => setShowReconciliar(true)}
@@ -196,12 +196,12 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
       {/* KPI */}
       <div className="grid grid-cols-2 gap-3">
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase">Fatura</p>
-          <p className="text-xl font-bold text-orange-600 mt-1">{fmt(total)}</p>
+          <p className="text-xs text-texto-2 uppercase">Fatura</p>
+          <p className="text-xl font-bold text-despesa mt-1">{fmt(total)}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400 uppercase">Lançamentos</p>
-          <p className="text-xl font-bold text-gray-200 mt-1">{txs.length}</p>
+          <p className="text-xs text-texto-2 uppercase">Lançamentos</p>
+          <p className="text-xl font-bold text-texto-1 mt-1">{txs.length}</p>
         </div>
       </div>
 
@@ -217,15 +217,15 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         )}
         {txs.length === 0 ? (
           <div className="text-center py-10">
-            <ArrowUpCircle size={28} className="text-gray-700 mx-auto mb-2" />
-            <p className="text-gray-500 text-sm">Nenhum lançamento nesta fatura</p>
+            <ArrowUpCircle size={28} className="text-texto-3 mx-auto mb-2" />
+            <p className="text-texto-3 text-sm">Nenhum lançamento nesta fatura</p>
             <button onClick={onNewTx} className="btn-primary mt-3 text-xs">Adicionar lançamento</button>
           </div>
         ) : (
           <>
             {/* Totalizador Conciliados/Pendentes (lançamentos visíveis) */}
             {(reconciledTotals.conciliado > 0 || reconciledTotals.pendente > 0) && (
-              <div className="border-b border-gray-800 bg-surface/40 px-4 py-2.5 flex items-center text-xs">
+              <div className="border-b border-borda bg-surface/40 px-4 py-2.5 flex items-center text-xs">
                 <ReconciledTotals
                   conciliado={reconciledTotals.conciliado}
                   pendente={reconciledTotals.pendente}
@@ -237,7 +237,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
             {/* Mobile: cards estilo app bancário */}
             <div className="md:hidden">
               {displayTxs.length === 0 ? (
-                <p className="text-center py-8 text-gray-500 text-xs">Nenhum lançamento corresponde aos filtros</p>
+                <p className="text-center py-8 text-texto-3 text-xs">Nenhum lançamento corresponde aos filtros</p>
               ) : displayTxs.map(tx => (
                 <TxMobileItem
                   key={tx.id}
@@ -255,19 +255,19 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
             <div className="overflow-x-auto hidden md:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Data</th>
-                  <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">Descrição</th>
-                  <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Categoria</th>
-                  <th className="text-right px-4 py-3 text-xs text-gray-400 font-medium">Valor</th>
+                <tr className="border-b border-borda">
+                  <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Data</th>
+                  <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium">Descrição</th>
+                  <th className="text-left px-4 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
+                  <th className="text-right px-4 py-3 text-xs text-texto-2 font-medium">Valor</th>
                   <th className="px-4 py-3 w-16"></th>
-                  <th className="px-2 py-3 text-center text-xs text-gray-400 font-medium w-10" title="Reconciliado">R</th>
+                  <th className="px-2 py-3 text-center text-xs text-texto-2 font-medium w-10" title="Reconciliado">R</th>
                 </tr>
               </thead>
               <tbody>
                 {displayTxs.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-gray-500 text-xs">
+                    <td colSpan={6} className="text-center py-8 text-texto-3 text-xs">
                       Nenhum lançamento corresponde aos filtros
                     </td>
                   </tr>
@@ -275,16 +275,16 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 {displayTxs.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId)
                   return (
-                    <tr key={tx.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
+                    <tr key={tx.id} className="border-b border-borda/50 hover:bg-surface-hover/30 transition-colors">
+                      <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
-                        <p className="text-gray-200 text-sm">{tx.description}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400/80 align-middle" title="Tem histórico de alterações" />}</p>
-                        {tx.payee && <p className="text-xs text-gray-500">{tx.payee}</p>}
+                        <p className="text-texto-1 text-sm">{tx.description}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
+                        {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
-                        {cat && <span className="text-xs bg-gray-800 px-2 py-1 rounded-full text-gray-300">{cat.icon} {cat.name}</span>}
+                        {cat && <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2">{cat.icon} {cat.name}</span>}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-orange-600 whitespace-nowrap text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-despesa whitespace-nowrap text-sm">
                         {fmt(tx.amount)}
                       </td>
                       <td className="px-4 py-3">
@@ -292,13 +292,13 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                           <button
                             onClick={() => setConfirmEstorno(tx)}
                             title="Estornar lançamento"
-                            className="p-1.5 text-gray-700 hover:text-amber-400 hover:bg-amber-400/10 rounded transition-colors"
+                            className="p-1.5 text-texto-3 hover:text-despesa hover:bg-despesa/10 rounded transition-colors"
                           >
                             <Undo2 size={11} />
                           </button>
                           <button
                             onClick={() => { setEditTx(tx); setShowEdit(true) }}
-                            className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
+                            className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                           >
                             <Edit2 size={11} />
                           </button>
@@ -306,11 +306,11 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                             onConfirm={(date) => handleDuplicate(tx, date)}
                             sourceTx={tx}
                             iconSize={11}
-                            className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                            className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
                           />
                           <button
                             onClick={() => setConfirmDelete(tx)}
-                            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                            className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
                           >
                             <Trash2 size={11} />
                           </button>
@@ -329,18 +329,18 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                 })}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-700 bg-surface/30">
-                  <td colSpan={3} className="px-4 py-3 text-sm font-bold text-gray-300">Total da Fatura</td>
-                  <td className="px-4 py-3 text-right text-sm font-bold text-orange-600">{fmt(total)}</td>
+                <tr className="border-t-2 border-borda-forte bg-surface/30">
+                  <td colSpan={3} className="px-4 py-3 text-sm font-bold text-texto-2">Total da Fatura</td>
+                  <td className="px-4 py-3 text-right text-sm font-bold text-despesa">{fmt(total)}</td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
             </table>
             </div>
             {/* Total da fatura — mobile */}
-            <div className="md:hidden flex items-center justify-between px-4 py-3 border-t-2 border-gray-700 bg-surface/30">
-              <span className="text-sm font-bold text-gray-300">Total da Fatura</span>
-              <span className="text-sm font-bold text-orange-600">{fmt(total)}</span>
+            <div className="md:hidden flex items-center justify-between px-4 py-3 border-t-2 border-borda-forte bg-surface/30">
+              <span className="text-sm font-bold text-texto-2">Total da Fatura</span>
+              <span className="text-sm font-bold text-despesa">{fmt(total)}</span>
             </div>
           </>
         )}
@@ -381,7 +381,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           return (
             <>
               ⚠️ Este lançamento possui um agendamento de resgate vinculado:<br /><br />
-              <span className="text-gray-100 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
+              <span className="text-texto-1 font-medium">{r.description} — {fmt(r.amount)} — {fmtDate(r.startDate)}</span><br /><br />
               Ambos serão excluídos. Deseja continuar?
             </>
           )
@@ -415,12 +415,12 @@ function AccountView({ account, onBack, onNewTx, onEditTx }) {
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-texto-2 hover:text-texto-1 transition-colors"
         >
           <ArrowLeft size={14} /> Lançamentos
         </button>
-        <ChevronRight size={12} className="text-gray-600" />
-        <span className="text-sm text-gray-200">{account.apelido || account.name}</span>
+        <ChevronRight size={12} className="text-texto-3" />
+        <span className="text-sm text-texto-1">{account.apelido || account.name}</span>
       </div>
       <ExtratoContaPanel account={account} onEdit={onEditTx} onNewTx={onNewTx} />
     </div>
@@ -436,15 +436,15 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
       {/* Contas bancárias */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-300">Contas</h2>
+          <h2 className="text-sm font-semibold text-texto-2">Contas</h2>
           <button onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
             <Plus size={12} /> Novo
           </button>
         </div>
         {bankAccounts.length === 0 ? (
           <div className="card text-center py-10">
-            <Wallet size={32} className="text-gray-700 mx-auto mb-3" />
-            <p className="text-gray-500 text-sm">Nenhuma conta cadastrada</p>
+            <Wallet size={32} className="text-texto-3 mx-auto mb-3" />
+            <p className="text-texto-3 text-sm">Nenhuma conta cadastrada</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -452,23 +452,23 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
               <button
                 key={a.id}
                 onClick={() => onSelectAccount(a)}
-                className="card text-left hover:bg-gray-800/60 transition-colors group border border-transparent hover:border-gray-700"
+                className="card text-left hover:bg-surface-hover/60 transition-colors group border border-transparent hover:border-borda-forte"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0">
-                      <Wallet size={14} className="text-emerald-400" />
+                    <div className="w-8 h-8 rounded-lg bg-surface-2 group-hover:bg-surface-hover flex items-center justify-center transition-colors shrink-0">
+                      <Wallet size={14} className="text-texto-2" />
                     </div>
-                    <p className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors truncate">
+                    <p className="text-sm font-medium text-texto-1 group-hover:text-texto-1 transition-colors truncate">
                       {a.apelido || a.name}
                     </p>
                   </div>
-                  <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors shrink-0 ml-2" />
+                  <ChevronRight size={14} className="text-texto-3 group-hover:text-texto-2 transition-colors shrink-0 ml-2" />
                 </div>
                 <p className={`text-2xl font-bold ${(a.balance || 0) >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                  {fmt(a.balance || 0)}
+                  {fmtSinal(a.balance || 0)}
                 </p>
-                <p className="text-xs text-gray-600 mt-0.5">Saldo atual</p>
+                <p className="text-xs text-texto-3 mt-0.5">Saldo atual</p>
               </button>
             ))}
           </div>
@@ -478,8 +478,8 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
       {/* Cartões de crédito */}
       {creditCards.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
-            <CreditCard size={14} className="text-gray-500" />
+          <h2 className="text-sm font-semibold text-texto-2 mb-3 flex items-center gap-2">
+            <CreditCard size={14} className="text-texto-3" />
             Cartões de Crédito
           </h2>
           <div className="space-y-3">
@@ -487,18 +487,18 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
               const faturas = cardFaturas[card.id] || []
               return (
                 <div key={card.id} className="card p-0 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                  <div className="px-4 py-3 border-b border-borda flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <CreditCard size={14} className="text-purple-400 shrink-0" />
-                      <span className="text-sm font-semibold text-gray-200">{card.apelido || card.name}</span>
+                      <CreditCard size={14} className="text-texto-2 shrink-0" />
+                      <span className="text-sm font-semibold text-texto-1">{card.apelido || card.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500">
-                        Dívida: <span className="text-purple-400 font-semibold">{fmt(creditUsage(card.id))}</span>
+                      <span className="text-xs text-texto-3">
+                        Dívida: <span className="text-texto-1 font-semibold">{fmt(creditUsage(card.id))}</span>
                       </span>
                       <button
                         onClick={() => onNewTx(card)}
-                        className="p-1.5 text-gray-500 hover:text-gray-300 hover:bg-gray-800 rounded transition-colors"
+                        className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                         title="Novo lançamento no cartão"
                       >
                         <Plus size={14} />
@@ -506,23 +506,23 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                     </div>
                   </div>
                   {faturas.length === 0 ? (
-                    <p className="text-center py-6 text-gray-600 text-xs">Nenhum lançamento no cartão</p>
+                    <p className="text-center py-6 text-texto-3 text-xs">Nenhum lançamento no cartão</p>
                   ) : (
                     <div>
                       {faturas.map(fat => (
                         <button
                           key={fat.key}
                           onClick={() => onSelectFatura(card, fat.key)}
-                          className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-gray-800/30 transition-colors text-left group"
+                          className="w-full flex items-center justify-between px-4 py-3 border-b border-borda/40 last:border-0 hover:bg-surface-hover/30 transition-colors text-left group"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-xs text-gray-500 uppercase tracking-wide shrink-0">Fatura</span>
-                            <span className="text-sm font-semibold text-gray-200">{fat.label}</span>
-                            <span className="text-xs text-gray-600 shrink-0">{fat.count} lançamento{fat.count !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-texto-3 uppercase tracking-wide shrink-0">Fatura</span>
+                            <span className="text-sm font-semibold text-texto-1">{fat.label}</span>
+                            <span className="text-xs text-texto-3 shrink-0">{fat.count} lançamento{fat.count !== 1 ? 's' : ''}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                            <span className="text-sm font-bold text-orange-600">{fmt(fat.total)}</span>
-                            <ChevronRight size={12} className="text-gray-600 group-hover:text-gray-400 transition-colors" />
+                            <span className="text-sm font-bold text-despesa">{fmt(fat.total)}</span>
+                            <ChevronRight size={12} className="text-texto-3 group-hover:text-texto-2 transition-colors" />
                           </div>
                         </button>
                       ))}

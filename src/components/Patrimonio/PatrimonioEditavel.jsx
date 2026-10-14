@@ -14,11 +14,11 @@ import { fmt } from '../shared/utils'
 
 function Valor({ label, children, hint }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-gray-800 last:border-0">
-      <span className="text-xs text-gray-500 shrink-0">{label}</span>
+    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-borda last:border-0">
+      <span className="text-xs text-texto-3 shrink-0">{label}</span>
       <span className="text-right">
-        <span className="text-sm text-gray-200 block">{children}</span>
-        {hint && <span className="text-[11px] text-gray-600 block mt-0.5">{hint}</span>}
+        <span className="text-sm text-texto-1 block">{children}</span>
+        {hint && <span className="text-[11px] text-texto-3 block mt-0.5">{hint}</span>}
       </span>
     </div>
   )
@@ -30,17 +30,17 @@ function Opcao({ ativa, onClick, titulo, valor, indefinido, cor }) {
       type="button"
       onClick={onClick}
       className={`w-full text-left rounded-lg border p-2.5 transition-colors ${
-        ativa ? `${cor.borda} ${cor.fundo}` : 'border-gray-800 hover:border-gray-700'
+        ativa ? `${cor.borda} ${cor.fundo}` : 'border-borda hover:border-borda-forte'
       }`}
     >
       <span className="flex items-center gap-2.5">
         <span className={`w-3 h-3 rounded-full shrink-0 border ${
-          ativa ? `${cor.pino} ${cor.borda}` : 'bg-transparent border-gray-700'
+          ativa ? `${cor.pino} ${cor.borda}` : 'bg-transparent border-borda-forte'
         }`} />
         <span className="min-w-0 flex-1">
-          <span className={`text-xs block ${ativa ? cor.texto : 'text-gray-400'}`}>{titulo}</span>
-          <span className="text-sm text-gray-200 block">
-            {indefinido ? <span className="text-gray-600 italic text-xs">não preenchido</span> : fmt(valor)}
+          <span className={`text-xs block ${ativa ? cor.texto : 'text-texto-2'}`}>{titulo}</span>
+          <span className="text-sm text-texto-1 block">
+            {indefinido ? <span className="text-texto-3 italic text-xs">não preenchido</span> : fmt(valor)}
           </span>
         </span>
       </span>
@@ -48,8 +48,8 @@ function Opcao({ ativa, onClick, titulo, valor, indefinido, cor }) {
   )
 }
 
-const COR_NF = { borda: 'border-blue-500/40', fundo: 'bg-blue-500/5', pino: 'bg-blue-500', texto: 'text-blue-400' }
-const COR_PAGO = { borda: 'border-teal-500/40', fundo: 'bg-teal-500/5', pino: 'bg-teal-500', texto: 'text-teal-400' }
+const COR_NF = { borda: 'border-primary/40', fundo: 'bg-primary/5', pino: 'bg-primary', texto: 'text-primary-fg' }
+const COR_PAGO = { borda: 'border-primary/40', fundo: 'bg-primary/5', pino: 'bg-primary', texto: 'text-primary-fg' }
 
 // String vazia = "limpar o campo" (null), e não 0 — são coisas diferentes para o backend.
 const paraNumero = (s) => (String(s).trim() === '' ? null : Number(s))
@@ -107,20 +107,20 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
   return (
     <div className="card">
       <div className="flex items-center justify-between gap-3 mb-3">
-        <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-          <Wallet size={14} className="text-teal-400" /> Valores do Bem
+        <h3 className="text-sm font-semibold text-texto-2 flex items-center gap-2">
+          <Wallet size={14} className="text-receita" /> Valores do Bem
         </h3>
         {podeEditar && !editando && (
           <button
             type="button"
             onClick={abrirEdicao}
-            className="text-xs text-teal-400 hover:text-teal-300 flex items-center gap-1.5"
+            className="text-xs text-primary-fg hover:text-texto-1 flex items-center gap-1.5"
           >
             <Pencil size={12} /> Editar
           </button>
         )}
         {!podeEditar && (
-          <span className="text-[11px] text-gray-600 flex items-center gap-1.5" title="Bem com movimentações registradas">
+          <span className="text-[11px] text-texto-3 flex items-center gap-1.5" title="Bem com movimentações registradas">
             <Lock size={11} /> calculado pelo histórico
           </span>
         )}
@@ -141,7 +141,7 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
               className="input" type="number" step="0.01" min="0" placeholder="Deixe vazio para usar o saldo"
               value={pago} onChange={e => setPago(e.target.value)}
             />
-            <p className="text-[11px] text-gray-600 mt-1">
+            <p className="text-[11px] text-texto-3 mt-1">
               Em branco, o Patrimônio usa o saldo da conta ({fmt(bem.saldo)}).
             </p>
           </div>
@@ -158,7 +158,7 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
         <div>
           <Valor label="Contrato / Nota Fiscal">
             {bem.valor_nota_fiscal == null
-              ? <span className="text-gray-600 italic text-xs">não preenchido</span>
+              ? <span className="text-texto-3 italic text-xs">não preenchido</span>
               : fmt(bem.valor_nota_fiscal)}
           </Valor>
           <Valor
@@ -166,17 +166,17 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
             hint={bem.valor_pago_manual == null ? 'sem valor informado — o Patrimônio usa o saldo' : null}
           >
             {bem.valor_pago_manual == null
-              ? <span className="text-gray-600 italic text-xs">não preenchido</span>
+              ? <span className="text-texto-3 italic text-xs">não preenchido</span>
               : fmt(bem.valor_pago_manual)}
           </Valor>
           <Valor label="Saldo Atual" hint={temMovimentacoes ? 'somado pelas movimentações do bem' : null}>
-            <span className="text-teal-400 font-semibold">{fmt(bem.saldo)}</span>
+            <span className="text-receita font-semibold">{fmt(bem.saldo)}</span>
           </Valor>
         </div>
       )}
 
-      <div className="border-t border-gray-800 mt-3 pt-3 space-y-2">
-        <p className="text-xs text-gray-500">Usar no Patrimônio</p>
+      <div className="border-t border-borda mt-3 pt-3 space-y-2">
+        <p className="text-xs text-texto-3">Usar no Patrimônio</p>
         <Opcao
           ativa={metodo === 'nota_fiscal'} cor={COR_NF} titulo="Contrato / Nota Fiscal"
           valor={nfAtual} indefinido={nfAtual == null}
@@ -188,8 +188,8 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
           onClick={() => trocarMetodo('valor_pago')}
         />
         {usandoSaldo && (
-          <p className="text-[11px] text-amber-400/80">
-            O valor escolhido está em branco, então o Patrimônio usa o saldo ({fmt(bem.saldo)}).
+          <p className="text-[11px] text-aviso">
+            ⚠{' '}O valor escolhido está em branco, então o Patrimônio usa o saldo ({fmt(bem.saldo)}).
             Preencha-o para o bem entrar pelo número certo.
           </p>
         )}

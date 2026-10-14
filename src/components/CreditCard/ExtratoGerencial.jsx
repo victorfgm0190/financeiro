@@ -10,8 +10,8 @@ function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupo) return null
   let cls = 'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold'
   if (grupo.number === 1) cls += ' bg-reserva/20 text-reserva'
-  else if (grupo.number === 'D') cls += ' bg-gray-700/60 text-gray-500'
-  else cls += ' bg-orange-500/20 text-orange-600'
+  else if (grupo.number === 'D') cls += ' bg-surface-hover/60 text-texto-3'
+  else cls += ' bg-despesa/20 text-despesa'
   return <span className={cls}>{grupo.alias}</span>
 }
 
@@ -79,7 +79,7 @@ export default function ExtratoGerencial({ initialCardId }) {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-300 mb-4">Extrato Gerencial</h2>
+        <h2 className="text-sm font-semibold text-texto-2 mb-4">Extrato Gerencial</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="label">Cartão</label>
@@ -101,24 +101,24 @@ export default function ExtratoGerencial({ initialCardId }) {
 
       {rowsWithBalance.length === 0 ? (
         <div className="card text-center py-10">
-          <p className="text-gray-500 text-sm">Nenhum lançamento no período</p>
+          <p className="text-texto-3 text-sm">Nenhum lançamento no período</p>
         </div>
       ) : (
         <div className="card p-0 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium whitespace-nowrap">Data</th>
-                <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">Nº</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium">Descrição</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden lg:table-cell">Movimentação</th>
-                <th className="text-left px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Favorecido</th>
-                <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">Ger</th>
-                <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium hidden md:table-cell">Fatura</th>
-                <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">R</th>
-                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Pagamento</th>
-                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Depósito</th>
-                <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Saldo</th>
+              <tr className="border-b border-borda">
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
+                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium">Nº</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Descrição</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden lg:table-cell">Movimentação</th>
+                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Favorecido</th>
+                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium">Ger</th>
+                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Fatura</th>
+                <th className="text-center px-3 py-3 text-xs text-texto-2 font-medium">R</th>
+                <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Pagamento</th>
+                <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Depósito</th>
+                <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium">Saldo</th>
               </tr>
             </thead>
             <tbody>
@@ -130,28 +130,28 @@ export default function ExtratoGerencial({ initialCardId }) {
                 return (
                   <tr
                     key={tx.id}
-                    className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                    className="border-b border-borda/50 hover:bg-surface-hover/30 transition-colors"
                   >
-                    <td className="px-3 py-2.5 text-gray-400 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
-                    <td className="px-3 py-2.5 text-center text-gray-600 text-xs">{tx._seq}</td>
-                    <td className="px-3 py-2.5 text-gray-200 max-w-xs">
+                    <td className="px-3 py-2.5 text-texto-2 whitespace-nowrap text-xs">{fmtDate(tx.date)}</td>
+                    <td className="px-3 py-2.5 text-center text-texto-3 text-xs">{tx._seq}</td>
+                    <td className="px-3 py-2.5 text-texto-1 max-w-xs">
                       <p className="truncate">{tx.description}</p>
                     </td>
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        tx.type === 'expense' ? 'bg-orange-500/15 text-orange-600'
-                        : tx.type === 'income' ? 'bg-blue-500/15 text-blue-600'
-                        : tx.type === 'credit_payment' ? 'bg-blue-500/15 text-blue-600'
-                        : 'bg-gray-700 text-gray-400'
+                        tx.type === 'expense' ? 'bg-despesa/15 text-despesa'
+                        : tx.type === 'income' ? 'bg-receita/15 text-receita'
+                        : tx.type === 'credit_payment' ? 'bg-receita/15 text-receita'
+                        : 'bg-surface-hover text-texto-2'
                       }`}>{movLabel}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-gray-500 text-xs hidden md:table-cell">{tx.payee || '—'}</td>
+                    <td className="px-3 py-2.5 text-texto-3 text-xs hidden md:table-cell">{tx.payee || '—'}</td>
                     <td className="px-3 py-2.5 text-center">
                       {tx.grupoGerencial
                         ? <GerBadge grupoId={tx.grupoGerencial} gerencialGroups={gerencialGroups} />
-                        : <span className="text-gray-700 text-xs">—</span>}
+                        : <span className="text-texto-3 text-xs">—</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-center text-xs text-gray-500 hidden md:table-cell">
+                    <td className="px-3 py-2.5 text-center text-xs text-texto-3 hidden md:table-cell">
                       {getBillLabel(tx.date, card)}
                     </td>
                     <td className="px-3 py-2.5 text-center">
@@ -161,13 +161,13 @@ export default function ExtratoGerencial({ initialCardId }) {
                         title={tx.reconciled ? 'Desmarcar conferido' : 'Marcar como conferido'}
                       />
                     </td>
-                    <td className="px-3 py-2.5 text-right text-orange-600 font-medium whitespace-nowrap text-xs">
+                    <td className="px-3 py-2.5 text-right text-despesa font-medium whitespace-nowrap text-xs">
                       {tx._pagamento > 0 ? fmt(tx._pagamento) : ''}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-blue-600 font-medium whitespace-nowrap text-xs">
+                    <td className="px-3 py-2.5 text-right text-receita font-medium whitespace-nowrap text-xs">
                       {tx._deposito > 0 ? fmt(tx._deposito) : ''}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap text-xs ${tx._balance < 0 ? 'text-orange-600' : 'text-blue-600'}`}>
+                    <td className={`px-3 py-2.5 text-right font-semibold whitespace-nowrap text-xs ${tx._balance < 0 ? 'text-despesa' : 'text-receita'}`}>
                       {fmt(Math.abs(tx._balance))}{tx._balance < 0 ? ' D' : ' C'}
                     </td>
                   </tr>

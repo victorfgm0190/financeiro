@@ -16,6 +16,8 @@ const PAGE_TITLES = {
   reservas: 'Controle de Reservas',
   budget: 'Orçamento por Categoria',
   reports: 'Relatórios',
+  patrimonio: 'Patrimônio',
+  envelopes: 'Envelopes',
   alerts: 'Alertas de Vencimento',
   settings: 'Configurações',
 }
@@ -28,12 +30,12 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null
 
   return (
-    <header className="border-b border-gray-800 bg-gray-950 px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-10">
+    <header className="border-b border-borda bg-page px-4 md:px-6 pb-2.5 header-safe-top flex items-center gap-3 sticky top-0 z-10">
       {/* Title + period */}
       <div className="min-w-0">
-        <h1 className="text-base font-semibold text-gray-100 leading-tight">{PAGE_TITLES[page] || page}</h1>
+        <h1 className="text-base font-semibold text-texto-1 leading-tight">{PAGE_TITLES[page] || page}</h1>
         {financialPeriod && page !== 'schedule' && (
-          <p className="text-xs text-gray-500 leading-tight">
+          <p className="text-xs text-texto-3 leading-tight">
             {format(financialPeriod.start, 'dd/MM/yyyy')} – {format(financialPeriod.end, 'dd/MM/yyyy')}
           </p>
         )}
@@ -47,8 +49,8 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
             onClick={() => setActiveProfileId(null)}
             className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
               activeProfileId === null
-                ? 'bg-gray-600 border-gray-500 text-white'
-                : 'bg-gray-800/60 border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                ? 'bg-primary/15 border-primary/40 text-primary-fg'
+                : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
             }`}
           >
             Tudo
@@ -64,10 +66,10 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
                 title={`${p.name} — ${p.type === 'pf' ? 'CPF' : 'CNPJ'} ${p.document || ''}`}
                 className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
                   isActive
-                    ? 'text-white border-transparent'
-                    : 'bg-gray-800/60 border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                    ? 'bg-surface-2 text-texto-1 border-transparent ring-2 ring-inset'
+                    : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
                 }`}
-                style={isActive ? { backgroundColor: p.color, borderColor: p.color } : {}}
+                style={isActive ? { '--tw-ring-color': p.color } : {}}
               >
                 <Icon size={11} className="shrink-0" />
                 <span className="hidden sm:inline truncate max-w-24">{p.name}</span>
@@ -86,7 +88,7 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
           onClick={onOpenSearch}
           title="Busca global (lançamentos e agendamentos)"
           aria-label="Busca global"
-          className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"
+          className="shrink-0 p-2 rounded-lg text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors"
         >
           <Search size={18} />
         </button>
@@ -97,31 +99,31 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
             <button
               onClick={() => setProfileMenuOpen(o => !o)}
               aria-label="Trocar perfil"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-700 bg-gray-800/60 text-gray-200 max-w-[160px]"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-borda-forte bg-surface-2/60 text-texto-1 max-w-[160px]"
               style={activeProfile ? { borderColor: activeProfile.color } : {}}
             >
               {activeProfile
                 ? (() => {
                     const Icon = activeProfile.type === 'pf' ? User : Building2
-                    return <Icon size={13} className="shrink-0" style={{ color: activeProfile.color }} />
+                    return <Icon size={13} className="shrink-0 text-texto-2" />
                   })()
-                : <User size={13} className="shrink-0 text-gray-400" />}
+                : <User size={13} className="shrink-0 text-texto-2" />}
               <span className="truncate">{activeProfile ? activeProfile.name : 'Tudo'}</span>
-              <ChevronDown size={13} className="shrink-0 text-gray-500" />
+              <ChevronDown size={13} className="shrink-0 text-texto-3" />
             </button>
 
             {profileMenuOpen && (
               <>
                 {/* Backdrop para fechar ao clicar fora */}
                 <div className="fixed inset-0 z-20" onClick={() => setProfileMenuOpen(false)} />
-                <div className="absolute right-0 mt-1.5 z-30 w-52 rounded-lg border border-gray-700 bg-gray-900 shadow-xl py-1">
+                <div className="absolute right-0 mt-1.5 z-30 w-52 rounded-lg border border-borda-forte bg-surface shadow-xl py-1">
                   <button
                     onClick={() => { setActiveProfileId(null); setProfileMenuOpen(false) }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
-                      activeProfileId === null ? 'text-white font-semibold' : 'text-gray-300'
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-surface-hover ${
+                      activeProfileId === null ? 'text-texto-1 font-semibold' : 'text-texto-2'
                     }`}
                   >
-                    <User size={13} className="shrink-0 text-gray-400" />
+                    <User size={13} className="shrink-0 text-texto-2" />
                     <span className="truncate">Tudo</span>
                   </button>
                   {profiles.map(p => {
@@ -131,13 +133,14 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
                       <button
                         key={p.id}
                         onClick={() => { setActiveProfileId(p.id); setProfileMenuOpen(false) }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
-                          isActive ? 'text-white font-semibold' : 'text-gray-300'
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-surface-hover ${
+                          isActive ? 'text-texto-1 font-semibold' : 'text-texto-2'
                         }`}
+                        style={{ boxShadow: `inset 3px 0 0 ${p.color}` }}
                       >
-                        <Icon size={13} className="shrink-0" style={{ color: p.color }} />
+                        <Icon size={13} className="shrink-0 text-texto-2" />
                         <span className="truncate flex-1">{p.name}</span>
-                        <span className="text-[10px] text-gray-600 shrink-0">{p.type === 'pf' ? 'CPF' : 'CNPJ'}</span>
+                        <span className="text-[10px] text-texto-3 shrink-0">{p.type === 'pf' ? 'CPF' : 'CNPJ'}</span>
                       </button>
                     )
                   })}
@@ -148,14 +151,14 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
         )}
 
         <div className="text-right hidden md:block">
-          <p className="text-xs text-gray-400">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+          <p className="text-xs text-texto-2">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
         </div>
 
         <button
           onClick={clearTokenAndRedirect}
           title="Sair"
           aria-label="Sair"
-          className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+          className="shrink-0 p-2 rounded-lg text-texto-2 hover:text-perigo hover:bg-perigo-bg transition-colors"
         >
           <LogOut size={18} />
         </button>

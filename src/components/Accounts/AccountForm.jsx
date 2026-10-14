@@ -18,8 +18,8 @@ const TYPES = [
 function Tooltip({ text }) {
   return (
     <span className="relative group/tip ml-1 inline-flex items-center">
-      <Info size={12} className="text-gray-500 cursor-help" />
-      <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-2.5 py-2 invisible group-hover/tip:visible opacity-0 group-hover/tip:opacity-100 transition-all pointer-events-none z-30 shadow-xl leading-relaxed">
+      <Info size={12} className="text-texto-3 cursor-help" />
+      <span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 text-xs bg-surface-2 border border-borda-forte text-texto-2 rounded-lg px-2.5 py-2 invisible group-hover/tip:visible opacity-0 group-hover/tip:opacity-100 transition-all pointer-events-none z-30 shadow-xl leading-relaxed">
         {text}
       </span>
     </span>
@@ -31,10 +31,10 @@ function Toggle({ checked, onChange, label, tooltip }) {
     <label className="flex items-center gap-2.5 cursor-pointer">
       <div className="relative shrink-0">
         <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
-        <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-[#0F6E56] transition-colors" />
+        <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
         <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
       </div>
-      <span className="text-sm text-gray-300 select-none">{label}</span>
+      <span className="text-sm text-texto-2 select-none">{label}</span>
       {tooltip && <Tooltip text={tooltip} />}
     </label>
   )
@@ -187,8 +187,8 @@ export default function AccountForm({ initial, onClose }) {
               key={t.value}
               className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
                 form.type === t.value
-                  ? 'border-[#0F6E56] bg-[#0F6E56]/10 text-[#0F6E56]'
-                  : 'border-gray-700 bg-gray-800 text-gray-300'
+                  ? 'border-primary bg-primary/10 text-primary-fg'
+                  : 'border-borda-forte bg-surface-2 text-texto-2'
               }`}
             >
               <input
@@ -228,7 +228,7 @@ export default function AccountForm({ initial, onClose }) {
             placeholder="Ex: NUgi"
             maxLength={8}
           />
-          <p className="text-xs text-gray-600 mt-0.5 text-right">{form.apelido.length}/8</p>
+          <p className="text-xs text-texto-3 mt-0.5 text-right">{form.apelido.length}/8</p>
         </div>
       </div>
 
@@ -299,7 +299,7 @@ export default function AccountForm({ initial, onClose }) {
               <span>Saldo Atual</span>
               <button
                 type="button"
-                className="flex items-center gap-1 text-xs text-[#0F6E56] hover:text-emerald-400 transition-colors"
+                className="flex items-center gap-1 text-xs text-primary-fg hover:text-texto-1 transition-colors"
                 onClick={() => {
                   recalcularSaldo(initial.id, Math.round(Number(form.initialBalance) * 100) / 100)
                   onClose()
@@ -308,7 +308,7 @@ export default function AccountForm({ initial, onClose }) {
                 <RefreshCw size={11} /> Recalcular
               </button>
             </label>
-            <div className="input bg-gray-700/50 text-gray-400 cursor-not-allowed select-none">
+            <div className="input bg-surface-hover/50 text-texto-2 cursor-not-allowed select-none">
               {fmt(initial.balance ?? 0)}
             </div>
           </div>
@@ -401,7 +401,7 @@ export default function AccountForm({ initial, onClose }) {
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-texto-3 mt-1">
               Deixe em branco para usar a conta principal padrão
             </p>
           </div>
@@ -409,8 +409,8 @@ export default function AccountForm({ initial, onClose }) {
       )}
 
       {!isPatrimonial && (
-      <div className="space-y-3 pt-1 border-t border-gray-800">
-        <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Classificação</p>
+      <div className="space-y-3 pt-1 border-t border-borda">
+        <p className="text-xs text-texto-3 uppercase tracking-wide pt-1">Classificação</p>
 
         <Toggle
           checked={form.isMain}
@@ -460,10 +460,10 @@ export default function AccountForm({ initial, onClose }) {
               tooltip="Esta conta é usada no controle gerencial do cartão de crédito"
             />
             {conflictAccount && (
-              <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-400" />
-                <p className="text-xs text-amber-300 leading-relaxed">
-                  A conta <strong className="text-amber-200">"{conflictAccount.name}"</strong> já é a Conta Corrente Principal.
+              <div className="flex items-start gap-2 p-3 bg-aviso/10 border border-aviso/30 rounded-lg">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5 text-aviso" />
+                <p className="text-xs text-aviso leading-relaxed">
+                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta Corrente Principal.
                   Ao salvar, ela será substituída por esta conta.
                 </p>
               </div>
@@ -496,7 +496,7 @@ export default function AccountForm({ initial, onClose }) {
             </div>
 
             {form.vinculoTipo === 'reserva' && (
-              <div className="ml-3 space-y-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+              <div className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
                 <div>
                   <label className="label">Tipo de reserva</label>
                   <select
@@ -522,15 +522,15 @@ export default function AccountForm({ initial, onClose }) {
                     />
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    Esta conta usará a categoria <span className="text-gray-300 font-medium">🏦 Reservas Gerais</span> automaticamente em lançamentos de reserva.
+                  <p className="text-xs text-texto-3 leading-relaxed">
+                    Esta conta usará a categoria <span className="text-texto-2 font-medium">🏦 Reservas Gerais</span> automaticamente em lançamentos de reserva.
                   </p>
                 )}
               </div>
             )}
 
             {form.vinculoTipo === 'patrimonio' && (
-              <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+              <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
                 <div>
                   <label className="label">Categoria vinculada *</label>
                   <CategorySelect
@@ -546,9 +546,9 @@ export default function AccountForm({ initial, onClose }) {
                     <p className="text-xs text-despesa mt-1">Selecione a categoria do patrimônio.</p>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Transferências para esta conta geram <span className="text-gray-300 font-medium">despesa</span> automática na categoria;
-                  resgates geram <span className="text-gray-300 font-medium">receita</span>. O saldo soma no KPI de Investimentos.
+                <p className="text-xs text-texto-3 leading-relaxed">
+                  Transferências para esta conta geram <span className="text-texto-2 font-medium">despesa</span> automática na categoria;
+                  resgates geram <span className="text-texto-2 font-medium">receita</span>. O saldo soma no KPI de Investimentos.
                 </p>
               </div>
             )}
@@ -558,8 +558,8 @@ export default function AccountForm({ initial, onClose }) {
       )}
 
       {isInvestible && (
-        <div className="space-y-3 pt-1 border-t border-gray-800">
-          <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Investimento</p>
+        <div className="space-y-3 pt-1 border-t border-borda">
+          <p className="text-xs text-texto-3 uppercase tracking-wide pt-1">Investimento</p>
           <Toggle
             checked={form.isInvestimento}
             onChange={e => {
@@ -572,7 +572,7 @@ export default function AccountForm({ initial, onClose }) {
             tooltip="Conta que acumula patrimônio com liquidez condicional (consórcio, imóvel na planta, previdência). Transferências para a conta geram despesa automática; resgates geram receita, na categoria vinculada."
           />
           {form.isInvestimento && (
-            <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+            <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
               <label className="label">Categoria do Investimento *</label>
               <CategorySelect
                 categories={categories}
@@ -594,8 +594,8 @@ export default function AccountForm({ initial, onClose }) {
       {/* ── Rendimento ─────────────────────────────────────────────────────────
           Habilita o botão "Lançar Rendimento" no card: o usuário informa o saldo novo
           e o app cria a receita da diferença. Opcional — sem categoria, nada aparece. */}
-      <div className="space-y-3 pt-1 border-t border-gray-800">
-        <p className="text-xs text-gray-500 uppercase tracking-wide pt-1">Rendimento</p>
+      <div className="space-y-3 pt-1 border-t border-borda">
+        <p className="text-xs text-texto-3 uppercase tracking-wide pt-1">Rendimento</p>
         <div>
           <label className="label">Categoria de Rendimento</label>
           <CategorySelect
@@ -607,42 +607,42 @@ export default function AccountForm({ initial, onClose }) {
             placeholder="Nenhuma (botão desativado)"
             searchable
           />
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            Define a categoria da receita lançada pelo botão <span className="text-gray-300 font-medium">Lançar Rendimento</span> do card desta conta.
+          <p className="text-xs text-texto-3 mt-1 leading-relaxed">
+            Define a categoria da receita lançada pelo botão <span className="text-texto-2 font-medium">Lançar Rendimento</span> do card desta conta.
           </p>
         </div>
 
         {form.rendimentoCategoriaId && (
-          <div className="ml-3 space-y-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+          <div className="ml-3 space-y-2 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">
             <label className="label">Rendimento por</label>
-            <div className="flex rounded-lg overflow-hidden border border-gray-700">
+            <div className="flex rounded-lg overflow-hidden border border-borda-forte">
               {[['conta', 'Conta'], ['grupo', 'Grupo']].map(([v, l]) => (
                 <button
                   type="button"
                   key={v}
                   onClick={() => set('rendimentoModo', v)}
                   className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                    form.rendimentoModo === v ? 'bg-[#185FA5] text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    form.rendimentoModo === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
                   }`}
                 >
                   {l}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <p className="text-xs text-texto-3 leading-relaxed">
               {form.rendimentoModo === 'grupo' ? (
                 <>
-                  O saldo de referência será a <span className="text-gray-300 font-medium">soma das contas do grupo</span>
-                  {grupoDaConta ? <> <span className="text-gray-300 font-medium">{grupoDaConta.name}</span></> : ''}.
+                  O saldo de referência será a <span className="text-texto-2 font-medium">soma das contas do grupo</span>
+                  {grupoDaConta ? <> <span className="text-texto-2 font-medium">{grupoDaConta.name}</span></> : ''}.
                   A receita continua sendo lançada nesta conta.
                   {!form.accountGroupId && (
-                    <span className="block text-amber-400 mt-1">
+                    <span className="block text-aviso mt-1">
                       Esta conta não está em nenhum grupo — o saldo de referência cairá para o desta conta.
                     </span>
                   )}
                 </>
               ) : (
-                <>O saldo de referência será o <span className="text-gray-300 font-medium">saldo atual desta conta</span>.</>
+                <>O saldo de referência será o <span className="text-texto-2 font-medium">saldo atual desta conta</span>.</>
               )}
             </p>
           </div>
