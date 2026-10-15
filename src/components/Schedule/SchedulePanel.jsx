@@ -27,6 +27,7 @@ import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
 import { useAtalho, useTituloAtalho, useCamadaModal } from '../../context/atalhosHooks'
+import ShortcutHint from '../shared/ShortcutHint'
 import { pagarParcela } from '../../lib/bemApi'
 import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
@@ -2553,15 +2554,18 @@ export default function SchedulePanel() {
           {provisoesPendentes.length > 0 && (
             <button className="btn-secondary flex items-center gap-2" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
+              <ShortcutHint actionId="agend.executarGerenciais" />
             </button>
           )}
           {activeTab === 'conta' && (
             <>
               <button className="btn-secondary hidden md:flex items-center gap-2" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
                 <Hourglass size={14} /> Lançar Provisão
+                <ShortcutHint actionId="agend.lancarProvisao" />
               </button>
               <button className="btn-primary hidden md:flex items-center gap-2" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
                 <Plus size={14} /> Novo Agendamento
+                <ShortcutHint actionId="agend.novoAgendamento" />
               </button>
             </>
           )}

@@ -6,6 +6,8 @@ import {
 import { useApp } from '../../context/AppContext'
 import ThemeToggle from '../ThemeToggle'
 import SessaoUsuario from './SessaoUsuario'
+import ShortcutHint from '../shared/ShortcutHint'
+import { useTituloAtalho } from '../../context/atalhosHooks'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -42,6 +44,12 @@ function DbStatusBadge({ status }) {
 
 export default function Sidebar({ active, setActive, alertCount }) {
   const { dbStatus } = useApp()
+  // Itens com atalho global: tooltip com a combinação atual + selo que só aparece segurando Alt.
+  const atalhoNav = { cashflow: 'nav.fluxoCaixa', envelopes: 'nav.envelopes' }
+  const tituloNav = {
+    cashflow: useTituloAtalho('Fluxo de Caixa', atalhoNav.cashflow),
+    envelopes: useTituloAtalho('Envelopes', atalhoNav.envelopes),
+  }
 
   return (
     <aside className="hidden md:flex w-56 shrink-0 bg-page border-r border-borda flex-col h-screen sticky top-0">
@@ -58,10 +66,13 @@ export default function Sidebar({ active, setActive, alertCount }) {
           <button
             key={id}
             onClick={() => setActive(id)}
-            className={`nav-item ${active === id ? 'nav-active' : ''}`}
+            title={tituloNav[id]}
+            className={`nav-item relative ${active === id ? 'nav-active' : ''}`}
           >
             <Icon size={16} className="shrink-0" />
             <span className="flex-1 text-left">{label}</span>
+            {/* Flutua no canto do item (estilo KeyTips): não empurra o rótulo para 2 linhas. */}
+            {atalhoNav[id] && <ShortcutHint actionId={atalhoNav[id]} soNoAlt className="absolute -top-1.5 right-1 z-10" />}
             {id === 'alerts' && alertCount > 0 && (
               <span className="badge bg-perigo-solido text-white">{alertCount}</span>
             )}

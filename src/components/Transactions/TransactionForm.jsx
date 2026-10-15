@@ -31,11 +31,12 @@ import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
 import DateInput from '../shared/DateInput'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
+import ShortcutHint from '../shared/ShortcutHint'
 
 const TYPE_OPTIONS = [
-  { value: 'income', label: 'Receita' },
-  { value: 'expense', label: 'Despesa' },
-  { value: 'transfer', label: 'Transferência' },
+  { value: 'income', label: 'Receita', atalho: 'lancamento.tipoReceita' },
+  { value: 'expense', label: 'Despesa', atalho: 'lancamento.tipoDespesa' },
+  { value: 'transfer', label: 'Transferência', atalho: 'lancamento.tipoTransf' },
 ]
 
 // As 10 frequências do sistema (mesmos values do ScheduleForm/agendamentos).
@@ -1313,6 +1314,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               }`}
             >
               {t.label}
+              <ShortcutHint actionId={t.atalho} habilitado={atalhosForm} className="ml-1.5" />
             </button>
           ))}
         </div>
@@ -1716,6 +1718,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </div>
             <PiggyBank size={14} className="text-reserva shrink-0" />
             <span className="text-sm text-reserva select-none">Será pago com reserva</span>
+            <ShortcutHint actionId="lancamento.toggleReserva" habilitado={atalhosForm} className="text-reserva" />
             {matchingSpecificReserva && !form.useReserva && !reservaFuncaoMode && (
               <span className="text-xs text-texto-2 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
             )}
@@ -1971,6 +1974,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </div>
             <Repeat size={14} className="text-texto-2 shrink-0" />
             <span className="text-sm text-texto-2 select-none">Repetir este lançamento</span>
+            <ShortcutHint actionId="lancamento.toggleRepetir" habilitado={atalhosForm} className="text-texto-2" />
           </label>
 
           {form.repeat && (
@@ -2063,7 +2067,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1" title={tituloGravar}>{initial ? 'Salvar' : 'Registrar'}</button>
+        <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
+          {initial ? 'Salvar' : 'Registrar'}
+          <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
+        </button>
       </div>
     </form>
   )

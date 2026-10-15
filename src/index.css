@@ -195,6 +195,27 @@
   .badge {
     @apply inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold;
   }
+  /* Selo de atalho (ShortcutHint): discreto e na cor do texto do botão/rótulo (currentColor), para
+     servir sobre qualquer fundo nos dois temas. Segurando Alt (html[data-atalhos-alt]) todos ficam
+     em destaque — fundo surface com borda/anel primary, que contrasta inclusive sobre o
+     .btn-primary — e os "só no Alt" aparecem. */
+  .atalho-hint {
+    @apply inline-flex items-center shrink-0 px-1 rounded border font-mono text-[10px] leading-4 font-medium whitespace-nowrap select-none align-middle transition-[opacity,background-color,color,box-shadow] duration-150;
+    border-color: color-mix(in srgb, currentColor 35%, transparent);
+    background-color: color-mix(in srgb, currentColor 8%, transparent);
+    opacity: 0.75;
+  }
+  .atalho-hint[data-so-no-alt] {
+    display: none;
+  }
+  [data-atalhos-alt] .atalho-hint {
+    display: inline-flex;
+    opacity: 1;
+    color: var(--color-texto-1);
+    background-color: var(--color-surface);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent), 0 1px 3px rgb(0 0 0 / 0.25);
+  }
 }
 
 /* Skeleton shimmer — placeholder animado dos valores numéricos enquanto a API não respondeu

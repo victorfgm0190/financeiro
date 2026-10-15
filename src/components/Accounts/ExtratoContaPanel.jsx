@@ -21,6 +21,7 @@ import ReconciledTotals from '../shared/ReconciledTotals'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useTituloAtalho } from '../../context/atalhosHooks'
+import ShortcutHint from '../shared/ShortcutHint'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -1133,6 +1134,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               {onNewTx && (
                 <button onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
+                  <ShortcutHint actionId={atalhoNovoTx} />
                 </button>
               )}
               {!backButton && onClose && (

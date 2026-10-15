@@ -6,6 +6,7 @@ import { FabProvider } from './context/FabContext'
 import { AtalhosProvider } from './context/AtalhosContext'
 import { useAtalho } from './context/atalhosHooks'
 import AtalhosAjudaModal from './components/shared/AtalhosAjudaModal'
+import ModoAltAtalhos from './components/shared/ModoAltAtalhos'
 import { useIsMobile } from './hooks/useIsMobile'
 import { useTheme } from './hooks/useTheme'
 import { useAutoBackup } from './hooks/useAutoBackup'
@@ -189,6 +190,7 @@ function AppContent() {
       <MonthStartModal />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <AtalhosAjudaModal />
+      <ModoAltAtalhos />
     </>
   )
 

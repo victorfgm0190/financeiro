@@ -32,9 +32,20 @@ export function useCamadaModal(open, ref) {
   return id
 }
 
+// Texto da combinação ATUAL do usuário para a ação ("Alt+G"), lido do cadastro (mapa do contexto —
+// muda na hora em que Configurações › Atalhos grava). null no mobile, sem provider, com o atalho
+// desativado ou para id desconhecido.
+export function rotuloAtalho(ctx, acaoId) {
+  const combinacao = ctx?.ativo && acaoId ? ctx.mapa?.[acaoId] : null
+  return combinacao ? textoCombinacao(combinacao) : null
+}
+
+export function useShortcutLabel(acaoId) {
+  return rotuloAtalho(useContext(AtalhosContext), acaoId)
+}
+
 // "Novo Lançamento (Alt+N)" para o title do botão; sem atalho (ou no mobile), só o rótulo.
 export function useTituloAtalho(rotulo, acaoId) {
-  const ctx = useContext(AtalhosContext)
-  const combinacao = ctx?.ativo ? ctx.mapa[acaoId] : null
-  return combinacao ? `${rotulo} (${textoCombinacao(combinacao)})` : rotulo
+  const texto = useShortcutLabel(acaoId)
+  return texto ? `${rotulo} (${texto})` : rotulo
 }

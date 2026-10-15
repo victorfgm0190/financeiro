@@ -43,6 +43,9 @@ export default function AtalhosAjudaModal() {
           </ul>
         </div>
         <p className="text-xs text-texto-3">
+          Dica: segure Alt para ver os atalhos nos botões.
+        </p>
+        <p className="text-xs text-texto-3">
           Para mudar, vá em <a href="#config/cadastros/atalhos" onClick={ctx.fecharAjuda} className="text-primary-fg hover:underline">Configurações › Cadastros › Atalhos</a>.
         </p>
       </div>
