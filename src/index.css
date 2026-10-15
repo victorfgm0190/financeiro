@@ -2,7 +2,7 @@
 
 /* ─── Design tokens (Tailwind v4 @theme) — temas claro e escuro ────────────────
    Gera utilitários (bg-page, bg-surface, text-receita, bg-reserva/20, border-borda …) que
-   apontam para var(--color-*). Mapeamento classe → token: _tema/mapeamento.md.
+   apontam para var(--color-*). Mapeamento classe → token: docs/tema-mapeamento.md.
 
    - @theme static define os tokens com os valores do TEMA ESCURO (= visual original do app).
      "static" faz o Tailwind emitir TODAS as variáveis em :root, mesmo as que nenhuma classe usa

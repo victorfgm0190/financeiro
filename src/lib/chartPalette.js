@@ -3,7 +3,7 @@
 // 1) Paleta categórica de gráfico (séries/fatias sem significado próprio): uma variante por tema,
 //    escolhida para deuteranopia — entre cores VIZINHAS (ordem de uso) a diferença simulada é
 //    ΔE ≥ 40 (escuro) / ≥ 32 (claro) e a de luminosidade ΔL* ≥ 14 / ≥ 17, e todas têm contraste
-//    ≥ 3:1 com o fundo do card (#1A2438 / #FFFFFF). Medições na Fase 3 do tema (_tema/mapeamento.md).
+//    ≥ 3:1 com o fundo do card (#1A2438 / #FFFFFF). Medições na Fase 3 do tema (docs/tema-mapeamento.md).
 //    Receita/despesa/reserva/transferência NÃO saem daqui: usam os tokens (useThemeColors).
 //
 // 2) Paletas de ESCOLHA (cor que o usuário grava como dado: perfil, tipo de documento): sem variante
