@@ -38,6 +38,7 @@ import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO }
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
 import { novoLoteId } from '../../lib/historico'
+import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO } from '../../lib/resumoSelecao'
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import AgendaMobile from './AgendaMobile'
@@ -1414,11 +1415,78 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
   )
 }
 
+// Valor EFETIVO da ocorrência pendente de uma linha (override da prévia aplicado).
+const valorOcorrencia = (r) => Number(r.nextDate ? occEfetiva(r.schedule, r.nextDate).amount : r.schedule.amount) || 0
+
+// Resumo do registro em lote: aplicações × resgates → líquido por par de contas (com o sentido do
+// dinheiro), impacto por conta e, à parte, despesas/receitas/fatura/transferências comuns.
+function ResumoLinha({ glyph, label, n, valor, cls }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-texto-2 min-w-0 truncate">
+        {glyph && <span className={`${cls} mr-1`}>{glyph}</span>}{label} <span className="text-texto-3">({n})</span>
+      </span>
+      <span className={`font-semibold shrink-0 tabular-nums ${cls}`}>{fmt(valor)}</span>
+    </div>
+  )
+}
+
+function ResumoLote({ resumo }) {
+  const { g, pares, liquidoReserva, impactoPorConta } = resumo
+  const temReserva = g.aplicacao.items.length > 0 || g.resgate.items.length > 0
+  const frase = (p) => p.sentido === 'zero'
+    ? 'Sem movimentação líquida (aplicações = resgates)'
+    : `${p.sentido === 'resgate' ? 'Resgate' : 'Aplicação'} líquid${p.sentido === 'resgate' ? 'o' : 'a'} de ${fmt(Math.abs(p.liquido))}: ${p.origemNome} → ${p.destinoNome}`
+  const outros = [
+    ['despesa', '↓', 'Saídas (despesas)', 'text-despesa'],
+    ['receita', '↑', 'Entradas (receitas)', 'text-receita'],
+    ['fatura', '🧾', 'Pagamento de fatura', 'text-texto-2'],
+    ['transferencia', '⇄', 'Transferências', 'text-transferencia'],
+  ].filter(([k]) => g[k].items.length > 0)
+
+  return (
+    <div className="px-3 py-2.5 bg-surface-2/60 rounded-lg text-xs space-y-1">
+      {temReserva && (
+        <>
+          <ResumoLinha glyph="↑" label="Aplicações" n={g.aplicacao.items.length} valor={g.aplicacao.total} cls="text-reserva" />
+          <ResumoLinha glyph="↓" label="Resgates" n={g.resgate.items.length} valor={g.resgate.total} cls="text-despesa" />
+          <div className="flex items-center justify-between gap-3 pt-1 border-t border-borda">
+            <span className="text-sm font-semibold text-texto-1">Líquido</span>
+            <span className="text-sm font-bold text-primary-fg tabular-nums">{fmt(Math.abs(liquidoReserva))}</span>
+          </div>
+          {pares.map(p => (
+            <p key={`${p.contaId}|${p.reservaId}`} className={`leading-snug ${p.sentido === 'resgate' ? 'text-despesa' : p.sentido === 'aplicacao' ? 'text-reserva' : 'text-texto-3'}`}>
+              → {frase(p)}
+            </p>
+          ))}
+          {impactoPorConta.length > 0 && (
+            <p className="text-[11px] text-texto-3 leading-snug break-words">
+              Impacto por conta:{' '}
+              {impactoPorConta.map((c, i) => (
+                <span key={c.accountId} className="whitespace-nowrap">
+                  {i > 0 && ' · '}{c.nome} <span className={c.delta > 0 ? 'text-receita' : 'text-despesa'}>{fmtSinal(c.delta)}</span>
+                </span>
+              ))}
+            </p>
+          )}
+        </>
+      )}
+      {outros.length > 0 && (
+        <div className={`space-y-1 ${temReserva ? 'pt-1 mt-1 border-t border-borda' : ''}`}>
+          {outros.map(([k, glyph, label, cls]) => (
+            <ResumoLinha key={k} glyph={glyph} label={label} n={g[k].items.length} valor={g[k].total} cls={cls} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   const { scheduleReservaFuncoes } = useApp()
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  // Valor EFETIVO da ocorrência pendente de cada linha (override da prévia) — valor inicial do input.
-  const valorDe = (r) => Number(r.nextDate ? occEfetiva(r.schedule, r.nextDate).amount : r.schedule.amount) || 0
+  // Valor efetivo da ocorrência pendente — valor inicial do input.
+  const valorDe = valorOcorrencia
   // Resgate com detalhamento por função: o valor vem das linhas do detalhamento (igual ao
   // registro individual, que também não deixa editá-lo).
   const comDetalhe = useMemo(
@@ -1442,7 +1510,8 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
     return !(Number.isFinite(v) && v > 0) || !itens[r.schedule.id]?.date
   }
   const algumInvalido = selectedRows.some(invalido)
-  const total = selectedRows.reduce((sum, r) => sum + (Number.isFinite(valorItem(r)) ? valorItem(r) : 0), 0)
+  // Recalculado a cada edição de valor (mesma função do painel de seleção).
+  const resumo = resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorItem(r) })), accounts)
 
   const confirmar = () => {
     if (algumInvalido) return
@@ -1492,6 +1561,10 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
               const it = itens[schedule.id]
               const detalhado = comDetalhe.has(schedule.id)
               const ruim = invalido(r)
+              const grupo = classificarAgendamento(schedule, accounts)
+              const seta = grupo === 'aplicacao' ? { g: '↑', cls: 'text-reserva', t: 'Aplicação' }
+                : grupo === 'resgate' ? { g: '↓', cls: 'text-despesa', t: 'Resgate' }
+                : null
               return (
                 <div
                   key={schedule.id}
@@ -1504,6 +1577,9 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                         {acc?.apelido || acc?.name || '—'} · prev. {fmtDate(nextDate)}
                       </p>
                     </div>
+                    {seta && (
+                      <span className={`text-sm font-bold shrink-0 ${seta.cls}`} title={seta.t} aria-label={seta.t}>{seta.g}</span>
+                    )}
                     {detalhado ? (
                       <span className={`text-xs font-bold shrink-0 ${valueColor}`} title="Valor definido pelo detalhamento por função">
                         {fmt(valorDe(r))}
@@ -1541,16 +1617,15 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
               )
             })}
           </div>
+        </div>
 
-          {/* Total */}
-          <div className="flex items-center justify-between px-3 py-2.5 bg-surface-2/60 rounded-lg">
-            <span className="text-sm text-texto-2 font-medium">Total</span>
-            <span className="text-base font-bold text-texto-1">{fmt(total)}</span>
-          </div>
+        {/* Resumo (fixo acima dos botões; rola sozinho se crescer demais) */}
+        <div className="px-5 pt-3 shrink-0 max-h-[40vh] overflow-y-auto border-t border-borda">
+          <ResumoLote resumo={resumo} />
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
+        <div className="flex gap-3 px-5 py-4 shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
           <button
             className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
@@ -1581,8 +1656,9 @@ const SELECTION_GROUP_META = {
   despesa:   { glyph: '↓', label: 'Despesas',  cls: 'text-despesa' },
   receita:   { glyph: '↑', label: 'Receitas',  cls: 'text-receita' },
   fatura:    { glyph: '🧾', label: 'Fatura',    cls: 'text-texto-2' },
+  transferencia: { glyph: '⇄', label: 'Transferências', cls: 'text-transferencia' },
 }
-const SELECTION_GROUP_ORDER = ['aplicacao', 'resgate', 'despesa', 'receita', 'fatura']
+const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true }) {
   const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
@@ -1647,33 +1723,11 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // Totalizador dinâmico da seleção: agrupa por tipo de movimentação e calcula o saldo
   // líquido de caixa (receita + resgate − despesa − aplicação). Fatura é grupo à parte,
   // fora do saldo. Atualiza em tempo real conforme a seleção muda.
-  const selectionTotals = useMemo(() => {
-    const r2 = (n) => Math.round(n * 100) / 100
-    const g = {
-      aplicacao: { items: [], total: 0 },
-      resgate:   { items: [], total: 0 },
-      despesa:   { items: [], total: 0 },
-      receita:   { items: [], total: 0 },
-      fatura:    { items: [], total: 0 },
-    }
-    for (const { schedule: s } of selectedRows) {
-      const amt = Number(s.amount) || 0
-      let key = null
-      if (s.tipo === 'pagamento_fatura') key = 'fatura'
-      else if (s.transactionType === 'transfer') {
-        if (accounts.find(a => a.id === s.toAccountId)?.isReserva) key = 'aplicacao'
-        else if (accounts.find(a => a.id === s.accountId)?.isReserva) key = 'resgate'
-      } else if (s.transactionType === 'expense') key = 'despesa'
-      else if (s.transactionType === 'income') key = 'receita'
-      if (!key) continue
-      g[key].items.push({ description: s.description || '—', amount: amt })
-      g[key].total = r2(g[key].total + amt)
-    }
-    const hasInflow = g.receita.items.length > 0 || g.resgate.items.length > 0
-    const hasOutflow = g.despesa.items.length > 0 || g.aplicacao.items.length > 0
-    const saldo = r2(g.receita.total - g.despesa.total + g.resgate.total - g.aplicacao.total)
-    return { g, saldo, showSaldo: hasInflow && hasOutflow }
-  }, [selectedRows, accounts])
+  // Valor = efetivo da próxima ocorrência (o mesmo que o modal de registro em lote pré-preenche).
+  const selectionTotals = useMemo(
+    () => resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorOcorrencia(r) })), accounts),
+    [selectedRows, accounts]
+  )
 
   const toggleSelect = (id) => setSelected(prev => {
     const next = new Set(prev)
