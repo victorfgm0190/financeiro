@@ -9,6 +9,7 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
+import AtalhosPanel from './AtalhosPanel'
 import UsuariosPanel from './UsuariosPanel'
 import { getSessao } from '../../lib/api'
 import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig } from '../../lib/configRota'
@@ -1862,6 +1863,7 @@ export default function SettingsPanel() {
 
       {secao === 'favorecidos' && <FavorecidosPanel />}
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
+      {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </div>
       </div>

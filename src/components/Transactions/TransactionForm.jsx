@@ -28,6 +28,7 @@ import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
 import DateInput from '../shared/DateInput'
+import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita' },
@@ -48,6 +49,19 @@ const REPEAT_FREQUENCIES = [
   { value: 'semiannual', label: 'Semestral' },
   { value: 'annual', label: 'Anual' },
 ]
+
+// Atalho dos switches "Será pago com reserva" / "Repetir este lançamento": clica no próprio switch
+// (mesmo onChange do clique) e, ao ligar, foca o primeiro campo que aparece no bloco.
+function alternarSwitch(ref) {
+  const input = ref.current
+  if (!input) return false
+  input.click()
+  if (!input.checked) return
+  const bloco = input.closest('[data-bloco-switch]')
+  requestAnimationFrame(() => {
+    bloco?.querySelector('select, textarea, input:not([type="checkbox"]), button')?.focus()
+  })
+}
 
 function GerencialSelect({ value, onChange, grupos }) {
   const sorted = useMemo(() => [...grupos].sort((a, b) => {
@@ -215,6 +229,19 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Atalhos do modal de lançamento: os mesmos handlers do botão/switch (só no formulário completo).
+  const formRef = useRef(null)
+  const reservaSwitchRef = useRef(null)
+  const repetirSwitchRef = useRef(null)
+  const atalhosForm = step === 'form' && (!rapido || maisOpcoes)
+  useAtalho('lancamento.gravar', () => { if (!formRef.current) return false; formRef.current.requestSubmit() }, atalhosForm)
+  useAtalho('lancamento.tipoReceita', () => set('type', 'income'), atalhosForm)
+  useAtalho('lancamento.tipoDespesa', () => set('type', 'expense'), atalhosForm)
+  useAtalho('lancamento.tipoTransf', () => set('type', 'transfer'), atalhosForm)
+  useAtalho('lancamento.toggleReserva', () => alternarSwitch(reservaSwitchRef), atalhosForm)
+  useAtalho('lancamento.toggleRepetir', () => alternarSwitch(repetirSwitchRef), atalhosForm)
+  const tituloGravar = useTituloAtalho(initial ? 'Salvar' : 'Registrar', 'lancamento.gravar')
 
   // Favorecido → Descrição: a descrição acompanha o favorecido enquanto o usuário não a editar
   // manualmente. Inicia "já editada" quando o lançamento existente tem uma descrição própria
@@ -1278,7 +1305,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {initial?.id && (
         <div className="flex justify-end -mb-2">
           <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
@@ -1723,10 +1750,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       </div>
 
       {form.type === 'expense' && reservaAccounts.length > 0 && !reservaFuncaoMode && (
-        <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
+        <div data-bloco-switch className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
+                ref={reservaSwitchRef}
                 type="checkbox"
                 checked={form.useReserva}
                 onChange={e => {
@@ -1989,10 +2017,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {/* Repetir este lançamento — só no formulário de NOVO lançamento */}
       {!initial?.id && (
-        <div className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
+        <div data-bloco-switch className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
               <input
+                ref={repetirSwitchRef}
                 type="checkbox"
                 checked={form.repeat}
                 onChange={e => set('repeat', e.target.checked)}
@@ -2095,7 +2124,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Registrar'}</button>
+        <button type="submit" className="btn-primary flex-1" title={tituloGravar}>{initial ? 'Salvar' : 'Registrar'}</button>
       </div>
     </form>
   )

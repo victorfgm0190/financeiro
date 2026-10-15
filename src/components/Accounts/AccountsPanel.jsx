@@ -18,6 +18,7 @@ import ComposicaoPatrimonioModal from '../Patrimonio/ComposicaoPatrimonioModal'
 import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
 import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
 import TransactionForm from '../Transactions/TransactionForm'
+import { useAtalho } from '../../context/atalhosHooks'
 
 const ACCOUNT_ICONS = {
   checking: Landmark,
@@ -709,6 +710,9 @@ export default function AccountsPanel({ setActivePage }) {
   const handleUpdateValue = (account) => setUpdateValueAccount(account)
 
   const closeTxForm = () => { setShowTxForm(false); setEditTxInitial(null) }
+  // Botão "Novo Lançamento" do extrato e atalho conta.novoLancamento (na lista, sem conta pré-escolhida).
+  const abrirNovoLancamento = () => { setEditTxInitial(null); setShowTxForm(true) }
+  useAtalho('conta.novoLancamento', abrirNovoLancamento)
 
   const [dragOverGroup, setDragOverGroup] = useState(null)
   const handleDropAccount = (targetGroupId, accountId) => {
@@ -732,7 +736,8 @@ export default function AccountsPanel({ setActivePage }) {
           onClose={() => { saveScroll(); setExtratoAccount(null) }}
           backButton
           onEdit={(tx) => { setEditTxInitial(tx); setShowTxForm(true) }}
-          onNewTx={() => { setEditTxInitial(null); setShowTxForm(true) }}
+          onNewTx={abrirNovoLancamento}
+          atalhoNovoTx="conta.novoLancamento"
           onDelete={deleteTransaction}
         />
         <Modal
@@ -958,6 +963,10 @@ export default function AccountsPanel({ setActivePage }) {
         {updateValueAccount && (
           <UpdateValueModal account={updateValueAccount} onClose={() => setUpdateValueAccount(null)} />
         )}
+      </Modal>
+
+      <Modal open={showTxForm} onClose={closeTxForm} title="Novo Lançamento">
+        <TransactionForm initial={{ type: 'expense' }} onClose={closeTxForm} />
       </Modal>
     </div>
   )

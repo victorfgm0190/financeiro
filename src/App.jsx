@@ -3,6 +3,9 @@ import { differenceInDays, parseISO } from 'date-fns'
 import { dueDateInMonth } from './lib/fatura'
 import { AppProvider, useApp } from './context/AppContext'
 import { FabProvider } from './context/FabContext'
+import { AtalhosProvider } from './context/AtalhosContext'
+import { useAtalho } from './context/atalhosHooks'
+import AtalhosAjudaModal from './components/shared/AtalhosAjudaModal'
 import { useIsMobile } from './hooks/useIsMobile'
 import { useTheme } from './hooks/useTheme'
 import { useAutoBackup } from './hooks/useAutoBackup'
@@ -79,6 +82,8 @@ function AppContent() {
   }, [activePage, scrollScope])
   // Troca de módulo no mobile: módulo de painel passa pelo navigate (hash, activePage); tela própria
   // do mobile (Início, Mais) só troca o módulo.
+  useAtalho('nav.fluxoCaixa', () => navigate('cashflow'))
+  useAtalho('nav.envelopes', () => navigate('envelopes'))
   const irParaModulo = useCallback((id) => {
     const m = mobileModules.find(x => x.id === moduloMobile(mobileModules, id))
     if (m.page) navigate(m.page)
@@ -183,6 +188,7 @@ function AppContent() {
       )}
       <MonthStartModal />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      <AtalhosAjudaModal />
     </>
   )
 
@@ -239,7 +245,9 @@ export default function App() {
     <PrivateRoute>
       <AppProvider>
         <FabProvider>
-          <AppContent />
+          <AtalhosProvider>
+            <AppContent />
+          </AtalhosProvider>
         </FabProvider>
       </AppProvider>
     </PrivateRoute>

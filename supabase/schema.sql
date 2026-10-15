@@ -960,3 +960,18 @@ ALTER TABLE historico_alteracoes DISABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS idx_historico_entidade ON historico_alteracoes (entidade, entidade_id);
 CREATE INDEX IF NOT EXISTS idx_historico_serie ON historico_alteracoes (serie_key);
 CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id);
+
+-- ATALHOS DE TECLADO por usuário (Configurações › Cadastros › Atalhos). As ações são fixas no
+-- código (src/lib/atalhos/registry.js); só o que o usuário ALTEROU fica aqui — ação sem linha usa o
+-- padrão. combinacao NULL = atalho desativado. user_id = id da sessão (sem FK: o login fixo de
+-- emergência tem id 'env:<usuário>'). Também criada pela API (api/atalhos.js).
+CREATE TABLE IF NOT EXISTS atalhos_usuario (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  acao_id TEXT NOT NULL,
+  combinacao TEXT,              -- ex.: 'Alt+N', 'Ctrl+Shift+K'
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, acao_id)
+);
+ALTER TABLE atalhos_usuario DISABLE ROW LEVEL SECURITY;

@@ -20,6 +20,7 @@ import DuplicateButton from '../shared/DuplicateButton'
 import ReconciledTotals from '../shared/ReconciledTotals'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useTituloAtalho } from '../../context/atalhosHooks'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -482,7 +483,9 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
   )
 }
 
-export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton }) {
+// atalhoNovoTx: id da ação de atalho que a tela registrou para o mesmo onNewTx (só para o tooltip).
+export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton, atalhoNovoTx }) {
+  const tituloNovoTx = useTituloAtalho('Novo Lançamento', atalhoNovoTx)
   const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos } = useApp()
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
@@ -1128,7 +1131,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                 </button>
               )}
               {onNewTx && (
-                <button onClick={onNewTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
+                <button onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
                 </button>
               )}

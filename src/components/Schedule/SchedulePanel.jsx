@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
@@ -26,6 +26,7 @@ import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
+import { useAtalho, useTituloAtalho, useCamadaModal } from '../../context/atalhosHooks'
 import { pagarParcela } from '../../lib/bemApi'
 import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
@@ -2119,10 +2120,13 @@ function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financ
   const selCount = selectedVisible.length
   const total = selectedVisible.reduce((s, p) => s + p.amount, 0)
 
+  // Overlay próprio (não usa o Modal): vira camada para os atalhos da tela não dispararem por trás.
+  const painelRef = useRef(null)
+  useCamadaModal(true, painelRef)
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
-      <div className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div ref={painelRef} className="relative bg-surface border border-borda-forte rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <div>
             <h3 className="font-semibold text-texto-1">Executar Provisões Gerenciais</h3>
@@ -2497,6 +2501,18 @@ export default function SchedulePanel() {
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
 
+  // Atalhos da tela: os mesmos handlers dos botões abaixo, valendo só quando o botão está visível.
+  // Executar Gerenciais abre a MESMA confirmação do botão — nunca executa direto.
+  const abrirExecutarGer = () => setShowExecutarGer(true)
+  const abrirLancarProvisao = () => { setEditProvisao(null); setShowProvisaoForm(true) }
+  const abrirNovoAgendamento = () => { setEditSchedule(null); setShowForm(true) }
+  useAtalho('agend.executarGerenciais', () => (provisoesPendentes.length > 0 ? abrirExecutarGer() : false))
+  useAtalho('agend.lancarProvisao', () => (activeTab === 'conta' ? abrirLancarProvisao() : false))
+  useAtalho('agend.novoAgendamento', () => (activeTab === 'conta' ? abrirNovoAgendamento() : false))
+  const tituloExecutarGer = useTituloAtalho('Executar Gerenciais', 'agend.executarGerenciais')
+  const tituloLancarProvisao = useTituloAtalho('Lançar Provisão', 'agend.lancarProvisao')
+  const tituloNovoAgendamento = useTituloAtalho('Novo Agendamento', 'agend.novoAgendamento')
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -2506,16 +2522,16 @@ export default function SchedulePanel() {
         </div>
         <div className="flex items-center gap-2">
           {provisoesPendentes.length > 0 && (
-            <button className="btn-secondary flex items-center gap-2" onClick={() => setShowExecutarGer(true)}>
+            <button className="btn-secondary flex items-center gap-2" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
             </button>
           )}
           {activeTab === 'conta' && (
             <>
-              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={() => { setEditProvisao(null); setShowProvisaoForm(true) }}>
+              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
                 <Hourglass size={14} /> Lançar Provisão
               </button>
-              <button className="btn-primary hidden md:flex items-center gap-2" onClick={() => { setEditSchedule(null); setShowForm(true) }}>
+              <button className="btn-primary hidden md:flex items-center gap-2" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
                 <Plus size={14} /> Novo Agendamento
               </button>
             </>

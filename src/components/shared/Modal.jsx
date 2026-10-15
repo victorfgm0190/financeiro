@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { useCamadaModal, CamadaContext } from '../../context/atalhosHooks'
 
 const MAX_WIDTHS = {
   sm: 'md:max-w-sm',
@@ -9,6 +10,9 @@ const MAX_WIDTHS = {
 }
 
 export default function Modal({ open, onClose, title, children, size = 'md' }) {
+  // Camada para os atalhos de teclado: ações registradas dentro deste modal só valem com ele no topo.
+  const painelRef = useRef(null)
+  const camadaId = useCamadaModal(open, painelRef)
   useEffect(() => {
     if (!open) return
     const handler = (e) => { if (e.key === 'Escape') onClose() }
@@ -29,6 +33,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
           isolando-o das recomposições forçadas por elementos portados acima (ex.: o dropdown
           do SearchableSelect em z-9999), que faziam o modal "sumir" por um frame. */}
       <div
+        ref={painelRef}
         style={{ transform: 'translateZ(0)' }}
         className={`relative z-10 flex flex-col bg-surface border-b border-borda md:border md:rounded-2xl w-full h-full md:h-auto md:max-h-[90vh] ${MAX_WIDTHS[size] || MAX_WIDTHS.md} shadow-2xl`}
       >
@@ -38,7 +43,9 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="flex-1 overflow-y-auto p-5">
+          <CamadaContext.Provider value={camadaId}>{children}</CamadaContext.Provider>
+        </div>
       </div>
     </div>
   )
