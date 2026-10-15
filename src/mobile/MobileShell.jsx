@@ -4,6 +4,7 @@ import { useFab } from '../context/FabContext'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from '../hooks/useScrollRestoration'
 import { abas } from './navegacao'
 import ActionSheet from './ActionSheet'
+import PerfilChips from './PerfilChips'
 import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { TelaCarregando, AvisoDesatualizado } from './Carregando'
 
@@ -91,6 +92,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
       >
         <ScrollScopeContext.Provider value={scrollCtx}>
           {saldos === 'desatualizado' && modulo.id !== 'mais' && <AvisoDesatualizado />}
+          {modulo.perfil && !Tela && <div className="mb-4"><PerfilChips /></div>}
           {conteudo}
         </ScrollScopeContext.Provider>
       </main>

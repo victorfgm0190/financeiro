@@ -33,6 +33,7 @@ import ConsultaCard from './ConsultaCard'
 import EfetivarModal from './EfetivarModal'
 import MudarDataModal from './MudarDataModal'
 import FluxoMobileLista, { FluxoSheet } from './FluxoMobileLista'
+import { MASCARA, lerOcultar } from '../../mobile/ocultarValores'
 import { HORIZONTES_MOBILE, marcadoresLinhaMobile } from '../../lib/fluxoMobile'
 
 const round2 = n => Math.round(n * 100) / 100
@@ -65,13 +66,13 @@ const SITUACAO = {
   sem: 'text-texto-3',
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label, oculto }) => {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-surface border border-borda-forte rounded-lg p-3 text-xs shadow-xl">
       <p className="text-texto-2 mb-1">{label}</p>
       {payload.map(p => (
-        <p key={p.name} style={{ color: p.color }} className="font-medium">{p.name}: {fmt(p.value)}</p>
+        <p key={p.name} style={{ color: p.color }} className="font-medium">{p.name}: {oculto ? MASCARA : fmt(p.value)}</p>
       ))}
     </div>
   )
@@ -166,6 +167,10 @@ export default function CashFlowPanel({ setActivePage }) {
   const consulta = useMemo(() => resolverConsultaAtiva(visiveis, ativaId), [visiveis, ativaId])
   const isMobile = useIsMobile()
   const cor = useThemeColors()
+  // "Olho" do mobile (ligado no Início): no celular, mascara os valores da tela. Desktop sem efeito.
+  const [ocultarPref] = useState(lerOcultar)
+  const oculto = isMobile && ocultarPref
+  const vf = (n, f = fmt) => (oculto ? MASCARA : f(n))
   const [consultaExcluir, setConsultaExcluir] = useState(null)
   // Horizonte escolhido vale para a consulta em que foi escolhido; trocar de consulta volta ao
   // horizonte padrão dela. Mesmo esquema (derivado, sem efeito) para os overrides da tabela,
@@ -277,6 +282,10 @@ export default function CashFlowPanel({ setActivePage }) {
     if (min && min.valor < base) for (const r of rowsView) if (r.ativa && r.date === min.data) key = r._key
     return { serie: sr, projetado: projetadoNoFim(sr), minimo: min, minimoKey: key }
   }, [rowsView, base, hoje, fim])
+  // Saldo ao FINAL de cada dia (celular, cabeçalho de cada data): a MESMA série do gráfico e do
+  // "Projetado"/"Mínimo" — parte de `base` (com os atrasos marcados) e soma só as linhas ativas.
+  // Todo dia do período tem valor, então uma data só com linhas desmarcadas repete o anterior.
+  const saldoDoDia = useMemo(() => new Map(serie.map(p => [p.date, p.balance])), [serie])
 
   // ── Simulação ativa (card) ─────────────────────────────────────────────────
   const tocaContas = (sc) => accountIds.has(sc.accountId) || accountIds.has(sc.toAccountId)
@@ -562,7 +571,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 <h2 className="text-sm font-semibold text-texto-2">Saldo inicial · {consulta.nome}</h2>
                 <p className="text-xs text-texto-3">{rotuloModo(consulta.modo)} · soma de {contas.length} conta{contas.length !== 1 ? 's' : ''} · cada uma pelo seu último dia de saldo</p>
               </div>
-              <p className={`ml-auto text-lg font-bold whitespace-nowrap ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</p>
+              <p className={`ml-auto text-lg font-bold whitespace-nowrap ${corSaldo(saldoInicial)}`}>{vf(saldoInicial)}</p>
             </div>
             {isMobile && (
               <button
@@ -592,7 +601,7 @@ export default function CashFlowPanel({ setActivePage }) {
                       <td className="px-4 py-2 text-xs text-texto-1">{a.apelido || a.name}</td>
                       <td className="px-4 py-2 text-xs text-texto-2">{ultimo ? fmtDate(ultimo) : '—'}</td>
                       <td className="px-4 py-2 text-xs"><span className={SITUACAO[situacao.tipo]}>{ultimo ? (situacao.tipo === 'parada' ? '⚠ ' : situacao.tipo === 'sem' ? '' : '✓ ') + situacao.rotulo : '—'}</span></td>
-                      <td className={`px-4 py-2 text-right text-xs font-semibold ${(a.balance || 0) >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{fmt(a.balance || 0)}</td>
+                      <td className={`px-4 py-2 text-right text-xs font-semibold ${(a.balance || 0) >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{vf(a.balance || 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -605,17 +614,17 @@ export default function CashFlowPanel({ setActivePage }) {
           <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${temSimulacao ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
             <div className="card">
               <div className="flex items-center gap-2 mb-1 text-texto-2"><Wallet size={14} /><p className="text-xs uppercase tracking-wide">Saldo inicial</p></div>
-              <p className={`text-xl font-bold ${corSaldo(saldoInicial)}`}>{fmt(saldoInicial)}</p>
-              {atraso.length > 0 && <p className="text-[11px] text-texto-3 mt-0.5">+ em atraso: {fmt(atrasoTotal)}</p>}
+              <p className={`text-xl font-bold ${corSaldo(saldoInicial)}`}>{vf(saldoInicial)}</p>
+              {atraso.length > 0 && <p className="text-[11px] text-texto-3 mt-0.5">+ em atraso: {vf(atrasoTotal)}</p>}
             </div>
             <div className="card">
               <p className="text-xs text-texto-2 uppercase tracking-wide">Projetado ({horizonte}D)</p>
-              <p className={`text-xl font-bold mt-1 ${corSaldo(projetado)}`}>{fmt(projetado)}</p>
+              <p className={`text-xl font-bold mt-1 ${corSaldo(projetado)}`}>{vf(projetado)}</p>
               <p className="text-[11px] text-texto-3 mt-0.5">em {fmtDate(fim)}</p>
             </div>
             <div className="card">
               <p className="text-xs text-texto-2 uppercase tracking-wide">Mínimo projetado</p>
-              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(minimo.valor)}</p>
+              <p className={`text-xl font-bold mt-1 ${minimo.valor >= 0 ? 'text-receita' : 'text-despesa'}`}>{vf(minimo.valor, fmtSinal)}</p>
               <p className="text-[11px] text-texto-3 mt-0.5">em {fmtDate(minimo.data)}</p>
             </div>
             {temSimulacao && (
@@ -640,8 +649,8 @@ export default function CashFlowPanel({ setActivePage }) {
               <LineChart data={serie} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={cor.chartGrade} />
                 <XAxis dataKey="label" tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} interval={Math.max(1, Math.floor(serie.length / 8))} />
-                <YAxis tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip />} />
+                <YAxis tick={{ fill: cor.chartEixo, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={v => (oculto ? '' : `R$${(v / 1000).toFixed(0)}k`)} />
+                <Tooltip content={<CustomTooltip oculto={oculto} />} />
                 <ReferenceLine y={0} stroke={cor.chartEixo} strokeDasharray="4 4" />
                 <Line type="monotone" dataKey="balance" name="Saldo" stroke={cor.receita} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
               </LineChart>
@@ -661,6 +670,8 @@ export default function CashFlowPanel({ setActivePage }) {
                 base={base}
                 saldoInicial={saldoInicial}
                 minimoKey={minimoKey}
+                saldoDoDia={saldoDoDia}
+                oculto={oculto}
                 horizonte={horizonte}
                 qtdContas={contas.length}
                 corSaldo={corSaldo}

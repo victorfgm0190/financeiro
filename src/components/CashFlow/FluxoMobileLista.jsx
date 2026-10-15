@@ -5,6 +5,7 @@ import { agruparPorDia } from '../../lib/fluxoMobile'
 import { STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import BottomSheet from '../shared/BottomSheet'
+import { MASCARA } from '../../mobile/ocultarValores'
 
 // Bottom sheet dos filtros/consultas do Fluxo no celular (componente compartilhado).
 export const FluxoSheet = BottomSheet
@@ -12,9 +13,9 @@ export const FluxoSheet = BottomSheet
 const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
 
 // Valor da linha: entrada (+, azul) ou saída (−, laranja) — as mesmas cores das colunas do desktop.
-function valor(r, apagado) {
-  if (r.entrada > 0) return <span className={`text-sm font-semibold whitespace-nowrap ${apagado ? 'text-texto-3' : 'text-receita'}`}>+{fmt(r.entrada)}</span>
-  if (r.saida > 0) return <span className={`text-sm font-semibold whitespace-nowrap ${apagado ? 'text-texto-3' : 'text-despesa'}`}>−{fmt(r.saida)}</span>
+function valor(r, apagado, oculto) {
+  if (r.entrada > 0) return <span className={`text-sm font-semibold whitespace-nowrap ${apagado ? 'text-texto-3' : 'text-receita'}`}>{oculto ? MASCARA : `+${fmt(r.entrada)}`}</span>
+  if (r.saida > 0) return <span className={`text-sm font-semibold whitespace-nowrap ${apagado ? 'text-texto-3' : 'text-despesa'}`}>{oculto ? MASCARA : `−${fmt(r.saida)}`}</span>
   return <span className="text-sm text-texto-3">—</span>
 }
 
@@ -35,7 +36,7 @@ function iconeStatus(status) {
 // e valor. O resto (tipo, saldo, incluir no cálculo, ações, doc/status por extenso) abre ao tocar no item.
 // Recebe as linhas JÁ calculadas pelo painel — nenhum valor é recalculado aqui.
 export default function FluxoMobileLista({
-  rowsView, atraso, excluidas, atrasoAtivas, atrasoTotal, base, saldoInicial, minimoKey, horizonte,
+  rowsView, atraso, excluidas, atrasoAtivas, atrasoTotal, base, saldoInicial, minimoKey, saldoDoDia, oculto, horizonte,
   qtdContas, corSaldo, subtitulo, statusCelula, docBadge, tipoBadge, docDaLinha, statusDaLinha, marcadores,
   toggleLinha, toggleAtraso, onMudarData, onDesfazerData, onEfetivar, onEditarProvisorio, onExcluirProvisorio,
 }) {
@@ -43,6 +44,8 @@ export default function FluxoMobileLista({
   const [atrasoAberto, setAtrasoAberto] = useState(false)
   const alternar = (key) => setAberta(k => (k === key ? null : key))
   const grupos = agruparPorDia(rowsView)
+  // Valores respeitam o "olho" do mobile (oculto → máscara).
+  const vf = (n, f = fmtSinal) => (oculto ? MASCARA : f(n))
 
   const detalhe = (r, ativa, emAtraso) => {
     const ehMinimo = r._key === minimoKey
@@ -69,7 +72,7 @@ export default function FluxoMobileLista({
           {!emAtraso && (
             <span className="inline-flex items-center gap-1.5">
               <span className="text-texto-3">Saldo</span>
-              <span className={`font-bold ${!ativa ? 'text-texto-3' : r.saldo >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{ativa ? fmtSinal(r.saldo) : '—'}</span>
+              <span className={`font-bold ${!ativa ? 'text-texto-3' : r.saldo >= 0 ? 'text-texto-1' : 'text-despesa'}`}>{ativa ? vf(r.saldo) : '—'}</span>
               {ehMinimo && ativa && <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.saldo < 0 ? 'bg-despesa/15 text-despesa' : 'bg-receita/15 text-receita'}`}>mínimo</span>}
             </span>
           )}
@@ -130,7 +133,7 @@ export default function FluxoMobileLista({
             </p>
             <p className="text-[11px] text-texto-3 truncate">{subtitulo(r)}</p>
           </div>
-          {valor(r, !ativa)}
+          {valor(r, !ativa, oculto)}
           {expandida ? <ChevronDown size={14} className="text-texto-3 shrink-0" /> : <ChevronRight size={14} className="text-texto-3 shrink-0" />}
         </button>
         {expandida && detalhe(r, ativa, emAtraso)}
@@ -146,7 +149,7 @@ export default function FluxoMobileLista({
           <p className="text-xs text-texto-2">Hoje · saldo inicial</p>
           <p className="text-[11px] text-texto-3">{qtdContas} conta{qtdContas !== 1 ? 's' : ''}, cada uma no seu último dia</p>
         </div>
-        <p className={`text-sm font-bold ${corSaldo(saldoInicial)}`}>{fmtSinal(saldoInicial)}</p>
+        <p className={`text-sm font-bold ${corSaldo(saldoInicial)}`}>{vf(saldoInicial)}</p>
       </div>
 
       {/* Pendências em atraso */}
@@ -166,10 +169,10 @@ export default function FluxoMobileLista({
             <button type="button" onClick={() => setAtrasoAberto(o => !o)} aria-expanded={atrasoAberto} className="flex-1 min-h-[44px] flex items-center gap-2 text-left">
               {atrasoAberto ? <ChevronDown size={14} className="text-perigo" /> : <ChevronRight size={14} className="text-perigo" />}
               <span className="text-sm text-perigo flex-1">⚠ Pendências em atraso ({atraso.length})</span>
-              <span className={`text-sm font-semibold ${atrasoTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{fmtSinal(atrasoTotal)}</span>
+              <span className={`text-sm font-semibold ${atrasoTotal >= 0 ? 'text-receita' : 'text-despesa'}`}>{vf(atrasoTotal)}</span>
             </button>
           </div>
-          <p className="px-4 pb-2 -mt-1 text-[11px] text-texto-3">Saldo com atrasos: <span className={`font-semibold ${corSaldo(base)}`}>{fmt(base)}</span></p>
+          <p className="px-4 pb-2 -mt-1 text-[11px] text-texto-3">Saldo com atrasos: <span className={`font-semibold ${corSaldo(base)}`}>{vf(base, fmt)}</span></p>
           {atrasoAberto && (
             <ul className="border-t border-borda/60">
               {atraso.map(r => item(r, !excluidas.has(r._key), true))}
@@ -181,8 +184,15 @@ export default function FluxoMobileLista({
       {/* Eventos por dia */}
       {grupos.map(g => (
         <section key={g.date}>
-          <h3 className="sticky top-0 z-[1] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-texto-2 bg-surface/95 border-b border-borda">
-            {fmtDate(g.date)}
+          <h3 className="sticky top-0 z-[1] px-4 py-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-texto-2 bg-surface/95 border-b border-borda">
+            <span className="shrink-0">{fmtDate(g.date)}</span>
+            <span aria-hidden="true" className="flex-1 min-w-2 border-b border-dotted border-borda-forte" />
+            {saldoDoDia?.has(g.date) && (
+              <span className="shrink-0 normal-case tracking-normal whitespace-nowrap">
+                <span className="font-normal text-texto-3">Saldo </span>
+                <span className={`font-bold ${saldoDoDia.get(g.date) >= 0 ? 'text-receita' : 'text-despesa'}`}>{vf(saldoDoDia.get(g.date))}</span>
+              </span>
+            )}
           </h3>
           <ul>
             {g.rows.map(r => item(r, r.ativa))}

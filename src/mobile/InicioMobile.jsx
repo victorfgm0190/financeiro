@@ -15,9 +15,9 @@ import { gravarPreferencias } from '../lib/preferenciasUi'
 import DespesasMobile from './DespesasMobile'
 import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { SkeletonVal, SkeletonLinhas } from './Carregando'
+import PerfilChips from './PerfilChips'
+import { MASCARA, lerOcultar, gravarOcultar } from './ocultarValores'
 
-const OCULTAR_KEY = 'finup:mobile:ocultarValores'
-const MASCARA = 'R$ ••••'
 
 // Nome do usuário logado (campo `user` do JWT), com a 1ª letra maiúscula. '' se não houver.
 function nomeDoToken() {
@@ -28,10 +28,6 @@ function nomeDoToken() {
   } catch {
     return ''
   }
-}
-
-function lerOcultar() {
-  try { return localStorage.getItem(OCULTAR_KEY) === '1' } catch { return false }
 }
 
 // Tela Início do mobile. Valores do card verde = os do Painel (saldosPrincipais do App e a mesma
@@ -47,7 +43,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 
   const alternarOcultar = () => {
     setOcultar(o => {
-      try { localStorage.setItem(OCULTAR_KEY, o ? '0' : '1') } catch { /* sem storage */ }
+      gravarOcultar(!o)
       return !o
     })
   }
@@ -76,6 +72,8 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
           {ocultar ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
       </header>
+
+      <PerfilChips />
 
       <ResumoCard saldosPrincipais={saldosPrincipais} v={v} carregando={carregando} />
 

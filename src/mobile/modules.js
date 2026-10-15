@@ -13,6 +13,8 @@
 // card: true → pode virar card no Início (`cardTitle` é o título do card).
 // saldo: true → tela mostra saldos/valores: placeholder até o recálculo automático terminar
 //               (useSaldosProntos, mesmo sinal do Painel do desktop).
+// perfil: true → chips de perfil (Tudo | CPF | CNPJ) logo abaixo do cabeçalho da tela. Telas
+//               `component` com cabeçalho próprio (Início) os colocam elas mesmas.
 import {
   Home, TrendingUp, Calendar, LayoutGrid, PiggyBank, Mail, Plus, CalendarPlus, ArrowLeftRight,
   Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard,
@@ -23,9 +25,9 @@ import DespesasMobile from './DespesasMobile'
 import { LancamentoAcao, AgendamentoAcao, TransferenciaAcao, ReservaAcao } from './acoes'
 
 export const mobileModules = [
-  { id: 'inicio',        label: 'Início',          icon: Home,           place: 'tab', component: InicioMobile },
-  { id: 'fluxo',         label: 'Fluxo',           icon: TrendingUp,     place: 'tab', page: 'cashflow', saldo: true },
-  { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true },
+  { id: 'inicio',        label: 'Início',          icon: Home,           place: 'tab', component: InicioMobile, perfil: true },
+  { id: 'fluxo',         label: 'Fluxo',           icon: TrendingUp,     place: 'tab', page: 'cashflow', saldo: true, perfil: true },
+  { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true, perfil: true },
   { id: 'mais',          label: 'Mais',            icon: LayoutGrid,     place: 'tab', component: MaisMobile },
 
   { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, page: 'reservas', saldo: true },
