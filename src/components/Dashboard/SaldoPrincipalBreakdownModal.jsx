@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmtSinal } from '../shared/utils'
 import { hojeStr } from '../../lib/saldos'
+import { MASCARA } from '../../mobile/ocultarValores'
 
 const rb = v => Math.round(v * 100) / 100
+
+// Só APARÊNCIA (nada no cálculo): compacto = celular (seções a partir da 2ª recolhidas, descrições
+// com reticências); oculto = "olho" do mobile ligado (valores mascarados).
+const Aparencia = createContext({ compacto: false, oculto: false })
 
 // Dias entre duas datas 'yyyy-mm-dd' (só a data — UTC nos dois lados, sem fuso nem hora).
 const diasEntre = (de, ate) => {
@@ -24,14 +29,16 @@ const ddmm = (s) => {
 const sign = (v) => ((v ?? 0) >= 0 ? 'text-receita' : 'text-despesa')
 
 function Val({ v, bold }) {
-  return <span className={`${sign(v)} ${bold ? 'font-bold' : ''} tabular-nums whitespace-nowrap`}>{fmtSinal(v)}</span>
+  const { oculto } = useContext(Aparencia)
+  return <span className={`${sign(v)} ${bold ? 'font-bold' : ''} tabular-nums whitespace-nowrap shrink-0`}>{oculto ? MASCARA : fmtSinal(v)}</span>
 }
 
 // Linha simples: rótulo à esquerda, valor à direita.
 function Row({ label, value, muted, indent }) {
+  const { compacto } = useContext(Aparencia)
   return (
     <div className={`flex items-baseline justify-between gap-3 ${indent ? 'pl-4' : ''}`}>
-      <span className={`text-sm ${muted ? 'text-texto-3' : 'text-texto-2'} min-w-0`}>{label}</span>
+      <span className={`text-sm ${muted ? 'text-texto-3' : 'text-texto-2'} min-w-0 ${compacto ? 'truncate' : ''}`} title={compacto ? label : undefined}>{label}</span>
       <Val v={value} />
     </div>
   )
@@ -41,8 +48,9 @@ function Divider() {
   return <div className="border-t border-borda-forte/70 my-1.5" />
 }
 
-function Section({ title, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen)
+function Section({ title, children, primeira = false }) {
+  const { compacto } = useContext(Aparencia)
+  const [open, setOpen] = useState(!compacto || primeira)
   return (
     <div className="rounded-lg border border-borda bg-surface/40">
       <button
@@ -58,7 +66,7 @@ function Section({ title, children, defaultOpen = true }) {
   )
 }
 
-export default function SaldoPrincipalBreakdownModal() {
+export default function SaldoPrincipalBreakdownModal({ compacto = false, oculto = false }) {
   const { getSaldoPrincipalBreakdown } = useApp()
   const b = getSaldoPrincipalBreakdown()
 
@@ -73,15 +81,16 @@ export default function SaldoPrincipalBreakdownModal() {
   const subtotalPendentes = rb(b.finalCiclo.total - b.finalCiclo.saldoAtual - subtotalAtraso)
 
   return (
+    <Aparencia.Provider value={{ compacto, oculto }}>
     <div className="space-y-3">
       {/* 1. Saldo Atual Ciclo */}
-      <Section title={`Saldo Atual do Ciclo (${ddmm(b.cycleStart)} a ${ddmm(b.cycleEnd)})`}>
+      <Section primeira title={`Saldo Atual do Ciclo (${ddmm(b.cycleStart)} a ${ddmm(b.cycleEnd)})`}>
         <Row label="Saldo base (lançamentos efetivados)" value={b.saldoAtual.base} />
         {/* Detalhe informativo: contas que compõem o Saldo base (badge FC). */}
         {b.saldoAtual.contas?.map((c, i) => (
           <div key={c.id || i} className="flex items-baseline justify-between gap-3 pl-4">
             <span className="text-xs text-texto-2 min-w-0 truncate">• {c.name}</span>
-            <span className="text-xs text-texto-2 tabular-nums whitespace-nowrap">{fmtSinal(c.saldo)}</span>
+            <span className="text-xs text-texto-2 tabular-nums whitespace-nowrap shrink-0">{oculto ? MASCARA : fmtSinal(c.saldo)}</span>
           </div>
         ))}
         {b.saldoAtual.gerencialTransfers !== 0 && (
@@ -104,7 +113,7 @@ export default function SaldoPrincipalBreakdownModal() {
                 <AlertTriangle size={13} className="shrink-0 self-center" />
                 + Lançamentos em atraso (pendentes antes de {ddmm(hoje)})
               </span>
-              <span className="text-sm font-bold text-perigo tabular-nums whitespace-nowrap">{fmtSinal(subtotalAtraso)}</span>
+              <span className="text-sm font-bold text-perigo tabular-nums whitespace-nowrap shrink-0">{oculto ? MASCARA : fmtSinal(subtotalAtraso)}</span>
             </div>
             {atrasados.map((it, i) => {
               const dias = diasEntre(it.date, hoje)
@@ -215,5 +224,6 @@ export default function SaldoPrincipalBreakdownModal() {
         </Section>
       )}
     </div>
+    </Aparencia.Provider>
   )
 }

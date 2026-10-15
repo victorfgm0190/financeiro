@@ -30,7 +30,7 @@ export const mobileModules = [
   { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true, perfil: true },
   { id: 'mais',          label: 'Mais',            icon: LayoutGrid,     place: 'tab', component: MaisMobile },
 
-  { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, page: 'reservas', saldo: true },
+  { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, cardTitle: 'Saldo em reservas', page: 'reservas', saldo: true },
   { id: 'envelopes',     label: 'Envelopes',       icon: Mail,           place: 'more', group: 'Dinheiro guardado', card: true, page: 'envelopes', saldo: true },
   { id: 'contas',        label: 'Contas',          icon: Wallet,         place: 'more', group: 'Contas e cartões', page: 'accounts', saldo: true },
   { id: 'cartao',        label: 'Cartão',          icon: CreditCard,     place: 'more', group: 'Contas e cartões', page: 'credit', saldo: true },

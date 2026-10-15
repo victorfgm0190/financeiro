@@ -8,6 +8,7 @@ import { subMonths, format, startOfMonth, endOfMonth, differenceInDays, parseISO
 import { ptBR } from 'date-fns/locale'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate, accountsForView, isResgateReservaSombra } from '../shared/utils'
+import { saldoTotalContas } from '../../lib/saldoTotal'
 import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../../lib/receitasDespesas'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useThemeColors } from '../../hooks/useTheme'
@@ -112,7 +113,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     pct: prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null,
   })
 
-  const totalAssets = accounts.filter(a => a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
+  const totalAssets = saldoTotalContas(accounts)
   const totalDebt = accounts.filter(a => a.type === 'credit').reduce((s, a) => s + creditUsage(a.id), 0)
   // Saldo Principal do ciclo (mesmos valores de saldosPrincipais do App; fallback ao
   // somatório de balance caso a prop não venha). Mantém o painel consistente com sidebar/header.
@@ -409,7 +410,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         <KpiCard
           icon={PiggyBank}
           iconColor={reservaLiquido >= 0 ? 'text-receita' : 'text-despesa'}
-          label="Reservas"
+          label="Movimento de reservas no ciclo"
           value={reservaLiquido}
           valueColor={reservaLiquido >= 0 ? 'text-receita' : 'text-despesa'}
           loading={loading}

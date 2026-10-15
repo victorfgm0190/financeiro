@@ -5,7 +5,7 @@ import { Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal } 
 import { useApp } from '../context/AppContext'
 import { fmt, fmtDate } from '../components/shared/utils'
 import BottomSheet from '../components/shared/BottomSheet'
-import { getToken } from '../lib/api'
+import { getSessao } from '../lib/api'
 import { hojeStr } from '../lib/saldos'
 import { occEfetiva } from '../lib/fluxoCaixa'
 import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../lib/receitasDespesas'
@@ -17,18 +17,19 @@ import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { SkeletonVal, SkeletonLinhas } from './Carregando'
 import PerfilChips from './PerfilChips'
 import { MASCARA, lerOcultar, gravarOcultar } from './ocultarValores'
+import TelaCheia from './TelaCheia'
+import SaldoPrincipalBreakdownModal from '../components/Dashboard/SaldoPrincipalBreakdownModal'
+import { saldoTotalContas } from '../lib/saldoTotal'
 
 
-// Nome do usuário logado (campo `user` do JWT), com a 1ª letra maiúscula. '' se não houver.
-function nomeDoToken() {
-  try {
-    const payload = JSON.parse(atob(getToken().split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    const u = String(payload.user || '').trim()
-    return u ? u.charAt(0).toUpperCase() + u.slice(1) : ''
-  } catch {
-    return ''
-  }
+// Primeiro nome do usuário logado (nome do cadastro na sessão), com a 1ª letra maiúscula.
+// '' se não houver.
+function primeiroNome() {
+  const n = String(getSessao()?.nome || '').trim().split(/\s+/)[0] || ''
+  return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''
 }
+
+const maiusculaInicial = (t) => t.charAt(0).toUpperCase() + t.slice(1)
 
 // Tela Início do mobile. Valores do card verde = os do Painel (saldosPrincipais do App e a mesma
 // classificação de receitas/despesas do mês) — nada é recalculado por uma regra nova.
@@ -36,6 +37,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   const { settings, updateSettings } = useApp()
   const [ocultar, setOcultar] = useState(lerOcultar)
   const [personalizar, setPersonalizar] = useState(false)
+  const [comoChegamos, setComoChegamos] = useState(false)
   // Enquanto o recálculo automático não termina (mesmo sinal do Painel), nenhum número aparece:
   // o resumo mostra shimmer e os cards, linhas de placeholder.
   const carregando = useSaldosProntos() === 'carregando'
@@ -52,14 +54,14 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   const salvarCards = (lista) =>
     updateSettings({ mobileHomeCards: gravarPreferencias(settings?.mobileHomeCards, { cards: prefDosCards(lista) }) })
 
-  const mes = format(new Date(), "MMMM 'de' yyyy", { locale: ptBR })
-  const nome = nomeDoToken()
+  const mes = maiusculaInicial(format(new Date(), "MMMM 'de' yyyy", { locale: ptBR }))
+  const nome = primeiroNome()
 
   return (
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-3 pt-1">
         <div>
-          <p className="text-xs text-texto-3 capitalize">{mes}</p>
+          <p className="text-xs text-texto-3">{mes}</p>
           <h1 className="text-xl font-bold text-texto-1">{nome ? `Olá, ${nome}` : 'Olá'}</h1>
         </div>
         <button
@@ -75,7 +77,12 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 
       <PerfilChips />
 
-      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} carregando={carregando} />
+      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} carregando={carregando} onAbrir={() => setComoChegamos(true)} />
+
+      {/* "Como chegamos aqui": o MESMO componente do Painel desktop, em tela cheia no celular. */}
+      <TelaCheia open={comoChegamos} onClose={() => setComoChegamos(false)} title="Como chegamos aqui">
+        <SaldoPrincipalBreakdownModal compacto oculto={ocultar} />
+      </TelaCheia>
 
       {cards.filter(c => c.on).map(({ modulo }) => {
         const Corpo = CORPOS[modulo.id]
@@ -107,33 +114,49 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
   )
 }
 
-function ResumoCard({ saldosPrincipais, v: valor, carregando }) {
+// Card verde = card "Saldo Principal" + KPIs do Painel desktop, com os mesmos nomes e fontes:
+// Principal e Final Ciclo (saldosPrincipais ← getSaldoPrincipalBreakdown), Receitas/Despesas do
+// Mês (totaisDoPeriodo) e Saldo Total (saldoTotalContas). Tocar abre o "Como chegamos aqui".
+function ResumoCard({ saldosPrincipais, v: valor, carregando, onAbrir }) {
   const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
   const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
-  const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(getFinancialPeriod()), cls)
+  const periodo = getFinancialPeriod()
+  const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls)
+  const fimCiclo = format(periodo.end, 'dd/MM')
   // Shimmer claro sobre o verde (o .skeleton padrão é escuro).
   const v = (n, tam = 'w-24 h-4') => (carregando ? <SkeletonVal className={`${tam} my-0.5 opacity-40`} /> : valor(n))
 
   return (
-    <section className="rounded-2xl p-5 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #0E6B4E 0%, #0B5740 100%)' }}>
-      <p className="text-xs text-white/80">Saldo total</p>
+    <button
+      type="button"
+      onClick={onAbrir}
+      aria-label="Saldo principal — ver como chegamos aqui"
+      className="relative w-full text-left rounded-2xl p-5 text-white shadow-lg"
+      style={{ background: 'linear-gradient(135deg, #0E6B4E 0%, #0B5740 100%)' }}
+    >
+      <ChevronRight size={18} aria-hidden="true" className="absolute top-4 right-4 text-white/60" />
+      <p className="text-xs text-white/80">Saldo principal</p>
       <p className="text-3xl font-extrabold tracking-tight mt-0.5">{v(saldosPrincipais?.saldoAtual ?? 0, 'w-40 h-8')}</p>
       <div className="grid grid-cols-2 gap-3 mt-4">
         <div>
-          <p className="text-[11px] text-white/80">Entradas do mês</p>
+          <p className="text-[11px] text-white/80">Receitas do mês</p>
           <p className="text-sm font-semibold">{v(income)}</p>
         </div>
         <div>
-          <p className="text-[11px] text-white/80">Saídas do mês</p>
+          <p className="text-[11px] text-white/80">Despesas do mês</p>
           <p className="text-sm font-semibold">{v(expense)}</p>
         </div>
       </div>
       <div className="mt-4 pt-3 border-t border-white/15 flex items-center justify-between">
-        <p className="text-xs text-white/80">Saldo previsto fim do mês</p>
+        <p className="text-xs text-white/80">Previsto fim do ciclo ({fimCiclo})</p>
         <p className="text-sm font-bold">{v(saldosPrincipais?.saldoFinalCiclo ?? 0)}</p>
       </div>
-    </section>
+      <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-white/70">
+        <p>Saldo total (todas as contas)</p>
+        <p className="font-semibold">{v(saldoTotalContas(profileAccounts), 'w-20 h-3')}</p>
+      </div>
+    </button>
   )
 }
 
