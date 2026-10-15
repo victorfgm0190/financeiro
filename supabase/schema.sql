@@ -961,6 +961,12 @@ CREATE INDEX IF NOT EXISTS idx_historico_entidade ON historico_alteracoes (entid
 CREATE INDEX IF NOT EXISTS idx_historico_serie ON historico_alteracoes (serie_key);
 CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id);
 
+-- Transferências entre perfis CPF/CNPJ no AGENDAMENTO: categoria na visão de cada perfil (mesmas
+-- colunas de lancamentos). O lançamento efetivado herda as duas. NULL = sem categoria.
+-- Também criadas pela API (api/load.js).
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT;
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT;
+
 -- ATALHOS DE TECLADO por usuário (Configurações › Cadastros › Atalhos). As ações são fixas no
 -- código (src/lib/atalhos/registry.js); só o que o usuário ALTEROU fica aqui — ação sem linha usa o
 -- padrão. combinacao NULL = atalho desativado. user_id = id da sessão (sem FK: o login fixo de

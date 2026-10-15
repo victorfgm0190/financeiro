@@ -8,6 +8,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
+import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
+import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
@@ -259,6 +261,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     reservaFuncaoId: initial?.reservaFuncaoId || '',
     amount: (occInicial ? occInicial.amount : initial?.amount) ?? '',
     categoryId: (occInicial ? occInicial.categoryId : initial?.categoryId) || '',
+    // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (campos da parcela).
+    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : initial?.categoriaCnpjId) || '',
+    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : initial?.categoriaCpfId) || '',
     payee: initial?.payee || '',
     costCenter: (occInicial ? occInicial.costCenter : initial?.costCenter) || '',
     frequency: initial?.frequency || '',
@@ -283,6 +288,18 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const [editingOcc, setEditingOcc] = useState(null)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  // Tipo/contas mudaram: se a transferência deixou de ser entre perfis, o bloco some e as duas
+  // categorias por visão são limpas (não ficam gravadas escondidas).
+  const accById = (id) => accounts.find(a => a.id === id)
+  const entrePerfis = (f) => f.transactionType === 'transfer' && isTransferenciaEntrePerfis(accById(f.accountId), accById(f.toAccountId))
+  const setContas = (patch) => setForm(f => {
+    const n = { ...f, ...patch }
+    return entrePerfis(n) ? n : { ...n, categoriaCnpjId: '', categoriaCpfId: '' }
+  })
+  // O que se grava: as duas só valem em transferência entre perfis (senão null).
+  const categoriasPerfisDe = (f) => f.transactionType === 'transfer'
+    ? categoriasEntrePerfis(accById(f.accountId), accById(f.toAccountId), f)
+    : { categoriaCnpjId: null, categoriaCpfId: null }
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
 
@@ -433,6 +450,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     amount: occInicial ? occInicial.amount : initial.amount,
     date: ancoraExibida || null,
     categoryId: (occInicial ? occInicial.categoryId : initial.categoryId) || null,
+    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : initial.categoriaCnpjId) || null,
+    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : initial.categoriaCpfId) || null,
     description: (occInicial ? occInicial.description : initial.description) || null,
     accountId: (occInicial ? occInicial.accountId : initial.accountId) || null,
     costCenter: (occInicial ? occInicial.costCenter : initial.costCenter) || null,
@@ -444,6 +463,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     amount: Number(f.amount),
     ...(ancoraTocada ? { date: f.nextOccurrence || null } : {}),
     categoryId: f.categoryId || null,
+    ...categoriasPerfisDe(f),
     description: f.description || null,
     accountId: f.accountId || null,
     costCenter: f.costCenter || null,
@@ -485,6 +505,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       const base = {
         ...initial, ...data, nextOccurrence: ancoraSalva,
         amount: initial.amount, categoryId: initial.categoryId, description: initial.description,
+        categoriaCnpjId: initial.categoriaCnpjId || null, categoriaCpfId: initial.categoriaCpfId || null,
         accountId: initial.accountId, accountType: initial.accountType, costCenter: initial.costCenter,
         grupoGerencial: initial.grupoGerencial, payee: initial.payee, tipoDocumentoId: initial.tipoDocumentoId,
       }
@@ -567,6 +588,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       ...form,
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
+      ...categoriasPerfisDe(form),
       // A âncora só muda se o campo foi editado. Ele EXIBE a data efetiva (com a exceção), e
       // salvar isso de volta re-ancoraria a série a cada save de qualquer outro campo.
       nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
@@ -657,7 +679,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               <button
                 type="button"
                 key={t}
-                onClick={() => set('transactionType', t)}
+                onClick={() => setContas({ transactionType: t })}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
                   form.transactionType === t
                     ? t === 'income' ? 'bg-receita text-page'
@@ -692,7 +714,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
-            onChange={id => setForm(f => ({ ...f, accountId: id, reservaFuncaoId: '' }))}
+            onChange={id => setContas({ accountId: id, reservaFuncaoId: '' })}
             placeholder="Selecione a conta..."
             preserveGroupOrder
             ungroupedLast
@@ -761,11 +783,25 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
-              onChange={id => setForm(f => ({ ...f, toAccountId: id, reservaExpenseCategoryId: '' }))}
+              onChange={id => setContas({ toAccountId: id, reservaExpenseCategoryId: '' })}
               placeholder="Selecione a conta destino..."
               preserveGroupOrder
               ungroupedLast
               required
+            />
+          </div>
+        )}
+
+        {/* Transferência entre perfis (CPF↔CNPJ): categoria em cada visão. Mesmo bloco do Novo Lançamento. */}
+        {entrePerfis(form) && (
+          <div className="col-span-2">
+            <TransferenciaPerfisCategorias
+              fromAccount={schFromAcc}
+              toAccount={schToAcc}
+              categoriaCnpjId={form.categoriaCnpjId}
+              categoriaCpfId={form.categoriaCpfId}
+              onChangeCnpj={id => set('categoriaCnpjId', id || '')}
+              onChangeCpf={id => set('categoriaCpfId', id || '')}
             />
           </div>
         )}

@@ -43,7 +43,9 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
   switch (campo) {
     case 'amount': return brl(v)
     case 'date': return ddmmyyyy(v)
-    case 'categoryId': {
+    case 'categoryId':
+    case 'categoriaCnpjId':
+    case 'categoriaCpfId': {
       const c = (ctx.categorias || []).find(x => x.id === v)
       return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : '(categoria removida)'
     }

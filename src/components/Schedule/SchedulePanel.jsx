@@ -30,6 +30,8 @@ import { useAtalho, useTituloAtalho, useCamadaModal } from '../../context/atalho
 import { pagarParcela } from '../../lib/bemApi'
 import ToastShared from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
+import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
+import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
 import TipoDocumentoFiltro from '../shared/TipoDocumentoFiltro'
 import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO } from '../../lib/tiposDocumento'
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
@@ -236,6 +238,21 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   const [trfAmount, setTrfAmount] = useState(occAmount)
   const [trfDate, setTrfDate] = useState(occDate)
   const [trfNotes, setTrfNotes] = useState(schedule.notes || '')
+  // Transferência entre perfis: categorias por visão pré-preenchidas com as da ocorrência.
+  // Editar aqui vale só para este lançamento — o agendamento não muda.
+  const [trfCatCnpj, setTrfCatCnpj] = useState(schedule.categoriaCnpjId || '')
+  const [trfCatCpf, setTrfCatCpf] = useState(schedule.categoriaCpfId || '')
+  const trfFromAcc = accounts.find(a => a.id === trfFromId)
+  const trfToAcc = accounts.find(a => a.id === trfToId)
+  // Contas trocadas para o mesmo perfil: o bloco some e as duas categorias são limpas.
+  const setTrfContas = (fromId, toId) => {
+    setTrfFromId(fromId)
+    setTrfToId(toId)
+    if (!isTransferenciaEntrePerfis(accounts.find(a => a.id === fromId), accounts.find(a => a.id === toId))) {
+      setTrfCatCnpj('')
+      setTrfCatCpf('')
+    }
+  }
 
   const [finAccountId, setFinAccountId] = useState(schedule.accountId || '')
   // Quanto vai ser pago AGORA. Nasce na parcela cheia (o caso normal) e é editável para o
@@ -386,6 +403,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         amount: valorAba, date: trfDate,
         description: schedule.description, notes: trfNotes,
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
+        ...categoriasEntrePerfis(trfFromAcc, trfToAcc, { categoriaCnpjId: trfCatCnpj, categoriaCpfId: trfCatCpf }),
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
@@ -607,13 +625,13 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               )}
               <div>
                 <label className="label">Banco de</label>
-                <select className="input" value={trfFromId} onChange={e => setTrfFromId(e.target.value)} disabled={hasDetalhe}>
+                <select className="input" value={trfFromId} onChange={e => setTrfContas(e.target.value, trfToId)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
               <div>
                 <label className="label">Banco para</label>
-                <select className="input" value={trfToId} onChange={e => setTrfToId(e.target.value)} disabled={hasDetalhe}>
+                <select className="input" value={trfToId} onChange={e => setTrfContas(trfFromId, e.target.value)} disabled={hasDetalhe}>
                   <AccountOptions accounts={accounts} accountGroups={accountGroups} />
                 </select>
               </div>
@@ -630,6 +648,17 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
                 />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
+              {/* Resgate detalhado é registrado pelo motor (registerScheduleOccurrence), que herda as categorias. */}
+              {!hasDetalhe && (
+                <TransferenciaPerfisCategorias
+                  fromAccount={trfFromAcc}
+                  toAccount={trfToAcc}
+                  categoriaCnpjId={trfCatCnpj}
+                  categoriaCpfId={trfCatCpf}
+                  onChangeCnpj={id => setTrfCatCnpj(id || '')}
+                  onChangeCpf={id => setTrfCatCpf(id || '')}
+                />
+              )}
               <div>
                 <label className="label">Data</label>
                 <DateInput className="input" value={trfDate} onChange={e => setTrfDate(e.target.value)} />

@@ -627,6 +627,9 @@ export const scheduleToRow = (s) => ({
   source_expense_ids: Array.isArray(s.sourceExpenseIds) ? s.sourceExpenseIds : [],
   // Tipo de documento (tipos_documento.id). NULL = sem tipo — fallback só na exibição.
   tipo_documento_id: s.tipoDocumentoId || null,
+  // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (herdadas pelo lançamento).
+  categoria_cnpj_id: s.categoriaCnpjId || null,
+  categoria_cpf_id: s.categoriaCpfId || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -666,6 +669,8 @@ export const rowToSchedule = (r) => ({
   // Fase 1: null/ausente → []. pg devolve JSONB já parseado (array JS).
   sourceExpenseIds: Array.isArray(r.source_expense_ids) ? r.source_expense_ids : [],
   tipoDocumentoId: r.tipo_documento_id || null,
+  categoriaCnpjId: r.categoria_cnpj_id || null,
+  categoriaCpfId: r.categoria_cpf_id || null,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada

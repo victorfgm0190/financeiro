@@ -23,6 +23,7 @@ import { getToken } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia } from '../lib/camposSerie'
+import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
 import { saveLocal, loadLocal } from '../lib/storage'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
@@ -1232,6 +1233,8 @@ export function AppProvider({ children }) {
             reservaFuncaoId: schedule.reservaFuncaoId || null,
             // O lançamento efetivado herda o tipo de documento do agendamento.
             tipoDocumentoId: schedule.tipoDocumentoId || null,
+            // ...e as categorias por visão da transferência entre perfis (null fora dela).
+            ...categoriasEntrePerfis(accounts.find(a => a.id === schedule.accountId), accounts.find(a => a.id === schedule.toAccountId), schedule),
             origin: ORIGIN.AGENDAMENTO_AUTO,
             createdAt: new Date().toISOString(),
           }
@@ -2537,6 +2540,10 @@ export function AppProvider({ children }) {
       const gerTrace = ['gerencial_devolucao', 'resgate_reserva', 'pagamento_fatura'].includes(schedule.tipo)
         ? { cardId: schedule.cardId || null, faturaRef: schedule.faturaRef || null, sourceScheduleId: scheduleId }
         : {}
+      // Transferência entre perfis: o lançamento herda as categorias por visão da ocorrência.
+      const categoriasPerfis = categoriasEntrePerfis(
+        d.accounts.find(a => a.id === schedule.accountId), d.accounts.find(a => a.id === schedule.toAccountId), schedule,
+      )
 
       // Resgate com detalhamento por função (Etapa B): gera UMA transferência por FUNÇÃO
       // (valor + função própria), em vez da transferência única. O detalhamento agora tem uma
@@ -2567,6 +2574,7 @@ export function AppProvider({ children }) {
           scheduleId,
           reservaFuncaoId: srf.reservaFuncaoId,
           tipoDocumentoId: schedule.tipoDocumentoId || null,
+          ...categoriasPerfis,
           origin: ORIGIN.AGENDAMENTO,
           ...gerTrace,
           createdAt: nowIso,
@@ -2613,6 +2621,7 @@ export function AppProvider({ children }) {
         reservaFuncaoId: schedule.reservaFuncaoId || null,
         // O lançamento efetivado herda o tipo de documento do agendamento.
         tipoDocumentoId: schedule.tipoDocumentoId || null,
+        ...categoriasPerfis,
         origin: ORIGIN.AGENDAMENTO,
         ...gerTrace,
       }

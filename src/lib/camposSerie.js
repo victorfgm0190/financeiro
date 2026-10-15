@@ -3,7 +3,8 @@
 //
 // Campos da SÉRIE (favorecido, tipo de documento): mudou em qualquer parcela → vale para TODAS as
 // pendentes da série, sem perguntar.
-// Campos da PARCELA (valor, data, categoria, descrição, conta, centro de custo, grupo gerencial):
+// Campos da PARCELA (valor, data, categoria — inclusive as da transferência entre perfis —,
+// descrição, conta, centro de custo, grupo gerencial):
 // se a série tem outras pendentes depois desta, o usuário escolhe "Só esta parcela" ou "Esta e
 // as próximas pendentes". Data em "esta e as próximas" desloca as próximas pelo mesmo nº de dias.
 //
@@ -19,11 +20,12 @@ import { somarDias, diasEntre } from './fluxoConsultas.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 
 export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId']
-export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
+export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'categoriaCnpjId', 'categoriaCpfId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
 export const CAMPOS_EDITAVEIS = [...CAMPOS_PARCELA, ...CAMPOS_SERIE]
 
 export const ROTULO_CAMPO = {
-  amount: 'Valor', date: 'Data', categoryId: 'Categoria', description: 'Descrição', accountId: 'Conta',
+  amount: 'Valor', date: 'Data', categoryId: 'Categoria', categoriaCnpjId: 'Categoria no CNPJ',
+  categoriaCpfId: 'Categoria no CPF', description: 'Descrição', accountId: 'Conta',
   costCenter: 'Centro de custo', grupoGerencial: 'Grupo gerencial', payee: 'Favorecido',
   tipoDocumentoId: 'Tipo de documento',
 }
@@ -77,6 +79,8 @@ export function occCampos(schedule, dataOriginal) {
     date: o.date || dataOriginal,
     amount: o.amount != null ? Number(o.amount) : s.amount,
     categoryId: pick('categoryId'),
+    categoriaCnpjId: pick('categoriaCnpjId'),
+    categoriaCpfId: pick('categoriaCpfId'),
     description: pick('description'),
     accountId: pick('accountId'),
     costCenter: pick('costCenter'),
@@ -311,7 +315,8 @@ export function comCamposDaOcorrencia(schedule, dataOriginal, accounts = []) {
   const oc = occCampos(schedule, dataOriginal)
   const out = {
     ...schedule,
-    categoryId: oc.categoryId, description: oc.description, accountId: oc.accountId,
+    categoryId: oc.categoryId, categoriaCnpjId: oc.categoriaCnpjId, categoriaCpfId: oc.categoriaCpfId,
+    description: oc.description, accountId: oc.accountId,
     costCenter: oc.costCenter, grupoGerencial: oc.grupoGerencial,
   }
   if (oc.accountId !== schedule.accountId) {

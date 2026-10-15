@@ -129,6 +129,10 @@ export default async function handler(req, res) {
     // Metadados das baixas: { "<data da ocorrência>": { tipo, lancamento_id, import_id } }.
     // `registered` continua sendo a lista de datas baixadas; isto só descreve COMO cada uma foi.
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS registered_meta JSONB NOT NULL DEFAULT '{}'::jsonb`)
+    // Transferências entre perfis CPF/CNPJ: categoria na visão de cada perfil (mesmas colunas de
+    // lancamentos). O lançamento efetivado herda as duas. null = sem categoria (agendamentos antigos).
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT`)
+    await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)
     // Ocorrências de agendamento baixadas por uma importação de fatura
     // ([{ scheduleId, occurrenceDate, txId }]) — o estorno da importação as reabre.
     await query(`ALTER TABLE card_imports ADD COLUMN IF NOT EXISTS schedule_baixas JSONB NOT NULL DEFAULT '[]'::jsonb`)
