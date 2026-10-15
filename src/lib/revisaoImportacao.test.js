@@ -1,0 +1,159 @@
+import { describe, it, expect } from 'vitest'
+import { resolverLinhasRevisao, projetarTotalFatura, compararNaFatura } from './revisaoImportacao'
+
+const CARTAO = 'acc_card'
+const tx = (o) => ({ accountId: CARTAO, accountType: 'credit', type: 'expense', ...o })
+const linha = (o) => ({ type: 'expense', selected: true, faturaMonthYear: '2026-10', _generated: false, ...o })
+const resolver = (rows, transactions, extra = {}) =>
+  resolverLinhasRevisao(rows, { accountId: CARTAO, transactions, closingDay: 13, ...extra })
+
+describe('compararNaFatura', () => {
+  it('descrição sozinha nunca basta: valor diferente não é duplicata', () => {
+    const banco = tx({ id: 't', description: 'Yelumseg Parc3', amount: 205.61, faturaMonthYear: '2026-10' })
+    expect(compararNaFatura(linha({ description: 'Yelumseg Parc3', amount: 74.29 }), banco)).toBeNull()
+  })
+
+  it('não trata o estorno como duplicata da compra que ele estorna', () => {
+    const compra = tx({ id: 't', description: 'Aramis', amount: 149.95, dateCartao: '2026-09-10' })
+    expect(compararNaFatura(linha({ type: 'income', description: 'Aramis', amount: 149.95, _dateCartao: '2026-09-10' }), compra)).toBeNull()
+  })
+
+  it('mesma base e parcela → existe; parcela diferente → possível', () => {
+    const banco = tx({ id: 't', description: 'Aramis 4/4', amount: 149.95, installmentNum: 4, installmentTotal: 4 })
+    expect(compararNaFatura(linha({ description: 'Aramis 4/4', amount: 149.95, _installment: { num: 4, total: 4 } }), banco)).toBe('existe')
+    expect(compararNaFatura(linha({ description: 'Aramis 3/4', amount: 149.95, _installment: { num: 3, total: 4 } }), banco)).toBe('possivel')
+  })
+
+  it('casa a parcela do Itaú ("1/3") com a do sistema ("01/03")', () => {
+    const banco = tx({ id: 't', description: 'CLINICA HIGA-CT LT01/03', amount: 666.34, dateCartao: '2026-07-10' })
+    expect(compararNaFatura(linha({ description: 'Clinica Higa-ct Lt 1/3', amount: 666.34, _installment: { num: 1, total: 3 }, _dateCartao: '2026-07-10' }), banco)).toBe('existe')
+  })
+
+  it('"ParcN" do texto é o número da parcela: Parc7 × Parc6 é possível, não existe', () => {
+    const banco = tx({ id: 't', description: 'Yelumseg Parc6', amount: 205.61 })
+    expect(compararNaFatura(linha({ description: 'Yelumseg Parc7', amount: 205.61 }), banco)).toBe('possivel')
+    expect(compararNaFatura(linha({ description: 'Yelumseg Parc6', amount: 205.61 }), banco)).toBe('existe')
+  })
+
+  it('tolerância de valor é R$ 0,01', () => {
+    const banco = tx({ id: 't', description: 'Netflix.com', amount: 20.90 })
+    expect(compararNaFatura(linha({ description: 'Netflix.com', amount: 20.91 }), banco)).toBe('existe')
+    expect(compararNaFatura(linha({ description: 'Netflix.com', amount: 20.95 }), banco)).toBeNull()
+  })
+
+  it('valor igual sem semelhança de descrição é coincidência', () => {
+    const banco = tx({ id: 't', description: 'Posto Shangri-la', amount: 10 })
+    expect(compararNaFatura(linha({ description: 'Mercado Livre', amount: 10 }), banco)).toBeNull()
+  })
+
+  it('datas de compra conhecidas e diferentes: possível, não existe', () => {
+    const banco = tx({ id: 't', description: 'Uber', amount: 15, dateCartao: '2026-09-20' })
+    expect(compararNaFatura(linha({ description: 'Uber', amount: 15, _dateCartao: '2026-09-25' }), banco)).toBe('possivel')
+  })
+})
+
+describe('resolverLinhasRevisao — casos da fatura 10/2026', () => {
+  // Caso A: série 74,30 em 5× com as projeções uma fatura atrasadas.
+  const yelumseg74 = [
+    tx({ id: 'y1', description: 'Yelumseg Parc1', amount: 74.30, faturaMonthYear: '2026-09', installmentNum: 1, installmentTotal: 5 }),
+    tx({ id: 'y3', description: 'Yelumseg Parc1 3/5', amount: 74.30, faturaMonthYear: '2026-11', installmentNum: 3, installmentTotal: 5 }),
+  ]
+  const yelumseg205 = tx({ id: 'y205', description: 'Yelumseg Parc3', amount: 205.61, faturaMonthYear: '2026-06', installmentNum: 3, installmentTotal: 12 })
+
+  it('A: "Yelumseg Parc3" 74,29 de 10/2026 é novo, com aviso da projeção de 11/2026', () => {
+    const row = linha({
+      _id: 0, description: 'Yelumseg Parc3', amount: 74.29, _dateCartao: '2026-10-11',
+      _installment: { num: 3, total: 5, base: 'Yelumseg', matchStr: null }, _serieAnchor: yelumseg74[1],
+    })
+    const [r] = resolver([row], [...yelumseg74, yelumseg205])
+    expect(r._collisionTx).toBeNull()
+    expect(r._dupLevel).toBeNull()
+    expect(r.selected).toBe(true)
+    expect(r._tambemEm.map(o => o.fatura)).toEqual(['2026-11'])
+  })
+
+  it('B: "Aramis 3/4" × "Aramis 4/4" manual na mesma fatura é possível duplicata com o registro do banco', () => {
+    const manual = tx({ id: 'a4', description: 'Aramis 4/4', amount: 149.95, faturaMonthYear: '2026-10', installmentNum: 4, installmentTotal: 4 })
+    const row = linha({ _id: 0, description: 'Aramis 3/4', amount: 149.95, _dateCartao: '2026-07-10', _installment: { num: 3, total: 4, base: 'Aramis', matchStr: '3/4' } })
+    const [r] = resolver([row], [manual])
+    expect(r._dupLevel).toBe('possivel')
+    expect(r._dupTx).toBe(manual)
+    expect(r.selected).toBe(false)
+
+    // "É o mesmo": vira atualização do registro existente.
+    const [mesmo] = resolver([{ ...row, _mesmoQueId: 'a4' }], [manual])
+    expect(mesmo._collisionTx).toBe(manual)
+    expect(mesmo._mesmoConfirmado).toBe(true)
+    expect(mesmo._dupLevel).toBeNull()
+  })
+
+  it('colisão de parcela só vale na mesma fatura e com o mesmo valor', () => {
+    const projecao = tx({ id: 'p', description: 'Loja 2/3', amount: 33.34, faturaMonthYear: '2026-10', installmentNum: 2, installmentTotal: 3 })
+    const row = linha({ _id: 0, description: 'Loja 2/3', amount: 33.34, _installment: { num: 2, total: 3, base: 'Loja', matchStr: '2/3' } })
+    expect(resolver([row], [projecao])[0]._collisionTx).toBe(projecao)
+    // Centavos de arredondamento: possível duplicata, nunca "No banco".
+    const arred = resolver([{ ...row, amount: 33.37 }], [projecao])[0]
+    expect(arred._collisionTx).toBeNull()
+    expect(arred._dupLevel).toBe('possivel')
+  })
+
+  it('casa 1:1 — duas linhas idênticas e um só lançamento gravado: a segunda é nova', () => {
+    const banco = [tx({ id: 'u', description: 'Uber', amount: 50, faturaMonthYear: '2026-10' })]
+    const rows = [linha({ _id: 0, description: 'Uber', amount: 50 }), linha({ _id: 1, description: 'Uber', amount: 50 })]
+    const [r0, r1] = resolver(rows, banco)
+    expect(r0._dupLevel).toBe('certeza')
+    expect(r1._dupLevel).toBeNull()
+  })
+
+  it('prefere o par com a mesma data de compra', () => {
+    const banco = [
+      tx({ id: 'd9', description: 'Uber', amount: 15, faturaMonthYear: '2026-10', dateCartao: '2026-09-29' }),
+      tx({ id: 'd5', description: 'Uber', amount: 15, faturaMonthYear: '2026-10', dateCartao: '2026-09-25' }),
+    ]
+    const rows = [linha({ _id: 0, description: 'Uber', amount: 15, _dateCartao: '2026-09-25' }), linha({ _id: 1, description: 'Uber', amount: 15, _dateCartao: '2026-09-29' })]
+    const [r0, r1] = resolver(rows, banco)
+    expect(r0._dbTx.id).toBe('d5')
+    expect(r1._dbTx.id).toBe('d9')
+  })
+
+  it('reconhece o estorno já importado', () => {
+    const banco = [tx({ id: 'e', type: 'income', description: 'Aramis', amount: 149.95, faturaMonthYear: '2026-10' })]
+    expect(resolver([linha({ _id: 0, type: 'income', description: 'Aramis', amount: 149.95 })], banco)[0]._dupLevel).toBe('certeza')
+  })
+
+  it('assinatura mensal em outra fatura não gera aviso "Também em"', () => {
+    const banco = [tx({ id: 'n', description: 'Netflix.com', amount: 20.90, faturaMonthYear: '2026-09', dateCartao: '2026-09-06' })]
+    expect(resolver([linha({ _id: 0, description: 'Netflix.com', amount: 20.90, _dateCartao: '2026-10-06' })], banco)[0]._tambemEm).toEqual([])
+  })
+})
+
+describe('projetarTotalFatura', () => {
+  const opts = (transactions) => ({ fatura: '2026-10', accountId: CARTAO, transactions, closingDay: 13 })
+
+  it('C: total do arquivo inclui todas as linhas (estornos negativos) e a diferença é explicada', () => {
+    const banco = [tx({ id: 'a4', description: 'Aramis 4/4', amount: 149.95, faturaMonthYear: '2026-10', installmentNum: 4, installmentTotal: 4 })]
+    const rows = [
+      linha({ _id: 0, description: 'Aramis 3/4', amount: 149.95, _installment: { num: 3, total: 4, base: 'Aramis', matchStr: '3/4' } }),
+      linha({ _id: 1, description: 'Padaria', amount: 20 }),
+      linha({ _id: 2, description: 'Padaria', amount: 5, type: 'income' }),
+      linha({ _id: 3, description: 'Farmácia', amount: 30, selected: false }),
+    ]
+    const resolved = resolver(rows, banco)
+    const p = projetarTotalFatura(resolved, opts(banco))
+    expect(p.arquivo).toBe(194.95)
+    // Aramis 4/4 já gravada representa a possível duplicata; Padaria e o estorno entram; a
+    // Farmácia desmarcada fica de fora.
+    expect(p.projetado).toBe(164.95)
+    expect(p.diferenca).toBe(30)
+    expect(p.itens).toHaveLength(1)
+    expect(p.itens[0]).toMatchObject({ tipo: 'linha_fora', valor: 30 })
+  })
+
+  it('lançamento gravado sem linha no arquivo entra na lista', () => {
+    const banco = [tx({ id: 'x', description: 'Manual', amount: 12, faturaMonthYear: '2026-10' })]
+    const p = projetarTotalFatura(resolver([linha({ _id: 0, description: 'Padaria', amount: 20 })], banco), opts(banco))
+    expect(p.projetado).toBe(32)
+    expect(p.itens).toEqual([expect.objectContaining({ tipo: 'so_no_banco', valor: -12 })])
+    expect(p.itens.reduce((s, i) => s + i.valor, 0)).toBeCloseTo(p.diferenca, 2)
+  })
+})

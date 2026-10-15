@@ -13,7 +13,8 @@ import { detectInstallment, detectParcela, installmentKey } from '../../lib/inst
 import { extractLearnKeyword } from '../../lib/descMatch'
 import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
-import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, computeDupMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
+import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
@@ -644,11 +645,6 @@ function nextMonthSameDay(dateStr) {
 
 // ── ITEM 10 — funções puras extraídas do handleImport (testáveis, sem efeito colateral) ──
 
-// Linhas efetivamente importáveis: selecionadas, não-duplicadas e sem colisão por installment_key.
-function filterSelectedRows(rows) {
-  return (rows || []).filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
-}
-
 // faturaMonthYear (YYYY-MM) de um item, para agrupar por fatura: a fatura explícita da linha,
 // senão derivada da data pelo dia de fechamento. Núcleo do addFaturaAfetada.
 function faturaMyOf(faturaMonthYear, dateStr, closingDay) {
@@ -955,30 +951,6 @@ function CatGerModal({ rows, categories, sortedGrupos, onChangeGrupo, onClose })
   )
 }
 
-// installment_key de um lançamento EXISTENTE (usa num/total gravados; cai p/ detecção
-// quando faltarem). null quando não é parcela reconhecível.
-function keyOfExistingTx(tx) {
-  const det = detectInstallment(tx.description || '')
-  const num = tx.installmentNum ?? det?.num
-  const total = tx.installmentTotal ?? det?.total
-  if (num == null || total == null) return null
-  return installmentKey({
-    accountId: tx.accountId, description: tx.description,
-    installmentNum: num, installmentTotal: total,
-    amount: tx.amount, faturaMonthYear: tx.faturaMonthYear, date: tx.date,
-    installmentOccurrence: tx.installmentOccurrence,
-  })
-}
-// installment_key PROSPECTIVA de uma linha de importação (o que txToRow gravaria no insert).
-function keyOfImportRow(row, accountId) {
-  if (!row._installment) return null
-  return installmentKey({
-    accountId, description: row.description,
-    installmentNum: row._installment.num, installmentTotal: row._installment.total,
-    amount: row.amount, faturaMonthYear: row.faturaMonthYear, date: row.date,
-    installmentOccurrence: row._installmentOccurrence,
-  })
-}
 // Chave da SÉRIE de parcelas = installment_key SEM o número da parcela
 // (accountId | base | total | cents | serie_inicio). Parcelas irmãs (2/12, 3/12, …)
 // compartilham esta chave — usada para herdar o grupo gerencial de uma parcela anterior.
@@ -1012,50 +984,6 @@ function serieIdDaLinhaConciliacao(indice, accountId, row, faturaMY) {
     amount: row.amount, faturaMonthYear: faturaMY,
   }))
   return (sk && indice.get(sk)) || newSerieId()
-}
-
-// Chave de COLISÃO = installment_key SEM o componente de centavos
-// (accountId | base | num/total | serie_inicio).
-//
-// A installment_key persistida é exata de propósito: ela sustenta o índice UNIQUE
-// uq_lancamentos_installment e o remapeamento de id do upsert (api/_db.js). Arredondá-la
-// criaria colisão falsa entre parcelas legitimamente distintas. Por isso a tolerância de
-// valor mora AQUI, no casamento da importação — não na chave.
-//
-// Sem isto, 1 centavo de diferença virava parcela duplicada: R$100,00 em 3× fica
-// 33,34/33,33/33,33 no banco e o extrato pode trazer 33,37/33,30/33,33.
-function collisionKeyFromFull(fullKey) {
-  if (!fullKey) return null
-  const parts = fullKey.split('|')
-  if (parts.length < 5) return null
-  return `${parts[0]}|${parts[1]}|${parts[2]}|${parts[4]}`
-}
-
-// Tolerância de valor ao casar uma parcela do extrato com a já gravada. Mesma faixa de
-// isDuplicateInstallment / findExistingParcela (lib/parcelas.js) — os três matchers do
-// parcelamento passam a concordar.
-const TOLERANCIA_VALOR = 0.50
-
-// Parcela já no banco que corresponde à linha importada: mesma chave de colisão e valor
-// dentro da tolerância. Havendo mais de uma candidata, vence a de menor diferença.
-// `usados` são os lançamentos já casados por outra linha deste mesmo arquivo: um lançamento
-// do banco só pode ser a colisão de UMA linha. Sem esse consumo, duas gêmeas casavam com a
-// mesma parcela salva e as duas viravam UPDATE dela — a segunda sumia.
-function matchParcelaExistente(index, row, accountId, usados) {
-  // O índice só tem despesas. Um estorno com sufixo de parcela na descrição casaria com a
-  // parcela que ele estorna e viraria UPDATE dela — em vez de um lançamento novo.
-  if ((row.type || 'expense') !== 'expense') return null
-  const k = collisionKeyFromFull(keyOfImportRow(row, accountId))
-  const candidatas = k ? index.get(k) : null
-  if (!candidatas?.length) return null
-  let melhor = null
-  let menorDiff = Infinity
-  for (const t of candidatas) {
-    if (usados?.has(t.id)) continue
-    const diff = Math.abs((Number(t.amount) || 0) - (Number(row.amount) || 0))
-    if (diff <= TOLERANCIA_VALOR && diff < menorDiff) { melhor = t; menorDiff = diff }
-  }
-  return melhor
 }
 
 // Override manual de parcelamento (camada sobre detectInstallment, sem alterá-lo). Quando a
@@ -1389,18 +1317,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // sem os centavos), para detectar colisão na reimportação (mesma parcela → atualizar, não
   // inserir). Cada chave guarda TODAS as candidatas: o desempate por valor (±R$0,50) é feito
   // em matchParcelaExistente, já que centavos de arredondamento variam entre extratos.
-  const existingParcelaByKey = useMemo(() => {
-    const m = new Map()
-    if (!selectedAccount) return m
-    for (const t of transactions) {
-      if (t.accountId !== selectedAccount || t.type !== 'expense' || t.accountType !== 'credit') continue
-      const k = collisionKeyFromFull(keyOfExistingTx(t))
-      if (!k) continue
-      if (!m.has(k)) m.set(k, [])
-      m.get(k).push(t)
-    }
-    return m
-  }, [transactions, selectedAccount])
+  const existingParcelaByKey = useMemo(() => indexarParcelasDoCartao(transactions, selectedAccount), [transactions, selectedAccount])
   // Linhas de colisão que o usuário desmarcou (não atualizar). Default: todas aplicam.
   const [collisionSkip, setCollisionSkip] = useState(() => new Set())
   const toggleCollision = (id) => setCollisionSkip(prev => {
@@ -1817,77 +1734,20 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setCardInfo({ cardName: '', faturaStr: '' })
   }
 
-  // Lançamentos do cartão selecionado, agrupados por fatura — candidatos da conciliação.
-  // A fatura de um lançamento é o faturaMonthYear EXPLÍCITO quando existe e, na falta dele, a
-  // derivada da data pelo dia de fechamento — a mesma regra de faturaItensSistema (conciliação),
-  // de txBillKey (CreditCardPanel) e de findGlobalMaxMonth. Agrupar o que não tem o campo sob ''
-  // jogava esses lançamentos num balde que `cardTxsByFatura.get(r.faturaMonthYear)` nunca
-  // consulta: tudo que foi salvo sem fatura explícita (lançamento manual, fluxo gerencial, base
-  // antiga) ficava invisível para computeDupMatch e a linha reaparecia como NOVA na importação,
-  // embora a conciliação — que calcula o fallback — apontasse a duplicata corretamente.
-  const cardTxsByFatura = useMemo(() => {
-    const m = new Map()
-    if (!selectedAccount) return m
-    const closingDay = accounts.find(a => a.id === selectedAccount)?.closingDay || 14
-    for (const t of transactions) {
-      if (t.accountId !== selectedAccount) continue
-      if (t.type !== 'expense' && t.type !== 'income') continue
-      const f = t.faturaMonthYear || calcFatura(t.date, closingDay)
-      if (!f) continue
-      if (!m.has(f)) m.set(f, [])
-      m.get(f).push(t)
-    }
-    return m
-  }, [transactions, selectedAccount, accounts])
-
+  // Casamento com o que já está gravado no cartão (lib/revisaoImportacao): mesma fatura + mesmo
+  // valor é pré-requisito de "No banco ↻", "Já existe" e "Possível duplicata"; o mesmo lançamento
+  // noutra fatura vira só o aviso "Também em". Na COLISÃO a classificação default é a do banco —
+  // a do CSV rebaixava tudo para "D · Despesa" ao confirmar —, salvo edição manual
+  // (`_catEdit` / `_gerEdit`). A fatura de um lançamento sem faturaMonthYear sai da data pelo
+  // fechamento, a mesma regra da conciliação: sem isso o lançamento manual ficava invisível.
   const resolvedRows = useMemo(() => {
-    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
-    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null }))
-    // `_dbTx` = lançamento REAL já salvo no banco que corresponde à linha.
-    // Na COLISÃO a linha vira um UPDATE do lançamento salvo, então a classificação DEFAULT é
-    // a que já está no banco (a do extrato) — nunca a do CSV/classificação automática, que
-    // rebaixava tudo para "D · Despesa" ao confirmar. O usuário ainda reclassifica à mão: o
-    // valor editado (`_catEdit` / `_gerEdit`) prevalece sobre o do banco.
-    // Gêmeas legítimas — a fatura de 08/2026 traz duas "Payservice 5/5" de R$ 59,60 no mesmo
-    // dia. O ordinal entra ANTES do casamento: cada gêmea passa a ter chave de colisão própria
-    // (#2, #3…), então procura a SUA parcela no banco em vez de as duas disputarem a mesma.
-    const comOcorrencia = assignInstallmentOccurrences(rows, selectedAccount)
-    // Casamento 1:1 — um lançamento do banco só pode casar com UMA linha do arquivo. Vale para
-    // os dois caminhos (colisão por chave e duplicata por valor+descrição): sem consumir o
-    // candidato, as duas gêmeas casavam com o único lançamento salvo e a segunda era descartada.
-    const usadosDb = new Set()
-    return comOcorrencia.map(row => {
-      const r = { ...row, accountId: selectedAccount }
-      // Colisão por installment_key → atualizar o existente (não inserir, não pular).
-      // Série inferida ("Yelumseg Parc7"): a descrição não dá a mesma installment_key das irmãs,
-      // então a parcela já gerada é procurada pela série da irmã (serie_id / início da série).
-      const collisionTx = matchParcelaExistente(existingParcelaByKey, r, selectedAccount, usadosDb)
-        || ((r._serieAnchor?.accountId === selectedAccount && r._installment && (r.type || 'expense') === 'expense')
-          ? findParcelaDaSerie(r._serieAnchor, r._installment.num, r.amount, transactions, usadosDb)
-          : null)
-      if (collisionTx) {
-        usadosDb.add(collisionTx.id)
-        return {
-          ...r,
-          categoryId: r._catEdit ? r.categoryId : (collisionTx.categoryId || r.categoryId),
-          grupoGerencial: r._gerEdit ? r.grupoGerencial : (collisionTx.grupoGerencial || r.grupoGerencial),
-          _reservaFuncaoId: r._gerEdit ? r._reservaFuncaoId : (collisionTx.reservaFuncaoId || null),
-          _isDuplicate: false, _collisionTx: collisionTx, _dbTx: collisionTx, _dupLevel: null, selected: false,
-        }
-      }
-      // Conciliação inteligente progressiva contra os lançamentos da MESMA fatura ainda livres.
-      const candidatos = (cardTxsByFatura.get(r.faturaMonthYear) || []).filter(t => !usadosDb.has(t.id))
-      const { level: dupLevel, tx: dupTx } = r._generated ? { level: null, tx: null } : computeDupMatch(r, candidatos)
-      if (dupTx) usadosDb.add(dupTx.id)
-      const isCerteza = dupLevel === 'certeza'
-      // Certeza: nunca selecionável. Provável/Possível: desmarcado por padrão, salvo se o
-      // usuário forçar. Sem duplicata: segue o `selected` da linha.
-      const selected = isCerteza ? false : (dupLevel ? forcedDupSelect.has(r._id) : row.selected)
-      // Só "certeza" é com certeza o mesmo lançamento → exibe a classificação do banco.
-      // Provável/possível seguem editáveis (podem ser compras distintas).
-      return { ...r, _isDuplicate: isCerteza, _collisionTx: null, _dbTx: isCerteza ? dupTx : null, _dupLevel: dupLevel, selected }
+    if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null, _tambemEm: [] }))
+    if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null, _tambemEm: [] }))
+    return resolverLinhasRevisao(rows, {
+      accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
+      forcedDupSelect, parcelasPorChave: existingParcelaByKey,
     })
-  }, [rows, selectedAccount, editingImport, existingParcelaByKey, cardTxsByFatura, forcedDupSelect, transactions])
+  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions])
 
   // Linhas alimentadas ao totalizador por grupo gerencial. O totalizador retrata a fatura
   // INTEIRA (linhas desmarcadas também entram), então quem já está no banco deve pesar no
@@ -2115,7 +1975,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       return
     }
     // 1. Filtrar linhas efetivamente importáveis (selecionadas, sem duplicata/colisão).
-    const toImport = filterSelectedRows(resolvedRows)
+    const toImport = linhasAImportar(resolvedRows)
 
     // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória. Não
     // bloqueia com alert — destaca as linhas pendentes (borda laranja no select) e rola até a 1ª.
@@ -2360,15 +2220,21 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Item 7: colisões por installment_key — ATUALIZA o lançamento existente (UPDATE) em
     // vez de inserir/pular. Só as confirmadas (não desmarcadas pelo usuário na prévia).
     const collisionsToApply = resolvedRows.filter(r => r._collisionTx && !collisionSkip.has(r._id))
+    const reservasRenomeadas = new Map()
     collisionsToApply.forEach(row => {
       const tx = row._collisionTx
       const saveDate = computeSaveDate(row)
       addFaturaAfetada(row.faturaMonthYear, saveDate)
+      const novaDescricao = row.description || tx.description
       updateTransaction(tx.id, {
         date: saveDate,
         dateCartao: row._dateCartao || tx.dateCartao || null,
         // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
-        description: row.description || tx.description,
+        description: novaDescricao,
+        // "É o mesmo": a série manual podia estar com a numeração adiantada (Aramis 4/4 × 3/4 do
+        // extrato) — a parcela do arquivo prevalece. Na colisão por chave os números já são iguais.
+        installmentNum: row._installment?.num ?? tx.installmentNum ?? null,
+        installmentTotal: row._installment?.total ?? tx.installmentTotal ?? null,
         serieId: serieAlvo.get(row._id) || tx.serieId || null,
         categoryId: row.categoryId || null,
         grupoGerencial: row.grupoGerencial || null,
@@ -2379,7 +2245,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
       if (row.grupoGerencial) registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       serieBackfill.delete(tx.id)
+      // A "Reserva Gerencial - <descrição>" provisionada para este gasto leva o nome antigo; o motor
+      // só a reescreve quando o valor muda. Descrição não mexe em saldo → atualização sem recálculo.
+      if (novaDescricao !== tx.description) {
+        for (const t of transactions) {
+          if (t.type !== 'transfer' || (t.sourceExpenseId !== tx.id && t.parentTxId !== tx.id)) continue
+          if (t.description === `Reserva Gerencial - ${tx.description}`) reservasRenomeadas.set(t.id, { description: `Reserva Gerencial - ${novaDescricao}` })
+        }
+      }
     })
+    if (reservasRenomeadas.size > 0) atualizarCamposLancamentos(reservasRenomeadas)
 
     // Backfill do serie_id nos membros já gravados da série (inclusive cópias antigas).
     // Um único update: serie_id não mexe em saldo nem em fatura, então não precisa do recálculo
@@ -2464,7 +2339,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Clique em "Confirmar Importação": valida a função obrigatória (mesmo guard do handleImport)
   // e, se passar, abre o modal de preview. A confirmação real (handleImport) só roda no modal.
   const handleConfirmImport = () => {
-    const toImport = filterSelectedRows(resolvedRows)
+    const toImport = linhasAImportar(resolvedRows)
     const pendentesFunc = toImport.filter(r =>
       reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
     if (pendentesFunc.length > 0) {
@@ -2547,7 +2422,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const found = resolvedRows.length
   const dups = resolvedRows.filter(r => r._isDuplicate).length
-  const toImportCount = filterSelectedRows(resolvedRows).length
+  const toImportCount = linhasAImportar(resolvedRows).length
   // Item 7: linhas que colidem com parcela já existente (mesma installment_key).
   const collisionRows = resolvedRows.filter(r => r._collisionTx)
   const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id)).length
@@ -2604,18 +2479,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   //   estornos  = receitas dentro da fatura (abatidas do total)
   //   total     = despesas - estornos  (pagamentos de fatura já são filtrados no parse)
   const totais = useMemo(() => {
-    let importar = 0, jaExistem = 0, estornos = 0
+    let importar = 0, jaExistem = 0
     for (const r of resolvedRows) {
-      const val = Number(r.amount) || 0
-      if (r.type === 'income') { estornos += val; continue }
-      // Colisão (installment_key já existe → será ATUALIZADA, não inserida): conta em "Já existem"
-      // para o Total da fatura refletir TODAS as linhas. Sem isto some do total (selected=false).
-      if (r._collisionTx) { jaExistem += val; continue }
-      if (r._isDuplicate) jaExistem += val
+      if (r._generated) continue
+      const val = (r.type === 'income' ? -1 : 1) * (Number(r.amount) || 0)
+      if (r._collisionTx || r._isDuplicate) jaExistem += val
       else if (r.selected) importar += val
     }
-    return { importar, jaExistem, estornos, total: importar + jaExistem - estornos }
+    return { importar, jaExistem }
   }, [resolvedRows])
+  // Total do arquivo × total que a fatura terá no banco depois da confirmação. O antigo "Total da
+  // fatura" somava só as linhas do arquivo e deixava de fora as desmarcadas (Aramis/M6 como
+  // possível duplicata) sem dizer por quê.
+  const projecao = useMemo(() => (editingImport || !selectedAccount || !faturaMonthYear)
+    ? null
+    : projetarTotalFatura(resolvedRows, {
+      fatura: faturaMonthYear, accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
+    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport])
+  const [verDiferencas, setVerDiferencas] = useState(true)
 
   // Item 4 — heurística de "dia de fechamento errado": quantas linhas À VISTA (num<=1) têm a
   // date_cartao FORA da janela da fatura de referência p/ o closingDay do cartão. Parcelas antigas
@@ -3645,30 +3526,59 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           )}
 
           {/* Totalizador da fatura */}
-          <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 py-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-xs text-texto-3">Total a ser importado:</span>
-              <span className="text-sm font-semibold text-receita">{fmt(totais.importar)}</span>
-            </div>
-            <span className="text-texto-3 font-medium">+</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xs text-texto-3">Já existem:</span>
-              <span className="text-sm font-semibold text-aviso">{fmt(totais.jaExistem)}</span>
-            </div>
-            {totais.estornos > 0 && (
-              <>
-                <span className="text-texto-3 font-medium">−</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs text-texto-3">Estornos:</span>
-                  <span className="text-sm font-semibold text-despesa">{fmt(totais.estornos)}</span>
+          <div className="card py-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-texto-3">A importar:</span>
+                <span className="text-sm font-semibold text-receita">{fmt(totais.importar)}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-texto-3">Já no banco:</span>
+                <span className="text-sm font-semibold text-aviso">{fmt(totais.jaExistem)}</span>
+              </div>
+              {projecao && (
+                <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 sm:ml-auto">
+                  <div className="flex items-baseline gap-2" title="Soma de todas as linhas do arquivo, com os estornos negativos">
+                    <span className="text-xs text-texto-2">Total do arquivo:</span>
+                    <span className="text-lg font-bold text-texto-1">{fmt(projecao.arquivo)}</span>
+                  </div>
+                  <div className="flex items-baseline gap-2" title={`O que a fatura ${fmtFatura(faturaMonthYear)} terá no banco depois da confirmação: o já gravado nela + as linhas que serão inseridas`}>
+                    <span className="text-xs text-texto-2">Total projetado da fatura:</span>
+                    <span className={`text-lg font-bold ${Math.abs(projecao.diferenca) > 0.01 ? 'text-perigo' : 'text-texto-1'}`}>{fmt(projecao.projetado)}</span>
+                  </div>
                 </div>
-              </>
-            )}
-            <span className="text-texto-3 font-medium">=</span>
-            <div className="flex items-baseline gap-2 sm:ml-auto">
-              <span className="text-xs text-texto-2">Total da fatura:</span>
-              <span className="text-lg font-bold text-texto-1">{fmt(totais.total)}</span>
+              )}
             </div>
+            {projecao && Math.abs(projecao.diferenca) > 0.01 && (
+              <div className="rounded border border-perigo/40 bg-perigo-bg px-3 py-2">
+                <button type="button" className="flex items-center gap-2 text-xs font-semibold text-perigo w-full text-left" onClick={() => setVerDiferencas(v => !v)}>
+                  <AlertCircle size={14} className="shrink-0" />
+                  Diferença de {fmt(projecao.diferenca)} entre o arquivo e a fatura projetada — {projecao.itens.length} linha{projecao.itens.length !== 1 ? 's' : ''} explica{projecao.itens.length !== 1 ? 'm' : ''}
+                  <span className="ml-auto text-[10px] font-normal">{verDiferencas ? 'ocultar' : 'ver'}</span>
+                </button>
+                {verDiferencas && (
+                  <ul className="mt-1.5 space-y-0.5">
+                    {projecao.itens.map((it, i) => {
+                      const ref = it.linha || it.tx
+                      return (
+                        <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-texto-2 min-w-0">
+                          <span className={`w-20 shrink-0 text-right font-semibold ${it.valor < 0 ? 'text-despesa' : 'text-texto-1'}`}>{fmt(it.valor)}</span>
+                          <button
+                            type="button"
+                            className="truncate text-left hover:text-texto-1 disabled:cursor-default"
+                            disabled={!it.linha}
+                            onClick={() => document.getElementById(`ccrow-${it.linha._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                          >
+                            {ref.description} <span className="text-texto-3">({fmtDate(it.linha?._dateCartao || ref.dateCartao || ref.date)})</span>
+                          </button>
+                          <span className="text-texto-3">— {it.motivo}</span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -3735,7 +3645,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       <td className="px-3 py-2">
                         <input type="checkbox" className="accent-primary"
                           checked={row.selected} disabled={row._dupLevel === 'certeza' || !!row._collisionTx}
-                          onChange={() => { (row._dupLevel === 'provavel' || row._dupLevel === 'possivel') ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
+                          onChange={() => { row._dupLevel === 'possivel' ? toggleForcedDup(row._id) : toggleRow(row._id) }} />
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <DateInput
@@ -3887,17 +3797,37 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                       </td>
                       <td className="px-3 py-2">
                         {row._collisionTx
-                          ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Já existe no banco (mesma installment_key) — ver seção 'atualizar?'">No banco ↻</span>
+                          ? (row._mesmoConfirmado
+                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do banco recebe o nome e a parcela do arquivo — ver seção 'atualizar?'">É o mesmo ↻</span>
+                            : <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Mesma parcela, mesma fatura e mesmo valor já no banco — ver seção 'atualizar?'">No banco ↻</span>)
                           : row._dupLevel === 'certeza'
-                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-perigo-bg text-perigo" title="date_cartao + valor + descrição idênticos — já existe na fatura">🔴 Já existe</span>
-                            : row._dupLevel === 'provavel'
-                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="date_cartao + valor iguais e descrição similar — pode importar marcando">🟠 Provável duplicata</span>
-                              : row._dupLevel === 'possivel'
-                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2" title="valor e descrição similares (data ignorada) — pode importar marcando">🟡 Possível duplicata</span>
-                                : row._estornoHerdado
-                                  ? <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
-                                  : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
+                            ? <span className="text-xs px-1.5 py-0.5 rounded bg-perigo-bg text-perigo" title="Mesma fatura, mesmo valor, mesma descrição-base e mesma parcela — já existe no banco">🔴 Já existe</span>
+                            : row._dupLevel === 'possivel'
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-2" title="Mesma fatura e mesmo valor, mas descrição, parcela ou data diferente — pode importar marcando">🟡 Possível duplicata</span>
+                              : row._estornoHerdado
+                                ? <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita" title={`Estorno — classificação herdada da compra "${row._estornoHerdado.description}" (${fmtDate(row._estornoHerdado.date)})`}>↩ Estorno herdado</span>
+                                : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
                         }
+                        {(row._dupLevel === 'possivel' || row._mesmoConfirmado) && (() => {
+                          const tx = row._dupTx || row._collisionTx
+                          return (
+                            <div className="mt-1 text-[10px] text-texto-3 max-w-[16rem]">
+                              <p className="truncate" title={tx.description}>
+                                Banco: <span className="text-texto-2">{tx.description}</span>
+                                {' · '}parcela {numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}${totalParcelasDoTx(tx) ? `/${totalParcelasDoTx(tx)}` : ''}` : '—'}
+                                {' · '}fatura {fmtFatura(faturaDoLancamento(tx, importClosingDay))}
+                              </p>
+                              {row._mesmoConfirmado
+                                ? <button type="button" className="text-primary-fg hover:text-texto-1" onClick={() => updateRow(row._id, { _mesmoQueId: null })}>Desfazer "é o mesmo"</button>
+                                : <button type="button" className="text-primary-fg hover:text-texto-1 text-left" onClick={() => updateRow(row._id, { _mesmoQueId: tx.id })}>É o mesmo — atualizar nome/parcela do existente</button>}
+                            </div>
+                          )
+                        })()}
+                        {row._tambemEm?.length > 0 && (
+                          <p className="mt-1 text-[10px] text-aviso" title={row._tambemEm.map(o => `${o.tx.description} · ${fmt(o.tx.amount)} · fatura ${fmtFatura(o.fatura)}`).join(' | ')}>
+                            ⚠ Também em {row._tambemEm.map(o => fmtFatura(o.fatura)).join(', ')}
+                          </p>
+                        )}
                         {(() => {
                           const baixa = baixasPorLinha.get(row._id)
                           if (!baixa) return null
@@ -3947,7 +3877,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 <Layers size={13} className="text-aviso shrink-0" />
                 <h3 className="text-xs font-semibold text-aviso">Parcelas já no banco — atualizar?</h3>
                 <span className="text-[10px] text-texto-3">
-                  {collisionRows.length} colisã{collisionRows.length !== 1 ? 'ões' : 'o'} (mesma installment_key)
+                  {collisionRows.length} lançamento{collisionRows.length !== 1 ? 's' : ''} já gravado{collisionRows.length !== 1 ? 's' : ''} nesta fatura
                   {' · '}{collisionsToApplyCount} marcada{collisionsToApplyCount !== 1 ? 's' : ''} p/ atualizar
                 </span>
               </div>
@@ -3962,7 +3892,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                   // linha "Valor" mostra o valor mantido (sem seta); a divergência do extrato
                   // aparece no badge "CSV" ao lado da descrição.
                   const valorCsvDiverge = Math.abs((Number(tx.amount) || 0) - (Number(r.amount) || 0)) > 0.005
+                  const parcTx = numeroParcelaDoTx(tx) ? `${numeroParcelaDoTx(tx)}/${totalParcelasDoTx(tx) || '?'}` : '—'
+                  const parcRow = r._installment ? `${r._installment.num}/${r._installment.total}` : parcTx
                   const fields = [
+                    ['Descrição', tx.description, r.description || tx.description],
+                    ['Parcela', parcTx, parcRow],
                     // computeSaveDate — a MESMA função da gravação (era dt(r.date), que divergia
                     // do que o UPDATE realmente escrevia na parcela 1 do Dindin).
                     ['Data', dt(tx.date), dt(computeSaveDate(r))],
@@ -3988,7 +3922,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                           </span>
                         )}
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-1 pl-6">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-x-3 gap-y-1 pl-6">
                         {fields.map(([label, before, after]) => {
                           const changed = before !== after
                           return (

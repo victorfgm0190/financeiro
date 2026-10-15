@@ -1,5 +1,6 @@
-// Casamento de lançamentos na importação e na conciliação de fatura de cartão: normalização de
-// descrição, similaridade, nível de duplicata e cruzamento Itaú × sistema.
+// Casamento de lançamentos na conciliação de fatura de cartão: normalização de descrição,
+// similaridade e cruzamento Itaú × sistema. O casamento da Revisão da importação mora em
+// revisaoImportacao.js.
 //
 // Vive em lib porque é lógica pura e é onde mora a regra que mais custou acerto de fatura: o
 // TIPO faz parte do casamento. Um estorno chega com o valor e a descrição da compra que ele
@@ -46,47 +47,13 @@ export function normalizeDescForMatch(desc) {
   return normText(stripParcelaSuffix(desc))
 }
 
-// Nível de duplicata, testado em ordem (primeiro match vence). Candidatos = lançamentos da
-// MESMA fatura do cartão. Retorna { level, tx }: level = 'certeza' | 'provavel' | 'possivel' |
-// null e tx = o lançamento do BANCO que casou (null quando não há match).
-//   certeza : mesmo tipo + date_cartao igual + valor ±0,50 + descrição idêntica
-//   provavel: mesmo tipo + date_cartao igual + valor ±0,50 + descrição similar (≥70%)
-//   possivel: mesmo tipo + valor ±0,50 + descrição similar (≥70%), sem considerar data
-//
-// O TIPO faz parte do casamento. Um estorno chega como receita com o valor e a descrição da
-// compra que ele estorna — sem comparar o tipo, ele casava com a própria compra original e
-// virava "certeza" (nunca importável) ou "possível" (desmarcado por padrão): o estorno sumia
-// sem aviso. É a mesma relação que applyEstornoInheritance usa de propósito para HERDAR a
-// classificação da compra — herdar sim, deduplicar não.
-export function computeDupMatch(row, candidates) {
-  const none = { level: null, tx: null }
-  if (!candidates || candidates.length === 0) return none
-  const amt = Number(row.amount) || 0
-  const rowType = row.type || 'expense'
-  const rowCardDate = row._dateCartao || row.date
-  const sameType = (t) => (t.type || 'expense') === rowType
-  const amtClose = (t) => sameType(t) && Math.abs((Number(t.amount) || 0) - amt) <= 0.50
-  const dateEq = (t) => !!rowCardDate && (t.dateCartao || t.date) === rowCardDate
-  // Similaridade SEM o sufixo de parcela, como no crossMatchConciliacao: o sistema guarda a
-  // parcela colada ("LT01/03") e o Itaú manda "Lt 1/3", e sem tirar o sufixo o Jaccard dessas
-  // duas cai para 0,4 — a importação não via a duplicata que a conciliação via.
-  const simSemParcela = (t) => descSimilarity(stripParcelaSuffix(t.description), stripParcelaSuffix(row.description))
-  // 'certeza' continua exigindo a descrição INTEIRA igual, com o sufixo. Só ela desabilita o
-  // checkbox — um falso positivo aqui descarta um lançamento legítimo sem o usuário poder
-  // reverter. Provável/possível apenas desmarcam por padrão e mostram o badge, então podem
-  // usar o critério mais frouxo: no pior caso o usuário remarca a linha.
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && normText(t.description) === normText(row.description)) return { level: 'certeza', tx: t }
-  for (const t of candidates) if (amtClose(t) && dateEq(t) && simSemParcela(t) >= 0.7) return { level: 'provavel', tx: t }
-  for (const t of candidates) if (amtClose(t) && simSemParcela(t) >= 0.7) return { level: 'possivel', tx: t }
-  return none
-}
-
 // Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (mesmo tipo
 // + valor ±0,50 + descrição), 1:1 guloso. Níveis: certeza (idêntica), provável (≥0,70),
 // possível (≥0,50). Pré-marca a ação em certeza/provável (Itaú→Ignorar, sistema→Manter);
 // possível só recebe badge. Reusa descSimilarity/normText. Devolve cópias anotadas com
-// _crossLevel. O tipo entra no casamento pelo mesmo motivo de computeDupMatch: sem ele um
-// estorno casava com a compra que estorna e era pré-marcado "ignorar" — nunca importado.
+// _crossLevel. O TIPO faz parte do casamento: um estorno chega com o valor e a descrição da
+// compra que estorna — sem comparar o tipo ele casava com a própria compra e era pré-marcado
+// "ignorar" — nunca importado.
 export function crossMatchConciliacao(soItau, soSistema) {
   const itauOut = soItau.map(i => ({ ...i }))
   const sysOut = soSistema.map(s => ({ ...s }))

@@ -10,7 +10,7 @@ import { normText, stripParcelaSuffix } from './conciliacaoMatch.js'
 export const nomeFavorecido = (s) => String(s ?? '').trim()
 
 // Descrição base de um lançamento — o favorecido padrão da importação e o "começa com" da
-// renomeação. Mesma função de descrição base do computeDupMatch.
+// renomeação. Mesma descrição base do casamento da Revisão (revisaoImportacao).
 export const baseDoFavorecido = (descricao) => nomeFavorecido(stripParcelaSuffix(descricao))
 
 const vazio = () => ({ lancamentos: 0, agendamentos: 0, regras: 0, total: 0 })
