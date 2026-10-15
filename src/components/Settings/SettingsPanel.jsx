@@ -9,6 +9,8 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
+import UsuariosPanel from './UsuariosPanel'
+import { getSessao } from '../../lib/api'
 import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig } from '../../lib/configRota'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { mobileModules } from '../../mobile/modules'
@@ -579,7 +581,10 @@ export default function SettingsPanel() {
   // No mobile as seções só do computador saem do menu; rota apontando para uma delas cai na 1ª
   // seção visível da aba. No desktop nada é filtrado (abas === CONFIG_ABAS em conteúdo).
   const ocultas = isMobile ? SECOES_SO_DESKTOP : SEM_OCULTAS
+  // Aba só de admin (Usuários) some para os demais papéis.
+  const ehAdmin = getSessao()?.papel === 'admin'
   const abas = CONFIG_ABAS
+    .filter(a => !a.soAdmin || ehAdmin)
     .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id)) }))
     .filter(a => a.secoes.length > 0)
   const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
@@ -1857,6 +1862,7 @@ export default function SettingsPanel() {
 
       {secao === 'favorecidos' && <FavorecidosPanel />}
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
+      {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </div>
       </div>
 

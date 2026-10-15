@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { secoesMais } from './navegacao'
 import ThemeToggle from '../components/ThemeToggle'
+import SessaoUsuario from '../components/Layout/SessaoUsuario'
 
 // Tela "Mais": gerada 100% de modules.js (secoesMais) — aqui só o layout de cada tipo de seção.
 export default function MaisMobile({ modules, irPara }) {
@@ -48,6 +49,9 @@ export default function MaisMobile({ modules, irPara }) {
       ))}
       <section>
         <ThemeToggle />
+      </section>
+      <section className="rounded-xl border border-borda px-4 py-3">
+        <SessaoUsuario comSair />
       </section>
     </div>
   )

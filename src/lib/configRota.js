@@ -37,6 +37,11 @@ export const CONFIG_ABAS = [
       { id: 'manutencao', label: 'Manutenção' },
     ],
   },
+  // Só para administradores (SettingsPanel esconde dos demais; a /api/usuarios também barra).
+  {
+    id: 'usuarios', label: 'Usuários', soAdmin: true,
+    secoes: [{ id: 'usuarios', label: 'Usuários', novo: true }],
+  },
   {
     id: 'perigo', label: 'Zona de perigo', perigo: true,
     secoes: [{ id: 'zona-perigo', label: 'Zona de perigo' }],

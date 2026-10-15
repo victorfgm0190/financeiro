@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import ThemeToggle from '../ThemeToggle'
+import SessaoUsuario from './SessaoUsuario'
 
 const NAV = [
   { id: 'dashboard', label: 'Painel', icon: LayoutDashboard },
@@ -73,6 +74,11 @@ export default function Sidebar({ active, setActive, alertCount }) {
         </div>
 
         <ThemeToggle compacto />
+
+        {/* Usuário logado (e aviso de acesso de emergência) */}
+        <div className="border-t border-borda/60 pt-2">
+          <SessaoUsuario />
+        </div>
 
         {/* Identidade */}
         <div className="border-t border-borda/60 pt-2">

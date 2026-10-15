@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Vitest: o 1º `new PGlite()` de cada arquivo (Postgres em WASM) leva vários segundos quando os
+  // arquivos rodam em paralelo — o padrão de 10s estourava no beforeEach de forma intermitente.
+  test: { hookTimeout: 30_000 },
   plugins: [
     react(),
     tailwindcss(),

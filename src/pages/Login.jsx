@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Lock, User, LogIn } from 'lucide-react'
 import { AUTH_TOKEN_KEY } from '../lib/api'
 
-// Tela de login (admin único). POST /api/auth → salva o JWT em localStorage['auth_token'] e
+// Tela de login (cadastro de usuários; o login fixo de emergência é decidido na API). POST /api/auth → salva o JWT em localStorage['auth_token'] e
 // recarrega em '/' — o PrivateRoute lê o token salvo e monta o app. Dark theme, consistente com o app.
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -18,7 +18,7 @@ export default function Login() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Usuário sem diferenciar maiúsculas (VMOREIRA = vmoreira); a senha vai como digitada.
+        // Usuário ou e-mail, sem diferenciar maiúsculas (VMOREIRA = vmoreira); a senha vai como digitada.
         body: JSON.stringify({ username: username.trim().toLowerCase(), password }),
       })
       if (!res.ok) {
@@ -52,7 +52,7 @@ export default function Login() {
             onSubmit com preventDefault continua fazendo o login por fetch. */}
         <form method="post" action="/api/auth" onSubmit={handleSubmit} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl">
           <div>
-            <label htmlFor="username" className="block text-xs text-texto-2 mb-1.5">Usuário</label>
+            <label htmlFor="username" className="block text-xs text-texto-2 mb-1.5">Usuário ou e-mail</label>
             <div className="relative">
               <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-texto-3" />
               {/* name/id/autoComplete padrão: é o que o Safari usa para oferecer e salvar a senha nas

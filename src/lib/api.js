@@ -27,3 +27,26 @@ export function clearTokenAndRedirect() {
   clearScrollRestoration()
   if (typeof window !== 'undefined') window.location.reload()
 }
+
+// Sessão atual, lida do payload do JWT salvo (só para EXIBIR nome/papel/origem — quem autoriza é a
+// API). Token novo: { sub, org, papel, username, nome, origem }; token antigo { user, role } conta
+// como login fixo. Token ilegível (ex.: modo dev) → null.
+export function getSessao() {
+  const token = getToken()
+  if (!token) return null
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+    const p = JSON.parse(new TextDecoder().decode(bytes))
+    const username = p.username ?? p.user ?? null
+    return {
+      id: p.sub ?? null,
+      username,
+      nome: p.nome ?? username,
+      papel: p.papel ?? p.role ?? null,
+      origem: p.origem ?? 'env',
+    }
+  } catch {
+    return null
+  }
+}
