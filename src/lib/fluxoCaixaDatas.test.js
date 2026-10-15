@@ -173,4 +173,42 @@ describe('datas provisórias persistidas (camada do relatório)', () => {
     expect(fluxo([real]).rows.map(r => r.date)).toEqual(['2026-10-25', '2026-11-20'])
     expect(opcoesAplicarData(receb, '2026-10-20', '2026-10-25', '2026-10-20').once).toBe(false)
   })
+
+  // Pendência em atraso (hoje 15/10): o painel lista o atraso com end = ontem e os eventos com
+  // start = hoje. Mudar a data do vencido de 08/10 para 20/10 tira do atraso e põe no período.
+  describe('vencido movido para o futuro', () => {
+    const ajuda = {
+      id: 'sch_ajuda', transactionType: 'expense', accountId: 'acc_itau', amount: 400,
+      frequency: 'monthly', occurrenceType: 'continuous', startDate: '2026-09-08', nextOccurrence: '2026-10-08',
+      registered: ['2026-09-08'], skipped: [], overrides: {},
+    }
+    const atraso = (s) => fluxo(s, '0001-01-01', '2026-10-14')
+    const futuro = (s) => fluxo(s, '2026-10-15', '2026-11-30')
+
+    it('antes: 08/10 no atraso; depois só as próximas no período', () => {
+      expect(atraso([ajuda]).rows.map(r => r._origDate)).toEqual(['2026-10-08'])
+      expect(futuro([ajuda]).rows.map(r => r.date)).toEqual(['2026-11-08'])
+    })
+
+    it('só simular (data provisória): sai do atraso e aparece em 20/10, sem mexer nas outras', () => {
+      const d = { id: 'dp2', schedule_id: 'sch_ajuda', data_original: '2026-10-08', data_provisoria: '2026-10-20' }
+      const { schedules } = aplicarDatasNosAgendamentos([ajuda], [d])
+      expect(atraso(schedules).rows).toEqual([])
+      expect(futuro(schedules).rows.map(r => r.date)).toEqual(['2026-10-20', '2026-11-08'])
+      expect(futuro(schedules).rows.map(r => r.saldo)).toEqual([-400, -800])
+    })
+
+    it('gravar só esta ocorrência: idem, e a série segue no dia 08', () => {
+      const real = { ...ajuda, ...patchAplicarData(ajuda, '2026-10-08', '2026-10-20', 'ocorrencia') }
+      expect(real.overrides).toEqual({ '2026-10-08': { date: '2026-10-20' } })
+      expect(real.registered).toEqual(['2026-09-08'])
+      expect(atraso([real]).rows).toEqual([])
+      expect(futuro([real]).rows.map(r => r.date)).toEqual(['2026-10-20', '2026-11-08'])
+    })
+
+    it('data passada mantém no atraso, na nova data', () => {
+      const real = { ...ajuda, ...patchAplicarData(ajuda, '2026-10-08', '2026-10-10', 'ocorrencia') }
+      expect(atraso([real]).rows.map(r => r.date)).toEqual(['2026-10-10'])
+    })
+  })
 })

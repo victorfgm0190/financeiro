@@ -81,33 +81,31 @@ export default function FluxoMobileLista({
           <input type="checkbox" className="accent-primary w-4 h-4" checked={ativa} onChange={() => toggleLinha(r._key)} />
           Incluir no cálculo
         </label>
-        {!emAtraso && (
-          <div className="flex flex-wrap gap-2">
-            {!r._provisorio && (
-              <button type="button" onClick={() => onMudarData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
-                <CalendarClock size={14} /> Mudar data
+        <div className="flex flex-wrap gap-2">
+          {!r._provisorio && (
+            <button type="button" onClick={() => onMudarData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
+              <CalendarClock size={14} /> Mudar data
+            </button>
+          )}
+          {r._dataOriginal && (
+            <button type="button" onClick={() => onDesfazerData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-ambar">
+              <RotateCcw size={14} /> Desfazer data
+            </button>
+          )}
+          {r._provisorio && (
+            <>
+              <button type="button" onClick={() => onEfetivar(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs border-primary/40 text-primary-fg">
+                <CheckCircle2 size={14} /> Efetivar
               </button>
-            )}
-            {r._dataOriginal && (
-              <button type="button" onClick={() => onDesfazerData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-ambar">
-                <RotateCcw size={14} /> Desfazer data
+              <button type="button" onClick={() => onEditarProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
+                <Pencil size={14} /> Editar
               </button>
-            )}
-            {r._provisorio && (
-              <>
-                <button type="button" onClick={() => onEfetivar(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs border-primary/40 text-primary-fg">
-                  <CheckCircle2 size={14} /> Efetivar
-                </button>
-                <button type="button" onClick={() => onEditarProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
-                  <Pencil size={14} /> Editar
-                </button>
-                <button type="button" onClick={() => onExcluirProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-perigo">
-                  <Trash2 size={14} /> Excluir
-                </button>
-              </>
-            )}
-          </div>
-        )}
+              <button type="button" onClick={() => onExcluirProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-perigo">
+                <Trash2 size={14} /> Excluir
+              </button>
+            </>
+          )}
+        </div>
       </div>
     )
   }

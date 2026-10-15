@@ -788,7 +788,19 @@ export default function CashFlowPanel({ setActivePage }) {
                             <td className="px-3 py-1.5 text-[11px] text-texto-3">{accName(contaDaLinha(r, accountIds))}</td>
                             <td className="px-3 py-1.5 text-right text-[11px] text-receita">{r.entrada > 0 ? fmt(r.entrada) : ''}</td>
                             <td className="px-3 py-1.5 text-right text-[11px] text-despesa">{r.saida > 0 ? fmt(r.saida) : ''}</td>
-                            <td colSpan={2} />
+                            <td />
+                            <td className="px-3 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <button type="button" onClick={() => setMudarData(r)} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Mudar data">
+                                  <CalendarClock size={13} />
+                                </button>
+                                {r._dataOriginal && (
+                                  <button type="button" onClick={() => desfazerData(r)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded text-ambar hover:bg-ambar/10 whitespace-nowrap" title={`Voltar para ${fmtDate(r._dataOriginal)}`}>
+                                    <RotateCcw size={11} /> Desfazer data
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         )
                       })}
