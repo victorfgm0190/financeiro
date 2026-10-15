@@ -38,6 +38,7 @@ import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO }
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
 import { novoLoteId } from '../../lib/historico'
+import { contasEnvolvidas, filtrarPorContas } from '../../lib/filtroContasEnvolvidas'
 import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO } from '../../lib/resumoSelecao'
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -1720,6 +1721,17 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   const selectedRows = rows.filter(r => selected.has(r.schedule.id) && r.nextDate)
   const selectedIds = selectableRows.filter(r => selected.has(r.schedule.id)).map(r => r.schedule.id)
 
+  // Lista mudou (ex.: filtro de contas) → tira da seleção o que ficou oculto (nunca re-seleciona).
+  // Ajuste durante o render, sem effect: React reprocessa antes de pintar.
+  const [rowsAnteriores, setRowsAnteriores] = useState(rows)
+  if (rowsAnteriores !== rows) {
+    setRowsAnteriores(rows)
+    const visiveis = new Set(selectableRows.map(r => r.schedule.id))
+    if ([...selected].some(id => !visiveis.has(id))) {
+      setSelected(new Set([...selected].filter(id => visiveis.has(id))))
+    }
+  }
+
   // Totalizador dinâmico da seleção: agrupa por tipo de movimentação e calcula o saldo
   // líquido de caixa (receita + resgate − despesa − aplicação). Fatura é grupo à parte,
   // fora do saldo. Atualiza em tempo real conforme a seleção muda.
@@ -2327,6 +2339,18 @@ export default function SchedulePanel() {
 
   const [activeTab, setActiveTab] = useState('conta')
   const [viewFilter, setViewFilter] = useState('future')
+  // Filtro "Contas envolvidas" (só no sub-filtro Resgates Anuais): ids das contas selecionadas.
+  const [selContas, setSelContas] = useState(() => new Set())
+  const escolherViewFilter = (id) => {
+    setViewFilter(id)
+    if (id !== 'ra') setSelContas(new Set())
+  }
+  const toggleConta = (id) => setSelContas(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
   const [showForm, setShowForm] = useState(false)
   const [showProvisaoForm, setShowProvisaoForm] = useState(false)
   const [editSchedule, setEditSchedule] = useState(null)
@@ -2576,6 +2600,24 @@ export default function SchedulePanel() {
       : searchedSchedules.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
     return filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
   }, [searchedSchedules, selValores, selTipos, tiposDocumento])
+  // Chips de "Contas envolvidas": contados sobre a lista já filtrada pelos demais filtros. Conta
+  // selecionada que sumiu da lista (por outro filtro) continua como chip, com 0, para poder desligá-la.
+  const filtroContasAtivo = viewFilter === 'ra'
+  const contasChips = useMemo(() => {
+    if (!filtroContasAtivo) return []
+    const chips = contasEnvolvidas(finalSchedules, allAccounts)
+    for (const id of selContas) {
+      if (!chips.some(c => c.accountId === id)) {
+        const acc = allAccounts.find(a => a.id === id)
+        chips.push({ accountId: id, nome: acc?.apelido || acc?.name || '?', count: 0 })
+      }
+    }
+    return chips
+  }, [filtroContasAtivo, finalSchedules, allAccounts, selContas])
+  const visibleSchedules = useMemo(
+    () => (filtroContasAtivo ? filtrarPorContas(finalSchedules, selContas) : finalSchedules),
+    [filtroContasAtivo, finalSchedules, selContas]
+  )
   // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
   const extrasTipoFiltro = useMemo(() => [
     ...(tiposDocumento.some(t => t.sigla === 'CC') ? [] : [{ id: 'CC', sigla: 'CC', nome: 'Fatura de Cartão (automático)', cor: '#8b5cf6' }]),
@@ -2656,7 +2698,7 @@ export default function SchedulePanel() {
             {VIEW_FILTERS.map(f => (
               <button
                 key={f.id}
-                onClick={() => setViewFilter(f.id)}
+                onClick={() => escolherViewFilter(f.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
                   viewFilter === f.id
                     ? 'bg-primary text-white'
@@ -2671,6 +2713,44 @@ export default function SchedulePanel() {
               </button>
             ))}
           </div>
+
+          {/* Contas envolvidas (Resgates Anuais): 0 contas = tudo; 1 = origem ou destino; 2+ = entre elas */}
+          {filtroContasAtivo && contasChips.length > 0 && (
+            <div className="flex items-center gap-2 -mt-1">
+              <span className="text-xs text-texto-3 shrink-0">Contas envolvidas:</span>
+              <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setSelContas(new Set())}
+                  className={`shrink-0 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
+                    selContas.size === 0 ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
+                  }`}
+                >
+                  Todas
+                </button>
+                {contasChips.map(c => {
+                  const ativo = selContas.has(c.accountId)
+                  return (
+                    <button
+                      key={c.accountId}
+                      onClick={() => toggleConta(c.accountId)}
+                      aria-pressed={ativo}
+                      className={`shrink-0 flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
+                        ativo ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
+                      }`}
+                    >
+                      {c.nome}
+                      <span className="opacity-70">{c.count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {selContas.size > 0 && (
+                <button onClick={() => setSelContas(new Set())} title="Limpar contas" className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors shrink-0">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Barra de filtros (tempo real) — fixa no topo ao rolar apenas no desktop (md+) */}
           <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end md:sticky md:top-0 md:z-20">
@@ -2719,8 +2799,8 @@ export default function SchedulePanel() {
           </div>
 
           <SchedulesTable
-            schedules={finalSchedules}
-            agruparSeries={!hasActiveFilter}
+            schedules={visibleSchedules}
+            agruparSeries={!hasActiveFilter && selContas.size === 0}
             categories={categories}
             accounts={accounts}
             gerencialGroups={gerencialGroups}
