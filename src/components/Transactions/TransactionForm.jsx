@@ -32,6 +32,7 @@ import DebtPaymentModal from './DebtPaymentModal'
 import DateInput from '../shared/DateInput'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
+import { competenciasImplausiveis, mensagemCompetenciaImplausivel } from '../../lib/competenciaFatura'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita', atalho: 'lancamento.tipoReceita' },
@@ -473,6 +474,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     if (reservaFuncaoMode && reservaGroupFuncs.length > 1 && !form.reservaFuncaoId) {
       alert('Selecione a função de reserva para este grupo.')
       return
+    }
+
+    if (isCredit && form.type === 'expense') {
+      const msg = mensagemCompetenciaImplausivel(competenciasImplausiveis([{
+        description: form.description, faturaMonthYear: form.faturaMonthYear, dateCartao: form.dateCartao,
+        date: form.date, installmentNum: initial?.installmentNum,
+      }]))
+      if (msg) { alert(msg); return }
     }
 
     const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1

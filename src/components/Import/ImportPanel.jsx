@@ -18,6 +18,7 @@ import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhas
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
+import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
 import CategorySelect from '../shared/CategorySelect'
@@ -1664,6 +1665,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // dia vs fechamento (gastos após o fechamento → fatura do mês anterior ao de referência).
   const handleFaturaMonthYearChange = (newFatura) => {
     setFaturaMonthYear(newFatura)
+    setError('')
     if (!newFatura || rows.length === 0) return
     const acc = accounts.find(a => a.id === selectedAccount)
     const cl = acc?.closingDay || 14
@@ -1976,6 +1978,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     }
     // 1. Filtrar linhas efetivamente importáveis (selecionadas, sem duplicata/colisão).
     const toImport = linhasAImportar(resolvedRows)
+    const msgCompetencia = mensagemCompetenciaImplausivel(competenciasImplausiveis(toImport.filter(r => !r._generated)))
+    if (msgCompetencia) { setError(msgCompetencia); return }
 
     // Grupo numerado multi-função (Reservas Anuais): a função de reserva é obrigatória. Não
     // bloqueia com alert — destaca as linhas pendentes (borda laranja no select) e rola até a 1ª.
@@ -2340,6 +2344,12 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // e, se passar, abre o modal de preview. A confirmação real (handleImport) só roda no modal.
   const handleConfirmImport = () => {
     const toImport = linhasAImportar(resolvedRows)
+    const msgCompetencia = mensagemCompetenciaImplausivel(competenciasImplausiveis(toImport.filter(r => !r._generated)))
+    if (msgCompetencia) { setError(msgCompetencia); return }
+    const msgMes = !editingImport && divergenciaMesArquivo(faturaMonthYear, importFaturaMY)
+    if (msgMes && !window.confirm(`${msgMes}
+
+Importar mesmo assim no mês selecionado?`)) return
     const pendentesFunc = toImport.filter(r =>
       reserveFuncsForGroup(r.grupoGerencial).length > 1 && !r._reservaFuncaoId)
     if (pendentesFunc.length > 0) {
@@ -2545,11 +2555,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       const isXls = /\.xlsx?$/i.test(file.name)
       let csvRows
       let declarado = null
+      let mesArquivo = ''
       if (isXls) {
         const aoa = await parseFile(file)
         const itau = parseItauXLS(aoa, categories)
         csvRows = itau.rows
         declarado = itau.totalDeclarado
+        mesArquivo = itau.faturaMY
         if (csvRows.length === 0) {
           setConcError('Nenhum lançamento encontrado no XLS/XLSX. Verifique se é a fatura exportada pelo internet banking do Itaú.')
           return
@@ -2560,12 +2572,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           setConcError('CSV não reconhecido. Verifique se é o formato de exportação do Itaú (colunas: data, lançamento, valor).')
           return
         }
-        csvRows = parseItauCSV(text, categories).rows
+        const itau = parseItauCSV(text, categories)
+        csvRows = itau.rows
+        mesArquivo = itau.faturaMY
         if (csvRows.length === 0) {
           setConcError('Nenhum lançamento encontrado no CSV.')
           return
         }
       }
+
+      const msgCompetencia = mensagemCompetenciaImplausivel(competenciasImplausiveis(csvRows.map(r => ({
+        ...r, faturaMonthYear, _dateCartao: r.date, _installment: detectInstallment(r.description),
+      }))))
+      if (msgCompetencia) { setConcError(msgCompetencia); return }
+      const msgMes = divergenciaMesArquivo(faturaMonthYear, mesArquivo)
+      if (msgMes && !window.confirm(`${msgMes}
+
+Conciliar mesmo assim com o mês selecionado?`)) return
 
       // Classifica cada item do CSV (categoria/gerencial/favorecido) p/ o caso de importação.
       const grupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
@@ -3503,6 +3526,15 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
                 {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-texto-1">{cardInfo.faturaStr}</p></div>}
               </div>
             </div>
+            {!editingImport && divergenciaMesArquivo(faturaMonthYear, importFaturaMY) && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg border border-perigo/40 bg-perigo-bg text-perigo text-xs">
+                <AlertCircle size={14} />
+                <span>{divergenciaMesArquivo(faturaMonthYear, importFaturaMY)}</span>
+                <button className="ml-auto underline font-medium" onClick={() => handleFaturaMonthYearChange(importFaturaMY)}>
+                  Usar o mês do arquivo
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Item 4 — aviso (não bloqueia) de dia de fechamento possivelmente errado */}
@@ -3581,6 +3613,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
             )}
           </div>
 
+          {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
             <div className="flex gap-2">

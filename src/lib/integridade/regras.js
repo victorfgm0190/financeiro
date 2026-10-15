@@ -23,6 +23,7 @@ import { computeOccurrences } from '../occurrences.js'
 import { computeFaturaRef } from '../fatura.js'
 import { faturaToDate } from '../parcelas.js'
 import { faturaEstaFechada } from '../faturasFechadas.js'
+import { distanciaCompetencia, LIMITE_MESES_COMPETENCIA } from '../competenciaFatura.js'
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -595,6 +596,104 @@ const GER_ETAPA_A_DUPLICADA = {
         esperado: { quantidade: 1, valor: rb(g.tx.amount) },
         encontrado: { quantidade: ets.length, soma: rb(soma), etapas_a: ordenarIds(ets.map(resumoEtapa)), gasto: resumoGasto(g) },
       }))
+    }
+    return out
+  },
+}
+
+// ─── Competência (fatura) implausível ───────────────────────────────────────
+// Bug de 15/10/2026: uma importação gravou a fatura 10/2024 em compras de set–out/2026. As etapas A
+// herdaram a fatura errada e ficaram FORA da fatura 10/2026 — a revisão da fatura certa não as via.
+// Estas três regras rodam sem janela (`desde`) justamente porque o sintoma é uma fatura fora dela.
+
+const distanciaDoGasto = (g) => distanciaCompetencia({
+  faturaMY: g.fatura, dateCartao: g.tx.dateCartao, date: g.tx.date,
+  installmentNum: g.tx.installmentNum ?? detectInstallment(g.tx.description || '')?.num,
+})
+const competenciaImplausivel = (g) => {
+  const d = distanciaDoGasto(g)
+  return d != null && Math.abs(d) > LIMITE_MESES_COMPETENCIA
+}
+
+const COMPETENCIA_IMPLAUSIVEL = {
+  codigo: 'COMPETENCIA_IMPLAUSIVEL', lado: 'divergência', severidade: 'aprovar',
+  descricao: `Gasto de cartão numa fatura a mais de ${LIMITE_MESES_COMPETENCIA} meses da data da compra`,
+  verificar(dados) {
+    const ctx = montarContexto(dados)
+    const out = []
+    for (const g of ctx.gastos) {
+      if (!competenciaImplausivel(g)) continue
+      const d = distanciaDoGasto(g)
+      out.push(divergencia(this, {
+        origem_id: g.tx.id, conta_id: g.card.id, fatura_ref: ymParaRef(g.fatura),
+        descricao: `"${g.tx.description || ''}" (${brl(g.tx.amount)}) de ${g.tx.dateCartao || g.tx.date} está na fatura ${ymParaRef(g.fatura)} (${Math.abs(d)} meses de distância)`,
+        esperado: { distancia_max_meses: LIMITE_MESES_COMPETENCIA },
+        encontrado: { distancia_meses: d, gasto: resumoGasto(g) },
+      }))
+    }
+    return out
+  },
+}
+
+const GER_RESERVA_FATURA_INCOERENTE = {
+  codigo: 'GER_RESERVA_FATURA_INCOERENTE', lado: 'divergência', severidade: 'aprovar',
+  descricao: 'Reserva gerencial com fatura diferente da do gasto de origem, ou com origem em fatura de ano implausível',
+  verificar(dados) {
+    const ctx = montarContexto(dados)
+    const out = []
+    for (const e of ctx.etapas) {
+      const g = e.gastoId ? ctx.gastoById.get(e.gastoId) : null
+      if (!g) continue
+      const rotulo = refParaYM(e.tx.faturaRef)
+      const divergente = !!rotulo && rotulo !== g.fatura
+      const implausivel = competenciaImplausivel(g)
+      if (!divergente && !implausivel) continue
+      const motivo = divergente
+        ? `rótulo Fatura ${ymParaRef(rotulo)} × gasto na fatura ${ymParaRef(g.fatura)}`
+        : `gasto de ${g.tx.dateCartao || g.tx.date} na fatura ${ymParaRef(g.fatura)}`
+      out.push(divergencia(this, {
+        origem_id: e.tx.id, conta_id: e.tx.toAccountId || null, fatura_ref: e.tx.faturaRef || ymParaRef(g.fatura),
+        descricao: `"${e.tx.description || e.tx.id}" (${brl(e.tx.amount)}) — ${motivo}`,
+        esperado: { fatura: ymParaRef(g.fatura), plausivel: true },
+        encontrado: { fatura_rotulo: e.tx.faturaRef || null, implausivel, etapa_a: resumoEtapa(e), gasto: resumoGasto(g) },
+      }))
+    }
+    return out
+  },
+}
+
+const normDescReserva = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/^reserva gerencial\s*-\s*/, '').replace(/\s+/g, ' ').trim()
+
+const GER_RESERVA_DUPLICADA_ENTRE_FATURAS = {
+  codigo: 'GER_RESERVA_DUPLICADA_ENTRE_FATURAS', lado: 'sobra', severidade: 'aprovar',
+  descricao: 'Mesma reserva gerencial (conta, descrição, valor e data) lançada em faturas diferentes a partir de gastos diferentes',
+  verificar(dados) {
+    const ctx = montarContexto(dados)
+    const grupos = new Map()
+    for (const e of ctx.etapas) {
+      if (!e.gastoId) continue
+      const k = [e.tx.toAccountId, normDescReserva(e.tx.description), rb(e.tx.amount).toFixed(2), String(e.tx.date || '').slice(0, 10)].join('|')
+      if (!grupos.has(k)) grupos.set(k, [])
+      grupos.get(k).push(e)
+    }
+    const out = []
+    for (const ets of grupos.values()) {
+      if (new Set(ets.map(e => e.gastoId)).size < 2) continue
+      const faturaDe = (e) => { const g = ctx.gastoById.get(e.gastoId); return g ? g.fatura : refParaYM(e.tx.faturaRef) }
+      // Gêmeas legítimas (duas compras iguais no mesmo dia) caem na MESMA fatura — não são duplicata.
+      if (new Set(ets.map(faturaDe)).size < 2) continue
+      // Aponta as suspeitas (origem com competência implausível); sem nenhuma, todas.
+      const suspeitas = ets.filter(e => { const g = ctx.gastoById.get(e.gastoId); return !g || competenciaImplausivel(g) })
+      for (const e of (suspeitas.length && suspeitas.length < ets.length ? suspeitas : ets)) {
+        const outras = ets.filter(o => o !== e)
+        out.push(divergencia(this, {
+          origem_id: e.tx.id, conta_id: e.tx.toAccountId || null, fatura_ref: e.tx.faturaRef || ymParaRef(faturaDe(e)),
+          descricao: `"${e.tx.description || e.tx.id}" (${brl(e.tx.amount)}, ${e.tx.date}) também existe na fatura ${outras.map(o => ymParaRef(faturaDe(o))).join(', ')}`,
+          esperado: { quantidade: 1 },
+          encontrado: { etapa_a: resumoEtapa(e), fatura_origem: ymParaRef(faturaDe(e)), irmas: ordenarIds(outras.map(o => ({ ...resumoEtapa(o), fatura_origem: ymParaRef(faturaDe(o)) }))) },
+        }))
+      }
     }
     return out
   },
@@ -1310,13 +1409,20 @@ export const REGRAS = [
   GER_FECHAMENTO_FATURA, GER_SALDO_SUBCONTA,
   NUM_RESGATE_FALTANDO, NUM_RESGATE_VALOR, NUM_RESGATE_ORFAO, NUM_SEM_CONTA_ORIGEM,
   NUM_COM_ETAPA_A, D_COM_ETAPA_A, GRUPO_INEXISTENTE, CADEIA_INCOMPLETA,
+  COMPETENCIA_IMPLAUSIVEL, GER_RESERVA_FATURA_INCOERENTE, GER_RESERVA_DUPLICADA_ENTRE_FATURAS,
 ]
 
 export const REGRAS_POR_CODIGO = Object.fromEntries(REGRAS.map(r => [r.codigo, r]))
 
 // Regras avaliadas sempre por inteiro (fora da janela `desde`): a fatura_ref delas é só onde a
 // pendência é exibida (a fatura aberta mais antiga), não o recorte avaliado.
-export const REGRAS_SEM_JANELA = new Set(['GER_SALDO_SUBCONTA'])
+export const REGRAS_SEM_JANELA = new Set([
+  'GER_SALDO_SUBCONTA', 'COMPETENCIA_IMPLAUSIVEL', 'GER_RESERVA_FATURA_INCOERENTE', 'GER_RESERVA_DUPLICADA_ENTRE_FATURAS',
+])
+
+// Regras de competência — também mostradas no "Revisar Movimentos Automáticos" do cartão, para
+// qualquer fatura (não só a selecionada).
+export const REGRAS_COMPETENCIA = ['COMPETENCIA_IMPLAUSIVEL', 'GER_RESERVA_FATURA_INCOERENTE', 'GER_RESERVA_DUPLICADA_ENTRE_FATURAS']
 
 // Roda as regras (todas, ou só `opcoes.regras`) sobre um único contexto. Saída ordenada e sem
 // carimbo de tempo: a mesma base produz exatamente a mesma lista (idempotência da varredura).

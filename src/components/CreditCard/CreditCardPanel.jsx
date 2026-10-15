@@ -8,6 +8,7 @@ import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
+import { executarRegras, REGRAS_COMPETENCIA } from '../../lib/integridade/regras'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
@@ -238,8 +239,11 @@ export default function CreditCardPanel() {
   //     (não começa com tx_gerA_ nem tx_ger_).
   //  B) resgate_reserva cuja soma do detalhamento (schedule_reserva_funcoes) diverge do amount.
   //  C) gerencial_devolucao sem detalhamento (0 linhas) ou com soma divergente do amount.
+  //  D) Competência: gasto do cartão em fatura implausível e reserva gerencial (Ger. do cartão) com
+  //     fatura divergente da origem ou duplicada em outra fatura — em QUALQUER fatura, não só na
+  //     selecionada (o lote de 15/10/2026 gravado em 10/2024 ficava invisível na 10/2026).
   const computeRevisaoExtras = () => {
-    if (!selectedCard || !billKey) return { fantasmas: [], agendamentos: [] }
+    if (!selectedCard || !billKey) return { fantasmas: [], agendamentos: [], competencia: [] }
     const apelido = selectedCard.apelido || selectedCard.name?.slice(0, 6) || 'CC'
     const gerAccId = accounts.find(a => a.name === `Ger. ${apelido}`)?.id || null
 
@@ -266,16 +270,20 @@ export default function CreditCardPanel() {
       if (qtd === 0 || Math.abs((Number(s.amount) || 0) - soma) > 0.01)
         agendamentos.push({ tipo: 'gerencial_devolucao', fatura, esperado: Number(s.amount) || 0, soma, motivo: qtd === 0 ? 'sem_detalhamento' : 'divergencia' })
     }
-    return { fantasmas, agendamentos }
+    const competencia = executarRegras(
+      { transactions, accounts, schedules, gerencialGroups },
+      { desde: null, regras: REGRAS_COMPETENCIA },
+    ).filter(d => d.conta_id === selectedCard.id || (gerAccId && d.conta_id === gerAccId))
+    return { fantasmas, agendamentos, competencia }
   }
 
   const handleAbrirRevisar = async () => {
     if (!selectedCard || !billKey) return
-    setRevisarState({ loading: true, executando: false, preview: null, fantasmas: [], agendamentos: [] })
+    setRevisarState({ loading: true, executando: false, preview: null, fantasmas: [], agendamentos: [], competencia: [] })
     try {
       const preview = await revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: true })
-      const { fantasmas, agendamentos } = computeRevisaoExtras()
-      setRevisarState({ loading: false, executando: false, preview, fantasmas, agendamentos })
+      const { fantasmas, agendamentos, competencia } = computeRevisaoExtras()
+      setRevisarState({ loading: false, executando: false, preview, fantasmas, agendamentos, competencia })
     } catch (e) {
       setRevisarState(null)
       setToast(`Erro ao revisar: ${e.message}`)
@@ -1154,8 +1162,9 @@ export default function CreditCardPanel() {
             const acoes = revisarState.preview?.acoes || []
             const fantasmas = revisarState.fantasmas || []
             const agendamentos = revisarState.agendamentos || []
+            const competencia = revisarState.competencia || []
             const busy = revisarState.executando
-            if (acoes.length + fantasmas.length + agendamentos.length === 0) return (
+            if (acoes.length + fantasmas.length + agendamentos.length + competencia.length === 0) return (
               <div className="py-10 text-center">
                 <CheckCircle2 size={28} className="text-primary-fg mx-auto mb-2" />
                 <p className="text-texto-2 text-sm">✅ Nenhuma inconsistência encontrada</p>
@@ -1220,6 +1229,32 @@ export default function CreditCardPanel() {
                     <button className="btn-primary w-full text-sm" onClick={handleRecalcularAgendamentos} disabled={busy}>
                       {busy ? 'Recalculando…' : 'Recalcular agendamentos'}
                     </button>
+                  </section>
+                )}
+                {/* SEÇÃO 4 — Competência (qualquer fatura do cartão) */}
+                {competencia.length > 0 && (
+                  <section className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Competência fora do lugar (todas as faturas)</h4>
+                      <span className="text-xs text-texto-3">{competencia.length} item{competencia.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {competencia.map(d => (
+                        <div key={`${d.regra}|${d.origem_id}`} className="flex items-start gap-3 rounded-lg p-3 bg-perigo-bg">
+                          <AlertTriangle size={16} className="text-perigo mt-0.5 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-texto-1">{d.descricao}</p>
+                            <p className="text-xs text-texto-3">
+                              {d.regra === 'COMPETENCIA_IMPLAUSIVEL' ? 'Gasto em fatura implausível'
+                                : d.regra === 'GER_RESERVA_FATURA_INCOERENTE' ? 'Reserva gerencial com fatura incoerente'
+                                : 'Reserva gerencial duplicada entre faturas'}
+                              {d.fatura_ref ? ` · Fatura ${d.fatura_ref}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-texto-3">Corrija a fatura ou exclua os lançamentos errados — esta revisão não os altera.</p>
                   </section>
                 )}
               </div>
