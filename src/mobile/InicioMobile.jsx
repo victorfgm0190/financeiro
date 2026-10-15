@@ -3,7 +3,7 @@ import { format, addDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { fmt, fmtDate } from '../components/shared/utils'
+import { fmt, fmtSinal, fmtDate } from '../components/shared/utils'
 import BottomSheet from '../components/shared/BottomSheet'
 import { getSessao } from '../lib/api'
 import { hojeStr } from '../lib/saldos'
@@ -77,7 +77,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 
       <PerfilChips />
 
-      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} carregando={carregando} onAbrir={() => setComoChegamos(true)} />
+      <ResumoCard saldosPrincipais={saldosPrincipais} v={v} ocultar={ocultar} carregando={carregando} onAbrir={() => setComoChegamos(true)} />
 
       {/* "Como chegamos aqui": o MESMO componente do Painel desktop, em tela cheia no celular. */}
       <TelaCheia open={comoChegamos} onClose={() => setComoChegamos(false)} title="Como chegamos aqui">
@@ -115,17 +115,38 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 }
 
 // Card verde = card "Saldo Principal" + KPIs do Painel desktop, com os mesmos nomes e fontes:
-// Principal e Final Ciclo (saldosPrincipais ← getSaldoPrincipalBreakdown), Receitas/Despesas do
-// Mês (totaisDoPeriodo) e Saldo Total (saldoTotalContas). Tocar abre o "Como chegamos aqui".
-function ResumoCard({ saldosPrincipais, v: valor, carregando, onAbrir }) {
-  const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod } = useApp()
+// Principal (saldosPrincipais), Final Ciclo · Projetado · Atual Cal. · Final Cal. (o MESMO retorno
+// de getSaldoPrincipalBreakdown() que o card do desktop lê, com o perfil ativo), Receitas/Despesas
+// do Mês (totaisDoPeriodo) e Saldo Total (saldoTotalContas). Tocar abre o "Como chegamos aqui".
+function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }) {
+  const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod, getSaldoPrincipalBreakdown } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
   const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
   const periodo = getFinancialPeriod()
   const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls)
-  const fimCiclo = format(periodo.end, 'dd/MM')
+  const b = useMemo(() => getSaldoPrincipalBreakdown(), [getSaldoPrincipalBreakdown])
+  const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
+  // Mesmas linhas e regras do card do desktop (DashboardPanel cicloRows): Atual Cal./Final Cal.
+  // só no modo custom.
+  const ciclo = [
+    { label: `Final Ciclo (até ${ddmm(b.cycleEnd)})`, val: b.finalCiclo?.total },
+    { label: 'Projetado', val: b.projetado?.total },
+    ...(b.mode === 'custom' ? [
+      { label: `Atual Cal. (até ${ddmm(b.calendarEnd)})`, val: b.atualCalendario?.total },
+      { label: 'Final Cal.', val: b.finalCalendario?.total },
+    ] : []),
+  ].filter(r => r.val != null)
   // Shimmer claro sobre o verde (o .skeleton padrão é escuro).
   const v = (n, tam = 'w-24 h-4') => (carregando ? <SkeletonVal className={`${tam} my-0.5 opacity-40`} /> : valor(n))
+  // Valores do ciclo com sinal (decisão 10 do tema: negativo = "−R$" + text-despesa). O token de
+  // despesa não tem contraste sobre o verde fixo do card (D7), então o negativo vai num selo
+  // bg-surface — o par surface/despesa é o mesmo do Painel nos dois temas.
+  const vCiclo = (n) => {
+    if (carregando) return <SkeletonVal className="w-20 h-4 my-0.5 opacity-40" />
+    if (ocultar) return MASCARA
+    if (n < 0) return <span className="inline-block rounded-md px-1.5 -mx-1.5 bg-surface text-despesa">{fmtSinal(n)}</span>
+    return fmtSinal(n)
+  }
 
   return (
     <button
@@ -148,11 +169,15 @@ function ResumoCard({ saldosPrincipais, v: valor, carregando, onAbrir }) {
           <p className="text-sm font-semibold">{v(expense)}</p>
         </div>
       </div>
-      <div className="mt-4 pt-3 border-t border-white/15 flex items-center justify-between">
-        <p className="text-xs text-white/80">Previsto fim do ciclo ({fimCiclo})</p>
-        <p className="text-sm font-bold">{v(saldosPrincipais?.saldoFinalCiclo ?? 0)}</p>
+      <div className="mt-4 pt-3 border-t border-white/15 grid grid-cols-2 gap-x-3 gap-y-2.5">
+        {ciclo.map(r => (
+          <div key={r.label} className="min-w-0">
+            <p className="text-[11px] text-white/80 whitespace-nowrap">{r.label}</p>
+            <p className="text-[13px] min-[390px]:text-sm font-bold whitespace-nowrap tabular-nums">{vCiclo(r.val)}</p>
+          </div>
+        ))}
       </div>
-      <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-white/70">
+      <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-white/80">
         <p>Saldo total (todas as contas)</p>
         <p className="font-semibold">{v(saldoTotalContas(profileAccounts), 'w-20 h-3')}</p>
       </div>
