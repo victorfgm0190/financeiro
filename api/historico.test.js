@@ -117,6 +117,31 @@ describe('financiamento (TIGGO): favorecido só nas parcelas PENDENTES', () => {
   })
 })
 
+describe('origem do histórico', () => {
+  it('grava origem revisao_automatica (exclusão sem rows) e deixa null nas edições comuns', async () => {
+    const r = await aplicarEdicao(q, client(), {
+      lote_id: 'R1',
+      historico: [
+        { entidade: 'lancamento', entidade_id: 'tx_dup', escopo: 'parcela', campo: 'exclusao', valor_anterior: { id: 'tx_dup', amount: 19.9 }, valor_novo: null, motivo: 'Revisão automática: duplicata', origem: 'revisao_automatica' },
+        { entidade: 'lancamento', entidade_id: 'tx_ok', escopo: 'parcela', campo: 'description', valor_anterior: 'a', valor_novo: 'b' },
+      ],
+    }, upsertRowsNoClient)
+    expect(r.historico).toBe(2)
+    const h = await q('SELECT entidade_id, campo, origem, valor_anterior FROM historico_alteracoes ORDER BY entidade_id')
+    expect(h).toEqual([
+      { entidade_id: 'tx_dup', campo: 'exclusao', origem: 'revisao_automatica', valor_anterior: { id: 'tx_dup', amount: 19.9 } },
+      { entidade_id: 'tx_ok', campo: 'description', origem: null, valor_anterior: 'a' },
+    ])
+  })
+
+  it('origem desconhecida é recusada', async () => {
+    await expect(aplicarEdicao(q, client(), {
+      lote_id: 'R2',
+      historico: [{ entidade: 'lancamento', entidade_id: 'x', campo: 'exclusao', origem: 'qualquer' }],
+    }, upsertRowsNoClient)).rejects.toThrow(/origem inválida/)
+  })
+})
+
 describe('motor/sync não gravam histórico', () => {
   it('upsert de sync (upsertRowsNoClient) não toca historico_alteracoes', async () => {
     await upsertRowsNoClient(client(), 'agendamentos', [scheduleToRow({ ...diarista, amount: 999 })])

@@ -57,6 +57,11 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
       const t = (ctx.tipos || []).find(x => x.id === v)
       return t ? `${t.sigla} — ${t.nome}` : '(tipo removido)'
     }
+    case 'faturaMonthYear': return /^\d{4}-\d{2}$/.test(v) ? `${v.slice(5, 7)}/${v.slice(0, 4)}` : String(v)
+    // Exclusão (revisão automática): foto do lançamento removido.
+    case 'exclusao': return typeof v === 'object'
+      ? `${v.description || v.id} · ${brl(v.amount)} · ${ddmmyyyy(v.date)}${v.faturaMonthYear ? ` · fatura ${v.faturaMonthYear.slice(5, 7)}/${v.faturaMonthYear.slice(0, 4)}` : ''}`
+      : String(v)
     case 'grupoGerencial': {
       const g = (ctx.grupos || []).find(x => x.id === v)
       return g ? (g.name || String(g.number)) : String(v)
@@ -65,7 +70,9 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
   }
 }
 
-export const rotuloCampo = (campo) => ROTULO_CAMPO[campo] || campo
+// Campos que só aparecem no histórico (correções da revisão automática do cartão).
+const ROTULO_EXTRA = { exclusao: 'Lançamento excluído', faturaMonthYear: 'Fatura' }
+export const rotuloCampo = (campo) => ROTULO_CAMPO[campo] || ROTULO_EXTRA[campo] || campo
 
 // Agrupa as linhas por lote (uma edição) para a linha do tempo, mais recente primeiro.
 export function agruparPorLote(linhas) {

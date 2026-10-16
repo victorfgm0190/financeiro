@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   CreditCard, DollarSign, Calendar, FileText, FileBarChart, ArrowLeft,
   ChevronLeft, ChevronRight, Plus, Edit2, Trash2, CheckCircle2, Circle, CheckSquare, RotateCcw,
@@ -8,7 +8,9 @@ import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtDate, today, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, classifyFatura } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
-import { executarRegras, REGRAS_COMPETENCIA } from '../../lib/integridade/regras'
+import { executarRegras, REGRAS_COMPETENCIA, ymParaRef, refParaYM } from '../../lib/integridade/regras'
+import { planejarCorrecoesCompetencia, resumirPlano, acoesDoPlano, linhasHistoricoRevisao } from '../../lib/revisaoCompetencia'
+import { novoLoteId } from '../../lib/historico'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
@@ -170,20 +172,122 @@ function AcaoRow({ a }) {
   )
 }
 
+// ─── Revisar › Competência: item com a correção sugerida e prévia da correção ───────
+
+const ROTULO_REGRA_COMPETENCIA = {
+  COMPETENCIA_IMPLAUSIVEL: 'Gasto em fatura implausível',
+  GER_RESERVA_FATURA_INCOERENTE: 'Reserva gerencial com fatura incoerente',
+  GER_RESERVA_DUPLICADA_ENTRE_FATURAS: 'Reserva gerencial duplicada entre faturas',
+}
+
+function sugestaoCompetencia(it) {
+  switch (it.tipo) {
+    case 'excluir_duplicata':
+      return `Excluir duplicata — o mesmo gasto já está na fatura ${ymParaRef(it.equivalente.fatura)}${it.excluir.length > 1 ? ' (a reserva gerencial dele sai junto)' : ''}`
+    case 'mover': return `Mover para a fatura ${ymParaRef(it.mover.para)} (fatura da data da compra)`
+    case 'excluir_reserva': return 'Excluir a reserva gerencial (o gasto de origem é mantido)'
+    case 'coberta': return 'Resolvida junto com a correção do gasto de origem'
+    default: return null
+  }
+}
+
+function ItemCompetencia({ it, busy, onCorrigir }) {
+  const regras = (it.regras || [it.regra]).map(r => ROTULO_REGRA_COMPETENCIA[r] || r)
+  const botao = it.tipo === 'excluir_duplicata' ? 'Excluir duplicata'
+    : it.tipo === 'mover' ? `Mover para ${ymParaRef(it.mover.para)}`
+      : it.tipo === 'excluir_reserva' ? 'Excluir' : null
+  const sugestao = sugestaoCompetencia(it)
+  return (
+    <div className={`flex items-start gap-3 rounded-lg p-3 ${it.tipo === 'coberta' ? 'bg-surface-2/60' : 'bg-perigo-bg'}`}>
+      <AlertTriangle size={16} className={`mt-0.5 shrink-0 ${it.tipo === 'coberta' ? 'text-texto-3' : 'text-perigo'}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-texto-1">{it.detalhe || it.descricao}</p>
+        <p className="text-xs text-texto-3">{regras.join(' · ')}{it.fatura ? ` · Fatura ${ymParaRef(it.fatura)}` : ''}</p>
+        {sugestao && <p className="text-xs text-texto-2 mt-1"><span className="font-semibold">Sugestão:</span> {sugestao}</p>}
+        {it.aviso && <p className="text-xs text-aviso mt-0.5">{it.aviso}</p>}
+      </div>
+      {botao && (
+        <button className="btn-secondary text-xs px-2.5 py-1 shrink-0 whitespace-nowrap" onClick={onCorrigir} disabled={busy}>
+          {botao}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// Fatura (YYYY-MM) de um lançamento da prévia: gasto → faturaMonthYear; reserva → faturaRef.
+const faturaDoLancamento = (t) => t.faturaMonthYear || refParaYM(t.faturaRef) || null
+
+function PreviaCorrecao({ itens, transactions, cardId, isFaturaFechada, busy, onVoltar, onConfirmar }) {
+  const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
+  const r = useMemo(() => resumirPlano(itens, txById), [itens, txById])
+  const fechadas = [...new Set([
+    ...r.excluidos.map(faturaDoLancamento),
+    ...r.movidos.flatMap(m => [m.de, m.para]),
+  ].filter(ym => ym && isFaturaFechada(cardId, ym)))].sort()
+  const linha = (t, extra) => (
+    <div key={t.id} className="flex items-baseline justify-between gap-3 text-xs">
+      <span className="min-w-0 truncate text-texto-2">
+        <span className="text-texto-3">{t.type === 'expense' ? 'Gasto' : 'Reserva'} · </span>
+        {t.description || t.id} · {fmtDate(String(t.dateCartao || t.date).slice(0, 10))}
+        {extra}
+      </span>
+      <span className="tabular-nums whitespace-nowrap text-texto-1">{fmt(Number(t.amount) || 0)}</span>
+    </div>
+  )
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-texto-2">Prévia da correção — confira antes de aplicar.</p>
+      {r.excluidos.length > 0 && (
+        <section className="space-y-1.5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Serão excluídos ({r.excluidos.length})</h4>
+          {r.excluidos.map(t => linha(t, faturaDoLancamento(t) ? ` · fatura ${ymParaRef(faturaDoLancamento(t))}` : ''))}
+        </section>
+      )}
+      {r.movidos.length > 0 && (
+        <section className="space-y-1.5">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-texto-2">Mudam de fatura ({r.movidos.length})</h4>
+          {r.movidos.map(m => m.tx && linha(m.tx, ` · ${ymParaRef(m.de)} → ${ymParaRef(m.para)}`))}
+        </section>
+      )}
+      <div className="rounded-lg bg-surface-2/60 p-3 space-y-1 text-xs">
+        {r.qtdGastosExcluidos > 0 && <div className="flex justify-between gap-3"><span className="text-texto-2">Gastos excluídos ({r.qtdGastosExcluidos})</span><span className="tabular-nums text-texto-1">{fmt(r.totalGastosExcluidos)}</span></div>}
+        {r.qtdReservasExcluidas > 0 && <div className="flex justify-between gap-3"><span className="text-texto-2">Reservas gerenciais excluídas ({r.qtdReservasExcluidas})</span><span className="tabular-nums text-texto-1">{fmt(r.totalReservasExcluidas)}</span></div>}
+        {r.movidos.length > 0 && <div className="flex justify-between gap-3"><span className="text-texto-2">Gastos movidos ({r.movidos.length})</span><span className="tabular-nums text-texto-1">{fmt(r.totalMovido)}</span></div>}
+      </div>
+      {fechadas.length > 0 && (
+        <p className="flex items-start gap-1.5 text-xs text-aviso">
+          <AlertTriangle size={13} className="shrink-0 mt-px" />
+          Mexe em fatura fechada ({fechadas.map(ymParaRef).join(', ')}). A correção manual é permitida; o motor automático continua ignorando faturas fechadas.
+        </p>
+      )}
+      <p className="text-xs text-texto-3">
+        Tudo fica registrado no histórico de alterações (origem: revisão automática). O gasto de origem de uma reserva nunca é apagado.
+      </p>
+      <div className="flex gap-2 pt-3 border-t border-borda">
+        <button className="btn-secondary flex-1" onClick={onVoltar} disabled={busy}>Voltar</button>
+        <button className="btn-danger flex-1" onClick={onConfirmar} disabled={busy}>
+          {busy ? 'Aplicando…' : 'Confirmar e aplicar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function CreditCardPanel() {
   const {
     profileAccounts: accounts,
     profileTransactions: transactions,
     profileSchedules: schedules,
     categories, gerencialGroups, scheduleReservaFuncoes,
-    addTransaction, deleteTransaction, setReconciled, recalcularAgendamentosFatura,
+    addTransaction, deleteTransaction, updateTransaction, setReconciled, recalcularAgendamentosFatura, registrarEdicao,
     reconciliarGerencial, revisarMovimentosFatura, getOccurrencesProjecao: getNextOccurrences,
     isFaturaFechada, fecharFatura, abrirFatura, creditUsage,
   } = useApp()
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
   const [reconciling, setReconciling] = useState(false)
-  const [revisarState, setRevisarState] = useState(null) // { loading, executando, preview }
+  const [revisarState, setRevisarState] = useState(null) // { loading, executando, preview, previa, recarregar }
 
   const handleReconciliarGerencial = async () => {
     if (!selectedCard || reconciling) return
@@ -239,11 +343,9 @@ export default function CreditCardPanel() {
   //     (não começa com tx_gerA_ nem tx_ger_).
   //  B) resgate_reserva cuja soma do detalhamento (schedule_reserva_funcoes) diverge do amount.
   //  C) gerencial_devolucao sem detalhamento (0 linhas) ou com soma divergente do amount.
-  //  D) Competência: gasto do cartão em fatura implausível e reserva gerencial (Ger. do cartão) com
-  //     fatura divergente da origem ou duplicada em outra fatura — em QUALQUER fatura, não só na
-  //     selecionada (o lote de 15/10/2026 gravado em 10/2024 ficava invisível na 10/2026).
+  //  (A competência — seção 4 — é calculada ao vivo em `competenciaRevisao`, mais abaixo.)
   const computeRevisaoExtras = () => {
-    if (!selectedCard || !billKey) return { fantasmas: [], agendamentos: [], competencia: [] }
+    if (!selectedCard || !billKey) return { fantasmas: [], agendamentos: [] }
     const apelido = selectedCard.apelido || selectedCard.name?.slice(0, 6) || 'CC'
     const gerAccId = accounts.find(a => a.name === `Ger. ${apelido}`)?.id || null
 
@@ -270,20 +372,16 @@ export default function CreditCardPanel() {
       if (qtd === 0 || Math.abs((Number(s.amount) || 0) - soma) > 0.01)
         agendamentos.push({ tipo: 'gerencial_devolucao', fatura, esperado: Number(s.amount) || 0, soma, motivo: qtd === 0 ? 'sem_detalhamento' : 'divergencia' })
     }
-    const competencia = executarRegras(
-      { transactions, accounts, schedules, gerencialGroups },
-      { desde: null, regras: REGRAS_COMPETENCIA },
-    ).filter(d => d.conta_id === selectedCard.id || (gerAccId && d.conta_id === gerAccId))
-    return { fantasmas, agendamentos, competencia }
+    return { fantasmas, agendamentos }
   }
 
   const handleAbrirRevisar = async () => {
     if (!selectedCard || !billKey) return
-    setRevisarState({ loading: true, executando: false, preview: null, fantasmas: [], agendamentos: [], competencia: [] })
+    setRevisarState({ loading: true, executando: false, preview: null, fantasmas: [], agendamentos: [], previa: null })
     try {
       const preview = await revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: true })
-      const { fantasmas, agendamentos, competencia } = computeRevisaoExtras()
-      setRevisarState({ loading: false, executando: false, preview, fantasmas, agendamentos, competencia })
+      const { fantasmas, agendamentos } = computeRevisaoExtras()
+      setRevisarState({ loading: false, executando: false, preview, fantasmas, agendamentos, previa: null })
     } catch (e) {
       setRevisarState(null)
       setToast(`Erro ao revisar: ${e.message}`)
@@ -384,6 +482,76 @@ export default function CreditCardPanel() {
     () => accounts.find(a => a.id === selectedCardId) || creditCards[0] || null,
     [accounts, selectedCardId, creditCards]
   )
+
+  // ── Revisar › Competência fora do lugar ─────────────────────────────────────
+  // Gasto do cartão em fatura implausível e reserva gerencial (Ger. do cartão) com fatura divergente
+  // da origem ou duplicada em outra fatura — em QUALQUER fatura, não só na selecionada (o lote de
+  // 15/10/2026 gravado em 10/2024 ficava invisível na 10/2026). Calculado AO VIVO enquanto o modal
+  // está aberto: depois de uma correção a lista se refaz sozinha. Cada item traz a correção sugerida
+  // (lib/revisaoCompetencia). Ação manual do usuário: vale também para fatura fechada — o motor de
+  // integridade automático continua ignorando as fechadas.
+  const revisarAberto = !!revisarState && !revisarState.loading
+  const competenciaRevisao = useMemo(() => {
+    if (!revisarAberto || !selectedCard) return []
+    const apelido = selectedCard.apelido || selectedCard.name?.slice(0, 6) || 'CC'
+    const gerAccId = accounts.find(a => a.name === `Ger. ${apelido}`)?.id || null
+    return executarRegras(
+      { transactions, accounts, schedules, gerencialGroups },
+      { desde: null, regras: REGRAS_COMPETENCIA },
+    ).filter(d => d.conta_id === selectedCard.id || (gerAccId && d.conta_id === gerAccId))
+  }, [revisarAberto, selectedCard, transactions, accounts, schedules, gerencialGroups])
+  const planoCompetencia = useMemo(
+    () => (selectedCard && competenciaRevisao.length
+      ? planejarCorrecoesCompetencia({ divergencias: competenciaRevisao, transactions, card: selectedCard })
+      : { itens: [], resumo: null }),
+    [competenciaRevisao, transactions, selectedCard],
+  )
+  const itensCorrigiveis = planoCompetencia.itens.filter(it => ['excluir_duplicata', 'mover', 'excluir_reserva'].includes(it.tipo))
+
+  // Depois de corrigir, refaz as outras seções (engine da fatura, fantasmas, agendamentos) já com
+  // o estado novo — o effect roda depois do render, com transactions/schedules atualizados.
+  useEffect(() => {
+    if (!revisarState?.recarregar || !selectedCard || !billKey) return
+    let vivo = true
+    revisarMovimentosFatura({ cardId: selectedCard.id, faturaRef: faturaRefFromBillKey(), dryRun: true })
+      .then(preview => {
+        if (!vivo) return
+        const { fantasmas, agendamentos } = computeRevisaoExtras()
+        setRevisarState(st => (st ? { ...st, preview, fantasmas, agendamentos, recarregar: false } : st))
+      })
+      .catch(() => { if (vivo) setRevisarState(st => (st ? { ...st, recarregar: false } : st)) })
+    return () => { vivo = false }
+  }, [revisarState?.recarregar]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aplica as correções (um item ou "Corrigir todos", sempre depois da prévia). O histórico é
+  // gravado ANTES (origem revisao_automatica): se o registro falha, nada é alterado. As ações são
+  // as normais do app — deleteTransaction leva junto a etapa A do gasto e reverte saldos;
+  // updateTransaction move a fatura e refaz a reserva — e, no fim, reconciliarGerencial refaz os
+  // agendamentos de resgate/devolução das faturas afetadas e o saldo das subcontas Ger.
+  const aplicarCorrecoesCompetencia = async (itensAlvo) => {
+    if (!selectedCard || !itensAlvo?.length) return
+    setRevisarState(st => ({ ...st, executando: true }))
+    try {
+      const txById = new Map(transactions.map(t => [t.id, t]))
+      const loteId = novoLoteId()
+      const historico = linhasHistoricoRevisao(itensAlvo, txById, { loteId })
+      await registrarEdicao({ historico, loteId, motivo: 'Revisão automática do cartão' })
+      const { excluir, mover } = acoesDoPlano(itensAlvo)
+      for (const id of excluir) deleteTransaction(id)
+      for (const m of mover) updateTransaction(m.id, { faturaMonthYear: m.para })
+      const faturas = [...new Set(itensAlvo.flatMap(it => [it.fatura, it.faturaGasto, it.mover?.para]).filter(Boolean))]
+      await reconciliarGerencial(selectedCard.id, faturas)
+      const r = resumirPlano(itensAlvo, txById)
+      setRevisarState(st => (st ? { ...st, executando: false, previa: null, recarregar: true } : st))
+      const partes = []
+      if (r.excluidos.length) partes.push(`${r.excluidos.length} lançamento${r.excluidos.length !== 1 ? 's' : ''} excluído${r.excluidos.length !== 1 ? 's' : ''}`)
+      if (r.movidos.length) partes.push(`${r.movidos.length} movido${r.movidos.length !== 1 ? 's' : ''} de fatura`)
+      setToast(`✓ ${partes.join(', ')} · registrado no histórico`)
+    } catch (e) {
+      setRevisarState(st => (st ? { ...st, executando: false } : st))
+      setToast(`Erro ao corrigir: ${e.message}`)
+    }
+  }
 
   // Keep same month when switching cards (per spec)
   const handleCardChange = (cardId) => {
@@ -1158,11 +1326,21 @@ export default function CreditCardPanel() {
             <div className="py-10 text-center text-texto-2 text-sm">
               <RotateCcw size={20} className="animate-spin mx-auto mb-2" /> Analisando movimentos…
             </div>
+          ) : revisarState.previa ? (
+            <PreviaCorrecao
+              itens={revisarState.previa.itens}
+              transactions={transactions}
+              cardId={selectedCard?.id}
+              isFaturaFechada={isFaturaFechada}
+              busy={revisarState.executando}
+              onVoltar={() => setRevisarState(st => ({ ...st, previa: null }))}
+              onConfirmar={() => aplicarCorrecoesCompetencia(revisarState.previa.itens)}
+            />
           ) : (() => {
             const acoes = revisarState.preview?.acoes || []
             const fantasmas = revisarState.fantasmas || []
             const agendamentos = revisarState.agendamentos || []
-            const competencia = revisarState.competencia || []
+            const competencia = planoCompetencia.itens
             const busy = revisarState.executando
             if (acoes.length + fantasmas.length + agendamentos.length + competencia.length === 0) return (
               <div className="py-10 text-center">
@@ -1239,32 +1417,38 @@ export default function CreditCardPanel() {
                       <span className="text-xs text-texto-3">{competencia.length} item{competencia.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="space-y-2">
-                      {competencia.map(d => (
-                        <div key={`${d.regra}|${d.origem_id}`} className="flex items-start gap-3 rounded-lg p-3 bg-perigo-bg">
-                          <AlertTriangle size={16} className="text-perigo mt-0.5 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm text-texto-1">{d.descricao}</p>
-                            <p className="text-xs text-texto-3">
-                              {d.regra === 'COMPETENCIA_IMPLAUSIVEL' ? 'Gasto em fatura implausível'
-                                : d.regra === 'GER_RESERVA_FATURA_INCOERENTE' ? 'Reserva gerencial com fatura incoerente'
-                                : 'Reserva gerencial duplicada entre faturas'}
-                              {d.fatura_ref ? ` · Fatura ${d.fatura_ref}` : ''}
-                            </p>
-                          </div>
-                        </div>
+                      {competencia.map(it => (
+                        <ItemCompetencia
+                          key={it.chave}
+                          it={it}
+                          busy={busy}
+                          onCorrigir={() => setRevisarState(st => ({ ...st, previa: { itens: [it] } }))}
+                        />
                       ))}
                     </div>
-                    <p className="text-xs text-texto-3">Corrija a fatura ou exclua os lançamentos errados — esta revisão não os altera.</p>
+                    <p className="text-xs text-texto-3">
+                      As correções passam por uma prévia e ficam registradas no histórico de alterações
+                      (origem: revisão automática). Valem também para fatura fechada.
+                    </p>
                   </section>
                 )}
               </div>
             )
           })()}
-          {!revisarState.loading && (
+          {!revisarState.loading && !revisarState.previa && (
             <div className="flex gap-2 pt-4 mt-4 border-t border-borda">
               <button className="btn-secondary flex-1" onClick={() => setRevisarState(null)} disabled={revisarState.executando}>
                 Fechar
               </button>
+              {itensCorrigiveis.length > 0 && (
+                <button
+                  className="btn-danger flex-1"
+                  onClick={() => setRevisarState(st => ({ ...st, previa: { itens: itensCorrigiveis } }))}
+                  disabled={revisarState.executando}
+                >
+                  Corrigir todos ({itensCorrigiveis.length})
+                </button>
+              )}
             </div>
           )}
         </Modal>

@@ -4,10 +4,12 @@ import { query } from './_db.js'
 // em série ou em massa). Uma linha por campo e por item; `lote_id` agrupa as linhas de uma mesma
 // edição. Gravado SEMPRE na mesma transação da alteração. O motor (recálculo de fatura,
 // reconciliação), o sync e qualquer automação NÃO gravam aqui — só os endpoints de edição do
-// usuário chamam inserirHistorico.
+// usuário chamam inserirHistorico. `origem` diz de onde veio a ação do usuário: null = edição
+// comum; 'revisao_automatica' = correção disparada no "Revisar Movimentos Automáticos".
 
 export const ENTIDADES = ['agendamento', 'lancamento']
 export const ESCOPOS = ['parcela', 'proximas', 'serie']
+export const ORIGENS = ['revisao_automatica']
 
 export const DDL_HISTORICO = [
   `CREATE TABLE IF NOT EXISTS historico_alteracoes (
@@ -27,6 +29,7 @@ export const DDL_HISTORICO = [
   'CREATE INDEX IF NOT EXISTS idx_historico_entidade ON historico_alteracoes (entidade, entidade_id)',
   'CREATE INDEX IF NOT EXISTS idx_historico_serie ON historico_alteracoes (serie_key)',
   'CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id)',
+  'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS origem TEXT',
 ]
 
 let pronto = false
@@ -49,6 +52,8 @@ export function normalizarLinhaHistorico(l, { loteId, motivo } = {}) {
   if (!campo) return { erro: 'campo é obrigatório' }
   if (!entidadeId) return { erro: 'entidade_id é obrigatório' }
   if (!lote) return { erro: 'lote_id é obrigatório' }
+  const origem = l?.origem == null || l.origem === '' ? null : String(l.origem)
+  if (origem && !ORIGENS.includes(origem)) return { erro: `origem inválida: ${origem}` }
   const m = l?.motivo ?? motivo
   return {
     linha: {
@@ -59,11 +64,12 @@ export function normalizarLinhaHistorico(l, { loteId, motivo } = {}) {
       valor_anterior: l?.valor_anterior === undefined ? null : l.valor_anterior,
       valor_novo: l?.valor_novo === undefined ? null : l.valor_novo,
       motivo: m ? String(m).trim().slice(0, 500) || null : null,
+      origem,
     },
   }
 }
 
-const COLS = ['entidade', 'entidade_id', 'ocorrencia_data', 'serie_key', 'lote_id', 'escopo', 'campo', 'valor_anterior', 'valor_novo', 'motivo']
+const COLS = ['entidade', 'entidade_id', 'ocorrencia_data', 'serie_key', 'lote_id', 'escopo', 'campo', 'valor_anterior', 'valor_novo', 'motivo', 'origem']
 
 // INSERT das linhas (já normalizadas) com o `q` da transação de quem chama. Devolve quantas.
 export async function inserirHistorico(q, linhas) {
@@ -80,4 +86,4 @@ export async function inserirHistorico(q, linhas) {
   return linhas.length
 }
 
-export const SQL_HISTORICO_COLS = 'id, entidade, entidade_id, ocorrencia_data, serie_key, lote_id, escopo, campo, valor_anterior, valor_novo, motivo, created_at'
+export const SQL_HISTORICO_COLS = 'id, entidade, entidade_id, ocorrencia_data, serie_key, lote_id, escopo, campo, valor_anterior, valor_novo, motivo, origem, created_at'
