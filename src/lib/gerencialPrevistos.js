@@ -189,3 +189,56 @@ export function projecoesEtapaA({
   }
   return out
 }
+
+// Soma a etapa A prevista POR FORA do breakdown do Saldo Principal (calcularSaldoPrincipalBreakdown
+// é protegida e não conhece a projeção). Mesma regra de agendamento do breakdown: ocorrência no
+// ciclo [cycleStart, fim] com ponta no pool, pelo líquido (destino no pool ? +v : 0) − (origem no
+// pool ? v : 0). O pool é o que o próprio breakdown devolveu (saldoAtual.contas). Os itens entram na
+// lista do Final Ciclo para o modal "Como chegamos aqui" continuar fechando com o total.
+export function somarEtapaAPrevistaNoSaldoPrincipal(b, previstas = []) {
+  if (!b || !previstas?.length) return b
+  const poolIds = new Set((b.saldoAtual?.contas || []).map(c => c.id))
+  if (poolIds.size === 0) return b
+  const rb = (v) => Math.round(v * 100) / 100
+  const itensAte = (fim) => {
+    const itens = []
+    for (const p of previstas) {
+      if (!p?.date || p.date < b.cycleStart || p.date > fim) continue
+      const v = (poolIds.has(p.toAccountId) ? p.amount : 0) - (poolIds.has(p.fromAccountId) ? p.amount : 0)
+      if (v === 0) continue
+      itens.push({ description: p.description, amount: rb(v), date: p.date, scheduleId: p.scheduleId, _etapaAPrevista: true })
+    }
+    const porAgendamento = new Map()
+    for (const it of itens) porAgendamento.set(it.scheduleId, [...(porAgendamento.get(it.scheduleId) || []), it])
+    for (const lista of porAgendamento.values()) {
+      lista.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
+      lista.forEach((it, i) => { it.occurrenceNumber = i + 1; it.totalOccurrences = lista.length })
+    }
+    return { itens, total: rb(itens.reduce((s, it) => s + it.amount, 0)) }
+  }
+  const ordenar = (lista) => [...lista].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))
+  const ciclo = itensAte(b.cycleEnd)
+  const out = { ...b }
+  if (ciclo.itens.length) {
+    const finalCiclo = rb(b.finalCiclo.total + ciclo.total)
+    out.finalCiclo = {
+      ...b.finalCiclo,
+      agendamentos: ordenar([...b.finalCiclo.agendamentos, ...ciclo.itens]),
+      agendamentosTotal: rb(b.finalCiclo.agendamentosTotal + ciclo.total),
+      total: finalCiclo,
+    }
+    out.projetado = { ...b.projetado, finalCiclo, total: rb(b.projetado.total + ciclo.total) }
+  }
+  if (b.finalCalendario && b.calendarEnd) {
+    const cal = itensAte(b.calendarEnd)
+    if (cal.itens.length) {
+      out.finalCalendario = {
+        ...b.finalCalendario,
+        agendamentos: ordenar([...b.finalCalendario.agendamentos, ...cal.itens]),
+        agendamentosTotal: rb(b.finalCalendario.agendamentosTotal + cal.total),
+        total: rb(b.finalCalendario.total + cal.total),
+      }
+    }
+  }
+  return out
+}

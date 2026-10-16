@@ -68,7 +68,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipalBreakdown, dbStatus, creditUsage } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipal, etapaAPrevistas, dbStatus, creditUsage } = useApp()
   const accounts = profileAccounts
   // Enquanto a API não respondeu, os valores exibidos vêm do cache local (sessão anterior) e
   // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.
@@ -122,10 +122,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').reduce((s, a) => s + (a.balance || 0), 0)
 
   // Valor "Projetado" reutilizado do modal "Como chegamos aqui"
-  // (getSaldoPrincipalBreakdown().projetado.total), que já desconta os envelopes restantes.
-  const projetadoModal = useMemo(() => getSaldoPrincipalBreakdown()?.projetado?.total ?? null, [getSaldoPrincipalBreakdown])
-  // Valor "Final Ciclo" reutilizado do mesmo modal (getSaldoPrincipalBreakdown().finalCiclo.total).
-  const finalCicloModal = useMemo(() => getSaldoPrincipalBreakdown()?.finalCiclo?.total ?? null, [getSaldoPrincipalBreakdown])
+  // (getSaldoPrincipal().projetado.total), que já desconta os envelopes restantes.
+  const projetadoModal = useMemo(() => getSaldoPrincipal()?.projetado?.total ?? null, [getSaldoPrincipal])
+  // Valor "Final Ciclo" reutilizado do mesmo modal (getSaldoPrincipal().finalCiclo.total).
+  const finalCicloModal = useMemo(() => getSaldoPrincipal()?.finalCiclo?.total ?? null, [getSaldoPrincipal])
 
   // Saldos do ciclo exibidos no card abaixo do Principal (Final Ciclo · Projetado · Atual Cal.
   // · Final Cal.). Atual Cal./Final Cal. sempre visíveis no modo custom — mesmo quando coincidem
@@ -233,6 +233,17 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       }
     }
 
+    // Etapa A prevista do Grupo G — a mesma que getSaldoPrincipal soma no Projetado.
+    for (const p of etapaAPrevistas || []) {
+      if (p.date <= todayStr || p.date > periodStr.end) continue
+      const fromPrincipal = principalIds.has(p.fromAccountId)
+      const toPrincipal = principalIds.has(p.toAccountId)
+      if (fromPrincipal === toPrincipal) continue
+      if (fromPrincipal) pendingExpense += p.amount
+      else pendingIncome += p.amount
+      pendingCount++
+    }
+
     // Future registered transactions (date > today, ≤ end of period) — used for saldoFinal
     let futureDelta = 0
     for (const tx of transactions) {
@@ -257,7 +268,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       pendingCount,
       futureDelta,
     }
-  }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal])
+  }, [accounts, schedules, transactions, getNextOccurrences, periodStr.end, saldoPrincipal, etapaAPrevistas])
 
   const today = hojeStr()
 

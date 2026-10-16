@@ -7,7 +7,6 @@ import {
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
-import { projecoesEtapaA } from '../../lib/gerencialPrevistos'
 import { montarLinhasSimuladas, patchAplicarData, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from '../../lib/fluxoCaixaDatas'
 import {
   HORIZONTES, rotuloModo, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
@@ -90,7 +89,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado, categories, gerencialGroups,
+    toggleScheduleConfirmado, categories, projetarEtapaA,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
@@ -248,7 +247,7 @@ export default function CashFlowPanel({ setActivePage }) {
     const agds = consulta.incluir_agendamentos ? schedulesFluxo : []
     // includeSchedules fica sempre true (ele também liga os envelopes); "sem agendamentos" é a
     // lista vazia, para os envelopes seguirem a opção própria.
-    const etapaAPrevistas = projecoesEtapaA({ schedules: agds, transactions, accounts, gerencialGroups, getOccurrences: getNextOccurrences })
+    const etapaAPrevistas = projetarEtapaA(agds)
     const r = computeFluxoCaixa({
       ...comum, start: hoje, end: fim, transactions, schedules: agds, etapaAPrevistas,
       envelopes: incluirEnvelopes ? envelopes : [], provisorios,
@@ -264,7 +263,7 @@ export default function CashFlowPanel({ setActivePage }) {
       atraso: anotarLinhasProvisorias(a, dpPorChave, scheduleById, occEfetiva),
     }
   }, [accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
-    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, accounts, gerencialGroups])
+    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA])
 
   const { atrasoTotal, atrasoAtivas, base } = useMemo(() => {
     const { total, ativas } = totalEmAtraso(atraso, excluidas)

@@ -68,8 +68,8 @@ function Section({ title, children, primeira = false }) {
 }
 
 export default function SaldoPrincipalBreakdownModal({ compacto = false, oculto = false }) {
-  const { getSaldoPrincipalBreakdown, accounts } = useApp()
-  const b = getSaldoPrincipalBreakdown()
+  const { getSaldoPrincipal, accounts } = useApp()
+  const b = getSaldoPrincipal()
   // Contas completas por id, para o selo de perfil de cada linha do Saldo base.
   const contaPorId = new Map((accounts || []).map(a => [a.id, a]))
   const semContasFC = (b.saldoAtual.contas?.length ?? 0) === 0

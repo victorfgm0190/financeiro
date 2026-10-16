@@ -116,15 +116,15 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 
 // Card verde = card "Saldo Principal" + KPIs do Painel desktop, com os mesmos nomes e fontes:
 // Principal (saldosPrincipais), Final Ciclo · Projetado · Atual Cal. · Final Cal. (o MESMO retorno
-// de getSaldoPrincipalBreakdown() que o card do desktop lê, com o perfil ativo), Receitas/Despesas
+// de getSaldoPrincipal() que o card do desktop lê, com o perfil ativo), Receitas/Despesas
 // do Mês (totaisDoPeriodo) e Saldo Total (saldoTotalContas). Tocar abre o "Como chegamos aqui".
 function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }) {
-  const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod, getSaldoPrincipalBreakdown } = useApp()
+  const { profileAccounts, profileReportTransactions, reserveFunctions, getFinancialPeriod, getSaldoPrincipal } = useApp()
   // Mesma classificação e período dos KPIs "Receitas do Mês"/"Despesas do Mês" do Painel.
   const cls = useMemo(() => criarClassificadores(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
   const periodo = getFinancialPeriod()
   const { income, expense } = totaisDoPeriodo(profileReportTransactions, periodoStr(periodo), cls)
-  const b = useMemo(() => getSaldoPrincipalBreakdown(), [getSaldoPrincipalBreakdown])
+  const b = useMemo(() => getSaldoPrincipal(), [getSaldoPrincipal])
   const ddmm = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
   // Mesmas linhas e regras do card do desktop (DashboardPanel cicloRows): Atual Cal./Final Cal.
   // só no modo custom.

@@ -94,16 +94,16 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipalBreakdown, data, syncError, dismissSyncError } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError } = useApp()
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
 
   // Saldos principais (sidebar/header/hero do Dashboard): os 5 saldos do ciclo derivados da
-  // MESMA fonte de verdade do card "Saldo Principal" (getSaldoPrincipalBreakdown). Assim o
+  // MESMA fonte de verdade do card "Saldo Principal" (getSaldoPrincipal). Assim o
   // header exibe exatamente os mesmos valores que o card — sem engine paralela/legada.
   const saldosPrincipais = useMemo(() => {
-    const b = getSaldoPrincipalBreakdown()
+    const b = getSaldoPrincipal()
     const isCustom = b.mode === 'custom'
     return {
       saldoAtual: b.saldoAtual.total,
@@ -115,7 +115,7 @@ function AppContent() {
       // Pool vazio (perfil sem conta FC): os cards explicam em vez de mostrar R$ 0,00 seco.
       semContasFC: (b.saldoAtual.contas?.length ?? 0) === 0,
     }
-  }, [getSaldoPrincipalBreakdown])
+  }, [getSaldoPrincipal])
   const saldoPrincipal = saldosPrincipais.saldoAtual
 
   const alertCount = useMemo(() => {

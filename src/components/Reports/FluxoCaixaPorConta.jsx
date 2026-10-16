@@ -55,7 +55,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao } = useApp()
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -211,6 +211,7 @@ export default function FluxoCaixaPorConta() {
     const r = computeFluxoCaixa({
       accountIds, currentBalance, start, end,
       transactions, schedules: schedulesRelatorio, envelopes, reserveFunctions, provisorios,
+      etapaAPrevistas: projetarEtapaA(schedulesRelatorio),
       getNextOccurrences, includeSchedules,
       hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
     })
@@ -219,7 +220,7 @@ export default function FluxoCaixaPorConta() {
       saldoAnteriorRealizado: r.saldoAnteriorRealizado,
       saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
     }
-  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios])
+  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios, projetarEtapaA])
 
   // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
   // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move

@@ -36,7 +36,7 @@ import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas } from '../lib/autoRegistro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
-import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao } from '../lib/gerencialPrevistos'
+import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
@@ -2920,6 +2920,16 @@ export function AppProvider({ children }) {
     [coberturaCartao],
   )
 
+  // Etapa A PREVISTA do Grupo G (só em memória): a MESMA lista para Fluxo de Caixa Futuro, relatório
+  // Fluxo de Caixa por Conta e Saldo Principal do Painel. Quem tem datas provisórias passa os
+  // próprios agendamentos; contas/lançamentos são sempre os globais (a conta principal e a
+  // tx_gerA_ real não dependem do perfil — o perfil entra pelos agendamentos e pelo pool).
+  const projetarEtapaA = useCallback((schedules) => projecoesEtapaA({
+    schedules, transactions: data.transactions, accounts: data.accounts,
+    gerencialGroups: data.gerencialGroups, getOccurrences: getOccurrencesProjecao,
+  }), [data.transactions, data.accounts, data.gerencialGroups, getOccurrencesProjecao])
+  const etapaAPrevistas = useMemo(() => projetarEtapaA(profileSchedules), [projetarEtapaA, profileSchedules])
+
   // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
   // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
   // provisão "Uma vez" devolve a própria startDate (a única ocorrência). Devolve null quando
@@ -3066,7 +3076,7 @@ export function AppProvider({ children }) {
       accountIds, currentBalance, start, end,
       transactions: data.transactions, schedules: data.schedules,
       envelopes: data.envelopes, reserveFunctions: data.reserveFunctions,
-      getNextOccurrences, includeSchedules: true,
+      getNextOccurrences, includeSchedules: true, etapaAPrevistas,
     })
     return {
       saldoAnterior: r.saldoAnterior,
@@ -3074,7 +3084,7 @@ export function AppProvider({ children }) {
       saldoFinalCiclo: r.saldoFinalSemEnvelopes, // sem subtrair envelopes
       envelopesTotal: r.envelopesTotal,
     }
-  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod])
+  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod, etapaAPrevistas])
 
   // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal. ⚠ PROTEGIDA: o cálculo mora
   // em calcularSaldoPrincipalBreakdown (src/lib/saldoPrincipal.js); este wrapper só repassa os dados.
@@ -3083,6 +3093,12 @@ export function AppProvider({ children }) {
     envelopes: data.envelopes, settings: data.settings, gerencialGroups: data.gerencialGroups,
     profileId: activeProfileId, getNextOccurrences, getFinancialPeriod,
   }, referenceDate), [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod])
+
+  // Saldo Principal exibido no Painel: o breakdown protegido + a etapa A prevista, somada POR FORA.
+  const getSaldoPrincipal = useCallback(
+    (referenceDate = new Date()) => somarEtapaAPrevistaNoSaldoPrincipal(getSaldoPrincipalBreakdown(referenceDate), etapaAPrevistas),
+    [getSaldoPrincipalBreakdown, etapaAPrevistas],
+  )
 
   // ── Classification ───────────────────────────────────────────────────────────
   const classifyByRules = useCallback((description, { dayOfMonth = null, amountApprox = null } = {}) => {
@@ -5420,6 +5436,9 @@ export function AppProvider({ children }) {
       getAccountSaldos,
       getFluxoCaixaPrincipal,
       getSaldoPrincipalBreakdown,
+      getSaldoPrincipal,
+      projetarEtapaA,
+      etapaAPrevistas,
       getNextOccurrences,
       getOccurrencesProjecao,
       coberturaCartao,

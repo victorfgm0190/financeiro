@@ -263,3 +263,32 @@ describe('projecoesEtapaA — caso real BARBEARIA / CABELOS (Itaupers)', () => {
     expect(p.some(x => x.date === '2026-10-25')).toBe(false)
   })
 })
+
+import { somarEtapaAPrevistaNoSaldoPrincipal } from './gerencialPrevistos'
+
+describe('somarEtapaAPrevistaNoSaldoPrincipal — por fora do breakdown protegido', () => {
+  const b = {
+    cycleStart: '2026-10-01', cycleEnd: '2026-10-31', calendarEnd: '2026-11-30',
+    saldoAtual: { contas: [{ id: 'cc' }], total: 1000 },
+    finalCiclo: { saldoAtual: 1000, agendamentos: [{ description: 'Luz', amount: -50, date: '2026-10-20' }], agendamentosTotal: -50, total: 950 },
+    projetado: { finalCiclo: 950, envelopes: [], envelopesTotal: 30, total: 920 },
+    finalCalendario: { atualCalendario: 1000, agendamentos: [], agendamentosTotal: -50, total: 950 },
+  }
+  const prev = (date, extra = {}) => ({ id: `schgerA:s@${date}`, scheduleId: 's', date, amount: 120, fromAccountId: 'cc', toAccountId: 'ger', description: 'Ger. X — Y', ...extra })
+
+  it('desconta só as do ciclo do Final Ciclo/Projetado e as até o fim do mês no Final Cal.', () => {
+    const r = somarEtapaAPrevistaNoSaldoPrincipal(b, [prev('2026-09-30'), prev('2026-10-17'), prev('2026-10-31'), prev('2026-11-14')])
+    expect(r.finalCiclo.total).toBe(710)
+    expect(r.projetado).toMatchObject({ finalCiclo: 710, total: 680 })
+    expect(r.finalCalendario.total).toBe(590)
+    expect(r.finalCiclo.agendamentos.map(i => i.date)).toEqual(['2026-10-17', '2026-10-20', '2026-10-31'])
+    expect(r.finalCiclo.agendamentos[0]).toMatchObject({ amount: -120, occurrenceNumber: 1, totalOccurrences: 2 })
+    expect(b.finalCiclo.total).toBe(950) // não muta o breakdown
+  })
+
+  it('subconta Ger. no pool → transferência interna, sem efeito; sem previstas → mesmo objeto', () => {
+    const comGer = { ...b, saldoAtual: { ...b.saldoAtual, contas: [{ id: 'cc' }, { id: 'ger' }] } }
+    expect(somarEtapaAPrevistaNoSaldoPrincipal(comGer, [prev('2026-10-17')]).finalCiclo.total).toBe(950)
+    expect(somarEtapaAPrevistaNoSaldoPrincipal(b, [])).toBe(b)
+  })
+})
