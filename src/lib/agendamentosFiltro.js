@@ -172,9 +172,22 @@ export function contarFiltrosAvancados({ desc = '', payee = '', categoryId = '',
   ].filter(Boolean).length
 }
 
-// Último status e período por aba (localStorage, com try/catch: storage pode faltar).
-// Formato: { [aba]: { status, periodos: { [status]: periodo } } }. "Personalizado" não volta
-// (as datas não são guardadas): restaura o padrão do status.
+// Filtros avançados de uma aba (independentes por aba). tipos/valores são arrays no estado
+// guardado (Set não serializa); a tela converte para Set.
+export const AVANCADOS_VAZIOS = { desc: '', payee: '', cat: '', min: '', max: '', tipos: [], valores: [] }
+const str = (v) => (typeof v === 'string' ? v : '')
+const arr = (v) => (Array.isArray(v) ? v : [])
+export function avancadosValidos(v) {
+  return {
+    desc: str(v?.desc), payee: str(v?.payee), cat: str(v?.cat), min: str(v?.min), max: str(v?.max),
+    tipos: arr(v?.tipos).filter(x => typeof x === 'string'),
+    valores: arr(v?.valores).map(Number).filter(Number.isFinite),
+  }
+}
+
+// Estado de uma aba guardado no localStorage (com try/catch: storage pode faltar).
+// Formato: { [aba]: { status, periodos: { [status]: periodo }, avancados } }. "Personalizado" e as
+// datas De/Até não voltam: restaura o período padrão do status.
 export const FILTROS_AGENDA_KEY = 'finup.agendamentos.filtros.v1'
 export function lerFiltrosAba(aba, raw) {
   const statusValidos = STATUS_POR_ABA[aba] || ['apagar']
@@ -187,12 +200,34 @@ export function lerFiltrosAba(aba, raw) {
     const p = salvo?.periodos?.[st]
     periodos[st] = p && p !== 'custom' && opcoesPeriodo(st).includes(p) ? p : periodoPadrao(st)
   }
-  return { status, periodos }
+  return { status, periodos, avancados: avancadosValidos(salvo?.avancados), datas: { from: '', to: '' } }
 }
-export function salvarFiltrosAba(aba, valor) {
+export function salvarFiltrosAba(aba, { status, periodos, avancados }) {
   try {
     const todos = JSON.parse(localStorage.getItem(FILTROS_AGENDA_KEY) || '{}') || {}
-    todos[aba] = valor
+    todos[aba] = { status, periodos, avancados }
     localStorage.setItem(FILTROS_AGENDA_KEY, JSON.stringify(todos))
   } catch { /* storage indisponível: só não lembra */ }
+}
+
+// Etiquetas removíveis dos filtros ativos (aparecem sob a barra mesmo com o painel recolhido).
+// → [{ chave, texto }]; a tela remove pela chave ('desc' | 'payee' | 'cat' | 'tipos' | 'valor' | 'datas').
+export function etiquetasFiltros({ avancados, datas, periodo }, { nomeCategoria = (id) => id, nomeTipo = (id) => id, fmtValor = String, fmtData = String } = {}) {
+  const a = avancados || AVANCADOS_VAZIOS
+  const out = []
+  if (periodo === 'custom' && (datas?.from || datas?.to)) {
+    out.push({ chave: 'datas', texto: `Período: ${datas.from ? fmtData(datas.from) : '…'} – ${datas.to ? fmtData(datas.to) : '…'}` })
+  }
+  if (a.desc.trim()) out.push({ chave: 'desc', texto: `Descrição: ${a.desc.trim()}` })
+  if (a.payee.trim()) out.push({ chave: 'payee', texto: `Favorecido: ${a.payee.trim()}` })
+  if (a.cat) out.push({ chave: 'cat', texto: `Categoria: ${nomeCategoria(a.cat)}` })
+  if (a.tipos.length) out.push({ chave: 'tipos', texto: `Tipo: ${a.tipos.map(nomeTipo).join(', ')}` })
+  const faixa = a.min !== '' || a.max !== ''
+  if (faixa || a.valores.length) {
+    const partes = []
+    if (faixa) partes.push(a.min !== '' && a.max !== '' ? `${fmtValor(a.min)} a ${fmtValor(a.max)}` : a.min !== '' ? `≥ ${fmtValor(a.min)}` : `≤ ${fmtValor(a.max)}`)
+    if (a.valores.length) partes.push(a.valores.length === 1 ? fmtValor(a.valores[0]) : `${a.valores.length} valores`)
+    out.push({ chave: 'valor', texto: `Valor: ${partes.join(' · ')}` })
+  }
+  return out
 }

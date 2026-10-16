@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, opcoesPeriodo, periodoPadrao, contarFiltrosAvancados, lerFiltrosAba } from './agendamentosFiltro'
+import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, opcoesPeriodo, periodoPadrao, contarFiltrosAvancados, lerFiltrosAba, etiquetasFiltros, AVANCADOS_VAZIOS } from './agendamentosFiltro'
 
 // getNextOccurrences simplificado: devolve a(s) próxima(s) data(s) ORIGINAL(is) declaradas no fixture.
 const getNext = (s, n = 1) => (s._next || []).slice(0, n)
@@ -118,10 +118,30 @@ describe('FilterBar — status × período (substitui os chips sem perder combin
     expect(contarFiltrosAvancados({ desc: 'x', payee: ' ', categoryId: 'c', tipos: new Set(['CC']), min: '10' })).toBe(4)
     expect(contarFiltrosAvancados({ valores: new Set([1]) })).toBe(1)
   })
-  it('persistência por aba: restaura status/período; Personalizado e valores inválidos voltam ao padrão', () => {
-    const raw = JSON.stringify({ conta: { status: 'pagos', periodos: { apagar: 'next30', provisoes: 'custom', pagos: 'tudo' } }, anuais: { status: 'xx' } })
-    expect(lerFiltrosAba('conta', raw)).toEqual({ status: 'pagos', periodos: { apagar: 'next30', provisoes: 'futuros', pagos: 'tudo' } })
-    expect(lerFiltrosAba('anuais', raw)).toEqual({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes', resgates: 'tudo' } })
-    expect(lerFiltrosAba('cartao', 'lixo{')).toEqual({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes' } })
+  it('persistência por aba: restaura status/período/filtros avançados; Personalizado, datas e lixo voltam ao padrão', () => {
+    const raw = JSON.stringify({
+      conta: { status: 'pagos', periodos: { apagar: 'next30', provisoes: 'custom', pagos: 'tudo' }, avancados: { desc: 'TV', tipos: ['CC'], valores: ['150', 'x'], min: 10 } },
+      anuais: { status: 'xx' },
+    })
+    expect(lerFiltrosAba('conta', raw)).toEqual({
+      status: 'pagos', periodos: { apagar: 'next30', provisoes: 'futuros', pagos: 'tudo' },
+      avancados: { desc: 'TV', payee: '', cat: '', min: '', max: '', tipos: ['CC'], valores: [150] },
+      datas: { from: '', to: '' },
+    })
+    expect(lerFiltrosAba('anuais', raw)).toMatchObject({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes', resgates: 'tudo' }, avancados: AVANCADOS_VAZIOS })
+    expect(lerFiltrosAba('cartao', 'lixo{')).toMatchObject({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes' } })
+  })
+  it('etiquetas dos filtros ativos (removíveis pela chave)', () => {
+    const av = { ...AVANCADOS_VAZIOS, desc: ' TV ', cat: 'c1', tipos: ['CC', 'RES'], min: '10', valores: [150] }
+    const et = etiquetasFiltros({ avancados: av, datas: { from: '2026-10-01', to: '' }, periodo: 'custom' }, { nomeCategoria: () => 'Saúde' })
+    expect(et.map(e => [e.chave, e.texto])).toEqual([
+      ['datas', 'Período: 2026-10-01 – …'],
+      ['desc', 'Descrição: TV'],
+      ['cat', 'Categoria: Saúde'],
+      ['tipos', 'Tipo: CC, RES'],
+      ['valor', 'Valor: ≥ 10 · 150'],
+    ])
+    // datas só contam no Personalizado
+    expect(etiquetasFiltros({ avancados: AVANCADOS_VAZIOS, datas: { from: '2026-10-01' }, periodo: 'mes' })).toEqual([])
   })
 })

@@ -15,7 +15,7 @@ import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
-import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba } from '../../lib/agendamentosFiltro'
+import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
 import FilterBar from './FilterBar'
 import Modal from '../shared/Modal'
@@ -1695,7 +1695,7 @@ const SELECTION_GROUP_META = {
 }
 const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true }) {
+function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null }) {
   const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
@@ -1901,9 +1901,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     cols,
   }
 
-  // Celular: abas Pendentes | Atrasados | Pagos agrupadas por semana (AgendaMobile). Tocar num
-  // item abre a linha da tabela com todas as ações de sempre. No modo de seleção (ações em
-  // massa) volta para a tabela abaixo.
+  // Celular: lista por semana (AgendaMobile) — o status (A pagar/Provisões/Pagos) vem da barra do
+  // topo; com `pagosLinhas` mostra os pagos. Tocar num item abre a linha da tabela com todas as
+  // ações de sempre. No modo de seleção (ações em massa) volta para a tabela abaixo.
   if (isMobile && !selectionMode) {
     return (
       <>
@@ -1913,6 +1913,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           getNextOccurrences={getNextOccurrences}
           today={today}
           onSelecionar={selectableRows.length > 0 ? () => setSelectionMode(true) : null}
+          pagosLinhas={pagosLinhas}
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
             <table className="w-full text-sm">
               <tbody>
@@ -2439,6 +2440,7 @@ export default function SchedulePanel() {
   const faturasProvisao = useMemo(() => getFaturasProvisaoGerencial(), [getFaturasProvisaoGerencial])
   const [showExecutarGer, setShowExecutarGer] = useState(false)
 
+  const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState('conta')
   // Status e período POR ABA (FilterBar), lembrados no localStorage (lib/agendamentosFiltro).
   const [filtrosPorAba, setFiltrosPorAba] = useState(
@@ -2478,21 +2480,47 @@ export default function SchedulePanel() {
   // FAB mobile: abre o formulário de novo agendamento.
   useRegisterFab(() => { setEditSchedule(null); setShowForm(true) }, [])
 
-  // Filtros em tempo real (aba Agendamentos)
-  const [fltFrom, setFltFrom] = useState('')
-  const [fltTo, setFltTo] = useState('')
-  const [fltDesc, setFltDesc] = useState('')
-  const [fltPayee, setFltPayee] = useState('')
-  const [fltCat, setFltCat] = useState('')
-  const [fltMin, setFltMin] = useState('')
-  const [fltMax, setFltMax] = useState('')
+  // Filtros avançados e datas De/Até: POR ABA (independentes), dentro de filtrosPorAba; os
+  // avançados vão para o localStorage junto com status e período (lib/agendamentosFiltro).
+  const fAba = filtrosPorAba[activeTab]
+  const av = fAba.avancados
+  const setAvancado = (campo, valor) => atualizarFiltrosAba(f => ({ ...f, avancados: { ...f.avancados, [campo]: valor } }))
+  const setData = (campo, valor) => atualizarFiltrosAba(f => ({ ...f, datas: { ...f.datas, [campo]: valor } }))
+  const fltFrom = fAba.datas.from
+  const fltTo = fAba.datas.to
+  const setFltFrom = (v) => setData('from', v)
+  const setFltTo = (v) => setData('to', v)
+  const { desc: fltDesc, payee: fltPayee, cat: fltCat, min: fltMin, max: fltMax } = av
+  const setFltDesc = (v) => setAvancado('desc', v)
+  const setFltPayee = (v) => setAvancado('payee', v)
+  const setFltCat = (v) => setAvancado('cat', v)
+  const setFltMin = (v) => setAvancado('min', v)
+  const setFltMax = (v) => setAvancado('max', v)
   // Filtro de valor (multiselect) — valores reais dos agendamentos visíveis.
-  const [selValores, setSelValores] = useState(() => new Set())
+  const selValores = useMemo(() => new Set(av.valores), [av.valores])
+  const setSelValores = (set) => setAvancado('valores', [...set])
   // Multi-select de tipo de documento (chaves de chaveFiltroTipo; SEM_TIPO = "Sem tipo").
-  const [selTipos, setSelTipos] = useState(() => new Set())
+  const selTipos = useMemo(() => new Set(av.tipos), [av.tipos])
+  const setSelTipos = (set) => setAvancado('tipos', [...set])
   const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0 || selTipos.size > 0
-  const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax(''); setSelValores(new Set()); setSelTipos(new Set()) }
+  const clearFilters = () => atualizarFiltrosAba(f => ({ ...f, avancados: AVANCADOS_VAZIOS, datas: { from: '', to: '' } }))
   const filtrosAvancadosAtivos = contarFiltrosAvancados({ desc: fltDesc, payee: fltPayee, categoryId: fltCat, tipos: selTipos, min: fltMin, max: fltMax, valores: selValores })
+  // Etiquetas removíveis dos filtros ativos — sob a barra, mesmo com o painel recolhido.
+  const etiquetas = etiquetasFiltros(
+    { avancados: av, datas: fAba.datas, periodo: fAba.periodos[fAba.status] },
+    {
+      nomeCategoria: (id) => { const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : id },
+      nomeTipo: (k) => (k === SEM_TIPO ? 'Sem tipo' : tiposDocumento.find(t => t.id === k)?.sigla || k),
+      fmtValor: (v) => fmt(Number(v)),
+      fmtData: (d) => fmtDate(d),
+    },
+  )
+  const removerEtiqueta = (chave) => {
+    if (chave === 'datas') escolherPeriodo(periodoPadrao(statusAtual))
+    else if (chave === 'valor') atualizarFiltrosAba(f => ({ ...f, avancados: { ...f.avancados, min: '', max: '', valores: [] } }))
+    else if (chave === 'tipos') setSelTipos(new Set())
+    else setAvancado(chave, '')
+  }
 
   const escolherStatus = (id) => {
     if (id !== 'resgates') setSelContas(new Set())
@@ -2513,7 +2541,6 @@ export default function SchedulePanel() {
   const trocarAba = (aba) => {
     setActiveTab(aba)
     setSelContas(new Set())
-    if (filtrosPorAba[aba].periodos[filtrosPorAba[aba].status] !== 'custom') { setFltFrom(''); setFltTo('') }
   }
   // Datas De/Até efetivas: só no Personalizado.
   const dataDe = periodoAtual === 'custom' ? fltFrom : ''
@@ -2951,13 +2978,30 @@ export default function SchedulePanel() {
                 <Eye size={11} /> {showZeroed ? 'Ocultar zerados' : 'Mostrar zerados'}
               </button>
               {hasActiveFilter && (
-                <button onClick={() => { clearFilters(); if (periodoAtual === 'custom') escolherPeriodo(opcoesPeriodo(statusAtual).includes('futuros') ? 'futuros' : 'mes') }} className="flex items-center gap-1 text-xs text-texto-3 hover:text-texto-2 transition-colors">
+                <button onClick={() => { clearFilters(); if (periodoAtual === 'custom') escolherPeriodo(periodoPadrao(statusAtual)) }} className="flex items-center gap-1 text-xs text-texto-3 hover:text-texto-2 transition-colors">
                   <X size={12} /> Limpar filtros
                 </button>
               )}
             </div>
           </div>
         </FilterBar>
+        {etiquetas.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2" aria-label="Filtros ativos">
+            {etiquetas.map(e => (
+              <span key={e.chave} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs bg-primary/10 text-primary-fg border border-primary/30 max-w-full">
+                <span className="truncate">{e.texto}</span>
+                <button type="button" onClick={() => removerEtiqueta(e.chave)} aria-label={`Remover filtro ${e.texto}`} title="Remover filtro"
+                  className="p-0.5 rounded-full hover:bg-primary/20 shrink-0">
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {etiquetas.length > 1 && (
+              <button type="button" onClick={() => { clearFilters(); if (periodoAtual === 'custom') escolherPeriodo(periodoPadrao(statusAtual)) }}
+                className="text-xs text-texto-3 hover:text-texto-2 underline ml-1">Limpar tudo</button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contas envolvidas (Resgates anuais): 0 contas = tudo; 1 = origem ou destino; 2+ = entre elas */}
@@ -2998,7 +3042,10 @@ export default function SchedulePanel() {
         </div>
       )}
 
-      {abaPagos ? (
+      {abaPagos && isMobile ? (
+        // Celular: os pagos na lista por semana, com o detalhe (estornar, histórico…) ao tocar.
+        <SchedulesTable schedules={basePagos} pagosLinhas={pagosVisiveis} accounts={allAccounts} {...propsTabela} />
+      ) : abaPagos ? (
         <PagamentosTable
           linhas={pagosVisiveis}
           categories={categories}

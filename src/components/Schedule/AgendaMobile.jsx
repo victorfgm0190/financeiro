@@ -1,25 +1,24 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, MousePointer2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, MousePointer2, AlertTriangle } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { occCampos } from '../../lib/camposSerie'
 import { ehSintetico } from '../../lib/tiposDocumento'
-import { agruparPorSemana, particionarAgenda, pagosRecentes, totalAPagarNoMes } from '../../lib/agendaMobile'
+import { agruparPorSemana, particionarAgenda, totalAPagarNoMes } from '../../lib/agendaMobile'
 
-// Agenda no celular: abas Pendentes | Atrasados | Pagos, itens agrupados por semana, pill de
-// status e "Total a pagar no mês" no cabeçalho. Só exibição — as ações continuam sendo as da
-// linha da tabela (ScheduleRow), que aparece ao tocar no item via `renderDetalhe(row)`.
-
-const ABAS = [
-  { id: 'pendentes', label: 'Pendentes' },
-  { id: 'atrasados', label: 'Atrasados' },
-  { id: 'pagos', label: 'Pagos' },
-]
+// Agenda no celular. O status (A pagar / Provisões / Pagos) e o período vêm da barra de filtros
+// do topo (FilterBar) — aqui não há mais abas próprias:
+//  • A pagar / Provisões (`rows`): grupo destacado "Em atraso (N)" no topo, depois as semanas;
+//    séries concluídas (período "Tudo") num grupo "Concluídos" no fim.
+//  • Pagos (`pagosLinhas`): uma linha por ocorrência paga, por semana, mais recente primeiro.
+// Só exibição — as ações continuam sendo as da linha da tabela (ScheduleRow), que aparece ao tocar
+// no item via `renderDetalhe(row)` (no pago: histórico, estornar, editar…).
 
 const PILL = {
   atrasado:   { label: '⚠ Atrasado', cls: 'bg-perigo-bg text-perigo' },
   pendente:   { label: 'Pendente',   cls: 'bg-surface-2 text-texto-2' },
   pago:       { label: '✓ Pago',     cls: 'bg-primary/15 text-primary-fg' },
+  semlanc:    { label: 'Sem lançamento', cls: 'bg-surface-2 text-texto-3' },
   concluido:  { label: 'Concluído',  cls: 'bg-surface-hover/60 text-texto-2' },
   confirmado: { label: 'Confirmado', cls: 'bg-primary/15 text-primary-fg' },
 }
@@ -60,13 +59,11 @@ function Item({ id, aberto, onToggle, descricao, data, valor, schedule, pills, d
   )
 }
 
-export default function AgendaMobile({ rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar }) {
-  const [aba, setAba] = useState('pendentes')
+export default function AgendaMobile({ rows, schedules, getNextOccurrences, today, renderDetalhe, onSelecionar, pagosLinhas = null }) {
   const [aberto, setAberto] = useState(null)
   const toggle = (id) => setAberto(a => (a === id ? null : id))
 
   const { pendentes, atrasados, concluidos } = useMemo(() => particionarAgenda(rows, today), [rows, today])
-  const pagos = useMemo(() => pagosRecentes(schedules, today), [schedules, today])
   const totalMes = useMemo(
     () => totalAPagarNoMes(schedules, getNextOccurrences, today, s => !ehSintetico(s)),
     [schedules, getNextOccurrences, today],
@@ -75,8 +72,6 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
   // Detalhe de um pago: a linha do agendamento na tabela (histórico, estornar, editar…). Membro
   // de série colapsada não tem linha própria — monta uma com a próxima ocorrência dele.
   const rowDe = (s) => rowPorId.get(s.id) || { schedule: s, nextDate: getNextOccurrences(s, 1)[0] || null, futureItems: [] }
-
-  const contagem = { pendentes: pendentes.length, atrasados: atrasados.length, pagos: pagos.length }
 
   const itemPendente = (r, atrasado) => {
     const s = r.schedule
@@ -93,39 +88,46 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
     )
   }
 
-  const semanas = (lista, atrasado) => agruparPorSemana(lista, r => r.displayDate).map(sem => (
+  const semanas = (lista) => agruparPorSemana(lista, r => r.displayDate).map(sem => (
     <section key={sem.key} className="card p-0 overflow-hidden">
       <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
-      {sem.items.map(r => itemPendente(r, atrasado))}
+      {sem.items.map(r => itemPendente(r, false))}
     </section>
   ))
 
   let conteudo
-  if (aba === 'pendentes') {
-    conteudo = pendentes.length ? semanas(pendentes, false) : <Vazio texto="Nenhum agendamento pendente." />
-  } else if (aba === 'atrasados') {
-    conteudo = atrasados.length ? semanas(atrasados, true) : <Vazio texto="Nada em atraso." />
+  if (pagosLinhas) {
+    const grupos = agruparPorSemana(pagosLinhas, l => l.dataPagamento, { desc: true })
+    conteudo = grupos.length === 0 ? <Vazio texto="Nenhum pagamento no período." /> : grupos.map(sem => (
+      <section key={sem.key} className="card p-0 overflow-hidden">
+        <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
+        {sem.items.map(l => {
+          const id = `pago:${l.key}`
+          return (
+            <Item
+              key={id} id={id} aberto={aberto === id} onToggle={toggle}
+              descricao={l.description || l.schedule.description || '(agendamento)'}
+              data={l.dataPagamento} valor={Number(l.amount) || 0} schedule={l.schedule}
+              pills={l.semLancamento ? ['semlanc'] : ['pago']}
+              detalhe={aberto === id ? renderDetalhe(rowDe(l.schedule)) : null}
+            />
+          )
+        })}
+      </section>
+    ))
   } else {
-    const grupos = agruparPorSemana(pagos, p => p.dataEfetiva, { desc: true })
     conteudo = (
       <>
-        {grupos.length === 0 && <Vazio texto="Nenhum pagamento nos últimos 60 dias." />}
-        {grupos.map(sem => (
-          <section key={sem.key} className="card p-0 overflow-hidden">
-            <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">{sem.label}</h3>
-            {sem.items.map(p => {
-              const id = `pago:${p.schedule.id}@${p.date}`
-              return (
-                <Item
-                  key={id} id={id} aberto={aberto === id} onToggle={toggle}
-                  descricao={occCampos(p.schedule, p.date).description || p.schedule.description || '(agendamento)'}
-                  data={p.dataEfetiva} valor={p.amount} schedule={p.schedule} pills={['pago']}
-                  detalhe={aberto === id ? renderDetalhe(rowDe(p.schedule)) : null}
-                />
-              )
-            })}
+        {/* "Em atraso" (antes uma aba): grupo destacado no topo, antes das semanas. */}
+        {atrasados.length > 0 && (
+          <section className="card p-0 overflow-hidden border-perigo/40">
+            <h3 className="flex items-center gap-1.5 px-3 py-2 text-[11px] uppercase tracking-wide font-semibold text-perigo bg-perigo-bg border-b border-perigo/30">
+              <AlertTriangle size={12} /> Em atraso ({atrasados.length})
+            </h3>
+            {atrasados.map(r => itemPendente(r, true))}
           </section>
-        ))}
+        )}
+        {semanas(pendentes)}
         {concluidos.length > 0 && (
           <section className="card p-0 overflow-hidden">
             <h3 className="px-3 py-2 text-[11px] uppercase tracking-wide text-texto-3 border-b border-borda/60">Concluídos ({concluidos.length})</h3>
@@ -142,6 +144,7 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
             })}
           </section>
         )}
+        {atrasados.length === 0 && pendentes.length === 0 && concluidos.length === 0 && <Vazio texto="Nenhum agendamento no período." />}
       </>
     )
   }
@@ -153,33 +156,11 @@ export default function AgendaMobile({ rows, schedules, getNextOccurrences, toda
           <p className="text-[11px] uppercase tracking-wide text-texto-3">Total a pagar no mês</p>
           <p className="text-xl font-bold text-despesa tabular-nums">{fmt(totalMes)}</p>
         </div>
-        {onSelecionar && (
+        {onSelecionar && !pagosLinhas && (
           <button type="button" onClick={onSelecionar} className="btn-amber min-h-[44px]">
             <MousePointer2 size={13} /> Selecionar
           </button>
         )}
-      </div>
-
-      <div role="tablist" className="grid grid-cols-3 gap-1 p-1 bg-surface rounded-xl border border-borda">
-        {ABAS.map(t => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={aba === t.id}
-            onClick={() => { setAba(t.id); setAberto(null) }}
-            className={`min-h-[44px] rounded-lg text-sm font-medium transition-colors ${
-              aba === t.id ? 'bg-primary text-white' : 'text-texto-2'
-            }`}
-          >
-            {t.label}
-            {contagem[t.id] > 0 && (
-              <span className={`ml-1 text-[11px] ${aba === t.id ? 'text-white/80' : t.id === 'atrasados' ? 'text-perigo' : 'text-texto-3'}`}>
-                ({contagem[t.id]})
-              </span>
-            )}
-          </button>
-        ))}
       </div>
 
       {conteudo}
