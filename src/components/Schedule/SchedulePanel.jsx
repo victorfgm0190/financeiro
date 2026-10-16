@@ -938,6 +938,16 @@ function ScheduleRow({
   // até alguém clicar em "Separar Juros") não renderiza nada e continua como sempre foi.
   const rateioDetalhe = rateiosBySchedule?.get(schedule.id) || null
 
+  // Coluna "Ações" fixa à direita (desktop): fundo OPACO que reproduz o tom da linha (atraso,
+  // selecionada, confirmada, hover) sobre a superfície do card, para o conteúdo que rola por baixo
+  // não aparecer através dela. Tokens do tema — vale para claro e escuro.
+  // Classes literais (o Tailwind não enxerga classe montada por template).
+  const fundoAcoes = isSelected ? 'bg-[color-mix(in_srgb,var(--color-primary)_5%,var(--color-surface))]'
+    : daysLate > 0 ? 'bg-[color-mix(in_srgb,var(--color-perigo)_5%,var(--color-surface))]'
+      : canConfirm && nextDate && schedule.confirmado ? 'bg-[color-mix(in_srgb,var(--color-primary)_3%,var(--color-surface))]'
+        : 'bg-surface'
+  const acoesFixas = detalheMobile ? '' : `sticky right-0 z-[1] ${fundoAcoes} group-hover:bg-[color-mix(in_srgb,var(--color-surface-hover)_20%,var(--color-surface))] shadow-[-8px_0_8px_-8px_var(--color-overlay)]`
+
   return (
     <>
       <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
@@ -985,7 +995,7 @@ function ScheduleRow({
 
         {/* Descrição — toda a célula expande/colapsa quando há ocorrências futuras ou histórico */}
         <td
-          className={`px-3 py-3 w-full max-w-0 ${detalheMobile ? '' : 'min-w-[220px]'} ${canExpand ? 'cursor-pointer' : ''}`}
+          className={`px-3 py-3 w-full max-w-0 ${detalheMobile ? '' : 'min-w-[200px]'} ${canExpand ? 'cursor-pointer' : ''}`}
           onClick={canExpand ? toggleExpand : undefined}
         >
           <div className="flex items-start gap-1.5">
@@ -1126,15 +1136,15 @@ function ScheduleRow({
         </td>
 
         {/* Categoria */}
-        <td className="px-3 py-3 hidden md:table-cell">
+        <td className="px-3 py-3 hidden md:table-cell max-w-[160px]">
           {cat
-            ? <span className="text-xs text-texto-2 whitespace-nowrap">{cat.icon} {cat.name}</span>
+            ? <span className="block truncate text-xs text-texto-2" title={`${cat.icon} ${cat.name}`}>{cat.icon} {cat.name}</span>
             : <span className="text-texto-3 text-xs">—</span>}
         </td>
 
         {/* Favorecido */}
-        <td className="px-3 py-3 hidden lg:table-cell">
-          <span className="text-xs text-texto-2 truncate max-w-[120px] block">{schedule.payee || <span className="text-texto-3">—</span>}</span>
+        <td className="px-3 py-3 hidden lg:table-cell max-w-[140px]">
+          <span className="text-xs text-texto-2 truncate block" title={schedule.payee || undefined}>{schedule.payee || <span className="text-texto-3">—</span>}</span>
         </td>
 
         {/* Valor */}
@@ -1145,12 +1155,12 @@ function ScheduleRow({
         </td>
 
         {/* Frequência */}
-        <td className="px-3 py-3 w-px whitespace-nowrap hidden sm:table-cell">
+        <td className="px-3 py-3 w-24 whitespace-nowrap hidden sm:table-cell">
           <span className="text-xs text-texto-3">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
         </td>
 
         {/* Ações */}
-        <td className="px-3 py-3 w-px whitespace-nowrap align-middle">
+        <td className={`px-3 py-3 w-px whitespace-nowrap align-middle ${acoesFixas}`}>
           <div className="flex flex-col items-end gap-1.5">
           {(isProvisaoPendente || nCobertas > 0) && (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -1182,14 +1192,14 @@ function ScheduleRow({
             )}
           </div>
           )}
-          <div className="flex items-center justify-end gap-1.5 flex-nowrap">
+          <div className="flex items-center justify-end gap-1 flex-nowrap">
             {nextDate && (
               <>
                 <button
                   onClick={() => setShowPay(true)}
                   title="Pagar"
                   aria-label="Pagar"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-receita/15 text-receita rounded-md hover:bg-receita/25 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-receita/15 text-receita rounded-md hover:bg-receita/25 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> <span className="hidden 2xl:inline">Pagar</span>
                 </button>
@@ -1197,28 +1207,28 @@ function ScheduleRow({
                   onClick={() => setShowEstornar(true)}
                   title="Estornar"
                   aria-label="Estornar"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-despesa/15 text-despesa rounded-md hover:bg-despesa/25 transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-despesa/15 text-despesa rounded-md hover:bg-despesa/25 transition-colors font-medium"
                 >
                   <RotateCcw size={12} /> <span className="hidden 2xl:inline">Estornar</span>
                 </button>
                 <button
                   onClick={handlePular}
-                  title={isRecorrente ? 'Pular esta ocorrência (avança para a próxima)' : 'Pular (cancela o agendamento único)'}
+                  title={isRecorrente ? 'Pular — esta ocorrência (avança para a próxima)' : 'Pular — cancela o agendamento único'}
                   aria-label="Pular"
-                  className="flex items-center justify-center gap-1 h-7 px-2 text-xs bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 rounded-md hover:bg-surface-hover transition-colors font-medium"
+                  className="flex items-center justify-center gap-1 h-8 min-w-8 px-2 text-xs bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 rounded-md hover:bg-surface-hover transition-colors font-medium"
                 >
                   <SkipForward size={12} /> <span className="hidden 2xl:inline">Pular</span>
                 </button>
               </>
             )}
-            <button onClick={() => setShowHistorico(true)} className="btn-amber w-7 h-7 p-0 justify-center relative" title="Histórico de alterações" aria-label="Histórico">
+            <button onClick={() => setShowHistorico(true)} className="btn-amber w-8 h-8 p-0 justify-center relative shrink-0" title="Histórico de alterações" aria-label="Histórico">
               <History size={13} />
               {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>
-            <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-7 h-7 p-0 justify-center" title="Editar agendamento" aria-label="Editar">
+            <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
             </button>
-            <button onClick={() => setShowExcluir(true)} className="btn-amber w-7 h-7 p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
+            <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
             </button>
           </div>
@@ -2021,8 +2031,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
         </div>
       )}
 
-      {/* Table card */}
-      <div className="card p-0 overflow-hidden">
+      {/* Table card — sem overflow-hidden: quem rola é o container da tabela (overflow-x-auto) */}
+      <div className="card p-0">
         {!selectionMode && selectableRows.length > 0 && (
           <div className="flex justify-end px-3 pt-2.5 pb-0">
             <button
@@ -2050,12 +2060,12 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 )}
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap">Data</th>
                 <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
-                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-full min-w-[220px]">Descrição</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-full min-w-[200px]">Descrição</th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden lg:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden sm:table-cell whitespace-nowrap w-px">Frequência</th>
-                <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-px">Ações</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden sm:table-cell whitespace-nowrap w-24">Frequência</th>
+                <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-px sticky right-0 z-[1] bg-surface shadow-[-8px_0_8px_-8px_var(--color-overlay)]">Ações</th>
               </tr>
             </thead>
             <tbody>
