@@ -6,6 +6,9 @@ import { historicoOcorrencias, resumoRegistradas, STATUS_OCORRENCIA as ST } from
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
+import VincularLancamento from './VincularLancamento'
+import { useApp } from '../../context/AppContext'
+import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 
 // "Ver ocorrências registradas" do Editar Agendamento: histórico das ocorrências já consumidas
 // (pagas, puladas, baixadas) + lançamentos vinculados avulsos. Calculado no front, a partir do
@@ -26,11 +29,18 @@ const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-rece
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
   const isMobile = useIsMobile()
+  const { schedules: todosAgendamentos, markScheduleRegistered } = useApp()
   const resumo = useMemo(() => resumoRegistradas(schedule, transactions), [schedule, transactions])
   const [aberto, setAberto] = useState(false)
   const [carregando, setCarregando] = useState(false)
-  const [dados, setDados] = useState(null)
+  const [pronto, setPronto] = useState(false)
   const [txAberto, setTxAberto] = useState(null)
+  const [vinculando, setVinculando] = useState(null) // data baixada sendo vinculada
+  // Montado só depois do 1º clique; recalcula sozinho quando o agendamento muda (ex.: Vincular).
+  const dados = useMemo(
+    () => (pronto ? historicoOcorrencias(schedule, transactions) : null),
+    [pronto, schedule, transactions]
+  )
   if (!schedule?.id || !resumo.temAlgo) return null
 
   const accName = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
@@ -43,12 +53,10 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
   const alternar = () => {
     if (aberto) { setAberto(false); return }
     setAberto(true)
+    if (pronto) return
     setCarregando(true)
     // Montado só ao abrir; o setTimeout deixa o spinner aparecer antes do cálculo.
-    setTimeout(() => {
-      setDados(historicoOcorrencias(schedule, transactions))
-      setCarregando(false)
-    }, 0)
+    setTimeout(() => { setPronto(true); setCarregando(false) }, 0)
   }
   const contagem = resumo.continua ? `${resumo.registradas} registradas` : `${resumo.registradas} de ${resumo.total ?? '?'}`
   const clicavel = (l) => l.status === ST.PAGA || l.status === ST.AVULSO
@@ -79,7 +87,16 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-semibold text-texto-1">Parc. {parc(l)}</span>
-                        <Selo l={l} />
+                        <span className="flex items-center gap-1.5">
+                          <Selo l={l} />
+                          {l.status === ST.BAIXADA && (
+                            <span role="button" tabIndex={0} className="text-[10px] text-primary-fg underline"
+                              onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setVinculando(l.dataRegistro) } }}>
+                              Vincular
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <p className="text-xs text-texto-2">
                         {l.vencimento ? `Venc. ${fmtDate(l.vencimento)}` : 'Fora da série'}
@@ -120,11 +137,36 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                           <td className="px-2 py-1.5 text-texto-1 whitespace-nowrap">{l.valorPago != null ? <>{fmt(l.valorPago)}<Dif v={l.diferenca} /></> : '—'}</td>
                           <td className="px-2 py-1.5 text-texto-2 max-w-[8rem] truncate">{l.accountId ? accName(l.accountId) : '—'}</td>
                           <td className="px-2 py-1.5 text-texto-2 max-w-[9rem] truncate">{l.payee || '—'}</td>
-                          <td className="px-2 py-1.5"><Selo l={l} /></td>
+                          <td className="px-2 py-1.5 whitespace-nowrap">
+                            <Selo l={l} />
+                            {l.status === ST.BAIXADA && (
+                              <button type="button" className="ml-1.5 text-[10px] text-primary-fg underline"
+                                onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}>
+                                Vincular
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {/* Vincular a baixa escolhida a um lançamento existente (grava o meta na hora). */}
+              {vinculando && (
+                <div className="px-3 py-2 border-t border-borda space-y-1">
+                  <p className="text-xs text-texto-2">Baixa de {fmtDate(vinculando)} — escolha o lançamento:</p>
+                  <VincularLancamento
+                    key={vinculando}
+                    abertoInicial
+                    schedule={schedule}
+                    data={vinculando}
+                    transactions={transactions}
+                    schedules={todosAgendamentos}
+                    accounts={accounts}
+                    onVincular={(txId) => { markScheduleRegistered(schedule.id, vinculando, metaBaixaGerada(txId)); setVinculando(null) }}
+                  />
+                  <button type="button" className="text-[11px] text-texto-3 hover:text-texto-2" onClick={() => setVinculando(null)}>Cancelar</button>
                 </div>
               )}
               <div className="flex flex-wrap gap-x-4 gap-y-1 justify-end px-3 py-2 border-t border-borda text-xs">

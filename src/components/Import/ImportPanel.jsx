@@ -2327,7 +2327,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (baixasPorLinha.has(row._id)) return
       const saveDate = computeSaveDate(row)
       const s = findMatchingSchedule({ type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate })
-      if (s) pending.push({ schedule: s, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate } })
+      if (s) pending.push({ schedule: s, lancamentoId: rowTxId.get(row._id) || null, importId, tx: { type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate } })
     })
 
     // Conferência: o arquivo diz quanto a fatura vale; o banco tem que dizer o mesmo.
@@ -2380,7 +2380,10 @@ Importar mesmo assim no mês selecionado?`)) return
 
   const resolveScheduleMatch = (action) => {
     const cur = scheduleMatchQueue[0]
-    if (action === 'register') markScheduleRegistered(cur.schedule.id, getNextOccurrences(cur.schedule, 1)[0] || cur.tx.date)
+    // Meta liga a baixa ao lançamento importado sendo conciliado. Tipo "importado" + import_id (e
+    // não "pago"): desfazer a importação apaga o lançamento e precisa reabrir esta ocorrência.
+    if (action === 'register') markScheduleRegistered(cur.schedule.id, getNextOccurrences(cur.schedule, 1)[0] || cur.tx.date,
+      cur.lancamentoId ? { tipo: TIPO_BAIXA.IMPORTADO, lancamento_id: cur.lancamentoId, import_id: cur.importId || null } : null)
     else if (action === 'never') addRecurringMatchException(cur.tx.payee || cur.tx.description)
     setScheduleMatchQueue(q => q.slice(1))
   }

@@ -30,7 +30,7 @@ import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
-import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
@@ -1275,8 +1275,9 @@ export function AppProvider({ children }) {
           // ocorrência, REANCORA next_occurrence na próxima pendente. Era o único dos 4 caminhos
           // de escrita de `registered` que não avançava a âncora — o auto-registro deixava
           // next_occurrence NULL/obsoleto e a "Data de Vencimento Atual" do formulário em branco.
+          // Meta aponta o lançamento gerado (ligação explícita para histórico / aba Pagos).
           schedules = schedules.map(s => s.id === schedule.id
-            ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s)
+            ? aplicarBaixa(s, occurrenceDate, metaBaixaGerada(txId)) : s)
         }
       }
 
@@ -2600,8 +2601,9 @@ export function AppProvider({ children }) {
         return {
           ...d, accounts,
           transactions: [...d.transactions, ...detTxs, ...detAutoTxs],
+          // Baixa com o meta apontando o 1º lançamento gerado (o detalhamento gera um por função).
           schedules: d.schedules.map(s =>
-            s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s
+            s.id === scheduleId ? aplicarBaixa(s, occurrenceDate, metaBaixaGerada(detTxs[0]?.id)) : s
           ),
         }
       }
@@ -2682,8 +2684,10 @@ export function AppProvider({ children }) {
       return {
         ...d, accounts,
         transactions: [...d.transactions, newTx, ...autoTxs, ...(investIncome ? [investIncome] : [])],
+        // registered_meta[data].lancamento_id = lançamento gerado (vale para o motor da fatura e para
+        // os manuais). schedule_id o lançamento já leva (acima); o meta é a ligação explícita.
         schedules: d.schedules.map(s =>
-          s.id === scheduleId ? registerAndAdvance(s, [...(s.registered || []), occurrenceDate]) : s
+          s.id === scheduleId ? aplicarBaixa(s, occurrenceDate, metaBaixaGerada(newTxId)) : s
         ),
       }
     })

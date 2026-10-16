@@ -26,6 +26,7 @@ import {
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
+import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 import RateioModal from '../shared/RateioModal'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
@@ -805,7 +806,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         skipped: [],
         overrides: {},
       })
-      markScheduleRegistered(schId, form.date)
+      markScheduleRegistered(schId, form.date, metaBaixaGerada(txId))
     }
 
     // "Será pago com reserva" (despesa de conta corrente): a despesa já foi salva com o vínculo
@@ -859,7 +860,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     if (isCredit && form.type === 'expense') {
       const match = findMatchingSchedule(txData)
       if (match) {
-        setScheduleMatch({ schedule: match, tx: txData })
+        setScheduleMatch({ schedule: match, tx: txData, txId })
         setStep('schedule-match')
         return
       }
@@ -984,7 +985,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const handleRegister = () => {
       const nextOccs = getNextOccurrences(scheduleMatch.schedule, 3)
       const dateToMark = nextOccs[0] || scheduleMatch.tx.date
-      markScheduleRegistered(scheduleMatch.schedule.id, dateToMark)
+      // Meta liga a baixa ao lançamento recém-criado (ele não leva schedule_id).
+      markScheduleRegistered(scheduleMatch.schedule.id, dateToMark, metaBaixaGerada(scheduleMatch.txId))
       onClose()
     }
     return (

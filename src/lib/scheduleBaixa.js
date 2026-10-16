@@ -175,6 +175,11 @@ export function planejarBaixas({ linhas, futuras = [], schedules, transactions, 
 
 // ── Registro / estorno ───────────────────────────────────────────────────────
 
+// Meta da baixa feita GERANDO o lançamento (botão Pagar, registro de agendamento, motor da fatura:
+// pagamento_fatura / gerencial_devolucao / resgate_reserva). Aponta o lançamento gerado, para o
+// histórico e a aba "Pagos" casarem pela id e não por proximidade de data.
+export const metaBaixaGerada = (lancamentoId) => ({ tipo: TIPO_BAIXA.PAGO, lancamento_id: lancamentoId || null, import_id: null })
+
 // Baixa UMA ocorrência: mesma transição do markScheduleRegistered (registered + avanço de
 // next_occurrence), mais o meta quando informado.
 export function aplicarBaixa(s, occurrenceDate, meta = null) {

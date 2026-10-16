@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { historicoOcorrencias, resumoRegistradas, pagamentosDosAgendamentos, filtrarPagamentos, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
+import { historicoOcorrencias, resumoRegistradas, pagamentosDosAgendamentos, filtrarPagamentos, totaisPagamentos, candidatosVinculo, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
 import { computeOccurrences } from './occurrences'
+import { aplicarBaixa, metaBaixaGerada, baixasDaImportacao, lancamentosVinculados } from './scheduleBaixa'
 
 // Caso real (Neon, 16/10/2026): TV PAPAI, 8 parcelas mensais de 150 desde 20/06/2026, próxima 20/10.
 // Junho foi baixado em 18/06 sem lançamento; setembro foi pago em 18/09.
@@ -81,24 +82,90 @@ describe('aba Pagos — pagamentosDosAgendamentos / filtrarPagamentos', () => {
   const outro = { ...TV_PAPAI, id: 'sch_outro', description: 'ACADEMIA', payee: 'SMART', registered: ['2026-09-05'], skipped: ['2026-10-05'], installments: 12, startDate: '2026-09-05', nextOccurrence: '2026-11-05' }
   const txs = [...TXS, { id: 'tx_ac', date: '2026-09-06', amount: 99.9, accountId: 'acc_itau', payee: 'SMART FIT', scheduleId: 'sch_outro', description: 'ACADEMIA', categoryId: 'cat_saude' }]
   const linhas = pagamentosDosAgendamentos([TV_PAPAI, outro], txs)
-  it('uma linha por ocorrência paga (série em andamento incluída), mais recente primeiro; pulada/baixada fora', () => {
-    expect(linhas.map(l => [l.dataPagamento, l.description, `${l.parcela}/${l.total}`])).toEqual([
-      ['2026-09-18', 'TV PAPAI', '4/8'],
-      ['2026-09-06', 'ACADEMIA', '1/12'],
-      ['2026-08-20', 'TV PAPAI', '3/8'],
-      ['2026-07-20', 'TV PAPAI', '2/8'],
+  it('uma linha por ocorrência paga (série em andamento incluída) + baixada "sem lançamento"; pulada fora', () => {
+    expect(linhas.map(l => [l.dataPagamento, l.description, `${l.parcela}/${l.total}`, !!l.semLancamento])).toEqual([
+      ['2026-09-18', 'TV PAPAI', '4/8', false],
+      ['2026-09-06', 'ACADEMIA', '1/12', false],
+      ['2026-08-20', 'TV PAPAI', '3/8', false],
+      ['2026-07-20', 'TV PAPAI', '2/8', false],
+      ['2026-06-18', 'TV PAPAI', '1/8', true],
     ])
+    // Baixada: data baixada, conta e valor do agendamento.
+    expect(linhas[4]).toMatchObject({ accountId: TV_PAPAI.accountId ?? null, amount: 150, txId: null, motivo: 'sem lançamento' })
     expect(linhas[0]).toMatchObject({ accountId: 'acc_bb', payee: 'CARLOS ROBERTO MOREIRA', amount: 150, vencimento: '2026-09-20' })
   })
   it('filtro de favorecido CARLOS RO traz as parcelas pagas pelo BB', () => {
     const r = filtrarPagamentos(linhas, { payee: 'CARLOS RO' })
-    expect(r).toHaveLength(3)
-    expect(r.every(l => l.accountId === 'acc_bb')).toBe(true)
+    expect(r.filter(l => !l.semLancamento)).toHaveLength(3)
+    expect(r.filter(l => !l.semLancamento).every(l => l.accountId === 'acc_bb')).toBe(true)
+    expect(totaisPagamentos(linhas)).toEqual({ nPagos: 4, totalPago: 549.9, nSemLancamento: 1 })
   })
   it('data = data do pagamento; valor = valor pago; categoria', () => {
     expect(filtrarPagamentos(linhas, { from: '2026-09-01', to: '2026-09-30' }).map(l => l.dataPagamento)).toEqual(['2026-09-18', '2026-09-06'])
     expect(filtrarPagamentos(linhas, { max: 100 }).map(l => l.description)).toEqual(['ACADEMIA'])
     expect(filtrarPagamentos(linhas, { valores: new Set([99.9]) })).toHaveLength(1)
     expect(filtrarPagamentos(linhas, { categoryId: 'cat_saude' })).toHaveLength(1)
+  })
+})
+
+describe('baixa gerando lançamento grava registered_meta.lancamento_id (motor e manuais)', () => {
+  // Agendamento do motor da fatura: o lançamento gerado é casado pela id do meta, mesmo quando
+  // não tem schedule_id (legado) ou cai longe da data (pagamento atrasado > 1 período).
+  const pf = { id: 'fsch_card_202610_pagamento_fatura', tipo: 'pagamento_fatura', description: 'Pagamento Fatura X 10/2026', amount: 500, frequency: 'once', occurrenceType: 'continuous', startDate: '2026-10-20', registered: [], skipped: [], registeredMeta: {}, overrides: {} }
+  it('metaBaixaGerada + aplicarBaixa: registered e meta { tipo: pago, lancamento_id }', () => {
+    const s = aplicarBaixa(pf, '2026-10-20', metaBaixaGerada('tx_gerado'))
+    expect(s.registered).toEqual(['2026-10-20'])
+    expect(s.registeredMeta['2026-10-20']).toEqual({ tipo: 'pago', lancamento_id: 'tx_gerado', import_id: null })
+  })
+  it('o histórico casa pela id do meta, mesmo sem schedule_id e fora da janela', () => {
+    const s = aplicarBaixa(pf, '2026-10-20', metaBaixaGerada('tx_gerado'))
+    const tx = { id: 'tx_gerado', date: '2026-12-01', amount: 500, accountId: 'acc_itau', type: 'transfer' }
+    const h = historicoOcorrencias(s, [tx])
+    expect(h.linhas.map(l => [l.status, l.txId])).toEqual([[ST.PAGA, 'tx_gerado']])
+    expect(pagamentosDosAgendamentos([s], [tx])).toHaveLength(1)
+  })
+  it('não interfere nas regras que leem o meta: desfazer importação ignora "pago"; cobertura já o contava', () => {
+    const s = aplicarBaixa(pf, '2026-10-20', metaBaixaGerada('tx_gerado'))
+    expect(baixasDaImportacao(s, 'imp_1')).toEqual([])
+    expect([...lancamentosVinculados([s], [])]).toEqual(['tx_gerado'])
+  })
+})
+
+describe('"Vincular a lançamento existente" (candidatosVinculo) e baixas com meta (1b)', () => {
+  const s = { ...TV_PAPAI, accountId: 'acc_bb', transactionType: 'expense' }
+  // O pagamento real de junho: lançamento manual sem schedule_id (caso do Neon).
+  const junho = { id: 'tx_1782578282278_9ceskig4dzc', type: 'expense', date: '2026-06-18', amount: 150, accountId: 'acc_bb', description: 'CARLOS ROBERTO MOREIRA - TV PAPAI' }
+  const ctx = (txs) => ({ transactions: txs, schedules: [s] })
+  it('sugere o lançamento sem vínculo da mesma conta, valor ±0,05 e data a ±1 período', () => {
+    expect(candidatosVinculo(s, '2026-06-18', ctx([...TXS, junho])).map(t => t.id)).toEqual([junho.id])
+  })
+  it('exclui: outra conta, valor fora de ±0,05, data fora da janela, já vinculado, outro tipo', () => {
+    const fora = [
+      { ...junho, id: 'c1', accountId: 'acc_itau' },
+      { ...junho, id: 'c2', amount: 150.06 },
+      { ...junho, id: 'c3', date: '2026-08-01' },
+      { ...junho, id: 'c4', scheduleId: 'outro' },
+      { ...junho, id: 'c5', type: 'income' },
+      { ...junho, id: 'c6', amount: 149.96 },
+    ]
+    expect(candidatosVinculo(s, '2026-06-18', ctx(fora)).map(t => t.id)).toEqual(['c6'])
+    const comMeta = { ...s, registeredMeta: { '2026-07-20': { tipo: 'pago', lancamento_id: 'c6' } } }
+    expect(candidatosVinculo(comMeta, '2026-06-18', { transactions: fora, schedules: [comMeta] })).toEqual([])
+  })
+  it('vincular = baixa com meta → a 1/8 vira Paga e sai das sugestões', () => {
+    const vinc = aplicarBaixa(s, '2026-06-18', metaBaixaGerada(junho.id))
+    const h = historicoOcorrencias(vinc, [...TXS, junho])
+    expect(h.linhas[0]).toMatchObject({ parcela: 1, status: ST.PAGA, txId: junho.id, pagoEm: '2026-06-18' })
+    expect(candidatosVinculo(vinc, '2026-06-18', { transactions: [...TXS, junho], schedules: [vinc] })).toEqual([])
+  })
+  it('"Já registrei" (TransactionForm) e conciliação "registrar" (importação): o meta liga o lançamento à baixa', () => {
+    // TransactionForm: lançamento recém-criado, sem schedule_id, baixado na próxima ocorrência.
+    const novo = { id: 'tx_novo', type: 'expense', date: '2026-10-19', amount: 150, accountId: 'acc_bb' }
+    const s1 = aplicarBaixa(s, '2026-10-20', metaBaixaGerada(novo.id))
+    expect(historicoOcorrencias(s1, [...TXS, novo]).linhas.find(l => l.dataRegistro === '2026-10-20')).toMatchObject({ status: ST.PAGA, txId: 'tx_novo' })
+    // Importação: tipo importado + import_id → desfazer a importação reabre a ocorrência.
+    const s2 = aplicarBaixa(s, '2026-10-20', { tipo: 'importado', lancamento_id: 'tx_imp', import_id: 'imp_1' })
+    expect(baixasDaImportacao(s2, 'imp_1')).toEqual(['2026-10-20'])
+    expect(historicoOcorrencias(s2, [{ id: 'tx_imp', date: '2026-10-21', amount: 150, accountId: 'acc_card' }]).linhas.at(-1)).toMatchObject({ status: ST.PAGA, txId: 'tx_imp' })
   })
 })

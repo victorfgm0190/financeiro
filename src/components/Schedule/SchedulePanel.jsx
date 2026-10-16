@@ -12,7 +12,7 @@ import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios, proximaEfetiva } from '../../lib/fluxoCaixa'
-import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
+import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
@@ -26,7 +26,8 @@ import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
-import { pagamentosDosAgendamentos, filtrarPagamentos } from '../../lib/ocorrenciasRegistradas'
+import { pagamentosDosAgendamentos, filtrarPagamentos, totaisPagamentos } from '../../lib/ocorrenciasRegistradas'
+import VincularLancamento from './VincularLancamento'
 import { useAtalho, useTituloAtalho, useCamadaModal } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import { pagarParcela } from '../../lib/bemApi'
@@ -167,7 +168,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount } = useApp()
+  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos } = useApp()
   // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
   // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
   // ele o modal deixa de registrar a transferência conta→dívida e passa a baixar a parcela pelo
@@ -324,7 +325,8 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
       for (const c of [r.saldos_atualizados?.bem, r.saldos_atualizados?.divida]) {
         if (c?.id) updateAccount(c.id, { balance: c.saldo_novo })
       }
-      markScheduleRegistered(schedule.id, nextDate || today)
+      // Meta aponta o 1º lançamento criado pelo endpoint (principal; o de juros vai junto no estado).
+      markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(r.lancamentos_criados?.[0]?.id))
       onClose()
     } catch (err) {
       setFinErro(err.message)
@@ -402,7 +404,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         || accounts.find(a => a.id === trfToId && a.isReserva)
       const resvFuncs = resvAcc ? (reserveFunctions || []).filter(f => f.accountId === resvAcc.id) : []
       const autoFuncId = resvFuncs.length === 1 ? resvFuncs[0].id : null
-      addTransaction({
+      const txId = addTransaction({
         type: 'transfer', accountId: trfFromId, toAccountId: trfToId,
         amount: valorAba, date: trfDate,
         description: schedule.description, notes: trfNotes,
@@ -411,7 +413,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         scheduleId: schedule.id,
         origin: ORIGIN.AGENDAMENTO,
       })
-      markScheduleRegistered(schedule.id, regDate)
+      markScheduleRegistered(schedule.id, regDate, metaBaixaGerada(txId))
     }
     onClose()
   }
@@ -672,6 +674,18 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
                 <input className="input" value={trfNotes} onChange={e => setTrfNotes(e.target.value)} placeholder="Opcional" />
               </div>
             </>
+          )}
+          {/* Baixa apontando um lançamento que já existe (sem gerar outro). Fora do resgate com
+              detalhamento (um lançamento por função) e da parcela de financiamento (endpoint). */}
+          {!parcelaFin && !hasDetalhe && (
+            <VincularLancamento
+              schedule={scheduleProp}
+              data={nextDate || today}
+              transactions={transactions}
+              schedules={todosAgendamentos}
+              accounts={accounts}
+              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); onClose() }}
+            />
           )}
         </div>
 
@@ -2335,7 +2349,8 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
   }
   const cat = (id) => { const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : '—' }
   const conta = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
-  const total = linhas.reduce((acc, l) => acc + (Number(l.amount) || 0), 0)
+  // Rodapé: "sem lançamento" não soma no total — só é contado à parte.
+  const tot = totaisPagamentos(linhas)
   return (
     <div className="card p-0 overflow-x-auto">
       <table className="w-full text-xs">
@@ -2349,16 +2364,25 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
         <tbody>
           {linhas.map(l => {
             const tipo = resolverTipoDocumento(l, tiposDocumento)
+            // Baixada sem lançamento: cinza/itálico, data = data baixada, conta e valor do agendamento.
+            const sem = !!l.semLancamento
             return (
-              <tr key={l.key} className="border-b border-borda/60 last:border-0 hover:bg-surface-hover/40">
-                <td className="px-3 py-2 text-texto-1 whitespace-nowrap">{l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}</td>
+              <tr key={l.key} className={`border-b border-borda/60 last:border-0 hover:bg-surface-hover/40 ${sem ? 'italic opacity-70' : ''}`}>
+                <td className="px-3 py-2 text-texto-1 whitespace-nowrap">
+                  {l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}
+                  {sem && (
+                    <span className="ml-1.5 not-italic text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-3" title={l.motivo && l.motivo !== 'sem lançamento' ? `Baixada sem lançamento (${l.motivo})` : 'Baixada sem lançamento vinculado'}>
+                      sem lançamento
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.vencimento ? fmtDate(l.vencimento) : '—'}</td>
                 <td className="px-3 py-2 text-texto-1 max-w-[14rem] truncate">{l.description || '—'}</td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{l.payee || '—'}</td>
                 <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{cat(l.categoryId)}</td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap" title={tipo?.nome}>{tipo?.sigla || '—'}</td>
                 <td className="px-3 py-2 text-texto-2 max-w-[9rem] truncate">{conta(l.accountId)}</td>
-                <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${l.transactionType === 'income' ? 'text-receita' : 'text-despesa'}`}>{fmt(l.amount)}</td>
+                <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${sem ? 'text-texto-3' : l.transactionType === 'income' ? 'text-receita' : 'text-despesa'}`}>{fmt(l.amount)}</td>
                 <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.avulso ? 'avulso' : l.parcela ? (l.total ? `${l.parcela}/${l.total}` : `${l.parcela}`) : '—'}</td>
               </tr>
             )
@@ -2366,8 +2390,11 @@ function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
         </tbody>
         <tfoot>
           <tr className="border-t border-borda text-texto-2">
-            <td colSpan={7} className="px-3 py-2">{linhas.length} pagamento{linhas.length !== 1 ? 's' : ''}</td>
-            <td className="px-3 py-2 text-right font-semibold text-texto-1 whitespace-nowrap">{fmt(total)}</td>
+            <td colSpan={7} className="px-3 py-2">
+              {tot.nPagos} pago{tot.nPagos !== 1 ? 's' : ''} · {fmt(tot.totalPago)}
+              {tot.nSemLancamento > 0 && <span className="text-texto-3"> | {tot.nSemLancamento} sem lançamento</span>}
+            </td>
+            <td className="px-3 py-2 text-right font-semibold text-texto-1 whitespace-nowrap">{fmt(tot.totalPago)}</td>
             <td />
           </tr>
         </tfoot>

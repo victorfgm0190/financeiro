@@ -535,8 +535,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     if (ctx.tipo === 'A') {
       // Estrutura do formulário (frequência, parcelas, prévia…) + campos rastreados ainda com o
       // valor da SÉRIE; o plano decide override × agendamento base.
+      // registered/registeredMeta vêm SEMPRE do estado vivo: um "Vincular" feito no histórico
+      // enquanto havia edição de ocorrência pendente não pode ser desfeito pelo save.
       const base = {
         ...serieBase, ...data, nextOccurrence: ancoraSalva,
+        registered: atual.registered, registeredMeta: atual.registeredMeta,
         amount: serieBase.amount, categoryId: serieBase.categoryId, description: serieBase.description,
         categoriaCnpjId: serieBase.categoriaCnpjId || null, categoriaCpfId: serieBase.categoriaCpfId || null,
         accountId: serieBase.accountId, accountType: serieBase.accountType, costCenter: serieBase.costCenter,

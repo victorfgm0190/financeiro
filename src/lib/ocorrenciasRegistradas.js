@@ -19,11 +19,12 @@
 // Lançamentos com scheduleId que sobram entram no fim como "Avulso vinculado".
 import { computeOccurrences } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
+import { lancamentosVinculados } from './scheduleBaixa.js'
 
 export const STATUS_OCORRENCIA = { PAGA: 'paga', PULADA: 'pulada', BAIXADA: 'baixada', AVULSO: 'avulso' }
 
 // Janela de casamento = 1 período da frequência, em dias.
-const JANELA_DIAS = {
+export const JANELA_DIAS = {
   daily: 1, weekly: 7, biweekly: 14, monthly: 31, bimonthly: 62, quarterly: 92,
   quadrimestral: 123, semiannual: 184, annual: 366, once: 31,
 }
@@ -129,8 +130,9 @@ export function historicoOcorrencias(schedule, transactions = []) {
 }
 
 // Aba "Pagos" (Agendamentos): UMA linha por ocorrência PAGA de qualquer agendamento — inclusive das
-// séries em andamento — e pelos lançamentos vinculados avulsos. Mesmo casamento do histórico acima.
-// Puladas e baixadas sem lançamento NÃO entram (não há pagamento a mostrar). Mais recente primeiro.
+// séries em andamento —, pelos lançamentos vinculados avulsos e pelas BAIXADAS sem lançamento
+// (`semLancamento: true`, fora do total). Mesmo casamento do histórico acima. Puladas NÃO entram.
+// Mais recente primeiro.
 // Dados do LANÇAMENTO (data, conta, favorecido, valor, categoria, tipo); o agendamento completa o
 // que o lançamento não tiver.
 export function pagamentosDosAgendamentos(schedules = [], transactions = []) {
@@ -138,6 +140,19 @@ export function pagamentosDosAgendamentos(schedules = [], transactions = []) {
   const out = []
   for (const s of schedules || []) {
     for (const l of historicoOcorrencias(s, transactions).linhas) {
+      if (l.status === STATUS_OCORRENCIA.BAIXADA) {
+        // Baixada sem lançamento casado: aparece com o selo, data = data baixada, conta e valor do
+        // agendamento. Não entra no total pago.
+        out.push({
+          key: `${s.id}_baixa_${l.dataRegistro}`, scheduleId: s.id, schedule: s, txId: null, avulso: false,
+          semLancamento: true, motivo: l.motivo,
+          dataPagamento: l.dataRegistro, vencimento: l.vencimento, parcela: l.parcela, total: l.total,
+          description: s.description || '', payee: s.payee || '', categoryId: s.categoryId || null,
+          tipoDocumentoId: s.tipoDocumentoId || null, tipo: s.tipo || null,
+          accountId: s.accountId || null, amount: l.valorOriginal, transactionType: s.transactionType,
+        })
+        continue
+      }
       if (l.status !== STATUS_OCORRENCIA.PAGA && l.status !== STATUS_OCORRENCIA.AVULSO) continue
       const tx = txById.get(l.txId) || {}
       out.push({
@@ -168,4 +183,34 @@ export function filtrarPagamentos(linhas, { desc = '', payee = '', categoryId = 
     if (valores && valores.size > 0 && !valores.has(r2(l.amount))) return false
     return true
   })
+}
+
+// Totais do rodapé da aba Pagos: pagos (com lançamento) somam; "sem lançamento" só conta.
+export function totaisPagamentos(linhas) {
+  const pagos = (linhas || []).filter(l => !l.semLancamento)
+  return {
+    nPagos: pagos.length,
+    totalPago: r2(pagos.reduce((acc, l) => acc + (Number(l.amount) || 0), 0)),
+    nSemLancamento: (linhas || []).length - pagos.length,
+  }
+}
+
+// "Vincular a lançamento existente": lançamentos SEM vínculo que podem ser o pagamento da ocorrência
+// `data` (data baixada ou a vencer) de `schedule`. Mesma conta, mesmo tipo, valor do efetivo da
+// ocorrência ±R$ 0,05, data a ±1 período da frequência; fora os já vinculados (schedule_id ou
+// registered_meta.lancamento_id de outra baixa) e as sombras automáticas. Mais perto da data primeiro.
+export function candidatosVinculo(schedule, data, { transactions = [], schedules = [] } = {}) {
+  if (!schedule || !data) return []
+  const alvo = Number(occEfetiva(schedule, dia(data)).amount) || 0
+  const janela = JANELA_DIAS[schedule.frequency] ?? 31
+  const vinculados = lancamentosVinculados(schedules, transactions)
+  const tipo = schedule.transactionType || 'expense'
+  return (transactions || [])
+    .filter(t => !vinculados.has(t.id) && !t.scheduleId && !t.reservaAuto
+      && t.accountId === schedule.accountId && (t.type || 'expense') === tipo
+      && Math.abs((Number(t.amount) || 0) - alvo) <= 0.05
+      && distDias(t.date, data) <= janela)
+    .map(t => ({ tx: t, dias: distDias(t.date, data) }))
+    .sort((a, b) => a.dias - b.dias || dia(a.tx.date).localeCompare(dia(b.tx.date)))
+    .map(c => c.tx)
 }
