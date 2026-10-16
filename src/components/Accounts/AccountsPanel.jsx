@@ -14,6 +14,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import AccountForm from './AccountForm'
 import ExtratoContaPanel from './ExtratoContaPanel'
 import RendimentoModal from './RendimentoModal'
+import ProfileBadge from '../shared/ProfileBadge'
 import ComposicaoPatrimonioModal from '../Patrimonio/ComposicaoPatrimonioModal'
 import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
 import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
@@ -345,6 +346,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
           </div>
           <h3 className="font-semibold text-sm truncate">{account.name}</h3>
           <div className="flex flex-wrap gap-1 mt-1">
+            <ProfileBadge account={account} />
             {account.apelido && (
               <span className={`px-1.5 py-0.5 rounded text-xs bg-white/10 ${txtSec}`}>{account.apelido}</span>
             )}

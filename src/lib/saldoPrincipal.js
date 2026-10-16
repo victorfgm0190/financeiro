@@ -8,7 +8,7 @@ import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '.
 const rb = v => Math.round(v * 100) / 100
 
 // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal agregado sobre o pool de
-// contas (perfil ativo → contas do perfil; senão → fluxoCaixaPrincipal). Devolve, por seção,
+// contas FC (fluxoCaixaPrincipal) do perfil ativo (ou de todos, em Tudo). Devolve, por seção,
 // os componentes e itens (agendamentos, envelopes, lançamentos fora do ciclo) que somam cada saldo.
 //
 // profileId: perfil ativo (null = Tudo). getNextOccurrences(schedule, n) e getFinancialPeriod(ref)
@@ -27,9 +27,10 @@ export function calcularSaldoPrincipalBreakdown({
   const isCustom = mode === 'custom'
   const startDay = settings.financialMonthStartDay || 1
 
-  const pool = profileId
-    ? accounts.filter(a => a.profileId === profileId && a.type !== 'credit')
-    : accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
+  // Pool = contas FC (fluxoCaixaPrincipal), nunca cartão, recortadas pelo perfil ativo. MESMA regra
+  // em Tudo e em cada perfil: os pools dos perfis particionam o de Tudo, e todo valor abaixo é
+  // aditivo (transferência entre pools se anula), então Tudo = Σ perfis quando toda conta FC tem perfil.
+  const pool = accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit' && (!profileId || a.profileId === profileId))
   const poolIds = new Set(pool.map(a => a.id))
 
   // Contas Ger. (subcontas do grupo G) — para separar transferências gerenciais.

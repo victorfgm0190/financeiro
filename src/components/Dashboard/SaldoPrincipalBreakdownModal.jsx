@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmtSinal } from '../shared/utils'
 import { hojeStr } from '../../lib/saldos'
 import { MASCARA } from '../../mobile/ocultarValores'
+import ProfileBadge from '../shared/ProfileBadge'
 
 const rb = v => Math.round(v * 100) / 100
 
@@ -67,8 +68,11 @@ function Section({ title, children, primeira = false }) {
 }
 
 export default function SaldoPrincipalBreakdownModal({ compacto = false, oculto = false }) {
-  const { getSaldoPrincipalBreakdown } = useApp()
+  const { getSaldoPrincipalBreakdown, accounts } = useApp()
   const b = getSaldoPrincipalBreakdown()
+  // Contas completas por id, para o selo de perfil de cada linha do Saldo base.
+  const contaPorId = new Map((accounts || []).map(a => [a.id, a]))
+  const semContasFC = (b.saldoAtual.contas?.length ?? 0) === 0
 
   // Saldo Final Ciclo: a lista de pendentes do breakdown é só particionada por data. Data de
   // hoje não é atraso. O subtotal dos pendentes fecha por diferença com o total do breakdown —
@@ -85,11 +89,21 @@ export default function SaldoPrincipalBreakdownModal({ compacto = false, oculto 
     <div className="space-y-3">
       {/* 1. Saldo Atual Ciclo */}
       <Section primeira title={`Saldo Atual do Ciclo (${ddmm(b.cycleStart)} a ${ddmm(b.cycleEnd)})`}>
+        {semContasFC && (
+          <p className="flex items-start gap-1.5 text-xs text-aviso">
+            <AlertTriangle size={13} className="shrink-0 mt-px" />
+            Nenhuma conta de fluxo de caixa principal neste perfil. Marque contas como FC no cadastro
+            para que entrem no Saldo Principal.
+          </p>
+        )}
         <Row label="Saldo base (lançamentos efetivados)" value={b.saldoAtual.base} />
-        {/* Detalhe informativo: contas que compõem o Saldo base (badge FC). */}
+        {/* Detalhe informativo: contas que compõem o Saldo base (badge FC), com o selo do perfil. */}
         {b.saldoAtual.contas?.map((c, i) => (
-          <div key={c.id || i} className="flex items-baseline justify-between gap-3 pl-4">
-            <span className="text-xs text-texto-2 min-w-0 truncate">• {c.name}</span>
+          <div key={c.id || i} className="flex items-center justify-between gap-3 pl-4">
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs text-texto-2 min-w-0 truncate">• {c.name}</span>
+              <ProfileBadge account={contaPorId.get(c.id) || { id: c.id }} className="shrink-0" />
+            </span>
             <span className="text-xs text-texto-2 tabular-nums whitespace-nowrap shrink-0">{oculto ? MASCARA : fmtSinal(c.saldo)}</span>
           </div>
         ))}

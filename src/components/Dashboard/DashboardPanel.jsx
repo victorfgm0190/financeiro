@@ -337,7 +337,11 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-texto-2 font-medium">Saldo Principal</p>
-              <p className="text-xs text-texto-3 mt-0.5">Contas de fluxo de caixa · clique para ver posição</p>
+              <p className={`text-xs mt-0.5 ${saldosPrincipais?.semContasFC ? 'text-aviso' : 'text-texto-3'}`}>
+                {saldosPrincipais?.semContasFC
+                  ? 'Nenhuma conta de fluxo de caixa principal neste perfil'
+                  : 'Contas de fluxo de caixa · clique para ver posição'}
+              </p>
             </div>
           </div>
           <ChevronRight size={16} className="text-texto-3 group-hover:text-primary-fg transition-colors shrink-0" />

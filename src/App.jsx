@@ -112,6 +112,8 @@ function AppContent() {
       saldoAtualCalendario: isCustom ? (b.atualCalendario?.total ?? null) : null,
       saldoFinalCalendario: isCustom ? (b.finalCalendario?.total ?? null) : null,
       mode: isCustom ? 'custom' : 'calendar',
+      // Pool vazio (perfil sem conta FC): os cards explicam em vez de mostrar R$ 0,00 seco.
+      semContasFC: (b.saldoAtual.contas?.length ?? 0) === 0,
     }
   }, [getSaldoPrincipalBreakdown])
   const saldoPrincipal = saldosPrincipais.saldoAtual
