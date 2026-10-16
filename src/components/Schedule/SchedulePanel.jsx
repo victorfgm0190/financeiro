@@ -1021,6 +1021,10 @@ function ScheduleRow({
           </div>
           {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            {/* Abaixo de 1440px a coluna Frequência some: a frequência vira selo aqui. */}
+            <span className="min-[1440px]:hidden text-xs bg-surface-hover/60 text-texto-2 px-1.5 py-0.5 rounded whitespace-nowrap">
+              {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+            </span>
             {/* Série de fatura (desktop): o "+ N faturas seguintes" fica aqui, fora da linha do título,
                 para não espremer a descrição. */}
             {!detalheMobile && isSerie && hasFuture && (
@@ -1133,6 +1137,10 @@ function ScheduleRow({
           ) : acc ? (
             <p className="text-xs text-texto-3 mt-0.5 whitespace-normal break-words">{acc.apelido || acc.name}</p>
           ) : null}
+          {/* Abaixo de 1440px a coluna Favorecido some: o favorecido aparece aqui. */}
+          {schedule.payee && (
+            <p className="min-[1440px]:hidden text-xs text-texto-3 mt-0.5 truncate" title={schedule.payee}>{schedule.payee}</p>
+          )}
         </td>
 
         {/* Categoria */}
@@ -1143,7 +1151,7 @@ function ScheduleRow({
         </td>
 
         {/* Favorecido */}
-        <td className="px-3 py-3 hidden lg:table-cell max-w-[140px]">
+        <td className="px-3 py-3 hidden min-[1440px]:table-cell max-w-[140px]">
           <span className="text-xs text-texto-2 truncate block" title={schedule.payee || undefined}>{schedule.payee || <span className="text-texto-3">—</span>}</span>
         </td>
 
@@ -1155,7 +1163,7 @@ function ScheduleRow({
         </td>
 
         {/* Frequência */}
-        <td className="px-3 py-3 w-24 whitespace-nowrap hidden sm:table-cell">
+        <td className="px-3 py-3 w-24 whitespace-nowrap hidden min-[1440px]:table-cell">
           <span className="text-xs text-texto-3">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
         </td>
 
@@ -2062,9 +2070,9 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                 <th className="text-left px-2 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-[70px]" title="Tipo de documento">Doc.</th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium w-full min-w-[200px]">Descrição</th>
                 <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
-                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden lg:table-cell">Favorecido</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden min-[1440px]:table-cell">Favorecido</th>
                 <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
-                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden sm:table-cell whitespace-nowrap w-24">Frequência</th>
+                <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden min-[1440px]:table-cell whitespace-nowrap w-24">Frequência</th>
                 <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium whitespace-nowrap w-px sticky right-0 z-[1] bg-surface shadow-[-8px_0_8px_-8px_var(--color-overlay)]">Ações</th>
               </tr>
             </thead>
