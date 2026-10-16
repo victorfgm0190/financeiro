@@ -5,6 +5,7 @@ import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import { getEffectiveStatus, STATUS } from '../../lib/statusEfetivo'
 import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica } from '../../lib/buscaGlobal'
 import TransactionForm from '../Transactions/TransactionForm'
@@ -104,12 +105,15 @@ export default function GlobalSearch({ open, onClose }) {
   }
 
   const scheduleStatus = (s) => {
-    const next = getNextOccurrences(s, 1)[0] || null
+    // Próxima ocorrência pela data EFETIVA (override): a movida aparece no dia novo.
+    const base = getNextOccurrences(s, 1)[0] || null
+    const ef = base ? occEfetiva(s, base) : null
+    const next = ef?.date || null
     const registered = (s.registered || []).length
     const tdy = todayStr()
-    if (next && next < tdy) return { label: 'Atrasado', cls: 'bg-despesa/20 text-despesa', next, registered }
-    if (next) return { label: `Próxima ${fmtDate(next)}`, cls: 'bg-receita/15 text-receita', next, registered }
-    return { label: registered > 0 ? 'Concluído' : 'Sem ocorrências', cls: 'bg-surface-2 text-texto-2', next: null, registered }
+    if (next && next < tdy) return { label: 'Atrasado', cls: 'bg-despesa/20 text-despesa', next, registered, amount: ef.amount }
+    if (next) return { label: `Próxima ${fmtDate(next)}`, cls: 'bg-receita/15 text-receita', next, registered, amount: ef.amount }
+    return { label: registered > 0 ? 'Concluído' : 'Sem ocorrências', cls: 'bg-surface-2 text-texto-2', next: null, registered, amount: s.amount }
   }
 
   const buildResults = (txItems, scItems) => {
@@ -150,7 +154,7 @@ export default function GlobalSearch({ open, onClose }) {
         date: st.next || s.startDate,
         dateCartao: null,
         conta: s.transactionType === 'transfer' ? `${accName(s.accountId)} → ${accName(s.toAccountId)}` : (s.accountId ? accName(s.accountId) : '—'),
-        amount: s.amount,
+        amount: st.amount,
         desc: s.description || '',
         payee: s.payee || '',
         categoria: catLabel(s.categoryId),

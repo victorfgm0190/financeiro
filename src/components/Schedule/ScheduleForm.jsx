@@ -1124,7 +1124,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 const override = form.overrides[date]
                 const isSkipped = form.skipped.includes(date)
                 const displayDate = dataExibidaPrevia(date, i).split('-').reverse().join('/')
-                const hasCustomAmount = override && !isSkipped && override.amount !== (Number(form.amount) || 0)
+                // Override só de data não tem `amount` (de propósito: não congela o valor da série) —
+                // valor próprio só quando existe e difere; senão a célula mostrava "R$ NaN".
+                const hasCustomAmount = !!override && !isSkipped && override.amount != null && override.amount !== ''
+                  && Number.isFinite(Number(override.amount)) && Number(override.amount) !== (Number(form.amount) || 0)
 
                 return (
                   <button
@@ -1148,7 +1151,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     )}
                     {hasCustomAmount && (
                       <span className="block text-[9px] text-texto-2 mt-0.5">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(override.amount)}
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(override.amount))}
                       </span>
                     )}
                     {override && !isSkipped && !hasCustomAmount && override.date !== date && (

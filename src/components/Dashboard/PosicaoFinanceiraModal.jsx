@@ -2,6 +2,7 @@ import { Fragment, useState, useMemo } from 'react'
 import { ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 
 export default function PosicaoFinanceiraModal() {
   const { accounts, schedules, getOccurrencesProjecao: getNextOccurrences } = useApp()
@@ -16,9 +17,11 @@ export default function PosicaoFinanceiraModal() {
       const items = []
       schedules.forEach(s => {
         if (s.accountId !== account.id) return
-        getNextOccurrences(s, 48).forEach(date => {
+        // Data e valor EFETIVOS da ocorrência (override), não a data-base e o valor da série.
+        getNextOccurrences(s, 48).forEach(base => {
+          const { date, amount } = occEfetiva(s, base)
           if (date >= today) {
-            items.push({ description: s.description, amount: s.amount, date, type: s.transactionType })
+            items.push({ description: s.description, amount: Number(amount) || 0, date, type: s.transactionType })
           }
         })
       })

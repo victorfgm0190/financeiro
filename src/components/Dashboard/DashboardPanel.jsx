@@ -173,9 +173,10 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
     const in7 = hojeStr(new Date(Date.now() + 7 * 86400000))
     const items = []
     schedules.forEach(s => {
-      const nexts = getNextOccurrences(s, 2)
-      nexts.forEach(date => {
-        if (date <= in7) items.push({ schedule: s, date })
+      // Data e valor EFETIVOS (override da ocorrência): a movida aparece no dia novo.
+      getNextOccurrences(s, 2).forEach(base => {
+        const { date, amount } = occEfetiva(s, base)
+        if (date <= in7) items.push({ schedule: s, date, amount })
       })
     })
     return items.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
@@ -208,13 +209,15 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       const toPrincipal = principalIds.has(schedule.toAccountId)
       if (!fromPrincipal && !toPrincipal) continue
 
+      // Data e valor EFETIVOS da ocorrência (override): a janela do período usa a data em que
+      // ela realmente cai, não a data-base.
       const nexts = getNextOccurrences(schedule, 35)
-        .filter(date => date > todayStr && date <= periodStr.end)
+        .map(base => occEfetiva(schedule, base))
+        .filter(ef => ef.date > todayStr && ef.date <= periodStr.end)
       if (nexts.length === 0) continue
 
-      for (const occDate of nexts) {
-        // Valor EFETIVO da ocorrência (override da prévia), não o valor base.
-        const occAmount = Number(occEfetiva(schedule, occDate).amount) || 0
+      for (const ef of nexts) {
+        const occAmount = Number(ef.amount) || 0
         if (schedule.transactionType === 'income' && fromPrincipal) {
           pendingIncome += occAmount
           pendingCount++
@@ -595,7 +598,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             <p className="text-xs text-texto-3 text-center py-6">Nenhum vencimento nos próximos 7 dias</p>
           ) : (
             <div className="space-y-2">
-              {upcomingSchedules.map(({ schedule, date }, i) => {
+              {upcomingSchedules.map(({ schedule, date, amount }, i) => {
                 const isOverdue = date < today
                 const daysLeft = differenceInDays(parseISO(date), parseISO(today))
                 return (
@@ -620,7 +623,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
                       </div>
                     </div>
                     <span className={`text-xs font-bold shrink-0 ml-2 ${schedule.transactionType === 'income' ? 'text-receita' : 'text-despesa'}`}>
-                      {schedule.transactionType === 'income' ? '+' : '−'}{fmt(occEfetiva(schedule, date).amount)}
+                      {schedule.transactionType === 'income' ? '+' : '−'}{fmt(amount)}
                     </span>
                   </div>
                 )

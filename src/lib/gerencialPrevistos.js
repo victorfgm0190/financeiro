@@ -255,3 +255,28 @@ export function deltaEtapaAPrevistaNaConta(previstas = [], accountId, de, ate) {
   }
   return Math.round(acc * 100) / 100
 }
+
+// Lista "Agendamentos previstos" da fatura do cartão (CreditCardPanel) — alimenta também o
+// "+ R$ X previstos", o Saldo a Pagar e o totalizador por grupo gerencial (gerencialTotais).
+// Data e valor EFETIVOS (occEfetiva): a ocorrência de 28/09 movida para 16/10 sai da fatura de
+// outubro e entra na de novembro (fechamento 15), com a data 16/10 na lista. A data-base continua
+// em `dataBase` (chave do override/registro). `billKeyOf(data)` → 'YYYY-MM' da fatura.
+export function agendamentosPrevistosDaFatura({ schedules = [], cardId, billKey, getOccurrences, billKeyOf, limite = 24 }) {
+  const out = []
+  if (!cardId || !billKey || typeof getOccurrences !== 'function' || typeof billKeyOf !== 'function') return out
+  for (const s of schedules) {
+    if (!ehGastoPrevistoDeCartao(s, cardId)) continue
+    for (const original of getOccurrences(s, limite)) {
+      const dataBase = String(original).slice(0, 10)
+      const { date, amount } = occEfetiva(s, dataBase)
+      const dia = String(date).slice(0, 10)
+      if (billKeyOf(dia) !== billKey) continue
+      // grupoGerencial vai junto para o totalizador conseguir somar o previsto no token certo.
+      out.push({
+        key: `${s.id}_${dataBase}`, scheduleId: s.id, description: s.description, date: dia, dataBase,
+        amount: Number(amount) || 0, grupoGerencial: s.grupoGerencial || null,
+      })
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date))
+}

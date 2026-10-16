@@ -11,6 +11,7 @@ import { ORIGIN } from '../../lib/origins'
 import { executarRegras, REGRAS_COMPETENCIA, ymParaRef, refParaYM } from '../../lib/integridade/regras'
 import { planejarCorrecoesCompetencia, resumirPlano, acoesDoPlano, linhasHistoricoRevisao } from '../../lib/revisaoCompetencia'
 import { novoLoteId } from '../../lib/historico'
+import { agendamentosPrevistosDaFatura } from '../../lib/gerencialPrevistos'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
@@ -629,29 +630,16 @@ export default function CreditCardPanel() {
   // Despesas AGENDADAS (manuais) do cartão cujas próximas ocorrências PENDENTES caem na fatura
   // selecionada — projeção do que ainda vai entrar. getNextOccurrences já exclui ocorrências
   // registradas/puladas, evitando dupla contagem com os lançamentos já efetivados (billTotal).
-  // Exclui os agendamentos automáticos da fatura (pagamento/devolução/resgate).
-  const agendamentosPrevistos = useMemo(() => {
-    if (!selectedCard || !billKey) return []
-    const AUTO_TIPOS = ['pagamento_fatura', 'gerencial_devolucao', 'resgate_reserva']
-    const out = []
-    for (const s of (schedules || [])) {
-      if (s.transactionType !== 'expense') continue
-      if (s.accountId !== selectedCard.id) continue
-      if (AUTO_TIPOS.includes(s.tipo)) continue
-      // Normaliza a data (10 primeiros chars 'YYYY-MM-DD') antes do getBillKey: caso a
-      // ocorrência carregue componente de hora/'Z', getBillKey (new Date(date+'T00:00:00'))
-      // geraria Invalid Date e a fatura nunca casaria — o previsto sumiria da lista.
-      const occsNaFatura = getNextOccurrences(s, 24).filter(d => getBillKey(String(d).slice(0, 10), selectedCard) === billKey)
-      for (const occ of occsNaFatura) {
-        // grupoGerencial vai junto para o totalizador conseguir somar o previsto no token certo.
-        out.push({
-          key: `${s.id}_${occ}`, description: s.description, date: occ,
-          amount: Number(s.amount) || 0, grupoGerencial: s.grupoGerencial || null,
+  // Exclui os agendamentos automáticos da fatura (pagamento/devolução/resgate). Data e valor
+  // EFETIVOS da ocorrência (override) — ver agendamentosPrevistosDaFatura.
+  const agendamentosPrevistos = useMemo(() => (
+    selectedCard && billKey
+      ? agendamentosPrevistosDaFatura({
+          schedules, cardId: selectedCard.id, billKey, getOccurrences: getNextOccurrences,
+          billKeyOf: d => getBillKey(d, selectedCard),
         })
-      }
-    }
-    return out.sort((a, b) => a.date.localeCompare(b.date))
-  }, [schedules, selectedCard, billKey, getNextOccurrences])
+      : []
+  ), [schedules, selectedCard, billKey, getNextOccurrences])
   const totalPrevisto = agendamentosPrevistos.reduce((sum, a) => sum + a.amount, 0)
 
   // Pagamentos REAIS (credit_payment + transferências vinculadas) da fatura.
