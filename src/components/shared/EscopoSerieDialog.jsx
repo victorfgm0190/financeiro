@@ -9,7 +9,8 @@ import { ESCOPO, ROTULO_CAMPO } from '../../lib/camposSerie'
 // variante 'ocorrencia' (agendamento recorrente — data/valor de UMA ocorrência): pergunta direta
 // "Aplicar esta alteração às próximas ocorrências?" com dois botões. `conflitos` = ocorrências
 // seguintes cuja exceção (do campo alterado) será descartada no "Sim" — avisadas antes.
-export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie = 0, onConfirm, onCancel, variante, conflitos = [] }) {
+// `continua` (série sem fim): não mostra a contagem de pendentes, que é só o teto da projeção.
+export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie = 0, onConfirm, onCancel, variante, conflitos = [], continua = false }) {
   const [escopo, setEscopo] = useState(ESCOPO.PARCELA)
   const [motivo, setMotivo] = useState('')
   const parcela = mudancas.filter(m => !['payee', 'tipoDocumentoId'].includes(m.campo)).map(m => ROTULO_CAMPO[m.campo] || m.campo)
@@ -33,7 +34,10 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
           <div>
             <p className="text-sm font-semibold text-texto-1">Aplicar esta alteração às próximas ocorrências?</p>
             <p className="text-xs text-texto-2 mt-0.5">
-              Você alterou: <span className="text-texto-1">{parcela.join(', ')}</span>. Há {nProximas} ocorrência{nProximas !== 1 ? 's' : ''} pendente{nProximas !== 1 ? 's' : ''} depois desta.
+              Você alterou: <span className="text-texto-1">{parcela.join(', ')}</span>.{' '}
+              {continua
+                ? 'Vale para todas as próximas ocorrências pendentes.'
+                : `Há ${nProximas} parcela${nProximas !== 1 ? 's' : ''} pendente${nProximas !== 1 ? 's' : ''} depois desta.`}
             </p>
           </div>
         </div>

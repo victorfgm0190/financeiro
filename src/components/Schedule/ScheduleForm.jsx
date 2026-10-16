@@ -49,7 +49,7 @@ const TIPS = {
   payee: 'Pessoa ou empresa beneficiária do pagamento. Ex: Locadora, Empresa, Fornecedor.',
   frequency: 'Intervalo de repetição entre ocorrências: diário, semanal, mensal, anual etc.',
   startDate: 'Data da primeira ocorrência. As seguintes são calculadas automaticamente conforme a frequência.',
-  nextOccurrence: 'Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas (re-ancora a série no novo dia, sem perder a Data de Início). Vazio = calcula desde a Data de Início.',
+  nextOccurrence: 'Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas.',
   occurrence: 'Contínua: repete indefinidamente. Parcelada: encerra após número fixo de vezes.',
   installments: 'Total de vezes que este lançamento se repetirá antes de ser encerrado automaticamente.',
   remindDaysBefore: 'Exibe um alerta no painel X dias antes do vencimento para que você não se esqueça.',
@@ -675,6 +675,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     return (
       <EscopoSerieDialog
         variante="ocorrencia"
+        continua={form.occurrenceType === 'continuous'}
         mudancas={chipPendente.mudancas}
         nProximas={chipPendente.nProximas}
         nPendentesSerie={chipPendente.nPendentes}
@@ -688,6 +689,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     return (
       <EscopoSerieDialog
         variante={escopoPendente.ocorrencia ? 'ocorrencia' : undefined}
+        continua={form.occurrenceType === 'continuous'}
         conflitos={escopoPendente.conflitos}
         mudancas={escopoPendente.mudancas}
         nProximas={escopoPendente.nProximas}
@@ -1021,7 +1023,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               onChange={e => { set('nextOccurrence', e.target.value); setAncoraTocada(true) }}
             />
             <p className="text-[11px] text-texto-3 mt-1">
-              Próxima ocorrência. Altere o dia (ex.: 20 → 30) para mudar as próximas; a Data de Início é preservada.
+              Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas.
             </p>
             {faturaCalculada && (
               <p className="text-xs text-texto-2 mt-1">
