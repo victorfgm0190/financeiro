@@ -16,7 +16,7 @@ import { HistoricoPainel } from '../shared/HistoricoPainel'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoAgendamento, planoRegistros, occCampos,
   mudancasDaSerie, agendamentoDoMotor, chaveSerieFinanciamento, irmasFinanciamento,
-  agendamentoUnicoPendente, serieKeyDe, mensagemAplicada,
+  agendamentoUnicoPendente, serieKeyDe, mensagemAplicada, conflitosProximas, normalizarCampo, edicaoDeOcorrencia,
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
@@ -48,7 +48,7 @@ const TIPS = {
   payee: 'Pessoa ou empresa beneficiária do pagamento. Ex: Locadora, Empresa, Fornecedor.',
   frequency: 'Intervalo de repetição entre ocorrências: diário, semanal, mensal, anual etc.',
   startDate: 'Data da primeira ocorrência. As seguintes são calculadas automaticamente conforme a frequência.',
-  nextOccurrence: 'Próxima ocorrência / dia de vencimento atual. Altere para mudar o dia das próximas ocorrências sem perder a Data de Início original. Vazio = calcula desde a Data de Início.',
+  nextOccurrence: 'Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas (re-ancora a série no novo dia, sem perder a Data de Início). Vazio = calcula desde a Data de Início.',
   occurrence: 'Contínua: repete indefinidamente. Parcelada: encerra após número fixo de vezes.',
   installments: 'Total de vezes que este lançamento se repetirá antes de ser encerrado automaticamente.',
   remindDaysBefore: 'Exibe um alerta no painel X dias antes do vencimento para que você não se esqueça.',
@@ -227,14 +227,19 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   })
   const grpD = gerencialGroups.find(g => g.number === 'D')
 
+  // Versão VIVA do agendamento em edição (o estado do app). A edição de uma ocorrência pela prévia
+  // é aplicada na hora; daí em diante a âncora, o diff e a base do save partem desta versão, não
+  // do `initial` congelado na abertura do formulário.
+  const atual = (initial?.id && (schedules || []).find(s => s.id === initial.id)) || initial
   // Âncora da série tal como está no banco (data ORIGINAL da ocorrência). Vazia num agendamento
   // novo; num já salvo sem âncora explícita, a primeira ocorrência futura.
-  const ancoraSalva = initial?.nextOccurrence
-    || (initial?.id ? (getNextOccurrences(initial, 24).find(d => d >= today()) || '') : '')
+  const ancoraDe = (sch) => sch?.nextOccurrence
+    || (sch?.id ? (getNextOccurrences(sch, 24).find(d => d >= today()) || '') : '')
+  const ancoraSalva = ancoraDe(atual)
   // O que o campo MOSTRA: a mesma âncora com a exceção da ocorrência aplicada. Com a ocorrência
   // de 10/09 movida para 13/09, a âncora salva continua 10/09 e o campo exibe 13/09 — que é a
   // data em que a parcela realmente cai, e a que a tela inicial já mostrava.
-  const ancoraExibida = (ancoraSalva && initial) ? occEfetiva(initial, ancoraSalva).date : ancoraSalva
+  const ancoraExibida = (ancoraSalva && atual) ? occEfetiva(atual, ancoraSalva).date : ancoraSalva
   // Só o que o usuário digitar aqui re-ancora a série. Sem esta flag, reabrir o formulário e
   // salvar qualquer outro campo gravaria a data EXIBIDA como âncora nova (o submit faz
   // `data = { ...form }`) e deslocaria a série inteira sem ninguém pedir.
@@ -248,8 +253,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const ehMotor = !!initial?.id && agendamentoDoMotor(initial)
   const ehFinanciamento = !!initial?.id && !!chaveSerieFinanciamento(initial)
   const ehRecorrente = !!initial?.id && !ehMotor && !ehFinanciamento && (initial.frequency || 'once') !== 'once'
-  const occInicial = ehRecorrente && ancoraSalva ? occCampos(initial, ancoraSalva) : null
-  const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes }
+  const occInicial = ehRecorrente && ancoraSalva ? occCampos(atual, ancoraSalva) : null
+  const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes, conflitos }
+  // Edição de uma ocorrência pela prévia aguardando o "aplicar às próximas?".
+  const [chipPendente, setChipPendente] = useState(null) // { occDate, mudancas, nProximas, nPendentes, conflitos }
   const [verHistorico, setVerHistorico] = useState(false)
 
   const [form, setForm] = useState(() => ({
@@ -372,92 +379,113 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const previewSchedule = {
     ...form,
     // A prévia é gerada a partir da âncora SALVA, não da exibida. As datas que ela produz são as
-    // ORIGINAIS — chaves de overrides/skipped e do que o fluxo de caixa usa. Gerar a partir da
-    // data efetiva (13/09) produziria células keyed em 13/09, 13/10…, e a exceção criada ao
-    // clicar numa delas nunca seria encontrada pela série, que continua ancorada em 10/09.
+    // ORIGINAIS — chaves de overrides/skipped e do que o fluxo de caixa usa. Cada célula EXIBE a
+    // data e o valor EFETIVOS (occEfetiva), a mesma fonte do Fluxo/Fatura.
     nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
-    amount: Number(form.amount) || 0,
+    // Valor da SÉRIE: num recorrente salvo, o campo Valor mostra a ocorrência da âncora (que pode
+    // ter exceção própria), então a série vem do agendamento.
+    amount: ehRecorrente ? (Number(atual.amount) || 0) : (Number(form.amount) || 0),
     registered: [],
     skipped: [],
   }
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
 
-  // Deslocamento VISUAL da prévia. Quando a primeira ocorrência tem exceção de data (10/09 →
-  // 11/09), as seguintes são exibidas com o mesmo deslocamento — 11/10, 11/11 — que é o que
-  // quem moveu o vencimento espera ver.
-  //
-  // É só exibição, de propósito. As datas ORIGINAIS continuam sendo as chaves de
-  // overrides/skipped (por isso a grade segue iterando `preview`, não as datas exibidas) e
-  // continuam sendo o que `nextOccurrence`, o fluxo de caixa e a baixa usam. Mudar a âncora aqui
-  // deslocaria a série de verdade, e como o submit regrava `nextOccurrence` a cada save isso
-  // aconteceria sem ninguém pedir.
-  // Sem useMemo: `preview` já é recalculado a cada render, então memoizar em cima dele não
-  // pouparia nada — e a conta é uma subtração de datas.
-  const deslocPrevia = (() => {
-    const primeira = preview[0]
-    const ov = primeira ? form.overrides[primeira] : null
-    if (!ov?.date || ov.date === primeira) return 0
-    const ms = new Date(`${ov.date}T12:00:00`) - new Date(`${primeira}T12:00:00`)
-    return Math.round(ms / 86400000)
-  })()
-
-  // Data a EXIBIR numa célula da prévia: exceção própria manda; senão, a original deslocada.
-  const dataExibidaPrevia = (date, i) => {
-    const ov = form.overrides[date]
-    if (ov?.date) return ov.date
-    if (i === 0 || deslocPrevia === 0) return date
-    const d = new Date(`${date}T12:00:00`)
-    d.setDate(d.getDate() + deslocPrevia)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
-
   // Valor efetivo da próxima ocorrência do agendamento já salvo (respeita override individual).
   // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
   // próxima ocorrência tem valor diferente.
-  const nextOccDate = initial?.id ? (getNextOccurrences(initial, 1)[0] || null) : null
-  const nextOccAmount = nextOccDate ? Number(occEfetiva(initial, nextOccDate).amount) : null
-  const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(initial?.amount) || 0)
+  const nextOccDate = atual?.id ? (getNextOccurrences(atual, 1)[0] || null) : null
+  const nextOccAmount = nextOccDate ? Number(occEfetiva(atual, nextOccDate).amount) : null
+  const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(atual?.amount) || 0)
 
+  // Edição de uma ocorrência pela PRÉVIA (chip). Pular/voltar a incluir continua local (vai no
+  // save). Data e valor passam pela MESMA regra do formulário: pendentes depois desta → pergunta
+  // "aplicar às próximas?"; o plano é o planoAgendamento. Num agendamento já salvo, aplica e grava o
+  // histórico na hora (a prévia passa a refletir o estado real); num novo, só no formulário.
+  const fonteOcorrencias = () => (initial?.id ? atual : { ...previewSchedule, registered: [], skipped: [] })
   const handleSaveOccurrence = (changes) => {
-    setForm(f => {
-      const newSkipped = changes.skip
-        ? [...f.skipped.filter(d => d !== editingOcc), editingOcc]
-        : f.skipped.filter(d => d !== editingOcc)
-      const newOverrides = changes.skip
-        ? Object.fromEntries(Object.entries(f.overrides).filter(([k]) => k !== editingOcc))
-        : (() => {
-          // Só grava o que difere da série (antes gravava amount sempre e congelava o valor da
-          // ocorrência mesmo quando só a data mudava). Mantém os demais campos do override.
-          const ov = { ...(f.overrides[editingOcc] || {}) }
-          if (changes.date && changes.date !== editingOcc) ov.date = changes.date
-          else delete ov.date
-          if (Math.abs(Number(changes.amount) - (Number(f.amount) || 0)) > 0.005) ov.amount = Number(changes.amount)
-          else delete ov.amount
-          const resto = { ...f.overrides }
-          if (Object.keys(ov).length) resto[editingOcc] = ov
-          else delete resto[editingOcc]
-          return resto
-        })()
-      return { ...f, skipped: newSkipped, overrides: newOverrides }
-    })
+    const occDate = editingOcc
     setEditingOcc(null)
+    const eraPulada = form.skipped.includes(occDate)
+    if (changes.skip || eraPulada) {
+      setForm(f => ({
+        ...f,
+        skipped: changes.skip ? [...f.skipped.filter(d => d !== occDate), occDate] : f.skipped.filter(d => d !== occDate),
+        overrides: changes.skip ? Object.fromEntries(Object.entries(f.overrides).filter(([k]) => k !== occDate)) : f.overrides,
+      }))
+      if (changes.skip) return
+    }
+    const fonte = fonteOcorrencias()
+    const pendentes = getNextOccurrences(fonte, 400)
+    const { mudancas, perguntar, nProximas, conflitos } = edicaoDeOcorrencia(fonte, occDate, changes, pendentes)
+    if (!mudancas.length) return
+    if (perguntar) {
+      setChipPendente({ occDate, mudancas, nProximas, nPendentes: pendentes.length, conflitos })
+      return
+    }
+    aplicarEdicaoOcorrencia(occDate, mudancas, { escopo: ESCOPO.PARCELA })
+  }
+
+  const aplicarEdicaoOcorrencia = async (occDate, mudancas, decisao) => {
+    const fonte = fonteOcorrencias()
+    const escopo = decisao?.escopo || ESCOPO.PARCELA
+    const motivo = decisao?.motivo || null
+    const plano = planoAgendamento(fonte, {
+      occDate, mudancas, escopo,
+      pendentes: getNextOccurrences(fonte, 400), proximasDoNovo: s => getNextOccurrences(s, 400),
+    })
+    const novo = plano.schedule
+    if (initial?.id) {
+      updateSchedule(initial.id, novo)
+      // Espelha no formulário: exceções e, se o usuário não mexeu nos campos, a data e o valor
+      // exibidos da âncora (para o diff do save não ver mudança que não foi digitada).
+      const ancoraNova = ancoraDe(novo)
+      setForm(f => ({
+        ...f,
+        overrides: novo.overrides,
+        ...(!ancoraTocada && ancoraNova ? { nextOccurrence: occEfetiva(novo, ancoraNova).date } : {}),
+        ...(ancoraNova && normalizarCampo('amount', f.amount) === normalizarCampo('amount', camposAntes?.amount)
+          ? { amount: occCampos(novo, ancoraNova).amount } : {}),
+      }))
+      const loteId = novoLoteId()
+      const historico = linhasHistorico({
+        entidade: 'agendamento',
+        itens: itensPorEscopo([{ id: initial.id, ocorrenciaData: escopo === ESCOPO.PARCELA ? occDate : null, mudancas }], escopo),
+        serieKey: serieKeyDe({ agendamento: atual }), loteId, motivo,
+      })
+      try {
+        if (historico.length) await registrarEdicao({ agendamentos: [novo], historico, loteId, motivo })
+        onAviso?.(escopo === ESCOPO.PARCELA ? 'Ocorrência alterada. Histórico registrado.' : mensagemAplicada(plano.afetadas.length || 1))
+      } catch (err) {
+        onAviso?.(`Alteração salva, mas o histórico não foi registrado: ${err.message}`, 'error')
+      }
+      return
+    }
+    // Agendamento novo (ainda sem id): tudo fica no formulário até salvar.
+    const reancorou = novo.nextOccurrence !== fonte.nextOccurrence
+    setForm(f => ({
+      ...f,
+      overrides: novo.overrides,
+      ...(escopo !== ESCOPO.PARCELA && mudancas.some(m => m.campo === 'amount') ? { amount: novo.amount } : {}),
+      ...(reancorou ? { nextOccurrence: novo.nextOccurrence } : {}),
+    }))
+    if (reancorou) setAncoraTocada(true)
   }
 
   // Campos rastreados (valor, data, categoria, descrição, conta, centro de custo, grupo, favorecido,
   // tipo) ANTES e DEPOIS — base do diff da regra de séries e do histórico. A data só entra se o
   // campo foi tocado (o mesmo critério que já protegia a âncora).
-  const camposAntes = initial?.id ? {
-    amount: occInicial ? occInicial.amount : initial.amount,
+  const camposAntes = atual?.id ? {
+    amount: occInicial ? occInicial.amount : atual.amount,
     date: ancoraExibida || null,
-    categoryId: (occInicial ? occInicial.categoryId : initial.categoryId) || null,
-    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : initial.categoriaCnpjId) || null,
-    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : initial.categoriaCpfId) || null,
-    description: (occInicial ? occInicial.description : initial.description) || null,
-    accountId: (occInicial ? occInicial.accountId : initial.accountId) || null,
-    costCenter: (occInicial ? occInicial.costCenter : initial.costCenter) || null,
-    grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial.grupoGerencial) || null,
-    payee: initial.payee || null,
-    tipoDocumentoId: initial.tipoDocumentoId || null,
+    categoryId: (occInicial ? occInicial.categoryId : atual.categoryId) || null,
+    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : atual.categoriaCnpjId) || null,
+    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : atual.categoriaCpfId) || null,
+    description: (occInicial ? occInicial.description : atual.description) || null,
+    accountId: (occInicial ? occInicial.accountId : atual.accountId) || null,
+    costCenter: (occInicial ? occInicial.costCenter : atual.costCenter) || null,
+    grupoGerencial: (occInicial ? occInicial.grupoGerencial : atual.grupoGerencial) || null,
+    payee: atual.payee || null,
+    tipoDocumentoId: atual.tipoDocumentoId || null,
   } : null
   const camposDoForm = (f) => ({
     amount: Number(f.amount),
@@ -476,9 +504,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
   const contextoSerie = () => {
     if (ehRecorrente) {
-      const pendentes = getNextOccurrences(initial, 400)
+      const pendentes = getNextOccurrences(atual, 400)
       const occDate = ancoraSalva || pendentes[0]
-      return { tipo: 'A', occDate, nProximas: pendentes.filter(d => d > occDate).length, nPendentes: pendentes.length }
+      return { tipo: 'A', occDate, pendentes, nProximas: pendentes.filter(d => d > occDate).length, nPendentes: pendentes.length }
     }
     if (ehFinanciamento) {
       const irmas = irmasFinanciamento(initial, schedules)
@@ -503,11 +531,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       // Estrutura do formulário (frequência, parcelas, prévia…) + campos rastreados ainda com o
       // valor da SÉRIE; o plano decide override × agendamento base.
       const base = {
-        ...initial, ...data, nextOccurrence: ancoraSalva,
-        amount: initial.amount, categoryId: initial.categoryId, description: initial.description,
-        categoriaCnpjId: initial.categoriaCnpjId || null, categoriaCpfId: initial.categoriaCpfId || null,
-        accountId: initial.accountId, accountType: initial.accountType, costCenter: initial.costCenter,
-        grupoGerencial: initial.grupoGerencial, payee: initial.payee, tipoDocumentoId: initial.tipoDocumentoId,
+        ...atual, ...data, nextOccurrence: ancoraSalva,
+        amount: atual.amount, categoryId: atual.categoryId, description: atual.description,
+        categoriaCnpjId: atual.categoriaCnpjId || null, categoriaCpfId: atual.categoriaCpfId || null,
+        accountId: atual.accountId, accountType: atual.accountType, costCenter: atual.costCenter,
+        grupoGerencial: atual.grupoGerencial, payee: atual.payee, tipoDocumentoId: atual.tipoDocumentoId,
       }
       const plano = planoAgendamento(base, {
         occDate: ctx.occDate, mudancas, escopo: escopoParcela,
@@ -607,7 +635,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       const mudancas = diffCampos(camposAntes, camposDoForm(form))
       const ctx = contextoSerie()
       if (!decisao && precisaEscolherEscopo(mudancas, ctx.nProximas)) {
-        setEscopoPendente({ mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes })
+        setEscopoPendente({
+          mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, ocorrencia: ctx.tipo === 'A',
+          conflitos: ctx.tipo === 'A' ? conflitosProximas(atual, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
+        })
         return
       }
       // Parcela de financiamento: o favorecido vale para o financiamento e as parcelas PENDENTES —
@@ -629,9 +660,24 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   if (verHistorico && initial?.id) {
     return <HistoricoPainel entidade="agendamento" entidadeId={initial.id} serieKey={serieKeyDe({ agendamento: initial })} onVoltar={() => setVerHistorico(false)} />
   }
+  if (chipPendente) {
+    return (
+      <EscopoSerieDialog
+        variante="ocorrencia"
+        mudancas={chipPendente.mudancas}
+        nProximas={chipPendente.nProximas}
+        nPendentesSerie={chipPendente.nPendentes}
+        conflitos={chipPendente.conflitos}
+        onCancel={() => setChipPendente(null)}
+        onConfirm={(decisao) => { const c = chipPendente; setChipPendente(null); aplicarEdicaoOcorrencia(c.occDate, c.mudancas, decisao) }}
+      />
+    )
+  }
   if (escopoPendente) {
     return (
       <EscopoSerieDialog
+        variante={escopoPendente.ocorrencia ? 'ocorrencia' : undefined}
+        conflitos={escopoPendente.conflitos}
         mudancas={escopoPendente.mudancas}
         nProximas={escopoPendente.nProximas}
         nPendentesSerie={escopoPendente.nPendentes}
@@ -1123,55 +1169,47 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               {preview.map((date, i) => {
                 const override = form.overrides[date]
                 const isSkipped = form.skipped.includes(date)
-                const displayDate = dataExibidaPrevia(date, i).split('-').reverse().join('/')
-                // Override só de data não tem `amount` (de propósito: não congela o valor da série) —
-                // valor próprio só quando existe e difere; senão a célula mostrava "R$ NaN".
-                const hasCustomAmount = !!override && !isSkipped && override.amount != null && override.amount !== ''
-                  && Number.isFinite(Number(override.amount)) && Number(override.amount) !== (Number(form.amount) || 0)
+                // Data e valor REAIS da ocorrência (mesma fonte do Fluxo/Fatura). Override só de
+                // data não tem amount (de propósito) → vale o da série, nunca "R$ NaN".
+                const ef = occEfetiva(previewSchedule, date)
+                const valorReal = Number(ef.amount) || 0
+                const mudouData = !!override?.date && override.date !== date
+                const mudouValor = Math.abs(valorReal - previewSchedule.amount) > 0.005
+                const editado = !isSkipped && (mudouData || mudouValor)
+                const dataBR = (d) => d.split('-').reverse().join('/')
+                const tip = editado
+                  ? `Original: ${dataBR(date)}${mudouValor ? ` · valor original ${fmt(previewSchedule.amount)}` : ''} — clique para editar`
+                  : 'Clique para editar esta ocorrência'
 
                 return (
                   <button
                     key={date}
                     type="button"
                     onClick={() => setEditingOcc(date)}
-                    title="Clique para editar esta ocorrência"
+                    title={tip}
                     className={`text-center p-2 rounded-lg text-xs transition-all cursor-pointer ${
                       isSkipped
                         ? 'bg-surface-2/40 text-texto-3 ring-1 ring-borda-forte'
-                        : override
+                        : editado
                         ? 'bg-surface-hover text-texto-1 ring-1 ring-borda-campo'
                         : i === 0
                         ? 'bg-primary/15 text-primary-fg font-medium'
                         : 'bg-surface-2 text-texto-2'
                     } hover:ring-1 hover:ring-borda-forte`}
                   >
-                    <span className={isSkipped ? 'line-through opacity-40' : ''}>{displayDate}</span>
-                    {isSkipped && (
+                    <span className={isSkipped ? 'line-through opacity-40' : ''}>{dataBR(isSkipped ? date : ef.date)}</span>
+                    {isSkipped ? (
                       <span className="block text-[9px] text-texto-3 mt-0.5">Pulado</span>
+                    ) : (
+                      <span className="block text-[9px] text-texto-2 mt-0.5">{fmt(valorReal)}</span>
                     )}
-                    {hasCustomAmount && (
-                      <span className="block text-[9px] text-texto-2 mt-0.5">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(override.amount))}
-                      </span>
-                    )}
-                    {override && !isSkipped && !hasCustomAmount && override.date !== date && (
+                    {editado && (
                       <span className="block text-[9px] text-texto-2 mt-0.5">Editado</span>
                     )}
                   </button>
                 )
               })}
             </div>
-            {/* Sem este aviso a prévia mentiria: ela passa a mostrar 11/10, 11/11, mas o fluxo
-                de caixa, o Painel Geral e a baixa continuam usando as datas originais — a
-                exceção vale só para a ocorrência editada. Quem quer mover a série de verdade
-                tem o campo "Data de Vencimento Atual", que é a âncora. */}
-            {deslocPrevia !== 0 && (
-              <p className="text-xs text-aviso mt-1.5 leading-relaxed">
-                ⚠ As datas seguintes aparecem deslocadas junto com a exceção, mas a série continua
-                ancorada na data original — só a ocorrência editada mudou de fato. Para mover o
-                vencimento de todas, use <strong>Data de Vencimento Atual</strong>.
-              </p>
-            )}
           </div>
         )}
 
@@ -1186,7 +1224,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           originalDate={editingOcc}
           override={form.overrides[editingOcc]}
           isSkipped={form.skipped.includes(editingOcc)}
-          defaultAmount={Number(form.amount) || 0}
+          defaultAmount={previewSchedule.amount}
           onSave={handleSaveOccurrence}
           onClose={() => setEditingOcc(null)}
         />

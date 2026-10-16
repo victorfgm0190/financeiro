@@ -11,7 +11,7 @@ import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
-import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
+import { occEfetiva, escalarRateios, proximaEfetiva } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos } from '../../lib/agendamentosFiltro'
@@ -2557,12 +2557,13 @@ export default function SchedulePanel() {
     if (viewFilter === 'provisoes') return schedules.filter(s => s.isProvisao)
     if (viewFilter === 'history') return schedules.filter(s => getNextOccurrences(s, 1).length === 0)
     if (viewFilter === 'future')  return schedules.filter(s => getNextOccurrences(s, 1).length > 0)
+    // Filtros de período pela data EFETIVA da próxima ocorrência (override de data).
     if (viewFilter === 'next30')  return schedules.filter(s => {
-      const next = getNextOccurrences(s, 1)[0]
+      const next = proximaEfetiva(s, getNextOccurrences)?.date
       return next && next <= in30Str
     })
     if (viewFilter === 'month')   return schedules.filter(s => {
-      const next = getNextOccurrences(s, 1)[0]
+      const next = proximaEfetiva(s, getNextOccurrences)?.date
       return next && next >= monthStart && next <= monthEnd
     })
     if (viewFilter === 'ra') return schedules.filter(s =>

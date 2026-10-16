@@ -6,7 +6,8 @@
 // Campos da PARCELA (valor, data, categoria — inclusive as da transferência entre perfis —,
 // descrição, conta, centro de custo, grupo gerencial):
 // se a série tem outras pendentes depois desta, o usuário escolhe "Só esta parcela" ou "Esta e
-// as próximas pendentes". Data em "esta e as próximas" desloca as próximas pelo mesmo nº de dias.
+// as próximas pendentes". Data em "esta e as próximas" re-ancora a série no novo dia (agendamento
+// recorrente) ou desloca pelo mesmo nº de dias (parcelas como registros separados).
 //
 // REGRA DE OURO: nada aqui altera parcela já efetivada (ocorrência registrada, agendamento com
 // baixa, lançamento de fatura fechada/paga) nem lançamento já gerado. Só PENDENTES.
@@ -17,6 +18,7 @@
 // (pagamento_fatura / resgate_reserva / gerencial_devolucao) ficam FORA da regra.
 
 import { somarDias, diasEntre } from './fluxoConsultas.js'
+import { FREQ_MENSAIS, datasDaSerie } from './occurrences.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 
 export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId']
@@ -148,37 +150,36 @@ export function planoAgendamento(schedule, { occDate, mudancas, escopo, pendente
       s[m.campo] = m.para
     }
     const mData = parcela.find(x => x.campo === 'date')
-    if (mData && mData.de && mData.para) {
-      const delta = diasEntre(mData.de, mData.para)
-      if (delta !== 0) {
-        if (anteriores.length === 0 && typeof proximasDoNovo === 'function') {
-          // Editada = 1ª pendente: re-ancora a série e re-chaveia os overrides seguintes por posição.
-          const antigos = s.overrides
-          // A editada cai exatamente na data escolhida (mesmo se já tinha exceção de data); as
-          // seguintes seguem a série a partir dela; exceções próprias delas deslocam pelo mesmo delta.
-          const novaAncora = mData.para
-          s = { ...s, nextOccurrence: novaAncora, overrides: {} }
-          const novas = proximasDoNovo(s)
-          for (const [k, v] of Object.entries(antigos)) if (!daquiPraFrente.includes(k)) s.overrides[k] = v
-          daquiPraFrente.forEach((d, i) => {
-            const ov = antigos[d]
-            const alvo = novas[i]
-            if (!alvo) return
-            if (d === occDate) {
-              const resto = semCampo(ov || {}, 'date')
-              if (Object.keys(resto).length) s.overrides[alvo] = resto
-              return
-            }
-            if (!ov) return
-            s.overrides[alvo] = ov.date ? { ...ov, date: somarDias(ov.date, delta) } : ov
-          })
-        } else {
-          // Há pendentes antes: desloca, por override, cada pendente daqui pra frente.
-          for (const d of daquiPraFrente) {
-            const ov = s.overrides[d] || {}
-            s.overrides[d] = { ...ov, date: somarDias(ov.date || d, delta) }
-          }
-        }
+    if (mData && mData.de && mData.para && mData.para !== mData.de) {
+      // Data em "esta e as próximas": RE-ANCORA a série no novo dia (28 → 16: 16/10, 16/11…), não
+      // desloca por nº de dias (+18 dias dava 15/11, 16/12, 18/03…). Mês sem o dia → último dia
+      // (overrides._diaVencimento, só frequências mensais). Exceções de DATA das seguintes
+      // conflitam com a nova data e saem; os demais campos delas seguem a ocorrência por posição.
+      const dia = FREQ_MENSAIS.has(s.frequency) ? Number(mData.para.slice(8, 10)) : null
+      if (anteriores.length === 0 && typeof proximasDoNovo === 'function') {
+        // Editada = 1ª pendente: re-ancora a série e re-chaveia os overrides seguintes por posição.
+        const antigos = s.overrides
+        const novos = {}
+        for (const [k, v] of Object.entries(antigos)) if (!daquiPraFrente.includes(k)) novos[k] = v
+        if (dia) novos._diaVencimento = dia
+        else delete novos._diaVencimento
+        s = { ...s, nextOccurrence: mData.para, overrides: novos }
+        const novas = proximasDoNovo(s)
+        daquiPraFrente.forEach((d, i) => {
+          const ov = antigos[d]
+          const alvo = novas[i]
+          if (!alvo || !ov) return
+          const resto = semCampo(ov, 'date')
+          if (Object.keys(resto).length) s.overrides[alvo] = resto
+        })
+      } else {
+        // Há pendentes ANTES (ficam como estão): daqui pra frente, exceção com a data re-ancorada.
+        const datas = datasDaSerie(mData.para, s.frequency, daquiPraFrente.length, dia)
+        daquiPraFrente.forEach((d, i) => {
+          const ov = semCampo(s.overrides[d] || {}, 'date')
+          const alvo = datas[i]
+          s.overrides[d] = !alvo || alvo === d ? ov : { ...ov, date: alvo }
+        })
       }
     }
     daquiPraFrente.forEach(d => afetadas.add(d))
@@ -189,6 +190,40 @@ export function planoAgendamento(schedule, { occDate, mudancas, escopo, pendente
     afetadas: [...afetadas].sort(),
     escopo: parcela.length ? escopo : ESCOPO.SERIE,
   }
+}
+
+// Edição de UMA ocorrência (data e/ou valor — chip da prévia ou campos do formulário): mudanças
+// em relação ao EFETIVO da ocorrência e se precisa perguntar "aplicar às próximas?".
+// → { mudancas: [{campo,de,para}], perguntar, nProximas, conflitos }
+export function edicaoDeOcorrencia(schedule, occDate, { date, amount } = {}, pendentes = []) {
+  const ef = occCampos(schedule, occDate)
+  const mudancas = []
+  if (date && date !== ef.date) mudancas.push({ campo: 'date', de: ef.date, para: date })
+  const de = normalizarCampo('amount', ef.amount)
+  const para = normalizarCampo('amount', amount)
+  if (para != null && para !== de) mudancas.push({ campo: 'amount', de, para })
+  const nProximas = pendentes.filter(d => d > occDate).length
+  return {
+    mudancas, nProximas,
+    perguntar: mudancas.length > 0 && precisaEscolherEscopo(mudancas, nProximas),
+    conflitos: mudancas.length ? conflitosProximas(schedule, { occDate, mudancas, pendentes }) : [],
+  }
+}
+
+// Ocorrências PENDENTES depois de `occDate` cujas exceções serão DESCARTADAS por "esta e as
+// próximas" (o campo alterado já tem exceção própria nelas). Para o aviso do diálogo.
+// → [{ data, campos: [campo] }]
+export function conflitosProximas(schedule, { occDate, mudancas, pendentes = [] }) {
+  const campos = mudancasDaParcela(mudancas).map(m => m.campo)
+  const out = []
+  for (const d of pendentes) {
+    if (d <= occDate) continue
+    const ov = schedule?.overrides?.[d]
+    if (!ov || typeof ov !== 'object') continue
+    const emConflito = campos.filter(c => c in ov)
+    if (emConflito.length) out.push({ data: d, campos: emConflito })
+  }
+  return out
 }
 
 // ── Caminhos D/E (lançamentos parcelados) e F (parcelas de financiamento) ─────────────────────

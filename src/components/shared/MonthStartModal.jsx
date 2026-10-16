@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { X, CheckCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { executarTransferenciasInicioMes } from '../../lib/autoRegistro'
-import { occEfetiva } from '../../lib/fluxoCaixa'
+import { occEfetiva, proximaEfetiva } from '../../lib/fluxoCaixa'
 import { fmt, fmtDate } from './utils'
 
 const SESSION_KEY = 'monthStartModalDismissed'
@@ -29,7 +29,8 @@ export default function MonthStartModal() {
       if (!s.overrides?._gerencialKey && !s.overrides?._originTxId) return false
       const toAcc = accounts.find(a => a.id === s.toAccountId)
       if (toAcc?.type === 'credit') return false
-      const nextDate = getNextOccurrences(s, 1)[0]
+      // Mês pela data EFETIVA da próxima ocorrência (override de data).
+      const nextDate = proximaEfetiva(s, getNextOccurrences)?.date
       return nextDate && nextDate.startsWith(currentMonth)
     })
   }, [schedules, accounts, getNextOccurrences, isAfterStart, currentMonth])
@@ -95,7 +96,8 @@ export default function MonthStartModal() {
           {pendingSchedules.map(sch => {
             const fromAcc  = accounts.find(a => a.id === sch.accountId)
             const toAcc    = accounts.find(a => a.id === sch.toAccountId)
-            const nextDate = getNextOccurrences(sch, 1)[0]
+            const prox = proximaEfetiva(sch, getNextOccurrences)
+            const nextDate = prox?.date
             const isSelected = selectedSet.has(sch.id)
             return (
               <div
@@ -123,7 +125,7 @@ export default function MonthStartModal() {
                     {nextDate && <span className="ml-2 text-texto-3">· {fmtDate(nextDate)}</span>}
                   </p>
                 </div>
-                <span className="text-sm font-bold text-transferencia shrink-0">{fmt(nextDate ? occEfetiva(sch, nextDate).amount : sch.amount)}</span>
+                <span className="text-sm font-bold text-transferencia shrink-0">{fmt(prox ? prox.amount : sch.amount)}</span>
               </div>
             )
           })}

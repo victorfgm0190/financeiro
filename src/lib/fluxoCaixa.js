@@ -50,6 +50,14 @@ export function occEfetiva(schedule, dataOriginal) {
   }
 }
 
+// Próxima ocorrência PENDENTE com data e valor EFETIVOS: { base, date, amount } ou null.
+// `base` (data original) segue sendo a chave para registrar/pular/editar; `date` é quando ela cai.
+export function proximaEfetiva(schedule, getNextOccurrences) {
+  const base = getNextOccurrences(schedule, 1)[0]
+  if (!base) return null
+  return { base, ...occEfetiva(schedule, base) }
+}
+
 // Rateio do agendamento reescalado para o valor da ocorrência registrada. As linhas são
 // gravadas contra o valor BASE; com override de valor na ocorrência (ou valor digitado no
 // modal), copiá-las como estão faria o rateio não fechar com o lançamento. Proporcional por

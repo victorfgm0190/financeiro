@@ -23,6 +23,7 @@ import CreditCardPanel from './components/CreditCard/CreditCardPanel'
 import SchedulePanel from './components/Schedule/SchedulePanel'
 import ImportPanel from './components/Import/ImportPanel'
 import CashFlowPanel from './components/CashFlow/CashFlowPanel'
+import { proximaEfetiva } from './lib/fluxoCaixa'
 import ReservasPanel from './components/Reservas/ReservasPanel'
 import EnvelopesPanel from './components/Envelopes/EnvelopesPanel'
 import BudgetPanel from './components/Budget/BudgetPanel'
@@ -131,9 +132,10 @@ function AppContent() {
     const schedCount = schedules.filter(s => {
       const remindDays = s.remindDaysBefore ?? 3
       if (remindDays <= 0) return false
-      const next = getNextOccurrences(s, 1)
-      if (!next.length) return false
-      const days = differenceInDays(parseISO(next[0]), today)
+      // Data EFETIVA da próxima ocorrência (override): o lembrete conta até o dia em que ela cai.
+      const next = proximaEfetiva(s, getNextOccurrences)
+      if (!next) return false
+      const days = differenceInDays(parseISO(next.date), today)
       return days >= 0 && days <= remindDays
     }).length
     return creditCount + schedCount

@@ -12,7 +12,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ResgateBreakdownModal from '../Schedule/ResgateBreakdownModal'
-import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao } from '../../lib/resgateComposicao'
+import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao, parteDaFuncaoNaOcorrencia } from '../../lib/resgateComposicao'
+import { occEfetiva } from '../../lib/fluxoCaixa'
 import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
 
@@ -1437,12 +1438,16 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
     const resItems = []  // { date, label, amount, resgateScheduleId? } (resgates reais + provisões)
     for (const p of provisoes) {
       if (p.reservaFuncaoId !== f.id) continue
-      const amt = Number(p.amount) || 0
-      if (!amt) continue
       const occs = getNextOccurrences(p, 24)
       const until = p.provisaoEfetivadaUntil || null
-      const proxima = until ? occs.find(dd => dd > until) : occs[0]
-      if (!proxima || proxima < winStart || proxima > winEnd) continue
+      // `until` compara datas-base (chave); a janela e o valor usam a ocorrência EFETIVA.
+      const base = until ? occs.find(dd => dd > until) : occs[0]
+      if (!base) continue
+      const ef = occEfetiva(p, base)
+      const proxima = ef.date
+      const amt = Number(ef.amount) || 0
+      if (!amt) continue
+      if (proxima < winStart || proxima > winEnd) continue
       const idx = winIndexOf(proxima)
       if (idx < 0 || idx > 11) continue
       provs[idx] = round2(provs[idx] + amt)
@@ -1452,10 +1457,13 @@ function computeScheduledByFunction(linked, accounts, schedules, scheduleReserva
       const isDep = !!accById.get(s.toAccountId)?.isReserva
       const isRes = !isDep && !!accById.get(s.accountId)?.isReserva
       if (!isDep && !isRes) continue
-      // Regra de rateio por função em parteDaFuncao — a mesma que a composição do resgate usa.
-      const amt = parteDaFuncao(s, detBySchedule.get(s.id), f.id).valor
-      if (!amt) continue
-      for (const dateStr of getNextOccurrences(s, 140)) {
+      // Regra de rateio por função em parteDaFuncao — a mesma que a composição do resgate usa —
+      // aplicada à ocorrência EFETIVA (data e valor do override).
+      const det = detBySchedule.get(s.id)
+      if (!parteDaFuncao(s, det, f.id).valor) continue
+      for (const base of getNextOccurrences(s, 140)) {
+        const { date: dateStr, valor: amt } = parteDaFuncaoNaOcorrencia(s, det, f.id, base)
+        if (!amt) continue
         if (dateStr < winStart || dateStr > winEnd) continue
         const idx = winIndexOf(dateStr)
         if (idx < 0 || idx > 11) continue

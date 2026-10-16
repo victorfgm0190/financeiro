@@ -45,7 +45,7 @@ Final Ciclo, Projetado, Atual Cal. e Final Cal. fecham: Tudo = Victor + Lumen.
 | Saldo base | Σ `initialBalance` do pool + lançamentos até o fim do ciclo − transferências gerenciais |
 | Transf. gerenciais | Líquido das transferências com `grupoGerencial` ou com ponta em conta do grupo G / `Ger. …` |
 | Saldo Atual Ciclo | Saldo base + Transf. gerenciais |
-| Final Ciclo | Saldo Atual Ciclo + ocorrências não registradas de agendamentos com ponta no pool, do início ao fim do ciclo |
+| Final Ciclo | Saldo Atual Ciclo + ocorrências não registradas de agendamentos com ponta no pool cuja data EFETIVA (override de data, `occEfetiva`) cai do início ao fim do ciclo; valor efetivo |
 | Projetado | Final Ciclo − restante dos envelopes de contas do pool |
 | Atual Cal. | Saldo Atual Ciclo + lançamentos depois do ciclo até o fim do mês-calendário (só no modo custom) |
 | Final Cal. | Atual Cal. + agendamentos do início do ciclo até o fim do mês-calendário (só no modo custom) |

@@ -1,4 +1,5 @@
 import { ehFontePrevista, resolverFontePrevista } from './gerencialPrevistos'
+import { occEfetiva } from './fluxoCaixa.js'
 
 const round2 = n => Math.round(n * 100) / 100
 
@@ -27,6 +28,17 @@ export function parteDaFuncao(schedule, det, functionId) {
   }
   if (schedule?.reservaFuncaoId === functionId) return { valor: schedule.amount || 0, fonteIds: null }
   return { valor: 0, fonteIds: new Set() }
+}
+
+// Parte da função numa OCORRÊNCIA (data-base `dataBase`) do agendamento: data EFETIVA e valor
+// proporcional ao override de valor daquela ocorrência (o rateio por função de parteDaFuncao é
+// sobre o valor da série). Sem override → { date: dataBase, valor: parteDaFuncao }.
+export function parteDaFuncaoNaOcorrencia(schedule, det, functionId, dataBase) {
+  const { valor } = parteDaFuncao(schedule, det, functionId)
+  const ef = occEfetiva(schedule, dataBase)
+  const serie = Number(schedule?.amount) || 0
+  const fator = serie > 0 ? (Number(ef.amount) || 0) / serie : 1
+  return { date: ef.date, valor: fator === 1 ? valor : round2(valor * fator) }
 }
 
 // Resgate de cartão = agendamento resgate_reserva (um por conta-origem × fatura, do MESMO mês da

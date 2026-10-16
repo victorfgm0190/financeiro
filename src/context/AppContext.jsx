@@ -2993,11 +2993,12 @@ export function AppProvider({ children }) {
         const fromAcc = s.accountId === account.id
         const toAcc = s.toAccountId === account.id
         if (!fromAcc && !toAcc) continue
-        const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= dateStr)
-        for (const dt of occs) {
-          // Valor EFETIVO da ocorrência: respeita overrides[dataOriginal].amount (mesmo
-          // critério do relatório). Sem override → schedule.amount.
-          const amount = occEfetiva(s, dt).amount
+        // Data e valor EFETIVOS da ocorrência (overrides[dataOriginal]): entra no intervalo pela
+        // data em que realmente cai — mesma regra do Saldo Principal e do Fluxo de Caixa.
+        const occs = getNextOccurrences(s, 120)
+          .map(dt => occEfetiva(s, dt))
+          .filter(ef => ef.date >= cycleStartStr && ef.date <= dateStr)
+        for (const { amount } of occs) {
           if (s.transactionType === 'income' && fromAcc) acc += amount
           else if (s.transactionType === 'expense' && fromAcc) acc -= amount
           else if (s.transactionType === 'transfer') {

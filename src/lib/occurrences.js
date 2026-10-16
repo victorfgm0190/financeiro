@@ -11,6 +11,50 @@ export function parseScheduleDate(dateStr) {
   return new Date(String(dateStr).slice(0, 10) + 'T12:00:00')
 }
 
+// Frequências que avançam por MESES (o dia do mês importa).
+export const FREQ_MENSAIS = new Set(['monthly', 'bimonthly', 'quarterly', 'quadrimestral', 'semiannual'])
+
+// Dia de vencimento fixo da série (overrides._diaVencimento, gravado ao re-ancorar "esta e as
+// próximas"). Só vale para frequências mensais. Sem ele, o comportamento antigo (encadeado).
+export function diaVencimentoDe(schedule) {
+  const d = Number(schedule?.overrides?._diaVencimento)
+  return FREQ_MENSAIS.has(schedule?.frequency) && d >= 1 && d <= 31 ? d : null
+}
+
+// Avança `current` (Date) um passo da frequência. Com `dia` (dia de vencimento fixo), o resultado
+// cai nesse dia — ou no ÚLTIMO dia do mês quando o mês não o tem (31 → 28/02 → 31/03).
+function passo(current, frequency, dia = null) {
+  let n
+  switch (frequency) {
+    case 'daily': return addDays(current, 1)
+    case 'weekly': return addWeeks(current, 1)
+    case 'biweekly': return addWeeks(current, 2)
+    case 'monthly': n = 1; break
+    case 'bimonthly': n = 2; break
+    case 'quarterly': n = 3; break
+    case 'quadrimestral': n = 4; break
+    case 'semiannual': n = 6; break
+    case 'annual': return addYears(current, 1)
+    default: return current
+  }
+  const next = addMonths(current, n)
+  if (!dia) return next
+  const ultimo = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+  return new Date(next.getFullYear(), next.getMonth(), Math.min(dia, ultimo), 12)
+}
+
+// `n` datas da série a partir de `inicio` (inclusive), no passo da frequência. `dia` = dia fixo.
+export function datasDaSerie(inicio, frequency, n, dia = null) {
+  const out = []
+  let cur = parseScheduleDate(inicio)
+  for (let i = 0; i < n; i++) {
+    out.push(format(cur, 'yyyy-MM-dd'))
+    if (frequency === 'once') break
+    cur = passo(cur, frequency, dia)
+  }
+  return out
+}
+
 // Retorna todas as ocorrências pendentes de um agendamento até upToDateStr (inclusive)
 export function computePendingUpTo(schedule, upToDateStr) {
   const allDone = new Set([...(schedule.registered || []), ...(schedule.skipped || [])])
@@ -25,23 +69,13 @@ export function computePendingUpTo(schedule, upToDateStr) {
   // computeOccurrences, corrigido em 6ba73c6).
   const startStr = format(current, 'yyyy-MM-dd')
   let count = [...allDone].filter(d => d < startStr).length
+  const dia = diaVencimentoDe(schedule)
   while (count < maxInstallments) {
     const dateStr = format(current, 'yyyy-MM-dd')
     if (dateStr > upToDateStr) break
     if (!allDone.has(dateStr)) pending.push(dateStr)
     count++
-    switch (schedule.frequency) {
-      case 'daily':         current = addDays(current, 1); break
-      case 'weekly':        current = addWeeks(current, 1); break
-      case 'biweekly':      current = addWeeks(current, 2); break
-      case 'monthly':       current = addMonths(current, 1); break
-      case 'bimonthly':     current = addMonths(current, 2); break
-      case 'quarterly':     current = addMonths(current, 3); break
-      case 'quadrimestral': current = addMonths(current, 4); break
-      case 'semiannual':    current = addMonths(current, 6); break
-      case 'annual':        current = addYears(current, 1); break
-      default: break
-    }
+    current = passo(current, schedule.frequency, dia)
     if (schedule.frequency === 'once') break
   }
   return pending
@@ -82,24 +116,14 @@ export function computeOccurrences(schedule, count = 12) {
   // contagem recomeçava do zero, gerando uma parcela FANTASMA além do total (ex.: 2x virava 3x).
   const startStr = format(current, 'yyyy-MM-dd')
   let totalOccurrences = allDone.filter(d => d < startStr).length
+  const dia = diaVencimentoDe(schedule)
 
   while (occurrences.length < count && totalOccurrences < maxInstallments) {
     const dateStr = format(current, 'yyyy-MM-dd')
     totalOccurrences++
     if (!allDone.includes(dateStr)) occurrences.push(dateStr)
     if (occurrences.length >= count) break
-    switch (schedule.frequency) {
-      case 'daily': current = addDays(current, 1); break
-      case 'weekly': current = addWeeks(current, 1); break
-      case 'biweekly': current = addWeeks(current, 2); break
-      case 'monthly': current = addMonths(current, 1); break
-      case 'bimonthly': current = addMonths(current, 2); break
-      case 'quarterly': current = addMonths(current, 3); break
-      case 'quadrimestral': current = addMonths(current, 4); break
-      case 'semiannual': current = addMonths(current, 6); break
-      case 'annual': current = addYears(current, 1); break
-      default: break
-    }
+    current = passo(current, schedule.frequency, dia)
     if (schedule.frequency === 'once') break
   }
   return occurrences

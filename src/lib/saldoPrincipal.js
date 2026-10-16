@@ -101,7 +101,12 @@ export function calcularSaldoPrincipalBreakdown({
       const fromAcc = poolIds.has(s.accountId)
       const toAcc = poolIds.has(s.toAccountId)
       if (!fromAcc && !toAcc) continue
-      const occs = getNextOccurrences(s, 120).filter(dt => dt >= cycleStartStr && dt <= endStr)
+      // Pertence ao ciclo pela data EFETIVA (override de data da ocorrência), não pela data-base:
+      // a ocorrência de 28/09 movida para 16/10 conta no ciclo que contém 16/10 (2026-10-16,
+      // pedido explícito do usuário). Mesma regra do getAccountSaldos e do Fluxo de Caixa.
+      const occs = getNextOccurrences(s, 120)
+        .map(dt => occEfetiva(s, dt))
+        .filter(ef => ef.date >= cycleStartStr && ef.date <= endStr)
       if (occs.length === 0) continue
       // Uma entrada POR OCORRÊNCIA, cada uma com a sua data e o seu valor EFETIVO (respeita
       // overrides[dataOriginal].amount). Antes as ocorrências eram somadas numa linha só, com
@@ -112,8 +117,7 @@ export function calcularSaldoPrincipalBreakdown({
       // ratear daria número errado em toda série com override em alguma parcela.
       const doAgendamento = []
       let bruto = 0
-      for (const dt of occs) {
-        const val = occEfetiva(s, dt).amount
+      for (const { date: dt, amount: val } of occs) {
         let v = 0
         if (s.transactionType === 'income' && fromAcc) v = val
         else if (s.transactionType === 'expense' && fromAcc) v = -val
