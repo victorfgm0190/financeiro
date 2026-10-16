@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
+import { projecoesEtapaA } from '../../lib/gerencialPrevistos'
 import { montarLinhasSimuladas, patchAplicarData, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from '../../lib/fluxoCaixaDatas'
 import {
   HORIZONTES, rotuloModo, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
@@ -89,7 +90,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado, categories,
+    toggleScheduleConfirmado, categories, gerencialGroups,
   } = useApp()
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
@@ -247,22 +248,23 @@ export default function CashFlowPanel({ setActivePage }) {
     const agds = consulta.incluir_agendamentos ? schedulesFluxo : []
     // includeSchedules fica sempre true (ele também liga os envelopes); "sem agendamentos" é a
     // lista vazia, para os envelopes seguirem a opção própria.
+    const etapaAPrevistas = projecoesEtapaA({ schedules: agds, transactions, accounts, gerencialGroups, getOccurrences: getNextOccurrences })
     const r = computeFluxoCaixa({
-      ...comum, start: hoje, end: fim, transactions, schedules: agds,
+      ...comum, start: hoje, end: fim, transactions, schedules: agds, etapaAPrevistas,
       envelopes: incluirEnvelopes ? envelopes : [], provisorios,
     })
     const futuras = linhasFuturas(r.rows, { hoje, fim, incluirLancamentosFuturos: consulta.incluir_lancamentos_futuros })
     // Pendências em atraso: as mesmas ocorrências que o relatório soma no "saldo anterior c/
     // agendamentos", aqui listadas uma a uma (sem lançamentos, envelopes nem provisórios).
     const a = consulta.incluir_agendamentos
-      ? computeFluxoCaixa({ ...comum, start: INICIO_ATRASO, end: somarDias(hoje, -1), schedules: agds }).rows
+      ? computeFluxoCaixa({ ...comum, start: INICIO_ATRASO, end: somarDias(hoje, -1), schedules: agds, etapaAPrevistas }).rows
       : []
     return {
       rows: anotarLinhasProvisorias(futuras, dpPorChave, scheduleById, occEfetiva),
       atraso: anotarLinhasProvisorias(a, dpPorChave, scheduleById, occEfetiva),
     }
   }, [accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
-    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById])
+    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, accounts, gerencialGroups])
 
   const { atrasoTotal, atrasoAtivas, base } = useMemo(() => {
     const { total, ativas } = totalEmAtraso(atraso, excluidas)

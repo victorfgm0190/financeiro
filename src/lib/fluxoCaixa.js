@@ -84,6 +84,10 @@ export function computeFluxoCaixa({
   // como vêm de /api/fluxo-provisorios. Default [] de propósito: só o relatório passa esta
   // lista — os KPIs FINAL CICLO / PROJETADO do Painel Geral chamam sem ela e seguem idênticos.
   provisorios = [],
+  // Etapa A PREVISTA do Grupo G (projecoesEtapaA, gerencialPrevistos.js): saída Conta Principal →
+  // Ger.<apelido> por ocorrência pendente de despesa agendada de cartão. Default [] — só o Fluxo
+  // de Caixa Futuro passa.
+  etapaAPrevistas = [],
   getNextOccurrences,
   includeSchedules = true,
   hideReserva = false,
@@ -227,6 +231,23 @@ export function computeFluxoCaixa({
           // agendamento" das datas provisórias do relatório. Só metadado — não entra em cálculo.
           _scheduleId: s.id, _origDate: origDate,
         })
+      })
+    })
+
+    // 2b. Etapa A prevista (Grupo G). Mesma regra das ocorrências: antes de `start` vai para o
+    // "saldo anterior c/ agendamentos", dentro do período vira linha.
+    ;(etapaAPrevistas || []).forEach(p => {
+      if (!p?.date || p.date > end) return
+      if (oculto(p.fromAccountId, p.toAccountId)) return
+      const m = classify('transfer', p.fromAccountId, p.toAccountId, p.amount)
+      if (!m) return
+      if (p.date < start) { agendamentosAntes = round2(agendamentosAntes + m.entrada - m.saida); return }
+      out.push({
+        date: p.date, description: p.description, type: 'transfer',
+        fromAccountId: p.fromAccountId, toAccountId: p.toAccountId,
+        categoryId: p.categoryId || null, reservaFuncaoId: null,
+        entrada: m.entrada, saida: m.saida, status: 'Projetado', real: false,
+        _key: p.id, _scheduleId: p.scheduleId, _origDate: p.origDate, _etapaAPrevista: true,
       })
     })
 

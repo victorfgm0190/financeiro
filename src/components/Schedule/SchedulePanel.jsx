@@ -828,11 +828,16 @@ function ScheduleRow({
   const registered = schedule.registered || []
   const skipped = schedule.skipped || []
   const totalDone = registered.length + skipped.length
-  // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (mesmo cartão, valor e
-  // fatura). Só sinaliza — o agendamento não muda até o usuário baixar.
-  const { coberturaCartao, baixarComoJaNoCartao } = useApp()
+  // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (cartão, fatura, valor,
+  // data ±3 dias e descrição — ver txCobrindoOcorrencia). Só sinaliza — o agendamento não muda até
+  // o usuário baixar. O tooltip cita o lançamento casado para conferência antes de baixar.
+  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs } = useApp()
   const cobertas = coberturaCartao?.get(schedule.id)
   const nCobertas = cobertas?.size || 0
+  const tituloCobertas = nCobertas ? [...cobertas].map(([d, txId]) => {
+    const t = todasTxs?.find(x => x.id === txId)
+    return `${fmtDate(d)} ↔ ${t ? `${fmtDate(t.date)} ${t.description || '(sem descrição)'} ${fmt(t.amount)}` : txId}`
+  }).join('\n') : ''
   const isInstallment = schedule.occurrenceType === 'installment'
 
   // Data exibida na coluna e usada no badge "em atraso": casa com o campo "Data de Vencimento
@@ -1141,7 +1146,7 @@ function ScheduleRow({
               <>
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap"
-                  title={`Já lançado no cartão: ${[...cobertas.keys()].map(d => fmtDate(d)).join(', ')}. Fica fora do fluxo e dos previstos.`}
+                  title={`Já lançado no cartão (ocorrência ↔ lançamento):\n${tituloCobertas}\nFica fora do fluxo e dos previstos.`}
                 >
                   ⚠ Duplicado – já no cartão{nCobertas > 1 ? ` (${nCobertas})` : ''}
                 </span>

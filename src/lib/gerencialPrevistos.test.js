@@ -209,3 +209,57 @@ describe('resolverFontePrevista', () => {
     expect(resolverFontePrevista('tx_123', [sched], getOcc)).toBeNull()
   })
 })
+
+// ── Etapa A prevista no Fluxo de Caixa Futuro (Grupo G) ──────────────────────
+import { projecoesEtapaA } from './gerencialPrevistos'
+import { computeFluxoCaixa } from './fluxoCaixa'
+
+describe('projecoesEtapaA — caso real BARBEARIA / CABELOS (Itaupers)', () => {
+  const CC = 'acc_itau', CARD = 'acc_itaupers', GER = 'acc_ger_itaupers'
+  const accounts = [
+    { id: CC, type: 'checking', contaCorrentePrincipal: true, balance: 1000 },
+    { id: CARD, type: 'credit', apelido: 'Itaupers', closingDay: 13 },
+    { id: GER, type: 'checking', name: 'Ger. Itaupers' },
+  ]
+  const gerencialGroups = [{ id: 'grp_1', number: 1 }, { id: 'grp_2', number: 2, defaultAccountId: 'acc_res' }]
+  const base = { transactionType: 'expense', accountId: CARD, accountType: 'credit', amount: 120, occurrenceType: 'continuous', skipped: [], overrides: {} }
+  const barbearia = { ...base, id: 'sch_barb', description: 'BARBEARIA CONSTANCIA', frequency: 'biweekly', startDate: '2026-06-27', nextOccurrence: '2026-10-17', registered: [], grupoGerencial: 'grp_1' }
+  const cabelos = { ...base, id: 'sch_cab', description: 'CABELOS FILHOS', frequency: 'monthly', startDate: '2026-06-25', nextOccurrence: '2026-10-25', registered: [], grupoGerencial: 'grp_1' }
+  const doGrupo2 = { ...cabelos, id: 'sch_g2', grupoGerencial: 'grp_2' }
+  const semGrupo = { ...cabelos, id: 'sch_d', grupoGerencial: null }
+
+  const fluxo = (extra = {}) => {
+    const schedules = [barbearia, cabelos, doGrupo2, semGrupo]
+    const etapaAPrevistas = projecoesEtapaA({ schedules, accounts, gerencialGroups, getOccurrences: computeOccurrences, ...extra })
+    return computeFluxoCaixa({
+      accountIds: new Set([CC]), currentBalance: 1000, start: '2026-10-15', end: '2026-11-14',
+      schedules, etapaAPrevistas, getNextOccurrences: computeOccurrences,
+    })
+  }
+
+  it('15/10–14/11: 17/10, 25/10, 31/10 e 14/11, R$120 cada, saindo da Conta Principal', () => {
+    const r = fluxo()
+    expect(r.rows.map(x => [x.date, x.saida, x._key])).toEqual([
+      ['2026-10-17', 120, 'schgerA:sch_barb@2026-10-17'],
+      ['2026-10-25', 120, 'schgerA:sch_cab@2026-10-25'],
+      ['2026-10-31', 120, 'schgerA:sch_barb@2026-10-31'],
+      ['2026-11-14', 120, 'schgerA:sch_barb@2026-11-14'],
+    ])
+    expect(r.rows.every(x => x.toAccountId === GER && x.description.startsWith('Ger. Itaupers'))).toBe(true)
+    expect(r.saldoFinal).toBe(520)
+  })
+
+  it('grupos numerados e D/null não geram etapa A', () => {
+    const p = projecoesEtapaA({ schedules: [doGrupo2, semGrupo], accounts, gerencialGroups, getOccurrences: computeOccurrences })
+    expect(p).toEqual([])
+  })
+
+  it('ocorrência efetivada com tx_gerA_ real não é projetada', () => {
+    const transactions = [
+      { id: 'tx_cab', scheduleId: 'sch_cab', date: '2026-10-25', type: 'expense', accountId: CARD, amount: 120 },
+      { id: 'tx_gerA_tx_cab', type: 'transfer', accountId: CC, toAccountId: GER, date: '2026-10-25', amount: 120 },
+    ]
+    const p = projecoesEtapaA({ schedules: [cabelos], transactions, accounts, gerencialGroups, getOccurrences: (s, n) => computeOccurrences(s, n) })
+    expect(p.some(x => x.date === '2026-10-25')).toBe(false)
+  })
+})

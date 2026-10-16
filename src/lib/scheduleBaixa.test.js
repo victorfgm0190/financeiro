@@ -240,3 +240,50 @@ describe('lancamentosVinculados', () => {
     expect(lancamentosVinculados([desfazerBaixa(s, '2026-09-30')], [])).toEqual(new Set())
   })
 })
+
+// ── Regra C endurecida: caso real CABELOS FILHOS (Itaupers, fechamento 13) ───────────────────
+describe('regra C — critérios de cobertura', () => {
+  const cabelos = {
+    id: 'sch_1781282076131', description: 'CABELOS FILHOS', payee: 'IVAN', transactionType: 'expense',
+    accountId: CARD, accountType: 'credit', amount: 120, frequency: 'monthly', occurrenceType: 'continuous',
+    startDate: '2026-06-25', nextOccurrence: '2026-10-25', registered: [], skipped: [], registeredMeta: {},
+  }
+  const tx = (id, date, description, amount, faturaMonthYear, extra = {}) =>
+    ({ id, accountId: CARD, type: 'expense', amount, description, date, faturaMonthYear, ...extra })
+  const hering = tx('hering', '2026-10-15', 'Hering Kids -Ct Ai 2/2', 119.99, '2026-11', { installmentNum: 2, installmentTotal: 2 })
+  const arena = tx('arena', '2026-10-12', 'Arena Trampolim', 120, '2026-10', { payee: 'Arena Trampolim' })
+
+  it('CABELOS FILHOS 25/10 não casa com Hering Kids (só valor/fatura) nem com Arena Trampolim', () => {
+    expect(mapaCobertura({ schedules: [cabelos], transactions: [hering, arena], accounts }).size).toBe(0)
+  })
+
+  it('caso verdadeiro: mesma descrição, mesma fatura, ±1 dia → coberta', () => {
+    const real = tx('real', '2026-10-26', 'CABELOS FILHOS', 120, '2026-11')
+    const cob = mapaCobertura({ schedules: [cabelos], transactions: [hering, real], accounts })
+    expect([...cob.get(cabelos.id)]).toEqual([['2026-10-25', 'real']])
+  })
+
+  it('favorecido do agendamento também conta como descrição', () => {
+    const real = tx('ivan', '2026-10-24', 'IVAN CABELEIREIRO', 120, '2026-11')
+    expect(mapaCobertura({ schedules: [cabelos], transactions: [real], accounts }).get(cabelos.id).get('2026-10-25')).toBe('ivan')
+  })
+
+  it('fora de ±3 dias, outra fatura ou palavra só genérica/curta → não casa', () => {
+    const longe = tx('longe', '2026-10-20', 'CABELOS FILHOS', 120, '2026-11')
+    const outraFatura = tx('of', '2026-10-25', 'CABELOS FILHOS', 120, '2026-12')
+    const generica = { ...cabelos, description: 'PAG DE', payee: '' }
+    expect(mapaCobertura({ schedules: [cabelos], transactions: [longe, outraFatura], accounts }).size).toBe(0)
+    expect(mapaCobertura({ schedules: [generica], transactions: [tx('g', '2026-10-25', 'PAG DE', 120, '2026-11')], accounts }).size).toBe(0)
+  })
+
+  it('mais de um candidato → o de menor distância de data', () => {
+    const a = tx('a', '2026-10-22', 'CABELOS FILHOS', 120, '2026-11')
+    const b = tx('b', '2026-10-24', 'CABELOS FILHOS', 120, '2026-11')
+    expect(mapaCobertura({ schedules: [cabelos], transactions: [a, b], accounts }).get(cabelos.id).get('2026-10-25')).toBe('b')
+  })
+
+  it('lançamento já vinculado a outro agendamento não cobre', () => {
+    const real = tx('real', '2026-10-25', 'CABELOS FILHOS', 120, '2026-11', { scheduleId: 'outro' })
+    expect(mapaCobertura({ schedules: [cabelos], transactions: [real], accounts }).size).toBe(0)
+  })
+})

@@ -150,7 +150,7 @@ export function soltarTipo(ids, id, alvoId) {
 export function itemDaLinhaFluxo(r, { txPorId, agPorId, contaPorId } = {}) {
   if (!r) return null
   if (r._envelope) return { _envelope: true }
-  if (typeof r._key === 'string' && r._key.includes('_resg_')) return { _resgate: true }
+  if ((typeof r._key === 'string' && r._key.includes('_resg_')) || r._etapaAPrevista) return { _resgate: true }
   if (r._scheduleId) return agPorId?.get(r._scheduleId) || null
   if (r.real || r._lancamento) {
     const tx = txPorId?.get(r._key)

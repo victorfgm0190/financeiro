@@ -10,10 +10,11 @@
 //   • importação, linha nova (regra B)         → baixa "importado" + "coberta_parcela" nas futuras;
 //   • importação, linha já no cartão (regra A) → baixa "ja_no_cartao";
 //   • relatórios (regra C)                     → ocorrência pendente já coberta por lançamento
-//     do cartão fica fora das projeções, sem alterar o agendamento.
+//     do cartão fica fora das projeções, sem alterar o agendamento. Regra C exige mais (data e
+//     descrição) — ver txCobrindoOcorrencia.
 import { computeOccurrences, registerAndAdvance } from './occurrences.js'
 import { occEfetiva } from './fluxoCaixa.js'
-import { descSimilarity, stripParcelaSuffix } from './conciliacaoMatch.js'
+import { descSimilarity, stripParcelaSuffix, normText } from './conciliacaoMatch.js'
 
 export const BAIXA_TOLERANCIA_VALOR = 0.05
 
@@ -205,22 +206,54 @@ export function baixasDaImportacao(s, importId) {
 
 // ── Regra C: rede de segurança dos relatórios ───────────────────────────────
 
-// Lançamento do cartão que cobre a ocorrência pelo PRINCÍPIO e ainda está livre (não vinculado a
-// outra ocorrência nem `usados` por outra cobertura). Empate → descrição mais parecida.
+// Regra C é mais exigente que a importação: ela só SINALIZA ("Duplicado – já no cartão") a partir
+// do que já está gravado, sem uma linha de fatura dizendo qual compra é qual — casar só por
+// (cartão, fatura, valor) marcava como duplicada qualquer compra de mesmo valor na fatura
+// (ex.: "CABELOS FILHOS" R$ 120 × "Hering Kids 2/2" R$ 119,99). Exige TODOS:
+//   cartão + fatura + valor ±R$ 0,05 + data a ±3 dias + 1 palavra significativa em comum +
+//   lançamento livre. Empate → menor distância de data.
+// Exceção da data: parcela 2..N de agendamento PARCELADO fica no dia financeiro (15) e o
+// agendamento no dia de vencimento dele (30) — ali a fatura é a única âncora confiável.
+export const COBERTURA_JANELA_DIAS = 3
+
+const PALAVRA_RE = /[A-Z0-9]+/g
+// Palavras de 3+ letras que aparecem em qualquer razão social e não identificam a compra.
+const PALAVRAS_GENERICAS = new Set(['DOS', 'DAS', 'COM', 'PARA', 'LTDA', 'EIRELI', 'CIA', 'PARC', 'PARCELA', 'PAG', 'PGTO'])
+export function palavrasSignificativas(...textos) {
+  const out = new Set()
+  for (const t of textos) {
+    for (const w of normText(stripParcelaSuffix(t)).match(PALAVRA_RE) || []) {
+      if (w.length > 2 && !/^\d+$/.test(w) && !PALAVRAS_GENERICAS.has(w)) out.add(w)
+    }
+  }
+  return out
+}
+
+const diasEntre = (a, b) => Math.round(Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000)
+
+// Lançamento do cartão que cobre a ocorrência e ainda está livre (não vinculado a outra
+// ocorrência nem `usados` por outra cobertura).
 export function txCobrindoOcorrencia(schedule, dataOcorrencia, txsCartao, { closingDay = 14, usados = null } = {}) {
   const cardId = cartaoDoAgendamento(schedule)
   if (!cardId || !ehAgendamentoDeCartao(schedule, cardId)) return null
   const ef = occEfetiva(schedule, dataOcorrencia)
-  const fatura = faturaDaData(ef.date, closingDay)
-  const base = stripParcelaSuffix(schedule.description)
-  let best = null, bestSim = -1
+  const dataOcc = String(ef.date).slice(0, 10)
+  const fatura = faturaDaData(dataOcc, closingDay)
+  const palavras = palavrasSignificativas(schedule.description, schedule.payee)
+  if (palavras.size === 0) return null
+  const parcelado = schedule.occurrenceType === 'installment'
+  let best = null, bestDist = Infinity
   for (const t of txsCartao || []) {
     if ((t.type || 'expense') !== 'expense' || t.scheduleId) continue
     if (t.accountId !== schedule.accountId && t.accountId !== schedule.cardId) continue
     if (usados?.has(t.id) || !valorProximo(t.amount, ef.amount)) continue
     if (faturaDoLancamento(t, closingDay) !== fatura) continue
-    const sim = descSimilarity(stripParcelaSuffix(t.description), base)
-    if (sim > bestSim) { best = t; bestSim = sim }
+    const dist = t.date ? diasEntre(String(t.date).slice(0, 10), dataOcc) : Infinity
+    const isentoData = parcelado && Number(t.installmentNum) > 1
+    if (!isentoData && !(dist <= COBERTURA_JANELA_DIAS)) continue
+    const daTx = palavrasSignificativas(t.description, t.payee)
+    if (![...palavras].some(w => daTx.has(w))) continue
+    if (dist < bestDist) { best = t; bestDist = dist }
   }
   return best
 }

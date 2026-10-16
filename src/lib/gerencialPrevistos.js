@@ -12,6 +12,7 @@
 // descobrir que aquele gasto JÁ foi coberto por um resgate executado.
 
 import { occEfetiva } from './fluxoCaixa.js'
+import { contaPrincipalDe, nomeSubcontaGer } from './provisaoGerencial.js'
 
 export const PREVISTO_PREFIX = 'sch:'
 
@@ -133,4 +134,58 @@ export function resolverFontePrevista(id, schedules = [], getOccurrences, limite
     categoryId: schedule?.categoryId || null,
     schedule,
   }
+}
+
+// ── Etapa A PREVISTA (Grupo G) no Fluxo de Caixa ─────────────────────────────
+// A etapa A real (tx_gerA_<gasto>, Conta Principal → Ger.<apelido>) só nasce quando o gasto vira
+// lançamento. Até lá, cada ocorrência pendente de despesa agendada de cartão do Grupo G já
+// compromete a Conta Principal na data dela — o fluxo precisa mostrar essa saída. Só em memória:
+// nada é gravado, e o id sintético é determinístico para servir de chave de linha (exclusão
+// temporária, data provisória).
+export const ETAPA_A_PREVISTA_PREFIX = 'schgerA:'
+export const etapaAPrevistaId = (scheduleId, date) =>
+  `${ETAPA_A_PREVISTA_PREFIX}${scheduleId}@${String(date).slice(0, 10)}`
+
+// Projeções da etapa A das ocorrências pendentes. `getOccurrences` deve ser o das projeções
+// (exclui as ocorrências já cobertas por lançamento do cartão — essas já têm etapa A real).
+export function projecoesEtapaA({
+  schedules = [], transactions = [], accounts = [], gerencialGroups = [], getOccurrences, limite = 400,
+}) {
+  const out = []
+  const g1 = (gerencialGroups || []).find(g => g.number === 1)
+  if (!g1 || typeof getOccurrences !== 'function') return out
+  const contaPrincipal = contaPrincipalDe(accounts || [])
+  if (!contaPrincipal) return out
+  const accById = new Map((accounts || []).map(a => [a.id, a]))
+  const txIds = new Set((transactions || []).map(t => t.id))
+  // Ocorrência já efetivada com etapa A real: o lançamento leva scheduleId + date.
+  const efetivadas = new Set((transactions || [])
+    .filter(t => t.scheduleId && txIds.has(`tx_gerA_${t.id}`))
+    .map(t => `${t.scheduleId}|${String(t.date).slice(0, 10)}`))
+  for (const s of schedules || []) {
+    if (s.grupoGerencial !== g1.id) continue
+    const card = accById.get(s.accountId)
+    if (card?.type !== 'credit' || !ehGastoPrevistoDeCartao(s, card.id)) continue
+    const nomeSub = nomeSubcontaGer(card)
+    const subconta = (accounts || []).find(a => a.name === nomeSub) || null
+    const vistos = new Set()
+    for (const original of getOccurrences(s, limite)) {
+      const origDate = String(original).slice(0, 10)
+      const { date, amount } = occEfetiva(s, origDate)
+      const dia = String(date).slice(0, 10)
+      const valor = Math.round((Number(amount) || 0) * 100) / 100
+      if (!(valor > 0)) continue
+      if (efetivadas.has(`${s.id}|${dia}`) || efetivadas.has(`${s.id}|${origDate}`)) continue
+      const id = etapaAPrevistaId(s.id, dia)
+      if (vistos.has(id)) continue
+      vistos.add(id)
+      out.push({
+        id, scheduleId: s.id, origDate, date: dia, amount: valor,
+        fromAccountId: contaPrincipal.id, toAccountId: subconta?.id || null,
+        description: `${nomeSub} — ${s.description || 'agendamento'}`,
+        categoryId: s.categoryId || null,
+      })
+    }
+  }
+  return out
 }

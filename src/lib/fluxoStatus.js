@@ -24,7 +24,7 @@ export function statusConfirmacaoLinha(r, { agPorId } = {}) {
   if (!r || !r._scheduleId) return null
   if (r.real || r._lancamento || r._envelope || r._provisorio) return null
   const key = typeof r._key === 'string' ? r._key : ''
-  if (key.includes('_resg_') || key.startsWith('sch:')) return null
+  if (key.includes('_resg_') || key.startsWith('sch:') || r._etapaAPrevista) return null
   const s = agPorId?.get(r._scheduleId)
   if (!s || TIPOS_SEM_CONFIRMACAO.has(s.tipo)) return null
   const confirmavel = !!r._origDate && r._origDate === proximoVencimento(s)
