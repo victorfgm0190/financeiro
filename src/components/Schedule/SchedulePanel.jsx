@@ -26,6 +26,7 @@ import CategorySelect from '../shared/CategorySelect'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import DateInput from '../shared/DateInput'
+import { pagamentosDosAgendamentos, filtrarPagamentos } from '../../lib/ocorrenciasRegistradas'
 import { useAtalho, useTituloAtalho, useCamadaModal } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import { pagarParcela } from '../../lib/bemApi'
@@ -63,7 +64,7 @@ const VIEW_FILTERS = [
   { id: 'month',     label: 'Este mês' },
   { id: 'all',       label: 'Todos' },
   { id: 'provisoes', label: 'Provisões' },
-  { id: 'history',   label: 'Histórico' },
+  { id: 'history',   label: 'Pagos' },
   { id: 'ra',        label: 'Resgates Anuais' },
 ]
 
@@ -2322,6 +2323,59 @@ function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financ
   )
 }
 
+// Aba "Pagos": uma linha por ocorrência paga (dados do lançamento). Somente leitura.
+function PagamentosTable({ linhas, categories, accounts, tiposDocumento }) {
+  if (linhas.length === 0) {
+    return (
+      <div className="card text-center py-12">
+        <History size={32} className="text-texto-3 mx-auto mb-3" />
+        <p className="text-texto-3">Nenhum pagamento encontrado</p>
+      </div>
+    )
+  }
+  const cat = (id) => { const c = categories.find(x => x.id === id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : '—' }
+  const conta = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '—' }
+  const total = linhas.reduce((acc, l) => acc + (Number(l.amount) || 0), 0)
+  return (
+    <div className="card p-0 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-texto-3 text-left border-b border-borda">
+            {['Pago em', 'Vencimento', 'Descrição', 'Favorecido', 'Categoria', 'Tipo doc.', 'Conta', 'Valor pago', 'Parc.'].map(h => (
+              <th key={h} className={`px-3 py-2 font-medium whitespace-nowrap ${h === 'Valor pago' ? 'text-right' : ''}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map(l => {
+            const tipo = resolverTipoDocumento(l, tiposDocumento)
+            return (
+              <tr key={l.key} className="border-b border-borda/60 last:border-0 hover:bg-surface-hover/40">
+                <td className="px-3 py-2 text-texto-1 whitespace-nowrap">{l.dataPagamento ? fmtDate(l.dataPagamento) : '—'}</td>
+                <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.vencimento ? fmtDate(l.vencimento) : '—'}</td>
+                <td className="px-3 py-2 text-texto-1 max-w-[14rem] truncate">{l.description || '—'}</td>
+                <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{l.payee || '—'}</td>
+                <td className="px-3 py-2 text-texto-2 max-w-[11rem] truncate">{cat(l.categoryId)}</td>
+                <td className="px-3 py-2 text-texto-2 whitespace-nowrap" title={tipo?.nome}>{tipo?.sigla || '—'}</td>
+                <td className="px-3 py-2 text-texto-2 max-w-[9rem] truncate">{conta(l.accountId)}</td>
+                <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${l.transactionType === 'income' ? 'text-receita' : 'text-despesa'}`}>{fmt(l.amount)}</td>
+                <td className="px-3 py-2 text-texto-2 whitespace-nowrap">{l.avulso ? 'avulso' : l.parcela ? (l.total ? `${l.parcela}/${l.total}` : `${l.parcela}`) : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-borda text-texto-2">
+            <td colSpan={7} className="px-3 py-2">{linhas.length} pagamento{linhas.length !== 1 ? 's' : ''}</td>
+            <td className="px-3 py-2 text-right font-semibold text-texto-1 whitespace-nowrap">{fmt(total)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
 export default function SchedulePanel() {
   const {
     profileSchedules: schedules, schedules: allSchedules,
@@ -2331,7 +2385,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
-    activeProfileId, settings, tiposDocumento,
+    activeProfileId, settings, tiposDocumento, transactions,
   } = useApp()
 
   // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
@@ -2591,12 +2645,30 @@ export default function SchedulePanel() {
     }, getNextOccurrences, format(new Date(), 'yyyy-MM-dd'))
   }, [displaySchedules, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
 
-  // Valores reais (distintos) dos agendamentos visíveis (já filtrados por data/etc.), maior → menor.
+  // Aba "Pagos" (viewFilter 'history'): uma linha por ocorrência PAGA de qualquer agendamento do
+  // perfil, inclusive das séries em andamento (lib/ocorrenciasRegistradas). Os filtros da barra
+  // valem sobre essas linhas: data = data do pagamento, valor = valor pago.
+  const abaPagos = viewFilter === 'history'
+  const pagosLinhas = useMemo(
+    () => (abaPagos ? pagamentosDosAgendamentos(schedules, transactions) : []),
+    [abaPagos, schedules, transactions]
+  )
+  const pagosBuscados = useMemo(() => filtrarPagamentos(pagosLinhas, {
+    desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: fltFrom, to: fltTo,
+    min: fltMin !== '' ? parseFloat(fltMin) : null,
+    max: fltMax !== '' ? parseFloat(fltMax) : null,
+  }), [pagosLinhas, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax])
+  const pagosVisiveis = useMemo(
+    () => filtrarPorTipoDocumento(filtrarPagamentos(pagosBuscados, { valores: selValores }), selTipos, tiposDocumento),
+    [pagosBuscados, selValores, selTipos, tiposDocumento]
+  )
+
+  // Valores reais (distintos) dos itens visíveis (já filtrados por data/etc.), maior → menor.
   const valorOptions = useMemo(() => {
     const set = new Set()
-    for (const s of searchedSchedules) set.add(Math.round((Number(s.amount) || 0) * 100) / 100)
+    for (const s of (abaPagos ? pagosBuscados : searchedSchedules)) set.add(Math.round((Number(s.amount) || 0) * 100) / 100)
     return [...set].sort((a, b) => b - a)
-  }, [searchedSchedules])
+  }, [abaPagos, pagosBuscados, searchedSchedules])
   // Lista final após o filtro de valor (multiselect).
   // + filtro de tipo de documento, pelo tipo RESOLVIDO (resolverTipoDocumento): a fatura de cartão
   // sem tipo gravado cai em CC.
@@ -2784,16 +2856,17 @@ export default function SchedulePanel() {
               <label className="label text-xs">Tipo de documento</label>
               <TipoDocumentoFiltro tipos={tiposDocumento} extras={extrasTipoFiltro} selected={selTipos} onChange={setSelTipos} />
             </div>
-            <div>
-              <label className="label text-xs">Valor de</label>
-              <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." />
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className="label text-xs">Valor até</label>
-                <input type="number" step="0.01" className="input py-1.5 text-xs" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." />
+            {/* Valor: faixa Mín./Máx. num campo só (antes "Valor até" ficava espremido ao lado do
+                seletor). O botão "Valor" ao lado é OUTRO filtro: escolhe valores exatos da lista. */}
+            <div className="col-span-2 sm:col-span-3 lg:col-span-2 flex items-end gap-2 min-w-0">
+              <div className="flex-1 min-w-0">
+                <label className="label text-xs">Valor</label>
+                <div className="flex gap-1.5">
+                  <input type="number" step="0.01" className="input py-1.5 text-xs flex-1 min-w-0" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." aria-label="Valor mínimo" />
+                  <input type="number" step="0.01" className="input py-1.5 text-xs flex-1 min-w-0" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." aria-label="Valor máximo" />
+                </div>
               </div>
-              <div className="mb-0.5">
+              <div className="mb-0.5 shrink-0">
                 <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
               </div>
               {hasActiveFilter && (
@@ -2804,6 +2877,14 @@ export default function SchedulePanel() {
             </div>
           </div>
 
+          {abaPagos ? (
+            <PagamentosTable
+              linhas={pagosVisiveis}
+              categories={categories}
+              accounts={allAccounts}
+              tiposDocumento={tiposDocumento}
+            />
+          ) : (
           <SchedulesTable
             schedules={visibleSchedules}
             agruparSeries={!hasActiveFilter && selContas.size === 0}
@@ -2820,6 +2901,7 @@ export default function SchedulePanel() {
             onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
             onEditSchedule={openEditSchedule}
           />
+          )}
         </>
       )}
 

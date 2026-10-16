@@ -127,3 +127,45 @@ export function historicoOcorrencias(schedule, transactions = []) {
   const totalPagoPagas = r2(pagas.reduce((acc, l) => acc + l.valorPago, 0))
   return { linhas, totalPago, totalPrevisto, diferenca: r2(totalPagoPagas - totalPrevisto), nPagas: pagas.length }
 }
+
+// Aba "Pagos" (Agendamentos): UMA linha por ocorrência PAGA de qualquer agendamento — inclusive das
+// séries em andamento — e pelos lançamentos vinculados avulsos. Mesmo casamento do histórico acima.
+// Puladas e baixadas sem lançamento NÃO entram (não há pagamento a mostrar). Mais recente primeiro.
+// Dados do LANÇAMENTO (data, conta, favorecido, valor, categoria, tipo); o agendamento completa o
+// que o lançamento não tiver.
+export function pagamentosDosAgendamentos(schedules = [], transactions = []) {
+  const txById = new Map((transactions || []).map(t => [t.id, t]))
+  const out = []
+  for (const s of schedules || []) {
+    for (const l of historicoOcorrencias(s, transactions).linhas) {
+      if (l.status !== STATUS_OCORRENCIA.PAGA && l.status !== STATUS_OCORRENCIA.AVULSO) continue
+      const tx = txById.get(l.txId) || {}
+      out.push({
+        key: `${s.id}_${l.txId}`, scheduleId: s.id, schedule: s, txId: l.txId, avulso: l.status === STATUS_OCORRENCIA.AVULSO,
+        dataPagamento: l.pagoEm, vencimento: l.vencimento, parcela: l.parcela, total: l.total,
+        description: tx.description || s.description || '', payee: tx.payee || s.payee || '',
+        categoryId: tx.categoryId || s.categoryId || null,
+        tipoDocumentoId: tx.tipoDocumentoId || s.tipoDocumentoId || null, tipo: s.tipo || null,
+        accountId: l.accountId, amount: l.valorPago, transactionType: tx.type || s.transactionType,
+      })
+    }
+  }
+  return out.sort((a, b) => (b.dataPagamento || '').localeCompare(a.dataPagamento || '') || a.description.localeCompare(b.description))
+}
+
+// Filtros da barra sobre as linhas da aba Pagos. Data = data do PAGAMENTO; valor = valor pago.
+export function filtrarPagamentos(linhas, { desc = '', payee = '', categoryId = '', from = '', to = '', min = null, max = null, valores = null } = {}) {
+  const d = desc.trim().toLowerCase()
+  const p = payee.trim().toLowerCase()
+  return (linhas || []).filter(l => {
+    if (d && !l.description.toLowerCase().includes(d)) return false
+    if (p && !l.payee.toLowerCase().includes(p)) return false
+    if (categoryId && l.categoryId !== categoryId) return false
+    if (from && (l.dataPagamento || '') < String(from).slice(0, 10)) return false
+    if (to && (l.dataPagamento || '') > String(to).slice(0, 10)) return false
+    if (min != null && !Number.isNaN(min) && l.amount < min) return false
+    if (max != null && !Number.isNaN(max) && l.amount > max) return false
+    if (valores && valores.size > 0 && !valores.has(r2(l.amount))) return false
+    return true
+  })
+}

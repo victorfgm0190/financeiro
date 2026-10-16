@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { historicoOcorrencias, resumoRegistradas, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
+import { historicoOcorrencias, resumoRegistradas, pagamentosDosAgendamentos, filtrarPagamentos, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
 import { computeOccurrences } from './occurrences'
 
 // Caso real (Neon, 16/10/2026): TV PAPAI, 8 parcelas mensais de 150 desde 20/06/2026, próxima 20/10.
@@ -74,5 +74,31 @@ describe('regras de casamento e status', () => {
   })
   it('nada consumido nem vinculado → botão escondido', () => {
     expect(resumoRegistradas(base, []).temAlgo).toBe(false)
+  })
+})
+
+describe('aba Pagos — pagamentosDosAgendamentos / filtrarPagamentos', () => {
+  const outro = { ...TV_PAPAI, id: 'sch_outro', description: 'ACADEMIA', payee: 'SMART', registered: ['2026-09-05'], skipped: ['2026-10-05'], installments: 12, startDate: '2026-09-05', nextOccurrence: '2026-11-05' }
+  const txs = [...TXS, { id: 'tx_ac', date: '2026-09-06', amount: 99.9, accountId: 'acc_itau', payee: 'SMART FIT', scheduleId: 'sch_outro', description: 'ACADEMIA', categoryId: 'cat_saude' }]
+  const linhas = pagamentosDosAgendamentos([TV_PAPAI, outro], txs)
+  it('uma linha por ocorrência paga (série em andamento incluída), mais recente primeiro; pulada/baixada fora', () => {
+    expect(linhas.map(l => [l.dataPagamento, l.description, `${l.parcela}/${l.total}`])).toEqual([
+      ['2026-09-18', 'TV PAPAI', '4/8'],
+      ['2026-09-06', 'ACADEMIA', '1/12'],
+      ['2026-08-20', 'TV PAPAI', '3/8'],
+      ['2026-07-20', 'TV PAPAI', '2/8'],
+    ])
+    expect(linhas[0]).toMatchObject({ accountId: 'acc_bb', payee: 'CARLOS ROBERTO MOREIRA', amount: 150, vencimento: '2026-09-20' })
+  })
+  it('filtro de favorecido CARLOS RO traz as parcelas pagas pelo BB', () => {
+    const r = filtrarPagamentos(linhas, { payee: 'CARLOS RO' })
+    expect(r).toHaveLength(3)
+    expect(r.every(l => l.accountId === 'acc_bb')).toBe(true)
+  })
+  it('data = data do pagamento; valor = valor pago; categoria', () => {
+    expect(filtrarPagamentos(linhas, { from: '2026-09-01', to: '2026-09-30' }).map(l => l.dataPagamento)).toEqual(['2026-09-18', '2026-09-06'])
+    expect(filtrarPagamentos(linhas, { max: 100 }).map(l => l.description)).toEqual(['ACADEMIA'])
+    expect(filtrarPagamentos(linhas, { valores: new Set([99.9]) })).toHaveLength(1)
+    expect(filtrarPagamentos(linhas, { categoryId: 'cat_saude' })).toHaveLength(1)
   })
 })
