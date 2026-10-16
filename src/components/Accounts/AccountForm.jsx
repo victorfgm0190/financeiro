@@ -43,13 +43,13 @@ function Toggle({ checked, onChange, label, tooltip }) {
 // Selos FC/CC: mesmo formato dos selos do card da conta, com cores do tema.
 const SELOS = {
   FC: { texto: 'FC', title: 'Somar no Saldo Principal', cls: 'bg-receita/15 text-receita' },
-  CC: { texto: 'CC', title: 'Conta do dia a dia', cls: 'bg-primary/15 text-primary-fg' },
+  CC: { texto: 'CC', title: 'Conta central', cls: 'bg-primary/15 text-primary-fg' },
 }
 
 // Finalidade da conta: os valores gravados (vinculo_tipo) são os mesmos de sempre.
 const FINALIDADES = [
   { value: 'none', nome: 'Uso comum', ajuda: 'Movimentação normal, sem vínculo especial' },
-  { value: 'reserva', nome: 'Reserva', ajuda: 'Dinheiro guardado para um fim; aparece em Reservas e os resgates voltam para a conta do dia a dia' },
+  { value: 'reserva', nome: 'Reserva', ajuda: 'Dinheiro guardado para um fim; aparece em Reservas e os resgates voltam para a conta central' },
   { value: 'patrimonio', nome: 'Patrimônio', ajuda: 'Aplicações e investimentos; soma no Patrimônio e as transferências viram despesa/receita na categoria' },
 ]
 
@@ -454,14 +454,14 @@ export default function AccountForm({ initial, onClose }) {
       <div className="space-y-4 pt-1 border-t border-borda">
         <Bloco titulo="Exibição">
           <LinhaToggle
-            nome="Fixar no topo"
-            ajuda="Aparece antes das outras contas na tela Lançamentos"
+            nome="Destacar em Lançamentos"
+            ajuda="Fica no grupo do topo da lista e da escolha de conta em Lançamentos"
             checked={form.appPriority}
             onChange={e => set('appPriority', e.target.checked)}
           />
           <LinhaToggle
-            nome="Conta padrão"
-            ajuda="Marcada com ★ e listada primeiro na tela Lançamentos"
+            nome="Conta favorita ★"
+            ajuda="Marcada com ★ e listada primeiro em Lançamentos"
             checked={form.isMain}
             onChange={e => set('isMain', e.target.checked)}
           />
@@ -497,9 +497,9 @@ export default function AccountForm({ initial, onClose }) {
         {isChecking && (
           <Bloco titulo="Tipo da conta">
             <LinhaToggle
-              nome="Conta do dia a dia"
+              nome="Conta central"
               selo={SELOS.CC}
-              ajuda="Conta corrente que paga as faturas, movimenta o gerencial do cartão e recebe os resgates de reserva. Só uma por vez"
+              ajuda="Paga faturas, movimenta o gerencial do cartão e recebe resgates de reserva. Só uma por vez"
               checked={form.contaCorrentePrincipal}
               onChange={e => set('contaCorrentePrincipal', e.target.checked)}
             />
@@ -507,7 +507,7 @@ export default function AccountForm({ initial, onClose }) {
               <div className="flex items-start gap-2 p-3 bg-aviso/10">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5 text-aviso" />
                 <p className="text-xs text-aviso leading-relaxed">
-                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta do dia a dia.
+                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta central.
                   Ao salvar, ela será substituída por esta conta.
                 </p>
               </div>

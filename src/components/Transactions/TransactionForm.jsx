@@ -1931,7 +1931,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   <div className="space-y-1">
                     <p className="text-xs text-texto-2 leading-relaxed">
                       Agendamento de resgate automático:{' '}
-                      <strong className="text-texto-1">{acc.apelido || acc.name}</strong> → conta do dia a dia.
+                      <strong className="text-texto-1">{acc.apelido || acc.name}</strong> → conta central.
                     </p>
                     <p className="text-xs text-texto-2">
                       📅 Fatura {faturaRef3} · Resgate em {fmtDate(dueDate3)}

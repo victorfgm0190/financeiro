@@ -357,7 +357,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-500/30 text-purple-200">INV</span>
             )}
             {account.contaCorrentePrincipal && (
-              <span title="Conta do dia a dia" className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-white">CC</span>
+              <span title="Conta central" className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-white">CC</span>
             )}
             {isInactive && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-white/20 text-white">Inativa</span>
@@ -510,7 +510,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
       >
         <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
-        {account.isMain ? 'Conta padrão' : 'Definir como padrão'}
+        {account.isMain ? 'Conta favorita' : 'Definir como favorita'}
       </button>
     </div>
 
