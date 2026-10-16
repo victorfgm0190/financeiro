@@ -5,6 +5,7 @@ import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
+import { getEffectiveStatus, paiDaSombra, STATUS } from '../../lib/statusEfetivo'
 import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
 
@@ -39,7 +40,9 @@ export default function GlobalSearch({ open, onClose }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('todos')
-  const [results, setResults] = useState(null) // null = ainda não buscou
+  // Conjunto encontrado pela busca (null = ainda não buscou). O filtro de status é aplicado
+  // na renderização, então Todos/Registrado/Pendente refiltram na hora, sem nova busca.
+  const [found, setFound] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -49,6 +52,7 @@ export default function GlobalSearch({ open, onClose }) {
   const accById = useMemo(() => new Map(allAccounts.map(a => [a.id, a])), [allAccounts])
   const catById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
   const gerById = useMemo(() => new Map(gerencialGroups.map(g => [g.id, g])), [gerencialGroups])
+  const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
   const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : null }
 
@@ -74,7 +78,7 @@ export default function GlobalSearch({ open, onClose }) {
     const v = parseValor(value)
     if (v == null && !text.trim()) {
       setError('Informe um valor ou um texto (descrição/favorecido) para buscar.')
-      setResults(null)
+      setFound(null)
       return
     }
     setError('')
@@ -93,7 +97,7 @@ export default function GlobalSearch({ open, onClose }) {
       // Endpoint indisponível (ex.: ambiente sem deploy) → busca local em memória.
       ({ txItems, scItems } = clientFilter())
     }
-    setResults(buildResults(txItems, scItems))
+    setFound({ txIds: txItems.map(t => t.id), scIds: scItems.map(s => s.id) })
     setLoading(false)
   }
 
@@ -108,8 +112,12 @@ export default function GlobalSearch({ open, onClose }) {
 
   const buildResults = (txItems, scItems) => {
     const out = []
+    const hoje = todayStr()
     for (const t of txItems) {
-      const paid = !!t.reconciled
+      const paid = getEffectiveStatus(t, txById, hoje) === STATUS.REGISTRADO
+      // Sombra automática de reserva (sem conta): mostra as contas da transferência de origem.
+      const pai = paiDaSombra(t, txById)
+      const contaTx = (x) => x.type === 'transfer' ? `${accName(x.accountId)} → ${accName(x.toAccountId)}` : accName(x.accountId)
       if (status === 'pago' && !paid) continue
       if (status === 'naopago' && paid) continue
       out.push({
@@ -118,7 +126,7 @@ export default function GlobalSearch({ open, onClose }) {
         type: t.type,
         date: t.date,
         dateCartao: t.accountType === 'credit' ? (t.dateCartao || null) : null,
-        conta: t.type === 'transfer' ? `${accName(t.accountId)} → ${accName(t.toAccountId)}` : accName(t.accountId),
+        conta: pai ? `${contaTx(pai)} (auto)` : contaTx(t),
         amount: t.amount,
         desc: t.description || '',
         payee: t.payee || '',
@@ -199,8 +207,16 @@ export default function GlobalSearch({ open, onClose }) {
   )
 
   const reset = () => {
-    setValue(''); setText(''); setFrom(''); setTo(''); setStatus('todos'); setResults(null); setError('')
+    setValue(''); setText(''); setFrom(''); setTo(''); setStatus('todos'); setFound(null); setError('')
   }
+
+  // Objetos vivos em memória (edições refletem na hora) + filtro de status atual.
+  const results = useMemo(() => {
+    if (!found) return null
+    const txIds = new Set(found.txIds), scIds = new Set(found.scIds)
+    return buildResults(transactions.filter(t => txIds.has(t.id)), schedules.filter(s => scIds.has(s.id)))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found, status, transactions, schedules, txById, accById, catById, gerById])
 
   return (
     <>
