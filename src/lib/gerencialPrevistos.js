@@ -242,3 +242,16 @@ export function somarEtapaAPrevistaNoSaldoPrincipal(b, previstas = []) {
   }
   return out
 }
+
+// Efeito líquido da etapa A prevista numa conta, para ocorrências com data em [de, ate]: a Conta
+// Principal perde, a subconta Ger. ganha. Usado nos saldos por conta (getAccountSaldos).
+export function deltaEtapaAPrevistaNaConta(previstas = [], accountId, de, ate) {
+  if (!accountId) return 0
+  let acc = 0
+  for (const p of previstas || []) {
+    if (!p?.date || p.date < de || p.date > ate || p.fromAccountId === p.toAccountId) continue
+    if (p.fromAccountId === accountId) acc -= p.amount
+    else if (p.toAccountId === accountId) acc += p.amount
+  }
+  return Math.round(acc * 100) / 100
+}

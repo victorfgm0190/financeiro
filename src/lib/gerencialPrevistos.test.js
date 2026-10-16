@@ -292,3 +292,15 @@ describe('somarEtapaAPrevistaNoSaldoPrincipal — por fora do breakdown protegid
     expect(somarEtapaAPrevistaNoSaldoPrincipal(b, [])).toBe(b)
   })
 })
+
+import { deltaEtapaAPrevistaNaConta } from './gerencialPrevistos'
+
+describe('deltaEtapaAPrevistaNaConta', () => {
+  const ps = ['2026-10-14', '2026-10-17', '2026-10-25', '2026-10-31', '2026-11-14', '2026-11-15']
+    .map(date => ({ date, amount: 120, fromAccountId: 'itau', toAccountId: 'ger' }))
+  it('Principal perde e Ger. ganha o mesmo valor, só dentro de [de, ate]', () => {
+    expect(deltaEtapaAPrevistaNaConta(ps, 'itau', '2026-10-15', '2026-11-14')).toBe(-480)
+    expect(deltaEtapaAPrevistaNaConta(ps, 'ger', '2026-10-15', '2026-11-14')).toBe(480)
+    expect(deltaEtapaAPrevistaNaConta(ps, 'outra', '2026-10-15', '2026-11-14')).toBe(0)
+  })
+})

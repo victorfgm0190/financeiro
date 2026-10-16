@@ -36,7 +36,7 @@ import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas } from '../lib/autoRegistro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
-import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal } from '../lib/gerencialPrevistos'
+import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
@@ -2929,6 +2929,8 @@ export function AppProvider({ children }) {
     gerencialGroups: data.gerencialGroups, getOccurrences: getOccurrencesProjecao,
   }), [data.transactions, data.accounts, data.gerencialGroups, getOccurrencesProjecao])
   const etapaAPrevistas = useMemo(() => projetarEtapaA(profileSchedules), [projetarEtapaA, profileSchedules])
+  // Saldos POR CONTA não dependem do perfil ativo (getAccountSaldos lê data.schedules inteiro).
+  const etapaAPrevistasTodas = useMemo(() => projetarEtapaA(data.schedules), [projetarEtapaA, data.schedules])
 
   // Próxima ocorrência de uma provisão recorrente ainda NÃO efetivada: a primeira ocorrência
   // com data > provisao_efetivada_until (ou a próxima ocorrência se until for null). Para
@@ -3004,7 +3006,9 @@ export function AppProvider({ children }) {
           }
         }
       }
-      return acc
+      // Etapa A prevista do Grupo G (Principal → Ger.), pela data efetiva — a mesma lista do
+      // Fluxo de Caixa Futuro e do Painel.
+      return acc + deltaEtapaAPrevistaNaConta(etapaAPrevistasTodas, account.id, cycleStartStr, dateStr)
     }
 
     // Restante dos envelopes do ciclo vinculados à conta: max(0, limite − gasto na competência atual).
@@ -3056,7 +3060,7 @@ export function AppProvider({ children }) {
       saldoAtualCalendario, saldoFinalCalendario,
       cycleEnd: cycleEndStr, calendarEnd: calendarEndStr, today: todayStr,
     }
-  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod])
+  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod, etapaAPrevistasTodas])
 
   // FINAL CICLO / PROJETADO do Saldo Principal usando EXATAMENTE a engine do relatório
   // Fluxo de Caixa por Conta (computeFluxoCaixa) — ancorada no saldo REAL das contas. Pool:
