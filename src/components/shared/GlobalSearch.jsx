@@ -5,7 +5,7 @@ import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
-import { getEffectiveStatus, paiDaSombra, STATUS } from '../../lib/statusEfetivo'
+import { getEffectiveStatus, paiDaSombra, filtrarPorStatus, STATUS } from '../../lib/statusEfetivo'
 import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
 
@@ -113,13 +113,15 @@ export default function GlobalSearch({ open, onClose }) {
   const buildResults = (txItems, scItems) => {
     const out = []
     const hoje = todayStr()
-    for (const t of txItems) {
+    const sts = new Map(scItems.map(s => [s.id, scheduleStatus(s)]))
+    const filtrados = filtrarPorStatus({
+      txs: txItems, schedules: scItems, filtro: status, txById, hoje, temProxima: s => !!sts.get(s.id).next,
+    })
+    for (const t of filtrados.txs) {
       const paid = getEffectiveStatus(t, txById, hoje) === STATUS.REGISTRADO
       // Sombra automática de reserva (sem conta): mostra as contas da transferência de origem.
       const pai = paiDaSombra(t, txById)
       const contaTx = (x) => x.type === 'transfer' ? `${accName(x.accountId)} → ${accName(x.toAccountId)}` : accName(x.accountId)
-      if (status === 'pago' && !paid) continue
-      if (status === 'naopago' && paid) continue
       out.push({
         kind: 'tx', id: t.id, obj: t,
         sortDate: t.date || '',
@@ -136,10 +138,8 @@ export default function GlobalSearch({ open, onClose }) {
         statusCls: paid ? 'bg-receita/15 text-receita' : 'bg-surface-2 text-texto-2',
       })
     }
-    for (const s of scItems) {
-      const st = scheduleStatus(s)
-      if (status === 'pago' && st.registered === 0) continue
-      if (status === 'naopago' && !st.next) continue
+    for (const s of filtrados.schedules) {
+      const st = sts.get(s.id)
       // Pendente = tem próxima ocorrência a executar; senão (só ocorrências já
       // registradas) = Registrado. Mantém a paleta azul/cinza (sem verde/vermelho).
       const pendente = !!st.next

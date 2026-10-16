@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getEffectiveStatus, paiDaSombra, STATUS } from './statusEfetivo'
+import { getEffectiveStatus, paiDaSombra, filtrarPorStatus, STATUS } from './statusEfetivo'
 
 // Caso real (25/09/2026, 212,50): despesa MONJARO no Itaú + transferência Pharma → Itaú
 // registrada (o resgate) + par de sombras "Resgate Reserva: Pharma" sem conta.
@@ -38,5 +38,26 @@ describe('getEffectiveStatus', () => {
   it('lançamento comum segue o próprio reconciled', () => {
     expect(getEffectiveStatus(despesa, new Map(), HOJE)).toBe(STATUS.REGISTRADO)
     expect(getEffectiveStatus({ ...despesa, reconciled: false }, new Map(), HOJE)).toBe(STATUS.PENDENTE)
+  })
+})
+
+describe('filtrarPorStatus (Busca Global, caso real 212,50)', () => {
+  // 2 agendamentos com próxima ocorrência pendente (25/10 e 25/11/2026), já com 25/09 registrado.
+  const agTrf = { id: 'sch_trf', registered: ['2026-09-25'], _next: '2026-10-25' }
+  const agDesp = { id: 'sch_desp', registered: ['2026-09-25'], _next: '2026-11-25' }
+  const txs = [despesa, transf, sombraR, sombraD]
+  const base = { txs, schedules: [agTrf, agDesp], txById: mapa(txs), hoje: HOJE, temProxima: s => !!s._next }
+  const contar = (filtro) => {
+    const r = filtrarPorStatus({ ...base, filtro })
+    return [r.txs.length, r.schedules.length]
+  }
+
+  it('Todos = 4 lançamentos + 2 agendamentos', () => expect(contar('todos')).toEqual([4, 2]))
+  it('Registrado = 4 lançamentos + 0 agendamentos', () => expect(contar('pago')).toEqual([4, 0]))
+  it('Pendente = 0 lançamentos + 2 agendamentos', () => expect(contar('naopago')).toEqual([0, 2]))
+
+  it('agendamento sem próxima ocorrência conta como Registrado', () => {
+    const r = filtrarPorStatus({ ...base, schedules: [{ id: 'fim', registered: ['2026-01-01'] }], filtro: 'pago' })
+    expect(r.schedules).toHaveLength(1)
   })
 })

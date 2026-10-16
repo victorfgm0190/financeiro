@@ -23,3 +23,15 @@ export function getEffectiveStatus(tx, txById, hoje) {
   }
   return tx?.reconciled ? STATUS.REGISTRADO : STATUS.PENDENTE
 }
+
+// Filtro de status da Busca Global ('todos' | 'pago' = Registrado | 'naopago' = Pendente), aplicado
+// a LANÇAMENTOS (status efetivo acima) e AGENDAMENTOS (Pendente = tem próxima ocorrência a
+// executar; senão Registrado) — o mesmo critério do selo exibido em cada item.
+// `temProxima(s)` diz se o agendamento ainda tem ocorrência pendente.
+export function filtrarPorStatus({ txs = [], schedules = [], filtro = 'todos', txById, hoje, temProxima }) {
+  const passa = (registrado) => filtro === 'todos' || (filtro === 'pago' ? registrado : !registrado)
+  return {
+    txs: txs.filter(t => passa(getEffectiveStatus(t, txById, hoje) === STATUS.REGISTRADO)),
+    schedules: schedules.filter(s => passa(!temProxima(s))),
+  }
+}
