@@ -8,7 +8,7 @@ import {
 } from './bemUtils'
 
 export default function FinanciamentoModal({
-  bem, contasCorrentes, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
+  bem, contasCorrentes, contaCentralId = '', avisoContaCentral = null, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
 }) {
   const restante = Math.max(0, round2((bem.valor_nota_fiscal || 0) - (bem.saldo || 0)))
   const [form, setForm] = useState({
@@ -18,10 +18,8 @@ export default function FinanciamentoModal({
     banco: '',
     banco_favorecido_id: '',
     data_primeira_parcela: hojeIso(),
-    conta_origem_id: contasCorrentes.find(c => c.contaCorrentePrincipal)?.id
-      || contasCorrentes.find(c => c.isMain)?.id
-      || contasCorrentes[0]?.id
-      || '',
+    // Conta central do perfil do bem (BemDetail); sem ela, vazio — o usuário escolhe à mão.
+    conta_origem_id: contaCentralId || '',
   })
   const [loading, setLoading] = useState(false)
   const [tocouFavorecido, setTocouFavorecido] = useState(false)
@@ -168,10 +166,12 @@ export default function FinanciamentoModal({
             className="input"
             value={form.conta_origem_id}
             onChange={e => set('conta_origem_id', e.target.value)}
+            required
           >
-            {contasCorrentes.length === 0 && <option value="">Nenhuma conta corrente</option>}
+            <option value="">{contasCorrentes.length === 0 ? 'Nenhuma conta corrente' : 'Selecione a conta...'}</option>
             {contasCorrentes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {avisoContaCentral && !form.conta_origem_id && <p className="text-xs text-aviso mt-1">{avisoContaCentral}</p>}
         </div>
       </div>
 

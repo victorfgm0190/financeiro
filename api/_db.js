@@ -121,6 +121,19 @@ async function reconcileInstallmentKeys(client, rows) {
   })
 }
 
+// contas tem índices únicos parciais: uma Conta central (conta_corrente_principal) e uma favorita
+// (is_main) por perfil. O Postgres confere índice único linha a linha dentro do INSERT, então trocar
+// a flag de A para B no mesmo lote falhava se B viesse antes de A ("salvei e sumiu"). Antes do
+// upsert, desliga a flag em TODAS as linhas recebidas que a têm ligada no banco; o upsert religa
+// só as que chegam ligadas. Mesma transação: se o upsert falhar, o ROLLBACK desfaz isto também.
+export const FLAGS_UNICAS_CONTAS = ['conta_corrente_principal', 'is_main']
+export async function desligarFlagsUnicasAntes(client, rows) {
+  for (const col of FLAGS_UNICAS_CONTAS) {
+    const ids = rows.filter(r => r && col in r && r.id).map(r => r.id)
+    if (ids.length) await client.query(`UPDATE contas SET "${col}" = false WHERE id = ANY($1) AND "${col}"`, [ids])
+  }
+}
+
 // Faz upsert de um array de rows numa tabela, em lotes, dentro de uma transação.
 // Os rows já devem estar em snake_case (produzidos pelos *ToRow do frontend).
 // Devolve quantas linhas foram efetivamente gravadas (inseridas + atualizadas). Quem chama usa
@@ -131,6 +144,7 @@ async function reconcileInstallmentKeys(client, rows) {
 // na MESMA transação.
 export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id') {
   if (!rows || rows.length === 0) return 0
+  if (table === 'contas') await desligarFlagsUnicasAntes(client, rows)
   // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
   let lotes = [[rows, []]]
   if (table === 'lancamentos') {

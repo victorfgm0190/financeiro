@@ -4,11 +4,11 @@
 // ajusta incrementalmente como sempre fez; o motor deixa o recalcularSaldo recalcular).
 
 import { prevMonthScheduleDate } from './fatura.js'
+import { contaCentralDoPerfil } from './contaCentral.js'
 
-export const contaPrincipalDe = (accounts) =>
-  accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-  accounts.find(a => a.isMain && a.type !== 'credit') ||
-  accounts.find(a => a.type === 'checking') || null
+// Conta central do perfil do cartão (lib/contaCentral). Sem ela: null — nada de favorita, primeira
+// conta corrente ou Conta central de outro perfil.
+export const contaPrincipalDe = (accounts, profileId) => contaCentralDoPerfil(accounts, profileId)
 
 export const nomeSubcontaGer = (card) => `Ger. ${card?.apelido || card?.name?.slice(0, 6) || 'CC'}`
 
@@ -30,7 +30,8 @@ function faturaRefDe(tx) {
 export function montarProvisaoGerencial(d, parcela, { id, origin, faturaRef, agora = new Date().toISOString() } = {}) {
   const g1 = d.gerencialGroups?.find(g => g.number === 1)
   if (!g1) return null
-  const contaPrincipal = contaPrincipalDe(d.accounts)
+  const cardDaParcela = d.accounts.find(a => a.id === parcela.accountId)
+  const contaPrincipal = contaPrincipalDe(d.accounts, cardDaParcela?.profileId)
   if (!contaPrincipal) return null
 
   // Dia de início do ciclo financeiro: base das datas das transferências das parcelas 2..N.
@@ -63,7 +64,7 @@ export function montarProvisaoGerencial(d, parcela, { id, origin, faturaRef, ago
       id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
       name: nomeSubcontaGer(card), type: 'checking', balance: 0,
       bank: contaPrincipal.bank || '', apelido: `G${card?.apelido || card?.name?.slice(0, 6) || 'CC'}`.slice(0, 8),
-      fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+      fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
       grupoGerencial: g1.id, accountGroupId: contaPrincipal.accountGroupId || null,
     }
     accounts = [...accounts, subconta]

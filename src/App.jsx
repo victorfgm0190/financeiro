@@ -1,3 +1,4 @@
+import { AvisoOperacao } from './components/shared/ContaCentralAvisos'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { differenceInDays, parseISO } from 'date-fns'
 import { dueDateInMonth } from './lib/fatura'
@@ -176,6 +177,7 @@ function AppContent() {
   // Modais/toasts globais — iguais no desktop e no mobile.
   const overlays = (
     <>
+      <AvisoOperacao />
       <Modal open={showPosicao} onClose={() => setShowPosicao(false)} title="Como chegamos aqui" size="lg">
         <SaldoPrincipalBreakdownModal />
       </Modal>

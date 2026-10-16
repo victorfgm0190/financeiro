@@ -44,18 +44,6 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
       {/* Profile filter chips — desktop only (seletor de perfil do desktop) */}
       {profiles.length > 0 && (
         <div className="hidden md:flex items-center gap-1.5 flex-1 overflow-x-auto scrollbar-none px-1 min-w-0">
-          {/* "Tudo" chip */}
-          <button
-            onClick={() => setActiveProfileId(null)}
-            className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-              activeProfileId === null
-                ? 'bg-primary/15 border-primary/40 text-primary-fg'
-                : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
-            }`}
-          >
-            Tudo
-          </button>
-
           {profiles.map(p => {
             const isActive = activeProfileId === p.id
             const Icon = p.type === 'pf' ? User : Building2
@@ -76,6 +64,18 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
               </button>
             )
           })}
+          {/* "Tudo" chip — sempre por último */}
+          <button
+            onClick={() => setActiveProfileId(null)}
+            className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+              activeProfileId === null
+                ? 'bg-primary/15 border-primary/40 text-primary-fg'
+                : 'bg-surface-2/60 border-borda-forte text-texto-2 hover:text-texto-1 hover:bg-surface-hover'
+            }`}
+          >
+            Tudo
+          </button>
+
         </div>
       )}
 
@@ -117,15 +117,6 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
                 {/* Backdrop para fechar ao clicar fora */}
                 <div className="fixed inset-0 z-20" onClick={() => setProfileMenuOpen(false)} />
                 <div className="absolute right-0 mt-1.5 z-30 w-52 rounded-lg border border-borda-forte bg-surface shadow-xl py-1">
-                  <button
-                    onClick={() => { setActiveProfileId(null); setProfileMenuOpen(false) }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-surface-hover ${
-                      activeProfileId === null ? 'text-texto-1 font-semibold' : 'text-texto-2'
-                    }`}
-                  >
-                    <User size={13} className="shrink-0 text-texto-2" />
-                    <span className="truncate">Tudo</span>
-                  </button>
                   {profiles.map(p => {
                     const isActive = activeProfileId === p.id
                     const Icon = p.type === 'pf' ? User : Building2
@@ -144,6 +135,15 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
                       </button>
                     )
                   })}
+                  <button
+                    onClick={() => { setActiveProfileId(null); setProfileMenuOpen(false) }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-surface-hover ${
+                      activeProfileId === null ? 'text-texto-1 font-semibold' : 'text-texto-2'
+                    }`}
+                  >
+                    <User size={13} className="shrink-0 text-texto-2" />
+                    <span className="truncate">Tudo</span>
+                  </button>
                 </div>
               </>
             )}

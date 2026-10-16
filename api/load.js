@@ -313,6 +313,21 @@ export default async function handler(req, res) {
     await query(`UPDATE contas SET vinculo_tipo = 'reserva' WHERE is_reserva = true AND (vinculo_tipo IS NULL OR vinculo_tipo = 'none')`)
     // Mantém is_reserva sincronizado com vinculo_tipo (compat. com código legado).
     await query(`UPDATE contas SET is_reserva = (vinculo_tipo = 'reserva') WHERE vinculo_tipo IS NOT NULL`)
+    // Ordem dos perfis (chips do topo e seletores). Perfil sem ordem vai para o fim, pela criação.
+    await query(`ALTER TABLE perfis ADD COLUMN IF NOT EXISTS ordem INTEGER DEFAULT 0`)
+    // Conta central e favorita: no máximo uma por perfil; Conta central exige perfil. Em try/catch:
+    // com dados duplicados o índice não é criado, mas o app abre (a regra também vale no front).
+    try {
+      await query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_conta_central_com_perfil') THEN
+          ALTER TABLE contas ADD CONSTRAINT ck_conta_central_com_perfil
+            CHECK (NOT COALESCE(conta_corrente_principal, false) OR profile_id IS NOT NULL);
+        END IF; END $$`)
+      await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_contas_central_por_perfil ON contas (profile_id) WHERE conta_corrente_principal`)
+      await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_contas_favorita_por_perfil ON contas ((COALESCE(profile_id, ''))) WHERE is_main`)
+    } catch (err) {
+      console.error('[api/load] índices de Conta central/favorita não criados:', err.message)
+    }
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS investment_account_id TEXT`)
     // Empréstimos: categoria gera lançamento espelho e a conta vinculada (TEXT, sem FK).
     await query(`ALTER TABLE categorias ADD COLUMN IF NOT EXISTS gera_espelho BOOLEAN DEFAULT false`)
@@ -445,7 +460,7 @@ export default async function handler(req, res) {
         query('SELECT * FROM configuracoes WHERE id = 1'),
         query('SELECT * FROM envelopes'),
         query('SELECT * FROM grupos_conta ORDER BY "order"'),
-        query('SELECT * FROM perfis'),
+        query('SELECT * FROM perfis ORDER BY ordem NULLS LAST, created_at'),
         query('SELECT * FROM card_imports ORDER BY imported_at DESC'),
         query('SELECT * FROM gerencial_rules ORDER BY "order"'),
         query('SELECT * FROM reserve_functions ORDER BY ordem, name'),

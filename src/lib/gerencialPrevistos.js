@@ -154,8 +154,6 @@ export function projecoesEtapaA({
   const out = []
   const g1 = (gerencialGroups || []).find(g => g.number === 1)
   if (!g1 || typeof getOccurrences !== 'function') return out
-  const contaPrincipal = contaPrincipalDe(accounts || [])
-  if (!contaPrincipal) return out
   const accById = new Map((accounts || []).map(a => [a.id, a]))
   const txIds = new Set((transactions || []).map(t => t.id))
   // Ocorrência já efetivada com etapa A real: o lançamento leva scheduleId + date.
@@ -166,6 +164,9 @@ export function projecoesEtapaA({
     if (s.grupoGerencial !== g1.id) continue
     const card = accById.get(s.accountId)
     if (card?.type !== 'credit' || !ehGastoPrevistoDeCartao(s, card.id)) continue
+    // Conta central do PERFIL DO CARTÃO; perfil sem ela não projeta a etapa A (o banner avisa).
+    const contaPrincipal = contaPrincipalDe(accounts || [], card.profileId)
+    if (!contaPrincipal) continue
     const nomeSub = nomeSubcontaGer(card)
     const subconta = (accounts || []).find(a => a.name === nomeSub) || null
     const vistos = new Set()

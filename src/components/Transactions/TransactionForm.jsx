@@ -34,6 +34,7 @@ import DateInput from '../shared/DateInput'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel } from '../../lib/competenciaFatura'
+import { contaCentralDoPerfil, contaCentralPara } from '../../lib/contaCentral'
 
 const TYPE_OPTIONS = [
   { value: 'income', label: 'Receita', atalho: 'lancamento.tipoReceita' },
@@ -119,7 +120,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
     reserveFunctions, settings, findLinkedResgate, activeProfileId, categoryGroupOrder,
-    registrarEdicao, temHistorico,
+    registrarEdicao, temHistorico, profiles,
   } = useApp()
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
@@ -136,9 +137,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const [gerencialContaId, setGerencialContaId] = useState(() => {
     const saved = localStorage.getItem(GERENCIAL_CONTA_KEY)
     if (saved && accounts.some(a => a.id === saved)) return saved
-    return accounts.find(a => a.contaCorrentePrincipal)?.id
-      || accounts.find(a => a.type === 'checking')?.id
-      || ''
+    // Conta central do perfil do cartão do lançamento; sem ela, vazio (o aviso aparece no bloco G).
+    return contaCentralDoPerfil(accounts, accounts.find(a => a.id === initial?.accountId)?.profileId)?.id || ''
   })
 
   // Edição de despesa "Será pago com reserva": o vínculo vem de reservaContaId; lançamentos
@@ -376,10 +376,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   // Transferência entre perfis diferentes (CPF↔CNPJ): habilita categorias por visão (PARTE 1).
   const isInterProfileTransfer = form.type === 'transfer' && isTransferenciaEntrePerfis(transferFromAcc, transferToAcc)
 
-  const contaPrincipal =
-    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-    accounts.find(a => a.isMain && a.type !== 'credit') ||
-    accounts.find(a => a.type === 'checking')
+  // Resgate de reserva: Conta central do PERFIL DA RESERVA. Sem ela, o resgate fica bloqueado.
+  const centralResgate = resgateInfo?.contaResgate
+    ? contaCentralPara(accounts, profiles, resgateInfo.contaResgate)
+    : { conta: null, erro: null }
+  const contaPrincipal = centralResgate.conta
 
   // Options for SearchableSelect fields
   const accountOpts = useMemo(() => buildAccountSelectOptions(accounts, accountGroups, { isMobile }), [accounts, accountGroups, isMobile])
@@ -1173,6 +1174,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           {resgateInfo.funcaoNome && (
             <p className="text-xs text-reserva">Função: {resgateInfo.funcaoNome}</p>
           )}
+          {centralResgate.erro && (
+            <p className="text-xs text-aviso">{centralResgate.erro}</p>
+          )}
         </div>
         <div>
           <label className="label">Data do resgate</label>
@@ -1185,7 +1189,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </div>
         <div className="flex gap-3 pt-2">
           <button className="btn-secondary flex-1" onClick={onClose}>Agora não</button>
-          <button className="btn-primary flex-1" disabled={!resgateDate} onClick={handleResgate}>Criar Agendamento</button>
+          <button className="btn-primary flex-1" disabled={!resgateDate || !contaPrincipal} onClick={handleResgate}>Criar Agendamento</button>
         </div>
       </div>
     )
@@ -1881,6 +1885,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               const scheduleDate = `${fyyyy}-${fmm}-${dueDay}`
               return (
                 <div className="space-y-2">
+                  {selectedAccount?.type === 'credit' && contaCentralPara(accounts, profiles, selectedAccount).erro && (
+                    <p className="text-xs text-aviso">{contaCentralPara(accounts, profiles, selectedAccount).erro}</p>
+                  )}
                   <div>
                     <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino</label>
                     <select

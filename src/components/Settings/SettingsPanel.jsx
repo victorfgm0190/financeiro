@@ -71,7 +71,7 @@ export default function SettingsPanel() {
     gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
     accountGroups, addAccountGroup, updateAccountGroup, deleteAccountGroup,
     moveAccountGroup, reorderAccountGroups,
-    profiles, addProfile, updateProfile, deleteProfile,
+    profiles, addProfile, updateProfile, deleteProfile, moveProfile,
     accounts,
     transactions,
     recalcularSaldo,
@@ -269,7 +269,8 @@ export default function SettingsPanel() {
   const handleProfileSubmit = (e) => {
     e.preventDefault()
     if (!profileForm.name.trim()) return
-    const payload = { ...profileForm, document: profileForm.document.replace(/\D/g, '') }
+    // Nome sem espaços nas pontas (o " Lumen Tech " aparecia assim nas mensagens e nos chips).
+    const payload = { ...profileForm, name: profileForm.name.trim(), document: profileForm.document.replace(/\D/g, '') }
     if (editingProfile) updateProfile(editingProfile.id, payload)
     else addProfile(payload)
     closeProfileForm()
@@ -763,7 +764,8 @@ export default function SettingsPanel() {
         )}
 
         <div className="space-y-2 mb-3">
-          {profiles.map(p => {
+          {/* Ordem dos perfis: chips do topo e seletores seguem esta lista ("Tudo" sempre por último). */}
+          {profiles.map((p, i) => {
             const Icon = p.type === 'pf' ? User : Building2
             const rawDoc = p.document || ''
             const fmtDoc = rawDoc ? maskDoc(rawDoc, p.type) : '—'
@@ -780,6 +782,16 @@ export default function SettingsPanel() {
                   <p className="text-xs text-texto-3">{p.type === 'pf' ? 'CPF' : 'CNPJ'}: {fmtDoc}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex gap-0.5">
+                    <button type="button" title="Subir" aria-label={`Subir ${p.name}`} onClick={() => moveProfile(p.id, 'up')} disabled={i === 0}
+                      className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors">
+                      <ArrowUp size={11} />
+                    </button>
+                    <button type="button" title="Descer" aria-label={`Descer ${p.name}`} onClick={() => moveProfile(p.id, 'down')} disabled={i === profiles.length - 1}
+                      className="p-1 rounded hover:bg-surface-hover disabled:opacity-25 text-texto-2 transition-colors">
+                      <ArrowDown size={11} />
+                    </button>
+                  </div>
                   <button className="p-1 text-texto-3 hover:text-texto-2 transition-colors" onClick={() => openProfileEdit(p)}><Edit2 size={13} /></button>
                   <button className="p-1 text-texto-3 hover:text-perigo transition-colors" onClick={() => setProfileConfirmDelete(p.id)}><Trash2 size={13} /></button>
                 </div>

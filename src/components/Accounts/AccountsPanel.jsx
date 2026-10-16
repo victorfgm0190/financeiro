@@ -1,3 +1,4 @@
+import { BannerPerfisSemContaCentral } from '../shared/ContaCentralAvisos'
 import { useState, useEffect, useMemo } from 'react'
 import {
   Plus, Star, Trash2, Edit2, CreditCard, Landmark, PiggyBank,
@@ -5,6 +6,7 @@ import {
   ChevronDown, ChevronRight, RefreshCw, EyeOff, Eye, Scale, TrendingUp,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { checarRemocaoContaCentral } from '../../lib/contaCentral'
 import { fmt, fmtSinal, accountsForView, creditBillKey, creditBillStatus } from '../shared/utils'
 import { valorPatrimonial } from '../../lib/patrimonio'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -231,7 +233,9 @@ function GroupManager({ groups }) {
 }
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue, isNextDue = false, nextDueDays = null }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos, creditUsage } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos, creditUsage, accounts: todasContas, profiles, setAvisoOperacao } = useApp()
+  // Inativar a Conta central: bloqueado se o perfil tem cartão/reserva/Ger./financiamento.
+  const remocaoCentral = checarRemocaoContaCentral(account, { accounts: todasContas, schedules, profiles }, 'inativar')
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
   const isCredit = account.type === 'credit'
   const highlightCard = isCredit && isNextDue
@@ -382,6 +386,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               onClick={(e) => {
                 e.stopPropagation()
                 if (isInactive) updateAccount(account.id, { active: true })
+                else if (remocaoCentral.bloqueio) setAvisoOperacao(remocaoCentral.bloqueio)
                 else setConfirmInactivate(true)
               }}
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
@@ -523,7 +528,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
       onClose={() => setConfirmInactivate(false)}
       onConfirm={() => { updateAccount(account.id, { active: false }); setConfirmInactivate(false) }}
       title="Inativar Conta"
-      message="Deseja inativar esta conta? Ela não aparecerá nos formulários de lançamento."
+      message={`Deseja inativar esta conta? Ela não aparecerá nos formulários de lançamento.${remocaoCentral.aviso ? ` ${remocaoCentral.aviso}` : ''}`}
       confirmLabel="Inativar"
     />
     </>
@@ -628,7 +633,7 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
 }
 
 export default function AccountsPanel({ setActivePage }) {
-  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage, accounts: todasContas, schedules: todosAgendamentos, profiles, setAvisoOperacao } = useApp()
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -707,7 +712,13 @@ export default function AccountsPanel({ setActivePage }) {
   const saldosUngrouped = sumSaldos(ungrouped, saldosByAccount)
 
   const handleEdit = (account) => { setEditAccount(account); setShowForm(true) }
-  const handleDelete = (account) => setConfirmDelete(account)
+  // Excluir a Conta central: bloqueado se o perfil tem cartão/reserva/Ger./financiamento; senão avisa.
+  const remocaoDe = (account) => checarRemocaoContaCentral(account, { accounts: todasContas, schedules: todosAgendamentos, profiles }, 'excluir')
+  const handleDelete = (account) => {
+    const { bloqueio } = remocaoDe(account)
+    if (bloqueio) { setAvisoOperacao(bloqueio); return }
+    setConfirmDelete(account)
+  }
   const handleExtrato = (account) => { saveScroll(); setExtratoAccount(account) }
   const handleUpdateValue = (account) => setUpdateValueAccount(account)
 
@@ -758,6 +769,7 @@ export default function AccountsPanel({ setActivePage }) {
 
   return (
     <div className="space-y-6">
+      <BannerPerfisSemContaCentral />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card">
           <p className="text-xs text-texto-2 uppercase tracking-wide">Total em Contas</p>
@@ -952,7 +964,7 @@ export default function AccountsPanel({ setActivePage }) {
         onClose={() => setConfirmDelete(null)}
         onConfirm={() => { deleteAccount(confirmDelete.id); setConfirmDelete(null) }}
         title="Excluir Conta"
-        message={`Tem certeza que deseja excluir a conta "${confirmDelete?.name}"? Esta ação não pode ser desfeita.`}
+        message={`Tem certeza que deseja excluir a conta "${confirmDelete?.name}"? Esta ação não pode ser desfeita.${confirmDelete && remocaoDe(confirmDelete).aviso ? ` ${remocaoDe(confirmDelete).aviso}` : ''}`}
         danger
       />
 

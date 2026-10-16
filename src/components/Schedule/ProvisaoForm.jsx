@@ -5,6 +5,7 @@ import { today } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import { contaCentralDoPerfil, msgSemContaCentral } from '../../lib/contaCentral'
 
 // Mesmas frequências do ScheduleForm.
 const FREQUENCIES = [
@@ -26,25 +27,14 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder } = useApp()
+  const { accounts, profiles, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder } = useApp()
 
-  // Conta principal (Itaú Principal): a provisão é uma despesa futura debitada da conta
-  // principal — aparece no Fluxo de Caixa Principal como despesa "Uma vez".
-  const contaPrincipal = useMemo(() =>
-    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-    accounts.find(a => a.isMain && a.type !== 'credit') ||
-    accounts.find(a => a.type === 'checking') ||
-    accounts[0] || null,
-  [accounts])
-
-  // Categorias por perfil: o da conta principal (onde a provisão cai), senão o chip do topo; a
-  // categoria já gravada continua na lista.
-  const perfilCategorias = perfilParaCategorias(accounts, contaPrincipal?.id, activeProfileId)
-  const expenseCatOpts = useMemo(() =>
-    ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId]), categoryGroupOrder)
-      .filter(c => c.type === 'expense' || c.type === 'both')
-      .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null })),
-  [categories, perfilCategorias, initial?.categoryId, categoryGroupOrder])
+  // A provisão é uma despesa futura debitada da Conta central DO PERFIL DA PROVISÃO — aparece no
+  // Fluxo de Caixa Principal como despesa. Perfil: na edição, o da conta já gravada; na criação, o
+  // da conta da função de reserva escolhida; sem função, o select "Perfil" (obrigatório, nunca o
+  // filtro da tela). Sem Conta central nesse perfil, o Salvar fica bloqueado com o aviso.
+  const [perfilEscolhido, setPerfilEscolhido] = useState('')
+  const [erroCentral, setErroCentral] = useState(null)
 
   // TODAS as funções de reserva de TODAS as contas (cada função pertence a uma conta via
   // accountId). Formato "Nome (apelido)"; ordenado por conta e depois por nome da função.
@@ -77,6 +67,24 @@ export default function ProvisaoForm({ initial, onClose }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isRecorrente = form.frequency && form.frequency !== 'once'
 
+  const contaDaFuncao = form.comReserva && form.reservaFuncaoId
+    ? accounts.find(a => a.id === (reserveFunctions || []).find(f => f.id === form.reservaFuncaoId)?.accountId) || null
+    : null
+  const perfilDaProvisao = initial?.accountId
+    ? accounts.find(a => a.id === initial.accountId)?.profileId || null
+    : contaDaFuncao ? contaDaFuncao.profileId || null : (perfilEscolhido || null)
+  const mostraSelectPerfil = !initial?.accountId && !contaDaFuncao
+  const contaPrincipal = contaCentralDoPerfil(accounts, perfilDaProvisao)
+
+  // Categorias por perfil: o da conta principal (onde a provisão cai), senão o chip do topo; a
+  // categoria já gravada continua na lista.
+  const perfilCategorias = perfilParaCategorias(accounts, contaPrincipal?.id || initial?.accountId, activeProfileId)
+  const expenseCatOpts = useMemo(() =>
+    ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId]), categoryGroupOrder)
+      .filter(c => c.type === 'expense' || c.type === 'both')
+      .map(c => ({ id: c.id, label: `${c.icon} ${c.name}`, group: c.group || null })),
+  [categories, perfilCategorias, initial?.categoryId, categoryGroupOrder])
+
   // Prévia das próximas ocorrências — mesma lógica do ScheduleForm: reusa getNextOccurrences
   // com um schedule "virtual" montado do form. Contínua → próximas 12; Parcelada → só as N datas
   // (getNextOccurrences limita por installments). Recalculada a cada render → atualiza em tempo real
@@ -96,11 +104,15 @@ export default function ProvisaoForm({ initial, onClose }) {
     if (!form.description || !form.amount || !form.startDate || !form.frequency) return
     if (isRecorrente && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.comReserva && !form.reservaFuncaoId) return
+    if (!initial?.accountId && !contaPrincipal) {
+      setErroCentral(msgSemContaCentral(profiles, perfilDaProvisao, contaDaFuncao))
+      return
+    }
 
     const payload = {
       description: form.description,
       transactionType: 'expense',
-      // Em edição mantém a conta original; na criação usa a conta principal.
+      // Em edição mantém a conta original; na criação usa a Conta central do perfil da provisão.
       accountId: initial?.accountId || contaPrincipal?.id || '',
       accountType: initial?.accountType ?? (contaPrincipal?.type || null),
       toAccountId: '',
@@ -139,6 +151,21 @@ export default function ProvisaoForm({ initial, onClose }) {
           ocorrência a ocorrência, com o valor e a data reais.
         </p>
       </div>
+
+      {mostraSelectPerfil && (
+        <div>
+          <label className="label">Perfil *</label>
+          <select className="input" value={perfilEscolhido} required
+            onChange={e => { setPerfilEscolhido(e.target.value); setErroCentral(null) }}>
+            <option value="">Selecione o perfil...</option>
+            {profiles.map(p => <option key={p.id} value={p.id}>{String(p.name || '').trim()}</option>)}
+          </select>
+          <p className="text-xs text-texto-3 mt-1">A provisão sai da Conta central deste perfil.</p>
+        </div>
+      )}
+      {(erroCentral || (perfilDaProvisao && !contaPrincipal && !initial?.accountId)) && (
+        <p className="text-xs text-aviso">{erroCentral || msgSemContaCentral(profiles, perfilDaProvisao, contaDaFuncao)}</p>
+      )}
 
       {/* Descrição */}
       <div>

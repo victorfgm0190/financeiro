@@ -63,9 +63,9 @@ function Bloco({ titulo, children }) {
 }
 
 // Linha de toggle: nome em negrito, ajuda fixa abaixo, toggle à direita. A linha toda é o rótulo.
-function LinhaToggle({ nome, ajuda, selo, checked, onChange }) {
+function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false }) {
   return (
-    <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-hover/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary">
+    <label className={`flex items-center gap-3 px-3 py-2.5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-surface-hover/50'}`}>
       <div className="flex-1 min-w-0">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-1">
           {nome}
@@ -74,7 +74,7 @@ function LinhaToggle({ nome, ajuda, selo, checked, onChange }) {
         <p className="text-xs text-texto-3 leading-snug mt-0.5">{ajuda}</p>
       </div>
       <div className="relative shrink-0">
-        <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
+        <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} className="sr-only peer" />
         <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
         <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
       </div>
@@ -136,9 +136,28 @@ export default function AccountForm({ initial, onClose }) {
   // Grupo ao qual a conta pertence — usado só para nomear o escopo no modo "grupo".
   const grupoDaConta = accountGroups.find(g => g.id === form.accountGroupId) || null
 
-  const conflictAccount = isChecking && form.contaCorrentePrincipal
-    ? accounts.find(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal)
+  // Conta central e favorita: uma por PERFIL. Conta central exige perfil; a favorita das contas
+  // sem perfil forma um grupo próprio.
+  const perfilForm = form.profileId || null
+  const nomeDoPerfil = (id) => String(profiles.find(p => p.id === id)?.name || '').trim() || 'o perfil'
+  const conflictAccount = isChecking && form.contaCorrentePrincipal && perfilForm
+    ? accounts.find(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal && a.profileId === perfilForm)
     : null
+  const conflictFavorita = form.isMain
+    ? accounts.find(a => a.id !== initial?.id && a.isMain && (a.profileId || null) === perfilForm)
+    : null
+  // Era a Conta central e trocou de perfil (ou ficou sem): o perfil antigo fica sem Conta central.
+  const centralMudouDePerfil = !!(initial?.contaCorrentePrincipal && initial?.profileId && (initial.profileId || null) !== perfilForm)
+  const [avisoCentral, setAvisoCentral] = useState(null)
+  const alternarCentral = (ligar) => {
+    // A única Conta central do perfil não desliga: troca-se ligando a de outra conta do perfil.
+    if (!ligar && initial?.contaCorrentePrincipal && (initial.profileId || null) === perfilForm) {
+      setAvisoCentral(`Esta é a Conta central de ${nomeDoPerfil(perfilForm)}. Para trocar, ligue a Conta central em outra conta do perfil.`)
+      return
+    }
+    setAvisoCentral(null)
+    set('contaCorrentePrincipal', ligar)
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -158,10 +177,16 @@ export default function AccountForm({ initial, onClose }) {
       return
     }
 
-    if (form.contaCorrentePrincipal && isChecking) {
+    const centralFinal = isChecking && !!perfilForm && form.contaCorrentePrincipal
+    if (centralFinal) {
       accounts
-        .filter(a => a.type === 'checking' && a.id !== initial?.id && a.contaCorrentePrincipal)
+        .filter(a => a.id !== initial?.id && a.contaCorrentePrincipal && a.profileId === perfilForm)
         .forEach(a => updateAccount(a.id, { contaCorrentePrincipal: false }))
+    }
+    if (form.isMain) {
+      accounts
+        .filter(a => a.id !== initial?.id && a.isMain && (a.profileId || null) === perfilForm)
+        .forEach(a => updateAccount(a.id, { isMain: false }))
     }
 
     const rb = v => Math.round(v * 100) / 100
@@ -187,7 +212,7 @@ export default function AccountForm({ initial, onClose }) {
       dueDay: Number(form.dueDay),
       isMain: form.isMain,
       fluxoCaixaPrincipal: isPatrimonial ? false : form.fluxoCaixaPrincipal,
-      contaCorrentePrincipal: isChecking ? form.contaCorrentePrincipal : false,
+      contaCorrentePrincipal: centralFinal,
       contaAplicacao: !isCredit && !isPatrimonial ? form.contaAplicacao : false,
       grupoGerencial: form.grupoGerencial,
       accountGroupId: form.accountGroupId || null,
@@ -461,10 +486,15 @@ export default function AccountForm({ initial, onClose }) {
           />
           <LinhaToggle
             nome="Conta favorita ★"
-            ajuda="Marcada com ★ e listada primeiro em Lançamentos"
+            ajuda="Marcada com ★ e listada primeiro em Lançamentos. Uma por perfil"
             checked={form.isMain}
             onChange={e => set('isMain', e.target.checked)}
           />
+          {conflictFavorita && (
+            <p className="px-3 py-2 text-xs text-aviso bg-aviso/10">
+              A favorita de {perfilForm ? nomeDoPerfil(perfilForm) : 'contas sem perfil'} hoje é <strong className="text-texto-1">"{conflictFavorita.name}"</strong>. Ao salvar, ela deixa de ser favorita.
+            </p>
+          )}
           {/* Configuração de exibição mobile — disponível só no desktop */}
           <div className="hidden md:block">
             <LinhaToggle
@@ -500,14 +530,25 @@ export default function AccountForm({ initial, onClose }) {
               nome="Conta central"
               selo={SELOS.CC}
               ajuda="Paga faturas, movimenta o gerencial do cartão e recebe resgates de reserva. Só uma por vez"
-              checked={form.contaCorrentePrincipal}
-              onChange={e => set('contaCorrentePrincipal', e.target.checked)}
+              checked={form.contaCorrentePrincipal && !!perfilForm}
+              onChange={e => alternarCentral(e.target.checked)}
+              disabled={!perfilForm}
             />
+            {!perfilForm && (
+              <p className="px-3 py-2 text-xs text-texto-3">Defina o perfil da conta (Vínculo CPF / CNPJ) para torná-la Conta central.</p>
+            )}
+            {avisoCentral && !centralMudouDePerfil && <p className="px-3 py-2 text-xs text-aviso bg-aviso/10">{avisoCentral}</p>}
+            {centralMudouDePerfil && (
+              <p className="px-3 py-2 text-xs text-aviso bg-aviso/10">
+                Esta conta é a Conta central de {nomeDoPerfil(initial.profileId)}. Ao salvar, {nomeDoPerfil(initial.profileId)} fica sem Conta central
+                {perfilForm ? <> e ela passa a ser a Conta central de {nomeDoPerfil(perfilForm)}.</> : <> e ela deixa de ser Conta central (conta sem perfil não pode).</>}
+              </p>
+            )}
             {conflictAccount && (
               <div className="flex items-start gap-2 p-3 bg-aviso/10">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5 text-aviso" />
                 <p className="text-xs text-aviso leading-relaxed">
-                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta central.
+                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta central de {nomeDoPerfil(perfilForm)}.
                   Ao salvar, ela será substituída por esta conta.
                 </p>
               </div>

@@ -347,6 +347,7 @@ export const perfilToRow = (p) => ({
   document: p.document || null,
   color: p.color || '#6366f1',
   is_default: !!p.isDefault,
+  ordem: Number.isFinite(p.ordem) ? p.ordem : 0,
 })
 
 export const rowToPerfil = (r) => ({
@@ -356,6 +357,7 @@ export const rowToPerfil = (r) => ({
   document: r.document || '',
   color: r.color || '#6366f1',
   isDefault: !!r.is_default,
+  ordem: Number.isFinite(Number(r.ordem)) && r.ordem != null ? Number(r.ordem) : 0,
 })
 
 export const accountGroupToRow = (g) => ({

@@ -63,13 +63,20 @@ export default async function handler(req, res) {
       if (!c) return fail(res, 404, `conta de origem ${conta_origem_id} não encontrada`)
       contaOrigem = c.id
     } else {
-      const [c] = await query(
-        `SELECT id FROM contas
-          WHERE type NOT IN ('credit', 'asset', 'liability')
-          ORDER BY conta_corrente_principal DESC NULLS LAST, is_main DESC NULLS LAST, created_at
-          LIMIT 1`,
-      )
-      if (!c) return fail(res, 400, 'nenhuma conta corrente encontrada — informe conta_origem_id')
+      // Sem conta informada: a Conta central do PERFIL DO BEM. Sem ela, recusa — nunca cai para a
+      // favorita, para outra conta qualquer ou para a Conta central de outro perfil.
+      const [c] = bem.profile_id
+        ? await query(
+          `SELECT id FROM contas
+            WHERE profile_id = $1 AND type = 'checking' AND conta_corrente_principal
+            LIMIT 1`, [bem.profile_id],
+        )
+        : []
+      if (!c) {
+        if (!bem.profile_id) return fail(res, 400, `A conta "${String(bem.name || '').trim()}" não tem perfil. Defina o perfil dela em Contas → editar conta.`)
+        const [p] = await query(`SELECT name FROM perfis WHERE id = $1`, [bem.profile_id])
+        return fail(res, 400, `O perfil ${String(p?.name || bem.profile_id).trim()} não tem Conta central. Defina em Contas → editar conta.`)
+      }
       contaOrigem = c.id
     }
 

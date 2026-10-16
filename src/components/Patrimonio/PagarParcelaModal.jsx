@@ -6,7 +6,7 @@ import { pagarParcela } from '../../lib/bemApi'
 import { fmtData, hojeIso, calcularRateio, round2 } from './bemUtils'
 
 export default function PagarParcelaModal({
-  bem, financiamento, parcela, contasCorrentes, onCancel, onSuccess, onErro,
+  bem, financiamento, parcela, contasCorrentes, contaCentralId = '', avisoContaCentral = null, onCancel, onSuccess, onErro,
 }) {
   // Pagamento parcial anterior já abateu parte da parcela — o padrão é quitar o que falta.
   const restante = round2(Math.max(0, (parcela.total_provisioned || 0) - (parcela.total_pago || 0)))
@@ -14,8 +14,7 @@ export default function PagarParcelaModal({
   const [dataPagamento, setDataPagamento] = useState(hojeIso())
   const [contaOrigemId, setContaOrigemId] = useState(
     financiamento?.conta_origem_id
-      || contasCorrentes.find(c => c.contaCorrentePrincipal)?.id
-      || contasCorrentes[0]?.id
+      || contaCentralId
       || '',
   )
   const [loading, setLoading] = useState(false)
@@ -92,10 +91,11 @@ export default function PagarParcelaModal({
         </div>
         <div>
           <label className="label">Conta de Origem</label>
-          <select className="input" value={contaOrigemId} onChange={e => setContaOrigemId(e.target.value)}>
-            {contasCorrentes.length === 0 && <option value="">Nenhuma conta corrente</option>}
+          <select className="input" value={contaOrigemId} onChange={e => setContaOrigemId(e.target.value)} required>
+            <option value="">{contasCorrentes.length === 0 ? 'Nenhuma conta corrente' : 'Selecione a conta...'}</option>
             {contasCorrentes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          {avisoContaCentral && !contaOrigemId && <p className="text-xs text-aviso mt-1">{avisoContaCentral}</p>}
         </div>
       </div>
 

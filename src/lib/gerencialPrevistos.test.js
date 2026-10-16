@@ -217,8 +217,8 @@ import { computeFluxoCaixa } from './fluxoCaixa'
 describe('projecoesEtapaA — caso real BARBEARIA / CABELOS (Itaupers)', () => {
   const CC = 'acc_itau', CARD = 'acc_itaupers', GER = 'acc_ger_itaupers'
   const accounts = [
-    { id: CC, type: 'checking', contaCorrentePrincipal: true, balance: 1000 },
-    { id: CARD, type: 'credit', apelido: 'Itaupers', closingDay: 13 },
+    { id: CC, type: 'checking', contaCorrentePrincipal: true, balance: 1000, profileId: 'prf_1' },
+    { id: CARD, type: 'credit', apelido: 'Itaupers', closingDay: 13, profileId: 'prf_1' },
     { id: GER, type: 'checking', name: 'Ger. Itaupers' },
   ]
   const gerencialGroups = [{ id: 'grp_1', number: 1 }, { id: 'grp_2', number: 2, defaultAccountId: 'acc_res' }]

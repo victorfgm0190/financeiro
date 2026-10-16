@@ -1,3 +1,4 @@
+import { contaCentralParaId } from '../../lib/contaCentral'
 import { useMemo, useRef, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
@@ -168,7 +169,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos } = useApp()
   // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
   // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
   // ele o modal deixa de registrar a transferência conta→dívida e passa a baixar a parcela pelo
@@ -268,10 +269,8 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   const [finLoading, setFinLoading] = useState(false)
   const [finErro, setFinErro] = useState(null)
 
-  const contaPrincipal =
-    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-    accounts.find(a => a.isMain && a.type !== 'credit') ||
-    accounts.find(a => a.type === 'checking')
+  // Resgate do grupo gerencial → Conta central do PERFIL DA CONTA DO PAGAMENTO (ver handleConfirm).
+  const centralPagamento = (contaId) => contaCentralParaId(accounts, profiles, contaId)
 
   // Preview do MESMO rateio que o backend aplica: principal primeiro, juros com a sobra, resto
   // vira desvio. `calcularRateio` é a fórmula compartilhada (src/lib/financiamento.js) — a mesma
@@ -346,6 +345,13 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
     // Guarda além do botão desabilitado: parse falho nunca vira lançamento de R$ 0.
     if (!valorOk) return
     const regDate = nextDate || today
+    // Grupo numerado (≠ G, ≠ D) gera resgate para a Conta central do perfil da conta paga: sem
+    // ela, bloqueia o pagamento inteiro antes de gravar.
+    const grupoPag = tab === 'pagamento' && payGrupo ? gerencialGroups.find(g => g.id === payGrupo) : null
+    const precisaCentral = grupoPag && grupoPag.number !== 'D' && grupoPag.number !== 1 && accounts.some(a => a.id === grupoPag.defaultAccountId)
+    const central = precisaCentral ? centralPagamento(payAccountId) : { conta: null, erro: null }
+    if (central.erro) { setAvisoOperacao(central.erro); return }
+    const contaPrincipal = central.conta
     if (tab === 'pagamento') {
       const amount = valorAba
       if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
@@ -1682,7 +1688,7 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true }) {
-  const { scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
+  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1786,20 +1792,22 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     setTimeout(() => setToast(null), 3000)
   }
 
-  const contaPrincipal =
-    accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-    accounts.find(a => a.isMain && a.type !== 'credit') ||
-    accounts.find(a => a.type === 'checking')
 
   // occurrenceDate = ocorrência a baixar (nextDate); txDate = data dos lançamentos criados.
   // Registrar a ocorrência em nextDate (e não em txDate) é o que faz o agendamento avançar —
   // mesmo comportamento do pagamento individual (PayModal usa regDate = nextDate).
   const registerWithGerencial = (scheduleBase, occurrenceDate, txDate, amountArg = null) => {
     const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, accounts)
+    // Grupo numerado gera resgate para a Conta central do PERFIL DA CONTA DO AGENDAMENTO: sem ela,
+    // esta ocorrência não é registrada (as outras do lote seguem).
+    const grupo = schedule.grupoGerencial ? gerencialGroups.find(g => g.id === schedule.grupoGerencial) : null
+    const precisaCentral = grupo && grupo.number !== 'D' && grupo.number !== 1 && accounts.some(a => a.id === grupo.defaultAccountId)
+    const central = precisaCentral ? contaCentralParaId(accounts, profiles, schedule.accountId) : { conta: null, erro: null }
+    if (central.erro) { setAvisoOperacao(central.erro); return }
+    const contaPrincipal = central.conta
     registerScheduleOccurrence(schedule.id, txDate, occurrenceDate, amountArg)
     if (!schedule.grupoGerencial) return
     const amount = amountArg != null ? Number(amountArg) : (Number(occEfetiva(schedule, occurrenceDate).amount) || 0)
-    const grupo = gerencialGroups.find(g => g.id === schedule.grupoGerencial)
     if (!grupo || grupo.number === 'D') return
     if (grupo.number === 1) {
       const contaReserva = accounts.find(a => a.id === grupo.defaultAccountId)

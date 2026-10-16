@@ -44,6 +44,8 @@ import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
 import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import { ordenarGrupos, ordemGruposSalva, reordenarNoGrupo, ordemAoTrocarDeGrupo, compararNoGrupo } from '../lib/ordemCategorias'
+import { contaCentralDoPerfil, contaCentralPara, mesmoPerfil } from '../lib/contaCentral'
+import { ordenarPerfis, moverPerfil, proximaOrdem, perfilInicial, PERFIL_SESSAO_KEY, TUDO } from '../lib/perfisOrdem'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
@@ -729,7 +731,19 @@ export function AppProvider({ children }) {
   // depois de escrever (conferência de fatura) espera este flag baixar — o sync é debounced,
   // então uma leitura imediata pegaria o estado anterior.
   const [syncing, setSyncing] = useState(false)
-  const [activeProfileId, setActiveProfileId] = useState(null) // session-only, not persisted
+  // Perfil ativo: o 1º da ordem ao abrir (efeito abaixo, quando os perfis carregam); a escolha do
+  // usuário fica no sessionStorage — vale até fechar a aba/app (lib/perfisOrdem.js).
+  const [activeProfileId, setActiveProfileIdState] = useState(null)
+  const perfilEscolhidoRef = useRef((() => { try { return sessionStorage.getItem(PERFIL_SESSAO_KEY) } catch { return null } })())
+  const perfilIniciadoRef = useRef(false)
+  const setActiveProfileId = useCallback((id) => {
+    perfilEscolhidoRef.current = id ?? TUDO
+    perfilIniciadoRef.current = true
+    try { sessionStorage.setItem(PERFIL_SESSAO_KEY, id ?? TUDO) } catch { /* sessão sem storage */ }
+    setActiveProfileIdState(id ?? null)
+  }, [])
+  // Operação bloqueada por falta de Conta central no perfil do item (exibida por AvisoOperacao).
+  const [avisoOperacao, setAvisoOperacao] = useState(null)
   const prevDataRef = useRef(null)
   const syncTimerRef = useRef(null)
   const retryTimerRef = useRef(null)
@@ -1082,6 +1096,22 @@ export function AppProvider({ children }) {
     )
   }, [data.schedules, profileAccountIds, activeProfileId])
 
+  const profilesOrdenados = useMemo(() => ordenarPerfis(data.profiles), [data.profiles])
+
+  // Perfil inicial: assim que os perfis carregam, a escolha da sessão (se ainda existe) ou o 1º
+  // da ordem. Perfil ativo excluído → volta para o 1º.
+  useEffect(() => {
+    if (!initialized || profilesOrdenados.length === 0) return
+    if (!perfilIniciadoRef.current) {
+      perfilIniciadoRef.current = true
+      setActiveProfileIdState(perfilInicial(profilesOrdenados, perfilEscolhidoRef.current))
+      return
+    }
+    if (activeProfileId && !profilesOrdenados.some(p => p.id === activeProfileId)) {
+      setActiveProfileIdState(profilesOrdenados[0]?.id ?? null)
+    }
+  }, [initialized, profilesOrdenados, activeProfileId])
+
   const activeProfile = useMemo(
     () => activeProfileId ? (data.profiles || []).find(p => p.id === activeProfileId) || null : null,
     [data.profiles, activeProfileId],
@@ -1366,8 +1396,13 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, accounts: d.accounts.filter(a => a.id !== id) }))
   }, [update])
 
+  // Favorita: uma por perfil — desliga só as do mesmo perfil (contas sem perfil formam um grupo).
   const setMainAccount = useCallback((id) => {
-    update(d => ({ ...d, accounts: d.accounts.map(a => ({ ...a, isMain: a.id === id })) }))
+    update(d => {
+      const alvo = d.accounts.find(a => a.id === id)
+      if (!alvo) return d
+      return { ...d, accounts: d.accounts.map(a => a.id === id ? { ...a, isMain: true } : (mesmoPerfil(a, alvo) && a.isMain ? { ...a, isMain: false } : a)) }
+    })
   }, [update])
 
   // ── Transactions ────────────────────────────────────────────────────────────
@@ -1650,9 +1685,8 @@ export function AppProvider({ children }) {
       if (!lanc || lanc.type !== 'expense' || lanc.accountType !== 'credit') return d
       const card = d.accounts.find(a => a.id === lanc.accountId)
       if (!card) return d
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
+      // Conta central do PERFIL DO CARTÃO. Sem ela, não cria nada (banner em Contas/Painel avisa).
+      const contaPrincipal = contaCentralDoPerfil(d.accounts, card.profileId)
       if (!contaPrincipal) return d
 
       const faturaMesAno = faturaMesAnoOf(card, lanc.date, lanc.faturaMonthYear) // YYYY-MM
@@ -1688,7 +1722,7 @@ export function AppProvider({ children }) {
             id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
             name: subcontaName, type: 'checking', balance: 0,
             bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
-            fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+            fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
             grupoGerencial: grupo.id, accountGroupId: contaPrincipal.accountGroupId || null,
           }
           accounts = [...accounts, subconta]
@@ -2436,6 +2470,17 @@ export function AppProvider({ children }) {
   // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
   // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
   const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
+    // Resgate da reserva → Conta central do PERFIL DA RESERVA; sem ela, bloqueia antes de gravar.
+    {
+      const d0 = dataRef.current
+      const prov0 = d0.schedules.find(s => s.id === id)
+      const func0 = prov0?.reservaFuncaoId ? (d0.reserveFunctions || []).find(f => f.id === prov0.reservaFuncaoId) : null
+      const reserva0 = func0?.accountId ? d0.accounts.find(a => a.id === func0.accountId) : null
+      if (reserva0) {
+        const { erro } = contaCentralPara(d0.accounts, d0.profiles, reserva0)
+        if (erro) { setAvisoOperacao(erro); return false }
+      }
+    }
     update(d => {
       const prov = d.schedules.find(s => s.id === id)
       if (!prov) return d
@@ -2481,10 +2526,7 @@ export function AppProvider({ children }) {
       if (prov.reservaFuncaoId) {
         const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
         const contaReserva = func?.accountId ? d.accounts.find(a => a.id === func.accountId) : null
-        const contaPrincipal =
-          d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-          d.accounts.find(a => a.isMain && a.type !== 'credit') ||
-          d.accounts.find(a => a.type === 'checking')
+        const contaPrincipal = contaCentralDoPerfil(d.accounts, contaReserva?.profileId)
         if (contaReserva && contaPrincipal) {
           schedules = [...schedules, {
             id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
@@ -2864,7 +2906,7 @@ export function AppProvider({ children }) {
       const updated = profile.isDefault
         ? profiles.map(p => ({ ...p, isDefault: false }))
         : profiles
-      return { ...d, profiles: [...updated, { ...profile, id }] }
+      return { ...d, profiles: [...updated, { ...profile, id, ordem: proximaOrdem(profiles) }] }
     })
   }, [update])
 
@@ -2874,6 +2916,10 @@ export function AppProvider({ children }) {
       if (changes.isDefault) profiles = profiles.map(p => ({ ...p, isDefault: false }))
       return { ...d, profiles: profiles.map(p => p.id === id ? { ...p, ...changes } : p) }
     })
+  }, [update])
+
+  const moveProfile = useCallback((id, direction) => {
+    update(d => ({ ...d, profiles: moverPerfil(d.profiles || [], id, direction) }))
   }, [update])
 
   const deleteProfile = useCallback((id) => {
@@ -3658,9 +3704,9 @@ export function AppProvider({ children }) {
       // é ato explícito do usuário, feito pelo "Executar Gerenciais".
       const faturaCicloNoFuturo = _cicloEnd ? _dueDateObj > _cicloEnd : false
 
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
+      // Conta central do PERFIL DO CARTÃO. Sem ela, a fatura não ganha pagamento nem devoluções
+      // (banner em Contas/Painel e pendência de integridade avisam).
+      const contaPrincipal = contaCentralDoPerfil(d.accounts, card.profileId)
       if (!contaPrincipal) return d
 
       // Conta pagadora DESTE cartão (campo "Conta Pagadora" / payment_account_id): quem
@@ -3668,8 +3714,8 @@ export function AppProvider({ children }) {
       // pagamento_fatura. As voltas do gerencial (gerencial_devolucao, resgate_reserva)
       // seguem creditando a contaPrincipal — o dinheiro reservado retorna ao caixa
       // principal, independentemente de qual conta liquida a fatura.
-      // Fallback = conta principal padrão, preservando o comportamento anterior para
-      // cartões sem o campo preenchido (e para ids órfãos, ex.: conta pagadora excluída).
+      // Fallback = Conta central do perfil do cartão, para cartões sem o campo preenchido (e
+      // para ids órfãos, ex.: conta pagadora excluída).
       const contaPagadora = (card.paymentAccountId
         && d.accounts.find(a => a.id === card.paymentAccountId)) || contaPrincipal
 
@@ -3797,7 +3843,7 @@ export function AppProvider({ children }) {
         accounts = [...accounts, {
           id: subcontaId, name: subcontaName, type: 'checking', balance: 0,
           bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
-          fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false,
+          fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
           grupoGerencial: grupoGId,
           accountGroupId: contaPrincipal.accountGroupId || null,
         }]
@@ -4665,6 +4711,11 @@ export function AppProvider({ children }) {
     const dueDay           = cardAccount?.dueDay || 10
     const financialStartDay = data.settings?.financialMonthStartDay || 1
 
+    // Conta central do PERFIL DO CARTÃO: sem ela, bloqueia (só quando há parcelas a ajustar).
+    const temParcelas = data.schedules.some(s => s.overrides?._originTxId === txId)
+    const central = contaCentralPara(data.accounts, data.profiles, cardAccount)
+    if (temParcelas && central.erro) { setAvisoOperacao(central.erro); return }
+
     update(d => {
       const parcelaSchedules = d.schedules.filter(s =>
         s.overrides?._originTxId === txId &&
@@ -4673,9 +4724,7 @@ export function AppProvider({ children }) {
       )
       if (parcelaSchedules.length === 0) return d
 
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
+      const contaPrincipal = contaCentralDoPerfil(d.accounts, d.accounts.find(a => a.id === accountId)?.profileId)
       if (!contaPrincipal) return d
 
       let schedules = [...d.schedules]
@@ -4758,7 +4807,7 @@ export function AppProvider({ children }) {
 
       return { ...d, schedules }
     })
-  }, [data.gerencialGroups, data.accounts, data.settings, update])
+  }, [data.gerencialGroups, data.accounts, data.settings, data.schedules, data.profiles, update])
 
   // ── Lançamento de diferença ao mudar grupo gerencial DEPOIS do resgate pago ───
   // Quando o resgate/devolução de um grupo JÁ foi executado e o lançamento muda de grupo, o
@@ -4775,6 +4824,11 @@ export function AppProvider({ children }) {
   const criarLancamentoDiferenca = useCallback((txId, { prevGrupoId, newGrupoId, amount, accountId }) => {
     const V = Math.round((Number(amount) || 0) * 100) / 100
     if (!(V > 0)) return
+    {
+      const d0 = dataRef.current
+      const { erro } = contaCentralPara(d0.accounts, d0.profiles, d0.accounts.find(a => a.id === accountId))
+      if (erro) { setAvisoOperacao(erro); return }
+    }
     update(d => {
       const lanc = d.transactions.find(t => t.id === txId)
       if (!lanc) return d
@@ -4786,9 +4840,7 @@ export function AppProvider({ children }) {
       const faturaRef = `${mm}/${yyyy}`
       const apelido = card.apelido || card.name?.slice(0, 6) || 'CC'
 
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
+      const contaPrincipal = contaCentralDoPerfil(d.accounts, card.profileId)
       if (!contaPrincipal) return d
       const subcontaGer = d.accounts.find(a => a.name === `Ger. ${apelido}`)
 
@@ -5001,10 +5053,6 @@ export function AppProvider({ children }) {
   const getProvisoesPendentes = useCallback(() => {
     const g1 = data.gerencialGroups?.find(g => g.number === 1)
     if (!g1) return []
-    const contaPrincipal =
-      data.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-      data.accounts.find(a => a.isMain && a.type !== 'credit') ||
-      data.accounts.find(a => a.type === 'checking')
     return data.transactions
       .filter(tx => {
         if (tx.type !== 'expense' || tx.accountType !== 'credit') return false
@@ -5024,6 +5072,8 @@ export function AppProvider({ children }) {
         const card = data.accounts.find(a => a.id === tx.accountId)
         const apelido = card?.apelido || card?.name?.slice(0, 6) || 'CC'
         const subconta = data.accounts.find(a => a.name === `Ger. ${apelido}`)
+        // Conta central do PERFIL DO CARTÃO; sem ela a parcela aparece com o motivo (e não executa).
+        const central = contaCentralPara(data.accounts, data.profiles, card)
         return {
           id: tx.id,
           description: tx.description,
@@ -5033,11 +5083,12 @@ export function AppProvider({ children }) {
           amount: tx.amount,
           date: tx.date,
           cardId: tx.accountId || null,
-          contaOrigemId: contaPrincipal?.id || null,
+          contaOrigemId: central.conta?.id || null,
           contaDestinoId: subconta?.id || null,
+          erroContaCentral: central.erro,
         }
       })
-  }, [data.gerencialGroups, data.accounts, data.transactions])
+  }, [data.gerencialGroups, data.accounts, data.transactions, data.profiles])
 
   // Todas as faturas com parcelas Grupo G (executadas + pendentes), cada uma com a flag
   // `pendente` = tem ≥1 parcela AINDA SEM a transferência gerencial (mesma checagem
@@ -5070,18 +5121,20 @@ export function AppProvider({ children }) {
     if (ids.size === 0) return
     // Cartões afetados pelas parcelas executadas — para reconciliar saldos/agendamentos depois.
     const affectedCardIds = new Set()
+    // Parcelas cujo cartão é de perfil sem Conta central: não executam (montarProvisaoGerencial
+    // devolve null) e o usuário é avisado de quais perfis faltam.
+    const erros = new Set()
     for (const id of ids) {
       const tx = dataRef.current.transactions.find(t => t.id === id)
       if (tx?.accountId) affectedCardIds.add(tx.accountId)
+      const card = tx?.accountId ? dataRef.current.accounts.find(a => a.id === tx.accountId) : null
+      const { erro } = contaCentralPara(dataRef.current.accounts, dataRef.current.profiles, card)
+      if (card && erro) erros.add(erro)
     }
+    if (erros.size) setAvisoOperacao(`Algumas parcelas não foram executadas. ${[...erros].join(' ')}`)
     update(d => {
       const g1 = d.gerencialGroups?.find(g => g.number === 1)
       if (!g1) return d
-      const contaPrincipal =
-        d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal) ||
-        d.accounts.find(a => a.isMain && a.type !== 'credit') ||
-        d.accounts.find(a => a.type === 'checking')
-      if (!contaPrincipal) return d
 
       let accounts = [...d.accounts]
       const newTxs = []
@@ -5144,16 +5197,18 @@ export function AppProvider({ children }) {
 
   // ── Corrigir dados gerenciais: elimina provisões erradas de parcelados e reconstrói agendamentos ──
   const corrigirDadosGerencial = useCallback(() => {
+    {
+      const d0 = dataRef.current
+      const g = d0.gerencialGroups?.find(x => x.number === 1)
+      const cartoes = new Set(d0.transactions.filter(t => t.type === 'expense' && t.accountType === 'credit' && g && t.grupoGerencial === g.id).map(t => t.accountId))
+      const erros = new Set([...cartoes].map(id => contaCentralPara(d0.accounts, d0.profiles, d0.accounts.find(a => a.id === id)).erro).filter(Boolean))
+      if (erros.size) setAvisoOperacao(`Cartões de perfil sem Conta central ficaram de fora. ${[...erros].join(' ')}`)
+    }
     update(d => {
       const grupo1 = d.gerencialGroups?.find(g => g.number === 1)
       if (!grupo1) return d
 
       const financialStartDay = d.settings?.financialMonthStartDay || 1
-
-      const contaPrincipal = d.accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-        || d.accounts.find(a => a.isMain && a.type !== 'credit')
-        || d.accounts.find(a => a.type === 'checking')
-      if (!contaPrincipal) return d
 
       // Todos os lançamentos do grupo G em cartões de crédito
       const grupoGExpenses = d.transactions.filter(tx =>
@@ -5192,6 +5247,9 @@ export function AppProvider({ children }) {
       const uid = (p) => `${p}_${Date.now()}_${++seq}_${Math.random().toString(36).slice(2)}`
 
       byFatura.forEach(({ cardId, faturaRef, cardAcc, avista, parcelado }) => {
+        // Conta central do PERFIL DO CARTÃO; cartão de perfil sem ela fica de fora (avisado acima).
+        const contaPrincipal = contaCentralDoPerfil(d.accounts, cardAcc?.profileId)
+        if (!contaPrincipal) return
         if (parcelado === 0) return // só corrige faturas com parcelados
 
         const [mm, yyyy] = faturaRef.split('/')
@@ -5383,7 +5441,7 @@ export function AppProvider({ children }) {
       payees: data.payees,
       gerencialGroups: data.gerencialGroups,
       payables: data.payables || [],
-      profiles: data.profiles || [],
+      profiles: profilesOrdenados,
       cardImports: data.cardImports || [],
       reserveFunctions: data.reserveFunctions || [],
       scheduleReservaFuncoes: data.scheduleReservaFuncoes || [],
@@ -5400,7 +5458,8 @@ export function AppProvider({ children }) {
       addCardImport, updateCardImport, revertCardImport,
       activeProfileId, setActiveProfileId, activeProfile,
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
-      addProfile, updateProfile, deleteProfile,
+      addProfile, updateProfile, deleteProfile, moveProfile,
+      avisoOperacao, setAvisoOperacao,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions, ensureGerencialState,

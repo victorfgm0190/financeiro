@@ -11,10 +11,10 @@ export const GRUPOS = [
 ]
 
 export const CONTAS = [
-  { id: 'acc_cc', name: 'Conta Corrente', type: 'checking', contaCorrentePrincipal: true, balance: 0 },
-  { id: 'acc_itaupers', name: 'Itaú Personnalité', apelido: 'Itaupers', type: 'credit', closingDay: 5, dueDay: 12 },
-  { id: 'acc_ger_itaupers', name: 'Ger. Itaupers', type: 'gerencial', balance: 0 },
-  { id: 'acc_res_ca', name: 'Reserva Contas Anuais', type: 'checking', balance: 0 },
+  { id: 'acc_cc', name: 'Conta Corrente', type: 'checking', contaCorrentePrincipal: true, balance: 0, profileId: 'prf_1' },
+  { id: 'acc_itaupers', name: 'Itaú Personnalité', apelido: 'Itaupers', type: 'credit', closingDay: 5, dueDay: 12, profileId: 'prf_1' },
+  { id: 'acc_ger_itaupers', name: 'Ger. Itaupers', type: 'gerencial', balance: 0, profileId: 'prf_1' },
+  { id: 'acc_res_ca', name: 'Reserva Contas Anuais', type: 'checking', balance: 0, profileId: 'prf_1' },
 ]
 
 export const fmyRef = (fmy) => `${fmy.slice(5, 7)}/${fmy.slice(0, 4)}`

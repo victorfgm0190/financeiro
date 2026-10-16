@@ -1,3 +1,4 @@
+import { BannerPerfisSemContaCentral } from '../components/shared/ContaCentralAvisos'
 import { useMemo, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -59,6 +60,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
 
   return (
     <div className="space-y-4">
+      <BannerPerfisSemContaCentral />
       <header className="flex items-start justify-between gap-3 pt-1">
         <div>
           <p className="text-xs text-texto-3">{mes}</p>

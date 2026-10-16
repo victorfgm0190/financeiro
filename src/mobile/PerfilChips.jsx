@@ -1,7 +1,7 @@
 import { User, Building2 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
-// Chips de perfil do mobile (Tudo | CPF | CNPJ): o MESMO estado do desktop (activeProfileId do
+// Chips de perfil do mobile (perfis na ordem de Configurações | Tudo por último): o MESMO estado do desktop (activeProfileId do
 // AppContext) e os mesmos ícones/estilos dos chips do Header. Só troca o perfil — os números das
 // telas já vêm filtrados por ele (profileAccounts, profileSchedules, getSaldoPrincipalBreakdown…).
 export default function PerfilChips() {
@@ -13,14 +13,6 @@ export default function PerfilChips() {
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4" role="group" aria-label="Perfil">
-      <button
-        type="button"
-        onClick={() => setActiveProfileId(null)}
-        aria-pressed={activeProfileId === null}
-        className={`${base} ${activeProfileId === null ? 'bg-primary/15 border-primary/40 text-primary-fg' : inativo}`}
-      >
-        Tudo
-      </button>
       {profiles.map(p => {
         const ativo = activeProfileId === p.id
         const Icon = p.type === 'pf' ? User : Building2
@@ -39,6 +31,14 @@ export default function PerfilChips() {
           </button>
         )
       })}
+      <button
+        type="button"
+        onClick={() => setActiveProfileId(null)}
+        aria-pressed={activeProfileId === null}
+        className={`${base} ${activeProfileId === null ? 'bg-primary/15 border-primary/40 text-primary-fg' : inativo}`}
+      >
+        Tudo
+      </button>
     </div>
   )
 }

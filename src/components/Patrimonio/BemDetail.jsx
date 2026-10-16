@@ -1,3 +1,4 @@
+import { contaCentralPara } from '../../lib/contaCentral'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Info, ListOrdered, History, Settings2, Wallet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
@@ -29,7 +30,7 @@ const POR_PAGINA = 20
 
 export default function BemDetail({ conta, onClose }) {
   const {
-    accounts, categories, profileTransactions, payees,
+    accounts, profiles, categories, profileTransactions, payees,
     addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, mergeRateios,
     deleteSchedule, updateSchedule,
   } = useApp()
@@ -354,6 +355,9 @@ export default function BemDetail({ conta, onClose }) {
   const contasCorrentes = accounts.filter(
     a => !['credit', 'asset', 'liability', 'gerencial'].includes(a.type),
   )
+  // Conta de origem padrão do financiamento: Conta central do PERFIL DO BEM (sem ela, o campo
+  // fica vazio com o aviso — o usuário ainda pode escolher uma conta à mão).
+  const centralDoBem = contaCentralPara(accounts, profiles, conta)
 
   const transferenciasDoBem = useMemo(
     () => transferenciasElegiveisEntrada(profileTransactions, conta.id),
@@ -523,6 +527,8 @@ export default function BemDetail({ conta, onClose }) {
           <FinanciamentoModal
             bem={bem}
             contasCorrentes={contasCorrentes}
+            contaCentralId={centralDoBem.conta?.id || ''}
+            avisoContaCentral={centralDoBem.erro}
             contas={accounts}
             favorecidos={payees}
             onCancel={() => setModal(null)}
@@ -566,6 +572,8 @@ export default function BemDetail({ conta, onClose }) {
             financiamento={financiamento}
             parcela={modal.parcela}
             contasCorrentes={contasCorrentes}
+            contaCentralId={centralDoBem.conta?.id || ''}
+            avisoContaCentral={centralDoBem.erro}
             onCancel={() => setModal(null)}
             onSuccess={aposPagamento}
             onErro={(m) => avisar(m, 'error')}

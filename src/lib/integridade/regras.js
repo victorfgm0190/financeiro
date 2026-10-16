@@ -24,6 +24,7 @@ import { computeFaturaRef } from '../fatura.js'
 import { faturaToDate } from '../parcelas.js'
 import { faturaEstaFechada } from '../faturasFechadas.js'
 import { distanciaCompetencia, LIMITE_MESES_COMPETENCIA } from '../competenciaFatura.js'
+import { contaCentralDoPerfil } from '../contaCentral.js'
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -149,9 +150,8 @@ export function montarContexto(dados, opcoes = {}) {
   const txById = new Map(transactions.map(t => [t.id, t]))
   const subcontaIds = new Set(accounts.filter(ehSubcontaGer).map(a => a.id))
   const subcontaDoCartao = (card) => accounts.find(a => a.name === `Ger. ${apelidoDoCartao(card)}`) || null
-  const contaPrincipal = accounts.find(a => a.type === 'checking' && a.contaCorrentePrincipal)
-    || accounts.find(a => a.isMain && a.type !== 'credit')
-    || accounts.find(a => a.type === 'checking') || null
+  // Conta central do PERFIL DO CARTÃO (null quando o perfil não tem — a pendência diz isso).
+  const contaPrincipalDoCartao = (card) => contaCentralDoPerfil(accounts, card?.profileId)
 
   const classeDoTx = (tx) => {
     if (!tx?.grupoGerencial) return 'D'
@@ -223,7 +223,7 @@ export function montarContexto(dados, opcoes = {}) {
 
   const ctx = {
     [CTX]: true, hoje, desde, transactions, accounts, schedules, gerencialGroups,
-    grupos, contas, cartoes, txById, subcontaIds, subcontaDoCartao, contaPrincipal, classeDoTx,
+    grupos, contas, cartoes, txById, subcontaIds, subcontaDoCartao, contaPrincipalDoCartao, classeDoTx,
     gastos, gastoById, etapas, etapasPorGasto, gastosPorFatura, noEscopo, faturaAberta,
     faturasFechadas, fechada, avalia, faturaAbertaMaisAntiga, marcosSaldo,
   }
@@ -512,12 +512,13 @@ const GER_ETAPA_A_FALTANDO = {
         normalizeInstallmentBase((infoParcela(o.tx)?.base) ?? o.tx.description) === base &&
         (ctx.etapasPorGasto.get(o.tx.id) || []).length > 0)
       const sub = ctx.subcontaDoCartao(g.card)
+      const central = ctx.contaPrincipalDoCartao(g.card)
       out.push(divergencia(this, {
         origem_id: g.tx.id, conta_id: g.card.id, fatura_ref: ymParaRef(g.fatura),
-        descricao: `${g.tx.description || '(sem descrição)'} — ${brl(g.tx.amount)} na fatura ${ymParaRef(g.fatura)} do ${nomeConta(ctx, g.card.id)} não tem etapa A${ehProjecao(g.tx) ? ' (parcela projetada, ainda não importada)' : ''}`,
+        descricao: `${g.tx.description || '(sem descrição)'} — ${brl(g.tx.amount)} na fatura ${ymParaRef(g.fatura)} do ${nomeConta(ctx, g.card.id)} não tem etapa A${ehProjecao(g.tx) ? ' (parcela projetada, ainda não importada)' : ''}${central ? '' : ' — o perfil do cartão não tem Conta central'}`,
         esperado: {
           etapa_a_id: `tx_gerA_${g.tx.id}`, valor: rb(g.tx.amount), fatura_ref: ymParaRef(g.fatura),
-          de: ctx.contaPrincipal?.id || null, para: sub?.id || null, para_nome: sub?.name || `Ger. ${apelidoDoCartao(g.card)}`,
+          de: central?.id || null, para: sub?.id || null, para_nome: sub?.name || `Ger. ${apelidoDoCartao(g.card)}`,
         },
         encontrado: {
           etapas_a: [], gasto: resumoGasto(g), parcela: p ? `${p.num}/${p.total}` : null,
