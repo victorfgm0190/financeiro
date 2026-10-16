@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { historicoOcorrencias, resumoRegistradas, pagamentosDosAgendamentos, filtrarPagamentos, totaisPagamentos, candidatosVinculo, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
+import { historicoOcorrencias, resumoRegistradas, pagamentosDosAgendamentos, filtrarPagamentos, totaisPagamentos, candidatosVinculo, outrosValoresVinculo, STATUS_OCORRENCIA as ST } from './ocorrenciasRegistradas'
 import { computeOccurrences } from './occurrences'
 import { aplicarBaixa, metaBaixaGerada, baixasDaImportacao, lancamentosVinculados } from './scheduleBaixa'
 
@@ -167,5 +167,27 @@ describe('"Vincular a lançamento existente" (candidatosVinculo) e baixas com me
     const s2 = aplicarBaixa(s, '2026-10-20', { tipo: 'importado', lancamento_id: 'tx_imp', import_id: 'imp_1' })
     expect(baixasDaImportacao(s2, 'imp_1')).toEqual(['2026-10-20'])
     expect(historicoOcorrencias(s2, [{ id: 'tx_imp', date: '2026-10-21', amount: 150, accountId: 'acc_card' }]).linhas.at(-1)).toMatchObject({ status: ST.PAGA, txId: 'tx_imp' })
+  })
+
+  it('"Mostrar outros valores": mesma conta e janela, qualquer valor, menor diferença primeiro', () => {
+    const txs = [
+      junho,
+      { ...junho, id: 'o1', amount: 104.89 },
+      { ...junho, id: 'o2', amount: 160 },
+      { ...junho, id: 'o3', amount: 1000 },
+      { ...junho, id: 'o4', amount: 104.89, accountId: 'acc_itau' },
+      { ...junho, id: 'o5', amount: 120, date: '2026-08-01' },
+    ]
+    const r = outrosValoresVinculo(s, '2026-06-18', ctx(txs))
+    expect(r.map(c => [c.tx.id, c.diferenca])).toEqual([['o2', 10], ['o1', -45.11], ['o3', 850]])
+    // O de ±0,05 continua só nas sugestões principais.
+    expect(candidatosVinculo(s, '2026-06-18', ctx(txs)).map(t => t.id)).toEqual([junho.id])
+  })
+  it('vincular com valor diferente: o histórico mostra valor pago × previsto', () => {
+    const menor = { ...junho, id: 'o1', amount: 104.89 }
+    const vinc = aplicarBaixa(s, '2026-06-18', metaBaixaGerada(menor.id))
+    const h = historicoOcorrencias(vinc, [...TXS, menor])
+    expect(h.linhas[0]).toMatchObject({ status: ST.PAGA, txId: 'o1', valorOriginal: 150, valorPago: 104.89, diferenca: -45.11 })
+    expect(h.diferenca).toBe(-45.11)
   })
 })

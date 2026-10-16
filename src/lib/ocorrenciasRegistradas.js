@@ -199,7 +199,23 @@ export function totaisPagamentos(linhas) {
 // `data` (data baixada ou a vencer) de `schedule`. Mesma conta, mesmo tipo, valor do efetivo da
 // ocorrência ±R$ 0,05, data a ±1 período da frequência; fora os já vinculados (schedule_id ou
 // registered_meta.lancamento_id de outra baixa) e as sombras automáticas. Mais perto da data primeiro.
-export function candidatosVinculo(schedule, data, { transactions = [], schedules = [] } = {}) {
+export function candidatosVinculo(schedule, data, ctx = {}) {
+  return lancamentosLivresDaJanela(schedule, data, ctx)
+    .filter(c => Math.abs(c.diferenca) <= 0.05)
+    .sort((a, b) => a.dias - b.dias || dia(a.tx.date).localeCompare(dia(b.tx.date)))
+    .map(c => c.tx)
+}
+
+// "Mostrar outros valores": os mesmos lançamentos livres (mesma conta, mesmo tipo, ±1 período) cujo
+// valor fica FORA dos ±R$ 0,05. Menor diferença primeiro; `diferenca` = lançamento − previsto.
+export function outrosValoresVinculo(schedule, data, ctx = {}) {
+  return lancamentosLivresDaJanela(schedule, data, ctx)
+    .filter(c => Math.abs(c.diferenca) > 0.05)
+    .sort((a, b) => Math.abs(a.diferenca) - Math.abs(b.diferenca) || a.dias - b.dias)
+    .map(({ tx, diferenca }) => ({ tx, diferenca }))
+}
+
+function lancamentosLivresDaJanela(schedule, data, { transactions = [], schedules = [] } = {}) {
   if (!schedule || !data) return []
   const alvo = Number(occEfetiva(schedule, dia(data)).amount) || 0
   const janela = JANELA_DIAS[schedule.frequency] ?? 31
@@ -208,9 +224,6 @@ export function candidatosVinculo(schedule, data, { transactions = [], schedules
   return (transactions || [])
     .filter(t => !vinculados.has(t.id) && !t.scheduleId && !t.reservaAuto
       && t.accountId === schedule.accountId && (t.type || 'expense') === tipo
-      && Math.abs((Number(t.amount) || 0) - alvo) <= 0.05
       && distDias(t.date, data) <= janela)
-    .map(t => ({ tx: t, dias: distDias(t.date, data) }))
-    .sort((a, b) => a.dias - b.dias || dia(a.tx.date).localeCompare(dia(b.tx.date)))
-    .map(c => c.tx)
+    .map(t => ({ tx: t, dias: distDias(t.date, data), diferenca: r2((Number(t.amount) || 0) - alvo) }))
 }
