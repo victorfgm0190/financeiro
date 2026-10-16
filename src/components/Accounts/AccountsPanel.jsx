@@ -67,7 +67,8 @@ function daysUntilDue(dueDay) {
 }
 
 function UpdateValueModal({ account, onClose }) {
-  const { updateAccountValue } = useApp()
+  const { updateAccountValue, pode } = useApp()
+  const podeSalvar = pode('contas', 'editar')
   const [newValue, setNewValue] = useState(String(account.balance ?? ''))
   const [note, setNote] = useState('')
 
@@ -75,7 +76,7 @@ function UpdateValueModal({ account, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (newValue === '') return
+    if (newValue === '' || !podeSalvar) return
     updateAccountValue(account.id, Number(newValue), note)
     onClose()
   }
@@ -113,14 +114,19 @@ function UpdateValueModal({ account, onClose }) {
       </div>
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">Atualizar Valor</button>
+        {podeSalvar && <button type="submit" className="btn-primary flex-1">Atualizar Valor</button>}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
   )
 }
 
 function GroupManager({ groups }) {
-  const { addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup } = useApp()
+  const { addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, pode } = useApp()
+  // Grupos de contas são cadastros (src/lib/permissoes.js: grupos_conta → cadastros).
+  const podeIncluir = pode('cadastros', 'incluir')
+  const podeEditar = pode('cadastros', 'editar')
+  const podeExcluir = pode('cadastros', 'excluir')
   const [newName, setNewName] = useState('')
   const [newType, setNewType] = useState('financeiro')
   const [editId, setEditId] = useState(null)
@@ -164,18 +170,24 @@ function GroupManager({ groups }) {
                 </span>
                 <span className="flex-1 text-sm text-texto-1">{g.name}</span>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => moveAccountGroup(g.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
-                    <ArrowUp size={12} />
-                  </button>
-                  <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === active.length - 1} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
-                    <ArrowDown size={12} />
-                  </button>
-                  <button onClick={() => { setEditId(g.id); setEditName(g.name) }} className="p-1 rounded hover:bg-surface-hover text-texto-2 transition-colors">
-                    <Edit2 size={12} />
-                  </button>
-                  <button onClick={() => setConfirmDeleteId(g.id)} className="p-1 rounded hover:bg-surface-hover text-perigo transition-colors">
-                    <Trash2 size={12} />
-                  </button>
+                  {podeEditar && (
+                    <>
+                      <button onClick={() => moveAccountGroup(g.id, 'up')} disabled={i === 0} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
+                        <ArrowUp size={12} />
+                      </button>
+                      <button onClick={() => moveAccountGroup(g.id, 'down')} disabled={i === active.length - 1} className="p-1 rounded hover:bg-surface-hover disabled:opacity-30 text-texto-2 transition-colors">
+                        <ArrowDown size={12} />
+                      </button>
+                      <button onClick={() => { setEditId(g.id); setEditName(g.name) }} className="p-1 rounded hover:bg-surface-hover text-texto-2 transition-colors">
+                        <Edit2 size={12} />
+                      </button>
+                    </>
+                  )}
+                  {podeExcluir && (
+                    <button onClick={() => setConfirmDeleteId(g.id)} className="p-1 rounded hover:bg-surface-hover text-perigo transition-colors">
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -201,6 +213,10 @@ function GroupManager({ groups }) {
         )}
       </div>
 
+      {!podeIncluir && !podeEditar && !podeExcluir && (
+        <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>
+      )}
+      {podeIncluir && (
       <div className="flex gap-2 pt-2 border-t border-borda-forte">
         <select className="input w-36 text-sm" value={newType} onChange={e => setNewType(e.target.value)}>
           <option value="financeiro">Financeiro</option>
@@ -217,6 +233,7 @@ function GroupManager({ groups }) {
           <Plus size={14} />
         </button>
       </div>
+      )}
 
       {confirmDeleteId && (
         <ConfirmDialog
@@ -233,7 +250,9 @@ function GroupManager({ groups }) {
 }
 
 function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateValue, isNextDue = false, nextDueDays = null }) {
-  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos, creditUsage, accounts: todasContas, profiles, setAvisoOperacao } = useApp()
+  const { setMainAccount, moveAccount, recalcularSaldo, updateAccount, transactions, schedules, getAccountSaldos, creditUsage, accounts: todasContas, profiles, setAvisoOperacao, pode } = useApp()
+  const podeEditar = pode('contas', 'editar')
+  const podeExcluir = pode('contas', 'excluir')
   // Inativar a Conta central: bloqueado se o perfil tem cartão/reserva/Ger./financiamento.
   const remocaoCentral = checarRemocaoContaCentral(account, { accounts: todasContas, schedules, profiles }, 'inativar')
   const Icon = ACCOUNT_ICONS[account.type] || Landmark
@@ -324,7 +343,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
     <div
       className={`relative rounded-xl bg-gradient-to-br ${gradient} p-4 text-white shadow-lg cursor-pointer ${isInactive ? 'opacity-50' : ''}`}
       style={highlightCard ? { border: '2px solid #185FA5' } : undefined}
-      draggable
+      draggable={podeEditar}
       onDragStart={e => {
         e.dataTransfer.effectAllowed = 'move'
         e.dataTransfer.setData('text/plain', account.id)
@@ -370,7 +389,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
         <div className="flex flex-col gap-1 shrink-0 ml-2">
           <div className="flex gap-1">
-            {temRendimento && (
+            {temRendimento && podeEditar && (
               <button
                 onClick={(e) => { e.stopPropagation(); setShowRendimento(true) }}
                 className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
@@ -379,9 +398,12 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
                 <TrendingUp size={11} />
               </button>
             )}
+            {podeEditar && (
             <button onClick={(e) => { e.stopPropagation(); onEdit(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Editar conta">
               <Edit2 size={11} />
             </button>
+            )}
+            {podeEditar && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -394,10 +416,14 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
             >
               {isInactive ? <EyeOff size={11} /> : <Eye size={11} />}
             </button>
+            )}
+            {podeExcluir && (
             <button onClick={(e) => { e.stopPropagation(); onDelete(account) }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors" title="Excluir conta">
               <Trash2 size={11} />
             </button>
+            )}
           </div>
+          {podeEditar && (
           <div className="flex gap-1">
             <button onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 'up') }} disabled={idx === 0} className="p-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-30 transition-colors">
               <ArrowUp size={10} />
@@ -406,6 +432,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <ArrowDown size={10} />
             </button>
           </div>
+          )}
         </div>
       </div>
 
@@ -491,7 +518,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
                 : ''}
             </p>
           )}
-          {isAsset && (
+          {isAsset && podeEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); onUpdateValue(account) }}
               className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
@@ -499,7 +526,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <RefreshCw size={10} /> Atualizar Valor
             </button>
           )}
-          {!isAsset && account.type !== 'liability' && (
+          {!isAsset && account.type !== 'liability' && podeEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); recalcularSaldo(account.id) }}
               className={`mt-1.5 text-xs flex items-center gap-1 ${txtSec} hover:text-white transition-colors`}
@@ -510,13 +537,19 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         </div>
       )}
 
-      <button
-        onClick={(e) => { e.stopPropagation(); setMainAccount(account.id) }}
-        className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
-      >
-        <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
-        {account.isMain ? 'Conta favorita' : 'Definir como favorita'}
-      </button>
+      {podeEditar ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); setMainAccount(account.id) }}
+          className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
+        >
+          <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
+          {account.isMain ? 'Conta favorita' : 'Definir como favorita'}
+        </button>
+      ) : account.isMain ? (
+        <p className="mt-2.5 text-xs flex items-center gap-1 text-white">
+          <Star size={10} fill="currentColor" /> Conta favorita
+        </p>
+      ) : null}
     </div>
 
     {showRendimento && (
@@ -633,7 +666,8 @@ function GroupSection({ group, accounts, saldosByAccount, onEdit, onDelete, onEx
 }
 
 export default function AccountsPanel({ setActivePage }) {
-  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage, accounts: todasContas, schedules: todosAgendamentos, profiles, setAvisoOperacao } = useApp()
+  const { profileAccounts: accounts, accountGroups = [], activeAccountGroups = [], deleteAccount, updateAccount, deleteTransaction, getAccountSaldos, creditUsage, accounts: todasContas, schedules: todosAgendamentos, profiles, setAvisoOperacao, pode } = useApp()
+  const podeIncluirConta = pode('contas', 'incluir')
   const [showForm, setShowForm] = useState(false)
   const [editAccount, setEditAccount] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -816,9 +850,11 @@ export default function AccountsPanel({ setActivePage }) {
           <button className="btn-secondary flex items-center gap-1.5 text-sm" onClick={() => setShowGroupManager(true)}>
             <Settings size={13} /> Grupos
           </button>
-          <button className="btn-primary flex items-center gap-1.5" onClick={() => { setEditAccount(null); setShowForm(true) }}>
-            <Plus size={14} /> Nova Conta
-          </button>
+          {podeIncluirConta && (
+            <button className="btn-primary flex items-center gap-1.5" onClick={() => { setEditAccount(null); setShowForm(true) }}>
+              <Plus size={14} /> Nova Conta
+            </button>
+          )}
         </div>
       </div>
 
@@ -826,7 +862,7 @@ export default function AccountsPanel({ setActivePage }) {
         <div className="card text-center py-12">
           <Landmark size={32} className="text-texto-3 mx-auto mb-3" />
           <p className="text-texto-3">Nenhuma conta cadastrada</p>
-          <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Adicionar primeira conta</button>
+          {podeIncluirConta && <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Adicionar primeira conta</button>}
         </div>
       ) : (
         <div className="space-y-8">
@@ -934,7 +970,7 @@ export default function AccountsPanel({ setActivePage }) {
             <div className="card text-center py-8">
               <Landmark size={28} className="text-texto-3 mx-auto mb-3" />
               <p className="text-texto-3 text-sm">Nenhuma conta cadastrada</p>
-              <button className="btn-primary mt-3" onClick={() => { setEditAccount(null); setShowForm(true) }}>Adicionar primeira conta</button>
+              {podeIncluirConta && <button className="btn-primary mt-3" onClick={() => { setEditAccount(null); setShowForm(true) }}>Adicionar primeira conta</button>}
             </div>
           )}
         </div>

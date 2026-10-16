@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { ensureBemSchema } from './_bem.js'
 import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 import { ensureHistoricoSchema } from './_historico.js'
+import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 
 export default async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -469,6 +470,23 @@ export default async function handler(req, res) {
         query('SELECT * FROM favorecido_alias ORDER BY created_at'),
         query('SELECT * FROM tipos_documento ORDER BY ordem, nome'),
       ])
+
+    // Perfis permitidos (usuário restrito a alguns perfis): só as contas desses perfis e o que
+    // pertence a elas — lançamentos, agendamentos, funções de reserva, rateios, detalhamentos.
+    const ctx = await contextoPerfis(query, req.user)
+    if (ctx) {
+      const corte = (tabela, rows) => rows.splice(0, rows.length, ...recortarLeitura(tabela, rows, ctx))
+      corte('contas', accs)
+      corte('lancamentos', txs)
+      corte('agendamentos', scheds)
+      perfis.splice(0, perfis.length, ...perfis.filter(p => ctx.perfis.includes(p.id)))
+      rfns.splice(0, rfns.length, ...rfns.filter(f => ctx.contas.has(f.account_id)))
+      const txIds = new Set(txs.map(t => t.id))
+      const schIds = new Set(scheds.map(s => s.id))
+      rateios.splice(0, rateios.length, ...rateios.filter(r => txIds.has(r.lancamento_id) || schIds.has(r.lancamento_id)))
+      srfs.splice(0, srfs.length, ...srfs.filter(r => schIds.has(r.schedule_id)))
+      pays.splice(0, pays.length, ...pays.filter(p => !p.cartao_id || ctx.contas.has(p.cartao_id)))
+    }
 
     res.json({
       // Momento em que ESTA resposta foi montada no servidor. Serve de prova de frescor: se o

@@ -120,8 +120,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
     reserveFunctions, settings, findLinkedResgate, activeProfileId, categoryGroupOrder,
-    registrarEdicao, temHistorico, profiles,
+    registrarEdicao, temHistorico, profiles, pode,
   } = useApp()
+  // Nível de acesso: registrar = incluir; salvar edição = editar (sem permissão: só leitura).
+  const podeGravarForm = pode('lancamentos', initial?.id ? 'editar' : 'incluir')
 
   // Dia de início do mês financeiro — define a date de sistema das parcelas 2..N
   // (dia financialMonthStartDay do mês anterior à fatura da parcela).
@@ -446,6 +448,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
 
   const handleSubmit = (e, installmentDecision, decisao = null) => {
+    if (!podeGravarForm) { e?.preventDefault?.(); return }
     e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
@@ -1285,7 +1288,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           + Mais opções (data, parcelas, envelope)
         </button>
 
-        <button type="submit" className="btn-primary w-full min-h-[48px] text-base">Salvar</button>
+        {podeGravarForm
+          ? <button type="submit" className="btn-primary w-full min-h-[48px] text-base">Salvar</button>
+          : <p className="text-xs text-texto-3 text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </form>
     )
   }
@@ -2085,10 +2090,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
-          {initial ? 'Salvar' : 'Registrar'}
-          <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
-        </button>
+        {podeGravarForm ? (
+          <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
+            {initial ? 'Salvar' : 'Registrar'}
+            <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
+          </button>
+        ) : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>
   )

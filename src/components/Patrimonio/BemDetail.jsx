@@ -32,8 +32,12 @@ export default function BemDetail({ conta, onClose }) {
   const {
     accounts, profiles, categories, profileTransactions, payees,
     addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, mergeRateios,
-    deleteSchedule, updateSchedule,
+    deleteSchedule, updateSchedule, pode,
   } = useApp()
+  // Nível de acesso (src/lib/permissoes.js) — bem, entrada à vista e financiamento = patrimônio.
+  const podeIncluirPat = pode('patrimonio', 'incluir')
+  const podeEditarPat = pode('patrimonio', 'editar')
+  const podeExcluirPat = pode('patrimonio', 'excluir')
 
   const [bem, setBem] = useState(null)
   const [financiamento, setFinanciamento] = useState(null)
@@ -410,9 +414,11 @@ export default function BemDetail({ conta, onClose }) {
                     Defina a nota fiscal e as 4 categorias para poder criar o financiamento.
                   </p>
                 </div>
+                {podeEditarPat && (
                 <button className="btn-primary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5" onClick={() => setModal('parametrizar')}>
                   <Settings2 size={13} /> Parametrizar
                 </button>
+                )}
               </div>
             )}
 
@@ -422,7 +428,7 @@ export default function BemDetail({ conta, onClose }) {
                 saldoBem={bem.saldo}
                 contas={accounts}
                 estornando={estornando}
-                onEstornar={() => setConfirmandoEstorno(true)}
+                onEstornar={podeExcluirPat ? () => setConfirmandoEstorno(true) : null}
               />
             )}
 
@@ -435,12 +441,14 @@ export default function BemDetail({ conta, onClose }) {
                     perda ou o ganho é calculado sozinho.
                   </p>
                 </div>
+                {podeIncluirPat && (
                 <button
                   className="btn-primary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5"
                   onClick={() => setModal('entrada')}
                 >
                   <Wallet size={13} /> Registrar entrada
                 </button>
+                )}
               </div>
             )}
 
@@ -462,7 +470,7 @@ export default function BemDetail({ conta, onClose }) {
                   </button>
                 )
               })}
-              {!naoParametrizado && (
+              {!naoParametrizado && podeEditarPat && (
                 <button
                   onClick={() => setModal('parametrizar')}
                   className="ml-auto text-xs text-texto-3 hover:text-texto-2 px-2"
@@ -478,10 +486,10 @@ export default function BemDetail({ conta, onClose }) {
                 bem={bem}
                 financiamento={financiamento}
                 parcelasResumo={resumoParcelas}
-                onCriarFinanciamento={() => setModal('financiamento')}
-                onRegistrarEntrada={() => setModal('entrada')}
+                onCriarFinanciamento={podeIncluirPat ? () => setModal('financiamento') : null}
+                onRegistrarEntrada={podeIncluirPat ? () => setModal('entrada') : null}
                 temMovimentacoes={valoresTravados}
-                onSalvarValores={salvarValores}
+                onSalvarValores={podeEditarPat ? salvarValores : null}
                 onErro={(m) => avisar(m, 'error')}
               />
             )}
@@ -495,9 +503,9 @@ export default function BemDetail({ conta, onClose }) {
                 totalParcelas={metaParcelas.total}
                 loading={loadingParcelas}
                 onPage={setPaginaParcelas}
-                onPagar={(parcela) => setModal({ parcela })}
-                onEditarFavorecido={() => setModal('favorecido')}
-                onSepararJuros={separarJuros}
+                onPagar={podeEditarPat ? (parcela) => setModal({ parcela }) : null}
+                onEditarFavorecido={podeEditarPat ? () => setModal('favorecido') : null}
+                onSepararJuros={podeEditarPat ? separarJuros : null}
                 separandoJuros={separandoJuros}
                 temCategoriaTaxa={!!bem?.categorias?.taxa_finan?.id}
               />

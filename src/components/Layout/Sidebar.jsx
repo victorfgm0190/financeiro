@@ -43,7 +43,7 @@ function DbStatusBadge({ status }) {
 }
 
 export default function Sidebar({ active, setActive, alertCount }) {
-  const { dbStatus } = useApp()
+  const { dbStatus, podeVer } = useApp()
   // Itens com atalho global: tooltip com a combinação atual + selo que só aparece segurando Alt.
   const atalhoNav = { cashflow: 'nav.fluxoCaixa', envelopes: 'nav.envelopes' }
   const tituloNav = {
@@ -62,7 +62,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV.map(({ id, label, icon: Icon }) => (
+        {NAV.filter(({ id }) => podeVer(id)).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActive(id)}
@@ -88,7 +88,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
 
         {/* Usuário logado (e aviso de acesso de emergência) */}
         <div className="border-t border-borda/60 pt-2">
-          <SessaoUsuario />
+          <SessaoUsuario comSair />
         </div>
 
         {/* Identidade */}

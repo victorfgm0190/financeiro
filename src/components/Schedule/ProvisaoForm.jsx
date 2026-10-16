@@ -27,7 +27,9 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, profiles, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder } = useApp()
+  const { accounts, profiles, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder, pode } = useApp()
+  // Nível de acesso: lançar = incluir; salvar edição = editar (sem permissão: só leitura).
+  const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
   // A provisão é uma despesa futura debitada da Conta central DO PERFIL DA PROVISÃO — aparece no
   // Fluxo de Caixa Principal como despesa. Perfil: na edição, o da conta já gravada; na criação, o
@@ -101,6 +103,7 @@ export default function ProvisaoForm({ initial, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (!podeGravarForm) return
     if (!form.description || !form.amount || !form.startDate || !form.frequency) return
     if (isRecorrente && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.comReserva && !form.reservaFuncaoId) return
@@ -331,7 +334,9 @@ export default function ProvisaoForm({ initial, onClose }) {
 
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
+        {podeGravarForm
+          ? <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Lançar Provisão'}</button>
+          : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>
   )

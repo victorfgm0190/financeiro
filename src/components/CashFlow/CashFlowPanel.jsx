@@ -89,8 +89,15 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado, categories, projetarEtapaA,
+    toggleScheduleConfirmado, categories, projetarEtapaA, pode,
   } = useApp()
+  // Nível de acesso (src/lib/permissoes.js): consultas, provisórios e datas simuladas = fluxo;
+  // a flag Confirmado é do agendamento; "Efetivar" grava um agendamento/lançamento.
+  const podeIncluirF = pode('fluxo', 'incluir')
+  const podeEditarF = pode('fluxo', 'editar')
+  const podeExcluirF = pode('fluxo', 'excluir')
+  const podeConfirmar = pode('agendamentos', 'editar')
+  const podeEfetivar = podeEditarF && (pode('agendamentos', 'incluir') || pode('lancamentos', 'incluir'))
   const { consultas, salvarConsulta, excluirConsulta } = useFluxoConsultas()
   const { provisorios, salvarProvisorio, excluirProvisorio, efetivarComoAgendamento } = useFluxoProvisorios()
 
@@ -120,7 +127,7 @@ export default function CashFlowPanel({ setActivePage }) {
     const ok = st.status === STATUS_CONFIRMACAO.CONFIRMADO
     const rotulo = ok ? 'Confirmado' : 'A confirmar'
     const soIcone = compacto || isMobile
-    if (!st.confirmavel) {
+    if (!st.confirmavel || !podeConfirmar) {
       return (
         <span
           title="Só o próximo vencimento pode ser confirmado"
@@ -423,14 +430,16 @@ export default function CashFlowPanel({ setActivePage }) {
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-xs text-texto-3 uppercase tracking-wide">Consultas</p>
           <div className="ml-auto flex gap-2">
-            {!consulta.virtual && (
+            {!consulta.virtual && podeEditarF && (
               <button type="button" onClick={() => setConsultaModal({ initial: consulta })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
                 <SlidersHorizontal size={12} /> Editar consulta atual
               </button>
             )}
-            <button type="button" onClick={() => setConsultaModal({ initial: null })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
-              <Plus size={12} /> Nova consulta
-            </button>
+            {podeIncluirF && (
+              <button type="button" onClick={() => setConsultaModal({ initial: null })} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
+                <Plus size={12} /> Nova consulta
+              </button>
+            )}
           </div>
         </div>
         {isMobile && cartoes.length > 6 ? (
@@ -453,11 +462,11 @@ export default function CashFlowPanel({ setActivePage }) {
                 nContas={contasDaConsulta(c, accounts).length}
                 validarNome={(nome) => erroNome(nome, consultas, c.perfil_ids, c.id)}
                 onSelecionar={() => setAtivaId(c.id)}
-                onRenomear={async (nome) => { await salvarConsulta({ ...c, nome }); avisar('Consulta renomeada.') }}
-                onEditar={() => setConsultaModal({ initial: c })}
-                onDuplicar={() => duplicarConsulta(c)}
-                onDefinirPadrao={() => definirPadrao(c)}
-                onExcluir={() => setConsultaExcluir(c)}
+                onRenomear={podeEditarF ? async (nome) => { await salvarConsulta({ ...c, nome }); avisar('Consulta renomeada.') } : null}
+                onEditar={podeEditarF ? () => setConsultaModal({ initial: c }) : null}
+                onDuplicar={podeIncluirF ? () => duplicarConsulta(c) : null}
+                onDefinirPadrao={podeEditarF ? () => definirPadrao(c) : null}
+                onExcluir={podeExcluirF ? () => setConsultaExcluir(c) : null}
               />
             ))}
           </div>
@@ -472,7 +481,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 {dpForaDoPeriodo.map(d => (
                   <span key={d.id} className="inline-flex items-center gap-1">
                     {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
-                    <button type="button" onClick={() => removerDatasProvisorias([d.id]).catch(err => avisar(err.message, 'error'))} title="Voltar à data original"><RotateCcw size={11} /></button>
+                    {podeEditarF && <button type="button" onClick={() => removerDatasProvisorias([d.id]).catch(err => avisar(err.message, 'error'))} title="Voltar à data original"><RotateCcw size={11} /></button>}
                   </span>
                 ))}
                 {foraDoPeriodo.map(r => (
@@ -633,7 +642,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 <p className="text-xs text-texto-2 uppercase tracking-wide">Simulação</p>
                 <p className="text-xs text-texto-2 mt-1">
                   {qtdProvisorios} provisório{qtdProvisorios !== 1 ? 's' : ''} · {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''}
-                  {qtdDatas > 0 && <> · <button type="button" onClick={restaurarDatas} className="underline text-primary-fg hover:text-texto-1">restaurar datas</button></>}
+                  {qtdDatas > 0 && podeEditarF && <> · <button type="button" onClick={restaurarDatas} className="underline text-primary-fg hover:text-texto-1">restaurar datas</button></>}
                 </p>
                 <p className="text-xs text-texto-2 mt-1">
                   {qtdForaCalculo} linha{qtdForaCalculo !== 1 ? 's' : ''} fora do cálculo
@@ -685,11 +694,11 @@ export default function CashFlowPanel({ setActivePage }) {
                 tipoBadge={(r) => { const t = tipoEvento(r); return <span className={`text-[10px] px-1.5 py-0.5 rounded ${BADGE[t]}`}>{t}</span> }}
                 toggleLinha={toggleLinha}
                 toggleAtraso={toggleAtraso}
-                onMudarData={setMudarData}
-                onDesfazerData={desfazerData}
-                onEfetivar={setEfetivar}
-                onEditarProvisorio={(p) => setProvModal({ initial: p })}
-                onExcluirProvisorio={setProvExcluir}
+                onMudarData={podeEditarF ? setMudarData : null}
+                onDesfazerData={podeEditarF ? desfazerData : null}
+                onEfetivar={podeEfetivar ? setEfetivar : null}
+                onEditarProvisorio={podeEditarF ? (p) => setProvModal({ initial: p }) : null}
+                onExcluirProvisorio={podeExcluirF ? setProvExcluir : null}
               />
             </>
           ) : (
@@ -707,6 +716,7 @@ export default function CashFlowPanel({ setActivePage }) {
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
                   Ocultar reservas
                 </label>
+                {podeIncluirF && (
                 <button
                   type="button"
                   onClick={() => setProvModal({ initial: null })}
@@ -714,6 +724,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 >
                   <Plus size={13} /> Provisório
                 </button>
+                )}
               </div>
             </div>
 
@@ -792,10 +803,12 @@ export default function CashFlowPanel({ setActivePage }) {
                             <td />
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-1">
+                                {podeEditarF && (
                                 <button type="button" onClick={() => setMudarData(r)} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Mudar data">
                                   <CalendarClock size={13} />
                                 </button>
-                                {r._dataOriginal && (
+                                )}
+                                {r._dataOriginal && podeEditarF && (
                                   <button type="button" onClick={() => desfazerData(r)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded text-ambar hover:bg-ambar/10 whitespace-nowrap" title={`Voltar para ${fmtDate(r._dataOriginal)}`}>
                                     <RotateCcw size={11} /> Desfazer data
                                   </button>
@@ -858,27 +871,33 @@ export default function CashFlowPanel({ setActivePage }) {
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1">
-                            {!r._provisorio && (
+                            {!r._provisorio && podeEditarF && (
                               <button type="button" onClick={() => setMudarData(r)} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Mudar data">
                                 <CalendarClock size={13} />
                               </button>
                             )}
-                            {r._dataOriginal && (
+                            {r._dataOriginal && podeEditarF && (
                               <button type="button" onClick={() => desfazerData(r)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded text-ambar hover:bg-ambar/10 whitespace-nowrap" title={`Voltar para ${fmtDate(r._dataOriginal)}`}>
                                 <RotateCcw size={11} /> Desfazer data
                               </button>
                             )}
                             {r._provisorio && (
                               <>
+                                {podeEfetivar && (
                                 <button type="button" onClick={() => setEfetivar(r._provisorio)} className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-primary/40 text-primary-fg hover:bg-primary/10" title="Gravar como agendamento ou lançamento">
                                   <CheckCircle2 size={11} /> Efetivar
                                 </button>
+                                )}
+                                {podeEditarF && (
                                 <button type="button" onClick={() => setProvModal({ initial: r._provisorio })} className="p-1 rounded text-texto-3 hover:text-ambar hover:bg-ambar/10" title="Editar provisório">
                                   <Pencil size={13} />
                                 </button>
+                                )}
+                                {podeExcluirF && (
                                 <button type="button" onClick={() => setProvExcluir(r._provisorio)} className="p-1 rounded text-texto-3 hover:text-perigo hover:bg-perigo-bg" title="Excluir provisório">
                                   <Trash2 size={13} />
                                 </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -910,6 +929,7 @@ export default function CashFlowPanel({ setActivePage }) {
               <input type="checkbox" className="accent-primary w-4 h-4" checked={ocultarReserva} onChange={e => setOvr('ocultar_reserva', e.target.checked)} />
               Ocultar reservas
             </label>
+            {podeIncluirF && (
             <button
               type="button"
               onClick={() => { setFiltrosAbertos(false); setProvModal({ initial: null }) }}
@@ -917,6 +937,7 @@ export default function CashFlowPanel({ setActivePage }) {
             >
               <Plus size={14} /> Novo provisório
             </button>
+            )}
           </div>
         </FluxoSheet>
       )}
@@ -937,11 +958,11 @@ export default function CashFlowPanel({ setActivePage }) {
             setHorizonteSel({ consultaId: null, h: null })
             avisar(payload.id ? 'Consulta atualizada.' : 'Consulta criada.')
           }}
-          onExcluir={async (id) => {
+          onExcluir={podeExcluirF ? async (id) => {
             await excluirConsulta(id)
             setAtivaId(null)
             avisar('Consulta excluída.')
-          }}
+          } : null}
           onClose={() => setConsultaModal(null)}
         />
       )}

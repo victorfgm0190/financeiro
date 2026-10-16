@@ -106,7 +106,11 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico, pode } = useApp()
+  // Nível de acesso (lançamentos): novo/duplicar/estornar = incluir; reconciliar = editar; excluir = excluir.
+  const podeIncluir = pode('lancamentos', 'incluir')
+  const podeEditar = pode('lancamentos', 'editar')
+  const podeExcluir = pode('lancamentos', 'excluir')
   const [filtros, setFiltros] = useState(EMPTY_LANC_FILTROS)
   const [showReconciliar, setShowReconciliar] = useState(false)
   const [bulkEditTxs, setBulkEditTxs] = useState(null)
@@ -175,7 +179,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         <span className="text-sm text-texto-1">Fatura {label}</span>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-base font-bold text-despesa">{fmt(total)}</span>
-          {txs.length > 0 && !isMobile && (
+          {txs.length > 0 && !isMobile && podeEditar && (
             <button
               onClick={() => setShowReconciliar(true)}
               className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
@@ -184,12 +188,14 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
               <CheckSquare size={12} /> Reconciliar
             </button>
           )}
-          <button
-            onClick={onNewTx}
-            className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5"
-          >
-            <Plus size={12} /> Novo
-          </button>
+          {podeIncluir && (
+            <button
+              onClick={onNewTx}
+              className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5"
+            >
+              <Plus size={12} /> Novo
+            </button>
+          )}
         </div>
       </div>
 
@@ -219,7 +225,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
           <div className="text-center py-10">
             <ArrowUpCircle size={28} className="text-texto-3 mx-auto mb-2" />
             <p className="text-texto-3 text-sm">Nenhum lançamento nesta fatura</p>
-            <button onClick={onNewTx} className="btn-primary mt-3 text-xs">Adicionar lançamento</button>
+            {podeIncluir && <button onClick={onNewTx} className="btn-primary mt-3 text-xs">Adicionar lançamento</button>}
           </div>
         ) : (
           <>
@@ -289,39 +295,51 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1 justify-end">
-                          <button
-                            onClick={() => setConfirmEstorno(tx)}
-                            title="Estornar lançamento"
-                            className="p-1.5 text-texto-3 hover:text-despesa hover:bg-despesa/10 rounded transition-colors"
-                          >
-                            <Undo2 size={11} />
-                          </button>
+                          {podeIncluir && (
+                            <button
+                              onClick={() => setConfirmEstorno(tx)}
+                              title="Estornar lançamento"
+                              className="p-1.5 text-texto-3 hover:text-despesa hover:bg-despesa/10 rounded transition-colors"
+                            >
+                              <Undo2 size={11} />
+                            </button>
+                          )}
                           <button
                             onClick={() => { setEditTx(tx); setShowEdit(true) }}
+                            title={podeEditar ? 'Editar' : 'Ver'}
                             className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
                           >
                             <Edit2 size={11} />
                           </button>
-                          <DuplicateButton
-                            onConfirm={(date) => handleDuplicate(tx, date)}
-                            sourceTx={tx}
-                            iconSize={11}
-                            className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
-                          />
-                          <button
-                            onClick={() => setConfirmDelete(tx)}
-                            className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
-                          >
-                            <Trash2 size={11} />
-                          </button>
+                          {podeIncluir && (
+                            <DuplicateButton
+                              onConfirm={(date) => handleDuplicate(tx, date)}
+                              sourceTx={tx}
+                              iconSize={11}
+                              className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
+                            />
+                          )}
+                          {podeExcluir && (
+                            <button
+                              onClick={() => setConfirmDelete(tx)}
+                              aria-label="Excluir"
+                              className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3 text-center">
                         <div className="inline-flex justify-center">
-                          <ReconcileBadge
-                            reconciled={tx.reconciled}
-                            onClick={() => setReconciled([tx.id], !tx.reconciled)}
-                          />
+                          {podeEditar ? (
+                            <ReconcileBadge
+                              reconciled={tx.reconciled}
+                              onClick={() => setReconciled([tx.id], !tx.reconciled)}
+                            />
+                          ) : (
+                            <span className={`text-xs ${tx.reconciled ? 'text-primary-fg' : 'text-texto-3'}`} title={tx.reconciled ? 'Reconciliado' : 'Não reconciliado'}>{tx.reconciled ? '✓' : '—'}</span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -410,6 +428,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 // ─── Account extrato view ───────────────────────────────────────────────────
 
 function AccountView({ account, onBack, onNewTx, onEditTx }) {
+  const { pode } = useApp()
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
@@ -422,7 +441,7 @@ function AccountView({ account, onBack, onNewTx, onEditTx }) {
         <ChevronRight size={12} className="text-texto-3" />
         <span className="text-sm text-texto-1">{account.apelido || account.name}</span>
       </div>
-      <ExtratoContaPanel account={account} onEdit={onEditTx} onNewTx={onNewTx} />
+      <ExtratoContaPanel account={account} onEdit={onEditTx} onNewTx={pode('lancamentos', 'incluir') ? onNewTx : undefined} />
     </div>
   )
 }
@@ -430,16 +449,19 @@ function AccountView({ account, onBack, onNewTx, onEditTx }) {
 // ─── Accounts list view ─────────────────────────────────────────────────────
 
 function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount, onSelectFatura, onNewTx }) {
-  const { creditUsage } = useApp()
+  const { creditUsage, pode } = useApp()
+  const podeIncluir = pode('lancamentos', 'incluir')
   return (
     <div className="space-y-6">
       {/* Contas bancárias */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-texto-2">Contas</h2>
-          <button onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
-            <Plus size={12} /> Novo
-          </button>
+          {podeIncluir && (
+            <button onClick={() => onNewTx()} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
+              <Plus size={12} /> Novo
+            </button>
+          )}
         </div>
         {bankAccounts.length === 0 ? (
           <div className="card text-center py-10">
@@ -496,13 +518,15 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
                       <span className="text-xs text-texto-3">
                         Dívida: <span className="text-texto-1 font-semibold">{fmt(creditUsage(card.id))}</span>
                       </span>
-                      <button
-                        onClick={() => onNewTx(card)}
-                        className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
-                        title="Novo lançamento no cartão"
-                      >
-                        <Plus size={14} />
-                      </button>
+                      {podeIncluir && (
+                        <button
+                          onClick={() => onNewTx(card)}
+                          className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors"
+                          title="Novo lançamento no cartão"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   {faturas.length === 0 ? (
@@ -541,7 +565,8 @@ function AccountsList({ bankAccounts, creditCards, cardFaturas, onSelectAccount,
 // ─── Root panel ─────────────────────────────────────────────────────────────
 
 export default function TransactionsPanel() {
-  const { profileAccounts, accountGroups } = useApp()
+  const { profileAccounts, accountGroups, pode } = useApp()
+  const podeIncluirTx = pode('lancamentos', 'incluir')
   const accounts = profileAccounts
   const isMobile = useIsMobile()
 
@@ -610,11 +635,11 @@ export default function TransactionsPanel() {
 
   // FAB mobile: abre o novo lançamento já no contexto da view atual
   // (conta em extrato, cartão em fatura) ou no seletor de conta na lista.
-  useRegisterFab(() => {
+  useRegisterFab(podeIncluirTx ? () => {
     if (view?.type === 'account') openNewTx(view.account)
     else if (view?.type === 'fatura') openNewTx(view.card)
     else openNewTx()
-  }, [view, accounts.length])
+  } : null, [view, accounts.length, podeIncluirTx])
 
   // Account extrato view
   if (view?.type === 'account') {

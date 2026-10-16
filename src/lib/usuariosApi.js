@@ -16,7 +16,7 @@ async function chamar(url, { method = 'GET', body } = {}) {
   return json
 }
 
-export const listarUsuarios = () => chamar('/api/usuarios').then(r => r.usuarios || [])
+export const listarUsuarios = () => chamar('/api/usuarios').then(r => ({ usuarios: r.usuarios || [], perfis: r.perfis || [] }))
 export const criarUsuario = (dados) => chamar('/api/usuarios', { method: 'POST', body: dados }).then(r => r.usuario)
 export const editarUsuario = (dados) => chamar('/api/usuarios', { method: 'PATCH', body: dados }).then(r => r.usuario)
 export const trocarMinhaSenha = (senhaAtual, novaSenha) =>

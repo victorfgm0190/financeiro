@@ -96,6 +96,9 @@ function TabButton({ active, onClick, children, badge }) {
 }
 
 function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete }) {
+  const { pode } = useApp()
+  const podeEditar = pode('agendamentos', 'editar')
+  const podeExcluir = pode('agendamentos', 'excluir')
   const card = accounts.find(a => a.id === payable.cartaoId)
   const today = new Date().toISOString().split('T')[0]
   const isOverdue = payable.status === 'pending' && payable.dueDate < today
@@ -122,14 +125,14 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
         <div className="flex flex-col items-end gap-2">
           <p className="text-lg font-bold text-despesa">{fmt(payable.amount)}</p>
           <div className="flex gap-1">
-            {payable.status === 'pending' && (
+            {payable.status === 'pending' && podeEditar && (
               <button onClick={() => onMarkPaid(payable.id)} className="flex items-center gap-1 px-2 py-1 text-xs bg-receita/15 text-receita rounded-lg hover:bg-receita/25 transition-colors">
                 <CheckCircle size={11} /> Marcar Pago
               </button>
             )}
-            <button onClick={() => onDelete(payable.id)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
+            {podeExcluir && <button onClick={() => onDelete(payable.id)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors" aria-label="Excluir">
               <Trash2 size={12} />
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -842,7 +845,11 @@ function ScheduleRow({
   // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (cartão, fatura, valor,
   // data ±3 dias e descrição — ver txCobrindoOcorrencia). Só sinaliza — o agendamento não muda até
   // o usuário baixar. O tooltip cita o lançamento casado para conferência antes de baixar.
-  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs } = useApp()
+  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode } = useApp()
+  // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
+  // excluir = excluir. Sem permissão o botão some (a API também barra).
+  const podeEditar = pode('agendamentos', 'editar')
+  const podeExcluir = pode('agendamentos', 'excluir')
   const cobertas = coberturaCartao?.get(schedule.id)
   const nCobertas = cobertas?.size || 0
   const tituloCobertas = nCobertas ? [...cobertas].map(([d, txId]) => {
@@ -1050,7 +1057,7 @@ function ScheduleRow({
                 {totalDone}/{schedule.installments}x
               </span>
             )}
-            {canConfirm && nextDate && (
+            {canConfirm && nextDate && podeEditar && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleConfirmado(schedule.id) }}
@@ -1160,9 +1167,9 @@ function ScheduleRow({
         {/* Ações */}
         <td className={`px-3 py-3 w-px whitespace-nowrap align-middle ${acoesFixas}`}>
           <div className="flex flex-col items-end gap-1.5">
-          {(isProvisaoPendente || nCobertas > 0) && (
+          {((isProvisaoPendente && podeEditar) || nCobertas > 0) && (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {isProvisaoPendente && (
+            {isProvisaoPendente && podeEditar && (
               <button
                 onClick={() => setShowEfetivar(true)}
                 title="Efetivar Provisão — informar valor e data reais"
@@ -1179,19 +1186,19 @@ function ScheduleRow({
                 >
                   ⚠ Duplicado – já no cartão{nCobertas > 1 ? ` (${nCobertas})` : ''}
                 </span>
-                <button
+                {podeEditar && <button
                   onClick={() => { const n = baixarComoJaNoCartao(schedule.id); if (n) onToast?.(`${n} ocorrência${n !== 1 ? 's' : ''} baixada${n !== 1 ? 's' : ''} como já no cartão`) }}
                   title="Marca as ocorrências cobertas como baixadas (tipo 'já no cartão'), apontando o lançamento do cartão — não cria lançamento"
                   className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
                 >
                   <CheckCircle size={12} /> Baixar como já no cartão
-                </button>
+                </button>}
               </>
             )}
           </div>
           )}
           <div className="flex items-center justify-end gap-1 flex-nowrap">
-            {nextDate && (
+            {nextDate && podeEditar && (
               <>
                 <button
                   onClick={() => setShowPay(true)}
@@ -1223,12 +1230,12 @@ function ScheduleRow({
               <History size={13} />
               {comHistorico && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-primary-fg" />}
             </button>
-            <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
+            {podeEditar && <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
-            </button>
-            <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
+            </button>}
+            {podeExcluir && <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
-            </button>
+            </button>}
           </div>
           </div>
         </td>
@@ -1696,7 +1703,9 @@ const SELECTION_GROUP_META = {
 const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null }) {
-  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa } = useApp()
+  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode } = useApp()
+  // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
+  const podeSelecionar = pode('agendamentos', 'editar')
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
   const srfBySchedule = useMemo(() => {
     const funcName = new Map((reserveFunctions || []).map(f => [f.id, f.name]))
@@ -1912,7 +1921,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
           schedules={schedules}
           getNextOccurrences={getNextOccurrences}
           today={today}
-          onSelecionar={selectableRows.length > 0 ? () => setSelectionMode(true) : null}
+          onSelecionar={selectableRows.length > 0 && podeSelecionar ? () => setSelectionMode(true) : null}
           pagosLinhas={pagosLinhas}
           renderDetalhe={({ schedule, nextDate, futureItems, isSerie }) => (
             <table className="w-full text-sm">
@@ -2032,7 +2041,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
 
       {/* Table card — sem overflow-hidden: quem rola é o container da tabela (overflow-x-auto) */}
       <div className="card p-0">
-        {!selectionMode && selectableRows.length > 0 && (
+        {!selectionMode && selectableRows.length > 0 && podeSelecionar && (
           <div className="flex justify-end px-3 pt-2.5 pb-0">
             <button
               onClick={() => setSelectionMode(true)}
@@ -2429,8 +2438,11 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
-    activeProfileId, settings, tiposDocumento, transactions,
+    activeProfileId, settings, tiposDocumento, transactions, pode,
   } = useApp()
+  // Nível de acesso: criar agendamento/provisão = incluir; Executar Gerenciais cria lançamentos.
+  const podeIncluirAgend = pode('agendamentos', 'incluir')
+  const podeExecutarGer = pode('lancamentos', 'incluir')
 
   // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
   // no financiamento inteiro, e isso precisa ficar visível para quem editou só uma parcela.
@@ -2478,7 +2490,7 @@ export default function SchedulePanel() {
   }
 
   // FAB mobile: abre o formulário de novo agendamento.
-  useRegisterFab(() => { setEditSchedule(null); setShowForm(true) }, [])
+  useRegisterFab(podeIncluirAgend ? () => { setEditSchedule(null); setShowForm(true) } : null, [podeIncluirAgend])
 
   // Filtros avançados e datas De/Até: POR ABA (independentes), dentro de filtrosPorAba; os
   // avançados vão para o localStorage junto com status e período (lib/agendamentosFiltro).
@@ -2832,9 +2844,9 @@ export default function SchedulePanel() {
   const abrirExecutarGer = () => setShowExecutarGer(true)
   const abrirLancarProvisao = () => { setEditProvisao(null); setShowProvisaoForm(true) }
   const abrirNovoAgendamento = () => { setEditSchedule(null); setShowForm(true) }
-  useAtalho('agend.executarGerenciais', () => (provisoesPendentes.length > 0 ? abrirExecutarGer() : false))
-  useAtalho('agend.lancarProvisao', () => (activeTab === 'conta' ? abrirLancarProvisao() : false))
-  useAtalho('agend.novoAgendamento', () => (activeTab === 'conta' ? abrirNovoAgendamento() : false))
+  useAtalho('agend.executarGerenciais', () => (provisoesPendentes.length > 0 && podeExecutarGer ? abrirExecutarGer() : false))
+  useAtalho('agend.lancarProvisao', () => (activeTab === 'conta' && podeIncluirAgend ? abrirLancarProvisao() : false))
+  useAtalho('agend.novoAgendamento', () => (activeTab === 'conta' && podeIncluirAgend ? abrirNovoAgendamento() : false))
   const tituloExecutarGer = useTituloAtalho('Executar Gerenciais', 'agend.executarGerenciais')
   const tituloLancarProvisao = useTituloAtalho('Lançar Provisão', 'agend.lancarProvisao')
   const tituloNovoAgendamento = useTituloAtalho('Novo Agendamento', 'agend.novoAgendamento')
@@ -2866,13 +2878,13 @@ export default function SchedulePanel() {
           <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {provisoesPendentes.length > 0 && (
+          {provisoesPendentes.length > 0 && podeExecutarGer && (
             <button className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
               <ShortcutHint actionId="agend.executarGerenciais" />
             </button>
           )}
-          {activeTab === 'conta' && (
+          {activeTab === 'conta' && podeIncluirAgend && (
             <>
               <button className="btn-secondary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
                 <Hourglass size={14} /> Lançar Provisão

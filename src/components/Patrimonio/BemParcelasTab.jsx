@@ -79,7 +79,7 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
         </div>
       )}
 
-      {podePagar && (
+      {podePagar && onPagar && (
         <button
           className="btn-primary w-full mt-3 text-xs py-1.5"
           onClick={() => onPagar(parcela)}
@@ -130,15 +130,18 @@ export default function BemParcelasTab({
           )}
         </div>
         <div className="flex gap-2 shrink-0">
+          {onEditarFavorecido && (
           <button
             className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
             onClick={onEditarFavorecido}
           >
             <Settings2 size={13} /> Editar Favorecido
           </button>
+          )}
           {/* Divide o agendamento de cada parcela em principal + juros, via rateio. Só serve
               para financiamento provisionado ANTES de a criação passar a fazer isso sozinha —
               nas parcelas que já têm rateio o endpoint não mexe. */}
+          {onSepararJuros && (
           <button
             className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={onSepararJuros}
@@ -152,6 +155,7 @@ export default function BemParcelasTab({
               : <Split size={13} />}
             Separar Juros
           </button>
+          )}
         </div>
       </div>
 

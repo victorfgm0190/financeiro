@@ -1,5 +1,7 @@
-import { upsertRows, deleteRows, parseBody } from './_db.js'
+import { upsertRows, deleteRows, parseBody, query } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { autorizarSync } from './_permissoesApi.js'
+import { ErroHttp } from './_usuarios.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -22,7 +24,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   try {
-    const body = await parseBody(req)
+    // Permissão do módulo da tabela (e perfis permitidos): grava só o que o usuário pode; nada
+    // permitido → 403 (api/_permissoesApi.js).
+    const body = await autorizarSync(query, req.user, await parseBody(req))
     const { type } = body
 
     if (type === 'section') {
@@ -85,6 +89,7 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ error: `Unknown sync type: ${type}` })
   } catch (err) {
+    if (err instanceof ErroHttp) return res.status(err.status).json({ error: err.message })
     console.error('[api/sync]', err.message)
     res.status(500).json({ error: err.message })
   }

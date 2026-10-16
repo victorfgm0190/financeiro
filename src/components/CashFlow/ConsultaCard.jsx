@@ -93,13 +93,13 @@ export default function ConsultaCard({
           <span className="flex items-center gap-1.5">
             <span
               className={`text-sm font-medium truncate ${ativa ? 'text-primary-fg' : 'text-texto-1'}`}
-              onDoubleClick={e => { e.stopPropagation(); abrirRenomear() }}
-              title={renomeavel ? 'Duplo clique para renomear' : undefined}
+              onDoubleClick={e => { e.stopPropagation(); if (onRenomear) abrirRenomear() }}
+              title={renomeavel && onRenomear ? 'Duplo clique para renomear' : undefined}
             >
               {c.nome}
             </span>
             {padrao && <span className={`text-[10px] px-1.5 py-0.5 rounded ${ativa ? 'bg-surface' : 'bg-primary/15'} text-primary-fg shrink-0`}>padrão</span>}
-            {renomeavel && (
+            {renomeavel && onRenomear && (
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); abrirRenomear() }}
@@ -114,21 +114,23 @@ export default function ConsultaCard({
         <span className="block text-[11px] text-texto-3 mt-0.5">{rotuloModo(c.modo)} · {nContas} conta{nContas !== 1 ? 's' : ''}</span>
       </div>
 
+      {(onRenomear || onEditar || onDuplicar || onDefinirPadrao || onExcluir) && (
       <div className="relative shrink-0" ref={menuRef} onClick={e => e.stopPropagation()}>
         <button type="button" onClick={() => setMenu(m => !m)} className="p-1 rounded text-texto-3 hover:text-texto-1 hover:bg-surface-hover" title="Opções da consulta">
           <MoreHorizontal size={14} />
         </button>
         {menu && (
           <div className="absolute right-0 top-full mt-1 z-30 w-44 bg-surface border border-borda-forte rounded-lg shadow-2xl py-1">
-            {renomeavel && item('Renomear', 'renomear')}
-            {renomeavel && item('Editar', 'editar')}
-            {renomeavel && item('Duplicar', 'duplicar')}
-            {item(padrao ? 'Já é a padrão' : 'Definir como padrão', 'padrao', { disabled: padrao })}
-            {renomeavel && <div className="border-t border-borda my-1" />}
-            {renomeavel && item('Excluir', 'excluir', { danger: true })}
+            {renomeavel && onRenomear && item('Renomear', 'renomear')}
+            {renomeavel && onEditar && item('Editar', 'editar')}
+            {renomeavel && onDuplicar && item('Duplicar', 'duplicar')}
+            {onDefinirPadrao && item(padrao ? 'Já é a padrão' : 'Definir como padrão', 'padrao', { disabled: padrao })}
+            {renomeavel && onExcluir && <div className="border-t border-borda my-1" />}
+            {renomeavel && onExcluir && item('Excluir', 'excluir', { danger: true })}
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

@@ -116,12 +116,12 @@ export default function BemInfoTab({
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
-        {!financiamento && (
+        {!financiamento && onRegistrarEntrada && (
           <button className="btn-secondary flex-1 flex items-center justify-center gap-2" onClick={onRegistrarEntrada}>
             <Wallet size={14} /> Registrar Entrada à Vista
           </button>
         )}
-        {!financiamento && (
+        {!financiamento && onCriarFinanciamento && (
           <button className="btn-primary flex-1" onClick={onCriarFinanciamento}>
             Criar Financiamento
           </button>

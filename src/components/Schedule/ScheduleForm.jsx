@@ -195,7 +195,9 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode } = useApp()
+  // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
+  const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
   // Detalhamento por função do resgate (schedule_reserva_funcoes) do agendamento em edição.
   // Quando presente, exibimos a árvore (somente leitura) e ocultamos o select único.
@@ -623,6 +625,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   }
 
   const handleSubmit = async (e, decisao = null) => {
+    if (!podeGravarForm) { e?.preventDefault?.(); return }
     e?.preventDefault?.()
     if (!form.description || !form.amount || !form.accountId || !form.frequency) return
     if (form.frequency !== 'once' && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
@@ -1238,7 +1241,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         <div className="col-span-2 flex gap-3 pt-1">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
-          <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+          {podeGravarForm
+            ? <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
+            : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </form>
 

@@ -14,7 +14,8 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 // no formato que /api/fluxo-provisorios espera. `contas` (opcional) restringe a escolha de conta
 // (a tela Fluxo de Caixa Futuro passa só as contas da consulta ativa).
 export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar, onClose }) {
-  const { profileAccounts: accounts, accountGroups, categories, activeProfileId, categoryGroupOrder } = useApp()
+  const { profileAccounts: accounts, accountGroups, categories, activeProfileId, categoryGroupOrder, pode } = useApp()
+  const podeSalvar = pode('fluxo', initial?.id ? 'editar' : 'incluir')
 
   const [form, setForm] = useState({
     date: initial?.date || today(),
@@ -40,7 +41,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (salvando) return
+    if (salvando || !podeSalvar) return
     const amount = Number(form.amount)
     if (!form.description.trim() || !form.date || !form.account_id) return
     if (!Number.isFinite(amount) || amount <= 0) { setErro('Informe um valor maior que zero.'); return }
@@ -154,10 +155,13 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
 
       <div className="flex gap-3 justify-end pt-1">
         <button type="button" className="btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
-        <button type="submit" className="btn-primary" disabled={salvando}>
-          {salvando ? 'Salvando...' : initial?.id ? 'Salvar' : 'Adicionar'}
-        </button>
+        {podeSalvar && (
+          <button type="submit" className="btn-primary" disabled={salvando}>
+            {salvando ? 'Salvando...' : initial?.id ? 'Salvar' : 'Adicionar'}
+          </button>
+        )}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3 text-right">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
   )
 }

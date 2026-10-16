@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 
 // Busca Global combinada: lançamentos (lancamentos) + agendamentos (agendamentos).
 // Filtros: value (tolerância ±0,01), text (descrição/favorecido ILIKE), from/to (período),
@@ -61,7 +62,9 @@ export default async function handler(req, res) {
       )
     }
 
-    res.json({ transactions: txRows, schedules: scRows })
+    // Perfis permitidos do usuário: só o que pertence às contas desses perfis.
+    const ctx = await contextoPerfis(query, req.user)
+    res.json({ transactions: recortarLeitura('lancamentos', txRows, ctx), schedules: recortarLeitura('agendamentos', scRows, ctx) })
   } catch (err) {
     console.error('[api/search]', err.message)
     res.status(500).json({ error: err.message })

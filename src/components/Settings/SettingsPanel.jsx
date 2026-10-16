@@ -11,7 +11,7 @@ import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
 import AtalhosPanel from './AtalhosPanel'
 import UsuariosPanel from './UsuariosPanel'
-import { getSessao } from '../../lib/api'
+import { MODULO_DA_ABA_CONFIG } from '../../lib/permissoes'
 import { CONFIG_ABAS, parseConfigHash, configHash, ehHashConfig } from '../../lib/configRota'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { mobileModules } from '../../mobile/modules'
@@ -71,7 +71,7 @@ export default function SettingsPanel() {
     gerencialGroups, addGerencialGroup, updateGerencialGroup, deleteGerencialGroup,
     accountGroups, addAccountGroup, updateAccountGroup, deleteAccountGroup,
     moveAccountGroup, reorderAccountGroups,
-    profiles, addProfile, updateProfile, deleteProfile, moveProfile,
+    profiles, addProfile, updateProfile, deleteProfile, moveProfile, pode,
     accounts,
     transactions,
     recalcularSaldo,
@@ -584,15 +584,23 @@ export default function SettingsPanel() {
   // seção visível da aba. No desktop nada é filtrado (abas === CONFIG_ABAS em conteúdo).
   const ocultas = isMobile ? SECOES_SO_DESKTOP : SEM_OCULTAS
   // Aba só de admin (Usuários) some para os demais papéis.
-  const ehAdmin = getSessao()?.papel === 'admin'
+  // Abas por módulo (src/lib/permissoes.js): Usuários só admin; Geral/Dados/Zona de perigo =
+  // Configurações do sistema; Cadastros/Regras = Cadastros (operador vê, não edita).
+  const ehAdmin = pode('usuarios', 'ver')
   const abas = CONFIG_ABAS
-    .filter(a => !a.soAdmin || ehAdmin)
+    .filter(a => pode(MODULO_DA_ABA_CONFIG[a.id] || 'configuracoes', 'ver'))
     .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id)) }))
     .filter(a => a.secoes.length > 0)
   const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
   const secao = abaAtual.secoes.some(s => s.id === rota.secao) ? rota.secao : abaAtual.secoes[0].id
   const secaoAtual = abaAtual.secoes.find(s => s.id === secao) || abaAtual.secoes[0]
   const temSubmenu = abaAtual.secoes.length > 1
+  // Seção sem permissão de gravar no módulo da aba (ex.: Operador em Cadastros/Regras): tudo vira
+  // somente leitura — o fieldset desabilita botões e campos da seção. Atalhos são preferência
+  // pessoal (sempre editáveis); Usuários tem guarda própria (só admin).
+  const moduloDaSecao = MODULO_DA_ABA_CONFIG[abaAtual.id] || 'configuracoes'
+  const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' &&
+    !(pode(moduloDaSecao, 'incluir') || pode(moduloDaSecao, 'editar') || pode(moduloDaSecao, 'excluir'))
 
   return (
     <div className="space-y-4">
@@ -652,7 +660,12 @@ export default function SettingsPanel() {
             ))}
           </nav>
         )}
-        <div className="flex-1 min-w-0 w-full space-y-6">
+        <fieldset disabled={somenteLeitura} className="flex-1 min-w-0 w-full space-y-6 border-0 p-0 m-0">
+      {somenteLeitura && (
+        <p className="text-xs text-texto-3 bg-surface-2 border border-borda rounded-lg px-3 py-2">
+          Somente leitura — seu nível de acesso não permite gravar.
+        </p>
+      )}
       {/* Período Financeiro */}
       {secao === 'periodo' && (
       <div className="card">
@@ -1877,7 +1890,7 @@ export default function SettingsPanel() {
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
-        </div>
+        </fieldset>
       </div>
 
       <ConfirmDialog

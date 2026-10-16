@@ -209,7 +209,7 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
         {erro && <p className="text-xs text-perigo">{erro}</p>}
 
         <div className="flex gap-3 pt-1 flex-wrap">
-          {editando && (
+          {editando && onExcluir && (
             <button type="button" className="btn-danger flex items-center gap-1.5" disabled={salvando} onClick={() => setConfirmExcluir(true)}>
               <Trash2 size={13} /> Excluir consulta
             </button>

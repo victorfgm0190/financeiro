@@ -69,7 +69,7 @@ function KpiCard({ icon: Icon, iconColor, label, value, valueColor, deltaAbs, de
 }
 
 export default function DashboardPanel({ setActivePage, saldosPrincipais, onShowPosicao }) {
-  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipal, etapaAPrevistas, dbStatus, creditUsage } = useApp()
+  const { profileAccounts, profileReportTransactions, profileSchedules: schedules, categories, reserveFunctions, getFinancialPeriod, getOccurrencesProjecao: getNextOccurrences, getSaldoPrincipal, etapaAPrevistas, dbStatus, creditUsage, pode } = useApp()
   const accounts = profileAccounts
   // Enquanto a API não respondeu, os valores exibidos vêm do cache local (sessão anterior) e
   // serão sobrescritos — mostra skeleton nos números para evitar o flicker visível.
@@ -767,7 +767,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           {accounts.length === 0 && (
             <div className="col-span-4 text-center py-4">
               <p className="text-xs text-texto-3">Nenhuma conta cadastrada</p>
-              <button onClick={() => setActivePage('accounts')} className="btn-primary mt-2 text-xs">Criar conta</button>
+              {pode('contas', 'incluir') && <button onClick={() => setActivePage('accounts')} className="btn-primary mt-2 text-xs">Criar conta</button>}
             </div>
           )}
         </div>

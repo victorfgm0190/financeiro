@@ -53,7 +53,9 @@ function lancamentoDa(p, txById) {
 }
 
 export default function IntegridadePanel({ setActivePage }) {
-  const { accounts, transactions } = useApp()
+  const { accounts, transactions, pode } = useApp()
+  // Varrer, corrigir, aceitar saldo, ignorar/reabrir pendências = editar em Alertas/Integridade.
+  const podeEditarAl = pode('alertas', 'editar')
   const [status, setStatus] = useState('pendente')
   const [pendencias, setPendencias] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -140,10 +142,12 @@ export default function IntegridadePanel({ setActivePage }) {
             <Lock size={10} /> Faturas fechadas não são avaliadas
           </p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={varrer} disabled={varrendo}>
-          {varrendo ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          {varrendo ? 'Varrendo…' : 'Varrer agora'}
-        </button>
+        {podeEditarAl && (
+          <button className="btn-primary flex items-center gap-2" onClick={varrer} disabled={varrendo}>
+            {varrendo ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {varrendo ? 'Varrendo…' : 'Varrer agora'}
+          </button>
+        )}
       </div>
 
       {resumo && (
@@ -164,7 +168,7 @@ export default function IntegridadePanel({ setActivePage }) {
             {s.label}
           </button>
         ))}
-        {status === 'pendente' && corrigiveis.length > 0 && (
+        {status === 'pendente' && corrigiveis.length > 0 && podeEditarAl && (
           <button className="ml-auto text-xs flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary-hover"
             title="Aplica todas as correções automáticas (religar parcelas, depois etapas A) e varre de novo"
             onClick={() => setAjustar({ pendencias: corrigiveis, todas: true })}>
@@ -192,7 +196,7 @@ export default function IntegridadePanel({ setActivePage }) {
               <span className="badge bg-surface-hover/60 text-texto-2 font-mono">{regra}</span>
               {def?.lado && <span className={`badge ${LADO_COR[def.lado] || LADO_COR.configuração}`}>{def.lado}</span>}
               <span className="text-xs text-texto-3 ml-auto">{itens.length}</span>
-              {itens.filter(podeCorrigirSozinho).length > 1 && (
+              {itens.filter(podeCorrigirSozinho).length > 1 && podeEditarAl && (
                 <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                   onClick={() => setAjustar({ pendencias: itens.filter(podeCorrigirSozinho) })}>
                   <Wrench size={12} /> Corrigir as automáticas desta regra ({itens.filter(podeCorrigirSozinho).length})
@@ -256,13 +260,13 @@ export default function IntegridadePanel({ setActivePage }) {
                     <pre className="mt-2 text-[11px] text-texto-2 whitespace-pre-wrap break-all">{JSON.stringify({ origem_id: p.origem_id, esperado: p.esperado, encontrado: p.encontrado }, null, 2)}</pre>
                   </details>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {podeAjustar(p) && (
+                    {podeAjustar(p) && podeEditarAl && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-primary text-white hover:bg-primary-hover"
                         onClick={() => setAjustar({ pendencias: [p] })}>
                         <Wrench size={12} /> Corrigir
                       </button>
                     )}
-                    {p.regra === 'GER_SALDO_SUBCONTA' && p.status === 'pendente' && (
+                    {p.regra === 'GER_SALDO_SUBCONTA' && p.status === 'pendente' && podeEditarAl && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded bg-surface-hover text-texto-1 hover:bg-surface-hover"
                         title="Grava um marco de saldo da subconta. Não cria lançamento e não altera saldo."
                         onClick={() => setAceitarSaldo(p)}>
@@ -281,13 +285,13 @@ export default function IntegridadePanel({ setActivePage }) {
                         <ExternalLink size={12} /> Ir para a fatura
                       </button>
                     )}
-                    {p.status === 'pendente' && (
+                    {p.status === 'pendente' && podeEditarAl && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'ignorar')}>
                         <EyeOff size={12} /> Ignorar
                       </button>
                     )}
-                    {p.status === 'ignorada' && (
+                    {p.status === 'ignorada' && podeEditarAl && (
                       <button className="text-xs flex items-center gap-1 px-2 py-1 rounded text-texto-2 hover:text-texto-1"
                         onClick={() => mudarStatus(p, 'reabrir')}>
                         <RotateCcw size={12} /> Reabrir

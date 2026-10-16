@@ -25,7 +25,8 @@ function buildCatOpts(categories, type) {
 // Edição em lote de Data e/ou Categoria dos lançamentos selecionados.
 // `txs`: array de lançamentos selecionados. onApplied(count) é chamado após gravar.
 export default function BulkEditModal({ txs, onClose, onApplied }) {
-  const { categories, bulkUpdateTransactions, accounts, activeProfileId, categoryGroupOrder } = useApp()
+  const { categories, bulkUpdateTransactions, accounts, activeProfileId, categoryGroupOrder, pode } = useApp()
+  const podeEditar = pode('lancamentos', 'editar')
 
   const [items, setItems] = useState(() => txs || [])
   const [stage, setStage] = useState('review') // review | edit | confirm | blocked
@@ -161,7 +162,9 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
           )}
           <div className="flex gap-3">
             <button className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-            <button className="btn-primary flex-1" onClick={handleProsseguir} disabled={items.length === 0}>Prosseguir</button>
+            {podeEditar
+              ? <button className="btn-primary flex-1" onClick={handleProsseguir} disabled={items.length === 0}>Prosseguir</button>
+              : <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
           </div>
         </>
       )}

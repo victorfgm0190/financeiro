@@ -16,14 +16,15 @@ import ComposicaoPatrimonioModal from './ComposicaoPatrimonioModal'
 import { useThemeColors } from '../../hooks/useTheme'
 
 function UpdateValueModal({ account, onClose }) {
-  const { updateAccountValue } = useApp()
+  const { updateAccountValue, pode } = useApp()
+  const podeSalvar = pode('patrimonio', 'editar')
   const [newValue, setNewValue] = useState(String(account.balance ?? ''))
   const [note, setNote] = useState('')
   const lastEntry = (account.valueHistory || []).slice(-1)[0]
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (newValue === '') return
+    if (newValue === '' || !podeSalvar) return
     updateAccountValue(account.id, Number(newValue), note)
     onClose()
   }
@@ -61,8 +62,9 @@ function UpdateValueModal({ account, onClose }) {
       </div>
       <div className="flex gap-3 pt-1">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">Atualizar</button>
+        {podeSalvar && <button type="submit" className="btn-primary flex-1">Atualizar</button>}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
   )
 }
@@ -94,7 +96,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function PatrimonioPanel({ setActivePage }) {
-  const { profileAccounts: accounts, accountGroups } = useApp()
+  const { profileAccounts: accounts, accountGroups, pode } = useApp()
+  const podeEditarPatrimonio = pode('patrimonio', 'editar')
   const cor = useThemeColors()
   const [updateValueAccount, setUpdateValueAccount] = useState(null)
   const [expandedHistory, setExpandedHistory] = useState(null)
@@ -300,6 +303,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                         >
                           <Edit2 size={13} />
                         </button>
+                        {podeEditarPatrimonio && (
                         <button
                           onClick={() => setUpdateValueAccount(a)}
                           className="p-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary-fg transition-colors"
@@ -307,6 +311,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                         >
                           <RefreshCw size={13} />
                         </button>
+                        )}
                       </div>
                     </div>
                   </div>

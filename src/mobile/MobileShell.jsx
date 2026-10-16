@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Plus, ChevronLeft, Search } from 'lucide-react'
 import { useFab } from '../context/FabContext'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from '../hooks/useScrollRestoration'
-import { abas } from './navegacao'
+import { abas, acoes } from './navegacao'
 import ActionSheet from './ActionSheet'
 import PerfilChips from './PerfilChips'
 import { useSaldosProntos } from '../hooks/useSaldosProntos'
@@ -28,6 +28,8 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   }), [scrollKey])
 
   const tabs = abas(modules)
+  // Botão "+": só com alguma ação permitida (as ações já chegam filtradas pelo nível de acesso).
+  const temAcoes = (() => { const a = acoes(modules); return a.primarias.length + a.outras.length > 0 })()
   const modulo = modules.find(m => m.id === ativo) || tabs[0]
   const ehAba = modulo.place === 'tab'
   // Módulo fora da barra (Mais › Reservas, Configurações…) acende a aba "Mais".
@@ -104,7 +106,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
       >
         {tabs.slice(0, meio).map(botaoAba)}
         <div className="flex-1 flex justify-center">
-          <button
+          {temAcoes && <button
             type="button"
             onClick={() => setAcoesAbertas(true)}
             aria-label="Novo"
@@ -112,7 +114,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
             style={{ boxShadow: '0 6px 18px rgba(14,107,78,0.45)' }}
           >
             <Plus size={26} />
-          </button>
+          </button>}
         </div>
         {tabs.slice(meio).map(botaoAba)}
       </nav>

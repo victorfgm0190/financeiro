@@ -283,8 +283,13 @@ export default function CreditCardPanel() {
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, updateTransaction, setReconciled, recalcularAgendamentosFatura, registrarEdicao,
     reconciliarGerencial, revisarMovimentosFatura, getOccurrencesProjecao: getNextOccurrences,
-    isFaturaFechada, fecharFatura, abrirFatura, creditUsage,
+    isFaturaFechada, fecharFatura, abrirFatura, creditUsage, pode,
   } = useApp()
+  // Nível de acesso (Cartão de Crédito): novo lançamento/pagar fatura = incluir; fechar/abrir,
+  // atualizar, revisar, reconciliar e seleção = editar; excluir = excluir. Sem permissão o botão some.
+  const podeIncluir = pode('cartao', 'incluir')
+  const podeEditar = pode('cartao', 'editar')
+  const podeExcluir = pode('cartao', 'excluir')
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
   const [reconciling, setReconciling] = useState(false)
@@ -734,8 +739,8 @@ export default function CreditCardPanel() {
   // FAB mobile: novo lançamento no cartão/fatura selecionados (inativo nas
   // subtelas de extrato/relatório, onde o modal não está montado).
   useRegisterFab(
-    () => { if (!showExtrato && !showRelatorio && !faturaFechada) setShowNewTx(true) },
-    [showExtrato, showRelatorio, faturaFechada]
+    podeIncluir ? () => { if (!showExtrato && !showRelatorio && !faturaFechada) setShowNewTx(true) } : null,
+    [showExtrato, showRelatorio, faturaFechada, podeIncluir]
   )
 
   // ── Pay invoice ──────────────────────────────────────────────────────────
@@ -916,7 +921,7 @@ export default function CreditCardPanel() {
             de {fmt(billTotalComPrevistos)} · {isFaturaPaga ? 'Paga ✓' : isFaturaParcial ? 'Parcialmente paga' : 'Não paga'}
           </p>
           <DiferencaPagamento diferenca={diferencaPagamento - totalPrevisto} className="mt-1.5" />
-          <button
+          {podeEditar && <button
             onClick={faturaFechada ? handleAbrirFatura : handleFecharFatura}
             className={`mt-2 inline-block text-xs rounded px-3 py-1 border transition-colors ${
               faturaFechada
@@ -925,24 +930,24 @@ export default function CreditCardPanel() {
             }`}
           >
             {faturaFechada ? '🔓 Abrir Fatura' : '🔒 Fechar Fatura'}
-          </button>
+          </button>}
         </div>
         <div className="flex flex-col gap-2">
-          <button
+          {podeIncluir && <button
             disabled={faturaFechada}
             title={faturaFechada ? 'Fatura fechada — abra a fatura para adicionar lançamentos' : undefined}
             className={`btn-primary flex-1 hidden md:flex items-center justify-center gap-2 text-sm ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={() => setShowNewTx(true)}
           >
             <Plus size={14} /> Novo Lançamento
-          </button>
-          <button
+          </button>}
+          {podeIncluir && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
             onClick={() => { setShowPayModal(true); setPayAmount(String(billTotal)) }}
           >
             <DollarSign size={14} /> Pagar Fatura
-          </button>
-          <button
+          </button>}
+          {podeEditar && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
             onClick={() => {
               if (!selectedCard || !billKey) return
@@ -957,15 +962,15 @@ export default function CreditCardPanel() {
             title="Recalcula o total da fatura e atualiza a conta a pagar"
           >
             <RotateCcw size={14} /> Atualizar
-          </button>
-          <button
+          </button>}
+          {podeEditar && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
             onClick={handleAbrirRevisar}
             title="Revisa os movimentos automáticos (transferências gerenciais e resgates) da fatura e mostra os ajustes pendentes antes de aplicar"
           >
             <GitCompare size={14} /> Revisar Movimentos Automáticos
-          </button>
-          {!isMobile && (
+          </button>}
+          {!isMobile && podeEditar && (
             <button
               className="flex items-center justify-center gap-1.5 text-xs text-texto-3 hover:text-texto-2 disabled:opacity-50 transition-colors py-1"
               onClick={handleReconciliarGerencial}
@@ -1007,7 +1012,7 @@ export default function CreditCardPanel() {
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-3 text-xs font-bold">D</span>
               </div>
             )}
-            {billLancamentos.length > 0 && (
+            {billLancamentos.length > 0 && podeEditar && (
               <button
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-2.5 py-1 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
@@ -1016,7 +1021,7 @@ export default function CreditCardPanel() {
                 <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
               </button>
             )}
-            {billLancamentos.length > 0 && !isMobile && (
+            {billLancamentos.length > 0 && !isMobile && podeEditar && (
               <button
                 onClick={() => setShowReconciliar(true)}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-2.5 py-1"
@@ -1036,13 +1041,15 @@ export default function CreditCardPanel() {
           <div className="text-center py-12">
             <Calendar size={28} className="text-texto-3 mx-auto mb-2" />
             <p className="text-texto-3 text-sm">Nenhum lançamento nesta fatura</p>
-            <button
-              onClick={() => setShowNewTx(true)}
-              disabled={faturaFechada}
-              className={`btn-primary mt-3 text-xs ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              Adicionar lançamento
-            </button>
+            {podeIncluir && (
+              <button
+                onClick={() => setShowNewTx(true)}
+                disabled={faturaFechada}
+                className={`btn-primary mt-3 text-xs ${faturaFechada ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                Adicionar lançamento
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -1085,8 +1092,8 @@ export default function CreditCardPanel() {
                     ) : (
                       <ReconcileBadge
                         reconciled={tx.reconciled}
-                        onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                        title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                        onClick={(e) => { e.stopPropagation(); if (podeEditar) setReconciled([tx.id], !tx.reconciled) }}
+                        title={!podeEditar ? (tx.reconciled ? 'Reconciliado' : 'Não reconciliado') : tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
                       />
                     )
                   }
@@ -1216,25 +1223,31 @@ export default function CreditCardPanel() {
                             >
                               <Edit2 size={11} />
                             </button>
-                            <DuplicateButton
-                              onConfirm={(date) => handleDuplicate(tx, date)}
-                              sourceTx={tx}
-                              iconSize={11}
-                              className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
-                            />
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setConfirmDelete(tx) }}
-                              title="Excluir"
-                              className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
-                            >
-                              <Trash2 size={11} />
-                            </button>
+                            {podeIncluir && (
+                              <DuplicateButton
+                                onConfirm={(date) => handleDuplicate(tx, date)}
+                                sourceTx={tx}
+                                iconSize={11}
+                                className="p-1.5 text-texto-3 hover:text-primary-fg hover:bg-primary/10 rounded transition-colors"
+                              />
+                            )}
+                            {podeExcluir && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(tx) }}
+                                title="Excluir"
+                                aria-label="Excluir"
+                                className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
                           </div>
                         </td>
                         <td className="px-2 py-3 text-center">
                           <ReconcileBadge
                             reconciled={tx.reconciled}
-                            onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
+                            onClick={(e) => { e.stopPropagation(); if (podeEditar) setReconciled([tx.id], !tx.reconciled) }}
+                            title={podeEditar ? undefined : (tx.reconciled ? 'Reconciliado' : 'Não reconciliado')}
                           />
                         </td>
                       </tr>

@@ -193,11 +193,19 @@ function accountLabel(id, accounts, fallback = '—') {
 }
 
 // Badge clicável de reconciliação para a coluna "R" (design quadrado compartilhado).
+// Sem onClick (nível de acesso sem "editar"): só mostra o estado, sem ação.
 function ReconcileBtn({ reconciled, onClick }) {
+  if (!onClick) {
+    return (
+      <span className="inline-flex pointer-events-none opacity-70" title={reconciled ? 'Reconciliado' : 'Não reconciliado'}>
+        <ReconcileBadge reconciled={reconciled} title={reconciled ? 'Reconciliado' : 'Não reconciliado'} />
+      </span>
+    )
+  }
   return <ReconcileBadge reconciled={reconciled} onClick={onClick} />
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect, mostrarEditar = true }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -297,7 +305,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
       </td>
       <td className="px-2 py-1.5">
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          {onEdit && (
+          {onEdit && mostrarEditar && (
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(tx) }}
               title="Editar lançamento"
@@ -335,7 +343,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
       <td className="px-1 py-1.5 text-center">
         <ReconcileBtn
           reconciled={!!tx.reconciled}
-          onClick={(e) => { e.stopPropagation(); onToggleReconcile([tx.id], !tx.reconciled) }}
+          onClick={onToggleReconcile ? (e) => { e.stopPropagation(); onToggleReconcile([tx.id], !tx.reconciled) } : null}
         />
       </td>
     </tr>
@@ -410,7 +418,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
         <td className="px-1 py-1.5 text-center">
           <ReconcileBtn
             reconciled={allReconciled}
-            onClick={(e) => { e.stopPropagation(); onToggleReconcile(txs.map(t => t.id), !allReconciled) }}
+            onClick={onToggleReconcile ? (e) => { e.stopPropagation(); onToggleReconcile(txs.map(t => t.id), !allReconciled) } : null}
           />
         </td>
       </tr>
@@ -487,7 +495,11 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 // atalhoNovoTx: id da ação de atalho que a tela registrou para o mesmo onNewTx (só para o tooltip).
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton, atalhoNovoTx }) {
   const tituloNovoTx = useTituloAtalho('Novo Lançamento', atalhoNovoTx)
-  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos } = useApp()
+  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos, pode } = useApp()
+  // Nível de acesso (src/lib/permissoes.js): lançamentos do extrato — incluir/editar/excluir.
+  const podeIncluirTx = pode('lancamentos', 'incluir')
+  const podeEditarTx = pode('lancamentos', 'editar')
+  const podeExcluirTx = pode('lancamentos', 'excluir')
   // Always derive account from live context so balance stays current after new transactions
   const account = accounts.find(a => a.id === accountProp.id) || accountProp
   // Ações de conciliação em lote ficam só no computador.
@@ -1096,6 +1108,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               </div>
             )}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
+              {(podeEditarTx || podeExcluirTx) && (
               <button
                 onClick={toggleSelectMode}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
@@ -1103,8 +1116,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <ListChecks size={12} /> {selectMode ? 'Cancelar Seleção' : 'Selecionar'}
               </button>
+              )}
               {/* Reconciliar / Conciliar Gerenciais em lote: só no computador. */}
-              {!isMobile && (
+              {!isMobile && podeEditarTx && (
                 <>
                   <button
                     onClick={() => setShowReconciliar(true)}
@@ -1131,7 +1145,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   <Download size={12} /> Excel
                 </button>
               )}
-              {onNewTx && (
+              {onNewTx && podeIncluirTx && (
                 <button onClick={onNewTx} title={tituloNovoTx} className="btn-primary hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5">
                   <Plus size={12} /> Novo Lançamento
                   <ShortcutHint actionId={atalhoNovoTx} />
@@ -1352,7 +1366,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               )}
               {displayRows.map((row, i) =>
                 row.kind === 'netted' ? (
-                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={setReconciled} selectMode={selectMode} onEditTx={onEdit} onReverseTx={setConfirmEstorno} onDeleteTx={setConfirmDelete} onDeleteGroup={setConfirmDeleteGroup} />
+                  <NettedRow key={i} row={row} accountId={account.id} accounts={accounts} balance={row.runningBalance} onToggleReconcile={podeEditarTx ? setReconciled : null} selectMode={selectMode} onEditTx={podeEditarTx ? onEdit : null} onReverseTx={podeEditarTx ? setConfirmEstorno : null} onDeleteTx={podeExcluirTx ? setConfirmDelete : null} onDeleteGroup={podeExcluirTx ? setConfirmDeleteGroup : null} />
                 ) : (
                   <SingleRow
                     key={i}
@@ -1360,11 +1374,12 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     accountId={account.id}
                     accounts={accounts}
                     balance={row.runningBalance}
-                    onReverse={setConfirmEstorno}
+                    onReverse={podeEditarTx ? setConfirmEstorno : null}
                     onEdit={onEdit}
-                    onDuplicate={onEdit ? handleDuplicate : null}
-                    onDelete={setConfirmDelete}
-                    onToggleReconcile={setReconciled}
+                    mostrarEditar={podeEditarTx}
+                    onDuplicate={onEdit && podeIncluirTx ? handleDuplicate : null}
+                    onDelete={podeExcluirTx ? setConfirmDelete : null}
+                    onToggleReconcile={podeEditarTx ? setReconciled : null}
                     todayStr={todayStr}
                     selectMode={selectMode}
                     selected={selectedIds.has(row.tx.id)}
@@ -1442,10 +1457,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     className="w-5 h-5 rounded accent-primary cursor-pointer shrink-0"
                   />
                 ) : (
-                  <ReconcileBadge
-                    reconciled={tx.reconciled}
-                    onClick={(e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) }}
-                    title={tx.reconciled ? 'Reconciliado — toque para desmarcar' : 'Marcar como reconciliado'}
+                  <ReconcileBtn
+                    reconciled={!!tx.reconciled}
+                    onClick={podeEditarTx ? (e) => { e.stopPropagation(); setReconciled([tx.id], !tx.reconciled) } : null}
                   />
                 )
               }
@@ -1563,6 +1577,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               {selectedIds.size} selecionado{selectedIds.size !== 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-2 ml-auto flex-wrap">
+              {podeEditarTx && (
               <button
                 onClick={() => setBulkEditTxs(selectedTxs)}
                 disabled={selectedIds.size === 0}
@@ -1570,8 +1585,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <PencilLine size={12} /> Alterar Selecionados
               </button>
+              )}
               {/* Conciliar/Desconciliar em lote: só no computador. */}
-              {!isMobile && (
+              {!isMobile && podeEditarTx && (
                 <>
                   <button
                     onClick={() => handleBulkReconcile(true)}
@@ -1591,6 +1607,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                   </button>
                 </>
               )}
+              {podeExcluirTx && (
               <button
                 onClick={() => setShowBulkDelete(true)}
                 disabled={selectedIds.size === 0}
@@ -1599,6 +1616,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               >
                 <Trash2 size={12} /> Excluir
               </button>
+              )}
               <button
                 onClick={exitSelect}
                 className="btn-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"

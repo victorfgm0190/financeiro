@@ -112,6 +112,7 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
         )}
       </div>
 
+      {onEstornar && (
       <button
         type="button"
         onClick={onEstornar}
@@ -121,6 +122,7 @@ export default function TradeInResumo({ movimentacoes, saldoBem, contas = [], on
         {estornando ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
         {estornando ? 'Estornando...' : 'Estornar entrada'}
       </button>
+      )}
       <p className="text-[11px] text-texto-3 text-center">
         Desfaz o trade-in e desvincula as transferências. As transferências em si continuam no
         Extrato.

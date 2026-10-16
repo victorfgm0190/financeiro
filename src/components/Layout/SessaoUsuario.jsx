@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { UserCircle2, KeyRound, ShieldAlert, LogOut } from 'lucide-react'
 import { getSessao, clearTokenAndRedirect } from '../../lib/api'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
+import { rotuloNivel } from '../../lib/permissoes'
 import Toast from '../shared/Toast'
 
 // Quem está logado (Sidebar no desktop, tela "Mais" no mobile): nome, aviso discreto quando a
@@ -18,6 +19,7 @@ export default function SessaoUsuario({ comSair = false }) {
       <div className="flex items-center gap-2 min-w-0">
         <UserCircle2 size={14} className="shrink-0 text-texto-2" />
         <span className="text-xs text-texto-1 font-medium truncate" title={sessao.username || ''}>{sessao.nome}</span>
+        {sessao.nivel && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">{rotuloNivel(sessao.nivel)}</span>}
       </div>
       {emergencia && (
         <p className="flex items-center gap-1.5 text-[11px] text-aviso leading-tight">

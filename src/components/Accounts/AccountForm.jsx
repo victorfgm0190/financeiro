@@ -83,7 +83,9 @@ function LinhaToggle({ nome, ajuda, selo, checked, onChange, disabled = false })
 }
 
 export default function AccountForm({ initial, onClose }) {
-  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo } = useApp()
+  const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo, pode } = useApp()
+  // Salvar: conta nova exige incluir; existente exige editar (src/lib/permissoes.js).
+  const podeSalvar = pode('contas', initial ? 'editar' : 'incluir')
   const [form, setForm] = useState({
     name: initial?.name || '',
     apelido: initial?.apelido || '',
@@ -161,7 +163,7 @@ export default function AccountForm({ initial, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!form.name.trim()) return
+    if (!form.name.trim() || !podeSalvar) return
 
     // Vínculo Patrimônio exige categoria.
     const vinculoAtivo = !isCredit && !isPatrimonial ? form.vinculoTipo : 'none'
@@ -364,6 +366,7 @@ export default function AccountForm({ initial, onClose }) {
           <div>
             <label className="label flex items-center justify-between">
               <span>Saldo Atual</span>
+              {podeSalvar && (
               <button
                 type="button"
                 className="flex items-center gap-1 text-xs text-primary-fg hover:text-texto-1 transition-colors"
@@ -374,6 +377,7 @@ export default function AccountForm({ initial, onClose }) {
               >
                 <RefreshCw size={11} /> Recalcular
               </button>
+              )}
             </label>
             <div className="input bg-surface-hover/50 text-texto-2 cursor-not-allowed select-none">
               {fmt(initial.balance ?? 0)}
@@ -748,8 +752,9 @@ export default function AccountForm({ initial, onClose }) {
 
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>
+        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
   )
 }

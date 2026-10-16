@@ -29,7 +29,9 @@ const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-rece
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
   const isMobile = useIsMobile()
-  const { schedules: todosAgendamentos, markScheduleRegistered } = useApp()
+  const { schedules: todosAgendamentos, markScheduleRegistered, pode } = useApp()
+  // Vincular grava a baixa: só com permissão de editar agendamentos.
+  const podeVincular = pode('agendamentos', 'editar')
   const resumo = useMemo(() => resumoRegistradas(schedule, transactions), [schedule, transactions])
   const [aberto, setAberto] = useState(false)
   const [carregando, setCarregando] = useState(false)
@@ -89,7 +91,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                         <span className="text-xs font-semibold text-texto-1">Parc. {parc(l)}</span>
                         <span className="flex items-center gap-1.5">
                           <Selo l={l} />
-                          {l.status === ST.BAIXADA && (
+                          {l.status === ST.BAIXADA && podeVincular && (
                             <span role="button" tabIndex={0} className="text-[10px] text-primary-fg underline"
                               onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}
                               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setVinculando(l.dataRegistro) } }}>
@@ -139,7 +141,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                           <td className="px-2 py-1.5 text-texto-2 max-w-[9rem] truncate">{l.payee || '—'}</td>
                           <td className="px-2 py-1.5 whitespace-nowrap">
                             <Selo l={l} />
-                            {l.status === ST.BAIXADA && (
+                            {l.status === ST.BAIXADA && podeVincular && (
                               <button type="button" className="ml-1.5 text-[10px] text-primary-fg underline"
                                 onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}>
                                 Vincular

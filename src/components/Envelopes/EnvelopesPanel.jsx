@@ -51,7 +51,8 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
   // Categorias por perfil: o da conta do envelope (se tiver perfil), senão o chip do topo; as já
   // vinculadas ao envelope continuam na lista.
-  const { activeProfileId, categoryGroupOrder } = useApp()
+  const { activeProfileId, categoryGroupOrder, pode } = useApp()
+  const podeSalvar = pode('envelopes', initial ? 'editar' : 'incluir')
   const perfilCategorias = perfilParaCategorias(accounts, accountId, activeProfileId)
   const expCats     = filtrarCategoriasPorPerfil(categories.filter(c => c.type === 'expense' || c.type === 'both'), perfilCategorias, categoryIds)
   const nonCreditAc = accounts.filter(a => a.type !== 'credit')
@@ -130,10 +131,13 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
       <div className="flex gap-2 justify-end pt-1">
         <button className="btn-ghost" onClick={onCancel}>Cancelar</button>
+        {podeSalvar && (
         <button className="btn-primary" onClick={() => onSave({ name: name.trim(), limitAmount: Number(limitAmount), dueDay: Number(dueDay), categoryIds, accountId: accountId || null })} disabled={!valid}>
           Salvar
         </button>
+        )}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3 text-right">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </div>
   )
 }
@@ -268,7 +272,10 @@ function DetailModal({ data, compLabel, categories, accounts }) {
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode } = useApp()
+  const podeIncluir = pode('envelopes', 'incluir')
+  const podeEditar = pode('envelopes', 'editar')
+  const podeExcluir = pode('envelopes', 'excluir')
   const [showForm,  setShowForm]  = useState(false)
   const [editEnv,   setEditEnv]   = useState(null)
   const [detailId,  setDetailId]  = useState(null)
@@ -333,9 +340,11 @@ export default function EnvelopesPanel() {
           <h1 className="text-lg font-bold text-texto-1">Envelopes</h1>
           <p className="text-xs text-texto-3 mt-0.5">Controle de gastos por categoria com limite mensal</p>
         </div>
-        <button className="btn-primary flex items-center gap-1.5 text-sm" onClick={openNew}>
-          <Plus size={14} /> Novo Envelope
-        </button>
+        {podeIncluir && (
+          <button className="btn-primary flex items-center gap-1.5 text-sm" onClick={openNew}>
+            <Plus size={14} /> Novo Envelope
+          </button>
+        )}
       </div>
 
       {/* Competência selector */}
@@ -383,7 +392,7 @@ export default function EnvelopesPanel() {
           <p className="text-texto-3 text-sm mt-1 max-w-xs mx-auto">
             Crie envelopes para controlar seus gastos mensais por categoria — mercado, combustível, lazer, etc.
           </p>
-          <button className="btn-primary mt-5" onClick={openNew}>Criar primeiro envelope</button>
+          {podeIncluir && <button className="btn-primary mt-5" onClick={openNew}>Criar primeiro envelope</button>}
         </div>
       )}
 
@@ -394,6 +403,7 @@ export default function EnvelopesPanel() {
             <div key={env.id} className="card group hover:bg-surface-hover/80 transition-colors">
               {/* action buttons — linha própria no topo, acima do nome e do Limite */}
               <div className="flex justify-end gap-1.5 mb-1.5">
+                {podeEditar && (
                 <button
                   className="btn-amber w-7 h-7 p-0 justify-center"
                   onClick={e => { e.stopPropagation(); openEdit(env) }}
@@ -402,6 +412,8 @@ export default function EnvelopesPanel() {
                 >
                   <Edit2 size={13} />
                 </button>
+                )}
+                {podeExcluir && (
                 <button
                   className="btn-amber w-7 h-7 p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg"
                   onClick={e => {
@@ -413,6 +425,7 @@ export default function EnvelopesPanel() {
                 >
                   <Trash2 size={13} />
                 </button>
+                )}
               </div>
               <EnvelopeCard
                 envelope={env}

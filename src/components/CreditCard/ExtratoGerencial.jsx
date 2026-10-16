@@ -28,7 +28,8 @@ function getBillLabel(date, card) {
 }
 
 export default function ExtratoGerencial({ initialCardId }) {
-  const { accounts, transactions, gerencialGroups, updateTransaction } = useApp()
+  const { accounts, transactions, gerencialGroups, updateTransaction, pode } = useApp()
+  const podeEditar = pode('cartao', 'editar')
   useScrollScope('credit:extrato')
 
   const creditCards = accounts.filter(a => a.type === 'credit')
@@ -157,7 +158,7 @@ export default function ExtratoGerencial({ initialCardId }) {
                     <td className="px-3 py-2.5 text-center">
                       <ReconcileBadge
                         reconciled={tx.reconciled}
-                        onClick={() => updateTransaction(tx.id, { reconciled: !tx.reconciled })}
+                        onClick={() => { if (podeEditar) updateTransaction(tx.id, { reconciled: !tx.reconciled }) }}
                         title={tx.reconciled ? 'Desmarcar conferido' : 'Marcar como conferido'}
                       />
                     </td>

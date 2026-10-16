@@ -18,6 +18,8 @@ const { autenticar, ERRO_LOGIN, default: authHandler } = await import('./auth.js
 const { default: usuariosHandler } = await import('./usuarios.js')
 
 const MIGRACAO = readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-14_usuarios.sql', import.meta.url)), 'utf-8')
+  + readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-17_niveis_acesso.sql', import.meta.url)), 'utf-8')
+  + '\nCREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());'
 const SECRET = 'segredo-de-teste'
 const q = async (sql, params = []) => (await estado.db.query(sql, params)).rows
 const AGORA = new Date('2026-10-14T12:00:00Z')
@@ -41,9 +43,11 @@ async function chamar(handler, { method = 'GET', body, url = '/api/usuarios', au
 }
 
 // Usuário do cadastro com hash de custo baixo (o compare usa o custo gravado no hash → teste rápido).
-async function criarUsuario({ username, senha = 'senha-certa-1', papel = 'admin', ativo = true, org = 'org1', email = null }) {
-  const [u] = await q('INSERT INTO usuarios (username, nome, senha_hash, ativo, email) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-    [username, username.toUpperCase(), bcrypt.hashSync(senha, 4), ativo, email])
+const NIVEL_DO_PAPEL = { admin: 'admin', usuario: 'operador', leitura: 'consulta' }
+async function criarUsuario({ username, senha = 'senha-certa-1', papel = 'admin', nivel = NIVEL_DO_PAPEL[papel], ativo = true, org = 'org1', email = null, extra = {} }) {
+  const [u] = await q('INSERT INTO usuarios (username, nome, senha_hash, ativo, email, nivel, permissoes, perfis_permitidos, trocar_senha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+    [username, username.toUpperCase(), bcrypt.hashSync(senha, 4), ativo, email ?? `${username}@teste.com`, nivel,
+      JSON.stringify(extra.permissoes || {}), JSON.stringify(extra.perfis ?? 'todos'), !!extra.trocar_senha])
   await q('INSERT INTO membros (usuario_id, organizacao_id, papel) VALUES ($1, $2, $3)', [u.id, org, papel])
   return u.id
 }
@@ -80,7 +84,7 @@ describe('login por cadastro', () => {
     const id = await criarUsuario({ username: 'vmoreira' })
     await q('UPDATE usuarios SET tentativas_falhas = 3 WHERE id = $1', [id])
     const p = await autenticar(q, { username: ' VMoreira ', password: 'senha-certa-1' }, { env: {}, agora: AGORA })
-    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', username: 'vmoreira', nome: 'VMOREIRA', origem: 'db' })
+    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos', trocarSenha: false, username: 'vmoreira', nome: 'VMOREIRA', origem: 'db' })
     const [u] = await q('SELECT tentativas_falhas, ultimo_login FROM usuarios WHERE id = $1', [id])
     expect(u.tentativas_falhas).toBe(0)
     expect(new Date(u.ultimo_login).toISOString()).toBe(AGORA.toISOString())
@@ -179,13 +183,13 @@ describe('transição: ADMIN_USER = vmoreira também cadastrado — as duas senh
   })
 
   it('entra com a senha do cadastro (origem db)', async () => {
-    expect(await entrar('vmoreira', 'senha-certa-1')).toMatchObject({ sub: id, papel: 'usuario', origem: 'db' })
+    expect(await entrar('vmoreira', 'senha-certa-1')).toMatchObject({ sub: id, nivel: 'operador', origem: 'db' })
   })
 
   it('entra com o ADMIN_PASS: origem env, token do próprio usuário, papel admin, tentativas intactas', async () => {
     await q('UPDATE usuarios SET tentativas_falhas = 2 WHERE id = $1', [id])
     const p = await entrar('vmoreira', 'senha-fixa-123')
-    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', username: 'vmoreira', nome: 'VMOREIRA', origem: 'env' })
+    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos', trocarSenha: false, username: 'vmoreira', nome: 'VMOREIRA', origem: 'env' })
     expect((await cadastro(id)).tentativas_falhas).toBe(2)
   })
 
@@ -249,20 +253,22 @@ describe('API /api/usuarios', () => {
 
   it('POST cria usuário na organização; senha curta → 400; repetido → 409', async () => {
     const id = await criarUsuario({ username: 'vmoreira' })
-    const curto = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo', senha: '1234567' } })
+    const curto = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo', nome: 'N', email: 'n@x.com', senha: '1234567' } })
     expect(curto.statusCode).toBe(400)
-    const r = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'Novo.User', nome: 'Novo', senha: '12345678', papel: 'leitura' } })
-    expect(r.body.usuario).toMatchObject({ username: 'novo.user', nome: 'Novo', papel: 'leitura', ativo: true })
+    const semEmail = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo', nome: 'N', senha: '12345678' } })
+    expect(semEmail.statusCode).toBe(400)
+    const r = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'Novo.User', nome: 'Novo', email: 'Novo@X.com', senha: '12345678', nivel: 'consulta', trocar_senha: true } })
+    expect(r.body.usuario).toMatchObject({ username: 'novo.user', nome: 'Novo', email: 'novo@x.com', nivel: 'consulta', ativo: true, trocar_senha: true, perfis_permitidos: 'todos', criado_por: 'vmoreira' })
     expect(r.body.usuario).not.toHaveProperty('senha_hash')
-    expect(await autenticar(q, { username: 'novo.user', password: '12345678' }, { env: {}, agora: AGORA })).toMatchObject({ papel: 'leitura', org: 'org1' })
-    const dup = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo.user', senha: '12345678' } })
+    expect(await autenticar(q, { username: 'novo.user', password: '12345678' }, { env: {}, agora: AGORA })).toMatchObject({ nivel: 'consulta', org: 'org1', trocarSenha: true })
+    const dup = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo.user', nome: 'N', email: 'outro@x.com', senha: '12345678' } })
     expect(dup.statusCode).toBe(409)
   }, 20_000)
 
   it('e-mail repetido é recusado na criação e na edição (sem diferenciar maiúsculas); formato inválido → 400', async () => {
     const id = await criarUsuario({ username: 'vmoreira', email: 'victor@exemplo.com' })
     const outro = await criarUsuario({ username: 'gislaine', papel: 'usuario' })
-    const post = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo', email: 'VICTOR@exemplo.com', senha: '12345678' } })
+    const post = await chamar(usuariosHandler, { method: 'POST', auth: admin(id), body: { username: 'novo', nome: 'N', email: 'VICTOR@exemplo.com', senha: '12345678' } })
     expect(post.statusCode).toBe(409)
     const patch = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(id), body: { id: outro, email: 'Victor@Exemplo.com' } })
     expect(patch.statusCode).toBe(409)
@@ -276,13 +282,18 @@ describe('API /api/usuarios', () => {
 
   it('o único admin não se rebaixa nem se desativa; com outro admin ativo, pode', async () => {
     const id = await criarUsuario({ username: 'vmoreira' })
-    for (const body of [{ id, papel: 'usuario' }, { id, ativo: false }]) {
+    for (const body of [{ id, nivel: 'operador' }, { id, ativo: false }]) {
       const r = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(id), body })
       expect(r.statusCode).toBe(409)
     }
     await criarUsuario({ username: 'gislaine', papel: 'admin' })
-    const r = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(id), body: { id, papel: 'usuario' } })
-    expect(r.body.usuario.papel).toBe('usuario')
+    // com outro admin ativo, ainda não pode DESATIVAR a si mesmo
+    const euMesmo = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(id), body: { id, ativo: false } })
+    expect(euMesmo.statusCode).toBe(409)
+    expect(euMesmo.body.error).toMatch(/próprio usuário/)
+    const r = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(id), body: { id, nivel: 'operador' } })
+    expect(r.body.usuario.nivel).toBe('operador')
+    expect((await q('SELECT papel FROM membros WHERE usuario_id = $1', [id]))[0].papel).toBe('usuario')
   })
 
   it('PATCH edita, desbloqueia e redefine senha; usuário de outra organização → 404', async () => {
@@ -304,7 +315,8 @@ describe('API /api/usuarios', () => {
     const errada = await chamar(usuariosHandler, { method: 'POST', url, auth, body: { senhaAtual: 'nao-e-essa', novaSenha: 'nova-senha-9' } })
     expect(errada.statusCode).toBe(400)
     const ok = await chamar(usuariosHandler, { method: 'POST', url, auth, body: { senhaAtual: 'senha-certa-1', novaSenha: 'nova-senha-9' } })
-    expect(ok.body).toEqual({ ok: true })
+    expect(ok.body).toMatchObject({ ok: true })
+    expect(jwt.verify(ok.body.token, SECRET)).toMatchObject({ sub: id, nivel: 'consulta', trocarSenha: false })
     expect(await autenticar(q, { username: 'gislaine', password: 'nova-senha-9' }, { env: {}, agora: AGORA })).not.toBeNull()
     const env = token({ sub: 'env:emergencia', org: 'org1', papel: 'admin', username: 'emergencia', origem: 'env' })
     const r = await chamar(usuariosHandler, { method: 'POST', url, auth: env, body: { senhaAtual: 'x', novaSenha: 'nova-senha-9' } })
@@ -317,6 +329,54 @@ describe('middleware', () => {
     const { requireAuth } = await import('./_auth.js')
     const req = { headers: { authorization: `Bearer ${token({ user: 'vmoreira', role: 'admin' })}` } }
     expect(requireAuth(req, resposta())).toBe(true)
-    expect(req.user).toEqual({ id: 'env:vmoreira', orgId: null, papel: 'admin', username: 'vmoreira', nome: 'vmoreira', origem: 'env' })
+    expect(req.user).toEqual({ id: 'env:vmoreira', orgId: null, nivel: 'admin', papel: 'admin', permissoes: {}, perfis: 'todos', username: 'vmoreira', nome: 'vmoreira', origem: 'env' })
+  })
+})
+
+describe('níveis de acesso na API', () => {
+  const tk = (nivel, extra = {}) => token({ sub: 'u1', org: 'org1', nivel, papel: nivel, username: 'u1', origem: 'db', ...extra })
+  const reqDe = (auth, method, url) => ({ method, url, headers: { authorization: `Bearer ${auth}` } })
+
+  it('Consulta: leitura passa; qualquer gravação devolve 403 (rotas de vários módulos)', async () => {
+    const { requireAuth } = await import('./_auth.js')
+    const consulta = tk('consulta')
+    expect(requireAuth(reqDe(consulta, 'GET', '/api/load'), resposta())).toBe(true)
+    expect(requireAuth(reqDe(consulta, 'POST', '/api/search'), resposta())).toBe(true)
+    for (const [method, url] of [['POST', '/api/reserve-periods'], ['DELETE', '/api/fluxo-provisorios?id=1'], ['PUT', '/api/agendamentos'],
+      ['POST', '/api/transactions-bulk-update'], ['POST', '/api/bem/criar'], ['POST', '/api/financiamento/parcela/x/pagar'], ['POST', '/api/integridade'],
+      ['POST', '/api/historico'], ['POST', '/api/rota-nova-qualquer']]) {
+      const res = resposta()
+      expect(requireAuth(reqDe(consulta, method, url), res)).toBe(false)
+      expect(res.statusCode).toBe(403)
+    }
+  })
+
+  it('Operador grava nos módulos, mas não em Cadastros/Configurações; Admin grava tudo', async () => {
+    const { requireAuth } = await import('./_auth.js')
+    expect(requireAuth(reqDe(tk('operador'), 'POST', '/api/reserve-periods'), resposta())).toBe(true)
+    expect(requireAuth(reqDe(tk('operador'), 'POST', '/api/tipos-documento'), resposta())).toBe(false)
+    expect(requireAuth(reqDe(tk('operador'), 'POST', '/api/bem/migrate'), resposta())).toBe(false)
+    expect(requireAuth(reqDe(tk('admin'), 'POST', '/api/bem/migrate'), resposta())).toBe(true)
+  })
+
+  it('Personalizado: só o que o JSON libera (incluir/editar/excluir implicam ver)', async () => {
+    const { requireAuth } = await import('./_auth.js')
+    const p = tk('personalizado', { permissoes: { fluxo: { incluir: true } } })
+    expect(requireAuth(reqDe(p, 'POST', '/api/fluxo-provisorios'), resposta())).toBe(true)
+    expect(requireAuth(reqDe(p, 'DELETE', '/api/fluxo-provisorios'), resposta())).toBe(false)
+    expect(requireAuth(reqDe(p, 'POST', '/api/reserve-periods'), resposta())).toBe(false)
+  })
+
+  it('o JSON de permissões gravado é normalizado (só módulos conhecidos; ver implícito)', async () => {
+    const id = await criarUsuario({ username: 'vmoreira' })
+    const admin = token({ sub: id, org: 'org1', nivel: 'admin', papel: 'admin', username: 'vmoreira', origem: 'db' })
+    const r = await chamar(usuariosHandler, { method: 'POST', auth: admin, body: {
+      username: 'pers', nome: 'P', email: 'p@x.com', senha: '12345678', nivel: 'personalizado',
+      permissoes: { agendamentos: { editar: true }, inventado: { ver: true } },
+    } })
+    expect(r.body.usuario.permissoes.agendamentos).toEqual({ ver: true, incluir: false, editar: true, excluir: false })
+    expect(r.body.usuario.permissoes).not.toHaveProperty('inventado')
+    const tokenLogin = await autenticar(q, { username: 'pers', password: '12345678' }, { env: {}, agora: AGORA })
+    expect(tokenLogin.permissoes.agendamentos.editar).toBe(true)
   })
 })

@@ -981,3 +981,57 @@ CREATE TABLE IF NOT EXISTS atalhos_usuario (
   UNIQUE (user_id, acao_id)
 );
 ALTER TABLE atalhos_usuario DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- USUÁRIOS E NÍVEIS DE ACESSO
+-- Migrações: supabase/migrations/2026-10-14_usuarios.sql e 2026-10-17_niveis_acesso.sql.
+-- Nomes: usuario = username; ultimo_acesso = ultimo_login; criado_em = created_at;
+-- atualizado_em = updated_at. Senha em bcrypt (bcryptjs, custo 10). Acesso só via /api.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS organizacoes (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  nome TEXT NOT NULL,
+  ativo BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS usuarios (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  username TEXT UNIQUE NOT NULL CHECK (username = lower(username)),   -- "usuario"
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL,                                                -- único (índice), minúsculo
+  senha_hash TEXT NOT NULL,
+  nivel TEXT NOT NULL DEFAULT 'consulta'
+    CONSTRAINT usuarios_nivel_check CHECK (nivel IN ('admin', 'operador', 'consulta', 'personalizado')),
+  -- { "<modulo>": { "ver": true, "incluir": false, "editar": false, "excluir": false } } (src/lib/permissoes.js)
+  permissoes JSONB DEFAULT '{}'::jsonb,
+  perfis_permitidos JSONB DEFAULT '"todos"'::jsonb,                   -- "todos" ou [ids de perfis]
+  ativo BOOLEAN DEFAULT true,
+  trocar_senha BOOLEAN DEFAULT false,
+  ultimo_login TIMESTAMPTZ,                                           -- "ultimo_acesso"
+  tentativas_falhas INT DEFAULT 0,
+  bloqueado_ate TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),                               -- "criado_em"
+  criado_por TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()                                -- "atualizado_em"
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuarios (lower(email));
+
+-- Vínculo usuário × organização. `papel` é legado (as permissões usam usuarios.nivel).
+CREATE TABLE IF NOT EXISTS membros (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  usuario_id TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  organizacao_id TEXT NOT NULL REFERENCES organizacoes(id) ON DELETE CASCADE,
+  papel TEXT DEFAULT 'usuario' CHECK (papel IN ('admin', 'usuario', 'leitura')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (usuario_id, organizacao_id)
+);
+CREATE INDEX IF NOT EXISTS idx_membros_organizacao ON membros (organizacao_id);
+
+-- Bloqueio por tentativas do LOGIN FIXO de emergência. Remover junto com o login fixo.
+CREATE TABLE IF NOT EXISTS login_bloqueios (
+  chave TEXT PRIMARY KEY,
+  tentativas_falhas INT NOT NULL DEFAULT 0,
+  bloqueado_ate TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);

@@ -11,7 +11,7 @@ const SESSION_KEY = 'monthStartModalDismissed'
 export default function MonthStartModal() {
   const {
     schedules, accounts, settings,
-    getNextOccurrences, registerScheduleOccurrence,
+    getNextOccurrences, registerScheduleOccurrence, pode,
   } = useApp()
 
   const [dismissed, setDismissed] = useState(() => !!sessionStorage.getItem(SESSION_KEY))
@@ -42,7 +42,8 @@ export default function MonthStartModal() {
     }
   }, [pendingSchedules, selected])
 
-  if (dismissed || !isAfterStart || pendingSchedules.length === 0) return null
+  // Executar as transferências grava lançamentos: sem permissão, o modal nem abre.
+  if (dismissed || !isAfterStart || pendingSchedules.length === 0 || !pode('lancamentos', 'incluir')) return null
 
   const selectedSet = selected ?? new Set(pendingSchedules.map(s => s.id))
 

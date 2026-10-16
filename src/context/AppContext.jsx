@@ -19,7 +19,7 @@ import {
   createReserveLedgerRows,
 } from '../lib/db'
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
-import { getToken } from '../lib/api'
+import { getToken, getSessao } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia } from '../lib/camposSerie'
@@ -46,6 +46,7 @@ import { sincronizarFavorecidoDeParcela } from '../lib/bemApi'
 import { ordenarGrupos, ordemGruposSalva, reordenarNoGrupo, ordemAoTrocarDeGrupo, compararNoGrupo } from '../lib/ordemCategorias'
 import { contaCentralDoPerfil, contaCentralPara, mesmoPerfil } from '../lib/contaCentral'
 import { ordenarPerfis, moverPerfil, proximaOrdem, perfilInicial, PERFIL_SESSAO_KEY, TUDO } from '../lib/perfisOrdem'
+import { pode as podeNivel, podeVerPagina } from '../lib/permissoes'
 import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
@@ -742,6 +743,11 @@ export function AppProvider({ children }) {
     try { sessionStorage.setItem(PERFIL_SESSAO_KEY, id ?? TUDO) } catch { /* sessão sem storage */ }
     setActiveProfileIdState(id ?? null)
   }, [])
+  // Usuário logado (payload do token: nível, permissões, perfis) e o que ele pode fazer. Só para a
+  // interface — a API autoriza de novo cada gravação (src/lib/permissoes.js).
+  const [usuario] = useState(() => getSessao())
+  const pode = useCallback((modulo, acao = 'ver') => podeNivel(usuario, modulo, acao), [usuario])
+  const podeVer = useCallback((pagina) => podeVerPagina(usuario, pagina), [usuario])
   // Operação bloqueada por falta de Conta central no perfil do item (exibida por AvisoOperacao).
   const [avisoOperacao, setAvisoOperacao] = useState(null)
   const prevDataRef = useRef(null)
@@ -5460,6 +5466,7 @@ export function AppProvider({ children }) {
       profileAccounts, profileTransactions, profileReportTransactions, profileSchedules,
       addProfile, updateProfile, deleteProfile, moveProfile,
       avisoOperacao, setAvisoOperacao,
+      usuario, pode, podeVer,
       updateSettings,
       addAccount, updateAccount, deleteAccount, setMainAccount, updateAccountValue, recalcularSaldo, saveBalanceSnapshot, restoreBalanceSnapshot,
       addTransaction, updateTransaction, deleteTransaction, reverseTransaction, reverseGerencialCascadeOnly, setReconciled, bulkUpdateTransactions, ensureGerencialState,

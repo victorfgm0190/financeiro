@@ -1,5 +1,5 @@
 import { installmentKey } from './installments.js'
-import { authHeaders, clearTokenAndRedirect } from './api.js'
+import { authHeaders, clearTokenAndRedirect, gravacaoPermitida } from './api.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
@@ -24,7 +24,13 @@ async function apiGet(path) {
   return res.json()
 }
 
+// Gravação que o nível do usuário não permite: não vai à rede (a API devolveria 403). Resposta
+// neutra para os gravadores automáticos (sync, razão de reservas, integridade) seguirem sem erro —
+// a interface já esconde as ações de quem não pode gravar.
+const SEM_PERMISSAO = Object.freeze({ ok: true, skipped: true, semPermissao: true })
+
 async function apiPost(path, body) {
+  if (!gravacaoPermitida(path, 'POST', body)) return SEM_PERMISSAO
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -78,6 +84,7 @@ export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId, 
 // gravados diretamente no banco por operação e o state local é atualizado após sucesso.
 
 async function apiPut(path, body) {
+  if (!gravacaoPermitida(path, 'PUT', body)) return SEM_PERMISSAO
   const res = await fetch(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -93,6 +100,7 @@ async function apiPut(path, body) {
 }
 
 async function apiDelete(path) {
+  if (!gravacaoPermitida(path, 'DELETE')) return SEM_PERMISSAO
   const res = await fetch(path, { method: 'DELETE', headers: { ...authHeaders() } })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {

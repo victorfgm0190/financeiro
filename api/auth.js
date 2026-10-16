@@ -2,8 +2,9 @@ import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import { query, parseBody } from './_db.js'
 import {
-  normUser, conferirSenha, compararFicticio, ehTabelaInexistente, estaBloqueado, estadoAposFalha,
+  normUser, conferirSenha, compararFicticio, ehTabelaInexistente, estaBloqueado, estadoAposFalha, nivelDoPapel,
 } from './_usuarios.js'
+import { normalizarPermissoes, normalizarPerfis } from '../src/lib/permissoes.js'
 
 // Login por USUÁRIO ou E-MAIL. Dois modos convivendo nesta fase de transição, na ordem:
 //   a) procura o usuário (username ou e-mail, sem maiúsculas/espaços) na tabela usuarios;
@@ -17,7 +18,8 @@ import {
 //      fixo se aplica); o login fixo tem bloqueio próprio (login_bloqueios). Sucesso pelo login fixo
 //      não mexe nas tentativas do cadastro.
 //   e) a resposta de erro é sempre a mesma: não revela se o usuário existe, está inativo ou bloqueado.
-// Sucesso → JWT { sub, org, papel, username, nome, origem } válido por 12h.
+// Sucesso → JWT { sub, org, nivel, papel, permissoes, perfis, trocarSenha, username, nome, origem }
+// válido por 12h.
 
 export const ERRO_LOGIN = 'Usuário ou senha inválidos'
 export const JWT_EXPIRA = '12h'
@@ -25,6 +27,7 @@ export const JWT_EXPIRA = '12h'
 // Username nunca tem "@" e e-mail sempre tem: no máximo um usuário casa com o login.
 const SQL_USUARIO = `
   SELECT u.id, u.username, u.nome, u.senha_hash, u.ativo, u.tentativas_falhas, u.bloqueado_ate,
+         u.nivel, u.permissoes, u.perfis_permitidos, u.trocar_senha,
          m.organizacao_id, m.papel
     FROM usuarios u
     LEFT JOIN LATERAL (
@@ -105,13 +108,31 @@ async function payloadLoginFixo(q, login, cadastro, agora) {
   if (cadastro) {
     // Mesma pessoa do cadastro: histórico atribuído ao id dela. Papel forçado admin (recuperação).
     return {
-      sub: cadastro.id, org: cadastro.organizacao_id ?? await organizacaoPadrao(q), papel: 'admin',
+      sub: cadastro.id, org: cadastro.organizacao_id ?? await organizacaoPadrao(q), papel: 'admin', nivel: 'admin',
+      permissoes: {}, perfis: 'todos', trocarSenha: false,
       username: cadastro.username, nome: cadastro.nome || cadastro.username, origem: 'env',
     }
   }
-  return { sub: `env:${login}`, org: await organizacaoPadrao(q), papel: 'admin', username: login, nome: login, origem: 'env' }
+  return {
+    sub: `env:${login}`, org: await organizacaoPadrao(q), papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos',
+    trocarSenha: false, username: login, nome: login, origem: 'env',
+  }
 }
 // ─── fim do login fixo ─────────────────────────────────────────────────────────────────────────
+
+// Payload do JWT de um usuário do cadastro: nível, permissões (só valem no personalizado) e perfis
+// permitidos viajam no token — a API autoriza sem ir ao banco. `papel` = nível, para tokens/código
+// antigos que ainda olham papel === 'admin'.
+export function payloadDoCadastro(u) {
+  const nivel = u.nivel || nivelDoPapel(u.papel) || 'consulta'
+  return {
+    sub: u.id, org: u.organizacao_id, papel: nivel, nivel,
+    permissoes: nivel === 'personalizado' ? normalizarPermissoes(u.permissoes) : {},
+    perfis: normalizarPerfis(u.perfis_permitidos),
+    trocarSenha: !!u.trocar_senha,
+    username: u.username, nome: u.nome || u.username, origem: 'db',
+  }
+}
 
 // Núcleo do login (testável com qualquer `q(sql, params) → rows`). Devolve o payload do JWT ou null.
 // O campo do formulário continua se chamando `username`, mas aceita usuário ou e-mail.
@@ -135,10 +156,7 @@ export async function autenticar(q, { username, password } = {}, { env = process
   const senhaCadastroOk = utilizavel ? await conferirSenha(senha, cadastro.senha_hash) : await compararFicticio(senha)
   if (senhaCadastroOk) {
     await q('UPDATE usuarios SET tentativas_falhas = 0, bloqueado_ate = NULL, ultimo_login = $2 WHERE id = $1', [cadastro.id, agora])
-    return {
-      sub: cadastro.id, org: cadastro.organizacao_id, papel: cadastro.papel,
-      username: cadastro.username, nome: cadastro.nome || cadastro.username, origem: 'db',
-    }
+    return payloadDoCadastro(cadastro)
   }
 
   // (c) login fixo — REMOVER LOGIN FIXO ANTES DA COMERCIALIZAÇÃO

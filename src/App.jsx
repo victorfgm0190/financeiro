@@ -36,11 +36,13 @@ import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
-import { getToken } from './lib/api'
+import TrocarSenha from './pages/TrocarSenha'
+import { getToken, getSessao } from './lib/api'
 import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
 import MobileShell from './mobile/MobileShell'
 import { mobileModules } from './mobile/modules'
 import { moduloAposNavegar, moduloMobile } from './mobile/navegacao'
+import { podeVerModuloMobile } from './lib/permissoes'
 
 function AppContent() {
   // #config/<aba>/<seção> na URL abre Configurações direto — vale no reload e em links internos.
@@ -96,7 +98,7 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, usuario, podeVer } = useApp()
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)
@@ -157,6 +159,11 @@ function AppContent() {
 
   const financialPeriod = getFinancialPeriod()
 
+  // Páginas e módulos sem permissão de "ver" somem; página proibida aberta (hash, atalho, link de
+  // outro painel) cai no Painel.
+  const paginaVisivel = podeVer(activePage) ? activePage : 'dashboard'
+  const modulosVisiveis = useMemo(() => mobileModules.filter(m => podeVerModuloMobile(usuario, m)), [usuario])
+
   const panels = {
     dashboard: <DashboardPanel setActivePage={navigate} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
     accounts: <AccountsPanel setActivePage={navigate} />,
@@ -205,10 +212,10 @@ function AppContent() {
     return (
       <>
         <MobileShell
-          modules={mobileModules}
+          modules={modulosVisiveis}
           panels={panels}
-          // Ponto único de proteção: módulo só do computador ou inválido → Início.
-          ativo={moduloMobile(mobileModules, mobileAtivo)}
+          // Ponto único de proteção: módulo só do computador, inválido ou sem permissão → Início.
+          ativo={moduloMobile(modulosVisiveis, mobileAtivo)}
           irPara={irParaModulo}
           saldosPrincipais={saldosPrincipais}
           onToast={setGenericToast}
@@ -221,12 +228,12 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-page">
-      <Sidebar active={activePage} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+      <Sidebar active={paginaVisivel} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header page={activePage} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
+        <Header page={paginaVisivel} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
           <ScrollScopeContext.Provider value={scrollCtx}>
-            {panels[activePage] ?? panels.dashboard}
+            {panels[paginaVisivel] ?? panels.dashboard}
           </ScrollScopeContext.Provider>
         </main>
       </div>
@@ -242,6 +249,8 @@ function PrivateRoute({ children }) {
   // Lido uma vez ao montar: o login salva o token e recarrega a página, então a sessão vem daqui.
   const [token] = useState(() => getToken())
   if (!token) return <Login />
+  // "Trocar senha no próximo login": o app só abre depois da troca.
+  if (getSessao()?.trocarSenha) return <TrocarSenha />
   return children
 }
 

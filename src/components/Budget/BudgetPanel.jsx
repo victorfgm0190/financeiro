@@ -7,7 +7,10 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 
 export default function BudgetPanel() {
-  const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod } = useApp()
+  const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
+  const podeIncluir = pode('orcamento', 'incluir')
+  const podeEditar = pode('orcamento', 'editar')
+  const podeExcluir = pode('orcamento', 'excluir')
   const [showForm, setShowForm] = useState(false)
   const [editBudget, setEditBudget] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -78,16 +81,18 @@ export default function BudgetPanel() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-texto-2">Orçamentos por Categoria</h2>
-        <button className="btn-primary flex items-center gap-2" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
-          <Plus size={14} /> Novo Orçamento
-        </button>
+        {podeIncluir && (
+          <button className="btn-primary flex items-center gap-2" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
+            <Plus size={14} /> Novo Orçamento
+          </button>
+        )}
       </div>
 
       {budgets.length === 0 ? (
         <div className="card text-center py-12">
           <TrendingUp size={32} className="text-texto-3 mx-auto mb-3" />
           <p className="text-texto-3">Nenhum orçamento cadastrado</p>
-          <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Criar orçamento</button>
+          {podeIncluir && <button className="btn-primary mt-4" onClick={() => setShowForm(true)}>Criar orçamento</button>}
         </div>
       ) : (
         <div className="space-y-3">
@@ -119,12 +124,16 @@ export default function BudgetPanel() {
                     <span className={`text-sm font-bold ${overBudget ? 'text-perigo' : nearLimit ? 'text-aviso' : 'text-texto-2'}`}>
                       {pct.toFixed(0)}%
                     </span>
-                    <button onClick={() => openEdit(budget)} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
-                      <Edit2 size={12} />
-                    </button>
-                    <button onClick={() => setConfirmDelete(budget)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
-                      <Trash2 size={12} />
-                    </button>
+                    {podeEditar && (
+                      <button onClick={() => openEdit(budget)} className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors">
+                        <Edit2 size={12} />
+                      </button>
+                    )}
+                    {podeExcluir && (
+                      <button onClick={() => setConfirmDelete(budget)} className="p-1.5 text-texto-3 hover:text-perigo hover:bg-perigo-bg rounded transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="h-2 bg-surface-2 rounded-full overflow-hidden">

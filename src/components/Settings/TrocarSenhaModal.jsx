@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { trocarMinhaSenha } from '../../lib/usuariosApi'
+import { AUTH_TOKEN_KEY } from '../../lib/api'
 
 const SENHA_MIN = 8
 
@@ -19,7 +20,9 @@ export default function TrocarSenhaModal({ open, onClose, onTrocada }) {
     if (f.nova !== f.repetir) return setErro('A confirmação não confere com a nova senha.')
     setSalvando(true)
     try {
-      await trocarMinhaSenha(f.atual, f.nova)
+      const r = await trocarMinhaSenha(f.atual, f.nova)
+      // Token novo da API (mesmas permissões, sem a marca de troca obrigatória).
+      if (r?.token) { try { localStorage.setItem(AUTH_TOKEN_KEY, r.token) } catch { /* ignore */ } }
       fechar()
       onTrocada?.()
     } catch (err) {

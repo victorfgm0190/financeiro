@@ -4195,8 +4195,18 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 // ─── Painel principal ─────────────────────────────────────────────────────────
 
 export default function ImportPanel() {
-  const { profileAccounts: accounts, accountGroups, profileTransactions: transactions } = useApp()
+  const { profileAccounts: accounts, accountGroups, profileTransactions: transactions, pode } = useApp()
   const [tab, setTab] = useState('corrente')
+
+  // Importar/conciliar grava lançamentos: sem permissão de incluir, só o aviso.
+  if (!pode('importar', 'incluir')) {
+    return (
+      <div className="card text-center py-12">
+        <p className="text-sm text-texto-2">Importar Fatura</p>
+        <p className="text-xs text-texto-3 mt-1">Somente leitura — seu nível de acesso não permite importar nem conciliar.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

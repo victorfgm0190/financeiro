@@ -5,6 +5,7 @@ import { today } from './utils'
 import Modal from './Modal'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import { txToScheduleInitial } from '../../lib/herancaCampos'
+import { useApp } from '../../context/AppContext'
 
 // Lançamento → `initial` de um Agendamento NOVO: txToScheduleInitial (lib/herancaCampos.js) —
 // data/frequência ficam nos defaults do form; o tipo de documento é mantido.
@@ -24,6 +25,9 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
   const popRef = useRef(null)
 
   const open = step !== null
+  // Duplicar cria lançamento ou agendamento: sem permissão de incluir em nenhum, o botão some.
+  const { pode } = useApp()
+  const podeDuplicar = pode('lancamentos', 'incluir') || pode('agendamentos', 'incluir')
 
   useEffect(() => {
     if (!open) return
@@ -69,6 +73,7 @@ export default function DuplicateButton({ onConfirm, sourceTx, iconSize = 14, cl
   // ScheduleForm sobem pela ÁRVORE REACT — inclusive através de createPortal — e
   // disparariam o onEdit da linha, abrindo "Editar Lançamento" por baixo. O span
   // display:contents (não afeta o layout) intercepta e interrompe essa propagação.
+  if (!podeDuplicar) return null
   return (
     <span className="contents" onClick={(e) => e.stopPropagation()}>
       <button

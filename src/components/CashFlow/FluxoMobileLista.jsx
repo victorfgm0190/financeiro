@@ -82,27 +82,33 @@ export default function FluxoMobileLista({
           Incluir no cálculo
         </label>
         <div className="flex flex-wrap gap-2">
-          {!r._provisorio && (
+          {!r._provisorio && onMudarData && (
             <button type="button" onClick={() => onMudarData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
               <CalendarClock size={14} /> Mudar data
             </button>
           )}
-          {r._dataOriginal && (
+          {r._dataOriginal && onDesfazerData && (
             <button type="button" onClick={() => onDesfazerData(r)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-ambar">
               <RotateCcw size={14} /> Desfazer data
             </button>
           )}
           {r._provisorio && (
             <>
+              {onEfetivar && (
               <button type="button" onClick={() => onEfetivar(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs border-primary/40 text-primary-fg">
                 <CheckCircle2 size={14} /> Efetivar
               </button>
+              )}
+              {onEditarProvisorio && (
               <button type="button" onClick={() => onEditarProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs">
                 <Pencil size={14} /> Editar
               </button>
+              )}
+              {onExcluirProvisorio && (
               <button type="button" onClick={() => onExcluirProvisorio(r._provisorio)} className="btn-secondary min-h-[44px] flex items-center gap-1.5 text-xs text-perigo">
                 <Trash2 size={14} /> Excluir
               </button>
+              )}
             </>
           )}
         </div>

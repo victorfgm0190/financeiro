@@ -36,7 +36,8 @@ function saldoFuturoRealDe(account, getAccountSaldos, creditUsage) {
 // quando um investimento é acompanhado pelo total do grupo. A receita, porém, vai SEMPRE na
 // conta clicada (é ela que tem a categoria de rendimento configurada).
 export default function RendimentoModal({ account, onClose }) {
-  const { accounts, addTransaction, getAccountSaldos, creditUsage } = useApp()
+  const { accounts, addTransaction, getAccountSaldos, creditUsage, pode } = useApp()
+  const podeSalvar = pode('contas', 'editar')
 
   const isGrupo = account.rendimentoModo === 'grupo' && !!account.accountGroupId
   // Contas do escopo: no modo grupo, todas as do mesmo grupo (inclusive a clicada); senão só ela.
@@ -58,7 +59,7 @@ export default function RendimentoModal({ account, onClose }) {
   const valido = rendimento != null && rendimento > 0
 
   const handleConfirm = () => {
-    if (!valido || saving) return
+    if (!valido || saving || !podeSalvar) return
     setSaving(true)
     addTransaction({
       type: 'income',
@@ -133,6 +134,7 @@ export default function RendimentoModal({ account, onClose }) {
 
         <div className="flex gap-3 pt-1">
           <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+          {podeSalvar && (
           <button
             type="button"
             className="btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -141,7 +143,9 @@ export default function RendimentoModal({ account, onClose }) {
           >
             Confirmar
           </button>
+          )}
         </div>
+        {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </Modal>
   )

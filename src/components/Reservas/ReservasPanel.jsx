@@ -84,6 +84,11 @@ function MovValue({ value, tipo, onClick }) {
 // Toggle inline discreto "Despesa" por função: define se as movimentações da função
 // contam como despesa nos relatórios/dashboard. Clique alterna e salva via onToggle.
 function DespesaToggle({ on, onToggle }) {
+  if (!onToggle) {
+    return on
+      ? <span className="shrink-0 text-[9px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded bg-despesa/20 text-despesa" title="Conta como despesa no Dashboard/Relatórios">Despesa</span>
+      : null
+  }
   return (
     <button
       type="button"
@@ -104,6 +109,8 @@ function DespesaToggle({ on, onToggle }) {
 
 function FunctionForm({ initial, accounts, categories = [], transactions = [], schedules = [], onSubmit, onClose }) {
   const isMobile = useIsMobile()
+  const { pode } = useApp()
+  const podeSalvar = pode('reservas', initial ? 'editar' : 'incluir')
   const [form, setForm] = useState({
     name: initial?.name || '',
     accountId: initial?.accountId || '',
@@ -216,7 +223,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
   }, [transactions, schedules, initial])
 
   return (
-    <form onSubmit={e => { e.preventDefault(); onSubmit({
+    <form onSubmit={e => { e.preventDefault(); if (!podeSalvar) return; onSubmit({
       ...form,
       accountId: form.accountId || null,
       saldoInicial: Number(form.saldoInicial) || 0,
@@ -301,8 +308,9 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       </div>
       <div className="flex gap-3 pt-2">
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
-        <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>
+        {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar'}</button>}
       </div>
+      {!podeSalvar && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
     </form>
   )
 }
@@ -488,6 +496,11 @@ function ObsIndicator({ text }) {
 
 // ── Tab 1: Resumo ───────────────────────────────────────────────────────────
 function ResumoTab({ functions, accounts, categories = [], accountBalances, adjustmentsByFn = {}, activePeriodByFn = {}, saldosAtualizados, movFuturosByFn = {}, computeSaldo, todayStr, autoBoundsOf, lastFechamento, canUndo, onAdd, onEdit, onDelete, onUpdateFunction, onSetAccountBalance, onAddPeriod, onAddAdjustment, onUpdateAdjustment, onDeleteAdjustment, onVirar, onUndo, onReorder }) {
+  // Nível de acesso (src/lib/permissoes.js): funções, saldos iniciais, ajustes e viradas = reservas.
+  const { pode } = useApp()
+  const podeIncluir = pode('reservas', 'incluir')
+  const podeEditar = pode('reservas', 'editar')
+  const podeExcluir = pode('reservas', 'excluir')
   const byOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || a.name.localeCompare(b.name)
   // Nome da categoria vinculada à função (quando categoryId preenchido).
   const catNameOf = (id) => categories.find(c => c.id === id)?.name
@@ -571,17 +584,21 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               <FileSpreadsheet size={12} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}
-          {canUndo && (
+          {canUndo && podeEditar && (
             <button onClick={onUndo} className="btn-secondary flex items-center gap-1.5 text-xs py-1.5">
               <RotateCcw size={12} /> <span className="hidden sm:inline">Desfazer Virada</span><span className="sm:hidden">Desfazer</span>
             </button>
           )}
+          {podeEditar && (
           <button onClick={onVirar} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
             <CheckCircle size={12} /> <span className="hidden sm:inline">Virar Saldo</span><span className="sm:hidden">Virar</span>
           </button>
+          )}
+          {podeIncluir && (
           <button onClick={onAdd} className="btn-primary flex items-center gap-1.5 text-xs py-1.5">
             <Plus size={12} /> <span className="hidden sm:inline">Nova Função</span><span className="sm:hidden">Nova</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -589,7 +606,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
         <div className="card text-center py-12">
           <Layers size={32} className="text-texto-3 mx-auto mb-3" />
           <p className="text-texto-3">Nenhuma função de reserva cadastrada</p>
-          <button className="btn-primary mt-4" onClick={onAdd}>Cadastrar Função</button>
+          {podeIncluir && <button className="btn-primary mt-4" onClick={onAdd}>Cadastrar Função</button>}
         </div>
       )}
 
@@ -650,7 +667,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                 return (
                   <div
                     key={f.id}
-                    draggable
+                    draggable={podeEditar}
                     onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragId(f.id) }}
                     onDragOver={e => e.preventDefault()}
                     onDrop={e => { e.preventDefault(); handleDropOn(f) }}
@@ -660,7 +677,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <span className="text-sm font-medium text-texto-1 inline-flex items-center gap-1.5 min-w-0">
                         <GripVertical size={12} className="text-texto-3 cursor-grab shrink-0" />
                         <span className="truncate">{f.name}</span>
-                        <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
+                        <DespesaToggle on={!!f.exibirComoDespesa} onToggle={podeEditar ? () => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa }) : null} />
                         {/* Categoria só aparece quando difere do nome da função (evita "IPVA … IPVA" duplicado) */}
                         {catNameOf(f.categoryId) && catNameOf(f.categoryId) !== f.name && <span className="text-xs text-texto-2 truncate">{catNameOf(f.categoryId)}</span>}
                       </span>
@@ -689,7 +706,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-1.5 text-xs">
                         <span className="text-texto-3 shrink-0">Saldo inicial:</span>
-                        <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} />
+                        <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={podeEditar ? onAddPeriod : null} />
                       </div>
                       <div className="flex items-center gap-4 text-xs">
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -711,16 +728,20 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           >
                             {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
                           </button>
-                          <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={12} /></button>
+                          {podeEditar && <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={12} /></button>}
                           {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
+                          {podeEditar && (
                           <button onClick={() => onEdit(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                             <Edit2 size={12} />
                           </button>
+                          )}
+                          {podeExcluir && (
                           <button onClick={() => onDelete(f)} className="p-1.5 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                             <Trash2 size={12} />
                           </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -786,7 +807,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       return (
                         <tr
                           key={f.id}
-                          draggable
+                          draggable={podeEditar}
                           onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragId(f.id) }}
                           onDragOver={e => e.preventDefault()}
                           onDrop={e => { e.preventDefault(); handleDropOn(f) }}
@@ -796,12 +817,12 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                             <span className="inline-flex items-center gap-1.5">
                               <GripVertical size={11} className="text-texto-3 cursor-grab shrink-0" />
                               {f.name}
-                              <DespesaToggle on={!!f.exibirComoDespesa} onToggle={() => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa })} />
+                              <DespesaToggle on={!!f.exibirComoDespesa} onToggle={podeEditar ? () => onUpdateFunction(f.id, { exibirComoDespesa: !f.exibirComoDespesa }) : null} />
                               {catNameOf(f.categoryId) && <span className="text-xs text-texto-2">{catNameOf(f.categoryId)}</span>}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-right text-xs text-texto-2">
-                            <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={onAddPeriod} align="right" />
+                            <SaldoInicialCell f={f} todayStr={todayStr} activePeriod={activePeriodByFn[f.id]} onAddPeriod={podeEditar ? onAddPeriod : null} align="right" />
                           </td>
                           <td className="px-4 py-2 text-right">
                             <MovValue value={f.entradas} tipo="entradas" onClick={() => openOrigem(f, 'entradas')} />
@@ -818,7 +839,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                               >
                                 {f.ajuste !== 0 ? (f.ajuste > 0 ? '+' : '') + fmt(f.ajuste) : <span className="text-texto-3">0,00</span>}
                               </button>
-                              <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={11} /></button>
+                              {podeEditar && <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={11} /></button>}
                               {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                             </span>
                           </td>
@@ -842,12 +863,16 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center justify-end gap-0.5">
+                              {podeEditar && (
                               <button onClick={() => onEdit(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-2 transition-colors">
                                 <Edit2 size={11} />
                               </button>
+                              )}
+                              {podeExcluir && (
                               <button onClick={() => onDelete(f)} className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo transition-colors">
                                 <Trash2 size={11} />
                               </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -898,9 +923,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
           adjustments={adjustmentsByFn[adjFn.id] || []}
           activePeriod={activePeriodByFn[adjFn.id]}
           todayStr={todayStr}
-          onAdd={onAddAdjustment}
-          onUpdate={onUpdateAdjustment}
-          onDelete={onDeleteAdjustment}
+          onAdd={podeEditar ? onAddAdjustment : null}
+          onUpdate={podeEditar ? onUpdateAdjustment : null}
+          onDelete={podeEditar ? onDeleteAdjustment : null}
           onClose={() => setAdjFn(null)}
         />
       )}
@@ -1199,6 +1224,15 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
     } finally { setSaving(false) }
   }
 
+  if (!onAddPeriod) {
+    return (
+      <span className={`inline-flex items-center text-xs font-semibold text-texto-2 ${align === 'right' ? 'justify-end w-full' : ''}`}
+        title={activePeriod ? `Período desde ${fmtDate(activePeriod.data_inicio)}` : undefined}>
+        {fmt(f.saldoInicial ?? 0)}
+      </span>
+    )
+  }
+
   return (
     <span ref={ref} className={`relative inline-flex items-center gap-1 group ${align === 'right' ? 'justify-end w-full' : ''}`}>
       <button
@@ -1335,8 +1369,8 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
                           </>
                         ) : (
                           <>
-                            <button onClick={() => startEdit(a)} title="Editar" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-1"><Edit2 size={12} /></button>
-                            <button onClick={() => setConfirmDelId(a.id)} title="Excluir" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo"><Trash2 size={12} /></button>
+                            {onUpdate && <button onClick={() => startEdit(a)} title="Editar" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-texto-1"><Edit2 size={12} /></button>}
+                            {onDelete && <button onClick={() => setConfirmDelId(a.id)} title="Excluir" className="p-1 rounded hover:bg-surface-hover text-texto-3 hover:text-perigo"><Trash2 size={12} /></button>}
                           </>
                         )}
                       </div>
@@ -1355,7 +1389,9 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
           </table>
         </div>
 
-        {/* Novo ajuste */}
+        {/* Novo ajuste (só com permissão de gravar em Reservas) */}
+        {!onAdd && <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
+        {onAdd && (
         <div className="rounded-lg border border-borda-forte/60 p-3 space-y-2.5">
           <p className="text-xs font-semibold text-texto-2">+ Novo Ajuste</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1376,6 +1412,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
             <button type="button" onClick={handleAdd} disabled={busy || !newValor} className="btn-primary text-xs py-1.5 px-4">Salvar</button>
           </div>
         </div>
+        )}
 
         <p className="text-xs text-texto-3 leading-relaxed">
           Cada ajuste entra no saldo (Saldo Inicial + Entradas − Saídas + Ajuste). Aceita valores negativos

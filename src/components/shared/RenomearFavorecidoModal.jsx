@@ -17,7 +17,7 @@ import {
 export default function RenomearFavorecidoModal({
   open, onClose, nomes = null, nomeBase = null, nomeInicial = '', aliasInicial = true, titulo, onAplicado,
 }) {
-  const { data, renomearFavorecidos } = useApp()
+  const { data, renomearFavorecidos, pode } = useApp()
   const [para, setPara] = useState(nomeInicial || (nomes?.[0] ?? nomeBase ?? ''))
   const [criterio, setCriterio] = useState('exato')
   const [alias, setAlias] = useState(aliasInicial)
@@ -148,9 +148,11 @@ export default function RenomearFavorecidoModal({
 
         <div className="flex gap-3 justify-end">
           <button type="button" className="btn-secondary min-h-[44px]" onClick={onClose}>Cancelar</button>
-          <button type="button" className="btn-primary min-h-[44px]" disabled={!podeAplicar} onClick={aplicar}>
-            Aplicar{totalSel > 0 ? ` (${totalSel})` : ''}
-          </button>
+          {pode('lancamentos', 'editar') ? (
+            <button type="button" className="btn-primary min-h-[44px]" disabled={!podeAplicar} onClick={aplicar}>
+              Aplicar{totalSel > 0 ? ` (${totalSel})` : ''}
+            </button>
+          ) : <p className="text-xs text-texto-3">Somente leitura — seu nível de acesso não permite gravar.</p>}
         </div>
       </div>
     </Modal>

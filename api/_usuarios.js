@@ -4,9 +4,14 @@ import bcrypt from 'bcryptjs'
 // login (api/auth.js), a API de usuários (api/usuarios.js) e o seed (scripts/seed-admin.js).
 // As tabelas vêm da migração supabase/migrations/2026-10-14_usuarios.sql (rodada à mão no Neon).
 
-export const BCRYPT_CUSTO = 12
+export const BCRYPT_CUSTO = 10
 export const SENHA_MIN = 8
 export const PAPEIS = ['admin', 'usuario', 'leitura']
+// Níveis de acesso (src/lib/permissoes.js). membros.papel é legado: guardado só pelo vínculo.
+export const NIVEIS_VALIDOS = ['admin', 'operador', 'consulta', 'personalizado']
+export const papelLegado = (nivel) => (nivel === 'admin' ? 'admin' : nivel === 'consulta' ? 'leitura' : 'usuario')
+// Token antigo (sem nivel) → nível pelo papel/role de então.
+export const nivelDoPapel = (papel) => (papel === 'admin' ? 'admin' : papel === 'leitura' ? 'consulta' : papel ? 'operador' : null)
 export const MAX_TENTATIVAS = 5
 export const BLOQUEIO_MS = 15 * 60 * 1000
 export const USERNAME_RE = /^[a-z0-9._-]{3,40}$/

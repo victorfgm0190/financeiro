@@ -55,7 +55,14 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao } = useApp()
+  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao, pode } = useApp()
+  // Nível de acesso (src/lib/permissoes.js): provisórios e datas provisórias gravadas = fluxo;
+  // "Aplicar data" altera o agendamento; "Efetivar" cria um agendamento.
+  const podeIncluirF = pode('fluxo', 'incluir')
+  const podeEditarF = pode('fluxo', 'editar')
+  const podeExcluirF = pode('fluxo', 'excluir')
+  const podeAplicarData = pode('agendamentos', 'editar')
+  const podeEfetivar = podeEditarF && pode('agendamentos', 'incluir')
 
   // Última seleção salva (lida uma vez na montagem); cai no padrão atual quando ausente.
   const [selecaoSalva] = useState(loadSelecaoSalva)
@@ -278,7 +285,7 @@ export default function FluxoCaixaPorConta() {
 
   // Data editável: tudo o que ainda não aconteceu (A pagar / A receber / Projetado). Registrada
   // é fato; Provisório tem o próprio formulário (lápis).
-  const dataEditavel = (r) => !r.real && !r._provisorio
+  const dataEditavel = (r) => !r.real && !r._provisorio && podeEditarF
   const confirmarData = async () => {
     if (cancelouDataRef.current) { cancelouDataRef.current = false; return }
     if (!editandoData) return
@@ -456,6 +463,7 @@ export default function FluxoCaixaPorConta() {
               </button>
             ))}
           </div>
+          {podeIncluirF && (
           <button
             type="button"
             onClick={() => setProvModal({ initial: null })}
@@ -464,6 +472,7 @@ export default function FluxoCaixaPorConta() {
           >
             <Plus size={13} /> Provisório
           </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -567,15 +576,19 @@ export default function FluxoCaixaPorConta() {
           {!noSelection && qtdDatas > 0 && (
             <span className="inline-flex items-center gap-2 flex-wrap text-xs text-texto-2">
               {qtdDatas} data{qtdDatas !== 1 ? 's' : ''} alterada{qtdDatas !== 1 ? 's' : ''} provisoriamente
+              {podeEditarF && (
               <button type="button" onClick={restaurarTodas} className="underline hover:text-texto-1">
                 restaurar todas
               </button>
+              )}
               {dpForaDoPeriodo.map(d => (
                 <span key={d.id} className="inline-flex items-center gap-1 text-texto-2 underline decoration-dashed decoration-borda-campo underline-offset-2" title={`Data original: ${fmtDate(d.data_original)} · Provisória desde ${fmtDdMm(d.created_at)}`}>
                   · {scheduleById.get(d.schedule_id)?.description || 'Agendamento'} → {fmtDate(d.data_provisoria)} (fora do período)
+                  {podeEditarF && (
                   <button type="button" onClick={() => restaurarPersistida(d.id)} className="hover:text-texto-1" title="Voltar à data original">
                     <RotateCcw size={11} />
                   </button>
+                  )}
                 </span>
               ))}
               {foraDoPeriodo.map(r => (
@@ -736,7 +749,7 @@ export default function FluxoCaixaPorConta() {
                           >
                             {fmtDate(r.date)}
                           </button>
-                          {r._dataOriginal && (
+                          {r._dataOriginal && (!r._dpId || podeEditarF) && (
                             <button
                               type="button"
                               onClick={() => restaurarLinha(r)}
@@ -760,7 +773,7 @@ export default function FluxoCaixaPorConta() {
                       <span className={`text-xs px-1.5 py-0.5 rounded ${statusBadge(r.status)}`}>{r.status}</span>
                     </td>
                     <td className="px-2 py-2.5">
-                      {r._dataOriginal && r._scheduleId && (
+                      {r._dataOriginal && r._scheduleId && podeAplicarData && (
                         <button
                           type="button"
                           onClick={() => abrirAplicar(r)}
@@ -772,6 +785,7 @@ export default function FluxoCaixaPorConta() {
                       )}
                       {r._provisorio && (
                         <div className="flex items-center gap-1">
+                          {podeEditarF && (
                           <button
                             type="button"
                             onClick={() => setProvModal({ initial: r._provisorio })}
@@ -780,6 +794,8 @@ export default function FluxoCaixaPorConta() {
                           >
                             <Pencil size={13} />
                           </button>
+                          )}
+                          {podeEfetivar && (
                           <button
                             type="button"
                             onClick={() => setProvConfirm({ acao: 'efetivar', prov: r._provisorio })}
@@ -788,6 +804,8 @@ export default function FluxoCaixaPorConta() {
                           >
                             <CheckCircle2 size={13} />
                           </button>
+                          )}
+                          {podeExcluirF && (
                           <button
                             type="button"
                             onClick={() => setProvConfirm({ acao: 'excluir', prov: r._provisorio })}
@@ -796,6 +814,7 @@ export default function FluxoCaixaPorConta() {
                           >
                             <Trash2 size={13} />
                           </button>
+                          )}
                         </div>
                       )}
                     </td>
