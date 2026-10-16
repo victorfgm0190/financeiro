@@ -12,11 +12,12 @@ import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
-import { occEfetiva, escalarRateios, proximaEfetiva } from '../../lib/fluxoCaixa'
+import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
-import { scheduleDisplayDueDate, filtrarAgendamentos } from '../../lib/agendamentosFiltro'
+import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import FilterBar from './FilterBar'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import ScheduleForm from './ScheduleForm'
@@ -59,17 +60,6 @@ const FREQ_LABELS = {
   semiannual: 'Semestral',
   annual: 'Anual',
 }
-
-const VIEW_FILTERS = [
-  { id: 'future',    label: 'Todos os futuros' },
-  { id: 'next30',    label: 'Próximos 30 dias' },
-  { id: 'month',     label: 'Este mês' },
-  { id: 'all',       label: 'Todos' },
-  { id: 'provisoes', label: 'Provisões' },
-  { id: 'history',   label: 'Pagos' },
-  { id: 'ra',        label: 'Resgates Anuais' },
-]
-
 
 function GerBadge({ grupoId, gerencialGroups }) {
   if (!grupoId) {
@@ -2450,13 +2440,21 @@ export default function SchedulePanel() {
   const [showExecutarGer, setShowExecutarGer] = useState(false)
 
   const [activeTab, setActiveTab] = useState('conta')
-  const [viewFilter, setViewFilter] = useState('future')
-  // Filtro "Contas envolvidas" (só no sub-filtro Resgates Anuais): ids das contas selecionadas.
+  // Status e período POR ABA (FilterBar), lembrados no localStorage (lib/agendamentosFiltro).
+  const [filtrosPorAba, setFiltrosPorAba] = useState(
+    () => Object.fromEntries(Object.keys(STATUS_POR_ABA).map(aba => [aba, lerFiltrosAba(aba)]))
+  )
+  const statusAtual = filtrosPorAba[activeTab].status
+  const periodoAtual = filtrosPorAba[activeTab].periodos[statusAtual]
+  const atualizarFiltrosAba = (fn) => setFiltrosPorAba(prev => {
+    const novo = fn(prev[activeTab])
+    salvarFiltrosAba(activeTab, novo)
+    return { ...prev, [activeTab]: novo }
+  })
+  // Painel de filtros avançados: recolhido por padrão.
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
+  // Filtro "Contas envolvidas" (só no status Resgates anuais): ids das contas selecionadas.
   const [selContas, setSelContas] = useState(() => new Set())
-  const escolherViewFilter = (id) => {
-    setViewFilter(id)
-    if (id !== 'ra') setSelContas(new Set())
-  }
   const toggleConta = (id) => setSelContas(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id)
@@ -2494,6 +2492,32 @@ export default function SchedulePanel() {
   const [selTipos, setSelTipos] = useState(() => new Set())
   const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0 || selTipos.size > 0
   const clearFilters = () => { setFltFrom(''); setFltTo(''); setFltDesc(''); setFltPayee(''); setFltCat(''); setFltMin(''); setFltMax(''); setSelValores(new Set()); setSelTipos(new Set()) }
+  const filtrosAvancadosAtivos = contarFiltrosAvancados({ desc: fltDesc, payee: fltPayee, categoryId: fltCat, tipos: selTipos, min: fltMin, max: fltMax, valores: selValores })
+
+  const escolherStatus = (id) => {
+    if (id !== 'resgates') setSelContas(new Set())
+    atualizarFiltrosAba(f => ({ ...f, status: id }))
+    // Datas De/Até só valem no Personalizado do status escolhido.
+    if (filtrosPorAba[activeTab].periodos[id] !== 'custom') { setFltFrom(''); setFltTo('') }
+  }
+  const escolherPeriodo = (p) => {
+    atualizarFiltrosAba(f => ({ ...f, periodos: { ...f.periodos, [f.status]: p } }))
+    if (p === 'custom') setFiltrosAbertos(true)
+    else { setFltFrom(''); setFltTo('') }
+  }
+  // Escolher datas no painel = Período "Personalizado".
+  const mudarData = (setter) => (e) => {
+    setter(e.target.value)
+    if (periodoAtual !== 'custom') atualizarFiltrosAba(f => ({ ...f, periodos: { ...f.periodos, [f.status]: 'custom' } }))
+  }
+  const trocarAba = (aba) => {
+    setActiveTab(aba)
+    setSelContas(new Set())
+    if (filtrosPorAba[aba].periodos[filtrosPorAba[aba].status] !== 'custom') { setFltFrom(''); setFltTo('') }
+  }
+  // Datas De/Até efetivas: só no Personalizado.
+  const dataDe = periodoAtual === 'custom' ? fltFrom : ''
+  const dataAte = periodoAtual === 'custom' ? fltTo : ''
 
   // Filtro por cartão na aba "Cartão de Crédito" ('' = todos os cartões)
   const [cartaoFiltroId, setCartaoFiltroId] = useState('')
@@ -2584,7 +2608,6 @@ export default function SchedulePanel() {
   const faturaPaymentCardId = (s) => s.cardId || s.overrides?._gerencial?.cardId || s.toAccountId
   // Listas exibidas na aba Cartão, aplicando o filtro por cartão selecionado.
   const viewInvoice = cartaoFiltroId ? displayInvoice.filter(p => p.cartaoId === cartaoFiltroId) : displayInvoice
-  const viewFaturaPayments = cartaoFiltroId ? displayFaturaPayments.filter(s => faturaPaymentCardId(s) === cartaoFiltroId) : displayFaturaPayments
 
   // CORREÇÃO 3: contas de origem "gerenciais" = subcontas "Ger. ..." (têm grupoGerencial
   // no próprio account) + contas de resgate dos grupos numerados (raAccountIds).
@@ -2652,38 +2675,30 @@ export default function SchedulePanel() {
   const displayContasAnuais = showZeroed ? contasAnuais : contasAnuais.filter(s => !isZeroed(s))
   const pendingContasAnuais = displayContasAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
 
-  const filteredSchedules = useMemo(() => {
-    const now = new Date()
-    const todayStr  = format(now, 'yyyy-MM-dd')
-    const in30Str   = format(addDays(now, 30), 'yyyy-MM-dd')
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    const lastDay    = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-    const monthEnd   = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-
-    if (viewFilter === 'all')     return schedules
-    if (viewFilter === 'provisoes') return schedules.filter(s => s.isProvisao)
-    if (viewFilter === 'history') return schedules.filter(s => getNextOccurrences(s, 1).length === 0)
-    if (viewFilter === 'future')  return schedules.filter(s => getNextOccurrences(s, 1).length > 0)
-    // Filtros de período pela data EFETIVA da próxima ocorrência (override de data).
-    if (viewFilter === 'next30')  return schedules.filter(s => {
-      const next = proximaEfetiva(s, getNextOccurrences)?.date
-      return next && next <= in30Str
-    })
-    if (viewFilter === 'month')   return schedules.filter(s => {
-      const next = proximaEfetiva(s, getNextOccurrences)?.date
-      return next && next >= monthStart && next <= monthEnd
-    })
-    if (viewFilter === 'ra') return schedules.filter(s =>
-      s.transactionType === 'transfer' &&
-      (raAccountIds.has(s.accountId) || raAccountIds.has(s.toAccountId))
-    )
-    return schedules
-  }, [schedules, viewFilter, getNextOccurrences, raAccountIds])
+  // ── Lista da ABA ATIVA: base da aba → zerados → status/período → filtros avançados ──────────
+  // Resgates anuais (antes um chip da aba Agendamentos, hoje status da aba Contas Anuais):
+  // transferências que envolvem as contas de resgate dos grupos gerenciais numerados.
+  const raSchedules = useMemo(
+    () => schedules.filter(s => s.transactionType === 'transfer' && (raAccountIds.has(s.accountId) || raAccountIds.has(s.toAccountId))),
+    [schedules, raAccountIds]
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const raVisiveis = useMemo(() => showZeroed ? raSchedules : raSchedules.filter(s => !isZeroed(s)), [raSchedules, showZeroed, getNextOccurrences])
+  const faturaPaymentsDoCartao = cartaoFiltroId ? faturaPaymentSchedules.filter(s => faturaPaymentCardId(s) === cartaoFiltroId) : faturaPaymentSchedules
+  const baseDaAba = activeTab === 'conta' ? schedules
+    : activeTab === 'cartao' ? faturaPaymentsDoCartao
+      : activeTab === 'gerencial' ? gerencialSomente
+        : statusAtual === 'resgates' ? raSchedules : contasAnuais
 
   const displaySchedules = useMemo(
-    () => showZeroed ? filteredSchedules : filteredSchedules.filter(s => !isZeroed(s)),
+    () => showZeroed ? baseDaAba : baseDaAba.filter(s => !isZeroed(s)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filteredSchedules, showZeroed, getNextOccurrences]
+    [baseDaAba, showZeroed, getNextOccurrences]
+  )
+  const hojeStr = format(new Date(), 'yyyy-MM-dd')
+  const filteredSchedules = useMemo(
+    () => filtrarPorStatusPeriodo(displaySchedules, { status: statusAtual, periodo: periodoAtual }, getNextOccurrences, hojeStr),
+    [displaySchedules, statusAtual, periodoAtual, getNextOccurrences, hojeStr]
   )
 
   // Filtros em tempo real (data / descrição / categoria / valor) sobre a lista já filtrada por período
@@ -2691,26 +2706,27 @@ export default function SchedulePanel() {
     // Data De/Até comparam a MESMA data da coluna "Data" (override de data aplicado), como dia
     // 'YYYY-MM-DD', inclusivos. Antes comparava a data ORIGINAL da ocorrência: um item com a data
     // movida (ex.: 15/10 → 14/10) aparecia em 14/10 mas sumia do filtro 14/10–14/10.
-    return filtrarAgendamentos(displaySchedules, {
-      desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: fltFrom, to: fltTo,
+    return filtrarAgendamentos(filteredSchedules, {
+      desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: dataDe, to: dataAte,
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
-    }, getNextOccurrences, format(new Date(), 'yyyy-MM-dd'))
-  }, [displaySchedules, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax, getNextOccurrences])
+    }, getNextOccurrences, hojeStr)
+  }, [filteredSchedules, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax, getNextOccurrences, hojeStr])
 
-  // Aba "Pagos" (viewFilter 'history'): uma linha por ocorrência PAGA de qualquer agendamento do
-  // perfil, inclusive das séries em andamento (lib/ocorrenciasRegistradas). Os filtros da barra
-  // valem sobre essas linhas: data = data do pagamento, valor = valor pago.
-  const abaPagos = viewFilter === 'history'
-  const pagosLinhas = useMemo(
-    () => (abaPagos ? pagamentosDosAgendamentos(schedules, transactions) : []),
-    [abaPagos, schedules, transactions]
-  )
-  const pagosBuscados = useMemo(() => filtrarPagamentos(pagosLinhas, {
-    desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: fltFrom, to: fltTo,
-    min: fltMin !== '' ? parseFloat(fltMin) : null,
-    max: fltMax !== '' ? parseFloat(fltMax) : null,
-  }), [pagosLinhas, fltDesc, fltPayee, fltCat, fltFrom, fltTo, fltMin, fltMax])
+  // Status "Pagos" (qualquer aba): uma linha por ocorrência PAGA dos agendamentos da aba,
+  // inclusive das séries em andamento (lib/ocorrenciasRegistradas). Período = data do pagamento;
+  // valor = valor pago. Calculado sempre — o contador do status precisa dele.
+  const abaPagos = statusAtual === 'pagos'
+  const basePagos = activeTab === 'conta' ? schedules
+    : activeTab === 'cartao' ? faturaPaymentsDoCartao
+      : activeTab === 'gerencial' ? gerencialSomente : contasAnuais
+  const pagosLinhas = useMemo(() => pagamentosDosAgendamentos(basePagos, transactions), [basePagos, transactions])
+  const pagosBuscados = useMemo(() => filtrarPagamentos(
+    abaPagos ? filtrarPagosPorPeriodo(pagosLinhas, periodoAtual, hojeStr) : [], {
+      desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: dataDe, to: dataAte,
+      min: fltMin !== '' ? parseFloat(fltMin) : null,
+      max: fltMax !== '' ? parseFloat(fltMax) : null,
+    }), [abaPagos, pagosLinhas, periodoAtual, hojeStr, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax])
   const pagosVisiveis = useMemo(
     () => filtrarPorTipoDocumento(filtrarPagamentos(pagosBuscados, { valores: selValores }), selTipos, tiposDocumento),
     [pagosBuscados, selValores, selTipos, tiposDocumento]
@@ -2733,7 +2749,7 @@ export default function SchedulePanel() {
   }, [searchedSchedules, selValores, selTipos, tiposDocumento])
   // Chips de "Contas envolvidas": contados sobre a lista já filtrada pelos demais filtros. Conta
   // selecionada que sumiu da lista (por outro filtro) continua como chip, com 0, para poder desligá-la.
-  const filtroContasAtivo = viewFilter === 'ra'
+  const filtroContasAtivo = activeTab === 'anuais' && statusAtual === 'resgates'
   const contasChips = useMemo(() => {
     if (!filtroContasAtivo) return []
     const chips = contasEnvolvidas(finalSchedules, allAccounts)
@@ -2749,6 +2765,32 @@ export default function SchedulePanel() {
     () => (filtroContasAtivo ? filtrarPorContas(finalSchedules, selContas) : finalSchedules),
     [filtroContasAtivo, finalSchedules, selContas]
   )
+
+  // Aba Cartão: contas a pagar de fatura (cards) seguem o período (vencimento) e os filtros de
+  // data/descrição/valor que se aplicam a elas.
+  const invoiceVisiveis = useMemo(() => {
+    const de = dataDe || null
+    const ate = dataAte || null
+    const d = fltDesc.trim().toLowerCase()
+    const min = fltMin !== '' ? parseFloat(fltMin) : null
+    const max = fltMax !== '' ? parseFloat(fltMax) : null
+    return filtrarFaturasPorPeriodo(viewInvoice, periodoAtual, hojeStr).filter(p =>
+      (!de || p.dueDate >= de) && (!ate || p.dueDate <= ate) &&
+      (!d || (p.description || '').toLowerCase().includes(d)) &&
+      (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
+  }, [viewInvoice, periodoAtual, hojeStr, dataDe, dataAte, fltDesc, fltMin, fltMax])
+
+  // Contadores do segmentado: total de cada status na aba (sem período nem filtros).
+  const nPagos = totaisPagamentos(pagosLinhas).nPagos
+  const contagemStatus = {
+    conta: { apagar: allPending.length, provisoes: allPending.filter(s => s.isProvisao).length, pagos: nPagos },
+    cartao: { apagar: pendingInvoice + pendingFaturaPayments, pagos: nPagos },
+    gerencial: { apagar: pendingGerencial, pagos: nPagos },
+    anuais: { apagar: pendingContasAnuais, pagos: nPagos, resgates: raVisiveis.length },
+  }[activeTab]
+  const ICONE_STATUS = { apagar: Calendar, provisoes: Hourglass, pagos: History, resgates: ArrowLeftRight }
+  const opcoesStatus = STATUS_POR_ABA[activeTab].map(id => ({ id, label: STATUS[id].label, count: contagemStatus[id], icon: ICONE_STATUS[id] }))
+
   // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
   const extrasTipoFiltro = useMemo(() => [
     ...(tiposDocumento.some(t => t.sigla === 'CC') ? [] : [{ id: 'CC', sigla: 'CC', nome: 'Fatura de Cartão (automático)', cor: '#8b5cf6' }]),
@@ -2770,27 +2812,46 @@ export default function SchedulePanel() {
   const tituloLancarProvisao = useTituloAtalho('Lançar Provisão', 'agend.lancarProvisao')
   const tituloNovoAgendamento = useTituloAtalho('Novo Agendamento', 'agend.novoAgendamento')
 
+  const propsTabela = {
+    categories, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule,
+    registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences,
+    onNewSchedule: () => { setEditSchedule(null); setShowForm(true) },
+    onEditSchedule: openEditSchedule,
+  }
+  const vazioDaAba = {
+    cartao: { Icone: CreditCard, titulo: 'Nenhuma fatura gerada', sub: 'As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais' },
+    gerencial: { Icone: BarChart3, titulo: 'Nenhum resgate gerencial agendado', sub: 'Lançamentos no Grupo Gerencial (1) geram agendamentos de devolução das subcontas "Ger." para a conta principal' },
+    anuais: { Icone: ArrowLeftRight, titulo: 'Nenhuma movimentação anual agendada', sub: 'Depósitos (aplicações) e resgates das contas poupança aparecem aqui' },
+  }[activeTab]
+  // Aba sem nada (antes de status/período/filtros): mostra o vazio próprio da aba.
+  const abaSemNada = activeTab === 'cartao' ? (displayInvoice.length === 0 && displayFaturaPayments.length === 0)
+    : activeTab === 'gerencial' ? displayGerencial.length === 0
+      : activeTab === 'anuais' ? (statusAtual === 'resgates' ? raVisiveis.length === 0 : displayContasAnuais.length === 0)
+        : false
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-texto-2">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-texto-3 mt-0.5">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
+      {/* Título + ações. flex-wrap: com os 3 botões numa tela menor, os botões descem em vez de
+          espremer o título/subtítulo contra a linha das abas. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-texto-2 whitespace-nowrap">Agendamentos & Contas a Pagar</h2>
+          <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {provisoesPendentes.length > 0 && (
-            <button className="btn-secondary flex items-center gap-2" onClick={abrirExecutarGer} title={tituloExecutarGer}>
+            <button className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
               <ShortcutHint actionId="agend.executarGerenciais" />
             </button>
           )}
           {activeTab === 'conta' && (
             <>
-              <button className="btn-secondary hidden md:flex items-center gap-2" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
+              <button className="btn-secondary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirLancarProvisao} title={tituloLancarProvisao}>
                 <Hourglass size={14} /> Lançar Provisão
                 <ShortcutHint actionId="agend.lancarProvisao" />
               </button>
-              <button className="btn-primary hidden md:flex items-center gap-2" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
+              <button className="btn-primary hidden md:flex items-center gap-2 whitespace-nowrap" onClick={abrirNovoAgendamento} title={tituloNovoAgendamento}>
                 <Plus size={14} /> Novo Agendamento
                 <ShortcutHint actionId="agend.novoAgendamento" />
               </button>
@@ -2799,99 +2860,56 @@ export default function SchedulePanel() {
         </div>
       </div>
 
-      <div className="border-b border-borda flex items-center gap-0 overflow-x-auto">
-        <TabButton active={activeTab === 'conta'} onClick={() => setActiveTab('conta')} badge={allPending.length}>
+      <div className="border-b border-borda flex items-center gap-0 overflow-x-auto overflow-y-hidden">
+        <TabButton active={activeTab === 'conta'} onClick={() => trocarAba('conta')} badge={allPending.length}>
           <Calendar size={14} /> Agendamentos
         </TabButton>
-        <TabButton active={activeTab === 'cartao'} onClick={() => setActiveTab('cartao')} badge={pendingInvoice + pendingFaturaPayments}>
+        <TabButton active={activeTab === 'cartao'} onClick={() => trocarAba('cartao')} badge={pendingInvoice + pendingFaturaPayments}>
           <CreditCard size={14} /> Cartão de Crédito
         </TabButton>
-        <TabButton active={activeTab === 'gerencial'} onClick={() => setActiveTab('gerencial')} badge={pendingGerencial}>
+        <TabButton active={activeTab === 'gerencial'} onClick={() => trocarAba('gerencial')} badge={pendingGerencial}>
           <BarChart3 size={14} /> Gerencial
         </TabButton>
-        <TabButton active={activeTab === 'anuais'} onClick={() => setActiveTab('anuais')} badge={pendingContasAnuais}>
+        <TabButton active={activeTab === 'anuais'} onClick={() => trocarAba('anuais')} badge={pendingContasAnuais}>
           <ArrowLeftRight size={14} /> Contas Anuais
         </TabButton>
-        <button
-          onClick={() => setShowZeroed(v => !v)}
-          className={`ml-auto flex items-center gap-1.5 px-3 py-2.5 text-xs whitespace-nowrap transition-colors shrink-0 ${
-            showZeroed ? 'text-primary-fg' : 'text-texto-3 hover:text-texto-2'
-          }`}
-        >
-          <Eye size={11} /> {showZeroed ? 'Ocultar zerados' : 'Mostrar zerados'}
-        </button>
       </div>
 
-      {activeTab === 'conta' && (
-        <>
-          {/* Filter chips */}
-          <div className="flex flex-wrap gap-2">
-            {VIEW_FILTERS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => escolherViewFilter(f.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  viewFilter === f.id
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
-                }`}
-              >
-                {f.id === 'history' && <History size={11} />}
-                {f.id === 'ra' && <ArrowLeftRight size={11} />}
-                {f.id === 'provisoes' && <Hourglass size={11} />}
-                {f.label}
-                {f.id === 'future' && <span className="text-xs opacity-70">{allPending.length}</span>}
-              </button>
-            ))}
-          </div>
-
-          {/* Contas envolvidas (Resgates Anuais): 0 contas = tudo; 1 = origem ou destino; 2+ = entre elas */}
-          {filtroContasAtivo && contasChips.length > 0 && (
-            <div className="flex items-center gap-2 -mt-1">
-              <span className="text-xs text-texto-3 shrink-0">Contas envolvidas:</span>
-              <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setSelContas(new Set())}
-                  className={`shrink-0 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
-                    selContas.size === 0 ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
-                  }`}
-                >
-                  Todas
-                </button>
-                {contasChips.map(c => {
-                  const ativo = selContas.has(c.accountId)
-                  return (
-                    <button
-                      key={c.accountId}
-                      onClick={() => toggleConta(c.accountId)}
-                      aria-pressed={ativo}
-                      className={`shrink-0 flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
-                        ativo ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
-                      }`}
-                    >
-                      {c.nome}
-                      <span className="opacity-70">{c.count}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              {selContas.size > 0 && (
-                <button onClick={() => setSelContas(new Set())} title="Limpar contas" className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors shrink-0">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Barra de filtros (tempo real) — fixa no topo ao rolar apenas no desktop (md+) */}
-          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end md:sticky md:top-0 md:z-20">
+      {/* Barra: Status | Período | Filtros (+ painel recolhível). Mesma em todas as abas. Fixa no
+          topo ao rolar apenas no desktop (md+), com o fundo da página por trás. */}
+      <div className="md:sticky md:top-0 md:z-20 bg-page -mx-1 px-1 py-1">
+        <FilterBar
+          status={opcoesStatus}
+          statusAtual={statusAtual}
+          onStatus={escolherStatus}
+          periodos={opcoesPeriodo(statusAtual)}
+          periodoAtual={periodoAtual}
+          onPeriodo={escolherPeriodo}
+          filtrosAtivos={filtrosAvancadosAtivos}
+          aberto={filtrosAbertos}
+          onToggle={() => setFiltrosAbertos(v => !v)}
+          extra={activeTab === 'cartao' && cartoesDisponiveis.length > 0 ? (
+            <select
+              className="input py-1.5 text-xs w-auto max-w-[10rem]"
+              value={cartaoFiltroId}
+              onChange={e => setCartaoFiltroId(e.target.value)}
+              aria-label="Cartão"
+            >
+              <option value="">Todos os cartões</option>
+              {cartoesDisponiveis.map(c => (
+                <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
+              ))}
+            </select>
+          ) : null}
+        >
+          <div className="card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2 items-end">
             <div>
               <label className="label text-xs">Data de</label>
-              <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={e => setFltFrom(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltFrom} onChange={mudarData(setFltFrom)} />
             </div>
             <div>
               <label className="label text-xs">Data até</label>
-              <DateInput className="input py-1.5 text-xs" value={fltTo} onChange={e => setFltTo(e.target.value)} />
+              <DateInput className="input py-1.5 text-xs" value={fltTo} onChange={mudarData(setFltTo)} />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label className="label text-xs">Descrição</label>
@@ -2909,8 +2927,8 @@ export default function SchedulePanel() {
               <label className="label text-xs">Tipo de documento</label>
               <TipoDocumentoFiltro tipos={tiposDocumento} extras={extrasTipoFiltro} selected={selTipos} onChange={setSelTipos} />
             </div>
-            {/* Valor: faixa Mín./Máx. num campo só (antes "Valor até" ficava espremido ao lado do
-                seletor). O botão "Valor" ao lado é OUTRO filtro: escolhe valores exatos da lista. */}
+            {/* Valor: faixa Mín./Máx. num campo só. O botão "Valor" ao lado é OUTRO filtro: escolhe
+                valores exatos da lista. */}
             <div className="col-span-2 sm:col-span-3 lg:col-span-2 flex items-end gap-2 min-w-0">
               <div className="flex-1 min-w-0">
                 <label className="label text-xs">Valor</label>
@@ -2922,146 +2940,94 @@ export default function SchedulePanel() {
               <div className="mb-0.5 shrink-0">
                 <ValueFilterDropdown label="Valor" values={valorOptions} selected={selValores} onChange={setSelValores} />
               </div>
+            </div>
+            <div className="col-span-2 sm:col-span-3 lg:col-span-8 flex items-center justify-between gap-2 pt-1 border-t border-borda">
+              <button
+                type="button"
+                onClick={() => setShowZeroed(v => !v)}
+                aria-pressed={showZeroed}
+                className={`flex items-center gap-1.5 text-xs transition-colors ${showZeroed ? 'text-primary-fg' : 'text-texto-3 hover:text-texto-2'}`}
+              >
+                <Eye size={11} /> {showZeroed ? 'Ocultar zerados' : 'Mostrar zerados'}
+              </button>
               {hasActiveFilter && (
-                <button onClick={clearFilters} title="Limpar filtros" className="p-1.5 mb-0.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors shrink-0">
-                  <X size={14} />
+                <button onClick={() => { clearFilters(); if (periodoAtual === 'custom') escolherPeriodo(opcoesPeriodo(statusAtual).includes('futuros') ? 'futuros' : 'mes') }} className="flex items-center gap-1 text-xs text-texto-3 hover:text-texto-2 transition-colors">
+                  <X size={12} /> Limpar filtros
                 </button>
               )}
             </div>
           </div>
+        </FilterBar>
+      </div>
 
-          {abaPagos ? (
-            <PagamentosTable
-              linhas={pagosVisiveis}
-              categories={categories}
-              accounts={allAccounts}
-              tiposDocumento={tiposDocumento}
-            />
-          ) : (
-          <SchedulesTable
-            schedules={visibleSchedules}
-            agruparSeries={!hasActiveFilter && selContas.size === 0}
-            categories={categories}
-            accounts={accounts}
-            gerencialGroups={gerencialGroups}
-            addTransaction={addTransaction}
-            markScheduleRegistered={markScheduleRegistered}
-            deleteSchedule={deleteSchedule}
-            registerScheduleOccurrence={registerScheduleOccurrence}
-            skipScheduleOccurrence={skipScheduleOccurrence}
-            getNextOccurrences={getNextOccurrences}
-            efetivarProvisao={efetivarProvisao}
-            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-            onEditSchedule={openEditSchedule}
-          />
-          )}
-        </>
-      )}
-
-      {activeTab === 'cartao' && (
-        <div className="space-y-3">
-          {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) && cartoesDisponiveis.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-texto-3 shrink-0">Cartão:</label>
-              <select
-                className="input py-1.5 text-xs max-w-xs"
-                value={cartaoFiltroId}
-                onChange={e => setCartaoFiltroId(e.target.value)}
-              >
-                <option value="">Todos os cartões</option>
-                {cartoesDisponiveis.map(c => (
-                  <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {viewInvoice.length === 0 && viewFaturaPayments.length === 0 ? (
-            <div className="card text-center py-12">
-              <CreditCard size={32} className="text-texto-3 mx-auto mb-3" />
-              {(displayInvoice.length > 0 || displayFaturaPayments.length > 0) ? (
-                <p className="text-texto-3 text-sm">Nenhuma fatura para o cartão selecionado</p>
-              ) : (
-                <>
-                  <p className="text-texto-3 text-sm">Nenhuma fatura gerada</p>
-                  <p className="text-texto-3 text-xs mt-1">As faturas aparecem ao importar lançamentos de cartão ou ao lançar despesas gerenciais</p>
-                </>
-              )}
-            </div>
-          ) : (
-            <>
-              {[...viewInvoice].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
-                <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
-              ))}
-              {viewFaturaPayments.length > 0 && (
-                <SchedulesTable
-                  schedules={viewFaturaPayments}
-                  categories={categories}
-                  accounts={allAccounts}
-                  gerencialGroups={gerencialGroups}
-                  addTransaction={addTransaction}
-                  markScheduleRegistered={markScheduleRegistered}
-                  deleteSchedule={deleteSchedule}
-                  registerScheduleOccurrence={registerScheduleOccurrence}
-                  skipScheduleOccurrence={skipScheduleOccurrence}
-                  getNextOccurrences={getNextOccurrences}
-                  onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-                  onEditSchedule={openEditSchedule}
-                />
-              )}
-            </>
+      {/* Contas envolvidas (Resgates anuais): 0 contas = tudo; 1 = origem ou destino; 2+ = entre elas */}
+      {filtroContasAtivo && contasChips.length > 0 && (
+        <div className="flex items-center gap-2 -mt-1">
+          <span className="text-xs text-texto-3 shrink-0">Contas envolvidas:</span>
+          <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setSelContas(new Set())}
+              className={`shrink-0 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
+                selContas.size === 0 ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
+              }`}
+            >
+              Todas
+            </button>
+            {contasChips.map(c => {
+              const ativo = selContas.has(c.accountId)
+              return (
+                <button
+                  key={c.accountId}
+                  onClick={() => toggleConta(c.accountId)}
+                  aria-pressed={ativo}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
+                    ativo ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
+                  }`}
+                >
+                  {c.nome}
+                  <span className="opacity-70">{c.count}</span>
+                </button>
+              )
+            })}
+          </div>
+          {selContas.size > 0 && (
+            <button onClick={() => setSelContas(new Set())} title="Limpar contas" className="p-1.5 text-texto-3 hover:text-texto-2 hover:bg-surface-hover rounded transition-colors shrink-0">
+              <X size={14} />
+            </button>
           )}
         </div>
       )}
 
-      {activeTab === 'gerencial' && (
-        displayGerencial.length === 0 ? (
-          <div className="card text-center py-12">
-            <BarChart3 size={32} className="text-texto-3 mx-auto mb-3" />
-            <p className="text-texto-3 text-sm">Nenhum resgate gerencial agendado</p>
-            <p className="text-texto-3 text-xs mt-1">Lançamentos no Grupo Gerencial (1) geram agendamentos de devolução das subcontas "Ger." para a conta principal</p>
-          </div>
-        ) : (
-          <SchedulesTable
-            schedules={displayGerencial}
-            categories={categories}
-            accounts={allAccounts}
-            gerencialGroups={gerencialGroups}
-            addTransaction={addTransaction}
-            markScheduleRegistered={markScheduleRegistered}
-            deleteSchedule={deleteSchedule}
-            registerScheduleOccurrence={registerScheduleOccurrence}
-            skipScheduleOccurrence={skipScheduleOccurrence}
-            getNextOccurrences={getNextOccurrences}
-            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-            onEditSchedule={openEditSchedule}
-          />
-        )
-      )}
-
-      {activeTab === 'anuais' && (
-        displayContasAnuais.length === 0 ? (
-          <div className="card text-center py-12">
-            <ArrowLeftRight size={32} className="text-texto-3 mx-auto mb-3" />
-            <p className="text-texto-3 text-sm">Nenhuma movimentação anual agendada</p>
-            <p className="text-texto-3 text-xs mt-1">Depósitos (aplicações) e resgates das contas poupança aparecem aqui</p>
-          </div>
-        ) : (
-          <SchedulesTable
-            schedules={displayContasAnuais}
-            categories={categories}
-            accounts={allAccounts}
-            gerencialGroups={gerencialGroups}
-            addTransaction={addTransaction}
-            markScheduleRegistered={markScheduleRegistered}
-            deleteSchedule={deleteSchedule}
-            registerScheduleOccurrence={registerScheduleOccurrence}
-            skipScheduleOccurrence={skipScheduleOccurrence}
-            getNextOccurrences={getNextOccurrences}
-            onNewSchedule={() => { setEditSchedule(null); setShowForm(true) }}
-            onEditSchedule={openEditSchedule}
-          />
-        )
+      {abaPagos ? (
+        <PagamentosTable
+          linhas={pagosVisiveis}
+          categories={categories}
+          accounts={allAccounts}
+          tiposDocumento={tiposDocumento}
+        />
+      ) : abaSemNada && vazioDaAba ? (
+        <div className="card text-center py-12">
+          <vazioDaAba.Icone size={32} className="text-texto-3 mx-auto mb-3" />
+          <p className="text-texto-3 text-sm">{vazioDaAba.titulo}</p>
+          <p className="text-texto-3 text-xs mt-1">{vazioDaAba.sub}</p>
+        </div>
+      ) : activeTab === 'cartao' ? (
+        <div className="space-y-3">
+          {[...invoiceVisiveis].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(p => (
+            <PayableCard key={p.id} payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
+          ))}
+          {(visibleSchedules.length > 0 || invoiceVisiveis.length === 0) && (
+            <SchedulesTable schedules={visibleSchedules} agruparSeries={!hasActiveFilter} accounts={allAccounts} {...propsTabela} />
+          )}
+        </div>
+      ) : (
+        <SchedulesTable
+          schedules={visibleSchedules}
+          agruparSeries={!hasActiveFilter && selContas.size === 0}
+          accounts={activeTab === 'conta' ? accounts : allAccounts}
+          efetivarProvisao={activeTab === 'conta' ? efetivarProvisao : undefined}
+          {...propsTabela}
+        />
       )}
 
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditSchedule(null) }} title={editSchedule ? 'Editar Agendamento' : 'Novo Agendamento'} size="lg">

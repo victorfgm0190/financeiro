@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal } from './agendamentosFiltro'
+import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, opcoesPeriodo, periodoPadrao, contarFiltrosAvancados, lerFiltrosAba } from './agendamentosFiltro'
 
 // getNextOccurrences simplificado: devolve a(s) próxima(s) data(s) ORIGINAL(is) declaradas no fixture.
 const getNext = (s, n = 1) => (s._next || []).slice(0, n)
@@ -70,5 +70,58 @@ describe('filtrarAgendamentos — data 14/10 a 14/10', () => {
 
   it('sem nenhum filtro devolve a lista intacta', () => {
     expect(filtrarAgendamentos(todos, {}, getNext, HOJE)).toBe(todos)
+  })
+})
+
+describe('FilterBar — status × período (substitui os chips sem perder combinação)', () => {
+  const HOJE = '2026-10-16'
+  // getNextOccurrences simplificado: próxima = nextOccurrence (null = série concluída).
+  const gno = (s, n) => (s.nextOccurrence ? [s.nextOccurrence].slice(0, n) : [])
+  const S = [
+    { id: 'atraso', nextOccurrence: '2026-10-08', amount: 1 },
+    { id: 'mes', nextOccurrence: '2026-10-25', amount: 1 },
+    { id: 'nov', nextOccurrence: '2026-11-10', amount: 1 },
+    { id: 'dez', nextOccurrence: '2026-12-20', amount: 1 },
+    { id: 'concl', nextOccurrence: null, amount: 1 },
+    { id: 'prov', nextOccurrence: '2026-11-01', amount: 1, isProvisao: true },
+    { id: 'provEfet', nextOccurrence: null, amount: 1, isProvisao: true },
+  ]
+  const ids = (st, p) => filtrarPorStatusPeriodo(S, { status: st, periodo: p }, gno, HOJE).map(s => s.id)
+  it('A pagar: Todos os futuros = antigo "Todos os futuros" (só com próxima ocorrência)', () => {
+    expect(ids('apagar', 'futuros')).toEqual(['atraso', 'mes', 'nov', 'dez', 'prov'])
+  })
+  it('A pagar: Próximos 30 dias inclui os em atraso; Este mês = próxima no mês', () => {
+    expect(ids('apagar', 'next30')).toEqual(['atraso', 'mes', 'nov', 'prov'])
+    expect(ids('apagar', 'mes')).toEqual(['atraso', 'mes'])
+  })
+  it('A pagar: Tudo = antigo "Todos" (inclui as concluídas); Personalizado não recorta aqui', () => {
+    expect(ids('apagar', 'tudo')).toHaveLength(S.length)
+    expect(ids('apagar', 'custom')).toHaveLength(S.length)
+  })
+  it('Provisões: Tudo = antigo chip "Provisões"; Todos os futuros = só as pendentes', () => {
+    expect(ids('provisoes', 'tudo')).toEqual(['prov', 'provEfet'])
+    expect(ids('provisoes', 'futuros')).toEqual(['prov'])
+  })
+  it('Pagos pelo período da data de pagamento', () => {
+    const L = [{ dataPagamento: '2026-10-02' }, { dataPagamento: '2026-09-20' }, { dataPagamento: '2026-08-01' }]
+    expect(filtrarPagosPorPeriodo(L, 'mes', HOJE)).toHaveLength(1)
+    expect(filtrarPagosPorPeriodo(L, 'ult30', HOJE)).toHaveLength(2)
+    expect(filtrarPagosPorPeriodo(L, 'tudo', HOJE)).toHaveLength(3)
+  })
+  it('opções e padrões: Pagos não tem futuros; Pagos abre em Este mês, os outros em Todos os futuros', () => {
+    expect(opcoesPeriodo('pagos')).toEqual(['mes', 'ult30', 'tudo', 'custom'])
+    expect(opcoesPeriodo('apagar')).toEqual(['mes', 'next30', 'futuros', 'tudo', 'custom'])
+    expect([periodoPadrao('apagar'), periodoPadrao('provisoes'), periodoPadrao('pagos'), periodoPadrao('resgates')]).toEqual(['futuros', 'futuros', 'mes', 'tudo'])
+  })
+  it('badge de Filtros conta descrição, favorecido, categoria, tipo e valor (datas não)', () => {
+    expect(contarFiltrosAvancados({})).toBe(0)
+    expect(contarFiltrosAvancados({ desc: 'x', payee: ' ', categoryId: 'c', tipos: new Set(['CC']), min: '10' })).toBe(4)
+    expect(contarFiltrosAvancados({ valores: new Set([1]) })).toBe(1)
+  })
+  it('persistência por aba: restaura status/período; Personalizado e valores inválidos voltam ao padrão', () => {
+    const raw = JSON.stringify({ conta: { status: 'pagos', periodos: { apagar: 'next30', provisoes: 'custom', pagos: 'tudo' } }, anuais: { status: 'xx' } })
+    expect(lerFiltrosAba('conta', raw)).toEqual({ status: 'pagos', periodos: { apagar: 'next30', provisoes: 'futuros', pagos: 'tudo' } })
+    expect(lerFiltrosAba('anuais', raw)).toEqual({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes', resgates: 'tudo' } })
+    expect(lerFiltrosAba('cartao', 'lixo{')).toEqual({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes' } })
   })
 })

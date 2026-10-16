@@ -1,5 +1,5 @@
 // Data exibida e filtros da lista de Agendamentos. Sem React: usada pelo SchedulePanel e testável.
-import { occEfetiva } from './fluxoCaixa.js'
+import { occEfetiva, proximaEfetiva } from './fluxoCaixa.js'
 
 // Data de vencimento EXIBIDA (e usada no particionamento da lista) para um agendamento
 // RECORRENTE. Para 'once'/faturas e concluídos (nextDate null) devolve nextDate inalterado.
@@ -79,4 +79,120 @@ export function filtrarAgendamentos(schedules, { desc = '', payee = '', category
     }
     return true
   })
+}
+
+// ─── Barra de filtros (FilterBar): STATUS × PERÍODO ────────────────────────────────────────────
+// Substitui os chips antigos sem perder combinação:
+//   Todos os futuros = A pagar + Todos os futuros  ·  Próximos 30 dias = A pagar + Próximos 30 dias
+//   Este mês = A pagar + Este mês  ·  Todos = A pagar + Tudo (inclui as séries concluídas)
+//   Provisões = Provisões + Tudo  ·  Pagos = Pagos + Tudo  ·  Resgates Anuais = aba Contas Anuais,
+//   status "Resgates anuais" + Tudo  ·  datas De/Até = Personalizado.
+export const STATUS = {
+  apagar: { id: 'apagar', label: 'A pagar' },
+  provisoes: { id: 'provisoes', label: 'Provisões' },
+  pagos: { id: 'pagos', label: 'Pagos' },
+  resgates: { id: 'resgates', label: 'Resgates anuais' },
+}
+export const STATUS_POR_ABA = {
+  conta: ['apagar', 'provisoes', 'pagos'],
+  cartao: ['apagar', 'pagos'],
+  gerencial: ['apagar', 'pagos'],
+  anuais: ['apagar', 'pagos', 'resgates'],
+}
+export const PERIODOS = {
+  mes: 'Este mês',
+  next30: 'Próximos 30 dias',
+  ult30: 'Últimos 30 dias',
+  futuros: 'Todos os futuros',
+  tudo: 'Tudo',
+  custom: 'Personalizado…',
+}
+// Pagos olham para trás (data do pagamento): "futuros"/"próximos" não fazem sentido.
+export const opcoesPeriodo = (status) => (status === 'pagos'
+  ? ['mes', 'ult30', 'tudo', 'custom']
+  : ['mes', 'next30', 'futuros', 'tudo', 'custom'])
+export const periodoPadrao = (status) => (status === 'pagos' ? 'mes' : status === 'resgates' ? 'tudo' : 'futuros')
+
+function limitesDoMes(hoje) {
+  const [y, m] = hoje.split('-').map(Number)
+  const ultimo = new Date(y, m, 0).getDate()
+  const mm = String(m).padStart(2, '0')
+  return [`${y}-${mm}-01`, `${y}-${mm}-${String(ultimo).padStart(2, '0')}`]
+}
+function somarDias(hoje, n) {
+  const [y, m, d] = hoje.split('-').map(Number)
+  return diaLocal(new Date(y, m - 1, d + n))
+}
+
+// Agendamentos (A pagar / Provisões / Resgates) pelo período. Data = data EFETIVA da próxima
+// ocorrência (mesma regra dos chips antigos). "Tudo"/"Personalizado" não recortam aqui — o
+// Personalizado é aplicado pelas datas De/Até de filtrarAgendamentos.
+export function filtrarPorStatusPeriodo(schedules, { status = 'apagar', periodo = 'futuros' }, getNextOccurrences, hoje) {
+  let lista = schedules || []
+  if (status === 'provisoes') lista = lista.filter(s => s.isProvisao)
+  if (periodo === 'tudo' || periodo === 'custom') return lista
+  if (periodo === 'futuros') return lista.filter(s => getNextOccurrences(s, 1).length > 0)
+  const [ini, fim] = periodo === 'mes' ? limitesDoMes(hoje) : [null, somarDias(hoje, 30)]
+  return lista.filter(s => {
+    const d = proximaEfetiva(s, getNextOccurrences)?.date
+    if (!d) return false
+    return (!ini || d >= ini) && d <= fim
+  })
+}
+
+// Pagos pelo período (data do pagamento).
+export function filtrarPagosPorPeriodo(linhas, periodo, hoje) {
+  if (periodo === 'mes') {
+    const [ini, fim] = limitesDoMes(hoje)
+    return (linhas || []).filter(l => l.dataPagamento >= ini && l.dataPagamento <= fim)
+  }
+  if (periodo === 'ult30') {
+    const ini = somarDias(hoje, -30)
+    return (linhas || []).filter(l => l.dataPagamento >= ini && l.dataPagamento <= hoje)
+  }
+  return linhas || []
+}
+
+// Contas a pagar de fatura (cards da aba Cartão) pelo período: data = vencimento.
+export function filtrarFaturasPorPeriodo(payables, periodo, hoje) {
+  if (periodo === 'mes') {
+    const [ini, fim] = limitesDoMes(hoje)
+    return (payables || []).filter(p => p.dueDate >= ini && p.dueDate <= fim)
+  }
+  if (periodo === 'next30') return (payables || []).filter(p => p.dueDate <= somarDias(hoje, 30))
+  return payables || []
+}
+
+// Badge do botão "Filtros": quantos filtros AVANÇADOS estão ativos (descrição, favorecido,
+// categoria, tipo de documento, valor). Datas não contam — elas são o Período "Personalizado".
+export function contarFiltrosAvancados({ desc = '', payee = '', categoryId = '', tipos = null, min = '', max = '', valores = null } = {}) {
+  return [
+    !!desc.trim(), !!payee.trim(), !!categoryId, (tipos?.size || 0) > 0,
+    min !== '' || max !== '' || (valores?.size || 0) > 0,
+  ].filter(Boolean).length
+}
+
+// Último status e período por aba (localStorage, com try/catch: storage pode faltar).
+// Formato: { [aba]: { status, periodos: { [status]: periodo } } }. "Personalizado" não volta
+// (as datas não são guardadas): restaura o padrão do status.
+export const FILTROS_AGENDA_KEY = 'finup.agendamentos.filtros.v1'
+export function lerFiltrosAba(aba, raw) {
+  const statusValidos = STATUS_POR_ABA[aba] || ['apagar']
+  const salvo = (() => {
+    try { return JSON.parse(raw ?? localStorage.getItem(FILTROS_AGENDA_KEY) ?? 'null')?.[aba] || null } catch { return null }
+  })()
+  const status = statusValidos.includes(salvo?.status) ? salvo.status : statusValidos[0]
+  const periodos = {}
+  for (const st of statusValidos) {
+    const p = salvo?.periodos?.[st]
+    periodos[st] = p && p !== 'custom' && opcoesPeriodo(st).includes(p) ? p : periodoPadrao(st)
+  }
+  return { status, periodos }
+}
+export function salvarFiltrosAba(aba, valor) {
+  try {
+    const todos = JSON.parse(localStorage.getItem(FILTROS_AGENDA_KEY) || '{}') || {}
+    todos[aba] = valor
+    localStorage.setItem(FILTROS_AGENDA_KEY, JSON.stringify(todos))
+  } catch { /* storage indisponível: só não lembra */ }
 }
