@@ -351,13 +351,13 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
               <span className={`px-1.5 py-0.5 rounded text-xs bg-white/10 ${txtSec}`}>{account.apelido}</span>
             )}
             {account.fluxoCaixaPrincipal && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-white">FC</span>
+              <span title="Somar no Saldo Principal" className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-500/30 text-white">FC</span>
             )}
             {account.isInvestimento && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-500/30 text-purple-200">INV</span>
             )}
             {account.contaCorrentePrincipal && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-white">CC</span>
+              <span title="Conta do dia a dia" className="px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/30 text-white">CC</span>
             )}
             {isInactive && (
               <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-white/20 text-white">Inativa</span>
@@ -510,7 +510,7 @@ function AccountCard({ account, siblings, onEdit, onDelete, onExtrato, onUpdateV
         className={`mt-2.5 text-xs flex items-center gap-1 transition-opacity ${account.isMain ? 'text-white' : `${txtSec} hover:text-white`}`}
       >
         <Star size={10} fill={account.isMain ? 'currentColor' : 'none'} />
-        {account.isMain ? 'Conta principal' : 'Definir como principal'}
+        {account.isMain ? 'Conta padrão' : 'Definir como padrão'}
       </button>
     </div>
 
@@ -687,7 +687,7 @@ export default function AccountsPanel({ setActivePage }) {
   const financialGroups = sortedGroups.filter(g => g.type === 'financeiro')
   const patrimonialGroups = sortedGroups.filter(g => g.type === 'patrimonial')
 
-  // No mobile, contas marcadas como "Ocultar no Mobile" somem da grade (saldos/totais acima ficam intactos).
+  // No mobile, contas marcadas como "Esconder no celular" somem da grade (saldos/totais acima ficam intactos).
   const visibleAccounts = accountsForView(accounts, isMobile)
   const getGroupAccounts = (groupId) =>
     visibleAccounts.filter(a => a.accountGroupId === groupId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))

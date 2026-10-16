@@ -40,6 +40,48 @@ function Toggle({ checked, onChange, label, tooltip }) {
   )
 }
 
+// Selos FC/CC: mesmo formato dos selos do card da conta, com cores do tema.
+const SELOS = {
+  FC: { texto: 'FC', title: 'Somar no Saldo Principal', cls: 'bg-receita/15 text-receita' },
+  CC: { texto: 'CC', title: 'Conta do dia a dia', cls: 'bg-primary/15 text-primary-fg' },
+}
+
+// Finalidade da conta: os valores gravados (vinculo_tipo) são os mesmos de sempre.
+const FINALIDADES = [
+  { value: 'none', nome: 'Uso comum', ajuda: 'Movimentação normal, sem vínculo especial' },
+  { value: 'reserva', nome: 'Reserva', ajuda: 'Dinheiro guardado para um fim; aparece em Reservas e os resgates voltam para a conta do dia a dia' },
+  { value: 'patrimonio', nome: 'Patrimônio', ajuda: 'Aplicações e investimentos; soma no Patrimônio e as transferências viram despesa/receita na categoria' },
+]
+
+function Bloco({ titulo, children }) {
+  return (
+    <section>
+      <p className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">{titulo}</p>
+      <div className="rounded-lg border border-borda-forte divide-y divide-borda overflow-hidden">{children}</div>
+    </section>
+  )
+}
+
+// Linha de toggle: nome em negrito, ajuda fixa abaixo, toggle à direita. A linha toda é o rótulo.
+function LinhaToggle({ nome, ajuda, selo, checked, onChange }) {
+  return (
+    <label className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-hover/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-primary">
+      <div className="flex-1 min-w-0">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-texto-1">
+          {nome}
+          {selo && <span title={selo.title} className={`px-1.5 py-0.5 rounded text-xs font-bold ${selo.cls}`}>{selo.texto}</span>}
+        </p>
+        <p className="text-xs text-texto-3 leading-snug mt-0.5">{ajuda}</p>
+      </div>
+      <div className="relative shrink-0">
+        <input type="checkbox" checked={checked} onChange={onChange} className="sr-only peer" />
+        <div className="w-9 h-5 bg-borda-campo rounded-full peer-checked:bg-primary transition-colors" />
+        <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+      </div>
+    </label>
+  )
+}
+
 export default function AccountForm({ initial, onClose }) {
   const { accounts, accountGroups = [], activeAccountGroups = [], profiles = [], categories = [], addAccount, updateAccount, recalcularSaldo } = useApp()
   const [form, setForm] = useState({
@@ -409,91 +451,105 @@ export default function AccountForm({ initial, onClose }) {
       )}
 
       {!isPatrimonial && (
-      <div className="space-y-3 pt-1 border-t border-borda">
-        <p className="text-xs text-texto-3 uppercase tracking-wide pt-1">Classificação</p>
-
-        <Toggle
-          checked={form.isMain}
-          onChange={e => set('isMain', e.target.checked)}
-          label="Conta principal"
-        />
-
-        <Toggle
-          checked={form.appPriority}
-          onChange={e => set('appPriority', e.target.checked)}
-          label="Prioridade no app"
-          tooltip="Exibe esta conta com prioridade nos selects de lançamento, antes das demais"
-        />
-
-        <Toggle
-          checked={form.fluxoCaixaPrincipal}
-          onChange={e => set('fluxoCaixaPrincipal', e.target.checked)}
-          label="Fluxo de Caixa Principal"
-          tooltip="Esta conta aparece no painel de Fluxo de Caixa geral"
-        />
-
-        {/* Configuração de exibição mobile — disponível só no desktop */}
-        <div className="hidden md:block">
-          <Toggle
-            checked={form.hideOnMobile}
-            onChange={e => set('hideOnMobile', e.target.checked)}
-            label="Ocultar no Mobile"
-            tooltip="A conta continua aparecendo no desktop, mas fica oculta nas listas e seletores no celular. Dados e saldos não são afetados."
+      <div className="space-y-4 pt-1 border-t border-borda">
+        <Bloco titulo="Exibição">
+          <LinhaToggle
+            nome="Fixar no topo"
+            ajuda="Aparece antes das outras contas na tela Lançamentos"
+            checked={form.appPriority}
+            onChange={e => set('appPriority', e.target.checked)}
           />
-        </div>
-
-        {!isCredit && (
-          <Toggle
-            checked={form.contaAplicacao}
-            onChange={e => set('contaAplicacao', e.target.checked)}
-            label="Conta de Aplicação Financeira"
-            tooltip="Ativa a netização de transferências opostas na mesma data (resgate + aplicação → saldo líquido)"
+          <LinhaToggle
+            nome="Conta padrão"
+            ajuda="Marcada com ★ e listada primeiro na tela Lançamentos"
+            checked={form.isMain}
+            onChange={e => set('isMain', e.target.checked)}
           />
-        )}
+          {/* Configuração de exibição mobile — disponível só no desktop */}
+          <div className="hidden md:block">
+            <LinhaToggle
+              nome="Esconder no celular"
+              ajuda="Some das listas e seletores no celular; continua no desktop e nos saldos"
+              checked={form.hideOnMobile}
+              onChange={e => set('hideOnMobile', e.target.checked)}
+            />
+          </div>
+        </Bloco>
+
+        <Bloco titulo="Saldos e cálculos">
+          <LinhaToggle
+            nome="Somar no Saldo Principal"
+            selo={SELOS.FC}
+            ajuda="Entra no Saldo Principal ('Como chegamos aqui'), no Fluxo de Caixa e nos relatórios por padrão"
+            checked={form.fluxoCaixaPrincipal}
+            onChange={e => set('fluxoCaixaPrincipal', e.target.checked)}
+          />
+          {!isCredit && (
+            <LinhaToggle
+              nome="Compensar resgate e aplicação"
+              ajuda="No extrato, resgate e aplicação na mesma data viram um único valor líquido"
+              checked={form.contaAplicacao}
+              onChange={e => set('contaAplicacao', e.target.checked)}
+            />
+          )}
+        </Bloco>
 
         {isChecking && (
-          <>
-            <Toggle
+          <Bloco titulo="Tipo da conta">
+            <LinhaToggle
+              nome="Conta do dia a dia"
+              selo={SELOS.CC}
+              ajuda="Conta corrente que paga as faturas, movimenta o gerencial do cartão e recebe os resgates de reserva. Só uma por vez"
               checked={form.contaCorrentePrincipal}
               onChange={e => set('contaCorrentePrincipal', e.target.checked)}
-              label="Conta Corrente Principal"
-              tooltip="Esta conta é usada no controle gerencial do cartão de crédito"
             />
             {conflictAccount && (
-              <div className="flex items-start gap-2 p-3 bg-aviso/10 border border-aviso/30 rounded-lg">
+              <div className="flex items-start gap-2 p-3 bg-aviso/10">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5 text-aviso" />
                 <p className="text-xs text-aviso leading-relaxed">
-                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta Corrente Principal.
+                  A conta <strong className="text-texto-1">"{conflictAccount.name}"</strong> já é a Conta do dia a dia.
                   Ao salvar, ela será substituída por esta conta.
                 </p>
               </div>
             )}
-          </>
+          </Bloco>
         )}
 
         {!isCredit && !isPatrimonial && (
           <>
-            <div>
-              <label className="label flex items-center">
-                Vínculo da conta
-                <Tooltip text="Transferências para/desta conta geram automaticamente despesa (ida) e receita (volta). Reserva = reserva orçamentária; Patrimônio = investimento/aplicação (ex.: Consórcio)." />
-              </label>
-              <select
-                className="input"
-                value={form.vinculoTipo}
-                onChange={e => {
-                  const v = e.target.value
-                  set('vinculoTipo', v)
-                  setVinculoError(false)
-                  if (v !== 'reserva') { set('reservaType', 'geral'); set('reservaCategoryId', null) }
-                  if (v !== 'patrimonio') set('patrimonioCategoryId', null)
-                }}
-              >
-                <option value="none">Nenhum</option>
-                <option value="reserva">Reserva</option>
-                <option value="patrimonio">Patrimônio / Investimento</option>
-              </select>
-            </div>
+            <fieldset>
+              <legend className="text-xs text-texto-3 uppercase tracking-wide mb-1.5">Finalidade da conta</legend>
+              <div role="radiogroup" aria-label="Finalidade da conta" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {FINALIDADES.map(f => {
+                  const sel = form.vinculoTipo === f.value
+                  return (
+                    <label
+                      key={f.value}
+                      className={`flex flex-col gap-0.5 p-3 rounded-lg border cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${
+                        sel ? 'border-primary bg-primary/10' : 'border-borda-forte bg-surface-2 hover:bg-surface-hover'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="vinculoTipo"
+                        value={f.value}
+                        checked={sel}
+                        onChange={() => {
+                          const v = f.value
+                          set('vinculoTipo', v)
+                          setVinculoError(false)
+                          if (v !== 'reserva') { set('reservaType', 'geral'); set('reservaCategoryId', null) }
+                          if (v !== 'patrimonio') set('patrimonioCategoryId', null)
+                        }}
+                        className="sr-only"
+                      />
+                      <span className={`text-sm font-semibold ${sel ? 'text-primary-fg' : 'text-texto-1'}`}>{f.nome}</span>
+                      <span className="text-xs text-texto-3 leading-snug">{f.ajuda}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
 
             {form.vinculoTipo === 'reserva' && (
               <div className="ml-3 space-y-3 p-3 bg-surface-2/50 rounded-lg border border-borda-forte/50">

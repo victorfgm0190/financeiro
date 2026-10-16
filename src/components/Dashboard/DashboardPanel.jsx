@@ -353,7 +353,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
               <p className="text-xs uppercase tracking-wide text-texto-2 font-medium">Saldo Principal</p>
               <p className={`text-xs mt-0.5 ${saldosPrincipais?.semContasFC ? 'text-aviso' : 'text-texto-3'}`}>
                 {saldosPrincipais?.semContasFC
-                  ? 'Nenhuma conta de fluxo de caixa principal neste perfil'
+                  ? 'Nenhuma conta marcada como Somar no Saldo Principal (FC) neste perfil'
                   : 'Contas de fluxo de caixa · clique para ver posição'}
               </p>
             </div>

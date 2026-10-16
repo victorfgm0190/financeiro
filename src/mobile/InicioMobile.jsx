@@ -158,7 +158,7 @@ function ResumoCard({ saldosPrincipais, v: valor, ocultar, carregando, onAbrir }
     >
       <ChevronRight size={18} aria-hidden="true" className="absolute top-4 right-4 text-white/60" />
       <p className="text-xs text-white/80">
-        Saldo principal{saldosPrincipais?.semContasFC ? ' · nenhuma conta de fluxo de caixa principal neste perfil' : ''}
+        Saldo principal{saldosPrincipais?.semContasFC ? ' · nenhuma conta marcada como FC neste perfil' : ''}
       </p>
       <p className="text-3xl font-extrabold tracking-tight mt-0.5">{v(saldosPrincipais?.saldoAtual ?? 0, 'w-40 h-8')}</p>
       <div className="grid grid-cols-2 gap-3 mt-4">

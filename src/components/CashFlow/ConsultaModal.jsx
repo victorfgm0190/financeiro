@@ -168,7 +168,7 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
               <>
                 <p className="flex items-start gap-2 px-3 py-2 text-xs text-texto-2 border-b border-borda">
                   <Info size={13} className="shrink-0 mt-0.5 text-texto-3" />
-                  Usa automaticamente as contas marcadas como Fluxo de Caixa Principal (FC). Para mudar, altere o cadastro da conta.
+                  Usa automaticamente as contas marcadas como Somar no Saldo Principal (FC). Para mudar, altere o cadastro da conta.
                 </p>
                 {contas.map(a => linhaConta(a, false))}
                 {contas.length === 0 && <p className="text-xs text-aviso px-3 py-3">⚠ Nenhuma conta marcada como FC.</p>}

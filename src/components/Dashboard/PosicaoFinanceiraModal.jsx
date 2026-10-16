@@ -39,8 +39,8 @@ export default function PosicaoFinanceiraModal() {
   if (rows.length === 0) {
     return (
       <p className="text-center text-texto-3 text-sm py-10">
-        Nenhuma conta marcada como fluxo de caixa principal.<br />
-        <span className="text-texto-3 text-xs mt-1 block">Configure em Contas → editar conta → ativar "Fluxo de Caixa Principal".</span>
+        Nenhuma conta marcada como Somar no Saldo Principal (FC).<br />
+        <span className="text-texto-3 text-xs mt-1 block">Configure em Contas → editar conta → ativar "Somar no Saldo Principal".</span>
       </p>
     )
   }

@@ -548,11 +548,11 @@ export default function CashFlowPanel({ setActivePage }) {
           <AlertTriangle size={18} className="text-aviso shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-medium text-aviso">
-              {consulta.modo === 'principais' ? 'Nenhuma conta marcada como Fluxo de Caixa Principal' : 'Esta consulta não tem contas'}
+              {consulta.modo === 'principais' ? 'Nenhuma conta marcada como Somar no Saldo Principal (FC)' : 'Esta consulta não tem contas'}
             </p>
             <p className="text-xs text-texto-2 mt-0.5">
               {consulta.modo === 'principais'
-                ? <>Ative a flag <span className="font-semibold">Fluxo de Caixa Principal</span> em pelo menos uma conta corrente ou poupança, ou crie uma consulta.</>
+                ? <>Ative <span className="font-semibold">Somar no Saldo Principal</span> em pelo menos uma conta corrente ou poupança, ou crie uma consulta.</>
                 : 'Edite a consulta e selecione contas (ou grupos com contas) deste perfil.'}
             </p>
           </div>

@@ -92,8 +92,8 @@ export default function SaldoPrincipalBreakdownModal({ compacto = false, oculto 
         {semContasFC && (
           <p className="flex items-start gap-1.5 text-xs text-aviso">
             <AlertTriangle size={13} className="shrink-0 mt-px" />
-            Nenhuma conta de fluxo de caixa principal neste perfil. Marque contas como FC no cadastro
-            para que entrem no Saldo Principal.
+            Nenhuma conta deste perfil soma no Saldo Principal. Ative "Somar no Saldo Principal" (FC) no
+            cadastro da conta.
           </p>
         )}
         <Row label="Saldo base (lançamentos efetivados)" value={b.saldoAtual.base} />

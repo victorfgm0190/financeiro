@@ -14,7 +14,7 @@ export default function AccountOptions({
   labelFn,
 }) {
   // Contas inativas (active === false) nunca aparecem nos selects de formulário.
-  // No mobile (<md), contas marcadas como "Ocultar no Mobile" também são omitidas.
+  // No mobile (<md), contas marcadas como "Esconder no celular" também são omitidas.
   const isMobile = useIsMobile()
   const pool = (filter ? accounts.filter(filter) : accounts)
     .filter(a => a.active !== false && (!isMobile || !a.hideOnMobile))

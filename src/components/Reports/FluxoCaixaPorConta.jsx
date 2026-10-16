@@ -522,7 +522,7 @@ export default function FluxoCaixaPorConta() {
           {visao === 'principais' && (
             <div className="lg:col-span-2 flex items-end">
               <p className="text-xs text-texto-3">
-                Soma automática das contas do Fluxo de Caixa Principal (FC):{' '}
+                Soma automática das contas marcadas como Somar no Saldo Principal (FC):{' '}
                 <span className="text-texto-2">{selectedAccounts.length} conta{selectedAccounts.length !== 1 ? 's' : ''}</span>
               </p>
             </div>
@@ -649,7 +649,7 @@ export default function FluxoCaixaPorConta() {
 
         {noSelection ? (
           <div className="text-center py-10 text-texto-3 text-sm">
-            {visao === 'principais' ? 'Nenhuma conta marcada como Fluxo de Caixa Principal (FC).' : 'Selecione uma conta/grupo para ver o fluxo.'}
+            {visao === 'principais' ? 'Nenhuma conta marcada como Somar no Saldo Principal (FC).' : 'Selecione uma conta/grupo para ver o fluxo.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
