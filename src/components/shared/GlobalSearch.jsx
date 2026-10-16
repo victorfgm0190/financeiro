@@ -5,7 +5,8 @@ import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
-import { getEffectiveStatus, paiDaSombra, filtrarPorStatus, STATUS } from '../../lib/statusEfetivo'
+import { getEffectiveStatus, STATUS } from '../../lib/statusEfetivo'
+import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica } from '../../lib/buscaGlobal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
 
@@ -53,6 +54,7 @@ export default function GlobalSearch({ open, onClose }) {
   const catById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories])
   const gerById = useMemo(() => new Map(gerencialGroups.map(g => [g.id, g])), [gerencialGroups])
   const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
+  const selosPorPai = useMemo(() => selosReservaPorPai(transactions), [transactions])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
   const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : null }
 
@@ -63,7 +65,7 @@ export default function GlobalSearch({ open, onClose }) {
     const matchValue = (amt) => v == null || Math.abs(Math.abs(Number(amt)) - v) <= 0.01
     const matchText = (d, p) => !q || `${d || ''} ${p || ''}`.toLowerCase().includes(q)
     const txItems = transactions.filter(t =>
-      matchValue(t.amount) && matchText(t.description, t.payee) &&
+      !ehSombraAutomatica(t) && matchValue(t.amount) && matchText(t.description, t.payee) &&
       (!from || (t.date && t.date >= from)) && (!to || (t.date && t.date <= to))
     )
     const scItems = schedules.filter(s =>
@@ -114,21 +116,19 @@ export default function GlobalSearch({ open, onClose }) {
     const out = []
     const hoje = todayStr()
     const sts = new Map(scItems.map(s => [s.id, scheduleStatus(s)]))
-    const filtrados = filtrarPorStatus({
+    const filtrados = itensVisiveisBusca({
       txs: txItems, schedules: scItems, filtro: status, txById, hoje, temProxima: s => !!sts.get(s.id).next,
     })
     for (const t of filtrados.txs) {
       const paid = getEffectiveStatus(t, txById, hoje) === STATUS.REGISTRADO
-      // Sombra automática de reserva (sem conta): mostra as contas da transferência de origem.
-      const pai = paiDaSombra(t, txById)
-      const contaTx = (x) => x.type === 'transfer' ? `${accName(x.accountId)} → ${accName(x.toAccountId)}` : accName(x.accountId)
       out.push({
         kind: 'tx', id: t.id, obj: t,
         sortDate: t.date || '',
         type: t.type,
         date: t.date,
         dateCartao: t.accountType === 'credit' ? (t.dateCartao || null) : null,
-        conta: pai ? `${contaTx(pai)} (auto)` : contaTx(t),
+        conta: t.type === 'transfer' ? `${accName(t.accountId)} → ${accName(t.toAccountId)}` : accName(t.accountId),
+        selos: selosPorPai.get(t.id) || [],
         amount: t.amount,
         desc: t.description || '',
         payee: t.payee || '',
@@ -184,6 +184,9 @@ export default function GlobalSearch({ open, onClose }) {
             {r.kind === 'tx' ? 'Lançamento' : 'Agendamento'}
           </span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.statusCls}`}>{r.statusLabel}</span>
+          {(r.selos || []).map(selo => (
+            <span key={selo} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-reserva">{selo}</span>
+          ))}
           <span className="text-xs text-texto-3">
             {r.date ? fmtDate(r.date) : '—'}
             {r.dateCartao && <span className="text-texto-3"> · cartão {fmtDate(r.dateCartao)}</span>}
@@ -216,7 +219,7 @@ export default function GlobalSearch({ open, onClose }) {
     const txIds = new Set(found.txIds), scIds = new Set(found.scIds)
     return buildResults(transactions.filter(t => txIds.has(t.id)), schedules.filter(s => scIds.has(s.id)))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [found, status, transactions, schedules, txById, accById, catById, gerById])
+  }, [found, status, transactions, schedules, txById, selosPorPai, accById, catById, gerById])
 
   return (
     <>

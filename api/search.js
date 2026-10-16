@@ -36,13 +36,10 @@ export default async function handler(req, res) {
       if (like) { where.push(`(description ILIKE $${i} OR payee ILIKE $${i})`); params.push(like); i++ }
       if (from) { where.push(`date >= $${i}`); params.push(from); i++ }
       if (to) { where.push(`date <= $${i}`); params.push(to); i++ }
-      // Sombras automáticas de reserva/investimento (reserva_auto, SEM conta) entram pelo pai: a
-      // transferência de origem é do perfil. Legado sem parent_tx_id entra sempre (mesma regra do
-      // profileTransactions no front, que mantém todo reservaAuto).
-      if (accIds) {
-        where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}) OR (reserva_auto AND (parent_tx_id IS NULL OR parent_tx_id IN (SELECT id FROM lancamentos WHERE account_id = ANY($${i}) OR to_account_id = ANY($${i})))))`)
-        params.push(accIds); i++
-      }
+      // Sombras automáticas de reserva/investimento (reserva_auto, sem conta) não são itens da
+      // busca — a transferência de origem as representa (e ganha o selo no front).
+      where.push(`reserva_auto IS NOT TRUE`)
+      if (accIds) { where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}))`); params.push(accIds); i++ }
       var txRows = await query(
         `SELECT * FROM lancamentos ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY date DESC NULLS LAST LIMIT ${LIMIT}`,
         params,
