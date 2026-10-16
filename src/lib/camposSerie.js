@@ -157,21 +157,42 @@ export function planoAgendamento(schedule, { occDate, mudancas, escopo, pendente
       // conflitam com a nova data e saem; os demais campos delas seguem a ocorrência por posição.
       const dia = FREQ_MENSAIS.has(s.frequency) ? Number(mData.para.slice(8, 10)) : null
       if (anteriores.length === 0 && typeof proximasDoNovo === 'function') {
-        // Editada = 1ª pendente: re-ancora a série e re-chaveia os overrides seguintes por posição.
+        // Editada = 1ª pendente: re-ancora a série e re-chaveia tudo o que é guardado por data das
+        // ocorrências daqui pra frente — exceções (sem a data, que conflita) e PULOS. Frequência
+        // mensal: a ocorrência velha vai para a nova do MESMO MÊS (28/11 pulada → 16/11 pulada),
+        // que é a competência que o usuário pulou/editou; sem nova naquele mês, ou em frequência
+        // não mensal, vale a posição na série (contando as puladas). A editada tem prioridade: nada
+        // das seguintes cai em cima dela. Registradas nunca entram (o motor já as exclui).
         const antigos = s.overrides
+        const pulosAntigos = new Set(s.skipped || [])
+        const velhas = proximasDoNovo({ ...s, skipped: [] }).filter(d => d >= occDate)
+        const velhasSet = new Set(velhas)
         const novos = {}
-        for (const [k, v] of Object.entries(antigos)) if (!daquiPraFrente.includes(k)) novos[k] = v
+        for (const [k, v] of Object.entries(antigos)) if (!velhasSet.has(k)) novos[k] = v
         if (dia) novos._diaVencimento = dia
         else delete novos._diaVencimento
-        s = { ...s, nextOccurrence: mData.para, overrides: novos }
-        const novas = proximasDoNovo(s)
-        daquiPraFrente.forEach((d, i) => {
+        s = { ...s, nextOccurrence: mData.para, overrides: novos, skipped: (s.skipped || []).filter(d => !velhasSet.has(d)) }
+        const novas = proximasDoNovo({ ...s, skipped: [] })
+        const porMes = new Map()
+        if (dia) for (const n of novas) if (!porMes.has(n.slice(0, 7))) porMes.set(n.slice(0, 7), n)
+        const usados = new Set([mData.para])
+        velhas.forEach((d, i) => {
+          if (d === occDate) {
+            const ov = antigos[d]
+            const resto = ov ? semCampo(ov, 'date') : {}
+            if (Object.keys(resto).length) s.overrides[mData.para] = resto
+            return
+          }
+          const alvo = (dia && porMes.get(d.slice(0, 7))) || novas[i]
+          if (!alvo || usados.has(alvo)) return
+          usados.add(alvo)
+          if (pulosAntigos.has(d)) s.skipped.push(alvo)
           const ov = antigos[d]
-          const alvo = novas[i]
-          if (!alvo || !ov) return
+          if (!ov) return
           const resto = semCampo(ov, 'date')
           if (Object.keys(resto).length) s.overrides[alvo] = resto
         })
+        s.skipped.sort()
       } else {
         // Há pendentes ANTES (ficam como estão): daqui pra frente, exceção com a data re-ancorada.
         const datas = datasDaSerie(mData.para, s.frequency, daquiPraFrente.length, dia)

@@ -12,6 +12,7 @@ import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategori
 import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
+import { useGuardaFechamento } from '../shared/guardaFechamento'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoAgendamento, planoRegistros, occCampos,
@@ -227,19 +228,23 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   })
   const grpD = gerencialGroups.find(g => g.number === 'D')
 
-  // Versão VIVA do agendamento em edição (o estado do app). A edição de uma ocorrência pela prévia
-  // é aplicada na hora; daí em diante a âncora, o diff e a base do save partem desta versão, não
-  // do `initial` congelado na abertura do formulário.
+  // Versão VIVA do agendamento em edição (o estado do app) e, por cima dela, a série com as edições
+  // de ocorrência feitas pela prévia e ainda NÃO salvas (`serieLocal`). A âncora, o diff e a base
+  // do save partem de `serieBase`; nada vai para o banco antes do Salvar.
   const atual = (initial?.id && (schedules || []).find(s => s.id === initial.id)) || initial
+  const [serieLocal, setSerieLocal] = useState(null)
+  // Edições de ocorrência pela prévia pendentes (vão para o histórico no Salvar).
+  const [edicoesChip, setEdicoesChip] = useState([]) // [{ occDate, mudancas, escopo, motivo }]
+  const serieBase = serieLocal || atual
   // Âncora da série tal como está no banco (data ORIGINAL da ocorrência). Vazia num agendamento
   // novo; num já salvo sem âncora explícita, a primeira ocorrência futura.
   const ancoraDe = (sch) => sch?.nextOccurrence
     || (sch?.id ? (getNextOccurrences(sch, 24).find(d => d >= today()) || '') : '')
-  const ancoraSalva = ancoraDe(atual)
+  const ancoraSalva = ancoraDe(serieBase)
   // O que o campo MOSTRA: a mesma âncora com a exceção da ocorrência aplicada. Com a ocorrência
   // de 10/09 movida para 13/09, a âncora salva continua 10/09 e o campo exibe 13/09 — que é a
   // data em que a parcela realmente cai, e a que a tela inicial já mostrava.
-  const ancoraExibida = (ancoraSalva && atual) ? occEfetiva(atual, ancoraSalva).date : ancoraSalva
+  const ancoraExibida = (ancoraSalva && serieBase) ? occEfetiva(serieBase, ancoraSalva).date : ancoraSalva
   // Só o que o usuário digitar aqui re-ancora a série. Sem esta flag, reabrir o formulário e
   // salvar qualquer outro campo gravaria a data EXIBIDA como âncora nova (o submit faz
   // `data = { ...form }`) e deslocaria a série inteira sem ninguém pedir.
@@ -253,7 +258,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const ehMotor = !!initial?.id && agendamentoDoMotor(initial)
   const ehFinanciamento = !!initial?.id && !!chaveSerieFinanciamento(initial)
   const ehRecorrente = !!initial?.id && !ehMotor && !ehFinanciamento && (initial.frequency || 'once') !== 'once'
-  const occInicial = ehRecorrente && ancoraSalva ? occCampos(atual, ancoraSalva) : null
+  const occInicial = ehRecorrente && ancoraSalva ? occCampos(serieBase, ancoraSalva) : null
   const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes, conflitos }
   // Edição de uma ocorrência pela prévia aguardando o "aplicar às próximas?".
   const [chipPendente, setChipPendente] = useState(null) // { occDate, mudancas, nProximas, nPendentes, conflitos }
@@ -293,6 +298,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.transactionType })
 
   const [editingOcc, setEditingOcc] = useState(null)
+  // Edição de ocorrência pendente (não salva) → Cancelar/X perguntam antes de descartar.
+  const podeDescartar = () => edicoesChip.length === 0 || window.confirm('Descartar alterações não salvas?')
+  useGuardaFechamento(podeDescartar)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   // Tipo/contas mudaram: se a transferência deixou de ser entre perfis, o bloco some e as duas
@@ -384,7 +392,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
     // Valor da SÉRIE: num recorrente salvo, o campo Valor mostra a ocorrência da âncora (que pode
     // ter exceção própria), então a série vem do agendamento.
-    amount: ehRecorrente ? (Number(atual.amount) || 0) : (Number(form.amount) || 0),
+    amount: ehRecorrente ? (Number(serieBase.amount) || 0) : (Number(form.amount) || 0),
     registered: [],
     skipped: [],
   }
@@ -393,15 +401,17 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // Valor efetivo da próxima ocorrência do agendamento já salvo (respeita override individual).
   // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
   // próxima ocorrência tem valor diferente.
-  const nextOccDate = atual?.id ? (getNextOccurrences(atual, 1)[0] || null) : null
-  const nextOccAmount = nextOccDate ? Number(occEfetiva(atual, nextOccDate).amount) : null
-  const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(atual?.amount) || 0)
+  const nextOccDate = serieBase?.id ? (getNextOccurrences(serieBase, 1)[0] || null) : null
+  const nextOccAmount = nextOccDate ? Number(occEfetiva(serieBase, nextOccDate).amount) : null
+  const hasNextDiff = nextOccDate != null && nextOccAmount !== (Number(serieBase?.amount) || 0)
 
-  // Edição de uma ocorrência pela PRÉVIA (chip). Pular/voltar a incluir continua local (vai no
-  // save). Data e valor passam pela MESMA regra do formulário: pendentes depois desta → pergunta
-  // "aplicar às próximas?"; o plano é o planoAgendamento. Num agendamento já salvo, aplica e grava o
-  // histórico na hora (a prévia passa a refletir o estado real); num novo, só no formulário.
-  const fonteOcorrencias = () => (initial?.id ? atual : { ...previewSchedule, registered: [], skipped: [] })
+  // Edição de uma ocorrência pela PRÉVIA (chip). Data e valor passam pela MESMA regra do formulário:
+  // pendentes depois desta → pergunta "aplicar às próximas?"; o plano é o planoAgendamento. Tudo
+  // fica PENDENTE no formulário (a prévia já mostra) e só é gravado no Salvar, com o histórico.
+  // A fonte inclui os pulos/exceções locais do formulário, para nenhum se perder entre edições.
+  const fonteOcorrencias = () => (initial?.id
+    ? { ...serieBase, skipped: form.skipped, overrides: form.overrides }
+    : { ...previewSchedule, registered: [], skipped: form.skipped })
   const handleSaveOccurrence = (changes) => {
     const occDate = editingOcc
     setEditingOcc(null)
@@ -435,29 +445,19 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     })
     const novo = plano.schedule
     if (initial?.id) {
-      updateSchedule(initial.id, novo)
-      // Espelha no formulário: exceções e, se o usuário não mexeu nos campos, a data e o valor
-      // exibidos da âncora (para o diff do save não ver mudança que não foi digitada).
+      setSerieLocal(novo)
+      setEdicoesChip(l => [...l, { occDate, mudancas, escopo, motivo }])
+      // Espelha no formulário: exceções, pulos e, se o usuário não mexeu nos campos, a data e o
+      // valor exibidos da âncora (para o diff do save não ver mudança que não foi digitada).
       const ancoraNova = ancoraDe(novo)
       setForm(f => ({
         ...f,
         overrides: novo.overrides,
+        skipped: novo.skipped || [],
         ...(!ancoraTocada && ancoraNova ? { nextOccurrence: occEfetiva(novo, ancoraNova).date } : {}),
         ...(ancoraNova && normalizarCampo('amount', f.amount) === normalizarCampo('amount', camposAntes?.amount)
           ? { amount: occCampos(novo, ancoraNova).amount } : {}),
       }))
-      const loteId = novoLoteId()
-      const historico = linhasHistorico({
-        entidade: 'agendamento',
-        itens: itensPorEscopo([{ id: initial.id, ocorrenciaData: escopo === ESCOPO.PARCELA ? occDate : null, mudancas }], escopo),
-        serieKey: serieKeyDe({ agendamento: atual }), loteId, motivo,
-      })
-      try {
-        if (historico.length) await registrarEdicao({ agendamentos: [novo], historico, loteId, motivo })
-        onAviso?.(escopo === ESCOPO.PARCELA ? 'Ocorrência alterada. Histórico registrado.' : mensagemAplicada(plano.afetadas.length || 1))
-      } catch (err) {
-        onAviso?.(`Alteração salva, mas o histórico não foi registrado: ${err.message}`, 'error')
-      }
       return
     }
     // Agendamento novo (ainda sem id): tudo fica no formulário até salvar.
@@ -465,6 +465,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     setForm(f => ({
       ...f,
       overrides: novo.overrides,
+      skipped: novo.skipped || [],
       ...(escopo !== ESCOPO.PARCELA && mudancas.some(m => m.campo === 'amount') ? { amount: novo.amount } : {}),
       ...(reancorou ? { nextOccurrence: novo.nextOccurrence } : {}),
     }))
@@ -474,18 +475,18 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // Campos rastreados (valor, data, categoria, descrição, conta, centro de custo, grupo, favorecido,
   // tipo) ANTES e DEPOIS — base do diff da regra de séries e do histórico. A data só entra se o
   // campo foi tocado (o mesmo critério que já protegia a âncora).
-  const camposAntes = atual?.id ? {
-    amount: occInicial ? occInicial.amount : atual.amount,
+  const camposAntes = serieBase?.id ? {
+    amount: occInicial ? occInicial.amount : serieBase.amount,
     date: ancoraExibida || null,
-    categoryId: (occInicial ? occInicial.categoryId : atual.categoryId) || null,
-    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : atual.categoriaCnpjId) || null,
-    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : atual.categoriaCpfId) || null,
-    description: (occInicial ? occInicial.description : atual.description) || null,
-    accountId: (occInicial ? occInicial.accountId : atual.accountId) || null,
-    costCenter: (occInicial ? occInicial.costCenter : atual.costCenter) || null,
-    grupoGerencial: (occInicial ? occInicial.grupoGerencial : atual.grupoGerencial) || null,
-    payee: atual.payee || null,
-    tipoDocumentoId: atual.tipoDocumentoId || null,
+    categoryId: (occInicial ? occInicial.categoryId : serieBase.categoryId) || null,
+    categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : serieBase.categoriaCnpjId) || null,
+    categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : serieBase.categoriaCpfId) || null,
+    description: (occInicial ? occInicial.description : serieBase.description) || null,
+    accountId: (occInicial ? occInicial.accountId : serieBase.accountId) || null,
+    costCenter: (occInicial ? occInicial.costCenter : serieBase.costCenter) || null,
+    grupoGerencial: (occInicial ? occInicial.grupoGerencial : serieBase.grupoGerencial) || null,
+    payee: serieBase.payee || null,
+    tipoDocumentoId: serieBase.tipoDocumentoId || null,
   } : null
   const camposDoForm = (f) => ({
     amount: Number(f.amount),
@@ -504,7 +505,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
   const contextoSerie = () => {
     if (ehRecorrente) {
-      const pendentes = getNextOccurrences(atual, 400)
+      const pendentes = getNextOccurrences(serieBase, 400)
       const occDate = ancoraSalva || pendentes[0]
       return { tipo: 'A', occDate, pendentes, nProximas: pendentes.filter(d => d > occDate).length, nPendentes: pendentes.length }
     }
@@ -531,11 +532,11 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       // Estrutura do formulário (frequência, parcelas, prévia…) + campos rastreados ainda com o
       // valor da SÉRIE; o plano decide override × agendamento base.
       const base = {
-        ...atual, ...data, nextOccurrence: ancoraSalva,
-        amount: atual.amount, categoryId: atual.categoryId, description: atual.description,
-        categoriaCnpjId: atual.categoriaCnpjId || null, categoriaCpfId: atual.categoriaCpfId || null,
-        accountId: atual.accountId, accountType: atual.accountType, costCenter: atual.costCenter,
-        grupoGerencial: atual.grupoGerencial, payee: atual.payee, tipoDocumentoId: atual.tipoDocumentoId,
+        ...serieBase, ...data, nextOccurrence: ancoraSalva,
+        amount: serieBase.amount, categoryId: serieBase.categoryId, description: serieBase.description,
+        categoriaCnpjId: serieBase.categoriaCnpjId || null, categoriaCpfId: serieBase.categoriaCpfId || null,
+        accountId: serieBase.accountId, accountType: serieBase.accountType, costCenter: serieBase.costCenter,
+        grupoGerencial: serieBase.grupoGerencial, payee: serieBase.payee, tipoDocumentoId: serieBase.tipoDocumentoId,
       }
       const plano = planoAgendamento(base, {
         occDate: ctx.occDate, mudancas, escopo: escopoParcela,
@@ -589,7 +590,15 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       entradas = [{ id: initial.id, mudancas }]
     }
 
-    const historico = linhasHistorico({ entidade: 'agendamento', itens: itensPorEscopo(entradas, escopoParcela), serieKey, loteId, motivo })
+    // Edições de ocorrência pela prévia (pendentes até agora): cada uma com o seu escopo, no mesmo lote.
+    const historicoChip = edicoesChip.flatMap(e => linhasHistorico({
+      entidade: 'agendamento', serieKey, loteId, motivo: e.motivo || motivo,
+      itens: itensPorEscopo([{ id: initial.id, ocorrenciaData: e.escopo === ESCOPO.PARCELA ? e.occDate : null, mudancas: e.mudancas }], e.escopo),
+    }))
+    const historico = [
+      ...historicoChip,
+      ...linhasHistorico({ entidade: 'agendamento', itens: itensPorEscopo(entradas, escopoParcela), serieKey, loteId, motivo }),
+    ]
     if (historico.length) {
       try {
         await registrarEdicao({ agendamentos: finais, historico, loteId, motivo })
@@ -600,6 +609,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     }
     if (mudancas.length) {
       onAviso?.(ctx.tipo === 'simples' ? 'Alteração salva. Histórico registrado.' : mensagemAplicada(nAfetadas))
+    } else if (historicoChip.length) {
+      onAviso?.('Alterações salvas. Histórico registrado.')
     }
     return true
   }
@@ -637,7 +648,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       if (!decisao && precisaEscolherEscopo(mudancas, ctx.nProximas)) {
         setEscopoPendente({
           mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, ocorrencia: ctx.tipo === 'A',
-          conflitos: ctx.tipo === 'A' ? conflitosProximas(atual, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
+          conflitos: ctx.tipo === 'A' ? conflitosProximas(serieBase, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
         })
         return
       }
@@ -1214,7 +1225,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         )}
 
         <div className="col-span-2 flex gap-3 pt-1">
-          <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>
         </div>
       </form>

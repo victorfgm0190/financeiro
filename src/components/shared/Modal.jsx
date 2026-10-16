@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { GuardaFechamentoContext } from './guardaFechamento'
 import { useCamadaModal, CamadaContext } from '../../context/atalhosHooks'
 
 const MAX_WIDTHS = {
@@ -10,15 +11,24 @@ const MAX_WIDTHS = {
 }
 
 export default function Modal({ open, onClose, title, children, size = 'md' }) {
+  const guardas = useRef(new Set())
+  const registrarGuarda = useCallback((fn) => {
+    guardas.current.add(fn)
+    return () => guardas.current.delete(fn)
+  }, [])
+  const fechar = useCallback(() => {
+    for (const g of guardas.current) if (!g()) return
+    onClose()
+  }, [onClose])
   // Camada para os atalhos de teclado: ações registradas dentro deste modal só valem com ele no topo.
   const painelRef = useRef(null)
   const camadaId = useCamadaModal(open, painelRef)
   useEffect(() => {
     if (!open) return
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    const handler = (e) => { if (e.key === 'Escape') fechar() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  }, [open, fechar])
 
   if (!open) return null
 
@@ -28,7 +38,7 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
           (ex.: o dropdown portado do SearchableSelect, z-9999, ao passar o cursor pelas opções),
           o backdrop-filter invalida o backing store e o modal "sumia" por um frame. O overlay
           escuro (bg-overlay) mantém o mesmo efeito visual de escurecer o fundo. */}
-      <div className="absolute inset-0 bg-overlay hidden md:block" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay hidden md:block" onClick={fechar} />
       {/* Modal — translateZ(0) promove o painel a uma camada de composição GPU própria,
           isolando-o das recomposições forçadas por elementos portados acima (ex.: o dropdown
           do SearchableSelect em z-9999), que faziam o modal "sumir" por um frame. */}
@@ -39,12 +49,14 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
           <h2 className="text-base font-semibold text-texto-1">{title}</h2>
-          <button onClick={onClose} className="text-texto-3 hover:text-texto-2 transition-colors p-1 rounded-lg hover:bg-surface-hover">
+          <button onClick={fechar} className="text-texto-3 hover:text-texto-2 transition-colors p-1 rounded-lg hover:bg-surface-hover">
             <X size={18} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-5">
-          <CamadaContext.Provider value={camadaId}>{children}</CamadaContext.Provider>
+          <CamadaContext.Provider value={camadaId}>
+            <GuardaFechamentoContext.Provider value={registrarGuarda}>{children}</GuardaFechamentoContext.Provider>
+          </CamadaContext.Provider>
         </div>
       </div>
     </div>

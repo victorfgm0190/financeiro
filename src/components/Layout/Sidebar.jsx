@@ -95,6 +95,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
         <div className="border-t border-borda/60 pt-2">
           <p className="text-xs text-texto-3 font-medium leading-tight">Gislaine &amp; Victor Moreira</p>
           <p className="text-xs text-texto-3 leading-tight mt-0.5 italic">Transformando conhecimento em resultados.</p>
+          <p className="text-[10px] text-texto-3 leading-tight mt-1 font-mono" title="Versão (commit) em execução">v {import.meta.env.VITE_APP_COMMIT || 'dev'}</p>
         </div>
       </div>
     </aside>

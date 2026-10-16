@@ -19,4 +19,12 @@ if (import.meta.env.DEV) {
     .finally(iniciar)
 } else {
   iniciar()
+  // Service worker em autoUpdate: registra já no load e, quando um SW novo assume, recarrega a
+  // página uma vez (versão nova sem assets antigos). Checa atualização a cada hora no app aberto.
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => registerSW({
+      immediate: true,
+      onRegisteredSW(_url, reg) { if (reg) setInterval(() => reg.update(), 60 * 60 * 1000) },
+    }))
+    .catch(err => console.error('[pwa]', err))
 }

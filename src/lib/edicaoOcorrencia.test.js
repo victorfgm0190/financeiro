@@ -122,3 +122,38 @@ describe('telas que usam a próxima ocorrência / reservas', () => {
     expect(parteDaFuncaoNaOcorrencia(trf, det, 'f1', '2026-12-05')).toEqual({ date: '2026-12-05', valor: 600 })
   })
 })
+
+describe('pulos no "Sim" com data (re-ancoragem por posição)', () => {
+  const comPulo = { ...MAYARA, skipped: ['2026-11-28'] }
+  it('28/11 pulada; re-ancorar 28/09 → 16/10 com Sim → 16/11 continua pulada; 16/12 em diante normal', () => {
+    const { schedule: s } = editar(comPulo, '2026-09-28', { date: '2026-10-16', amount: 678.25 }, ESCOPO.PROXIMAS)
+    expect(s.skipped).toEqual(['2026-11-16'])
+    expect(computeOccurrences(s, 4)).toEqual(['2026-10-16', '2026-12-16', '2027-01-16', '2027-02-16'])
+  })
+  it('sem dupla contagem: cada mês tem no máximo uma ocorrência e nenhuma data velha sobra', () => {
+    const { schedule: s } = editar(comPulo, '2026-09-28', { date: '2026-10-16', amount: 678.25 }, ESCOPO.PROXIMAS)
+    const occs = computeOccurrences(s, 24).map(d => occEfetiva(s, d).date)
+    const meses = occs.map(d => d.slice(0, 7))
+    expect(new Set(meses).size).toBe(meses.length)
+    expect(occs.some(d => d.endsWith('-28'))).toBe(false)
+    expect(occs).not.toContain('2026-11-16')
+  })
+  it('exceção de valor de uma seguinte acompanha o mês (28/11 → 16/11); a do mês da editada não cai nela', () => {
+    const s0 = { ...MAYARA, overrides: { '2026-10-28': { amount: 650 }, '2026-11-28': { amount: 640 } } }
+    const { schedule: s } = editar(s0, '2026-09-28', { date: '2026-10-16', amount: 678.25 }, ESCOPO.PROXIMAS)
+    expect(s.overrides['2026-11-16']).toEqual({ amount: 640 })
+    expect(s.overrides['2026-10-16']).toBeUndefined() // a editada vale 678,25 (o que o usuário pediu)
+    expect(datasOverride(s)).toEqual(['2026-11-16'])
+  })
+  it('frequência semanal: re-chaveia por posição', () => {
+    const sem = { ...MAYARA, frequency: 'weekly', startDate: '2026-10-05', nextOccurrence: '2026-10-05', registered: [], skipped: ['2026-10-19'] }
+    const { schedule: s } = editar(sem, '2026-10-05', { date: '2026-10-07', amount: 678.25 }, ESCOPO.PROXIMAS)
+    expect(s.skipped).toEqual(['2026-10-21'])
+  })
+  it('registradas e pulos anteriores à editada não mudam', () => {
+    const s0 = { ...MAYARA, skipped: ['2026-04-28'] }
+    const { schedule: s } = editar(s0, '2026-09-28', { date: '2026-10-16', amount: 678.25 }, ESCOPO.PROXIMAS)
+    expect(s.registered).toEqual(MAYARA.registered)
+    expect(s.skipped).toEqual(['2026-04-28'])
+  })
+})
