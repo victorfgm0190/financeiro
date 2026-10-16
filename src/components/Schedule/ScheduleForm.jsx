@@ -12,6 +12,7 @@ import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategori
 import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
 import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
+import OcorrenciasRegistradas from './OcorrenciasRegistradas'
 import { useGuardaFechamento } from '../shared/guardaFechamento'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import {
@@ -393,7 +394,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     // Valor da SÉRIE: num recorrente salvo, o campo Valor mostra a ocorrência da âncora (que pode
     // ter exceção própria), então a série vem do agendamento.
     amount: ehRecorrente ? (Number(serieBase.amount) || 0) : (Number(form.amount) || 0),
-    registered: [],
+    // As registradas reais: num parcelado, o motor conta as já consumidas antes da âncora para
+    // saber quantas faltam — com [] a prévia do TV PAPAI (4 de 8 pagas) listava 8 datas futuras.
+    // As puladas seguem fora ([]), para continuarem aparecendo como chip "Pulado".
+    registered: initial?.id ? (serieBase?.registered || []) : [],
     skipped: [],
   }
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
@@ -1225,6 +1229,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             </div>
           </div>
         )}
+
+        {/* Histórico das ocorrências já consumidas (pagas, puladas, baixadas) — só leitura. */}
+        {initial?.id && <OcorrenciasRegistradas schedule={atual} transactions={transactions} accounts={accounts} />}
 
         <div className="col-span-2 flex gap-3 pt-1">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
