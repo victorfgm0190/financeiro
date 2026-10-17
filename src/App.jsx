@@ -40,6 +40,7 @@ import TrocarSenha from './pages/TrocarSenha'
 import CadastroCliente from './pages/CadastroCliente'
 import PaginaLegal from './pages/PaginaLegal'
 import EntrarComCodigo from './pages/EntrarComCodigo'
+import DefinirSenha from './pages/DefinirSenha'
 import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
 import ClientesPanel from './components/Clientes/ClientesPanel'
 import { resumoClientes } from './lib/clientesApi'
@@ -280,6 +281,8 @@ const PAGINAS_PUBLICAS = {
   '/privacidade': () => <PaginaLegal tipo="privacidade" />,
   // Código de passagem do login no www → token deste endereço (<sigla>.finup.app.br).
   '/entrar': () => <EntrarComCodigo />,
+  // Link de senha do e-mail (esqueci / convite) — token procurado no banco do ambiente deste endereço.
+  '/definir-senha': () => <DefinirSenha />,
 }
 
 export default function App() {

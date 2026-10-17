@@ -19,5 +19,7 @@ async function chamar(url, { method = 'GET', body } = {}) {
 export const listarUsuarios = () => chamar('/api/usuarios').then(r => ({ usuarios: r.usuarios || [], perfis: r.perfis || [] }))
 export const criarUsuario = (dados) => chamar('/api/usuarios', { method: 'POST', body: dados }).then(r => r.usuario)
 export const editarUsuario = (dados) => chamar('/api/usuarios', { method: 'PATCH', body: dados }).then(r => r.usuario)
+// Convite: link (48 h) por e-mail para o usuário criar a própria senha.
+export const enviarLinkSenha = (id) => chamar('/api/usuarios?acao=enviar-convite', { method: 'POST', body: { id } })
 export const trocarMinhaSenha = (senhaAtual, novaSenha) =>
   chamar('/api/usuarios?acao=minha-senha', { method: 'POST', body: { senhaAtual, novaSenha } })

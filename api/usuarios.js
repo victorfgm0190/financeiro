@@ -1,3 +1,4 @@
+import process from 'node:process'
 import jwt from 'jsonwebtoken'
 import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth, requireAdmin } from './_auth.js'
@@ -8,6 +9,11 @@ import {
 import { normalizarPermissoes } from '../src/lib/permissoes.js'
 import { payloadDoCadastro, JWT_EXPIRA } from './auth.js'
 import { comAmbiente, comAmbienteNoPayload } from './_ambiente.js'
+import { enviarEmail, ErroEmail } from './_email.js'
+import { modeloConvite, urlDefinirSenha } from './_emailSenha.js'
+import { gerarTokenSenha } from './_senhaTokens.js'
+import { ipDoReq } from './_plataforma.js'
+import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 // Cadastro de USUÁRIOS da organização do token. Só admin, sempre filtrando por req.user.orgId:
 //   GET                     → lista (nunca devolve senha_hash)
@@ -17,6 +23,8 @@ import { comAmbiente, comAmbienteNoPayload } from './_ambiente.js'
 // E, para qualquer usuário do cadastro (não para o login fixo):
 //   POST ?acao=minha-senha { senhaAtual, novaSenha } → troca a própria senha e devolve um token novo
 //        (sem a marca "trocar senha no próximo login").
+// E, só admin: POST ?acao=enviar-convite { id } → link 'convite' (48 h) por e-mail para o usuário criar
+//        a senha (api/_senhaTokens.js; o link aponta para o endereço deste ambiente).
 // Travas: a organização nunca fica sem um admin ativo; o admin não desativa a si mesmo.
 
 const COLS = `u.id, u.username, u.nome, u.email, u.nivel, u.permissoes, u.perfis_permitidos, u.ativo,
@@ -190,6 +198,27 @@ export async function trocarMinhaSenha(q, user, body = {}, { secret = process.en
   return { ok: true, token }
 }
 
+// Convite: link 'convite' (48 h) para o e-mail do usuário da organização. `q` de uma transação; o
+// e-mail sai depois do commit (enviarConvite). Devolve { usuario, token }.
+export async function prepararConvite(q, orgId, body = {}, { ip = null, agora = new Date() } = {}) {
+  if (!body.id) throw new ErroHttp(400, 'id é obrigatório')
+  const u = await buscarDaOrg(q, orgId, String(body.id))
+  if (!u) throw new ErroHttp(404, 'Usuário não encontrado')
+  if (!u.ativo) throw new ErroHttp(409, 'Usuário inativo: ative antes de enviar o link')
+  if (!String(u.email || '').trim()) throw new ErroHttp(409, 'Usuário sem e-mail cadastrado')
+  return { usuario: u, token: await gerarTokenSenha(q, u.id, 'convite', { ip, agora }) }
+}
+
+export async function enviarConvite(transacao, orgId, body, { ambiente, ip, enviar = enviarEmail } = {}) {
+  const { usuario, token } = await transacao((q) => prepararConvite(q, orgId, body, { ip }))
+  const sigla = ambiente?.sigla || AMBIENTE_PRINCIPAL
+  const { assunto, html, texto } = modeloConvite({
+    nome: usuario.nome || usuario.username, username: usuario.username, sigla, url: urlDefinirSenha(sigla, token),
+  })
+  await enviar({ para: usuario.email, assunto, html, texto })
+  return { ok: true, email: usuario.email }
+}
+
 function queryParam(req, nome) {
   if (req.query?.[nome]) return req.query[nome]
   try { return new URL(req.url, 'http://x').searchParams.get(nome) } catch { return null }
@@ -216,6 +245,10 @@ async function handler(req, res) {
       ])
       return res.json({ usuarios, perfis })
     }
+    if (queryParam(req, 'acao') === 'enviar-convite') {
+      if (req.method !== 'POST') return res.status(405).end()
+      return res.json(await enviarConvite(withTransaction, orgId, await parseBody(req), { ambiente: req.ambiente, ip: ipDoReq(req) }))
+    }
     const autor = req.user.username || req.user.id
     if (req.method === 'POST') return res.json({ ok: true, usuario: await criarUsuario(query, orgId, await parseBody(req), autor) })
     if (req.method === 'PATCH') {
@@ -226,6 +259,7 @@ async function handler(req, res) {
     return res.status(405).end()
   } catch (err) {
     if (err instanceof ErroHttp) return res.status(err.status).json({ error: err.message })
+    if (err instanceof ErroEmail) return res.status(err.status).json({ error: `Link gerado, mas o e-mail não saiu: ${err.message}` })
     if (err?.code === '23505') return res.status(409).json({ error: 'Já existe um usuário com esse nome de acesso ou e-mail' })
     if (ehTabelaInexistente(err)) return res.status(503).json({ error: 'Cadastro de usuários ainda não instalado (migração pendente)' })
     console.error('[api/usuarios]', err.message)

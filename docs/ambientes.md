@@ -64,12 +64,36 @@ ambiente existente (`siglaOcupada` olha `plataforma_clientes` e `ambientes`).
   `login_handoff` e responde `{ redirect: "https://<sigla>.finup.app.br/entrar?c=<código>" }`. A página
   `/entrar` chama `POST /api/auth?acao=trocar-codigo`, salva o token no localStorage daquele endereço e
   limpa a URL. Código expirado, reutilizado ou de outro ambiente → 401.
-- "Esqueci minha senha": por ora só a mensagem "Fale com o administrador do seu ambiente".
+- "Esqueci minha senha" e convite: ver **Links de senha** abaixo.
+
+## Links de senha (esqueci / convite)
+
+Rota pública `api/senha.js` (sem token, fora do `comAmbiente`); o ambiente vem como no login (endereço
+ou campo Ambiente). Tokens na tabela `senha_tokens` **do banco do ambiente** (migração
+`2026-10-17_senha_tokens.sql`): 32 bytes aleatórios em base64url, só o sha256 gravado, uso único, e
+gerar um novo invalida os anteriores do mesmo usuário (`api/_senhaTokens.js`).
+
+- `POST /api/senha?acao=esqueci { ambiente?, login }` → resposta SEMPRE "Se o usuário existir,
+  enviaremos um link para o e-mail cadastrado." (inclusive ambiente inexistente/suspenso, usuário sem
+  e-mail ou inativo, falha do e-mail). Usuário ativo com e-mail → link `redefinir` (1 h).
+  Limite: 3 por hora por IP e 3 por hora por usuário (tabela `senha_pedidos` do central); acima do
+  limite a resposta é a mesma, sem e-mail.
+- `GET /api/senha?acao=validar&token=…` → `{ ok, nome, tipo }` ou 410 "Link expirado ou já utilizado".
+- `POST /api/senha?acao=definir { token, novaSenha }` → mínimo 8; grava a senha, zera tentativas e
+  bloqueio, `trocar_senha = false`.
+- `POST /api/usuarios?acao=enviar-convite { id }` (só admin do ambiente) → link `convite` (48 h).
+- O link do e-mail é `https://<endereço do ambiente>/definir-senha?token=…` (www para o `vm`,
+  `<sigla>.finup.app.br` para clientes). validar/definir procuram o token **só** no banco do ambiente
+  do endereço: token de um ambiente nunca vale em outro (nem no www).
+- Telas: `/definir-senha` (pública; tira o token da URL ao abrir; sucesso → login com "Senha
+  definida, faça login"); `/?esqueci=1` abre o login direto no pedido de link; Configurações ›
+  Usuários tem o botão "Enviar link de senha" (desabilitado sem e-mail ou para inativo).
+- E-mails: `api/_emailSenha.js`, com o visual comum de `api/_emailModelo.js` (o mesmo das boas-vindas).
 
 ## Migrações em todos os ambientes
 
 ```
-node --env-file=.env.local scripts/migrar-central.js            # esquema do central
+node --env-file=.env.local scripts/migrar-central.js [--dry-run]  # esquema do central (supabase/central/*.sql)
 node --env-file=.env.local scripts/migrar-ambientes.js --dry-run  # lista o que faria
 node --env-file=.env.local scripts/migrar-ambientes.js            # aplica
 ```

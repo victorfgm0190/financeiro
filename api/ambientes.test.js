@@ -301,7 +301,7 @@ describe('sem contexto de ambiente', () => {
 })
 
 describe('todas as rotas protegidas usam comAmbiente', () => {
-  const PUBLICAS = new Set(['auth.js', 'cadastro-publico.js', 'sigla-disponivel.js'])
+  const PUBLICAS = new Set(['auth.js', 'cadastro-publico.js', 'sigla-disponivel.js', 'senha.js'])
   const raiz = fileURLToPath(new URL('.', import.meta.url))
   const rotas = []
   ;(function varrer(dir) {

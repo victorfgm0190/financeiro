@@ -296,6 +296,8 @@ describe('e-mail de boas-vindas (Resend)', () => {
     expect(m.html).toContain('https://cv.finup.app.br')
     expect(m.html).toContain('prefers-color-scheme: dark')
     expect(m.html).toContain('#0F6E56')
+    // rótulo longo em linha própria, com o link embaixo (não encosta)
+    expect(m.html).toMatch(/Endereço do seu ambiente<\/div>\s*<div[^>]*padding-top:4px[^>]*><a href="https:\/\/cv\.finup\.app\.br"/)
     const xss = modeloBoasVindas({ nome: '<i>Ana</i> Lima', email: 'a"b@x.com', sigla: 'cv' }).html
     expect(xss).toContain('Olá, &lt;i&gt;Ana&lt;/i&gt;!')
     expect(xss).toContain('a&quot;b@x.com')

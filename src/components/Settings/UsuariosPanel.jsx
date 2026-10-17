@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Pencil, KeyRound, Unlock, Power, RefreshCw, Check } from 'lucide-react'
+import { Plus, Pencil, KeyRound, Unlock, Power, RefreshCw, Check, Mail } from 'lucide-react'
 import Toast from '../shared/Toast'
 import Modal from '../shared/Modal'
 import { getSessao } from '../../lib/api'
-import { listarUsuarios, criarUsuario, editarUsuario } from '../../lib/usuariosApi'
+import { listarUsuarios, criarUsuario, editarUsuario, enviarLinkSenha } from '../../lib/usuariosApi'
 import { MODULOS, NIVEIS, ACOES, rotuloNivel, normalizarPermissao, permissoesDoNivel } from '../../lib/permissoes'
 
 const SENHA_MIN = 8
@@ -248,6 +248,19 @@ export default function UsuariosPanel() {
   const acao = async (dados, msg) => {
     try { substituir(await editarUsuario(dados)); avisar(msg) } catch (err) { avisar(err?.message || 'Falha ao alterar.', 'error') }
   }
+  const [enviandoLink, setEnviandoLink] = useState(null) // id do usuário
+  const enviarLink = async (u) => {
+    setEnviandoLink(u.id)
+    try {
+      const r = await enviarLinkSenha(u.id)
+      avisar(`Link de senha enviado para ${r.email || u.email}.`)
+    } catch (err) {
+      avisar(err?.message || 'Falha ao enviar o link.', 'error')
+    } finally {
+      setEnviandoLink(null)
+    }
+  }
+  const motivoSemLink = (u) => (!String(u.email || '').trim() ? 'Usuário sem e-mail' : !u.ativo ? 'Usuário inativo' : '')
   const perfisDe = (u) => (Array.isArray(u.perfis_permitidos) ? u.perfis_permitidos.map(id => nomePerfil.get(id) || id).join(', ') : 'Todos')
 
   return (
@@ -264,7 +277,7 @@ export default function UsuariosPanel() {
       <p className="text-xs text-texto-3">
         Níveis: Administrador (tudo), Operador (grava em tudo, sem usuários e configurações do sistema), Consulta (só vê) e
         Personalizado (módulo a módulo). Após 5 senhas erradas o acesso fica bloqueado por 15 minutos — use "Desbloquear" para
-        liberar antes. Mudanças de nível valem a partir do próximo login da pessoa.
+        liberar antes. O ícone de e-mail envia um link (48 h) para a pessoa criar a própria senha. Mudanças de nível valem a partir do próximo login da pessoa.
       </p>
       {erroLista && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erroLista}</p>}
 
@@ -298,6 +311,10 @@ export default function UsuariosPanel() {
                       <button type="button" title="Desbloquear" aria-label="Desbloquear" onClick={() => acao({ id: u.id, desbloquear: true }, 'Usuário desbloqueado.')}
                         className="p-1.5 rounded hover:bg-surface-hover text-texto-2"><Unlock size={13} /></button>
                     )}
+                    <button type="button" title={motivoSemLink(u) ? `Enviar link de senha — ${motivoSemLink(u)}` : 'Enviar link de senha por e-mail'}
+                      aria-label="Enviar link de senha" disabled={!!motivoSemLink(u) || enviandoLink === u.id} onClick={() => enviarLink(u)}
+                      className="p-1.5 rounded hover:bg-surface-hover text-texto-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                      <Mail size={13} className={enviandoLink === u.id ? 'animate-pulse' : ''} /></button>
                     <button type="button" title="Redefinir senha" aria-label="Redefinir senha" onClick={() => setSenhaDe(u)}
                       className="p-1.5 rounded hover:bg-surface-hover text-texto-2"><KeyRound size={13} /></button>
                     <button type="button" title="Editar" aria-label="Editar" onClick={() => setEditando(u)}

@@ -1,5 +1,5 @@
 import process from 'node:process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { _definirFabricaDePool } from '../_conexao.js'
 import { _limparCacheAmbientes } from '../_central.js'
@@ -7,7 +7,13 @@ import { _limparCacheAmbientes } from '../_central.js'
 // SÓ PARA TESTES (pasta com "_": a Vercel não publica como rota).
 // PGlite no lugar do Pool do pg, um por database, para simular o central e os ambientes.
 
-export const SQL_CENTRAL = readFileSync(fileURLToPath(new URL('../../supabase/central/2026-10-17_ambientes.sql', import.meta.url)), 'utf-8')
+// Todos os .sql de supabase/central (e de supabase/migrations), em ordem de nome — como os scripts.
+const lerPasta = (pasta) => {
+  const dir = fileURLToPath(new URL(`../../supabase/${pasta}/`, import.meta.url))
+  return readdirSync(dir).filter(f => f.endsWith('.sql')).sort().map(f => readFileSync(dir + f, 'utf-8')).join('\n')
+}
+export const SQL_CENTRAL = lerPasta('central')
+export const SQL_MIGRACOES = lerPasta('migrations')
 export const URL_CENTRAL_TESTE = 'postgresql://teste:teste@localhost/central'
 
 // PGlite (ou função que devolve o PGlite atual) → objeto com a cara do Pool do pg.
