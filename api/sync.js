@@ -3,6 +3,7 @@ import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
 import { comAmbiente } from './_ambiente.js'
+import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -37,6 +38,10 @@ async function handler(req, res) {
       // que o problema foi o payload. Sai como 400, que é o que de fato é.
       if (!table || typeof table !== 'string') {
         return res.status(400).json({ error: 'sync section sem `table`' })
+      }
+      // De-para Dindin só existe no ambiente principal (api/account-mapping.js).
+      if (table === 'account_mapping' && req.ambiente?.sigla !== AMBIENTE_PRINCIPAL) {
+        return res.status(403).json({ error: 'De-para Dindin disponível só no ambiente principal' })
       }
       const recebido = { table, upsert: upsert?.length ?? 0, delete: toDelete?.length ?? 0 }
       const [deleted, upserted] = await Promise.all([

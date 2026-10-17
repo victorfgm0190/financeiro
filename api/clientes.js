@@ -1,14 +1,12 @@
 import { parseBody } from './_db.js'
-import { centralQuery as query, withCentralTransaction as withTransaction } from './_central.js'
+import { centralQuery as query, withCentralTransaction as withTransaction, _limparCacheAmbientes } from './_central.js'
 import { requireAuth } from './_auth.js'
 import { ErroHttp } from './_usuarios.js'
 import {
   ensurePlataformaSchema, ehAdminPlataforma, validarCliente, siglaOcupada, buscarCliente, registrarHistorico,
   checarSigla, queryParam, statusValido,
 } from './_plataforma.js'
-import { provisionarCliente } from './_provisionar.js'
-import { enviarEmail, ErroEmail } from './_email.js'
-import { modeloBoasVindas } from './_emailBoasVindas.js'
+import { provisionarProximoPasso, estadoProvisionamento, reenviarConvite } from './_provisionar.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
@@ -20,22 +18,27 @@ import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 //   GET ?acao=sigla&sigla=&nome=&id= → disponibilidade (ignora o próprio cliente na edição)
 //   POST { ...campos }         → novo cliente manual (origem 'manual', status 'pedido')
 //   PATCH { id, ...campos }    → edição (status NÃO muda por aqui)
-//   POST ?acao=aprovar { id }  → provisionarCliente (api/_provisionar.js) → { cliente, mensagem }
-//   POST ?acao=status { id, acao: recusar|suspender|reativar|cancelar, motivo? }
-//   POST ?acao=email { id }    → e-mail de boas-vindas (Resend) → { id do Resend }; histórico
-//                                'email_enviado' ou 'email_falhou'
+//   GET ?acao=provisionamento&id=x → andamento do provisionamento (passos feitos/pendentes)
+//   POST ?acao=aprovar { id }  → executa o PRÓXIMO passo do provisionamento (api/_provisionar.js) e
+//                                devolve o andamento; a tela chama de novo até `concluido`
+//   POST ?acao=status { id, acao: recusar|suspender|reativar|cancelar, motivo? } — suspender/
+//                                cancelar/reativar também mudam ambientes.status no central (o
+//                                database do cliente NUNCA é apagado aqui)
+//   POST ?acao=reenviar-convite { id } → convite novo (48 h) + boas-vindas (cliente ativo)
 
 const CAMPOS_EDITAVEIS = ['nome', 'email', 'telefone', 'tipo_pessoa', 'documento', 'empresa', 'sigla', 'como_conheceu',
   'plano', 'valor_mensal', 'dia_vencimento', 'limite_usuarios', 'observacoes']
 
-// Transições pelos botões. Reativar volta para 'aprovado': nesta fase não existe ambiente ativo
-// (na Etapa 2, suspenso com ambiente criado volta para 'ativo').
+// Transições pelos botões. Reativar: volta para 'ativo' se o ambiente já tinha sido ativado
+// (evento prov_ativar); senão para 'aprovado' (o provisionamento continua pelo Aprovar).
 const TRANSICOES = {
   recusar: { de: ['pedido'], para: 'recusado' },
   suspender: { de: ['aprovado', 'ativo'], para: 'suspenso' },
   reativar: { de: ['suspenso', 'cancelado'], para: 'aprovado' },
   cancelar: { de: ['pedido', 'aprovado', 'ativo', 'suspenso', 'recusado'], para: 'cancelado' },
 }
+// Status do AMBIENTE (central) em cada ação. Só mexe em ambiente que já existe; o database fica.
+const AMBIENTE_NA_ACAO = { suspender: 'suspenso', cancelar: 'cancelado', reativar: 'ativo' }
 
 const contarNovos = async (q) => (await q("SELECT count(*)::int AS n FROM plataforma_clientes WHERE status = 'pedido'"))[0]?.n || 0
 
@@ -89,30 +92,21 @@ export async function mudarStatus(q, body, autor) {
   if (!atual) throw new ErroHttp(404, 'Cliente não encontrado')
   if (!t.de.includes(atual.status)) throw new ErroHttp(409, `Não é possível ${body.acao} um cliente com status "${atual.status}"`)
   if (!statusValido(t.para)) throw new ErroHttp(500, 'Status inválido')
-  await q('UPDATE plataforma_clientes SET status = $2, updated_at = now() WHERE id = $1', [atual.id, t.para])
+  const [amb] = await q('SELECT id, status FROM ambientes WHERE cliente_id = $1', [atual.id])
+  const [{ ativado }] = await q("SELECT count(*) > 0 AS ativado FROM plataforma_historico WHERE cliente_id = $1 AND evento = 'prov_ativar'", [atual.id])
+  // Reativar um ambiente que já esteve no ar → 'ativo'; um provisionamento interrompido → 'aprovado'.
+  const para = body.acao === 'reativar' && amb && ativado ? 'ativo' : t.para
+  await q('UPDATE plataforma_clientes SET status = $2, updated_at = now() WHERE id = $1', [atual.id, para])
   const motivo = String(body.motivo ?? '').trim().slice(0, 1000)
-  await registrarHistorico(q, atual.id, t.para, `Status ${atual.status} → ${t.para}${motivo ? ` · ${motivo}` : ''}`, autor)
-  return buscarCliente(q, atual.id)
-}
-
-// Só cliente já aprovado recebe boas-vindas. O envio fica fora de transação (chamada externa) e o
-// resultado — sucesso ou falha — vai para o histórico.
-const PODE_RECEBER_EMAIL = ['aprovado', 'ativo']
-
-export async function enviarBoasVindas(q, id, autor) {
-  const c = await buscarCliente(q, id)
-  if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
-  if (!PODE_RECEBER_EMAIL.includes(c.status)) throw new ErroHttp(409, 'Só cliente aprovado recebe o e-mail de boas-vindas')
-  const { assunto, html, texto } = modeloBoasVindas(c)
-  try {
-    const { id: idResend } = await enviarEmail({ para: c.email, assunto, html, texto })
-    await registrarHistorico(q, c.id, 'email_enviado', `Boas-vindas para ${c.email} · id ${idResend}`, autor)
-    return { id: idResend, para: c.email }
-  } catch (err) {
-    if (!(err instanceof ErroEmail)) throw err
-    await registrarHistorico(q, c.id, 'email_falhou', `Boas-vindas para ${c.email} · ${err.message}`, autor)
-    throw new ErroHttp(err.status, err.message)
+  let detalheAmbiente = ''
+  const novoAmb = AMBIENTE_NA_ACAO[body.acao]
+  // Ambiente ainda em provisionamento só muda para cancelado/suspenso; volta a 'ativo' só se já foi ativado.
+  if (amb && novoAmb && amb.status !== novoAmb && (novoAmb !== 'ativo' || ativado)) {
+    await q('UPDATE ambientes SET status = $2, updated_at = now() WHERE id = $1', [amb.id, novoAmb])
+    detalheAmbiente = ` · ambiente ${amb.status} → ${novoAmb}`
   }
+  await registrarHistorico(q, atual.id, para, `Status ${atual.status} → ${para}${detalheAmbiente}${motivo ? ` · ${motivo}` : ''}`, autor)
+  return buscarCliente(q, atual.id)
 }
 
 async function handler(req, res) {
@@ -131,6 +125,7 @@ async function handler(req, res) {
       if (acao === 'sigla') {
         return res.json(await checarSigla(query, queryParam(req, 'sigla'), queryParam(req, 'nome') || '', queryParam(req, 'id')))
       }
+      if (acao === 'provisionamento') return res.json(await estadoProvisionamento(query, String(queryParam(req, 'id') || '')))
       const id = queryParam(req, 'id')
       if (id) {
         const cliente = await buscarCliente(query, id)
@@ -146,14 +141,16 @@ async function handler(req, res) {
     const body = await parseBody(req)
     if (req.method === 'POST' && acao === 'aprovar') {
       if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
-      return res.json({ ok: true, ...(await provisionarCliente(String(body.id), { autor })) })
+      return res.json({ ok: true, ...(await provisionarProximoPasso(String(body.id), { autor })) })
     }
-    if (req.method === 'POST' && acao === 'email') {
+    if (req.method === 'POST' && acao === 'reenviar-convite') {
       if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
-      return res.json({ ok: true, ...(await enviarBoasVindas(query, String(body.id), autor)) })
+      return res.json(await reenviarConvite(String(body.id), { autor }))
     }
     if (req.method === 'POST' && acao === 'status') {
-      return res.json({ ok: true, cliente: await withTransaction(q => mudarStatus(q, body, autor)) })
+      const cliente = await withTransaction(q => mudarStatus(q, body, autor))
+      _limparCacheAmbientes() // suspensão/reativação vale já nesta instância (nas outras, em até 30 s)
+      return res.json({ ok: true, cliente })
     }
     if (req.method === 'POST') return res.json({ ok: true, cliente: await withTransaction(q => criarClienteManual(q, body, autor)) })
     if (req.method === 'PATCH') return res.json({ ok: true, cliente: await withTransaction(q => editarCliente(q, body, autor)) })

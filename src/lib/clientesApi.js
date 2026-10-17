@@ -34,8 +34,11 @@ export const listarClientes = () => chamar('/api/clientes')
 export const detalheCliente = (id) => chamar(`/api/clientes?${qs({ id })}`)
 export const criarCliente = (dados) => chamar('/api/clientes', { method: 'POST', body: dados }).then(r => r.cliente)
 export const editarCliente = (dados) => chamar('/api/clientes', { method: 'PATCH', body: dados }).then(r => r.cliente)
+// Provisionamento em passos: cada POST executa o PRÓXIMO passo e devolve o andamento
+// ({ passos: [{ id, rotulo, feito }], concluido, mensagem? }); a tela chama até concluir.
 export const aprovarCliente = (id) => chamar('/api/clientes?acao=aprovar', { method: 'POST', body: { id } })
-export const enviarBoasVindasEmail = (id) => chamar('/api/clientes?acao=email', { method: 'POST', body: { id } })
+export const andamentoProvisionamento = (id) => chamar(`/api/clientes?${qs({ acao: 'provisionamento', id })}`)
+export const reenviarConviteCliente = (id) => chamar('/api/clientes?acao=reenviar-convite', { method: 'POST', body: { id } })
 export const mudarStatusCliente = (id, acao, motivo) =>
   chamar('/api/clientes?acao=status', { method: 'POST', body: { id, acao, motivo } }).then(r => r.cliente)
 export const checarSiglaAdmin = (sigla, nome, id) => chamar(`/api/clientes?${qs({ acao: 'sigla', sigla, nome, id })}`)

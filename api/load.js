@@ -5,6 +5,7 @@ import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 import { ensureHistoricoSchema } from './_historico.js'
 import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
+import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -13,6 +14,9 @@ async function handler(req, res) {
   // gravação bem-sucedida podia trazer a foto anterior — dado "voltando ao original" sem que
   // nada tivesse falhado na escrita.
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  // Seeds e ajustes POR NOME (contas, funções de reserva e categorias do Victor) só no ambiente
+  // principal: banco de cliente nasce com o kit básico (api/_kitBasico.js) e nada mais.
+  const ehPrincipal = req.ambiente?.sigla === AMBIENTE_PRINCIPAL
   try {
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS gerencial_schedule_id TEXT`)
     await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS fatura_month_year TEXT`)
@@ -170,6 +174,8 @@ async function handler(req, res) {
       )
       if (exibirCol.length === 0) {
         await query(`ALTER TABLE reserve_functions ADD COLUMN exibir_como_despesa BOOLEAN NOT NULL DEFAULT false`)
+      }
+      if (exibirCol.length === 0 && ehPrincipal) {
         await query(
           `UPDATE reserve_functions SET exibir_como_despesa = true WHERE name = ANY($1)`,
           [[
@@ -353,33 +359,35 @@ async function handler(req, res) {
     // Cards do Início mobile: [{ id, on }] na ordem escolhida. NULL = padrão (todos ligados).
     await query(`ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS mobile_home_cards JSONB`)
 
-    // Seed idempotente: categoria "Capitalização" vinculada à conta de investimento Brasilcap.
-    // Só insere se houver uma conta cujo nome casa com "brasil...cap" e a categoria ainda não existir.
-    await query(`
-      INSERT INTO categorias (id, name, type, color, icon, category_group, investment_account_id)
-      SELECT 'cat_capitalizacao', 'Capitalização', 'expense', '#22c55e', '🐷', 'Aplicações', c.id
-      FROM contas c
-      WHERE c.name ILIKE '%brasil%cap%'
-        AND NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_capitalizacao' OR name = 'Capitalização')
-      LIMIT 1
-    `)
-    // Seed idempotente: categoria "Consórcio" (despesa) p/ contas de investimento.
-    await query(`
-      INSERT INTO categorias (id, name, type, color, icon, category_group)
-      SELECT 'cat_consorcio', 'Consórcio', 'expense', '#a855f7', '🏠', 'Aplicações'
-      WHERE NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio')
-    `)
-    // Conversão única da conta "Consórcio HS" em investimento, vinculada à categoria
-    // Consórcio. Só aplica enquanto a conta nunca foi configurada como investimento
-    // (não sobrescreve ajustes posteriores feitos pelo usuário).
-    await query(`
-      UPDATE contas
-      SET is_investimento = true,
-          investment_category_id = (SELECT id FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio' ORDER BY (id = 'cat_consorcio') DESC LIMIT 1)
-      WHERE (name ILIKE '%consorcio%hs%' OR name ILIKE '%consórcio%hs%')
-        AND is_investimento IS NOT TRUE
-        AND investment_category_id IS NULL
-    `)
+    if (ehPrincipal) {
+      // Seed idempotente: categoria "Capitalização" vinculada à conta de investimento Brasilcap.
+      // Só insere se houver uma conta cujo nome casa com "brasil...cap" e a categoria ainda não existir.
+      await query(`
+        INSERT INTO categorias (id, name, type, color, icon, category_group, investment_account_id)
+        SELECT 'cat_capitalizacao', 'Capitalização', 'expense', '#22c55e', '🐷', 'Aplicações', c.id
+        FROM contas c
+        WHERE c.name ILIKE '%brasil%cap%'
+          AND NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_capitalizacao' OR name = 'Capitalização')
+        LIMIT 1
+      `)
+      // Seed idempotente: categoria "Consórcio" (despesa) p/ contas de investimento.
+      await query(`
+        INSERT INTO categorias (id, name, type, color, icon, category_group)
+        SELECT 'cat_consorcio', 'Consórcio', 'expense', '#a855f7', '🏠', 'Aplicações'
+        WHERE NOT EXISTS (SELECT 1 FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio')
+      `)
+      // Conversão única da conta "Consórcio HS" em investimento, vinculada à categoria
+      // Consórcio. Só aplica enquanto a conta nunca foi configurada como investimento
+      // (não sobrescreve ajustes posteriores feitos pelo usuário).
+      await query(`
+        UPDATE contas
+        SET is_investimento = true,
+            investment_category_id = (SELECT id FROM categorias WHERE id = 'cat_consorcio' OR name = 'Consórcio' ORDER BY (id = 'cat_consorcio') DESC LIMIT 1)
+        WHERE (name ILIKE '%consorcio%hs%' OR name ILIKE '%consórcio%hs%')
+          AND is_investimento IS NOT TRUE
+          AND investment_category_id IS NULL
+      `)
+    } // fim dos seeds só do ambiente principal
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS day_of_month INTEGER`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS amount_approx NUMERIC`)
     await query(`ALTER TABLE regras_classificacao ADD COLUMN IF NOT EXISTS grupo_gerencial TEXT`)

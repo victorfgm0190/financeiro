@@ -933,8 +933,10 @@ export async function loadFromDb(defaultData) {
     // Resíduo do diagnóstico de persistência, já encerrado: limpa a chave de quem ainda a tem.
     try { localStorage.removeItem('finup_debug_ultimo_sync') } catch { /* indisponível */ }
 
-    // Sem dados de usuário (schema novo ou banco vazio) → migra local → Neon
-    if (!d.cats || d.cats.length === 0 || !d.accs || d.accs.length === 0) {
+    // Banco nunca inicializado (sem configurações E sem categorias) → 'empty' (o AppContext só
+    // semeia no ambiente principal). Banco com o kit básico e ainda sem contas (cliente novo) é um
+    // banco normal: abre vazio, sem semear nada.
+    if (!d.cfg && (!d.cats || d.cats.length === 0)) {
       return { status: 'empty', data: null }
     }
 
@@ -954,6 +956,10 @@ export async function loadFromDb(defaultData) {
               estornoCartaoCategoryId: d.cfg.estorno_cartao_category_id ?? null,
               faturasFechadas: d.cfg.faturas_fechadas ?? {},
               mobileHomeCards: d.cfg.mobile_home_cards ?? null,
+              // Rodapé da barra lateral do ambiente (vazio no 'vm' = texto de sempre). Só leitura:
+              // o syncSettings não grava estas colunas.
+              rodapeTitulo: d.cfg.rodape_titulo ?? null,
+              rodapeFrase: d.cfg.rodape_frase ?? null,
             }
           : defaultData.settings,
         costCenters: d.cfg?.cost_centers ?? defaultData.costCenters,

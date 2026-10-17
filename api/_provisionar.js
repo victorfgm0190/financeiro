@@ -1,61 +1,253 @@
-import { withCentralTransaction } from './_central.js'
-import { ErroHttp } from './_usuarios.js'
+import crypto from 'node:crypto'
+import { centralQuery, withCentralTransaction, _limparCacheAmbientes } from './_central.js'
+import { rodarNoAmbiente } from './_conexao.js'
+import { withTransaction } from './_db.js'
+import { ErroHttp, hashSenha } from './_usuarios.js'
 import { buscarCliente, registrarHistorico, siglaOcupada } from './_plataforma.js'
+import { criarDatabase, ErroNeon } from './_neon.js'
+import { ESTRUTURA_BASE, MIGRACOES } from './_sqlEmbutido.js'
+import { aplicarKitBasico } from './_kitBasico.js'
+import { gerarTokenSenha } from './_senhaTokens.js'
+import { enviarEmail, ErroEmail } from './_email.js'
+import { modeloBoasVindas } from './_emailBoasVindas.js'
+import { urlDefinirSenha } from './_emailSenha.js'
 import { problemaSigla, DOMINIO_CLIENTES } from '../src/lib/plataforma.js'
 
-// PONTO ÚNICO de provisionamento de um cliente da plataforma. Hoje é chamado pelo botão Aprovar
-// do Controle de Clientes; no futuro o aviso (webhook) da plataforma de pagamento vai chamar ESTA
-// mesma função — nada de provisionar por outro caminho.
+// PONTO ÚNICO de provisionamento de um cliente da plataforma (botão Aprovar do Controle de Clientes;
+// no futuro o aviso da plataforma de pagamento chama ESTA mesma função).
 //
-// FASE DE TESTE: só confirma a sigla, marca 'aprovado', grava o histórico e devolve a mensagem de
-// boas-vindas. REGRA DE SEGURANÇA: não cria usuário nem dá acesso a este banco (dados pessoais).
+// Cria o AMBIENTE do cliente em PASSOS. Cada chamada de provisionarProximoPasso() executa UM passo
+// pendente e devolve o andamento — a tela chama de novo até concluir (mostra o progresso e nunca
+// estoura o tempo de uma função da Vercel). Cada passo é idempotente e, ao terminar, grava o evento
+// prov_<passo> no plataforma_historico: se falhar no meio, "Tentar novamente" continua do passo que
+// falhou e repetir um passo não duplica nada.
 //
-// Estados de onde dá para provisionar. 'aprovado' de novo só regera a mensagem (idempotente).
+// REGRA: o banco do cliente nasce VAZIO — só a estrutura (supabase/estrutura_base.sql, sem dados) +
+// migrações + o kit básico (api/_kitBasico.js). NADA é copiado do neondb.
+
+export const PASSOS = [
+  { id: 'ambiente', rotulo: 'Registro do ambiente' },
+  { id: 'database', rotulo: 'Banco de dados no Neon' },
+  { id: 'estrutura', rotulo: 'Estrutura (tabelas e migrações)' },
+  { id: 'kit', rotulo: 'Kit básico' },
+  { id: 'admin', rotulo: 'Organização e usuário admin' },
+  { id: 'convite', rotulo: 'E-mail de boas-vindas com o convite' },
+  { id: 'ativar', rotulo: 'Ativar o ambiente' },
+]
+const evento = (passo) => `prov_${passo}`
+
+// Estados de onde dá para provisionar ('aprovado' = provisionamento em andamento).
 const PODE_PROVISIONAR = ['pedido', 'recusado', 'aprovado']
 
+export const databaseDoCliente = (sigla) => `cliente_${sigla}`
+export const enderecoDoCliente = (sigla) => `https://${sigla}.${DOMINIO_CLIENTES}`
+const nomeDoAmbiente = (c) => String((c.tipo_pessoa === 'PJ' && c.empresa) || c.nome).trim().slice(0, 150)
+
+// Texto para copiar / WhatsApp (o e-mail leva o botão do convite).
 export function mensagemBoasVindas(c) {
   const primeiroNome = String(c.nome || '').trim().split(/\s+/)[0] || 'tudo bem'
-  const endereco = `https://${c.sigla}.${DOMINIO_CLIENTES}`
   return [
-    `Olá, ${primeiroNome}! Seu pedido para usar o Finup foi aprovado.`,
+    `Olá, ${primeiroNome}! Seu pedido para usar o Finup foi aprovado e o seu ambiente está pronto.`,
     '',
     `Acesse: https://${DOMINIO_CLIENTES}`,
     `Ambiente: ${String(c.sigla).toUpperCase()}`,
     `Usuário: admin (ou o e-mail ${c.email})`,
-    `Endereço do seu ambiente: ${endereco}`,
+    `Endereço do seu ambiente: ${enderecoDoCliente(c.sigla)}`,
     '',
-    'Na próxima etapa você vai receber o link para criar a sua senha de acesso.',
+    `Enviamos para ${c.email} o link para você criar a sua senha (vale 48 horas).`,
     'Qualquer dúvida, é só responder esta mensagem.',
   ].join('\n')
 }
 
-export async function provisionarCliente(clienteId, { autor = null, transacao = withCentralTransaction } = {}) {
-  return transacao(async (q) => {
-    const c = await buscarCliente(q, clienteId, { travar: true })
-    if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
-    if (!PODE_PROVISIONAR.includes(c.status)) throw new ErroHttp(409, `Cliente com status "${c.status}" não pode ser aprovado`)
+async function ambienteDoCliente(q, c) {
+  const [amb] = await q('SELECT * FROM ambientes WHERE cliente_id = $1 OR sigla = $2 ORDER BY (cliente_id = $1) DESC LIMIT 1', [c.id, c.sigla])
+  return amb || null
+}
 
-    // 1. Confirma a sigla (formato, reservada e única).
-    const problema = problemaSigla(c.sigla)
-    if (problema) throw new ErroHttp(409, `Sigla: ${problema}`)
-    if (await siglaOcupada(q, c.sigla, c.id)) throw new ErroHttp(409, 'Sigla já está em uso por outro cliente')
+async function passosFeitos(q, clienteId) {
+  const rows = await q('SELECT DISTINCT evento FROM plataforma_historico WHERE cliente_id = $1 AND evento LIKE $2', [clienteId, 'prov\\_%'])
+  return new Set(rows.map(r => r.evento))
+}
 
-    // ETAPA 2 — entram aqui, nesta ordem (cada passo idempotente, para o webhook poder repetir):
-    //   2. criar o banco do cliente no Neon (API de projetos/branches) e guardar a connection string
-    //      no banco central da plataforma;
-    //   3. aplicar o schema (supabase/schema.sql + migrações) no banco novo;
-    //   4. criar a organização e o usuário admin (e-mail do cliente) NO BANCO DO CLIENTE — nunca aqui;
-    //   5. gerar o link de criação de senha (token de uso único com validade);
-    //   6. enviar o e-mail de boas-vindas com o link e o endereço sigla.finup.app.br.
+// Andamento para a tela.
+export async function estadoProvisionamento(q, clienteId) {
+  const cliente = await buscarCliente(q, clienteId)
+  if (!cliente) throw new ErroHttp(404, 'Cliente não encontrado')
+  const feitos = await passosFeitos(q, cliente.id)
+  const passos = PASSOS.map(p => ({ ...p, feito: feitos.has(evento(p.id)) }))
+  const concluido = passos.every(p => p.feito)
+  return {
+    cliente, passos, concluido,
+    proximo: passos.find(p => !p.feito)?.id || null,
+    endereco: cliente.sigla ? enderecoDoCliente(cliente.sigla) : null,
+    ...(concluido ? { mensagem: mensagemBoasVindas(cliente) } : {}),
+  }
+}
 
-    const jaAprovado = c.status === 'aprovado'
-    if (!jaAprovado) {
+// Transação no banco do CLIENTE (o _db.js aponta para ele dentro de rodarNoAmbiente).
+const noCliente = (amb, fn) => rodarNoAmbiente(amb, () => withTransaction(fn))
+
+async function idDoAdmin(q) {
+  const [u] = await q("SELECT id FROM usuarios WHERE username = 'admin'")
+  return u?.id || null
+}
+
+// Gera o convite (48 h) do admin no banco do cliente e envia o e-mail de boas-vindas com o botão.
+// Devolve o id do Resend. O token só existe no e-mail (no banco, o hash).
+async function enviarConvite(amb, c, { enviar = enviarEmail } = {}) {
+  const token = await noCliente(amb, async (q) => {
+    const id = await idDoAdmin(q)
+    if (!id) throw new ErroHttp(409, 'Usuário admin não encontrado no ambiente')
+    return gerarTokenSenha(q, id, 'convite')
+  })
+  const { assunto, html, texto } = modeloBoasVindas(c, { url: urlDefinirSenha(c.sigla, token) })
+  try {
+    const { id } = await enviar({ para: c.email, assunto, html, texto })
+    return id
+  } catch (err) {
+    if (err instanceof ErroEmail) throw new ErroHttp(err.status, `E-mail não enviado: ${err.message}`)
+    throw err
+  }
+}
+
+const EXECUTAR = {
+  // a) Linha em ambientes ('provisionando', cliente_<sigla>) e cliente 'aprovado'.
+  async ambiente(q, c, { autor }) {
+    const amb = await ambienteDoCliente(q, c)
+    if (amb && amb.cliente_id !== c.id) throw new ErroHttp(409, `A sigla ${c.sigla} já é de outro ambiente`)
+    if (!amb) {
+      await q(`INSERT INTO ambientes (sigla, nome, database_name, status, cliente_id) VALUES ($1, $2, $3, 'provisionando', $4)
+               ON CONFLICT (sigla) DO NOTHING`, [c.sigla, nomeDoAmbiente(c), databaseDoCliente(c.sigla), c.id])
+    }
+    if (c.status !== 'aprovado') {
       await q("UPDATE plataforma_clientes SET status = 'aprovado', updated_at = now() WHERE id = $1", [c.id])
       await registrarHistorico(q, c.id, 'aprovado', `Status ${c.status} → aprovado · sigla ${c.sigla}`, autor)
-    } else {
-      await registrarHistorico(q, c.id, 'boas_vindas', 'Mensagem de boas-vindas gerada novamente', autor)
     }
-    const cliente = await buscarCliente(q, c.id)
-    return { cliente, mensagem: mensagemBoasVindas(cliente), endereco: `https://${cliente.sigla}.${DOMINIO_CLIENTES}` }
-  })
+    return `ambiente ${c.sigla} · database ${databaseDoCliente(c.sigla)}`
+  },
+  // b) Database no Neon (já existente → segue).
+  async database(q, c, { neon }) {
+    const amb = await ambienteDoCliente(q, c)
+    const { criado } = await criarDatabase(amb.database_name, neon)
+    return `${amb.database_name} ${criado ? 'criado' : 'já existia'}`
+  },
+  // c) Estrutura base + migrações, numa transação, registradas em _migracoes.
+  async estrutura(q, c) {
+    const amb = await ambienteDoCliente(q, c)
+    const versao = await noCliente(amb, async (cq, client) => {
+      await cq(`CREATE TABLE IF NOT EXISTS _migracoes (
+        nome TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT now(), linha_de_base BOOLEAN NOT NULL DEFAULT false)`)
+      const feitas = new Set((await cq('SELECT nome FROM _migracoes')).map(r => r.nome))
+      if (!feitas.has('_estrutura_base')) {
+        await client.query(ESTRUTURA_BASE) // vários comandos: sem parâmetros (protocolo simples)
+        await cq("INSERT INTO _migracoes (nome) VALUES ('_estrutura_base')")
+      }
+      for (const m of MIGRACOES.filter(x => !feitas.has(x.nome))) {
+        await client.query(m.sql)
+        await cq('INSERT INTO _migracoes (nome) VALUES ($1)', [m.nome])
+      }
+      return MIGRACOES.length
+    })
+    await q('UPDATE ambientes SET schema_versao = $2, updated_at = now() WHERE id = $1', [amb.id, versao])
+    return `estrutura base + ${versao} migrações · versão ${versao}`
+  },
+  // d) Kit básico (api/_kitBasico.js).
+  async kit(q, c) {
+    const amb = await ambienteDoCliente(q, c)
+    await noCliente(amb, (cq) => aplicarKitBasico(cq, c))
+    return 'categorias, grupos, tipos de documento e configurações'
+  },
+  // e) Organização + usuário admin (senha aleatória inutilizável: o cliente define pelo convite).
+  async admin(q, c) {
+    const amb = await ambienteDoCliente(q, c)
+    return noCliente(amb, async (cq) => {
+      if (await idDoAdmin(cq)) return 'admin já existia'
+      let [org] = await cq('SELECT id FROM organizacoes ORDER BY created_at, id LIMIT 1')
+      if (!org) [org] = await cq('INSERT INTO organizacoes (nome) VALUES ($1) RETURNING id', [nomeDoAmbiente(c)])
+      const senhaInutilizavel = await hashSenha(crypto.randomBytes(32).toString('base64url'))
+      const [u] = await cq(
+        `INSERT INTO usuarios (username, nome, email, senha_hash, nivel, ativo, trocar_senha, criado_por, created_at, updated_at)
+         VALUES ('admin', $1, $2, $3, 'admin', true, false, 'provisionamento', now(), now()) RETURNING id`,
+        [String(c.nome).trim().slice(0, 100), String(c.email).trim().toLowerCase(), senhaInutilizavel],
+      )
+      await cq("INSERT INTO membros (usuario_id, organizacao_id, papel) VALUES ($1, $2, 'admin')", [u.id, org.id])
+      return `admin (${String(c.email).toLowerCase()})`
+    })
+  },
+  // f) Convite (48 h) + e-mail de boas-vindas com o botão "Criar minha senha".
+  async convite(q, c, { enviar }) {
+    const amb = await ambienteDoCliente(q, c)
+    const id = await enviarConvite(amb, c, { enviar })
+    return `boas-vindas com convite para ${c.email} · id ${id}`
+  },
+  // g) Ambiente e cliente 'ativo'.
+  async ativar(q, c) {
+    const amb = await ambienteDoCliente(q, c)
+    await q("UPDATE ambientes SET status = 'ativo', updated_at = now() WHERE id = $1", [amb.id])
+    await q("UPDATE plataforma_clientes SET status = 'ativo', updated_at = now() WHERE id = $1", [c.id])
+    return `${enderecoDoCliente(c.sigla)} no ar`
+  },
+}
+
+// Executa o PRÓXIMO passo pendente e devolve o andamento. Em erro: grava 'prov_falhou' no histórico
+// e lança (a tela mostra a mensagem e o botão "Tentar novamente").
+// `deps` (testes): { neon: { env, fetch, dormir, esperaMs }, enviar }.
+export async function provisionarProximoPasso(clienteId, { autor = null, neon = {}, enviar = enviarEmail } = {}) {
+  let passo = null
+  try {
+    const feito = await withCentralTransaction(async (q) => {
+      await q('SELECT pg_advisory_xact_lock(hashtext($1))', [`provisionar:${clienteId}`]) // um clique de cada vez
+      const c = await buscarCliente(q, clienteId, { travar: true })
+      if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
+      if (c.status === 'ativo') return null
+      if (!PODE_PROVISIONAR.includes(c.status)) throw new ErroHttp(409, `Cliente com status "${c.status}" não pode ser aprovado`)
+      const problema = problemaSigla(c.sigla)
+      if (problema) throw new ErroHttp(409, `Sigla: ${problema}`)
+      if (await siglaOcupada(q, c.sigla, c.id)) throw new ErroHttp(409, 'Sigla já está em uso por outro cliente')
+
+      const feitos = await passosFeitos(q, c.id)
+      passo = PASSOS.find(p => !feitos.has(evento(p.id)))
+      if (!passo) return null
+      const detalhe = await EXECUTAR[passo.id](q, c, { autor, neon, enviar })
+      await registrarHistorico(q, c.id, evento(passo.id), `${passo.rotulo}: ${detalhe}`, autor)
+      return passo.id
+    })
+    if (feito === 'ativar') _limparCacheAmbientes()
+  } catch (err) {
+    if (passo) {
+      const msg = err instanceof ErroHttp || err instanceof ErroNeon ? err.message : `erro interno (${err.message})`
+      await centralQuery('INSERT INTO plataforma_historico (cliente_id, evento, detalhe, autor) VALUES ($1, $2, $3, $4)',
+        [clienteId, 'prov_falhou', `${passo.rotulo}: ${msg}`.slice(0, 1000), autor]).catch(() => {})
+    }
+    if (err instanceof ErroNeon) throw new ErroHttp(err.status, err.message)
+    throw err
+  }
+  return estadoProvisionamento(centralQuery, clienteId)
+}
+
+// Provisiona até o fim (scripts/testes). A tela usa provisionarProximoPasso() passo a passo.
+export async function provisionarCliente(clienteId, opcoes = {}) {
+  let estado
+  for (let i = 0; i <= PASSOS.length; i++) {
+    estado = await provisionarProximoPasso(clienteId, opcoes)
+    if (estado.concluido) break
+  }
+  return estado
+}
+
+// "Reenviar convite" (cliente ativo): convite novo (invalida o anterior) + boas-vindas.
+export async function reenviarConvite(clienteId, { autor = null, enviar = enviarEmail } = {}) {
+  const c = await buscarCliente(centralQuery, clienteId)
+  if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
+  if (c.status !== 'ativo') throw new ErroHttp(409, 'Só cliente ativo recebe o convite')
+  const amb = await ambienteDoCliente(centralQuery, c)
+  if (!amb || amb.status !== 'ativo') throw new ErroHttp(409, 'Ambiente do cliente não está ativo')
+  try {
+    const id = await enviarConvite(amb, c, { enviar })
+    await registrarHistorico(centralQuery, c.id, 'convite_reenviado', `Boas-vindas com convite para ${c.email} · id ${id}`, autor)
+    return { ok: true, para: c.email, id }
+  } catch (err) {
+    await registrarHistorico(centralQuery, c.id, 'email_falhou', `Convite para ${c.email} · ${err.message}`, autor).catch(() => {})
+    throw err
+  }
 }

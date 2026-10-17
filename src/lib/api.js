@@ -1,4 +1,5 @@
 import { clearScrollRestoration } from '../hooks/useScrollRestoration'
+import { AMBIENTE_PRINCIPAL } from './ambienteHost'
 import {
   pode, podeGravar, atendeRegra, regraDaRota, MODULO_DA_TABELA, podeGravarConfiguracoes, normalizarPerfis,
 } from './permissoes.js'
@@ -62,6 +63,11 @@ export function getSessao() {
     return null
   }
 }
+
+// Sessão do ambiente principal ('vm', o do Victor)? Sem sessão legível (modo dev) → sim, como antes.
+// Coisas só do Victor (de-para/importação Dindin, rodapé "Gislaine & Victor Moreira", seed antigo
+// do navegador) só aparecem/rodam nele.
+export const noAmbientePrincipal = () => (getSessao()?.ambSigla ?? AMBIENTE_PRINCIPAL) === AMBIENTE_PRINCIPAL
 
 // O app pode tentar esta gravação? Mesmas regras da API (src/lib/permissoes.js). Sem sessão legível
 // deixa passar — a API decide. O /api/sync decide pela tabela (a API ainda filtra linha a linha).

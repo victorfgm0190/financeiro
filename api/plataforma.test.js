@@ -7,8 +7,8 @@ import jwt from 'jsonwebtoken'
 import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
 
 // Pedido público + Controle de Clientes num Postgres de verdade (PGlite). Os handlers rodam de
-// verdade: só o _db.js aponta para o PGlite. As tabelas de usuários entram para provar que aprovar
-// um cliente não cria login neste banco.
+// verdade: só o _db.js aponta para o PGlite. (O provisionamento completo do ambiente — Neon, banco
+// do cliente, kit, convite — está em api/provisionar.test.js; aqui o Aprovar só roda o 1º passo.)
 const estado = vi.hoisted(() => ({ db: null }))
 vi.mock('./_db.js', () => ({
   query: async (sql, params = []) => (params.length ? (await estado.db.query(sql, params)).rows : (await estado.db.exec(sql)).at(-1)?.rows ?? []),
@@ -20,7 +20,6 @@ const { default: cadastroHandler, LIMITE_POR_HORA } = await import('./cadastro-p
 const { default: clientesHandler } = await import('./clientes.js')
 const { default: siglaHandler } = await import('./sigla-disponivel.js')
 const { _resetSchemaPronto, ehAdminPlataforma } = await import('./_plataforma.js')
-const { provisionarCliente } = await import('./_provisionar.js')
 const { enviarEmail } = await import('./_email.js')
 const { modeloBoasVindas } = await import('./_emailBoasVindas.js')
 
@@ -200,39 +199,6 @@ describe('acesso ao Controle de Clientes', () => {
 describe('aprovação e ciclo de status', () => {
   const idDoPedido = async () => (await q('SELECT id FROM plataforma_clientes LIMIT 1'))[0].id
 
-  it('aprovar devolve a boas-vindas, grava histórico e NÃO cria nenhuma linha em usuarios', async () => {
-    await q("INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Victor')")
-    await q("INSERT INTO usuarios (username, nome, email, senha_hash, nivel) VALUES ('vmoreira', 'Victor', 'v@v.com', 'x', 'admin')")
-    const antes = await q('SELECT * FROM usuarios ORDER BY id')
-    const membrosAntes = await q('SELECT * FROM membros')
-    await pedir()
-    const id = await idDoPedido()
-
-    const r = await clientes({ method: 'POST', url: '/api/clientes?acao=aprovar', body: { id } })
-    expect(r.statusCode).toBe(200)
-    expect(r.body.cliente.status).toBe('aprovado')
-    expect(r.body.endereco).toBe('https://mss.finup.app.br')
-    expect(r.body.mensagem).toContain('Olá, Maria!')
-    expect(r.body.mensagem).toContain([
-      'Acesse: https://finup.app.br',
-      'Ambiente: MSS',
-      'Usuário: admin (ou o e-mail maria@exemplo.com)',
-      'Endereço do seu ambiente: https://mss.finup.app.br',
-    ].join('\n'))
-    expect(r.body.mensagem).not.toContain('Maria da Silva Souza')
-    expect(r.body.mensagem).toMatch(/próxima etapa[\s\S]*link para criar a sua senha/)
-
-    expect(await q('SELECT * FROM usuarios ORDER BY id')).toEqual(antes)
-    expect(await q('SELECT * FROM membros')).toEqual(membrosAntes)
-    const hist = await q('SELECT evento, autor FROM plataforma_historico WHERE cliente_id = $1 ORDER BY created_at', [id])
-    expect(hist).toEqual([{ evento: 'pedido', autor: 'formulario' }, { evento: 'aprovado', autor: 'vmoreira' }])
-
-    // Repetir só regera a mensagem.
-    const de_novo = await provisionarCliente(id, { autor: 'vmoreira' })
-    expect(de_novo.cliente.status).toBe('aprovado')
-    expect((await q('SELECT count(*)::int AS n FROM usuarios'))[0].n).toBe(1)
-  })
-
   it('recusar, suspender, reativar e cancelar seguem as transições permitidas', async () => {
     await pedir()
     const id = await idDoPedido()
@@ -273,13 +239,7 @@ describe('aprovação e ciclo de status', () => {
 
 describe('e-mail de boas-vindas (Resend)', () => {
   const respostaResend = (status, json) => vi.fn(async () => ({ ok: status < 300, status, json: async () => json }))
-  const aprovado = async () => {
-    await pedir()
-    const [{ id }] = await q('SELECT id FROM plataforma_clientes')
-    await clientes({ method: 'POST', url: '/api/clientes?acao=aprovar', body: { id } })
-    return id
-  }
-  const historico = async (id) => (await q('SELECT evento, detalhe FROM plataforma_historico WHERE cliente_id = $1 AND evento LIKE $2', [id, 'email_%']))
+  const URL_CONVITE = 'https://cv.finup.app.br/definir-senha?token=abc123'
   beforeEach(async () => {
     await estado.db.waitReady
     process.env.RESEND_API_KEY = 're_chave_secreta'
@@ -287,85 +247,73 @@ describe('e-mail de boas-vindas (Resend)', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('modelo: assunto com a sigla, mesmo conteúdo da mensagem, rodapé e HTML escapado', () => {
-    const m = modeloBoasVindas({ nome: 'Ana Lima', email: 'ana@x.com', sigla: 'cv' })
+  it('modelo: assunto com a sigla, dados de acesso, botão "Criar minha senha" (48 h), rodapé e HTML escapado', () => {
+    const m = modeloBoasVindas({ nome: 'Ana Lima', email: 'ana@x.com', sigla: 'cv' }, { url: URL_CONVITE })
     expect(m.assunto).toBe('Seu acesso ao Finup — ambiente CV')
     expect(m.texto).toContain('Acesse: https://finup.app.br\nAmbiente: CV\nUsuário: admin (ou o e-mail ana@x.com)\nEndereço do seu ambiente: https://cv.finup.app.br')
-    expect(m.texto).toMatch(/próxima etapa[\s\S]*link para criar a sua senha/)
+    expect(m.texto).toContain(`Criar minha senha: ${URL_CONVITE}`)
+    expect(m.texto).toContain('48 horas')
+    expect(m.texto).not.toMatch(/próxima etapa/)
+    expect(m.html).not.toMatch(/próxima etapa/)
     expect(m.texto).toContain('Dúvidas? Responda este e-mail ou escreva para contato@finup.app.br')
-    expect(m.html).toContain('https://cv.finup.app.br')
+    expect(m.html).toContain('Criar minha senha</a>')
+    expect(m.html).toContain(`href="${URL_CONVITE}"`)
     expect(m.html).toContain('prefers-color-scheme: dark')
     expect(m.html).toContain('#0F6E56')
     // rótulo longo em linha própria, com o link embaixo (não encosta)
     expect(m.html).toMatch(/Endereço do seu ambiente<\/div>\s*<div[^>]*padding-top:4px[^>]*><a href="https:\/\/cv\.finup\.app\.br"/)
-    const xss = modeloBoasVindas({ nome: '<i>Ana</i> Lima', email: 'a"b@x.com', sigla: 'cv' }).html
+    const xss = modeloBoasVindas({ nome: '<i>Ana</i> Lima', email: 'a"b@x.com', sigla: 'cv' }, { url: URL_CONVITE }).html
     expect(xss).toContain('Olá, &lt;i&gt;Ana&lt;/i&gt;!')
     expect(xss).toContain('a&quot;b@x.com')
     expect(xss).not.toContain('<i>Ana')
   })
 
-  it('sucesso: POST no Resend com Bearer, from/reply_to, histórico email_enviado com o id; log sem chave nem conteúdo', async () => {
-    const id = await aprovado()
+  it('sucesso: POST no Resend com Bearer e from/reply_to; log sem chave nem conteúdo', async () => {
     const fetch = respostaResend(200, { id: 'resend-123' })
     vi.stubGlobal('fetch', fetch)
     const log = vi.spyOn(console, 'info').mockImplementation(() => {})
-    const r = await clientes({ method: 'POST', url: '/api/clientes?acao=email', body: { id } })
-    expect(r.statusCode).toBe(200)
-    expect(r.body).toEqual({ ok: true, id: 'resend-123', para: 'maria@exemplo.com' })
+    const m = modeloBoasVindas({ nome: 'Maria', email: 'maria@exemplo.com', sigla: 'mss' }, { url: 'https://mss.finup.app.br/definir-senha?token=t' })
+    expect(await enviarEmail({ para: 'maria@exemplo.com', assunto: m.assunto, html: m.html, texto: m.texto })).toEqual({ id: 'resend-123' })
 
     const [url, init] = fetch.mock.calls[0]
     expect(url).toBe('https://api.resend.com/emails')
     expect(init.method).toBe('POST')
     expect(init.headers.Authorization).toBe('Bearer re_chave_secreta')
-    const enviado = JSON.parse(init.body)
-    expect(enviado).toMatchObject({
+    expect(JSON.parse(init.body)).toMatchObject({
       from: 'Finup <nao-responda@finup.app.br>', to: ['maria@exemplo.com'], reply_to: 'contato@finup.app.br',
       subject: 'Seu acesso ao Finup — ambiente MSS',
     })
-    expect(enviado.html).toContain('https://mss.finup.app.br')
-    expect(enviado.text).toContain('Ambiente: MSS')
-
-    expect(await historico(id)).toEqual([{ evento: 'email_enviado', detalhe: 'Boas-vindas para maria@exemplo.com · id resend-123' }])
     const logado = JSON.stringify(log.mock.calls)
     expect(logado).toContain('resend-123')
     expect(logado).not.toContain('re_chave_secreta')
-    expect(logado).not.toContain('mss.finup.app.br')
+    expect(logado).not.toContain('token=t')
     log.mockRestore()
   })
 
-  it('falha da API: 502, histórico email_falhou com a mensagem de erro', async () => {
-    const id = await aprovado()
+  it('falha da API: erro com a mensagem do Resend', async () => {
     vi.stubGlobal('fetch', respostaResend(422, { name: 'validation_error', message: 'Invalid `to` field' }))
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const r = await clientes({ method: 'POST', url: '/api/clientes?acao=email', body: { id } })
-    expect(r.statusCode).toBe(502)
-    expect(r.body.error).toBe('Serviço de e-mail recusou o envio (422: Invalid `to` field)')
-    expect(await historico(id)).toEqual([{ evento: 'email_falhou', detalhe: `Boas-vindas para maria@exemplo.com · ${r.body.error}` }])
+    await expect(enviarEmail({ para: 'a@b.com', assunto: 'x', html: '', texto: '' })).rejects.toThrow('Serviço de e-mail recusou o envio (422: Invalid `to` field)')
     expect(JSON.stringify(err.mock.calls)).not.toContain('re_chave_secreta')
     err.mockRestore()
   })
 
   it('chave ausente: erro claro, sem chamar o Resend', async () => {
-    const id = await aprovado()
     delete process.env.RESEND_API_KEY
     const fetch = respostaResend(200, { id: 'x' })
     vi.stubGlobal('fetch', fetch)
     await expect(enviarEmail({ para: 'a@b.com', assunto: 'x', html: '', texto: '' })).rejects.toThrow('Envio de e-mail não configurado')
-    const r = await clientes({ method: 'POST', url: '/api/clientes?acao=email', body: { id } })
-    expect(r.statusCode).toBe(503)
-    expect(r.body.error).toBe('Envio de e-mail não configurado')
     expect(fetch).not.toHaveBeenCalled()
-    expect((await historico(id))[0].evento).toBe('email_falhou')
   })
 
-  it('só o PLATAFORMA_ADMIN dispara (admin comum 403) e só cliente aprovado recebe', async () => {
+  it('reenviar convite: só o PLATAFORMA_ADMIN (admin comum 403) e só cliente ativo (pedido 409)', async () => {
     await pedir()
     const [{ id }] = await q('SELECT id FROM plataforma_clientes')
     const fetch = respostaResend(200, { id: 'x' })
     vi.stubGlobal('fetch', fetch)
-    const comum = await clientes({ method: 'POST', url: '/api/clientes?acao=email', body: { id }, auth: token('outro') })
+    const comum = await clientes({ method: 'POST', url: '/api/clientes?acao=reenviar-convite', body: { id }, auth: token('outro') })
     expect(comum.statusCode).toBe(403)
-    const pedido = await clientes({ method: 'POST', url: '/api/clientes?acao=email', body: { id } })
+    const pedido = await clientes({ method: 'POST', url: '/api/clientes?acao=reenviar-convite', body: { id } })
     expect(pedido.statusCode).toBe(409)
     expect(fetch).not.toHaveBeenCalled()
   })

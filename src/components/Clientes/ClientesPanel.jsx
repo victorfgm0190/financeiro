@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail } from 'lucide-react'
+import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink } from 'lucide-react'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
-  enviarBoasVindasEmail,
+  andamentoProvisionamento, reenviarConviteCliente,
 } from '../../lib/clientesApi'
 import {
   STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
@@ -12,7 +12,9 @@ import {
 } from '../../lib/plataforma'
 
 // CONTROLE DE CLIENTES da plataforma (só o administrador da plataforma — a API devolve 403 para
-// qualquer outro). Fase de teste: aprovar NÃO cria usuário nem ambiente; só gera a mensagem.
+// qualquer outro). Aprovar CRIA o ambiente do cliente (banco no Neon, estrutura, kit básico, admin e
+// convite por e-mail) em passos, com o progresso na tela (api/_provisionar.js). Suspender/cancelar/
+// reativar também mudam o ambiente (login e API do cliente); o banco nunca é apagado daqui.
 
 const dataHora = (v) => (v ? new Date(v).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 const moeda = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))
@@ -20,14 +22,14 @@ const COR_STATUS = {
   pedido: 'bg-ambar/15 text-ambar', aprovado: 'bg-primary/15 text-primary-fg', ativo: 'bg-receita/15 text-receita',
   suspenso: 'bg-aviso/15 text-aviso', cancelado: 'bg-surface-2 text-texto-3', recusado: 'bg-perigo-bg text-perigo',
 }
-// E-mail de boas-vindas (só PLATAFORMA_ADMIN; a API registra 'email_enviado'/'email_falhou').
-async function enviarPorEmail(id, onToast) {
+// Convite novo (48 h) + boas-vindas por e-mail (cliente ativo; a API registra no histórico).
+async function reenviarConvite(id, onToast) {
   try {
-    const r = await enviarBoasVindasEmail(id)
-    onToast({ message: `E-mail de boas-vindas enviado para ${r.para}` })
+    const r = await reenviarConviteCliente(id)
+    onToast({ message: `Convite enviado para ${r.para}` })
     return true
   } catch (e) {
-    onToast({ message: `Falha ao enviar o e-mail: ${e.message}`, variant: 'error' })
+    onToast({ message: `Falha ao enviar o convite: ${e.message}`, variant: 'error' })
     return false
   }
 }
@@ -35,6 +37,7 @@ async function enviarPorEmail(id, onToast) {
 // Botões por status (mesmas transições da API).
 const ACOES = [
   { id: 'aprovar', label: 'Aprovar', icon: Check, de: ['pedido', 'recusado'], classe: 'btn-primary' },
+  { id: 'aprovar', label: 'Continuar ativação', icon: Play, de: ['aprovado'], classe: 'btn-primary' },
   { id: 'recusar', label: 'Recusar', icon: X, de: ['pedido'], classe: 'btn-secondary' },
   { id: 'suspender', label: 'Suspender', icon: Pause, de: ['aprovado', 'ativo'], classe: 'btn-secondary' },
   { id: 'reativar', label: 'Reativar', icon: Play, de: ['suspenso', 'cancelado'], classe: 'btn-secondary' },
@@ -43,7 +46,12 @@ const ACOES = [
 const ROTULO_EVENTO = {
   pedido: 'Pedido recebido', criado: 'Cadastro manual', editado: 'Editado', aprovado: 'Aprovado', recusado: 'Recusado',
   suspenso: 'Suspenso', cancelado: 'Cancelado', boas_vindas: 'Boas-vindas', pedido_repetido: 'Pedido repetido',
-  email_enviado: 'E-mail enviado', email_falhou: 'E-mail falhou',
+  email_enviado: 'E-mail enviado', email_falhou: 'E-mail falhou', ativo: 'Ativo',
+  prov_ambiente: 'Provisionamento · ambiente', prov_database: 'Provisionamento · banco de dados',
+  prov_estrutura: 'Provisionamento · estrutura', prov_kit: 'Provisionamento · kit básico',
+  prov_admin: 'Provisionamento · admin', prov_convite: 'Provisionamento · convite',
+  prov_ativar: 'Provisionamento · ambiente ativo', prov_falhou: 'Falha no provisionamento',
+  convite_reenviado: 'Convite reenviado',
 }
 
 function StatusBadge({ status }) {
@@ -168,7 +176,7 @@ function Info({ label, valor }) {
   )
 }
 
-function DetalheCliente({ id, onMudou, onBoasVindas, onToast }) {
+function DetalheCliente({ id, onMudou, onProvisionar, onToast }) {
   const [dados, setDados] = useState(null)
   const [editando, setEditando] = useState(false)
   const [erro, setErro] = useState('')
@@ -177,24 +185,27 @@ function DetalheCliente({ id, onMudou, onBoasVindas, onToast }) {
   const carregar = useCallback(() => detalheCliente(id).then(setDados).catch(e => setErro(e.message)), [id])
   useEffect(() => { carregar() }, [carregar])
 
-  const reenviarEmail = async () => {
+  const reenviar = async () => {
     setOcupado(true)
-    await enviarPorEmail(id, onToast)
+    await reenviarConvite(id, onToast)
     await carregar()
     setOcupado(false)
   }
 
   const executar = async (acao) => {
     setErro('')
-    let motivo
-    if (acao !== 'aprovar') {
-      motivo = window.prompt(`Motivo (opcional) para ${acao}:`)
-      if (motivo === null) return
+    // Aprovar abre o provisionamento (progresso passo a passo; ele avisa ao terminar).
+    if (acao === 'aprovar') {
+      const c = dados?.cliente
+      if (c?.status !== 'aprovado' && !window.confirm(`Criar o ambiente ${String(c?.sigla || '').toUpperCase()} e enviar o convite para ${c?.email}?`)) return
+      onProvisionar(id)
+      return
     }
+    const motivo = window.prompt(`Motivo (opcional) para ${acao}:`)
+    if (motivo === null) return
     setOcupado(true)
     try {
-      if (acao === 'aprovar') onBoasVindas(await aprovarCliente(id))
-      else await mudarStatusCliente(id, acao, motivo)
+      await mudarStatusCliente(id, acao, motivo)
       await carregar()
       onMudou()
     } catch (e) {
@@ -235,19 +246,19 @@ function DetalheCliente({ id, onMudou, onBoasVindas, onToast }) {
 
       <div className="flex flex-wrap gap-2">
         {ACOES.filter(a => a.de.includes(c.status)).map(({ id: acao, label, icon: Icon, classe }) => (
-          <button key={acao} className={`${classe} inline-flex items-center gap-1.5`} disabled={ocupado} onClick={() => executar(acao)}>
+          <button key={`${acao}-${label}`} className={`${classe} inline-flex items-center gap-1.5`} disabled={ocupado} onClick={() => executar(acao)}>
             <Icon size={14} /> {label}
           </button>
         ))}
-        {c.status === 'aprovado' && (
-          <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={() => executar('aprovar')}>
-            <MessageCircle size={14} /> Mensagem de boas-vindas
-          </button>
-        )}
-        {['aprovado', 'ativo'].includes(c.status) && (
-          <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={reenviarEmail}>
-            <Mail size={14} /> Reenviar boas-vindas por e-mail
-          </button>
+        {c.status === 'ativo' && (
+          <>
+            <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={reenviar} title={`Convite novo (48 h) para ${c.email}`}>
+              <Mail size={14} /> Reenviar convite
+            </button>
+            <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={() => onProvisionar(id)}>
+              <MessageCircle size={14} /> Mensagem de boas-vindas
+            </button>
+          </>
         )}
       </div>
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
@@ -267,40 +278,93 @@ function DetalheCliente({ id, onMudou, onBoasVindas, onToast }) {
   )
 }
 
-function BoasVindasModal({ dados, onFechar, onToast, onMudou }) {
-  const [copiado, setCopiado] = useState(false)
-  const [enviando, setEnviando] = useState(false)
-  if (!dados) return null
-  const enviar = async () => {
-    setEnviando(true)
-    await enviarPorEmail(dados.cliente.id, onToast)
-    setEnviando(false)
+function IconePasso({ estado }) {
+  if (estado === 'feito') return <Check size={14} className="text-receita shrink-0" />
+  if (estado === 'rodando') return <Loader2 size={14} className="text-primary-fg animate-spin shrink-0" />
+  if (estado === 'erro') return <AlertTriangle size={14} className="text-perigo shrink-0" />
+  return <Circle size={14} className="text-texto-3 shrink-0" />
+}
+
+// Laço do provisionamento: andamento atual e, até concluir, um passo por chamada.
+async function rodarProvisionamento(id, { onEstado, onErro, onFim, onMudou }) {
+  try {
+    let r = await andamentoProvisionamento(id)
+    onEstado(r)
+    for (let i = 0; !r.concluido && i < 20; i++) {
+      r = await aprovarCliente(id)
+      onEstado(r)
+      onMudou()
+    }
+  } catch (e) {
+    onErro(e.message)
     onMudou()
+  } finally {
+    onFim()
   }
-  const whatsapp = linkWhatsApp(dados.cliente?.telefone, dados.mensagem)
+}
+
+// PROVISIONAMENTO do ambiente: chama a API passo a passo (cada chamada executa o próximo passo
+// pendente) e mostra o andamento. Erro → mensagem + "Tentar novamente" (continua do passo que
+// falhou; nada é duplicado). Concluído → mensagem de boas-vindas para copiar/WhatsApp.
+function ProvisionamentoModal({ id, onFechar, onMudou }) {
+  const [estado, setEstado] = useState(null)
+  const [rodando, setRodando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [copiado, setCopiado] = useState(false)
+
+  const executar = useCallback(() => rodarProvisionamento(id, { onEstado: setEstado, onErro: setErro, onFim: () => setRodando(false), onMudou }), [id, onMudou])
+  useEffect(() => { executar() }, [executar])
+  const tentarDeNovo = () => { setErro(''); setRodando(true); executar() }
+
+  const c = estado?.cliente
+  const whatsapp = estado?.mensagem ? linkWhatsApp(c?.telefone, estado.mensagem) : null
   const copiar = async () => {
-    try { await navigator.clipboard.writeText(dados.mensagem); setCopiado(true) } catch { setCopiado(false) }
+    try { await navigator.clipboard.writeText(estado.mensagem); setCopiado(true) } catch { setCopiado(false) }
   }
+  const estadoDoPasso = (p) => (p.feito ? 'feito' : p.id === estado?.proximo ? (rodando ? 'rodando' : erro ? 'erro' : 'pendente') : 'pendente')
+
   return (
-    <Modal open onClose={onFechar} title="Cliente aprovado — mensagem de boas-vindas">
+    <Modal open onClose={rodando ? () => {} : onFechar} title={estado?.concluido ? 'Ambiente pronto' : 'Criando o ambiente do cliente'}>
       <div className="space-y-4">
-        <textarea readOnly className="input font-mono text-xs min-h-[220px]" value={dados.mensagem} />
-        <p className="text-[11px] text-texto-3">Fase de teste: nenhum usuário nem ambiente foi criado.</p>
-        <div className="flex flex-wrap justify-end gap-2">
-          <button className="btn-secondary inline-flex items-center gap-1.5" onClick={copiar}><Copy size={14} /> {copiado ? 'Copiado' : 'Copiar'}</button>
-          <button className="btn-secondary inline-flex items-center gap-1.5" disabled={enviando} onClick={enviar} title={dados.cliente?.email}>
-            <Mail size={14} /> {enviando ? 'Enviando…' : 'Enviar por e-mail'}
-          </button>
-          {whatsapp ? (
-            <a className="btn-primary inline-flex items-center gap-1.5" target="_blank" rel="noopener noreferrer" href={whatsapp}>
-              <MessageCircle size={14} /> Abrir no WhatsApp
-            </a>
-          ) : (
-            <button type="button" disabled className="btn-primary inline-flex items-center gap-1.5" title="O telefone cadastrado não é um celular">
-              <MessageCircle size={14} /> Abrir no WhatsApp
+        {c && <p className="text-sm text-texto-2"><span className="font-semibold text-texto-1">{c.nome}</span> · {c.sigla}.{DOMINIO_CLIENTES}</p>}
+        {!estado && !erro && <p className="text-sm text-texto-3">Carregando…</p>}
+        {estado && (
+          <ol className="space-y-2">
+            {estado.passos.map(p => (
+              <li key={p.id} className="flex items-center gap-2 text-sm">
+                <IconePasso estado={estadoDoPasso(p)} />
+                <span className={p.feito ? 'text-texto-1' : 'text-texto-2'}>{p.rotulo}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {erro && (
+          <div className="space-y-2">
+            <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>
+            <button className="btn-primary inline-flex items-center gap-1.5" onClick={tentarDeNovo} disabled={rodando}>
+              <RefreshCw size={14} /> Tentar novamente
             </button>
-          )}
-        </div>
+          </div>
+        )}
+        {estado?.concluido && (
+          <>
+            <p className="text-sm text-receita">Ambiente ativo. O e-mail de boas-vindas com o botão &quot;Criar minha senha&quot; foi enviado para {c?.email}.</p>
+            <textarea readOnly className="input font-mono text-xs min-h-[200px]" value={estado.mensagem} />
+            <div className="flex flex-wrap justify-end gap-2">
+              <a className="btn-secondary inline-flex items-center gap-1.5" href={estado.endereco} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Abrir endereço</a>
+              <button className="btn-secondary inline-flex items-center gap-1.5" onClick={copiar}><Copy size={14} /> {copiado ? 'Copiado' : 'Copiar'}</button>
+              {whatsapp ? (
+                <a className="btn-primary inline-flex items-center gap-1.5" target="_blank" rel="noopener noreferrer" href={whatsapp}>
+                  <MessageCircle size={14} /> Abrir no WhatsApp
+                </a>
+              ) : (
+                <button type="button" disabled className="btn-primary inline-flex items-center gap-1.5" title="O telefone cadastrado não é um celular">
+                  <MessageCircle size={14} /> Abrir no WhatsApp
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )
@@ -311,11 +375,11 @@ export default function ClientesPanel({ onMudou = () => {} }) {
   const [filtro, setFiltro] = useState('pedido')
   const [aberto, setAberto] = useState(null)
   const [novo, setNovo] = useState(false)
-  const [boasVindas, setBoasVindas] = useState(null)
+  const [provisionando, setProvisionando] = useState(null) // id do cliente
   const [erro, setErro] = useState('')
   const [toast, setToast] = useState(null)
   const fecharToast = useCallback(() => setToast(null), [])
-  // Recarrega o detalhe aberto (histórico) depois de um envio feito pelo modal de boas-vindas.
+  // Recarrega o detalhe aberto (status/histórico) depois do provisionamento.
   const [detalheVersao, setDetalheVersao] = useState(0)
 
   const carregar = useCallback(() => listarClientes()
@@ -387,12 +451,14 @@ export default function ClientesPanel({ onMudou = () => {} }) {
       </div>
 
       <Modal open={!!aberto} onClose={() => setAberto(null)} title="Cliente" size="lg">
-        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onBoasVindas={setBoasVindas} onToast={setToast} />}
+        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onProvisionar={setProvisionando} onToast={setToast} />}
       </Modal>
       <Modal open={novo} onClose={() => setNovo(false)} title="Novo cliente" size="lg">
         {novo && <ClienteForm onCancelar={() => setNovo(false)} onSalvo={(c) => { setNovo(false); setToast({ message: 'Cliente cadastrado' }); mudou(); setAberto(c.id) }} />}
       </Modal>
-      <BoasVindasModal dados={boasVindas} onFechar={() => setBoasVindas(null)} onToast={setToast} onMudou={() => setDetalheVersao(v => v + 1)} />
+      {provisionando && (
+        <ProvisionamentoModal id={provisionando} onFechar={() => { setProvisionando(null); setDetalheVersao(v => v + 1) }} onMudou={mudou} />
+      )}
       {toast && <Toast message={toast.message} variant={toast.variant} onClose={fecharToast} />}
     </div>
   )

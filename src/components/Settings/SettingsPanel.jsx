@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import RodapeIdentidade from '../Layout/RodapeIdentidade'
+import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { STORAGE_KEY } from '../../lib/storage'
 import { fmt } from '../shared/utils'
@@ -589,7 +591,8 @@ export default function SettingsPanel() {
   const ehAdmin = pode('usuarios', 'ver')
   const abas = CONFIG_ABAS
     .filter(a => pode(MODULO_DA_ABA_CONFIG[a.id] || 'configuracoes', 'ver'))
-    .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id)) }))
+    // Importação histórica Dindin: só no ambiente principal ('vm').
+    .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id) && (s.id !== 'importacao' || noAmbientePrincipal())) }))
     .filter(a => a.secoes.length > 0)
   const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
   const secao = abaAtual.secoes.some(s => s.id === rota.secao) ? rota.secao : abaAtual.secoes[0].id
@@ -1624,7 +1627,7 @@ export default function SettingsPanel() {
       )}
 
       {/* Importação histórica Dindin */}
-      {secao === 'importacao' && (
+      {secao === 'importacao' && noAmbientePrincipal() && (
       <DindinImportPanel />
       )}
 
@@ -1922,8 +1925,7 @@ export default function SettingsPanel() {
 
       {/* Identidade — visível apenas no mobile (sidebar já mostra no desktop) */}
       <div className="md:hidden border-t border-borda pt-4 text-center space-y-0.5">
-        <p className="text-xs text-texto-3 font-medium">Gislaine &amp; Victor Moreira</p>
-        <p className="text-xs text-texto-3 italic">Transformando conhecimento em resultados.</p>
+        <RodapeIdentidade classeTitulo="text-xs text-texto-3 font-medium" classeFrase="text-xs text-texto-3 italic" />
       </div>
     </div>
   )

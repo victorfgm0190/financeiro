@@ -1,4 +1,4 @@
-// Aplica as migrações pendentes de supabase/migrations em CADA ambiente ativo (um database por
+// Aplica as migrações pendentes de supabase/migrations em CADA ambiente ativo ou suspenso (um database por
 // ambiente, listados no banco central), registrando a versão em ambientes.schema_versao.
 //
 // Versão = quantas migrações (em ordem de nome de arquivo) já valem naquele database. Cada database
@@ -37,10 +37,10 @@ const conectar = async (url) => {
 const central = await conectar(process.env.CENTRAL_DATABASE_URL)
 try {
   const ambientes = (await central.query(
-    "SELECT id, sigla, database_name, schema_versao FROM ambientes WHERE status = 'ativo' AND ($1::text IS NULL OR sigla = $1) ORDER BY sigla",
+    "SELECT id, sigla, database_name, schema_versao FROM ambientes WHERE status IN ('ativo', 'suspenso') AND ($1::text IS NULL OR sigla = $1) ORDER BY sigla",
     [so],
   )).rows
-  console.log(`${MIGRACOES.length} migração(ões) em supabase/migrations · ${ambientes.length} ambiente(s) ativo(s)${dryRun ? ' · DRY-RUN (nada é aplicado)' : ''}`)
+  console.log(`${MIGRACOES.length} migração(ões) em supabase/migrations · ${ambientes.length} ambiente(s) ativo(s)/suspenso(s)${dryRun ? ' · DRY-RUN (nada é aplicado)' : ''}`)
 
   for (const amb of ambientes) {
     const db = await conectar(urlDoDatabase(amb.database_name))

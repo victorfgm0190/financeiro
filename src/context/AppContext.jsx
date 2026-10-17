@@ -19,7 +19,7 @@ import {
   createReserveLedgerRows,
 } from '../lib/db'
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
-import { getToken, getSessao } from '../lib/api'
+import { getToken, getSessao, noAmbientePrincipal } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia } from '../lib/camposSerie'
@@ -954,11 +954,15 @@ export function AppProvider({ children }) {
         })
         saveLocal(merged)
       } else if (result.status === 'empty') {
-        // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase
+        // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase.
+        // SÓ no ambiente principal: o defaultData traz o plano de contas do Victor, e banco de
+        // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
         setDbStatus('connected')
-        try { await seedDefaults(defaultData) } catch {}
+        if (noAmbientePrincipal()) {
+          try { await seedDefaults(defaultData) } catch {}
+          fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
+        }
         fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
-        fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
       } else {
         // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback
         console.warn('[finup] Fallback para localStorage (Neon indisponível):', result.status, result.error || '')

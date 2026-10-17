@@ -90,6 +90,56 @@ gerar um novo invalida os anteriores do mesmo usuário (`api/_senhaTokens.js`).
   Usuários tem o botão "Enviar link de senha" (desabilitado sem e-mail ou para inativo).
 - E-mails: `api/_emailSenha.js`, com o visual comum de `api/_emailModelo.js` (o mesmo das boas-vindas).
 
+## Criar o ambiente de um cliente (Aprovar) — Parte B
+
+O botão **Aprovar** do Controle de Clientes chama `provisionarProximoPasso()` (`api/_provisionar.js`)
+uma vez por passo; a tela mostra o progresso e, em erro, a mensagem e **Tentar novamente**. Cada passo
+é idempotente e grava `prov_<passo>` no `plataforma_historico` (falha → `prov_falhou`); repetir
+continua do passo pendente e nunca duplica.
+
+1. **ambiente** — linha em `ambientes` (`status 'provisionando'`, `database_name 'cliente_<sigla>'`);
+   cliente → `aprovado`.
+2. **database** — `POST /projects/{NEON_PROJECT_ID}/branches/{NEON_BRANCH_ID}/databases` (dono
+   `neondb_owner`) e espera a operação terminar (`api/_neon.js`). Já existe → segue.
+3. **estrutura** — `supabase/estrutura_base.sql` + todas as migrações, numa transação, registradas em
+   `_migracoes`; `ambientes.schema_versao` atualizada.
+4. **kit** — `api/_kitBasico.js` (lista única do que um cliente novo ganha).
+5. **admin** — organização + usuário `admin` (nome e e-mail do cliente, nível admin, senha aleatória
+   inutilizável).
+6. **convite** — token `convite` (48 h, `api/_senhaTokens.js`) e e-mail de boas-vindas com o botão
+   "Criar minha senha" → `https://<sigla>.finup.app.br/definir-senha?token=…`.
+7. **ativar** — `ambientes.status` e `plataforma_clientes.status` → `ativo`.
+
+Cliente ativo: **Reenviar convite** (convite novo; o anterior deixa de valer) e **Mensagem de
+boas-vindas** (copiar/WhatsApp). Ciclo de vida: Suspender → ambiente `suspenso` (login e API
+respondem "Ambiente indisponível"); Reativar → volta a `ativo` (se já tinha sido ativado; senão o
+provisionamento continua); Cancelar → `cancelado`, **sem apagar o database** (exclusão definitiva é
+outra etapa, com confirmação dupla).
+
+**Regra: o banco do cliente nasce vazio.** Nada é copiado do neondb.
+
+- `supabase/estrutura_base.sql` é GERADO a partir do catálogo do neondb (só estrutura, nenhum comando
+  de dados): `node --env-file=.env.local scripts/gerar-estrutura-base.js`. A API usa a cópia embutida
+  em `api/_sqlEmbutido.js`: depois de mudar a estrutura ou criar uma migração, rode
+  `node scripts/gerar-sql-embutido.js` (o teste `api/provisionar.test.js` falha se esquecer).
+- O `supabase/schema.sql` antigo não roda num banco vazio e tem seeds do Victor: fica só como referência.
+
+### O que é só do ambiente principal (`vm`)
+
+- Seeds do navegador (`seedDefaults(defaultData)`, o plano de contas antigo) e os seeds/ajustes por
+  nome do `/api/load` (categorias Capitalização/Consórcio, conversão "Consórcio HS",
+  `exibir_como_despesa` por nome de função de reserva).
+- De-para e importação **Dindin**: Configurações › Dados › Importação, a aba "Conta Corrente" do
+  Importar (extrato Dindin), `GET /api/account-mapping` (cliente → lista vazia) e o sync da tabela
+  `account_mapping` (cliente → 403). O "Cartão de Crédito" (Importar Fatura) vale para todos.
+- Rodapé da barra lateral: colunas `configuracoes.rodape_titulo` / `rodape_frase`. Vazias no `vm` = o
+  texto de sempre ("Gislaine & Victor Moreira" / "Transformando conhecimento em resultados."); no
+  cliente o kit grava o nome (ou a empresa, se PJ).
+- Dia de início do mês financeiro: já é por banco (`configuracoes.financial_month_start_day`), editável
+  em Configurações › Geral; o kit grava 1, o `vm` continua 15.
+- O `/api/load` só devolve "banco vazio" quando não há configurações nem categorias: cliente novo, com
+  o kit e sem contas, abre normalmente (sem semear nada).
+
 ## Migrações em todos os ambientes
 
 ```
@@ -98,7 +148,7 @@ node --env-file=.env.local scripts/migrar-ambientes.js --dry-run  # lista o que 
 node --env-file=.env.local scripts/migrar-ambientes.js            # aplica
 ```
 
-`migrar-ambientes.js` percorre os ambientes `ativo`, aplica as migrações pendentes de
+`migrar-ambientes.js` percorre os ambientes `ativo` e `suspenso` (os dos clientes também), aplica as migrações pendentes de
 `supabase/migrations` (ordem de nome) e grava `ambientes.schema_versao` = nº de migrações aplicadas.
 Cada database registra os nomes em `_migracoes`. Database sem `_migracoes` (o neondb, migrado à mão)
 registra as primeiras `schema_versao` migrações como linha de base, sem rodá-las de novo.
@@ -109,4 +159,6 @@ registra as primeiras `schema_versao` migrações como linha de base, sem rodá-
 |---|---|---|
 | `CENTRAL_DATABASE_URL` | Vercel + `.env.local` | URL do `finup_central` |
 | `AMBIENTE_PADRAO` | Vercel (+ local) | `vm` — ambiente de `financeiro-gnsm.vercel.app` e `localhost` |
-| `NEON_DATABASE_URL` | só scripts antigos | a API não usa mais |
+| `NEON_DATABASE_URL` | só scripts (`gerar-estrutura-base`, antigos) | a API não usa mais |
+| `NEON_API_KEY` | Vercel + `.env.local` (Secret) | chave do projeto finup — cria o database do cliente |
+| `NEON_PROJECT_ID` / `NEON_BRANCH_ID` | Vercel + `.env.local` | projeto finup / branch production |

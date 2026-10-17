@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
+import { noAmbientePrincipal } from '../../lib/api'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -4196,7 +4197,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
 export default function ImportPanel() {
   const { profileAccounts: accounts, accountGroups, profileTransactions: transactions, pode } = useApp()
-  const [tab, setTab] = useState('corrente')
+  // Aba "Conta Corrente" = importação de extrato do DINDIN: só no ambiente principal ('vm').
+  // O "Cartão de Crédito" (Importar Fatura) vale para todos.
+  const [comDindin] = useState(noAmbientePrincipal)
+  const [tab, setTab] = useState(comDindin ? 'corrente' : 'cartao')
 
   // Importar/conciliar grava lançamentos: sem permissão de incluir, só o aviso.
   if (!pode('importar', 'incluir')) {
@@ -4212,7 +4216,7 @@ export default function ImportPanel() {
     <div className="space-y-4">
       <div className="flex items-center gap-1 border-b border-borda">
         {[
-          { id: 'corrente', label: 'Conta Corrente' },
+          ...(comDindin ? [{ id: 'corrente', label: 'Conta Corrente' }] : []),
           { id: 'cartao', label: 'Cartão de Crédito' },
         ].map(t => (
           <button
@@ -4227,7 +4231,7 @@ export default function ImportPanel() {
         ))}
       </div>
 
-      {tab === 'corrente' && <ContaCorrenteTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
+      {tab === 'corrente' && comDindin && <ContaCorrenteTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
       {tab === 'cartao' && <CartaoCreditoTab accounts={accounts} accountGroups={accountGroups} transactions={transactions} />}
     </div>
   )

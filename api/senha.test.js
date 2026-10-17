@@ -16,6 +16,8 @@ const { default: usuariosHandler } = await import('./usuarios.js')
 const { ERRO_LINK } = await import('./_senhaTokens.js')
 
 const SECRET = 'segredo-de-teste'
+// Tabelas do app que as migrações alteram (o banco real vem de supabase/estrutura_base.sql).
+const ANTES_DAS_MIGRACOES = 'CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY);\n'
 const TABELAS_APP = `
   CREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());
   INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Org'), ('org2', 'Outra');
@@ -44,7 +46,7 @@ beforeAll(async () => {
       ('amb-c', 'cc', 'Cliente C', 'banco_c', 'suspenso');`)
   for (const nome of ['banco_vm', 'banco_a', 'banco_b', 'banco_c']) {
     bancos[nome] = new PGlite()
-    await bancos[nome].exec(SQL_MIGRACOES + TABELAS_APP)
+    await bancos[nome].exec(ANTES_DAS_MIGRACOES + SQL_MIGRACOES + TABELAS_APP)
   }
   ids.victor = await criarUsuario('banco_vm', 'victor')
   ids.ana = await criarUsuario('banco_a', 'ana')
