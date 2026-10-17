@@ -6,6 +6,8 @@ import {
   checarSigla, queryParam, statusValido,
 } from './_plataforma.js'
 import { provisionarCliente } from './_provisionar.js'
+import { enviarEmail, ErroEmail } from './_email.js'
+import { modeloBoasVindas } from './_emailBoasVindas.js'
 
 // CONTROLE DE CLIENTES da plataforma — só o administrador da plataforma (PLATAFORMA_ADMIN), nunca
 // o nível 'admin' comum.
@@ -17,6 +19,8 @@ import { provisionarCliente } from './_provisionar.js'
 //   PATCH { id, ...campos }    → edição (status NÃO muda por aqui)
 //   POST ?acao=aprovar { id }  → provisionarCliente (api/_provisionar.js) → { cliente, mensagem }
 //   POST ?acao=status { id, acao: recusar|suspender|reativar|cancelar, motivo? }
+//   POST ?acao=email { id }    → e-mail de boas-vindas (Resend) → { id do Resend }; histórico
+//                                'email_enviado' ou 'email_falhou'
 
 const CAMPOS_EDITAVEIS = ['nome', 'email', 'telefone', 'tipo_pessoa', 'documento', 'empresa', 'sigla', 'como_conheceu',
   'plano', 'valor_mensal', 'dia_vencimento', 'limite_usuarios', 'observacoes']
@@ -88,6 +92,26 @@ export async function mudarStatus(q, body, autor) {
   return buscarCliente(q, atual.id)
 }
 
+// Só cliente já aprovado recebe boas-vindas. O envio fica fora de transação (chamada externa) e o
+// resultado — sucesso ou falha — vai para o histórico.
+const PODE_RECEBER_EMAIL = ['aprovado', 'ativo']
+
+export async function enviarBoasVindas(q, id, autor) {
+  const c = await buscarCliente(q, id)
+  if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
+  if (!PODE_RECEBER_EMAIL.includes(c.status)) throw new ErroHttp(409, 'Só cliente aprovado recebe o e-mail de boas-vindas')
+  const { assunto, html, texto } = modeloBoasVindas(c)
+  try {
+    const { id: idResend } = await enviarEmail({ para: c.email, assunto, html, texto })
+    await registrarHistorico(q, c.id, 'email_enviado', `Boas-vindas para ${c.email} · id ${idResend}`, autor)
+    return { id: idResend, para: c.email }
+  } catch (err) {
+    if (!(err instanceof ErroEmail)) throw err
+    await registrarHistorico(q, c.id, 'email_falhou', `Boas-vindas para ${c.email} · ${err.message}`, autor)
+    throw new ErroHttp(err.status, err.message)
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   if (!requireAuth(req, res)) return
@@ -119,6 +143,10 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && acao === 'aprovar') {
       if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
       return res.json({ ok: true, ...(await provisionarCliente(String(body.id), { autor })) })
+    }
+    if (req.method === 'POST' && acao === 'email') {
+      if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
+      return res.json({ ok: true, ...(await enviarBoasVindas(query, String(body.id), autor)) })
     }
     if (req.method === 'POST' && acao === 'status') {
       return res.json({ ok: true, cliente: await withTransaction(q => mudarStatus(q, body, autor)) })

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil } from 'lucide-react'
+import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail } from 'lucide-react'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
+  enviarBoasVindasEmail,
 } from '../../lib/clientesApi'
 import {
   STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
@@ -19,6 +20,18 @@ const COR_STATUS = {
   pedido: 'bg-ambar/15 text-ambar', aprovado: 'bg-primary/15 text-primary-fg', ativo: 'bg-receita/15 text-receita',
   suspenso: 'bg-aviso/15 text-aviso', cancelado: 'bg-surface-2 text-texto-3', recusado: 'bg-perigo-bg text-perigo',
 }
+// E-mail de boas-vindas (só PLATAFORMA_ADMIN; a API registra 'email_enviado'/'email_falhou').
+async function enviarPorEmail(id, onToast) {
+  try {
+    const r = await enviarBoasVindasEmail(id)
+    onToast({ message: `E-mail de boas-vindas enviado para ${r.para}` })
+    return true
+  } catch (e) {
+    onToast({ message: `Falha ao enviar o e-mail: ${e.message}`, variant: 'error' })
+    return false
+  }
+}
+
 // Botões por status (mesmas transições da API).
 const ACOES = [
   { id: 'aprovar', label: 'Aprovar', icon: Check, de: ['pedido', 'recusado'], classe: 'btn-primary' },
@@ -30,6 +43,7 @@ const ACOES = [
 const ROTULO_EVENTO = {
   pedido: 'Pedido recebido', criado: 'Cadastro manual', editado: 'Editado', aprovado: 'Aprovado', recusado: 'Recusado',
   suspenso: 'Suspenso', cancelado: 'Cancelado', boas_vindas: 'Boas-vindas', pedido_repetido: 'Pedido repetido',
+  email_enviado: 'E-mail enviado', email_falhou: 'E-mail falhou',
 }
 
 function StatusBadge({ status }) {
@@ -154,7 +168,7 @@ function Info({ label, valor }) {
   )
 }
 
-function DetalheCliente({ id, onMudou, onBoasVindas }) {
+function DetalheCliente({ id, onMudou, onBoasVindas, onToast }) {
   const [dados, setDados] = useState(null)
   const [editando, setEditando] = useState(false)
   const [erro, setErro] = useState('')
@@ -162,6 +176,13 @@ function DetalheCliente({ id, onMudou, onBoasVindas }) {
 
   const carregar = useCallback(() => detalheCliente(id).then(setDados).catch(e => setErro(e.message)), [id])
   useEffect(() => { carregar() }, [carregar])
+
+  const reenviarEmail = async () => {
+    setOcupado(true)
+    await enviarPorEmail(id, onToast)
+    await carregar()
+    setOcupado(false)
+  }
 
   const executar = async (acao) => {
     setErro('')
@@ -223,6 +244,11 @@ function DetalheCliente({ id, onMudou, onBoasVindas }) {
             <MessageCircle size={14} /> Mensagem de boas-vindas
           </button>
         )}
+        {['aprovado', 'ativo'].includes(c.status) && (
+          <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={reenviarEmail}>
+            <Mail size={14} /> Reenviar boas-vindas por e-mail
+          </button>
+        )}
       </div>
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
 
@@ -241,9 +267,16 @@ function DetalheCliente({ id, onMudou, onBoasVindas }) {
   )
 }
 
-function BoasVindasModal({ dados, onFechar }) {
+function BoasVindasModal({ dados, onFechar, onToast, onMudou }) {
   const [copiado, setCopiado] = useState(false)
+  const [enviando, setEnviando] = useState(false)
   if (!dados) return null
+  const enviar = async () => {
+    setEnviando(true)
+    await enviarPorEmail(dados.cliente.id, onToast)
+    setEnviando(false)
+    onMudou()
+  }
   const whatsapp = linkWhatsApp(dados.cliente?.telefone, dados.mensagem)
   const copiar = async () => {
     try { await navigator.clipboard.writeText(dados.mensagem); setCopiado(true) } catch { setCopiado(false) }
@@ -255,6 +288,9 @@ function BoasVindasModal({ dados, onFechar }) {
         <p className="text-[11px] text-texto-3">Fase de teste: nenhum usuário nem ambiente foi criado.</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button className="btn-secondary inline-flex items-center gap-1.5" onClick={copiar}><Copy size={14} /> {copiado ? 'Copiado' : 'Copiar'}</button>
+          <button className="btn-secondary inline-flex items-center gap-1.5" disabled={enviando} onClick={enviar} title={dados.cliente?.email}>
+            <Mail size={14} /> {enviando ? 'Enviando…' : 'Enviar por e-mail'}
+          </button>
           {whatsapp ? (
             <a className="btn-primary inline-flex items-center gap-1.5" target="_blank" rel="noopener noreferrer" href={whatsapp}>
               <MessageCircle size={14} /> Abrir no WhatsApp
@@ -278,6 +314,9 @@ export default function ClientesPanel({ onMudou = () => {} }) {
   const [boasVindas, setBoasVindas] = useState(null)
   const [erro, setErro] = useState('')
   const [toast, setToast] = useState(null)
+  const fecharToast = useCallback(() => setToast(null), [])
+  // Recarrega o detalhe aberto (histórico) depois de um envio feito pelo modal de boas-vindas.
+  const [detalheVersao, setDetalheVersao] = useState(0)
 
   const carregar = useCallback(() => listarClientes()
     .then(r => { setClientes(r.clientes); setErro('') })
@@ -348,13 +387,13 @@ export default function ClientesPanel({ onMudou = () => {} }) {
       </div>
 
       <Modal open={!!aberto} onClose={() => setAberto(null)} title="Cliente" size="lg">
-        {aberto && <DetalheCliente id={aberto} onMudou={mudou} onBoasVindas={setBoasVindas} />}
+        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onBoasVindas={setBoasVindas} onToast={setToast} />}
       </Modal>
       <Modal open={novo} onClose={() => setNovo(false)} title="Novo cliente" size="lg">
-        {novo && <ClienteForm onCancelar={() => setNovo(false)} onSalvo={(c) => { setNovo(false); setToast('Cliente cadastrado'); mudou(); setAberto(c.id) }} />}
+        {novo && <ClienteForm onCancelar={() => setNovo(false)} onSalvo={(c) => { setNovo(false); setToast({ message: 'Cliente cadastrado' }); mudou(); setAberto(c.id) }} />}
       </Modal>
-      <BoasVindasModal dados={boasVindas} onFechar={() => setBoasVindas(null)} />
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      <BoasVindasModal dados={boasVindas} onFechar={() => setBoasVindas(null)} onToast={setToast} onMudou={() => setDetalheVersao(v => v + 1)} />
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={fecharToast} />}
     </div>
   )
 }
