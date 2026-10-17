@@ -9,6 +9,7 @@
     { "source": "/manifest.webmanifest", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
   ],
   "redirects": [
+    { "source": "/", "has": [{ "type": "host", "value": "vm.finup.app.br" }], "destination": "https://www.finup.app.br/", "permanent": false },
     { "source": "/:path*", "has": [{ "type": "host", "value": "vm.finup.app.br" }], "destination": "https://www.finup.app.br/:path*", "permanent": false }
   ],
   "rewrites": [
