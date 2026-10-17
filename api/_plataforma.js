@@ -1,5 +1,6 @@
 import process from 'node:process'
-import { query } from './_db.js'
+import { centralQuery } from './_central.js'
+import { registroPorBanco, nomeDatabaseCentral } from './_conexao.js'
 import { normUser, ErroHttp } from './_usuarios.js'
 import {
   STATUS_CLIENTE, documentoValido, normalizarDocumento, normalizarTelefone, problemaTelefone, normalizarSigla, problemaSigla, candidatasSigla,
@@ -9,8 +10,9 @@ import {
 // Controle de Clientes do administrador da plataforma. Nada aqui cria usuário nem dá acesso aos
 // dados deste banco — o ambiente de cada cliente (sigla.finup.app.br + banco próprio) é a Etapa 2.
 //
-// ETAPA 2: as tabelas plataforma_* saem deste banco (dados pessoais) e vão para um banco CENTRAL
-// da plataforma. Por isso nenhuma delas referencia tabelas do app.
+// ETAPA 2: as tabelas plataforma_* moram no banco CENTRAL da plataforma (api/_central.js), fora
+// dos bancos dos ambientes. Por isso nenhuma delas referencia tabelas do app. (As cópias antigas no
+// neondb ficam até o Victor conferir e apagar.)
 
 export const DDL_PLATAFORMA = `
   CREATE TABLE IF NOT EXISTS plataforma_clientes (
@@ -59,14 +61,16 @@ export const DDL_PLATAFORMA = `
   CREATE INDEX IF NOT EXISTS idx_plataforma_cadastro_envios_ip ON plataforma_cadastro_envios (ip, created_at);
 `
 
-let pronto = false
-export async function ensurePlataformaSchema(q = query) {
-  if (pronto) return
+// As tabelas moram no banco CENTRAL (api/_central.js). "Já rodei" por database.
+const pronto = registroPorBanco()
+export async function ensurePlataformaSchema(q = centralQuery) {
+  const chave = `central:${nomeDatabaseCentral()}`
+  if (pronto.jaRodou(chave)) return
   await q(DDL_PLATAFORMA)
-  pronto = true
+  pronto.marcar(chave)
 }
 // Testes: cada banco novo precisa do DDL de novo.
-export const _resetSchemaPronto = () => { pronto = false }
+export const _resetSchemaPronto = () => pronto.limpar()
 
 // ─── Administrador da plataforma ────────────────────────────────────────────────────────────────
 // PLATAFORMA_ADMIN (Vercel) = username de quem controla os clientes. NÃO é o nível 'admin' comum:
@@ -149,15 +153,22 @@ export function validarCliente(body = {}, { parcial = false, atual = null, exigi
 
 // ─── Sigla no banco ─────────────────────────────────────────────────────────────────────────────
 
+// Ocupada = de outro cliente OU de um ambiente já existente (que não seja o do próprio cliente).
+// Os dois no banco central.
 export async function siglaOcupada(q, sigla, idAtual = null) {
-  const [r] = await q('SELECT id FROM plataforma_clientes WHERE sigla = $1 AND id IS DISTINCT FROM $2', [sigla, idAtual])
+  const [r] = await q(
+    `SELECT 1 FROM plataforma_clientes WHERE sigla = $1 AND id IS DISTINCT FROM $2
+     UNION ALL SELECT 1 FROM ambientes WHERE sigla = $1 AND cliente_id IS DISTINCT FROM $2 LIMIT 1`,
+    [sigla, idAtual])
   return !!r
 }
 
 export async function sugerirSiglaLivre(q, nome) {
   const candidatas = candidatasSigla(nome)
   if (!candidatas.length) return null
-  const ocupadas = new Set((await q('SELECT sigla FROM plataforma_clientes WHERE sigla = ANY($1)', [candidatas])).map(r => r.sigla))
+  const ocupadas = new Set((await q(
+    'SELECT sigla FROM plataforma_clientes WHERE sigla = ANY($1) UNION SELECT sigla FROM ambientes WHERE sigla = ANY($1)',
+    [candidatas])).map(r => r.sigla))
   return candidatas.find(s => !ocupadas.has(s)) || null
 }
 

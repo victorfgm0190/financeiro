@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Histórico do fornecedor: últimas ocorrências de um lançamento cuja descrição CORRESPONDA
 // (busca por similaridade — mesma ideia do front: normaliza e checa correspondência parcial).
@@ -26,7 +27,7 @@ function similarity(a, b) {
   return union ? inter / union : 0
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
@@ -62,3 +63,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

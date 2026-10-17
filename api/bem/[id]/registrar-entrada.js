@@ -4,6 +4,7 @@ import {
   getRouteId, num, round2, hoje, fail, ensureBemSchema,
   criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
 } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // POST /api/bem/[id]/registrar-entrada — registra a entrada à vista do bem.
 //
@@ -18,7 +19,7 @@ import {
 // No trade-in o bem antigo é LIQUIDADO: perda/ganho = valor_venda − valor_nota_fiscal, o saldo
 // vai a ZERO e a conta é marcada como vendida apontando para o bem novo.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -234,3 +235,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

@@ -1,4 +1,4 @@
-import { query } from './_db.js'
+import { centralQuery as query } from './_central.js'
 import { ensurePlataformaSchema, checarSigla, sugerirSiglaLivre, queryParam } from './_plataforma.js'
 
 // Público (sem login), SÓ leitura: a sigla serve para o endereço sigla.finup.app.br?

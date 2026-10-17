@@ -1,5 +1,7 @@
 import { query, parseBody } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Datas PROVISÓRIAS de ocorrências de agendamento no relatório "Fluxo de Caixa": "acho que este
 // recebimento do dia 20 só entra dia 25, mas não tenho certeza". Só o relatório lê esta tabela —
@@ -13,9 +15,10 @@ import { requireAuth } from './_auth.js'
 const DATA = /^\d{4}-\d{2}-\d{2}$/
 
 // DDL viva da tabela (a cópia em supabase/schema.sql é documentação). Roda uma vez por cold start.
-let schemaPronto = false
-async function ensureSchema() {
-  if (schemaPronto) return
+// "Já rodei" POR BANCO (um database por ambiente).
+const schemaPronto = registroPorBanco()
+export async function ensureSchema() {
+  if (schemaPronto.jaRodou()) return
   await query(`CREATE TABLE IF NOT EXISTS fluxo_datas_provisorias (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     schedule_id TEXT NOT NULL,
@@ -24,7 +27,7 @@ async function ensureSchema() {
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (schedule_id, data_original)
   )`)
-  schemaPronto = true
+  schemaPronto.marcar()
 }
 
 function queryParam(req, nome) {
@@ -52,7 +55,7 @@ async function limparOrfaos() {
   return ids.length
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -98,3 +101,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

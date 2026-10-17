@@ -1,7 +1,9 @@
 import { query, parseBody, withTransaction } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { acaoPorId } from '../src/lib/atalhos/registry.js'
 import { normalizarCombinacao, validarCombinacao } from '../src/lib/atalhos/combinacao.js'
+import { comAmbiente } from './_ambiente.js'
 
 // ATALHOS DE TECLADO do usuário logado (as ações são fixas em src/lib/atalhos/registry.js).
 // Só o que o usuário ALTEROU fica gravado; ação sem linha usa o padrão do registry.
@@ -22,11 +24,12 @@ export const DDL_ATALHOS = `CREATE TABLE IF NOT EXISTS atalhos_usuario (
     UNIQUE (user_id, acao_id)
   )`
 
-let pronto = false
-async function ensureAtalhosSchema() {
-  if (pronto) return
+// "Já rodei" POR BANCO (um database por ambiente).
+const pronto = registroPorBanco()
+export async function ensureAtalhosSchema() {
+  if (pronto.jaRodou()) return
   await query(DDL_ATALHOS)
-  pronto = true
+  pronto.marcar()
 }
 
 function queryParam(req, nome) {
@@ -54,7 +57,7 @@ export async function gravarAtalhos(q, userId, itens) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   const userId = req.user?.id
@@ -94,3 +97,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

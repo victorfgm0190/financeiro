@@ -1,4 +1,5 @@
-import { parseBody, withTransaction } from './_db.js'
+import { parseBody } from './_db.js'
+import { withCentralTransaction } from './_central.js'
 import { ErroHttp } from './_usuarios.js'
 import {
   ensurePlataformaSchema, validarCliente, siglaOcupada, sugerirSiglaLivre, registrarHistorico, ipDoReq,
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
   try {
     await ensurePlataformaSchema()
     const body = await parseBody(req)
-    return res.json(await withTransaction(q => receberPedido(q, body || {}, ipDoReq(req))))
+    return res.json(await withCentralTransaction(q => receberPedido(q, body || {}, ipDoReq(req))))
   } catch (err) {
     if (err instanceof ErroHttp) return res.status(err.status).json({ error: err.message, ...(err.sugestao ? { sugestao: err.sugestao } : {}) })
     if (err?.code === '23505') return res.status(409).json({ error: 'Essa sigla já está em uso' })

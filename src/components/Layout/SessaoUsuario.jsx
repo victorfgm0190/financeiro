@@ -21,6 +21,9 @@ export default function SessaoUsuario({ comSair = false }) {
         <span className="text-xs text-texto-1 font-medium truncate" title={sessao.username || ''}>{sessao.nome}</span>
         {sessao.nivel && <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">{rotuloNivel(sessao.nivel)}</span>}
       </div>
+      {sessao.ambSigla && (
+        <p className="text-[10px] text-texto-3 leading-tight font-mono" title="Ambiente (banco de dados) desta sessão">Ambiente {sessao.ambSigla.toUpperCase()}</p>
+      )}
       {emergencia && (
         <p className="flex items-center gap-1.5 text-[11px] text-aviso leading-tight">
           <ShieldAlert size={12} className="shrink-0" /> Logado com acesso de emergência

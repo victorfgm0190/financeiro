@@ -1,6 +1,7 @@
 import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureTiposDocumentoSchema, normalizarTipoBody, SQL_USOS_TIPO } from './_tiposDocumento.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Cadastro de TIPOS DE DOCUMENTO.
 //   GET                       → lista todos (ativos e inativos), por ordem
@@ -17,7 +18,7 @@ function queryParam(req, nome) {
   try { return new URL(req.url, 'http://x').searchParams.get(nome) } catch { return null }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -86,3 +87,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

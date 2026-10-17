@@ -1,4 +1,4 @@
-import { withTransaction } from './_db.js'
+import { withCentralTransaction } from './_central.js'
 import { ErroHttp } from './_usuarios.js'
 import { buscarCliente, registrarHistorico, siglaOcupada } from './_plataforma.js'
 import { problemaSigla, DOMINIO_CLIENTES } from '../src/lib/plataforma.js'
@@ -29,7 +29,7 @@ export function mensagemBoasVindas(c) {
   ].join('\n')
 }
 
-export async function provisionarCliente(clienteId, { autor = null, transacao = withTransaction } = {}) {
+export async function provisionarCliente(clienteId, { autor = null, transacao = withCentralTransaction } = {}) {
   return transacao(async (q) => {
     const c = await buscarCliente(q, clienteId, { travar: true })
     if (!c) throw new ErroHttp(404, 'Cliente não encontrado')

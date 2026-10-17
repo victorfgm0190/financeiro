@@ -7,6 +7,7 @@ import {
 } from './_usuarios.js'
 import { normalizarPermissoes } from '../src/lib/permissoes.js'
 import { payloadDoCadastro, JWT_EXPIRA } from './auth.js'
+import { comAmbiente, comAmbienteNoPayload } from './_ambiente.js'
 
 // Cadastro de USUÁRIOS da organização do token. Só admin, sempre filtrando por req.user.orgId:
 //   GET                     → lista (nunca devolve senha_hash)
@@ -168,7 +169,8 @@ export async function editarUsuario(q, orgId, body = {}, quem = null) {
 }
 
 // Troca a própria senha. Devolve um token novo (sem trocarSenha) — o app troca o salvo e segue.
-export async function trocarMinhaSenha(q, user, body = {}, { secret = process.env.JWT_SECRET } = {}) {
+// `ambiente`: o da requisição — o token novo continua preso a ele.
+export async function trocarMinhaSenha(q, user, body = {}, { secret = process.env.JWT_SECRET, ambiente = null } = {}) {
   if (user.origem !== 'db') throw new ErroHttp(403, 'Disponível só para usuários do cadastro')
   const novaSenha = validarSenha(body.novaSenha)
   const [u] = await q('SELECT senha_hash FROM usuarios WHERE id = $1 AND ativo', [user.id])
@@ -183,7 +185,8 @@ export async function trocarMinhaSenha(q, user, body = {}, { secret = process.en
        FROM usuarios u LEFT JOIN LATERAL (
          SELECT organizacao_id, papel FROM membros WHERE usuario_id = u.id ORDER BY created_at, id LIMIT 1
        ) m ON true WHERE u.id = $1`, [user.id])
-  const token = secret && atual ? jwt.sign(payloadDoCadastro(atual), secret, { expiresIn: JWT_EXPIRA }) : null
+  const payload = atual && (ambiente ? comAmbienteNoPayload(payloadDoCadastro(atual), ambiente) : payloadDoCadastro(atual))
+  const token = secret && payload ? jwt.sign(payload, secret, { expiresIn: JWT_EXPIRA }) : null
   return { ok: true, token }
 }
 
@@ -192,7 +195,7 @@ function queryParam(req, nome) {
   try { return new URL(req.url, 'http://x').searchParams.get(nome) } catch { return null }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   const minhaSenha = queryParam(req, 'acao') === 'minha-senha'
   if (!(minhaSenha ? requireAuth(req, res) : requireAdmin(req, res))) return
@@ -200,7 +203,7 @@ export default async function handler(req, res) {
   try {
     if (minhaSenha) {
       if (req.method !== 'POST') return res.status(405).end()
-      return res.json(await trocarMinhaSenha(query, req.user, await parseBody(req)))
+      return res.json(await trocarMinhaSenha(query, req.user, await parseBody(req), { ambiente: req.ambiente }))
     }
 
     const orgId = req.user.orgId
@@ -229,3 +232,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Falha ao processar a solicitação' })
   }
 }
+
+export default comAmbiente(handler)

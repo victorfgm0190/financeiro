@@ -1,5 +1,6 @@
 import { query, upsertRows, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Garante a tabela de staging (idempotente) — não depende da ordem de /api/load.
 async function ensureTable() {
@@ -22,7 +23,7 @@ async function ensureTable() {
   await query(`ALTER TABLE importacoes_pendentes ADD COLUMN IF NOT EXISTS fonte TEXT`)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     await ensureTable()
@@ -116,3 +117,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

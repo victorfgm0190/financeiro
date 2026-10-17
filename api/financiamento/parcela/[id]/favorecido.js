@@ -4,6 +4,7 @@ import {
   getRouteId, fail, explicarErro, ensureBemSchema, sincronizarFavorecidoAgendamentos,
 } from '../../../_bem.js'
 import { ensureHistoricoSchema } from '../../../_historico.js'
+import { comAmbiente } from '../../../_ambiente.js'
 
 // PATCH /api/financiamento/parcela/[id]/favorecido — o lado INVERSO da sincronização.
 // Body: { payee }
@@ -17,7 +18,7 @@ import { ensureHistoricoSchema } from '../../../_historico.js'
 //
 // Fica em parcela/[id]/ (e não num arquivo solto com o id no body) pelo mesmo motivo de
 // pagar.js: é uma ação SOBRE uma parcela, e o id dela é rota, não payload.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'PATCH') return fail(res, 405, 'Método não permitido')
 
@@ -89,3 +90,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

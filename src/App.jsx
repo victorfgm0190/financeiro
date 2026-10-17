@@ -39,6 +39,8 @@ import Login from './pages/Login'
 import TrocarSenha from './pages/TrocarSenha'
 import CadastroCliente from './pages/CadastroCliente'
 import PaginaLegal from './pages/PaginaLegal'
+import EntrarComCodigo from './pages/EntrarComCodigo'
+import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
 import ClientesPanel from './components/Clientes/ClientesPanel'
 import { resumoClientes } from './lib/clientesApi'
 import { getToken, getSessao } from './lib/api'
@@ -162,9 +164,10 @@ function AppContent() {
   }, [])
 
   // Administrador da PLATAFORMA (PLATAFORMA_ADMIN na API, não o nível admin): só ele vê "Clientes
-  // Finup". 403 da API = menu escondido.
+  // Finup", e só no ambiente principal ('vm'). 403 da API = menu escondido.
   const [plataforma, setPlataforma] = useState({ admin: false, novos: 0 })
   const atualizarPlataforma = useCallback(() => {
+    if (getSessao()?.ambSigla !== AMBIENTE_PRINCIPAL) return
     resumoClientes().then(setPlataforma).catch(() => {})
   }, [])
   useEffect(() => { atualizarPlataforma() }, [atualizarPlataforma])
@@ -275,6 +278,8 @@ const PAGINAS_PUBLICAS = {
   '/quero-ser-cliente': () => <CadastroCliente />,
   '/termos': () => <PaginaLegal tipo="termos" />,
   '/privacidade': () => <PaginaLegal tipo="privacidade" />,
+  // Código de passagem do login no www → token deste endereço (<sigla>.finup.app.br).
+  '/entrar': () => <EntrarComCodigo />,
 }
 
 export default function App() {

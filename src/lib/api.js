@@ -33,7 +33,8 @@ export function clearTokenAndRedirect() {
 
 // Sessão atual, lida do payload do JWT salvo. Serve para a INTERFACE (menu, botões, o que o app
 // tenta gravar) — quem autoriza de verdade é a API. Token novo: { sub, org, nivel, permissoes,
-// perfis, trocarSenha, username, nome, origem }; token antigo (sem nivel) deriva o nível do papel.
+// perfis, trocarSenha, username, nome, origem, amb, amb_sigla }; token antigo (sem nivel) deriva o
+// nível do papel; sem amb_sigla, é do ambiente principal ('vm').
 // Token ilegível (ex.: modo dev) → null.
 const NIVEL_DO_PAPEL = { admin: 'admin', usuario: 'operador', leitura: 'consulta' }
 export function getSessao() {
@@ -55,6 +56,7 @@ export function getSessao() {
       perfis: normalizarPerfis(p.perfis),
       trocarSenha: !!p.trocarSenha,
       origem: p.origem ?? 'env',
+      ambSigla: p.amb_sigla ?? 'vm',
     }
   } catch {
     return null

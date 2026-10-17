@@ -5,12 +5,13 @@ import {
   montarProvisao, criarAgendamentosParcelas, criarRateiosParcela, ACCOUNT_TYPE_DIVIDA,
   explicarErro, ensureBemSchema,
 } from '../_bem.js'
+import { comAmbiente } from '../_ambiente.js'
 
 // POST /api/financiamento/criar — provisiona o financiamento inteiro de uma vez:
 // conta de dívida em "Dívidas e Passivos", N parcelas em financing_installments e N
 // agendamentos de transferência (conta corrente → conta de dívida), um por vencimento.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -241,3 +242,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

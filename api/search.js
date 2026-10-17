@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Busca Global combinada: lançamentos (lancamentos) + agendamentos (agendamentos).
 // Filtros: value (tolerância ±0,01), text (descrição/favorecido ILIKE), from/to (período),
@@ -9,7 +10,7 @@ import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 const LIMIT = 50
 const TOL = 0.01
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
@@ -70,3 +71,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

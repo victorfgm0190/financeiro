@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Snapshots das viradas de saldo (histórico de períodos fechados por função).
 //   GET  → lista todos os snapshots (data_fim DESC)
@@ -11,7 +12,7 @@ const COLS = [
   'saldo_inicial', 'entradas', 'saidas', 'ajuste', 'saldo', 'saldo_atualizado',
 ]
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     if (req.method === 'GET') {
@@ -61,3 +62,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

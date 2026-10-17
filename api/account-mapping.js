@@ -1,7 +1,8 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method === 'GET') {
     try {
@@ -18,3 +19,5 @@ export default async function handler(req, res) {
   }
   res.status(405).json({ error: 'Method not allowed' })
 }
+
+export default comAmbiente(handler)

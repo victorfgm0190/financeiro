@@ -2,6 +2,7 @@ import { parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureTiposDocumentoSchema, SQL_TIPO_EM_MASSA_AGENDAMENTOS } from './_tiposDocumento.js'
 import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Escritas em massa de agendamentos que não passam pelo /api/sync.
 //   PUT { ids: [...], tipo_documento_id, lote_id?, motivo? }
@@ -23,7 +24,7 @@ export async function aplicarTipoEmMassa(q, { ids, tipoId, loteId, motivo }) {
   return { updated: rows.length, ids: rows.map(r => r.id), historico: mudaram.length }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'PUT') return res.status(405).end()
   try {
@@ -44,3 +45,5 @@ export default async function handler(req, res) {
     res.status(err.status || 500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

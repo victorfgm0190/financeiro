@@ -4,6 +4,7 @@ import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 import {
   ensureHistoricoSchema, normalizarLinhaHistorico, inserirHistorico, SQL_HISTORICO_COLS,
 } from './_historico.js'
+import { comAmbiente } from './_ambiente.js'
 
 // HISTÓRICO DE ALTERAÇÕES
 //   GET ?entidade=agendamento&entidade_id=x   → linhas do registro
@@ -33,7 +34,7 @@ export async function aplicarEdicao(q, client, body, upsert = upsertRowsNoClient
   return { agendamentos: ag, lancamentos: lc, historico: h }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -77,3 +78,5 @@ export default async function handler(req, res) {
     res.status(err.status || 500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
 
 // Login (cadastro + login fixo de emergência) e API de usuários num Postgres de verdade (PGlite, em
 // memória) criado pela PRÓPRIA migração. Os handlers rodam de verdade: só o _db.js aponta para o PGlite.
@@ -63,6 +64,7 @@ beforeEach(async () => {
   delete process.env.ALLOW_ENV_ADMIN
   estado.db = new PGlite()
   await estado.db.exec(MIGRACAO)
+  await prepararCentralNoMesmoBanco(() => estado.db)
   await q("INSERT INTO organizacoes (id, nome, created_at) VALUES ('org1', 'Victor', '2026-01-01'), ('org2', 'Outra', '2026-02-01')")
 })
 afterEach(() => {

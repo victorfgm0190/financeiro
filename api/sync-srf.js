@@ -1,12 +1,13 @@
 import { parseBody, replaceScheduleReservaFuncoes } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Endpoint dedicado ao detalhamento por lançamento (schedule_reserva_funcoes) de UM agendamento
 // (gerencial_devolucao / resgate_reserva). Fica FORA do /api/sync genérico porque uma fatura
 // grande gera centenas de linhas de detalhamento — o que inflava a section do sync e estourava.
 // Corpo: { scheduleId: string, rows: [row snake_case, ...] }. Substitui atomicamente TODO o
 // detalhamento do schedule_id (DELETE + INSERT em lotes de 100). rows [] ⇒ só remove.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -22,3 +23,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

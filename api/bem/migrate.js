@@ -1,6 +1,7 @@
 import { query } from '../_db.js'
 import { requireAuth } from '../_auth.js'
 import { ensureBemSchema, fail, explicarErro } from '../_bem.js'
+import { comAmbiente } from '../_ambiente.js'
 
 // /api/bem/migrate — dispara e confere o schema do módulo de bem imobilizado.
 //
@@ -91,7 +92,7 @@ async function inspecionar() {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'GET' && req.method !== 'POST') {
     return fail(res, 405, 'Método não permitido')
@@ -116,3 +117,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

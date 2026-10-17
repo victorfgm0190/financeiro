@@ -1,5 +1,6 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Backfill de rastreabilidade dos tx_ger_* históricos (provisões gerenciais criadas antes do
 // commit 661a4f16, 12/07/2026, quando executarProvisoesGerenciais passou a gravar
@@ -22,7 +23,7 @@ const NOVO_FATURA_REF = `CASE
     ELSE NULL
   END`
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
 
   try {
@@ -68,3 +69,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

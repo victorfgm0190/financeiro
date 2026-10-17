@@ -4,6 +4,7 @@ import {
   getRouteId, num, round2, fail, explicarErro, serializarBem, ensureBemSchema,
   METODOS_PATRIMONIO, METODO_PATRIMONIO_PADRAO,
 } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // POST /api/bem/[id]/atualizar-valores — edita os dois valores do bem e escolhe qual deles
 // representa o bem no Patrimônio.
@@ -18,7 +19,7 @@ import {
 // O MÉTODO é sempre editável, com ou sem movimentação: escolher qual número entra no Patrimônio
 // não reescreve nada, só troca a leitura.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -129,3 +130,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

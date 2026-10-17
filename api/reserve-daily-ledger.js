@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Razão diário das funções de reserva — uma linha por função por dia.
 //
@@ -30,7 +31,7 @@ function qp(req, key) {
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v))
 const num0 = (v) => Number(v) || 0
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     if (req.method === 'GET') {
@@ -144,3 +145,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

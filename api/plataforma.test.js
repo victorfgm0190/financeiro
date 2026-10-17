@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import jwt from 'jsonwebtoken'
+import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
 
 // Pedido público + Controle de Clientes num Postgres de verdade (PGlite). Os handlers rodam de
 // verdade: só o _db.js aponta para o PGlite. As tabelas de usuários entram para provar que aprovar
@@ -61,6 +62,7 @@ beforeEach(async () => {
   process.env.PLATAFORMA_ADMIN = 'vmoreira'
   estado.db = new PGlite()
   await estado.db.exec(MIGRACAO_USUARIOS)
+  await prepararCentralNoMesmoBanco(() => estado.db)
   _resetSchemaPronto()
 })
 afterEach(() => { process.env = envOriginal })

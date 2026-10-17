@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Histórico de períodos de saldo inicial por função de reserva.
 //   GET    → lista todos os períodos (todas as funções)
@@ -14,7 +15,7 @@ function queryId(req) {
   try { return new URL(req.url, 'http://x').searchParams.get('id') } catch { return null }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     if (req.method === 'GET') {
@@ -58,3 +59,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

@@ -1,4 +1,5 @@
 import { withTransaction } from './_db.js'
+import { bancoAtual } from './_conexao.js'
 import { inserirHistorico } from './_historico.js'
 
 // Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
@@ -79,19 +80,21 @@ export function getRouteId(req, segmentsFromEnd = 0) {
 // a coluna, então ele falha com "column bem_id does not exist" — dentro do próprio
 // ensureBemSchema, que é o que criaria a coluna. Todo endpoint de bem passa a devolver 500
 // e a migração nunca se completa sozinha. Com a transação é tudo-ou-nada.
-let schemaReady = null
+// Promessa POR BANCO (um database por ambiente): a migração roda uma vez em cada um.
+const schemaReady = new Map()
 
 // `force` descarta o cache do instance quente — usado por /api/bem/migrate para reexecutar
 // a migração sob demanda sem depender de um cold start.
 export function ensureBemSchema({ force = false } = {}) {
-  if (force) schemaReady = null
-  if (!schemaReady) {
-    schemaReady = runSchemaDDL().catch((err) => {
-      schemaReady = null
+  const banco = bancoAtual()
+  if (force) schemaReady.delete(banco)
+  if (!schemaReady.has(banco)) {
+    schemaReady.set(banco, runSchemaDDL().catch((err) => {
+      schemaReady.delete(banco)
       throw err
-    })
+    }))
   }
-  return schemaReady
+  return schemaReady.get(banco)
 }
 
 async function runSchemaDDL() {

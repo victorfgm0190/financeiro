@@ -1,4 +1,5 @@
 import { query } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 
 // HISTÓRICO DE ALTERAÇÕES feitas pelo USUÁRIO em agendamentos e lançamentos (edição individual,
 // em série ou em massa). Uma linha por campo e por item; `lote_id` agrupa as linhas de uma mesma
@@ -32,12 +33,13 @@ export const DDL_HISTORICO = [
   'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS origem TEXT',
 ]
 
-let pronto = false
+// "Já rodei" POR BANCO (um database por ambiente). Só o pool memoriza; um q de transação sempre executa.
+const pronto = registroPorBanco()
 export async function ensureHistoricoSchema(q = query) {
   const cache = q === query
-  if (cache && pronto) return
+  if (cache && pronto.jaRodou()) return
   for (const sql of DDL_HISTORICO) await q(sql)
-  if (cache) pronto = true
+  if (cache) pronto.marcar()
 }
 
 // Valida/normaliza uma linha vinda do app. Devolve { erro } ou { linha }.

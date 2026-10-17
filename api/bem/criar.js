@@ -4,12 +4,13 @@ import {
   genId, num, round2, fail, serializarBem,
   categoriasInexistentes, ACCOUNT_TYPE_BEM, TIPO_BEM, explicarErro,
 } from '../_bem.js'
+import { comAmbiente } from '../_ambiente.js'
 
 // POST /api/bem/criar — cadastro inicial de um bem imobilizado.
 // Cria (ou converte) a conta do bem e parametriza as 4 categorias usadas pelo módulo:
 // perda/ganho de venda, prestação e taxa de financiamento.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -96,3 +97,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

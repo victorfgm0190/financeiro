@@ -1,5 +1,7 @@
 import { query, parseBody, withTransaction } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Lançamentos PROVISÓRIOS do relatório "Fluxo de Caixa por Conta": entradas/saídas de
 // SIMULAÇÃO, gravadas à parte de agendamentos/lancamentos.
@@ -16,9 +18,10 @@ const TIPOS = new Set(['entrada', 'saida'])
 
 // DDL viva da tabela (a cópia em supabase/schema.sql é documentação). Roda uma vez por
 // cold start: pendurar no /api/load cobraria o custo de todo mundo por uma tela só.
-let schemaPronto = false
-async function ensureSchema() {
-  if (schemaPronto) return
+// "Já rodei" POR BANCO (um database por ambiente).
+const schemaPronto = registroPorBanco()
+export async function ensureSchema() {
+  if (schemaPronto.jaRodou()) return
   await query(`CREATE TABLE IF NOT EXISTS fluxo_provisorios (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     date TEXT NOT NULL,
@@ -31,7 +34,7 @@ async function ensureSchema() {
   )`)
   await query(`CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_date ON fluxo_provisorios (date)`)
   await query(`CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_account ON fluxo_provisorios (account_id)`)
-  schemaPronto = true
+  schemaPronto.marcar()
 }
 
 // id / acao do query string, com fallback via URL (robusto entre runtimes da Vercel).
@@ -113,7 +116,7 @@ async function efetivar(id) {
   })
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -178,3 +181,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

@@ -4,8 +4,9 @@ import { ensureBemSchema } from './_bem.js'
 import { ensureTiposDocumentoSchema } from './_tiposDocumento.js'
 import { ensureHistoricoSchema } from './_historico.js'
 import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
+import { comAmbiente } from './_ambiente.js'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   // Estado inteiro do usuário: nunca pode vir de cache. Sem este header a resposta ficava à
   // mercê do cache do navegador (e de qualquer intermediário), e um reload logo depois de uma
@@ -505,3 +506,5 @@ export default async function handler(req, res) {
     res.status(isTableMissing ? 404 : 500).json({ error: err.message, code: err.code })
   }
 }
+
+export default comAmbiente(handler)

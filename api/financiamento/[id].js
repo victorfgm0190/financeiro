@@ -5,6 +5,7 @@ import {
   getRouteId, genId, num, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
   ensureBemSchema, withFavorecido, sincronizarFavorecidoAgendamentos,
 } from '../_bem.js'
+import { comAmbiente } from '../_ambiente.js'
 
 // GET   /api/financiamento/[id] — financiamento completo: provisão × realizado, desvios e as
 // N parcelas. `desvio_juros` acumulado é a diferença entre os juros provisionados das parcelas
@@ -14,7 +15,7 @@ import {
 // Fica no mesmo arquivo porque a Vercel roteia por caminho, não por método: um endpoint
 // separado exigiria uma rota nova só para gravar uma coluna.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method === 'PATCH') return patch(req, res)
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
@@ -210,3 +211,5 @@ async function patch(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

@@ -2,6 +2,7 @@ import { upsertRows, deleteRows, parseBody, query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
+import { comAmbiente } from './_ambiente.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -19,7 +20,7 @@ function logSync(rotulo, recebido, gravado) {
   console.log(`[api/sync] ${rotulo}`, JSON.stringify({ recebido, gravado }))
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
 
@@ -94,3 +95,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

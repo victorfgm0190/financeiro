@@ -3,6 +3,7 @@ import { requireAuth } from '../../_auth.js'
 import {
   num, round2, fail, explicarErro, ensureBemSchema, criarRateiosParcela,
 } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // POST /api/financiamento/parcelas/popular-rateios — divide os agendamentos de parcela de um
 // financiamento ANTIGO nas duas categorias do bem, via rateio.
@@ -18,7 +19,7 @@ import {
 // `ja_tinham`. Rodar duas vezes não duplica nem sobrescreve — inclusive não sobrescreve um
 // rateio que o usuário tenha ajustado à mão, que é o caso em que reescrever seria pior.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -211,3 +212,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

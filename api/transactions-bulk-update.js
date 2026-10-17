@@ -1,6 +1,7 @@
 import { parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Atualização em lote de lançamentos: altera date e/ou category_id de vários
 // registros (id = ANY) numa única transação, junto com o histórico de alterações
@@ -36,7 +37,7 @@ export async function aplicarBulkLancamentos(q, { ids, date, categoryId, loteId,
   return { updated: rows.length, historico: linhas.length }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
@@ -56,3 +57,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

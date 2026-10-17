@@ -91,7 +91,7 @@ export function linkWhatsApp(telefone, mensagem = '') {
 
 export const SIGLA_MIN = 2
 export const SIGLA_MAX = 20
-export const SIGLAS_RESERVADAS = ['www', 'app', 'api', 'admin', 'mail', 'suporte', 'login', 'finup']
+export const SIGLAS_RESERVADAS = ['www', 'app', 'api', 'admin', 'mail', 'suporte', 'login', 'finup', 'vm']
 const PARTICULAS = new Set(['de', 'da', 'do', 'dos', 'das'])
 
 // Sem acento, minúscula, só letras e números.

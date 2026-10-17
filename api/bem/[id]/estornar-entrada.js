@@ -1,6 +1,7 @@
 import { query, parseBody, withTransaction } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // POST /api/bem/[id]/estornar-entrada — desfaz TODA a entrada à vista registrada no bem
 // (transferências vinculadas + trade-ins), deixando-o pronto para registrar de novo.
@@ -20,7 +21,7 @@ import { getRouteId, num, round2, fail, explicarErro, ensureBemSchema } from '..
 //
 // Movimentações de 'pagamento_parcela' não são tocadas: são do financiamento, não da entrada.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -191,3 +192,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

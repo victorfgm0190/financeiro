@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 async function ensureTable() {
   await query(`CREATE TABLE IF NOT EXISTS lancamento_rateios (
@@ -13,7 +14,7 @@ async function ensureTable() {
   await query(`CREATE INDEX IF NOT EXISTS idx_rateios_lancamento ON lancamento_rateios (lancamento_id)`)
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   try {
     await ensureTable()
@@ -54,3 +55,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

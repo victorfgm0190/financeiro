@@ -1,4 +1,5 @@
-import { query, parseBody, withTransaction } from './_db.js'
+import { parseBody } from './_db.js'
+import { centralQuery as query, withCentralTransaction as withTransaction } from './_central.js'
 import { requireAuth } from './_auth.js'
 import { ErroHttp } from './_usuarios.js'
 import {
@@ -8,6 +9,8 @@ import {
 import { provisionarCliente } from './_provisionar.js'
 import { enviarEmail, ErroEmail } from './_email.js'
 import { modeloBoasVindas } from './_emailBoasVindas.js'
+import { comAmbiente } from './_ambiente.js'
+import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 // CONTROLE DE CLIENTES da plataforma — só o administrador da plataforma (PLATAFORMA_ADMIN), nunca
 // o nível 'admin' comum.
@@ -112,10 +115,11 @@ export async function enviarBoasVindas(q, id, autor) {
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   if (!requireAuth(req, res)) return
-  if (!ehAdminPlataforma(req.user)) return res.status(403).json({ error: 'Acesso restrito ao administrador da plataforma' })
+  // Só no ambiente principal (o do Victor) e só para o PLATAFORMA_ADMIN. Os dados ficam no central.
+  if (!ehAdminPlataforma(req.user) || req.ambiente?.sigla !== AMBIENTE_PRINCIPAL) return res.status(403).json({ error: 'Acesso restrito ao administrador da plataforma' })
   const autor = req.user.username
   const acao = queryParam(req, 'acao')
 
@@ -161,3 +165,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Falha ao processar a solicitação' })
   }
 }
+
+export default comAmbiente(handler)

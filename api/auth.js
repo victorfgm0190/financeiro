@@ -1,6 +1,13 @@
 import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
+import process from 'node:process'
 import { query, parseBody } from './_db.js'
+import { centralQuery, buscarAmbientePorSigla, buscarAmbientePorId, ambienteAtivo } from './_central.js'
+import { rodarNoAmbiente } from './_conexao.js'
+import { ambienteDoReq, comAmbienteNoPayload, ERRO_AMBIENTE_INDISPONIVEL } from './_ambiente.js'
+import { queryParam } from './_plataforma.js'
+import { normalizarSigla } from '../src/lib/plataforma.js'
+import { AMBIENTE_PRINCIPAL, enderecoDoAmbiente } from '../src/lib/ambienteHost.js'
 import {
   normUser, conferirSenha, compararFicticio, ehTabelaInexistente, estaBloqueado, estadoAposFalha, nivelDoPapel,
 } from './_usuarios.js'
@@ -18,10 +25,19 @@ import { normalizarPermissoes, normalizarPerfis } from '../src/lib/permissoes.js
 //      fixo se aplica); o login fixo tem bloqueio próprio (login_bloqueios). Sucesso pelo login fixo
 //      não mexe nas tentativas do cadastro.
 //   e) a resposta de erro é sempre a mesma: não revela se o usuário existe, está inativo ou bloqueado.
-// Sucesso → JWT { sub, org, nivel, papel, permissoes, perfis, trocarSenha, username, nome, origem }
-// válido por 12h.
+// Sucesso → JWT { sub, org, nivel, papel, permissoes, perfis, trocarSenha, username, nome, origem,
+// amb, amb_sigla } válido por 12h.
+//
+// AMBIENTE (multi-cliente, docs/ambientes.md): o login roda no banco do ambiente — o do endereço
+// (<sigla>.finup.app.br) ou, no www / vercel.app / localhost, o digitado no campo Ambiente (vazio →
+// o do endereço). Ambiente inexistente, suspenso ou senha errada → a MESMA resposta (ERRO_LOGIN).
+// Login no www com o ambiente de um CLIENTE não devolve token: devolve { redirect } para
+// https://<sigla>.finup.app.br/entrar?c=<código de passagem> (uso único, 60 s, só o hash no central),
+// e POST /api/auth?acao=trocar-codigo { codigo } naquele endereço troca o código pelo token.
 
-export const ERRO_LOGIN = 'Usuário ou senha inválidos'
+export const ERRO_LOGIN = 'Usuário, senha ou ambiente inválidos'
+export const ERRO_CODIGO = 'Código de acesso inválido ou expirado. Entre novamente.'
+export const CODIGO_VALIDADE_S = 60
 export const JWT_EXPIRA = '12h'
 
 // Username nunca tem "@" e e-mail sempre tem: no máximo um usuário casa com o login.
@@ -179,6 +195,66 @@ export async function autenticar(q, { username, password } = {}, { env = process
   return null
 }
 
+// ─── Código de passagem (login no www → endereço do cliente) ─────────────────────────────────────
+const hashCodigo = (codigo) => crypto.createHash('sha256').update(String(codigo)).digest('hex')
+
+export async function criarCodigoPassagem(q, amb, payload, { agora = new Date() } = {}) {
+  const codigo = crypto.randomBytes(32).toString('base64url')
+  await q("DELETE FROM login_handoff WHERE expira_em < $1::timestamptz - interval '1 day'", [agora])
+  await q(
+    'INSERT INTO login_handoff (codigo_hash, ambiente_id, usuario_id, payload, expira_em) VALUES ($1, $2, $3, $4, $5)',
+    [hashCodigo(codigo), amb.id, payload.sub ?? null, JSON.stringify(payload), new Date(agora.getTime() + CODIGO_VALIDADE_S * 1000)],
+  )
+  return codigo
+}
+
+// Consome o código (uso único, atômico) SÓ se for do ambiente `sigla` e ainda válido: código de
+// outro ambiente nem é gasto. Devolve { ambiente_id, payload } ou null.
+export async function consumirCodigoPassagem(q, codigo, sigla, { agora = new Date() } = {}) {
+  if (!codigo || !sigla) return null
+  const [r] = await q(
+    `UPDATE login_handoff h SET usado_em = $3
+       FROM ambientes a
+      WHERE a.id = h.ambiente_id AND a.sigla = $2 AND h.codigo_hash = $1
+        AND h.usado_em IS NULL AND h.expira_em > $3
+     RETURNING h.ambiente_id, h.payload`,
+    [hashCodigo(codigo), sigla, agora],
+  )
+  return r || null
+}
+
+// Sem o login fixo de emergência (vale só no ambiente principal).
+const semLoginFixo = (env) => ({ ...env, ALLOW_ENV_ADMIN: 'false', ADMIN_USER: '', ADMIN_PASS: '' })
+
+async function entrar(req, res, body, secret) {
+  const doEndereco = ambienteDoReq(req)
+  const sigla = doEndereco.principal ? (normalizarSigla(body.ambiente) || doEndereco.sigla) : doEndereco.sigla
+  const amb = sigla ? await buscarAmbientePorSigla(sigla) : null
+  if (!ambienteAtivo(amb)) {
+    await compararFicticio(String(body.password ?? '')) // mesmo tempo de resposta de uma senha errada
+    return res.status(401).json({ error: ERRO_LOGIN })
+  }
+  const env = amb.sigla === AMBIENTE_PRINCIPAL ? process.env : semLoginFixo(process.env)
+  const base = await rodarNoAmbiente(amb, () => autenticar(query, body, { env }))
+  if (!base) return res.status(401).json({ error: ERRO_LOGIN })
+  const payload = comAmbienteNoPayload(base, amb)
+
+  if (amb.sigla === doEndereco.sigla) return res.json({ token: jwt.sign(payload, secret, { expiresIn: JWT_EXPIRA }) })
+  const codigo = await criarCodigoPassagem(centralQuery, amb, payload)
+  return res.json({ redirect: `${enderecoDoAmbiente(amb.sigla)}/entrar?c=${encodeURIComponent(codigo)}` })
+}
+
+async function trocarCodigo(req, res, body, secret) {
+  const { sigla } = ambienteDoReq(req)
+  const r = await consumirCodigoPassagem(centralQuery, String(body.codigo || ''), sigla)
+  if (!r) return res.status(401).json({ error: ERRO_CODIGO })
+  const amb = await buscarAmbientePorId(r.ambiente_id)
+  if (!amb || amb.sigla !== sigla) return res.status(401).json({ error: ERRO_CODIGO })
+  if (!ambienteAtivo(amb)) return res.status(403).json({ error: ERRO_AMBIENTE_INDISPONIVEL })
+  const payload = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload
+  return res.json({ token: jwt.sign(comAmbienteNoPayload(payload, amb), secret, { expiresIn: JWT_EXPIRA }) })
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   res.setHeader('Cache-Control', 'no-store')
@@ -187,11 +263,9 @@ export default async function handler(req, res) {
   if (!secret) return res.status(500).json({ error: 'Auth not configured' })
 
   try {
-    const body = await parseBody(req)
-    const payload = await autenticar(query, body)
-    if (!payload) return res.status(401).json({ error: ERRO_LOGIN })
-    const token = jwt.sign(payload, secret, { expiresIn: JWT_EXPIRA })
-    return res.json({ token })
+    const body = (await parseBody(req)) || {}
+    if (queryParam(req, 'acao') === 'trocar-codigo') return await trocarCodigo(req, res, body, secret)
+    return await entrar(req, res, body, secret)
   } catch (err) {
     console.error('[api/auth]', err.message)
     return res.status(500).json({ error: 'Falha ao entrar. Tente novamente.' })

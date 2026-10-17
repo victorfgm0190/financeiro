@@ -5,6 +5,7 @@ import {
   calcularRateio, criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
   ensureBemSchema,
 } from '../../../_bem.js'
+import { comAmbiente } from '../../../_ambiente.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
 //
@@ -28,7 +29,7 @@ import {
 // que o app recalculasse. Bem e dívida são type asset/liability, ficam fora desse recálculo — o
 // saldo deles é do backend e continua sendo escrito abaixo.
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return fail(res, 405, 'Método não permitido')
 
@@ -280,3 +281,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

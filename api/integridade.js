@@ -1,8 +1,10 @@
 import { query, parseBody, withTransaction } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
 import { executarRegras, hojeSP, addMesesYM } from '../src/lib/integridade/regras.js'
 import { planejarVarredura, POR_FATURA_FECHADA } from '../src/lib/integridade/motor.js'
 import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Motor de Integridade — pendências de dados (ver src/lib/integridade/regras.js).
 //   GET                         → lista (filtros: status, regra, conta_id, fatura_ref); ?resumo=1 → só contagens
@@ -16,9 +18,10 @@ import { dadosDeLinhas } from '../src/lib/integridade/dbRows.js'
 //                                 NÃO cria lançamento e NÃO altera saldo.
 // Este endpoint SÓ detecta: não cria, altera nem apaga nada em lancamentos/agendamentos/contas.
 
-let schemaPronto = false
-async function ensureSchema() {
-  if (schemaPronto) return
+// "Já rodei" POR BANCO (um database por ambiente).
+const schemaPronto = registroPorBanco()
+export async function ensureSchema() {
+  if (schemaPronto.jaRodou()) return
   await query(`CREATE TABLE IF NOT EXISTS pendencias_integridade (
     id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     regra         TEXT NOT NULL,
@@ -38,7 +41,7 @@ async function ensureSchema() {
     UNIQUE (regra, origem_id)
   )`)
   await query(`CREATE INDEX IF NOT EXISTS idx_pendencias_integridade_status ON pendencias_integridade (status)`)
-  schemaPronto = true
+  schemaPronto.marcar()
 }
 
 function param(req, nome) {
@@ -203,7 +206,7 @@ async function varrer(body) {
   })
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -280,3 +283,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

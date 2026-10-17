@@ -1,18 +1,9 @@
-import pg from 'pg'
-const { Pool } = pg
+import { poolDoContexto } from './_conexao.js'
 
-let pool
-
-function getPool() {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 3,
-    })
-  }
-  return pool
-}
+// Todas as funções daqui usam o banco do AMBIENTE da requisição (api/_conexao.js): o handler roda
+// dentro de comAmbiente() (api/_ambiente.js). Sem contexto de ambiente, getPool() lança — nunca há
+// um banco padrão. O banco central da plataforma é acessado por api/_central.js.
+const getPool = () => poolDoContexto()
 
 export async function query(sql, params = []) {
   const { rows } = await getPool().query(sql, params)

@@ -1,4 +1,5 @@
 import { query } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 
 // TIPOS DE DOCUMENTO (Boleto, NF, Fatura de Cartão…) e o vínculo opcional deles com agendamentos
 // e lançamentos (coluna tipo_documento_id TEXT NULL, sem FK: o sync manda a tabela inteira e uma FK
@@ -58,11 +59,12 @@ export const TABELAS_COM_TIPO = ['agendamentos', 'lancamentos']
 export const SQL_TABELAS_EXISTENTES = `SELECT DISTINCT table_name FROM information_schema.columns
   WHERE table_schema = current_schema() AND table_name = ANY($1) AND column_name = 'id'`
 
-let pronto = false
-// Idempotente; roda uma vez por cold start. `q` = query (pool) ou o q de uma transação.
+// Idempotente; roda uma vez por cold start EM CADA BANCO ("já rodei" por database).
+const pronto = registroPorBanco()
+// `q` = query (pool) ou o q de uma transação.
 export async function ensureTiposDocumentoSchema(q = query) {
   const cache = q === query // só o pool memoriza; um q de teste/transação sempre executa
-  if (cache && pronto) return
+  if (cache && pronto.jaRodou()) return
   await q(DDL_TIPOS_DOCUMENTO)
   const { sql, params } = sqlSeedTiposDocumento()
   await q(sql, params)
@@ -73,7 +75,7 @@ export async function ensureTiposDocumentoSchema(q = query) {
     await q(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS tipo_documento_id TEXT`)
     await q(`CREATE INDEX IF NOT EXISTS idx_${t}_tipo_documento ON ${t} (tipo_documento_id)`)
   }
-  if (cache) pronto = true
+  if (cache) pronto.marcar()
 }
 
 // Valida/normaliza o corpo de POST/PUT. Devolve { erro } ou { dados: { nome, sigla, natureza, cor, ativo, ordem } }.

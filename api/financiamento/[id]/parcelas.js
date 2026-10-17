@@ -3,6 +3,7 @@ import { requireAuth } from '../../_auth.js'
 import {
   getRouteId, round2, fail, SELECT_PARCELAS, serializarParcela, explicarErro,
 } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // GET /api/financiamento/[id]/parcelas?page=1&limit=20 — lista paginada das parcelas.
 // Sem query params devolve todas (limit padrão = total).
@@ -14,7 +15,7 @@ function readQuery(req, key) {
   try { return new URL(req.url, 'http://x').searchParams.get(key) } catch { return null }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
@@ -60,3 +61,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

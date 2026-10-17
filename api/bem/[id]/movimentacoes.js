@@ -1,11 +1,12 @@
 import { query } from '../../_db.js'
 import { requireAuth } from '../../_auth.js'
 import { getRouteId, num, fail, explicarErro } from '../../_bem.js'
+import { comAmbiente } from '../../_ambiente.js'
 
 // GET /api/bem/[id]/movimentacoes — histórico do bem em ordem cronológica: entradas à vista,
 // trade-ins (com perda/ganho) e pagamentos de parcela (principal × juros).
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'GET') return fail(res, 405, 'Método não permitido')
 
@@ -115,3 +116,5 @@ export default async function handler(req, res) {
     return fail(res, 500, explicarErro(err))
   }
 }
+
+export default comAmbiente(handler)

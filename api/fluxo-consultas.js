@@ -1,5 +1,7 @@
 import { query, parseBody, withTransaction } from './_db.js'
+import { registroPorBanco } from './_conexao.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // CONSULTAS salvas da tela "Fluxo de Caixa Futuro": nome + conjunto de contas (por conta / por
 // grupo / contas principais) + opções do cálculo + horizonte padrão.
@@ -33,11 +35,12 @@ export const DDL_FLUXO_CONSULTAS = `CREATE TABLE IF NOT EXISTS fluxo_consultas (
   )`
 
 // DDL viva da tabela (a cópia em supabase/schema.sql é documentação). Roda uma vez por cold start.
-let schemaPronto = false
-async function ensureSchema() {
-  if (schemaPronto) return
+// "Já rodei" POR BANCO (um database por ambiente).
+const schemaPronto = registroPorBanco()
+export async function ensureSchema() {
+  if (schemaPronto.jaRodou()) return
   await query(DDL_FLUXO_CONSULTAS)
-  schemaPronto = true
+  schemaPronto.marcar()
 }
 
 function queryParam(req, nome) {
@@ -73,7 +76,7 @@ export function normalizarConsultaBody(body) {
 // Desmarca a padrão das OUTRAS consultas quando esta é marcada (mesma transação da escrita).
 export const SQL_DESMARCAR_PADRAO = 'UPDATE fluxo_consultas SET padrao = false, updated_at = now() WHERE padrao AND id <> $1'
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
   try {
@@ -133,3 +136,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)

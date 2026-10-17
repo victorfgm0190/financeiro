@@ -1,5 +1,6 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
+import { comAmbiente } from './_ambiente.js'
 
 // Conferência pós-importação de uma fatura de cartão: soma o que REALMENTE está gravado no
 // Neon para (cartão, fatura) e devolve despesas, estornos, total e quantidades. O frontend
@@ -10,7 +11,7 @@ import { requireAuth } from './_auth.js'
 // A fatura é identificada pelos DOIS formatos que convivem na tabela: fatura_month_year
 // (YYYY-MM, o campo novo) e fatura_ref (MM/YYYY, o legado, ainda único em linhas antigas).
 // Lançamentos espelho ficam de fora: vivem na conta-espelho e nunca compõem o valor da fatura.
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
@@ -55,3 +56,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export default comAmbiente(handler)
