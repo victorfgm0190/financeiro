@@ -20,6 +20,7 @@ const PAGE_TITLES = {
   envelopes: 'Envelopes',
   alerts: 'Alertas de Vencimento',
   settings: 'Configurações',
+  clientes: 'Clientes Finup',
 }
 
 export default function Header({ page, financialPeriod, onOpenSearch }) {

@@ -131,13 +131,14 @@ export const podeGravarConfiguracoes = (usuario) => pode(usuario, 'configuracoes
 
 // Rota da API (sem /api, sem query) + método → { modulo, acao } que a gravação exige, ou null quando
 // a chamada é leitura (ou preferência pessoal). '*' = qualquer módulo gravável. O /api/sync decide
-// pela tabela (MODULO_DA_TABELA) dentro do handler; /api/usuarios tem guarda própria (admin).
+// pela tabela (MODULO_DA_TABELA) dentro do handler; /api/usuarios tem guarda própria (admin) e
+// /api/clientes também (administrador da plataforma, PLATAFORMA_ADMIN).
 const M = (modulo, acao) => ({ modulo, acao })
 const PORMETODO = (modulo) => ({ POST: M(modulo, 'incluir'), PUT: M(modulo, 'editar'), PATCH: M(modulo, 'editar'), DELETE: M(modulo, 'excluir') })
 const ROTAS = [
   // leituras via POST
   [/^(search|transaction-history|reserve-function-transactions|fatura-conferencia)$/, () => null],
-  [/^(load|ping|auth|account-mapping|atalhos|sync|usuarios)$/, () => null],
+  [/^(load|ping|auth|account-mapping|atalhos|sync|usuarios|clientes|cadastro-publico)$/, () => null],
   [/^sync-srf$/, () => M('agendamentos', 'editar')],
   [/^agendamentos$/, () => M('agendamentos', 'editar')],
   [/^transactions-bulk-update$/, () => M('lancamentos', 'editar')],

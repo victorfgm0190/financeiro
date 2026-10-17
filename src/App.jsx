@@ -37,6 +37,10 @@ import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
 import TrocarSenha from './pages/TrocarSenha'
+import CadastroCliente from './pages/CadastroCliente'
+import PaginaLegal from './pages/PaginaLegal'
+import ClientesPanel from './components/Clientes/ClientesPanel'
+import { resumoClientes } from './lib/clientesApi'
 import { getToken, getSessao } from './lib/api'
 import { fetchResumoIntegridade, INTEGRIDADE_EVENTO } from './lib/db'
 import MobileShell from './mobile/MobileShell'
@@ -157,12 +161,23 @@ function AppContent() {
     return () => { vivo = false; window.removeEventListener(INTEGRIDADE_EVENTO, atualizar) }
   }, [])
 
+  // Administrador da PLATAFORMA (PLATAFORMA_ADMIN na API, não o nível admin): só ele vê "Clientes
+  // Finup". 403 da API = menu escondido.
+  const [plataforma, setPlataforma] = useState({ admin: false, novos: 0 })
+  const atualizarPlataforma = useCallback(() => {
+    resumoClientes().then(setPlataforma).catch(() => {})
+  }, [])
+  useEffect(() => { atualizarPlataforma() }, [atualizarPlataforma])
+
   const financialPeriod = getFinancialPeriod()
 
   // Páginas e módulos sem permissão de "ver" somem; página proibida aberta (hash, atalho, link de
   // outro painel) cai no Painel.
-  const paginaVisivel = podeVer(activePage) ? activePage : 'dashboard'
-  const modulosVisiveis = useMemo(() => mobileModules.filter(m => podeVerModuloMobile(usuario, m)), [usuario])
+  const paginaVisivel = activePage === 'clientes' ? (plataforma.admin ? 'clientes' : 'dashboard') : podeVer(activePage) ? activePage : 'dashboard'
+  const modulosVisiveis = useMemo(
+    () => mobileModules.filter(m => (m.plataforma ? plataforma.admin : podeVerModuloMobile(usuario, m))),
+    [usuario, plataforma.admin],
+  )
 
   const panels = {
     dashboard: <DashboardPanel setActivePage={navigate} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />,
@@ -179,6 +194,7 @@ function AppContent() {
     reports: <ReportsPanel />,
     alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
+    clientes: <ClientesPanel onMudou={atualizarPlataforma} />,
   }
 
   // Modais/toasts globais — iguais no desktop e no mobile.
@@ -228,7 +244,7 @@ function AppContent() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-page">
-      <Sidebar active={paginaVisivel} setActive={navigate} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
+      <Sidebar active={paginaVisivel} setActive={navigate} plataforma={plataforma} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header page={paginaVisivel} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
@@ -254,10 +270,19 @@ function PrivateRoute({ children }) {
   return children
 }
 
+// Páginas PÚBLICAS (sem login) por caminho — o vercel.json manda tudo que não é /api para o index.
+const PAGINAS_PUBLICAS = {
+  '/quero-ser-cliente': () => <CadastroCliente />,
+  '/termos': () => <PaginaLegal tipo="termos" />,
+  '/privacidade': () => <PaginaLegal tipo="privacidade" />,
+}
+
 export default function App() {
   // Aplica o tema do contexto atual (mobile/desktop) no <html> — inclusive no Login e ao cruzar o
   // breakpoint ou mudar o tema do sistema, mesmo sem nenhum ThemeToggle montado.
   useTheme()
+  const publica = PAGINAS_PUBLICAS[window.location.pathname.replace(/\/+$/, '')]
+  if (publica) return publica()
   return (
     <PrivateRoute>
       <AppProvider>

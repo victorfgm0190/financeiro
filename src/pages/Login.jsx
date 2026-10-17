@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Lock, User, LogIn } from 'lucide-react'
+import { Lock, User, LogIn, UserPlus } from 'lucide-react'
 import { AUTH_TOKEN_KEY } from '../lib/api'
 
 // Tela de login (cadastro de usuários; o login fixo de emergência é decidido na API). POST /api/auth → salva o JWT em localStorage['auth_token'] e
@@ -100,6 +100,9 @@ export default function Login() {
           >
             <LogIn size={15} /> {loading ? 'Entrando…' : 'Entrar'}
           </button>
+          <a href="/quero-ser-cliente" className="btn-secondary w-full flex items-center justify-center gap-2">
+            <UserPlus size={15} /> Quero me tornar cliente
+          </a>
         </form>
 
         {/* Só em desenvolvimento (o Vite remove este bloco do build de produção): testa o visual

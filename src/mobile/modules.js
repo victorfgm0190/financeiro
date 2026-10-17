@@ -17,7 +17,7 @@
 //               `component` com cabeçalho próprio (Início) os colocam elas mesmas.
 import {
   Home, TrendingUp, Calendar, LayoutGrid, PiggyBank, Mail, Plus, CalendarPlus, ArrowLeftRight,
-  Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard,
+  Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard, Briefcase,
 } from 'lucide-react'
 import InicioMobile from './InicioMobile'
 import MaisMobile from './MaisMobile'
@@ -46,6 +46,9 @@ export const mobileModules = [
   { id: 'agendamento',   label: 'Agendamento',     icon: CalendarPlus,   place: 'action', primary: true, component: AgendamentoAcao },
   { id: 'transferencia', label: 'Transferência',   icon: ArrowLeftRight, place: 'action', primary: true, component: TransferenciaAcao },
   { id: 'reserva_mov',   label: 'Reserva',         icon: PiggyBank,      place: 'action', primary: true, component: ReservaAcao },
+
+  // plataforma: true → só para o administrador da plataforma (App filtra pela API, não por permissão).
+  { id: 'clientes',      label: 'Clientes Finup',  icon: Briefcase,      place: 'more', group: 'Plataforma', page: 'clientes', plataforma: true },
 
   { id: 'importar',      label: 'Importar fatura',   place: 'desktop', page: 'import' },
   { id: 'conciliacao',   label: 'Conciliação',       place: 'desktop' },

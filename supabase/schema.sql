@@ -1035,3 +1035,56 @@ CREATE TABLE IF NOT EXISTS login_bloqueios (
   bloqueado_ate TIMESTAMPTZ,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+
+-- ============================================================
+-- CLIENTES DA PLATAFORMA (pedido público "Quero me tornar cliente" + Controle de Clientes)
+-- Criadas pela própria API (api/_plataforma.js, ensurePlataformaSchema) — este bloco é cópia.
+-- ETAPA 2: estas tabelas plataforma_* MIGRAM para um banco CENTRAL da plataforma (fora deste
+-- banco, que guarda dados pessoais). Por isso não referenciam nenhuma tabela do app.
+-- Fase de teste: aprovar um cliente NÃO cria usuário nem dá acesso a este banco.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS plataforma_clientes (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL,
+  telefone TEXT,
+  tipo_pessoa TEXT NOT NULL DEFAULT 'PF' CHECK (tipo_pessoa IN ('PF', 'PJ')),
+  documento TEXT,
+  empresa TEXT,
+  sigla TEXT CHECK (sigla = lower(sigla)),
+  origem TEXT NOT NULL DEFAULT 'formulario' CHECK (origem IN ('formulario', 'manual')),
+  como_conheceu TEXT,
+  status TEXT NOT NULL DEFAULT 'pedido'
+    CHECK (status IN ('pedido', 'aprovado', 'ativo', 'suspenso', 'cancelado', 'recusado')),
+  plano TEXT,
+  valor_mensal NUMERIC(12, 2),
+  dia_vencimento INT CHECK (dia_vencimento BETWEEN 1 AND 31),
+  limite_usuarios INT CHECK (limite_usuarios >= 1),
+  observacoes TEXT,
+  aceite_termos_em TIMESTAMPTZ,
+  aceite_ip TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_plataforma_clientes_sigla ON plataforma_clientes (sigla);
+CREATE INDEX IF NOT EXISTS idx_plataforma_clientes_email ON plataforma_clientes (lower(email));
+CREATE INDEX IF NOT EXISTS idx_plataforma_clientes_status ON plataforma_clientes (status);
+
+CREATE TABLE IF NOT EXISTS plataforma_historico (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  cliente_id TEXT NOT NULL REFERENCES plataforma_clientes(id) ON DELETE CASCADE,
+  evento TEXT NOT NULL,
+  detalhe TEXT,
+  autor TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plataforma_historico_cliente ON plataforma_historico (cliente_id, created_at);
+
+-- Envios do formulário público por IP (limite por hora). Linhas com mais de 1 dia são apagadas.
+CREATE TABLE IF NOT EXISTS plataforma_cadastro_envios (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  ip TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plataforma_cadastro_envios_ip ON plataforma_cadastro_envios (ip, created_at);

@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import ThemeToggle from '../ThemeToggle'
@@ -23,6 +23,8 @@ const NAV = [
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },
+  // Só para o administrador da plataforma (prop `plataforma`, decidida pela API).
+  { id: 'clientes', label: 'Clientes Finup', icon: Briefcase, plataforma: true },
 ]
 
 const STATUS_CONFIG = {
@@ -42,7 +44,7 @@ function DbStatusBadge({ status }) {
   )
 }
 
-export default function Sidebar({ active, setActive, alertCount }) {
+export default function Sidebar({ active, setActive, alertCount, plataforma }) {
   const { dbStatus, podeVer } = useApp()
   // Itens com atalho global: tooltip com a combinação atual + selo que só aparece segurando Alt.
   const atalhoNav = { cashflow: 'nav.fluxoCaixa', envelopes: 'nav.envelopes' }
@@ -62,7 +64,7 @@ export default function Sidebar({ active, setActive, alertCount }) {
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {NAV.filter(({ id }) => podeVer(id)).map(({ id, label, icon: Icon }) => (
+        {NAV.filter((n) => (n.plataforma ? plataforma?.admin : podeVer(n.id))).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActive(id)}
@@ -73,6 +75,9 @@ export default function Sidebar({ active, setActive, alertCount }) {
             <span className="flex-1 text-left">{label}</span>
             {/* Flutua no canto do item (estilo KeyTips): não empurra o rótulo para 2 linhas. */}
             {atalhoNav[id] && <ShortcutHint actionId={atalhoNav[id]} soNoAlt className="absolute -top-1.5 right-1 z-10" />}
+            {id === 'clientes' && plataforma?.novos > 0 && (
+              <span className="badge bg-ambar text-white" title="Pedidos novos">{plataforma.novos}</span>
+            )}
             {id === 'alerts' && alertCount > 0 && (
               <span className="badge bg-perigo-solido text-white">{alertCount}</span>
             )}
