@@ -10,7 +10,8 @@ export const DOMINIO_CLIENTES = 'finup.app.br'
 export const soDigitos = (v) => String(v ?? '').replace(/\D/g, '')
 
 // ─── CPF / CNPJ ─────────────────────────────────────────────────────────────────────────────────
-// Só dígitos (o CNPJ alfanumérico da Receita ainda não é aceito nesta fase).
+// CPF só dígitos. CNPJ numérico ou ALFANUMÉRICO (Receita, 2026): 12 primeiras posições [0-9A-Z] e
+// 2 DVs numéricos; guardado em maiúsculas, sem máscara.
 
 export function cpfValido(v) {
   const d = soDigitos(v)
@@ -24,12 +25,16 @@ export function cpfValido(v) {
   return dv(9) === Number(d[9]) && dv(10) === Number(d[10])
 }
 
+export const normalizarCnpj = (v) => String(v ?? '').toUpperCase().replace(/[^0-9A-Z]/g, '')
+export const normalizarDocumento = (tipo, v) => (tipo === 'PJ' ? normalizarCnpj(v) : soDigitos(v))
+
 export function cnpjValido(v) {
-  const d = soDigitos(v)
-  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false
+  const d = normalizarCnpj(v)
+  if (!/^[0-9A-Z]{12}\d{2}$/.test(d) || /^(.)\1{13}$/.test(d)) return false
+  // Módulo 11 com valor = código ASCII − 48 (num dígito, o próprio número).
   const dv = (n) => {
     const pesos = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    const soma = pesos.reduce((s, p, i) => s + Number(d[i]) * p, 0)
+    const soma = pesos.reduce((s, p, i) => s + (d.charCodeAt(i) - 48) * p, 0)
     const r = soma % 11
     return r < 2 ? 0 : 11 - r
   }
@@ -39,20 +44,47 @@ export function cnpjValido(v) {
 export const documentoValido = (tipo, v) => (tipo === 'PJ' ? cnpjValido(v) : cpfValido(v))
 
 export function formatarDocumento(v) {
-  const d = soDigitos(v)
-  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
-  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  const d = normalizarCnpj(v)
+  if (/^\d{11}$/.test(d)) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+  if (d.length === 14) return d.replace(/^(.{2})(.{3})(.{3})(.{4})(.{2})$/, '$1.$2.$3/$4-$5')
   return d
 }
 
-// Telefone brasileiro só com dígitos (DDD + número = 10 ou 11; com o 55 na frente, 12 ou 13).
-export const telefoneValido = (v) => /^\d{10,13}$/.test(soDigitos(v))
+// ─── Telefone ───────────────────────────────────────────────────────────────────────────────────
+// Guardado só com dígitos (DDD + número, sem o 55). Celular = 11 dígitos com 9 depois do DDD; fixo
+// (10 dígitos) só vale marcado "não é WhatsApp".
 
-// Número para o wa.me: sem o 55, acrescenta o código do Brasil.
-export function telefoneWhatsApp(v) {
+export function normalizarTelefone(v) {
   const d = soDigitos(v)
+  return (d.length === 12 || d.length === 13) && d.startsWith('55') ? d.slice(2) : d
+}
+export const celularValido = (v) => /^[1-9]{2}9\d{8}$/.test(normalizarTelefone(v))
+export const fixoValido = (v) => /^[1-9]{2}[2-8]\d{7}$/.test(normalizarTelefone(v))
+
+// Motivo de recusa do telefone, ou null.
+export function problemaTelefone(v, { naoWhatsApp = false } = {}) {
+  if (celularValido(v)) return null
+  if (fixoValido(v)) return naoWhatsApp ? null : 'Telefone fixo só é aceito marcando "não é WhatsApp"'
+  return 'Telefone inválido: informe DDD + celular com 9 dígitos, ex.: (43) 99999-9999'
+}
+
+// Máscara enquanto digita: (43) 99999-9999 ou, com 10 dígitos, (43) 9999-9999.
+export function mascararTelefone(v) {
+  const d = normalizarTelefone(v).slice(0, 11)
   if (!d) return ''
-  return d.length <= 11 ? `55${d}` : d
+  if (d.length <= 2) return `(${d}`
+  const resto = d.slice(2)
+  const corte = d.length === 11 ? 5 : 4
+  return `(${d.slice(0, 2)}) ${resto.slice(0, corte)}${resto.length > corte ? `-${resto.slice(corte)}` : ''}`
+}
+
+// Número para o wa.me (55 + dígitos), ou '' quando não é celular.
+export const telefoneWhatsApp = (v) => (celularValido(v) ? `55${normalizarTelefone(v)}` : '')
+
+// Link do botão "Abrir no WhatsApp", ou null (botão desabilitado) quando o número não é celular.
+export function linkWhatsApp(telefone, mensagem = '') {
+  const n = telefoneWhatsApp(telefone)
+  return n ? `https://wa.me/${n}?text=${encodeURIComponent(mensagem)}` : null
 }
 
 // ─── SIGLA (subdomínio sigla.finup.app.br) ──────────────────────────────────────────────────────

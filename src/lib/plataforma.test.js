@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   cpfValido, cnpjValido, candidatasSigla, sugerirSigla, problemaSigla, normalizarSigla, telefoneWhatsApp, formatarDocumento,
+  mascararTelefone, normalizarTelefone, problemaTelefone, celularValido, linkWhatsApp, normalizarDocumento, documentoValido,
 } from './plataforma'
+import { cabecalhoDaPagina } from '../components/Layout/cabecalhoPagina'
 import { resumoClientes } from './clientesApi'
 import { mobileModules } from '../mobile/modules'
 
@@ -15,6 +17,18 @@ describe('CPF / CNPJ', () => {
     expect(cnpjValido('11222333000180')).toBe(false)
     expect(cnpjValido('11111111111111')).toBe(false)
     expect(formatarDocumento('11222333000181')).toBe('11.222.333/0001-81')
+  })
+  it('CNPJ alfanumérico: letras nas 12 primeiras posições, DVs numéricos, valor = ASCII − 48', () => {
+    // Exemplo oficial da Receita Federal.
+    expect(cnpjValido('12.ABC.345/01DE-35')).toBe(true)
+    expect(cnpjValido('12abc34501de35')).toBe(true)
+    expect(cnpjValido('12ABC34501DE36')).toBe(false)
+    expect(cnpjValido('12ABC34501DEA5')).toBe(false) // DV com letra
+    expect(cnpjValido('AAAAAAAAAAAAAA')).toBe(false)
+    expect(normalizarDocumento('PJ', '12.abc.345/01de-35')).toBe('12ABC34501DE35')
+    expect(normalizarDocumento('PF', '529.982.247-25')).toBe('52998224725')
+    expect(documentoValido('PF', '12ABC34501DE35')).toBe(false)
+    expect(formatarDocumento('12ABC34501DE35')).toBe('12.ABC.345/01DE-35')
   })
 })
 
@@ -41,6 +55,45 @@ describe('sigla', () => {
   it('telefone para o wa.me ganha o 55', () => {
     expect(telefoneWhatsApp('(11) 91234-5678')).toBe('5511912345678')
     expect(telefoneWhatsApp('5511912345678')).toBe('5511912345678')
+  })
+})
+
+describe('telefone', () => {
+  it('máscara (43) 99999-9999 enquanto digita', () => {
+    expect(mascararTelefone('4')).toBe('(4')
+    expect(mascararTelefone('43')).toBe('(43')
+    expect(mascararTelefone('43999')).toBe('(43) 999')
+    expect(mascararTelefone('439999988')).toBe('(43) 9999-988')
+    expect(mascararTelefone('43999998888')).toBe('(43) 99999-8888')
+    expect(mascararTelefone('4333221100')).toBe('(43) 3322-1100')
+    expect(mascararTelefone('(43) 99999-88889')).toBe('(43) 99999-8888')
+    expect(mascararTelefone('')).toBe('')
+  })
+  it('guarda só dígitos, sem o 55', () => {
+    expect(normalizarTelefone('(43) 99999-8888')).toBe('43999998888')
+    expect(normalizarTelefone('+55 43 99999-8888')).toBe('43999998888')
+  })
+  it('celular = 11 dígitos começando com 9; fixo só com "não é WhatsApp"', () => {
+    expect(celularValido('43999998888')).toBe(true)
+    expect(celularValido('43899998888')).toBe(false)
+    expect(problemaTelefone('43999998888')).toBeNull()
+    expect(problemaTelefone('4333221100')).toMatch(/não é WhatsApp/)
+    expect(problemaTelefone('4333221100', { naoWhatsApp: true })).toBeNull()
+    expect(problemaTelefone('43899998888')).toMatch(/inválido/)
+    expect(problemaTelefone('4399999')).toMatch(/inválido/)
+  })
+  it('WhatsApp: wa.me/55<dígitos> só para celular; fixo → botão desabilitado (null)', () => {
+    expect(linkWhatsApp('43999998888', 'Olá!')).toBe('https://wa.me/5543999998888?text=Ol%C3%A1!')
+    expect(linkWhatsApp('4333221100', 'Olá!')).toBeNull()
+    expect(linkWhatsApp(null)).toBeNull()
+  })
+})
+
+describe('cabeçalho', () => {
+  it('Clientes Finup sem seletor de perfil e sem período; outras telas mantêm', () => {
+    expect(cabecalhoDaPagina('clientes')).toEqual({ perfis: false, periodo: false })
+    expect(cabecalhoDaPagina('dashboard')).toEqual({ perfis: true, periodo: true })
+    expect(cabecalhoDaPagina('schedule')).toEqual({ perfis: true, periodo: false })
   })
 })
 

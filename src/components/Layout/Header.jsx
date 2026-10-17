@@ -4,6 +4,7 @@ import { ptBR } from 'date-fns/locale'
 import { User, Building2, Search, ChevronDown, LogOut } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { clearTokenAndRedirect } from '../../lib/api'
+import { cabecalhoDaPagina } from './cabecalhoPagina'
 
 const PAGE_TITLES = {
   dashboard: 'Painel Geral',
@@ -25,7 +26,9 @@ const PAGE_TITLES = {
 
 export default function Header({ page, financialPeriod, onOpenSearch }) {
   const today = new Date()
-  const { profiles, activeProfileId, setActiveProfileId } = useApp()
+  const { profiles: perfisDoApp, activeProfileId, setActiveProfileId } = useApp()
+  const { perfis: comPerfis, periodo: comPeriodo } = cabecalhoDaPagina(page)
+  const profiles = comPerfis ? perfisDoApp : []
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null
@@ -35,7 +38,7 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
       {/* Title + period */}
       <div className="min-w-0">
         <h1 className="text-base font-semibold text-texto-1 leading-tight">{PAGE_TITLES[page] || page}</h1>
-        {financialPeriod && page !== 'schedule' && (
+        {financialPeriod && comPeriodo && (
           <p className="text-xs text-texto-3 leading-tight">
             {format(financialPeriod.start, 'dd/MM/yyyy')} – {format(financialPeriod.end, 'dd/MM/yyyy')}
           </p>

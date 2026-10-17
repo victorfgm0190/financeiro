@@ -104,6 +104,24 @@ describe('pedido pelo formulário público', () => {
     expect(ok.statusCode).toBe(200)
   })
 
+  it('telefone: celular com 9; fixo só com "não é WhatsApp"; guarda só dígitos', async () => {
+    expect((await pedir({ telefone: '(43) 3322-1100' })).body.error).toMatch(/não é WhatsApp/)
+    expect((await pedir({ telefone: '(43) 89999-8888' }, '10.0.0.2')).body.error).toMatch(/Telefone inválido/)
+    expect((await pedir({ telefone: '' }, '10.0.0.3')).body.error).toMatch(/Informe o telefone/)
+    expect((await pedir({ telefone: '(43) 3322-1100', nao_whatsapp: true }, '10.0.0.4')).statusCode).toBe(200)
+    expect((await pedir({ email: 'b@exemplo.com', sigla: 'bb', telefone: '+55 (43) 99999-8888' }, '10.0.0.5')).statusCode).toBe(200)
+    const tels = (await q('SELECT telefone FROM plataforma_clientes ORDER BY created_at')).map(r => r.telefone)
+    expect(tels).toEqual(['4333221100', '43999998888'])
+  })
+
+  it('aceita CNPJ alfanumérico e guarda em maiúsculas, sem máscara', async () => {
+    const r = await pedir({ tipo_pessoa: 'PJ', documento: '12.abc.345/01de-35', empresa: 'Lumen Tech' })
+    expect(r.statusCode).toBe(200)
+    expect((await q('SELECT documento FROM plataforma_clientes'))[0].documento).toBe('12ABC34501DE35')
+    const invalido = await pedir({ tipo_pessoa: 'PJ', documento: '12.ABC.345/01DE-36', empresa: 'X', email: 'y@y.com', sigla: 'yy' }, '10.0.0.2')
+    expect(invalido.body.error).toBe('CNPJ inválido')
+  })
+
   it('exige o aceite dos termos', async () => {
     const r = await pedir({ aceite_termos: false })
     expect(r.statusCode).toBe(400)
@@ -191,9 +209,14 @@ describe('aprovação e ciclo de status', () => {
     expect(r.body.cliente.status).toBe('aprovado')
     expect(r.body.endereco).toBe('https://mss.finup.app.br')
     expect(r.body.mensagem).toContain('Olá, Maria!')
-    expect(r.body.mensagem).toContain('Endereço: https://mss.finup.app.br')
-    expect(r.body.mensagem).toContain('Usuário administrador: maria@exemplo.com')
-    expect(r.body.mensagem).toMatch(/link para criar a sua senha/)
+    expect(r.body.mensagem).toContain([
+      'Acesse: https://finup.app.br',
+      'Ambiente: MSS',
+      'Usuário: admin (ou o e-mail maria@exemplo.com)',
+      'Endereço do seu ambiente: https://mss.finup.app.br',
+    ].join('\n'))
+    expect(r.body.mensagem).not.toContain('Maria da Silva Souza')
+    expect(r.body.mensagem).toMatch(/próxima etapa[\s\S]*link para criar a sua senha/)
 
     expect(await q('SELECT * FROM usuarios ORDER BY id')).toEqual(antes)
     expect(await q('SELECT * FROM membros')).toEqual(membrosAntes)
@@ -237,5 +260,9 @@ describe('aprovação e ciclo de status', () => {
     const travada = await clientes({ method: 'PATCH', url: '/api/clientes', body: { id, sigla: 'outra' } })
     expect(travada.statusCode).toBe(409)
     expect((await clientes({ method: 'PATCH', url: '/api/clientes', body: { id, dia_vencimento: 40 } })).statusCode).toBe(400)
+    // Edição: fixo só com "não é WhatsApp"; guarda só dígitos.
+    expect((await clientes({ method: 'PATCH', url: '/api/clientes', body: { id, telefone: '(43) 3322-1100' } })).statusCode).toBe(400)
+    const fixo = await clientes({ method: 'PATCH', url: '/api/clientes', body: { id, telefone: '(43) 3322-1100', nao_whatsapp: true } })
+    expect(fixo.body.cliente.telefone).toBe('4333221100')
   })
 })

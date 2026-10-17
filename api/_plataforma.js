@@ -2,7 +2,7 @@ import process from 'node:process'
 import { query } from './_db.js'
 import { normUser, ErroHttp } from './_usuarios.js'
 import {
-  STATUS_CLIENTE, soDigitos, documentoValido, telefoneValido, normalizarSigla, problemaSigla, candidatasSigla,
+  STATUS_CLIENTE, documentoValido, normalizarDocumento, normalizarTelefone, problemaTelefone, normalizarSigla, problemaSigla, candidatasSigla,
 } from '../src/lib/plataforma.js'
 
 // CLIENTES DA PLATAFORMA (fase de teste, aprovação manual): pedidos do formulário público e o
@@ -114,14 +114,17 @@ export function validarCliente(body = {}, { parcial = false, atual = null, exigi
     if (!out.email) throw new ErroHttp(400, 'Informe o e-mail')
     if (!EMAIL_RE.test(out.email)) throw new ErroHttp(400, 'E-mail inválido')
   }
+  // Telefone: obrigatório no pedido público; celular, ou fixo com `nao_whatsapp: true`.
   if (tem('telefone')) {
-    out.telefone = soDigitos(body.telefone) || null
-    if (out.telefone && !telefoneValido(out.telefone)) throw new ErroHttp(400, 'Telefone inválido (informe DDD + número)')
+    out.telefone = normalizarTelefone(body.telefone) || null
+    if (!out.telefone && exigirDocumento) throw new ErroHttp(400, 'Informe o telefone/WhatsApp')
+    const problema = out.telefone && problemaTelefone(out.telefone, { naoWhatsApp: body.nao_whatsapp === true })
+    if (problema) throw new ErroHttp(400, problema)
   }
   if (tem('tipo_pessoa') || tem('documento') || tem('empresa')) {
     const tipo = 'tipo_pessoa' in body ? body.tipo_pessoa : (atual?.tipo_pessoa ?? 'PF')
     if (!['PF', 'PJ'].includes(tipo)) throw new ErroHttp(400, 'Tipo de pessoa inválido')
-    const doc = soDigitos('documento' in body ? body.documento : atual?.documento) || null
+    const doc = normalizarDocumento(tipo, 'documento' in body ? body.documento : atual?.documento) || null
     if (doc ? !documentoValido(tipo, doc) : exigirDocumento) throw new ErroHttp(400, tipo === 'PJ' ? 'CNPJ inválido' : 'CPF inválido')
     const empresa = texto('empresa' in body ? body.empresa : atual?.empresa, 150)
     if (tipo === 'PJ' && !empresa && exigirDocumento) throw new ErroHttp(400, 'Informe a empresa')

@@ -6,7 +6,8 @@ import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
 } from '../../lib/clientesApi'
 import {
-  STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, telefoneWhatsApp, candidatasSigla, normalizarSigla,
+  STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
+  mascararTelefone, fixoValido,
 } from '../../lib/plataforma'
 
 // CONTROLE DE CLIENTES da plataforma (só o administrador da plataforma — a API devolve 403 para
@@ -48,7 +49,12 @@ const VAZIO = {
   nome: '', email: '', telefone: '', tipo_pessoa: 'PF', documento: '', empresa: '', sigla: '', como_conheceu: '',
   plano: '', valor_mensal: '', dia_vencimento: '', limite_usuarios: '', observacoes: '',
 }
-const paraForm = (c) => Object.fromEntries(Object.keys(VAZIO).map(k => [k, c?.[k] ?? VAZIO[k]]))
+const paraForm = (c) => ({
+  ...Object.fromEntries(Object.keys(VAZIO).map(k => [k, c?.[k] ?? VAZIO[k]])),
+  telefone: mascararTelefone(c?.telefone),
+  // Sem coluna própria: fixo gravado só pode ter entrado marcado "não é WhatsApp".
+  nao_whatsapp: !!c?.telefone && fixoValido(c.telefone),
+})
 
 // Formulário de novo/edição. A sigla só muda enquanto o cliente não foi aprovado (a API também trava).
 function ClienteForm({ inicial, onSalvo, onCancelar }) {
@@ -88,14 +94,21 @@ function ClienteForm({ inicial, onSalvo, onCancelar }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Campo label="Nome" span={2}>{input('nome', { autoFocus: novo })}</Campo>
         <Campo label="E-mail">{input('email', { type: 'email' })}</Campo>
-        <Campo label="Telefone / WhatsApp">{input('telefone', { type: 'tel' })}</Campo>
+        <Campo label="Telefone / WhatsApp">
+          <input className="input" type="tel" value={f.telefone} placeholder="(43) 99999-9999"
+            onChange={e => set('telefone', mascararTelefone(e.target.value))} />
+          <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer">
+            <input type="checkbox" className="w-3.5 h-3.5 accent-primary" checked={f.nao_whatsapp} onChange={e => set('nao_whatsapp', e.target.checked)} />
+            Não é WhatsApp (fixo)
+          </label>
+        </Campo>
         <Campo label="Tipo">
           <select className="input" value={f.tipo_pessoa} onChange={e => set('tipo_pessoa', e.target.value)}>
             <option value="PF">Pessoa física</option>
             <option value="PJ">Pessoa jurídica</option>
           </select>
         </Campo>
-        <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'}>{input('documento', { inputMode: 'numeric' })}</Campo>
+        <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'}>{input('documento', { inputMode: f.tipo_pessoa === 'PJ' ? 'text' : 'numeric', autoCapitalize: 'characters' })}</Campo>
         {f.tipo_pessoa === 'PJ' && <Campo label="Empresa" span={2}>{input('empresa')}</Campo>}
         <Campo label="Sigla" span={2}>
           <div className="flex gap-2">
@@ -186,7 +199,7 @@ function DetalheCliente({ id, onMudou, onBoasVindas }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Info label="Nome" valor={c.nome} />
         <Info label="E-mail" valor={c.email} />
-        <Info label="Telefone" valor={c.telefone} />
+        <Info label="Telefone" valor={c.telefone && mascararTelefone(c.telefone)} />
         <Info label={c.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'} valor={c.documento && formatarDocumento(c.documento)} />
         {c.tipo_pessoa === 'PJ' && <Info label="Empresa" valor={c.empresa} />}
         <Info label="Endereço" valor={c.sigla && `${c.sigla}.${DOMINIO_CLIENTES}`} />
@@ -231,7 +244,7 @@ function DetalheCliente({ id, onMudou, onBoasVindas }) {
 function BoasVindasModal({ dados, onFechar }) {
   const [copiado, setCopiado] = useState(false)
   if (!dados) return null
-  const fone = telefoneWhatsApp(dados.cliente?.telefone)
+  const whatsapp = linkWhatsApp(dados.cliente?.telefone, dados.mensagem)
   const copiar = async () => {
     try { await navigator.clipboard.writeText(dados.mensagem); setCopiado(true) } catch { setCopiado(false) }
   }
@@ -242,13 +255,14 @@ function BoasVindasModal({ dados, onFechar }) {
         <p className="text-[11px] text-texto-3">Fase de teste: nenhum usuário nem ambiente foi criado.</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button className="btn-secondary inline-flex items-center gap-1.5" onClick={copiar}><Copy size={14} /> {copiado ? 'Copiado' : 'Copiar'}</button>
-          {fone ? (
-            <a className="btn-primary inline-flex items-center gap-1.5" target="_blank" rel="noopener noreferrer"
-              href={`https://wa.me/${fone}?text=${encodeURIComponent(dados.mensagem)}`}>
+          {whatsapp ? (
+            <a className="btn-primary inline-flex items-center gap-1.5" target="_blank" rel="noopener noreferrer" href={whatsapp}>
               <MessageCircle size={14} /> Abrir no WhatsApp
             </a>
           ) : (
-            <span className="text-xs text-texto-3 self-center">Sem telefone cadastrado para o WhatsApp</span>
+            <button type="button" disabled className="btn-primary inline-flex items-center gap-1.5" title="O telefone cadastrado não é um celular">
+              <MessageCircle size={14} /> Abrir no WhatsApp
+            </button>
           )}
         </div>
       </div>
@@ -322,7 +336,7 @@ export default function ClientesPanel({ onMudou = () => {} }) {
                 </td>
                 <td className="px-4 py-2.5 hidden md:table-cell">
                   <p className="text-texto-2">{c.email}</p>
-                  {c.telefone && <p className="text-xs text-texto-3">{c.telefone}</p>}
+                  {c.telefone && <p className="text-xs text-texto-3">{mascararTelefone(c.telefone)}</p>}
                 </td>
                 <td className="px-4 py-2.5 font-mono text-texto-2">{c.sigla || '—'}</td>
                 <td className="px-4 py-2.5"><StatusBadge status={c.status} /></td>

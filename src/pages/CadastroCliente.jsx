@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, CheckCircle2, Send, Loader } from 'lucide-react'
 import { checarSiglaPublica, enviarPedidoPublico } from '../lib/clientesApi'
 import {
-  candidatasSigla, normalizarSigla, problemaSigla, documentoValido, telefoneValido, soDigitos, DOMINIO_CLIENTES, SIGLA_MAX,
+  candidatasSigla, normalizarSigla, problemaSigla, documentoValido, problemaTelefone, mascararTelefone, normalizarTelefone, normalizarDocumento, DOMINIO_CLIENTES, SIGLA_MAX,
 } from '../lib/plataforma'
 
 // Página PÚBLICA "Quero me tornar cliente" (/quero-ser-cliente, sem login). Só registra o pedido:
@@ -10,7 +10,7 @@ import {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const VAZIO = {
-  nome: '', email: '', telefone: '', tipo_pessoa: 'PF', documento: '', empresa: '', como_conheceu: '',
+  nome: '', email: '', telefone: '', nao_whatsapp: false, tipo_pessoa: 'PF', documento: '', empresa: '', como_conheceu: '',
   aceite_termos: false, website: '',
 }
 
@@ -20,7 +20,9 @@ const nomeDaSigla = (f) => (f.tipo_pessoa === 'PJ' && f.empresa.trim() ? f.empre
 function validar(f) {
   if (!f.nome.trim()) return 'Informe o seu nome.'
   if (!EMAIL_RE.test(f.email.trim())) return 'Informe um e-mail válido.'
-  if (!telefoneValido(f.telefone)) return 'Informe o telefone/WhatsApp com DDD.'
+  if (!normalizarTelefone(f.telefone)) return 'Informe o telefone/WhatsApp com DDD.'
+  const tel = problemaTelefone(f.telefone, { naoWhatsApp: f.nao_whatsapp })
+  if (tel) return `${tel}.`
   if (!documentoValido(f.tipo_pessoa, f.documento)) return f.tipo_pessoa === 'PJ' ? 'CNPJ inválido.' : 'CPF inválido.'
   if (f.tipo_pessoa === 'PJ' && !f.empresa.trim()) return 'Informe o nome da empresa.'
   const p = problemaSigla(f.sigla)
@@ -90,7 +92,7 @@ export default function CadastroCliente() {
     setEnviando(true)
     try {
       const r = await enviarPedidoPublico({
-        ...f, sigla: siglaAtual, telefone: soDigitos(f.telefone), documento: soDigitos(f.documento), empresa: f.tipo_pessoa === 'PJ' ? f.empresa : '',
+        ...f, sigla: siglaAtual, telefone: normalizarTelefone(f.telefone), documento: normalizarDocumento(f.tipo_pessoa, f.documento), empresa: f.tipo_pessoa === 'PJ' ? f.empresa : '',
       })
       setEnviado(r.mensagem || 'Recebemos seu pedido, entraremos em contato.')
     } catch (err) {
@@ -145,8 +147,13 @@ export default function CadastroCliente() {
           <Campo label="E-mail">
             <input className="input" type="email" autoComplete="email" autoCapitalize="none" value={f.email} onChange={e => set('email', e.target.value)} />
           </Campo>
-          <Campo label="Telefone / WhatsApp" ajuda="Com DDD.">
-            <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={f.telefone} onChange={e => set('telefone', e.target.value)} placeholder="(11) 91234-5678" />
+          <Campo label="Telefone / WhatsApp" ajuda="Celular com DDD.">
+            <input className="input" type="tel" inputMode="tel" autoComplete="tel" value={f.telefone}
+              onChange={e => set('telefone', mascararTelefone(e.target.value))} placeholder="(43) 99999-9999" />
+            <label className="flex items-center gap-2 text-xs text-texto-3 mt-1.5 cursor-pointer">
+              <input type="checkbox" className="w-3.5 h-3.5 accent-primary" checked={f.nao_whatsapp} onChange={e => set('nao_whatsapp', e.target.checked)} />
+              Não é WhatsApp (telefone fixo)
+            </label>
           </Campo>
 
           <Campo label="Tipo">
@@ -160,7 +167,8 @@ export default function CadastroCliente() {
             </div>
           </Campo>
           <Campo label={f.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF'}>
-            <input className="input" inputMode="numeric" value={f.documento} onChange={e => set('documento', e.target.value)}
+            <input className="input" inputMode={f.tipo_pessoa === 'PJ' ? 'text' : 'numeric'} autoCapitalize="characters" value={f.documento}
+              onChange={e => set('documento', f.tipo_pessoa === 'PJ' ? e.target.value.toUpperCase() : e.target.value)}
               placeholder={f.tipo_pessoa === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'} />
           </Campo>
           {f.tipo_pessoa === 'PJ' && (

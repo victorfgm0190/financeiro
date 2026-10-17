@@ -55,6 +55,7 @@ export async function editarCliente(q, body, autor) {
   const atual = await buscarCliente(q, body.id, { travar: true })
   if (!atual) throw new ErroHttp(404, 'Cliente não encontrado')
   const entrada = Object.fromEntries(Object.entries(body).filter(([k]) => CAMPOS_EDITAVEIS.includes(k)))
+  if ('telefone' in entrada) entrada.nao_whatsapp = body.nao_whatsapp === true
   const dados = validarCliente(entrada, { parcial: true, atual, exigirDocumento: false })
   if ('sigla' in dados) {
     if (!dados.sigla) throw new ErroHttp(400, 'Informe a sigla')

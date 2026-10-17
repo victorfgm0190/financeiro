@@ -19,9 +19,10 @@ export function mensagemBoasVindas(c) {
   return [
     `Olá, ${primeiroNome}! Seu pedido para usar o Finup foi aprovado.`,
     '',
-    `Ambiente: ${c.empresa || c.nome}`,
-    `Endereço: ${endereco}`,
-    `Usuário administrador: ${c.email}`,
+    `Acesse: https://${DOMINIO_CLIENTES}`,
+    `Ambiente: ${String(c.sigla).toUpperCase()}`,
+    `Usuário: admin (ou o e-mail ${c.email})`,
+    `Endereço do seu ambiente: ${endereco}`,
     '',
     'Na próxima etapa você vai receber o link para criar a sua senha de acesso.',
     'Qualquer dúvida, é só responder esta mensagem.',
