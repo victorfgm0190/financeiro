@@ -73,6 +73,14 @@ export async function fetchFaturaConferencia(accountId, faturaMonthYear) {
   return apiPost('/api/fatura-conferencia', { accountId, faturaMonthYear })
 }
 
+// Transferências já gravadas no Neon para os agendamentos `ids` entre `de` e `ate` (YYYY-MM-DD).
+// Retorna as linhas do banco (snake_case); o casamento por contas/competência é ehExecucaoDe.
+export async function fetchTransferenciasExecutadas(ids, de, ate) {
+  const qs = new URLSearchParams({ ids: ids.join(','), de, ate })
+  const r = await apiGet(`/api/transferencias-executadas?${qs}`)
+  return r?.lancamentos || []
+}
+
 // Edição em lote de lançamentos (date e/ou categoryId) numa única operação no banco.
 // lote_id/motivo vão para o histórico de alterações, gravado na mesma transação.
 export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId, loteId = null, motivo = null } = {}) {
