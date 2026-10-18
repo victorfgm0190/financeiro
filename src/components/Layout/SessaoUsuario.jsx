@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { UserCircle2, KeyRound, ShieldAlert, LogOut } from 'lucide-react'
+import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone } from 'lucide-react'
 import { getSessao, clearTokenAndRedirect } from '../../lib/api'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
 import { rotuloNivel } from '../../lib/permissoes'
@@ -35,6 +35,9 @@ export default function SessaoUsuario({ comSair = false }) {
             <KeyRound size={11} /> Trocar minha senha
           </button>
         )}
+        <a href="/instalar" className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
+          <Smartphone size={11} /> Instalar no celular
+        </a>
         {comSair && (
           <button type="button" onClick={clearTokenAndRedirect} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-perigo min-h-[28px]">
             <LogOut size={11} /> Sair

@@ -37,6 +37,10 @@ export default defineConfig({
         background_color: '#030712',
         display: 'standalone',
         orientation: 'portrait',
+        // RELATIVOS de propósito: instalar a partir de <sigla>.finup.app.br abre aquele ambiente (o
+        // www abre o www). id '/' = o mesmo que o navegador já calculava pelo start_url, então o app
+        // já instalado continua sendo o mesmo.
+        id: '/',
         start_url: '/',
         scope: '/',
         icons: [

@@ -268,6 +268,28 @@ describe('e-mail de boas-vindas (Resend)', () => {
     expect(xss).not.toContain('<i>Ana')
   })
 
+  it('modelo: "Instale o Finup no celular" com o endereço do PRÓPRIO ambiente (nunca o www), sem imagem nem script', () => {
+    const m = modeloBoasVindas({ nome: 'Ana Lima', email: 'ana@x.com', sigla: 'cv' }, { url: URL_CONVITE })
+    for (const t of [m.texto, m.html]) {
+      expect(t).toContain('Instale o Finup no celular')
+      expect(t).toContain('Não precisa baixar nada na loja de aplicativos')
+      expect(t).toContain('Adicionar à Tela de Início')
+      expect(t).toContain('Instalar app')
+      expect(t).not.toContain('www.finup.app.br')
+    }
+    expect(m.texto).toContain('Ver passo a passo: https://cv.finup.app.br/instalar')
+    expect(m.texto).toContain('iPhone: abra https://cv.finup.app.br no Safari')
+    expect(m.texto).toContain('Android: abra https://cv.finup.app.br no Chrome')
+    expect(m.html).toContain('href="https://cv.finup.app.br/instalar"')
+    expect(m.html).toContain('Ver passo a passo</a>')
+    // a seção vem DEPOIS do botão "Criar minha senha"
+    expect(m.html.indexOf('Instale o Finup no celular')).toBeGreaterThan(m.html.indexOf('Criar minha senha</a>'))
+    expect(m.texto.indexOf('Instale o Finup')).toBeGreaterThan(m.texto.indexOf('Criar minha senha:'))
+    expect(m.html).not.toMatch(/<script|<img|javascript:/i)
+    // outro cliente → o endereço dele
+    expect(modeloBoasVindas({ nome: 'Bia', email: 'b@x.com', sigla: 'bb' }).texto).toContain('https://bb.finup.app.br/instalar')
+  })
+
   it('sucesso: POST no Resend com Bearer e from/reply_to; log sem chave nem conteúdo', async () => {
     const fetch = respostaResend(200, { id: 'resend-123' })
     vi.stubGlobal('fetch', fetch)

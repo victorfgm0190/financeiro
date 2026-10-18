@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { capturarPedidoDeInstalacao } from './lib/instalacao'
+
+// O Chrome oferece a instalação (PWA) antes da página montar: guarda o pedido para a /instalar.
+capturarPedidoDeInstalacao()
 
 const iniciar = () => createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -40,6 +40,7 @@ import TrocarSenha from './pages/TrocarSenha'
 import CadastroCliente from './pages/CadastroCliente'
 import PaginaLegal from './pages/PaginaLegal'
 import EntrarComCodigo from './pages/EntrarComCodigo'
+import Instalar from './pages/Instalar'
 import DefinirSenha from './pages/DefinirSenha'
 import { AMBIENTE_PRINCIPAL } from './lib/ambienteHost'
 import ClientesPanel from './components/Clientes/ClientesPanel'
@@ -283,6 +284,8 @@ const PAGINAS_PUBLICAS = {
   '/entrar': () => <EntrarComCodigo />,
   // Link de senha do e-mail (esqueci / convite) — token procurado no banco do ambiente deste endereço.
   '/definir-senha': () => <DefinirSenha />,
+  // Passo a passo para instalar o Finup (PWA) — link do e-mail de boas-vindas e do menu do usuário.
+  '/instalar': () => <Instalar />,
 }
 
 export default function App() {
