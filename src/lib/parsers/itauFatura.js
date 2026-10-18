@@ -24,24 +24,72 @@ export function faturaMYLabel(my) {
   return `${NOMES_MES[parseInt(m, 10) - 1]}/${y}`
 }
 
-// Extrai o mês de REFERÊNCIA da fatura (YYYY-MM) do cabeçalho de um arquivo do Itaú. O cabeçalho
-// traz "Fatura Aberta - Agosto/2026" (o mês verdadeiro da fatura), enquanto as DATAS das compras
-// caem no mês anterior ao fechamento — por isso detectMainFatura (baseado na data) erra numa fatura
-// aberta. Procura primeiro "<Mês>/<Ano>"; como reforço, "Vencimento DD/MM/YYYY" (o mês do vencimento
-// é o mês da fatura). Retorna '' quando nada é encontrado.
-export function extractItauFaturaMonth(texts) {
-  const norm = (v) => normAcento(v).toLowerCase()
-  const meses = Object.keys(MESES_PT).join('|')
-  const reMes = new RegExp(`\\b(${meses})\\b\\s*(?:de\\s*)?\\/?\\s*(\\d{4})`)
-  for (const raw of texts) {
-    const m = norm(raw).match(reMes)
-    if (m && MESES_PT[m[1]]) return `${m[2]}-${MESES_PT[m[1]]}`
+const RE_MES_ANO = new RegExp(`\\b(${Object.keys(MESES_PT).join('|')})\\b\\s*(?:de\\s*)?\\/?\\s*(\\d{4})`)
+
+// "<Mês>/<Ano>" de um texto → YYYY-MM ('' se não houver).
+function mesAnoDoTexto(raw) {
+  const m = normAcento(raw).toLowerCase().match(RE_MES_ANO)
+  return m && MESES_PT[m[1]] ? `${m[2]}-${MESES_PT[m[1]]}` : ''
+}
+
+// Data do vencimento: Date (cellDates), serial do Excel ou texto dd/mm/aaaa → YYYY-MM-DD ('' se não for data).
+function dataDoVencimento(v) {
+  if (v == null || v === '') return ''
+  if (typeof v === 'string') {
+    const m = v.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`
   }
-  for (const raw of texts) {
-    const v = norm(raw).match(/vencimento[^0-9]*(\d{2})\/(\d{2})\/(\d{4})/)
-    if (v) return `${v[3]}-${v[2]}`
+  const d = normalizeDate(v)
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''
+}
+
+// Cabeçalho da fatura do Itaú (linhas acima da tabela de lançamentos), localizado por RÓTULO:
+//   vencimento — célula "Vencimento": a data vem na própria célula ("Vencimento: 20/11/2026"),
+//                logo abaixo (layout XLS: rótulo I9, valor I10) ou à direita;
+//   mesTitulo  — "<Mês>/<Ano>" do título "Fatura Aberta - Novembro/2026" (conferência);
+//   aberta     — true pelo título "Fatura Aberta" ou pelo rótulo "Valor (parcial)", false pelo
+//                título "Fatura Fechada", null quando o arquivo não diz.
+// As DATAS dos lançamentos nunca entram: são da compra original (parcela de março na fatura de
+// novembro) e não dizem de que fatura o arquivo é.
+export function extractItauCabecalho(aoa, headerIdx) {
+  const norm = (v) => normAcento(v).trim().toLowerCase()
+  const linhas = (aoa || []).slice(0, headerIdx)
+  let vencimento = '', titulo = '', mesTitulo = '', valorParcial = false
+  for (let i = 0; i < linhas.length; i++) {
+    const row = linhas[i] || []
+    for (let c = 0; c < row.length; c++) {
+      const t = norm(row[c])
+      if (!t) continue
+      if (!vencimento && t.startsWith('vencimento')) {
+        vencimento = dataDoVencimento(String(row[c]).replace(/^\s*vencimento\s*:?\s*/i, ''))
+          || dataDoVencimento((linhas[i + 1] || [])[c])
+          || dataDoVencimento(row[c + 1])
+      }
+      if (/^valor\b.*\bparcial\b/.test(t)) valorParcial = true
+      if (!titulo && /^fatura\b/.test(t) && mesAnoDoTexto(t)) titulo = String(row[c]).trim()
+    }
   }
-  return ''
+  if (titulo) mesTitulo = mesAnoDoTexto(titulo)
+  else {
+    // Sem célula "Fatura … - <Mês>/<Ano>": aceita o primeiro "<Mês>/<Ano>" do cabeçalho.
+    for (const c of linhas.flat()) { mesTitulo = mesAnoDoTexto(c); if (mesTitulo) break }
+  }
+  const nt = norm(titulo)
+  const aberta = /\bfatura aberta\b/.test(nt) ? true
+    : /\bfatura fechada\b/.test(nt) ? false
+    : valorParcial ? true : null
+  return { vencimento, mesVencimento: vencimento.slice(0, 7), mesTitulo, titulo, aberta }
+}
+
+// Mês da fatura (YYYY-MM) a partir do cabeçalho: o do VENCIMENTO; sem vencimento, o do título.
+// Vazio quando nenhum dos dois existe — quem chama exige a escolha manual.
+export function mesDaFaturaItau(cab) {
+  return cab?.mesVencimento || cab?.mesTitulo || ''
+}
+
+// Título e vencimento apontam meses diferentes (ambos presentes).
+export function cabecalhoDivergente(cab) {
+  return !!(cab?.mesVencimento && cab?.mesTitulo && cab.mesVencimento !== cab.mesTitulo)
 }
 
 // Valor do XLS do Itaú: já costuma vir como número. Aceita também string (formato pt-BR),
@@ -138,8 +186,10 @@ export function isItauCSV(text) {
   return /^data[,;]lan[çc]amento[,;]valor/im.test(clean)
 }
 
+const CAB_VAZIO = { vencimento: '', mesVencimento: '', mesTitulo: '', titulo: '', aberta: null }
+
 export function parseItauCSV(text, categories = []) {
-  const vazio = { rows: [], cardName: '', faturaStr: '', faturaMY: '', totalDeclarado: null }
+  const vazio = { rows: [], cardName: '', faturaStr: '', faturaMY: '', totalDeclarado: null, cabecalho: CAB_VAZIO }
   const clean = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
   const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
 
@@ -147,11 +197,12 @@ export function parseItauCSV(text, categories = []) {
   const headerIdx = lines.findIndex(l => /^data[,;]lan[çc]amento[,;]valor/i.test(l))
   if (headerIdx === -1) return vazio
 
-  // Mês de referência do cabeçalho (linhas de preâmbulo antes da tabela de lançamentos).
-  const faturaMY = extractItauFaturaMonth(lines.slice(0, headerIdx))
+  const sep = lines[headerIdx].includes(';') ? ';' : ','
+  // Mês da fatura pelo cabeçalho (linhas de preâmbulo antes da tabela de lançamentos).
+  const cabecalho = extractItauCabecalho(lines.slice(0, headerIdx).map(l => l.split(sep)), headerIdx)
+  const faturaMY = mesDaFaturaItau(cabecalho)
   const estornoCategoryId = estornoCatOf(categories)
 
-  const sep = lines[headerIdx].includes(';') ? ';' : ','
   const parsed = []
   let idCtr = 0
 
@@ -173,7 +224,7 @@ export function parseItauCSV(text, categories = []) {
   }
 
   // O CSV não traz o total no cabeçalho — a conferência do parse fica só para o XLS/XLSX.
-  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY, totalDeclarado: null }
+  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY, totalDeclarado: null, cabecalho }
 }
 
 // Parser do XLS/XLSX exportado pelo internet banking do Itaú (fatura de cartão). Recebe a matriz
@@ -181,10 +232,10 @@ export function parseItauCSV(text, categories = []) {
 // para o fluxo de conciliação seguir sem alteração.
 // Estrutura: linha de cabeçalho com "Data" (col 1); Lançamento (col 2), Parcelamento (col 3),
 // Valor (col 4) — colunas localizadas RELATIVAS à célula "Data" para tolerar deslocamentos.
-// Retorna também faturaMY (YYYY-MM) extraído do cabeçalho, p/ ancorar a fatura sem depender da
-// data, e totalDeclarado (o "Valor (parcial)" do cabeçalho) para conferir o próprio parse.
+// Retorna também o cabeçalho (vencimento, mês do título, aberta/fechada), faturaMY (YYYY-MM, mês
+// do vencimento — ver mesDaFaturaItau) e totalDeclarado (o "Valor" do cabeçalho) p/ conferir o parse.
 export function parseItauXLS(aoa, categories = []) {
-  const vazio = { rows: [], cardName: '', faturaStr: '', faturaMY: '', totalDeclarado: null }
+  const vazio = { rows: [], cardName: '', faturaStr: '', faturaMY: '', totalDeclarado: null, cabecalho: CAB_VAZIO }
   if (!Array.isArray(aoa) || aoa.length === 0) return vazio
   const norm = (v) => normAcento(v).trim().toLowerCase()
 
@@ -198,7 +249,8 @@ export function parseItauXLS(aoa, categories = []) {
   if (headerIdx === -1) return vazio
 
   // Mês de referência e total a partir do cabeçalho (linhas acima da tabela de lançamentos).
-  const faturaMY = extractItauFaturaMonth(aoa.slice(0, headerIdx).flat())
+  const cabecalho = extractItauCabecalho(aoa, headerIdx)
+  const faturaMY = mesDaFaturaItau(cabecalho)
   const totalDeclarado = extractItauTotalDeclarado(aoa, headerIdx)
 
   const descCol = dataCol + 1, parcCol = dataCol + 2, valorCol = dataCol + 3
@@ -225,5 +277,5 @@ export function parseItauXLS(aoa, categories = []) {
     parsed.push(buildRow(idCtr++, { date, description, rawVal, estornoCategoryId }))
   }
 
-  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY, totalDeclarado }
+  return { rows: parsed, cardName: '', faturaStr: faturaMYLabel(faturaMY), faturaMY, totalDeclarado, cabecalho }
 }

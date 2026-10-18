@@ -1,5 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { parseItauXLS, extractItauTotalDeclarado, computeFileTotals, parseXlsValor } from './itauFatura'
+import { readFileSync } from 'node:fs'
+import * as XLSX from 'xlsx'
+import {
+  parseItauXLS, parseItauCSV, extractItauTotalDeclarado, computeFileTotals, parseXlsValor,
+  extractItauCabecalho, cabecalhoDivergente,
+} from './itauFatura'
+
+// Lê o .xlsx exatamente como o parseFile do ImportPanel (1ª aba, header:1, cellDates:true).
+function lerFixture(nome) {
+  const buf = readFileSync(new URL(`./__fixtures__/${nome}`, import.meta.url))
+  const wb = XLSX.read(buf, { type: 'buffer', cellDates: true })
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
+}
 
 // Fatura Personnalité 08/2026 — a que motivou este teste. Estrutura idêntica à do arquivo real
 // exportado pelo internet banking (cabeçalho com "Fatura Aberta - <Mês>/<Ano>", tabela de cartões
@@ -171,5 +183,64 @@ describe('computeFileTotals', () => {
   it('trata lista vazia sem quebrar', () => {
     expect(computeFileTotals([]).total).toBe(0)
     expect(computeFileTotals(null).qtd).toBe(0)
+  })
+})
+
+// Fixtures em __fixtures__ (gerarFixturesItau.mjs): fatura de novembro/2026 do layout real, dados
+// fictícios. As compras são de março a outubro — o mês tem de vir do cabeçalho, nunca delas.
+describe('parseItauXLS — mês e status pelo cabeçalho (arquivo .xlsx)', () => {
+  it('fatura aberta: mês do vencimento, total parcial e status aberta', () => {
+    const r = parseItauXLS(lerFixture('itau-fatura-aberta.xlsx'))
+    expect(r.faturaMY).toBe('2026-11')
+    expect(r.faturaStr).toBe('Novembro/2026')
+    expect(r.cabecalho.vencimento).toBe('2026-11-20')
+    expect(r.cabecalho.mesTitulo).toBe('2026-11')
+    expect(r.cabecalho.aberta).toBe(true)
+    expect(cabecalhoDivergente(r.cabecalho)).toBe(false)
+    expect(r.totalDeclarado).toBe(492.59)
+    expect(computeFileTotals(r.rows).total).toBe(492.59)
+    // As datas das linhas seguem sendo as da compra original.
+    expect(r.rows.map(x => x.date)).toEqual(['2026-10-14', '2026-09-24', '2026-03-08', '2026-03-02'])
+  })
+
+  it('fatura fechada: status fechada pelo título', () => {
+    const r = parseItauXLS(lerFixture('itau-fatura-fechada.xlsx'))
+    expect(r.faturaMY).toBe('2026-11')
+    expect(r.cabecalho.aberta).toBe(false)
+    expect(r.totalDeclarado).toBe(492.59)
+  })
+
+  it('título e vencimento divergentes: vale o vencimento e acusa a divergência', () => {
+    const r = parseItauXLS(lerFixture('itau-fatura-divergente.xlsx'))
+    expect(r.faturaMY).toBe('2026-11')
+    expect(r.cabecalho.mesTitulo).toBe('2026-10')
+    expect(cabecalhoDivergente(r.cabecalho)).toBe(true)
+  })
+
+  it('cabeçalho sem mês nem vencimento: mês vazio (escolha manual), sem cair nas datas', () => {
+    const r = parseItauXLS(lerFixture('itau-fatura-sem-mes.xlsx'))
+    expect(r.rows).toHaveLength(4)
+    expect(r.faturaMY).toBe('')
+    expect(r.faturaStr).toBe('')
+    expect(r.cabecalho.aberta).toBeNull()
+  })
+})
+
+describe('extractItauCabecalho', () => {
+  it('lê o vencimento na mesma célula do rótulo ou à direita dele', () => {
+    expect(extractItauCabecalho([['Vencimento: 20/11/2026']], 1).vencimento).toBe('2026-11-20')
+    expect(extractItauCabecalho([['', 'Vencimento', '05/01/2027']], 1).mesVencimento).toBe('2027-01')
+  })
+
+  it('detecta aberta só pelo rótulo "Valor (parcial)" quando o título não diz', () => {
+    const cab = extractItauCabecalho([['', 'Cartão', 'Valor (parcial)'], ['', 'final 0000', 10]], 2)
+    expect(cab.aberta).toBe(true)
+  })
+
+  it('CSV: o mês sai do vencimento do preâmbulo', () => {
+    const r = parseItauCSV('Fatura Aberta - Outubro/2026\nVencimento,20/11/2026\ndata,lançamento,valor\n2026-03-02,Loja 9/10,10.00\n')
+    expect(r.faturaMY).toBe('2026-11')
+    expect(r.cabecalho.aberta).toBe(true)
+    expect(cabecalhoDivergente(r.cabecalho)).toBe(true)
   })
 })

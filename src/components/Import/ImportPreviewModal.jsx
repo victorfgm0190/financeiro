@@ -10,11 +10,16 @@ const round2 = (n) => Math.round(n * 100) / 100
 //  • Grupos numerados: resgates por função e o status do agendamento de resgate da fatura
 //    (já executado / já agendado / será criado).
 // O botão de destaque é "Revisar" (volta sem confirmar); "Confirmar mesmo assim" é discreto.
+// Sem nenhum item NOVO (só "já existe" / atualizações) e com a fatura projetada batendo com o
+// arquivo (`faturaCompleta`), o aviso "Nenhum item gerencial" não se aplica: o modal diz que a
+// fatura já está completa e oferece só "Concluir" (`onConcluir`).
 export default function ImportPreviewModal({
   open, onConfirm, onCancel,
   resolvedRows, gerencialGroups, schedules, accounts, transactions, card, faturaMesAno, reserveFunctions,
   financialMonthStartDay = 1,
   mode = 'import', // 'import' | 'conciliar' — muda o título e o sufixo "não duplica" no status
+  faturaCompleta = false,
+  onConcluir,
 }) {
   // Toggle local (não persiste): mostra a data em que a transferência gerencial (etapa A)
   // será criada, ao lado de cada item do Grupo G.
@@ -109,11 +114,21 @@ export default function ImportPreviewModal({
     .filter(Boolean)
 
   const hasContent = itemsG.length > 0 || numberedSections.length > 0
+  const semNovos = toImport.length === 0
+  const completa = semNovos && faturaCompleta
 
   return (
     <Modal open={open} onClose={onCancel} title={`${isConciliar ? 'Resumo da Conciliação' : 'Resumo da Importação'} — ${apelido} ${faturaMesAno || ''}`} size="lg">
       <div className="space-y-5">
-        {!hasContent && (
+        {completa && (
+          <p className="text-sm text-texto-2">Fatura já está completa no banco. Nada novo a importar.</p>
+        )}
+        {semNovos && !faturaCompleta && (
+          <p className="text-sm text-aviso">
+            Nada novo a importar, mas a fatura projetada não bate com o arquivo. Revise as diferenças antes de concluir.
+          </p>
+        )}
+        {!semNovos && !hasContent && (
           <p className="text-sm text-texto-2">
             Nenhum item gerencial (Grupo G ou numerado) nesta importação. Os lançamentos entram apenas no pagamento da fatura.
           </p>
@@ -197,8 +212,12 @@ export default function ImportPreviewModal({
         ))}
 
         <div className="flex gap-3 justify-end pt-2">
-          <button className="btn-secondary text-sm" onClick={onConfirm}>Confirmar mesmo assim</button>
-          <button className="btn-primary text-sm" onClick={onCancel}>← Revisar</button>
+          {completa
+            ? <button className="btn-primary text-sm" onClick={onConcluir || onConfirm}>Concluir</button>
+            : <>
+                <button className="btn-secondary text-sm" onClick={semNovos ? (onConcluir || onConfirm) : onConfirm}>Confirmar mesmo assim</button>
+                <button className="btn-primary text-sm" onClick={onCancel}>← Revisar</button>
+              </>}
         </div>
       </div>
     </Modal>

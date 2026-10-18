@@ -13,7 +13,7 @@ import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, detectParcela, installmentKey } from '../../lib/installments'
 import { extractLearnKeyword } from '../../lib/descMatch'
 import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
-import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals } from '../../lib/parsers/itauFatura'
+import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
@@ -1089,6 +1089,15 @@ function ConferenciaLinha({ label, valor, sub, tone }) {
   )
 }
 
+// Texto do resumo final da importação de fatura. `result` = { novos, existiam, atualizados } ou,
+// na reedição, { salvos }.
+function textoResultado(result) {
+  if (result.salvos != null) return `${result.salvos} lançamento${result.salvos !== 1 ? 's' : ''} salvo${result.salvos !== 1 ? 's' : ''}.`
+  const { novos, existiam, atualizados } = result
+  if (novos === 0 && atualizados === 0) return 'Nenhum lançamento novo — a fatura já estava no banco.'
+  return `${novos} novo${novos !== 1 ? 's' : ''} importado${novos !== 1 ? 's' : ''} · ${existiam} já existia${existiam !== 1 ? 'm' : ''} · ${atualizados} atualizado${atualizados !== 1 ? 's' : ''}`
+}
+
 function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
   const { arquivo, banco, status, erro, totalDeclarado } = conferencia
   const r2 = (n) => Math.round(n * 100) / 100
@@ -1105,7 +1114,9 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
         {status === 'divergente' && <AlertCircle size={18} className="text-perigo" />}
         <span className="font-medium text-sm">
           {status === 'pendente' && 'Conferindo a fatura no banco…'}
-          {status === 'ok' && 'Fatura confere com o arquivo'}
+          {status === 'ok' && (conferencia.faturaAberta
+            ? 'Confere com o parcial de hoje (fatura ainda aberta)'
+            : 'Fatura confere com o arquivo')}
           {status === 'divergente' && 'Fatura NÃO confere com o arquivo'}
           {status === 'erro' && 'Não foi possível conferir a fatura'}
         </span>
@@ -1195,6 +1206,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Mês de referência extraído do cabeçalho do arquivo Itaú (ex.: "Agosto/2026" → '2026-08').
   // Serve de âncora estável na troca de cartão, evitando o mês errado derivado das datas.
   const [importFaturaMY, setImportFaturaMY] = useState('')
+  // Cabeçalho do arquivo Itaú aberto ({ vencimento, mesVencimento, mesTitulo, aberta } — ver
+  // extractItauCabecalho); null quando o arquivo não é do Itaú.
+  const [cabecalhoArquivo, setCabecalhoArquivo] = useState(null)
   const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
@@ -1348,6 +1362,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       let isItau = false
       // Total do cabeçalho do arquivo (só o XLS/XLSX do Itaú traz) — confere o próprio parse.
       let declarado = null
+      let cabecalho = null
 
       if (preParsed) {
         // Linhas já convertidas (ex.: CSV genérico após o mapeamento de colunas).
@@ -1360,7 +1375,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const text = await readFileAsText(file)
         if (isItauCSV(text)) {
           isItau = true
-          ;({ rows: parsed, cardName, faturaStr, faturaMY } = parseItauCSV(text, categories))
+          ;({ rows: parsed, cardName, faturaStr, faturaMY, cabecalho } = parseItauCSV(text, categories))
         } else {
           // ITEM 8: CSV genérico (Nubank/Bradesco/C6/…) → mapeamento de colunas. Aplica um mapeamento
           // salvo se já houver; senão abre o CsvColumnMapperModal (que re-chama handleFile via preParsed).
@@ -1380,7 +1395,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         // lançamentos, cai no formato Dindin (header com "Descrição").
         const itau = parseItauXLS(rawRows, categories)
         if (itau.rows.length > 0) {
-          ;({ cardName, faturaStr, faturaMY, rows: parsed } = itau)
+          ;({ cardName, faturaStr, faturaMY, rows: parsed, cabecalho } = itau)
           declarado = itau.totalDeclarado
           isItau = true
         } else {
@@ -1580,20 +1595,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
       const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
 
-      // Auto-detectar mês de referência pelo mês de fatura mais frequente e ancorar as parcelas a ele.
-      const detected = detectMainFatura(sortedRows)
-      // Itaú (fatura ABERTA): o arquivo é UMA fatura inteira e a fatura_ref é o mês de REFERÊNCIA
-      // escolhido pelo usuário — TODA linha pertence a ela. As datas das compras (date_cartao) caem
-      // no mês anterior ao fechamento, então detectMainFatura (baseado na data) erra o mês (ex.: à
-      // vista de 10–13/07 com fechamento 13 → 07/2026, quando a fatura aberta é 08/2026). Respeita a
-      // seleção do usuário quando já houver uma; senão usa o mês do CABEÇALHO do arquivo (faturaMY,
-      // ex.: "Fatura Aberta - Agosto/2026"), que é o mês verdadeiro da fatura; só cai no detectado
-      // (por data) como último recurso. Dindin segue sempre no detectado (a regra por data é legítima ali).
-      const reference = (isItau && faturaMonthYear) ? faturaMonthYear
-        : (isItau && faturaMY) ? faturaMY
-        : detected
-      // Guarda o mês do cabeçalho p/ a troca de cartão (handleAccountChange) não voltar ao detectado.
+      // Mês de referência.
+      // Itaú: o arquivo é UMA fatura inteira e o mês vem SÓ do cabeçalho (faturaMY = mês do
+      // vencimento; sem vencimento, o do título "Fatura Aberta - Novembro/2026"). Ele SEMPRE
+      // preenche o Mês de Referência ao carregar, sobrescrevendo a seleção anterior; a troca manual
+      // depois é respeitada (handleFaturaMonthYearChange). Sem mês no arquivo o campo fica VAZIO e a
+      // escolha é obrigatória — as datas das linhas são da compra original (parcela de março na
+      // fatura de novembro) e nunca definem o mês.
+      // Dindin / CSV genérico: mês de fatura mais frequente pelas datas (a regra é legítima ali).
+      const reference = isItau ? faturaMY : detectMainFatura(sortedRows)
+      // Guarda o mês do cabeçalho p/ a troca de cartão (handleAccountChange) manter a referência.
       setImportFaturaMY(isItau ? faturaMY : '')
+      setCabecalhoArquivo(isItau ? (cabecalho || null) : null)
       let alignedRows = reference ? alignInstallmentsToFatura(sortedRows, reference, resolvedDueDay) : sortedRows
       // Aplica a regra de fatura_ref (dia da data ORIGINAL vs fechamento) e corrige a
       // data de sistema para o mês de referência, mantendo date_cartao intacta.
@@ -1609,7 +1622,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         setRows(finalRows)
         setCardInfo({ cardName, faturaStr })
         setMatchQueue(pendingMatches)
-        if (reference) setFaturaMonthYear(reference)
+        if (reference || isItau) setFaturaMonthYear(reference)
       }
 
       const estornoCount = alignedRows.filter(isEstornoRow).length
@@ -1649,13 +1662,10 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           : (inst && inst.num > 1) ? addMonthToFatura(faturaParc1, inst.num - 1) : faturaParc1
         return { ...row, faturaMonthYear: fatura }
       })
-      const detected = detectMainFatura(rebased)
-      // Itaú: mantém o mês de referência escolhido pelo usuário (o arquivo é UMA fatura); o detectado
-      // por data erra p/ fatura aberta. Só usa o detectado quando ainda não há escolha do usuário.
+      // Itaú: mantém o Mês de Referência atual (o do arquivo ou o escolhido depois); sem nenhum,
+      // segue vazio — nunca o detectado pelas datas. Dindin: detectado pelas datas.
       const isItauRows = rebased.some(r => r._itau)
-      const reference = (isItauRows && faturaMonthYear) ? faturaMonthYear
-        : (isItauRows && importFaturaMY) ? importFaturaMY
-        : detected
+      const reference = isItauRows ? (faturaMonthYear || importFaturaMY) : detectMainFatura(rebased)
       if (reference) setFaturaMonthYear(reference)
       return reference ? applyReferenceFatura(rebased, reference, cl, dd, financialStartDay) : rebased
     })
@@ -1735,6 +1745,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     setFilename(imp.filename || '')
     setError('')
     setCardInfo({ cardName: '', faturaStr: '' })
+    setCabecalhoArquivo(null)
   }
 
   // Casamento com o que já está gravado no cartão (lib/revisaoImportacao): mesma fatura + mesmo
@@ -2086,7 +2097,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
       setEditingImport(null)
       setBaixasResult(0)
-      setResult(toImport.length)
+      setResult({ salvos: toImport.length })
       setRows([])
       return
     }
@@ -2321,7 +2332,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // ignora pela guarda faturaCicloNoPassado — sem isto os gerenciais não seriam materializados.
     gerencialTxIds.forEach(id => ensureGerencialState(id))
 
-    const totalProcessed = toImport.length + collisionsToApply.length
+    // Resumo final: X inseridos · Y que já estavam no banco (já existe / colisão pulada) · Z atualizados.
+    const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length }
     const pending = []
     toImport.forEach(row => {
       // Já tratada pela baixa automática (aplicada ou recusada na prévia) — não pergunta de novo.
@@ -2335,8 +2347,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
 
     setBaixasResult(scheduleBaixas.length)
-    if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(totalProcessed); setRows([]); setCollisionSkip(new Set()); return }
-    setResult(totalProcessed)
+    if (pending.length > 0) { setScheduleMatchQueue(pending); setResult(resumo); setRows([]); setCollisionSkip(new Set()); return }
+    setResult(resumo)
+    setRows([])
+    setCollisionSkip(new Set())
+  }
+
+  // Linhas do arquivo que já estavam no banco e não serão gravadas: "já existe" e colisões que o
+  // usuário optou por não atualizar. Parcelas futuras geradas ficam de fora (não vêm do arquivo).
+  const contarJaExistiam = (linhas) => linhas.filter(r => !r._generated
+    && (r._isDuplicate || (r._collisionTx && collisionSkip.has(r._id)))).length
+
+  // Nada novo e nada a atualizar: não grava nada — só fecha o fluxo com o resumo e confere a
+  // fatura no banco (a mesma conferência da importação).
+  const concluirSemImportar = () => {
+    iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
+    setBaixasResult(0)
+    setResult({ novos: 0, existiam: contarJaExistiam(resolvedRows), atualizados: 0 })
     setRows([])
     setCollisionSkip(new Set())
   }
@@ -2404,6 +2431,8 @@ Importar mesmo assim no mês selecionado?`)) return
     setConferencia({
       accountId, faturaMonthYear: faturaMY, arquivo,
       totalDeclarado: declarado ?? null,
+      // Fatura ainda aberta: o arquivo é o PARCIAL de hoje, não o valor final.
+      faturaAberta: cabecalhoArquivo?.aberta === true,
       banco: null, status: 'pendente', erro: '',
     })
   }
@@ -2560,12 +2589,14 @@ Importar mesmo assim no mês selecionado?`)) return
       let csvRows
       let declarado = null
       let mesArquivo = ''
+      let cabecalho = null
       if (isXls) {
         const aoa = await parseFile(file)
         const itau = parseItauXLS(aoa, categories)
         csvRows = itau.rows
         declarado = itau.totalDeclarado
         mesArquivo = itau.faturaMY
+        cabecalho = itau.cabecalho
         if (csvRows.length === 0) {
           setConcError('Nenhum lançamento encontrado no XLS/XLSX. Verifique se é a fatura exportada pelo internet banking do Itaú.')
           return
@@ -2579,6 +2610,7 @@ Importar mesmo assim no mês selecionado?`)) return
         const itau = parseItauCSV(text, categories)
         csvRows = itau.rows
         mesArquivo = itau.faturaMY
+        cabecalho = itau.cabecalho
         if (csvRows.length === 0) {
           setConcError('Nenhum lançamento encontrado no CSV.')
           return
@@ -2663,6 +2695,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         setConciliarMode(true)
         // A conciliação recebe o arquivo INTEIRO: todas as linhas pertencem à fatura escolhida.
         setTotalDeclarado(declarado)
+        setCabecalhoArquivo(cabecalho)
         setConcArquivoTotais(computeFileTotals(classificados))
         setConferencia(null)
         setRows([])
@@ -3436,7 +3469,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       {result !== null && scheduleMatchQueue.length === 0 && (
         <div className="card flex items-center gap-3 text-primary-fg">
           <Check size={20} />
-          <span className="font-medium">{result} lançamento{result !== 1 ? 's' : ''} importado{result !== 1 ? 's' : ''} com sucesso.</span>
+          <span className="font-medium">{textoResultado(result)}</span>
           {baixasResult > 0 && (
             <span className="text-sm text-primary-fg">{baixasResult} ocorrência{baixasResult !== 1 ? 's' : ''} de agendamento baixada{baixasResult !== 1 ? 's' : ''}</span>
           )}
@@ -3527,9 +3560,39 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               </div>
               <div className="flex items-end gap-4 pb-1">
                 {cardInfo.cardName && <div><p className="label">Cartão detectado</p><p className="text-sm text-texto-1">{cardInfo.cardName}</p></div>}
-                {cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-texto-1">{cardInfo.faturaStr}</p></div>}
+                {cabecalhoArquivo && !editingImport ? (
+                  <div>
+                    <p className="label">Fatura (arquivo)</p>
+                    {cardInfo.faturaStr
+                      ? <p className="text-sm text-texto-1">
+                          {cardInfo.faturaStr}
+                          {cabecalhoArquivo.vencimento && <span className="text-texto-3"> · venc. {fmtDate(cabecalhoArquivo.vencimento)}</span>}
+                        </p>
+                      : <p className="text-sm text-aviso">mês não identificado no arquivo</p>}
+                  </div>
+                ) : cardInfo.faturaStr && <div><p className="label">Fatura (arquivo)</p><p className="text-sm text-texto-1">{cardInfo.faturaStr}</p></div>}
               </div>
             </div>
+            {cabecalhoArquivo?.aberta === true && !editingImport && (
+              <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full border border-aviso/40 bg-aviso/10 text-aviso text-xs font-medium">
+                <AlertCircle size={12} /> Fatura aberta — valor parcial
+              </div>
+            )}
+            {cabecalhoArquivo && !editingImport && cabecalhoDivergente(cabecalhoArquivo) && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg border border-aviso/30 bg-aviso/10 text-aviso text-xs">
+                <AlertCircle size={14} />
+                <span>
+                  O título do arquivo diz {faturaMYLabel(cabecalhoArquivo.mesTitulo)}, mas o vencimento ({fmtDate(cabecalhoArquivo.vencimento)}) é
+                  de {faturaMYLabel(cabecalhoArquivo.mesVencimento)}. Vale o mês do vencimento — confira antes de importar.
+                </span>
+              </div>
+            )}
+            {cabecalhoArquivo && !editingImport && !importFaturaMY && (
+              <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg border border-aviso/30 bg-aviso/10 text-aviso text-xs">
+                <AlertCircle size={14} />
+                <span>Mês não identificado no arquivo (sem vencimento nem "Fatura … - Mês/Ano" no cabeçalho). Escolha o Mês de Referência para continuar.</span>
+              </div>
+            )}
             {!editingImport && divergenciaMesArquivo(faturaMonthYear, importFaturaMY) && (
               <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg border border-perigo/40 bg-perigo-bg text-perigo text-xs">
                 <AlertCircle size={14} />
@@ -3639,7 +3702,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               </button>
               <button
                 className="btn-primary flex items-center gap-1.5 text-xs py-1.5"
-                disabled={(toImportCount === 0 && collisionsToApplyCount === 0) || !selectedAccount}
+                disabled={(editingImport && toImportCount === 0) || !selectedAccount || !faturaMonthYear}
+                title={!faturaMonthYear ? 'Escolha o Mês de Referência' : undefined}
                 onClick={handleConfirmImport}
               >
                 <Save size={12} /> {editingImport
@@ -4178,6 +4242,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         faturaMesAno={faturaMonthYear}
         reserveFunctions={reserveFunctions}
         financialMonthStartDay={financialStartDay}
+        faturaCompleta={!!projecao && Math.abs(projecao.diferenca) <= TOLERANCIA_CONFERENCIA}
+        onConcluir={() => {
+          setShowImportPreview(false)
+          if (collisionsToApplyCount > 0) {
+            try { handleImport() } catch (e) { setError('Erro ao importar: ' + (e?.message || e)) }
+          } else concluirSemImportar()
+        }}
       />
 
       {estornoModal && (
