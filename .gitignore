@@ -30,3 +30,8 @@ graphify-out/
 
 # bundle temporário do smoke de render (scripts/smoke-render-bem.jsx)
 .smoke-out/
+
+# backups com dados do banco — nunca versionar
+backup_*.json
+*backup*.json
+backups/
