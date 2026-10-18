@@ -91,7 +91,7 @@ export function buildScheduleGroups(schedules, getNextOccurrences, { agruparSeri
         .slice(1)
         .map(d => {
           const { date, amount } = occEfetiva(s, d)
-          return { date, amount }
+          return { date, amount, base: d }
         })
     }
     groups.push({ schedule: s, nextDate, displayDate: displayDateOf(s, nextDate), futureItems })

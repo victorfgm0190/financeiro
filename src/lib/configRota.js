@@ -9,6 +9,7 @@ export const CONFIG_ABAS = [
       { id: 'periodo', label: 'Período financeiro' },
       { id: 'estornos', label: 'Estorno de cartão' },
       { id: 'perfis', label: 'Perfis' },
+      { id: 'agenda-celular', label: 'Agenda no celular', novo: true },
     ],
   },
   {

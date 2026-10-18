@@ -139,6 +139,8 @@ const ROTAS = [
   // leituras via POST
   [/^(search|transaction-history|reserve-function-transactions|fatura-conferencia)$/, () => null],
   [/^(load|ping|auth|account-mapping|atalhos|sync|usuarios|clientes|cadastro-publico)$/, () => null],
+  // Agenda no celular: feed do PRÓPRIO usuário (preferência pessoal; grava só no central).
+  [/^agenda-feed$/, () => null],
   [/^sync-srf$/, () => M('agendamentos', 'editar')],
   [/^agendamentos$/, () => M('agendamentos', 'editar')],
   [/^transactions-bulk-update$/, () => M('lancamentos', 'editar')],

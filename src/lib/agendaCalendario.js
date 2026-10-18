@@ -6,6 +6,7 @@
 //   grupo     — classificarAgendamento: despesa | fatura | receita | aplicacao | resgate | transferencia
 //   proxima   — é a próxima pendente do agendamento (ações completas); as seguintes são só leitura
 //   antesDe   — nas seguintes: data da próxima pendente ("Antes, efetive a de dd/mm")
+//   original  — data ORIGINAL da ocorrência (chave estável: overrides, UID do feed .ics)
 import { occEfetiva } from './fluxoCaixa.js'
 import { classificarAgendamento } from './resumoSelecao.js'
 
@@ -89,10 +90,10 @@ export function ocorrenciasPendentes(rows, getNextOccurrences, { ini, fim, hoje,
     const grupo = classificarAgendamento(s, accounts)
     const base = { schedule: s, row, grupo, pago: false }
     push({ ...base, key: `${s.id}@${row.nextDate}`, data: row.displayDate, amount: r2(occEfetiva(s, row.nextDate).amount),
-      proxima: true, ocorrencia: row.nextDate, antesDe: null, atrasado: row.displayDate < hoje })
+      proxima: true, ocorrencia: row.nextDate, original: row.nextDate, antesDe: null, atrasado: row.displayDate < hoje })
     const futuras = row.futureItems || []
     futuras.forEach((f, i) => push({ ...base, key: `${s.id}#${i + 1}`, data: f.date, amount: r2(f.amount),
-      proxima: false, ocorrencia: null, antesDe: row.displayDate, atrasado: false }))
+      proxima: false, ocorrencia: null, original: f.base || null, antesDe: row.displayDate, atrasado: false }))
     // Recorrente além das ocorrências que a lista lista: segue a mesma série até o fim do mês.
     if ((s.frequency || 'once') === 'once' || row.isSerie) continue
     const ultima = futuras.length ? futuras[futuras.length - 1].date : row.displayDate
@@ -108,7 +109,7 @@ export function ocorrenciasPendentes(rows, getNextOccurrences, { ini, fim, hoje,
     occs.slice(futuras.length + 1).forEach((o, j) => {
       const e = occEfetiva(s, o)
       push({ ...base, key: `${s.id}#${futuras.length + 1 + j}`, data: e.date, amount: r2(e.amount),
-        proxima: false, ocorrencia: null, antesDe: row.displayDate, atrasado: false })
+        proxima: false, ocorrencia: null, original: o, antesDe: row.displayDate, atrasado: false })
     })
   }
   return out

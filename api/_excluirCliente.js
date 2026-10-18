@@ -10,7 +10,7 @@ import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 // aprovado (sem ambiente). Apaga, nesta ordem, com retomada se falhar no meio:
 //   a) o database cliente_<sigla> no Neon (lá estão usuários, organização e senha_tokens do cliente);
 //      ao terminar grava 'excl_database' no histórico — repetir pula este passo;
-//   b) no central, numa transação: login_handoff e senha_pedidos do ambiente, o ambiente, o
+//   b) no central, numa transação: login_handoff, senha_pedidos e agenda_feeds do ambiente, o ambiente, o
 //      histórico e o cadastro do cliente;
 //   c) na MESMA transação, a auditoria em plataforma_exclusoes (sigla, nome, data, autor; sem senha
 //      nem token).
@@ -79,20 +79,23 @@ export async function excluirCliente(clienteId, { confirmacao, autor = null, neo
     const atual = await buscarCliente(q, c.id, { travar: true })
     if (!atual) throw new ErroHttp(404, 'Cliente não encontrado')
     const conta = async (sql, p) => (await q(`SELECT count(*)::int AS n FROM ${sql}`, p))[0].n
-    const n = { login_handoff: 0, senha_pedidos: 0, ambiente: 0 }
+    const n = { login_handoff: 0, senha_pedidos: 0, agenda_feeds: 0, ambiente: 0 }
     if (amb) {
       n.login_handoff = await conta('login_handoff WHERE ambiente_id = $1', [amb.id])
       n.senha_pedidos = await conta('senha_pedidos WHERE ambiente_id = $1 OR chave LIKE $2', [amb.id, `usr:${amb.id}:%`])
+      n.agenda_feeds = await conta('agenda_feeds WHERE ambiente_sigla = $1', [amb.sigla])
       n.ambiente = await conta('ambientes WHERE id = $1 AND cliente_id = $2', [amb.id, c.id])
       if (n.login_handoff) await q('DELETE FROM login_handoff WHERE ambiente_id = $1', [amb.id])
       if (n.senha_pedidos) await q('DELETE FROM senha_pedidos WHERE ambiente_id = $1 OR chave LIKE $2', [amb.id, `usr:${amb.id}:%`])
+      // Agenda no celular: os feeds do ambiente (o cache vai junto, ON DELETE CASCADE).
+      if (n.agenda_feeds) await q('DELETE FROM agenda_feeds WHERE ambiente_sigla = $1', [amb.sigla])
       if (n.ambiente) await q('DELETE FROM ambientes WHERE id = $1 AND cliente_id = $2', [amb.id, c.id])
     }
     n.historico = await conta('plataforma_historico WHERE cliente_id = $1', [c.id])
     if (n.historico) await q('DELETE FROM plataforma_historico WHERE cliente_id = $1', [c.id])
     n.cliente = await conta('plataforma_clientes WHERE id = $1', [c.id])
     await q('DELETE FROM plataforma_clientes WHERE id = $1', [c.id])
-    const detalhe = `${database} · central: ${n.ambiente} ambiente, ${n.login_handoff} login_handoff, ${n.senha_pedidos} senha_pedidos, ${n.historico} histórico, ${n.cliente} cadastro`
+    const detalhe = `${database} · central: ${n.ambiente} ambiente, ${n.login_handoff} login_handoff, ${n.senha_pedidos} senha_pedidos, ${n.agenda_feeds} agenda_feeds, ${n.historico} histórico, ${n.cliente} cadastro`
     await q(
       `INSERT INTO plataforma_exclusoes (cliente_id, sigla, nome, email, database_name, autor, detalhe)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,

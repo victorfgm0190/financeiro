@@ -11,6 +11,7 @@ import ModoAltAtalhos from './components/shared/ModoAltAtalhos'
 import { useIsMobile } from './hooks/useIsMobile'
 import { useTheme } from './hooks/useTheme'
 import { useAutoBackup } from './hooks/useAutoBackup'
+import { useAgendaFeed } from './hooks/useAgendaFeed'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from './hooks/useScrollRestoration'
 import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
@@ -108,6 +109,8 @@ function AppContent() {
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
   const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, usuario, podeVer } = useApp()
+  // Agenda no celular: gera e publica o .ics do usuário quando os dados mudam (hooks/useAgendaFeed).
+  useAgendaFeed()
 
   const handleAutoBackup = useCallback(() => setBackupToast(true), [])
   useAutoBackup(data, handleAutoBackup)

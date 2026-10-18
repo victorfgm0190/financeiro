@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays } from 'lucide-react'
 import { getSessao, clearTokenAndRedirect } from '../../lib/api'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
+import AgendaCelularPanel from '../Settings/AgendaCelularPanel'
+import Modal from '../shared/Modal'
 import { rotuloNivel } from '../../lib/permissoes'
 import Toast from '../shared/Toast'
 
@@ -10,6 +13,7 @@ import Toast from '../shared/Toast'
 export default function SessaoUsuario({ comSair = false }) {
   const [sessao] = useState(getSessao)
   const [trocar, setTrocar] = useState(false)
+  const [agenda, setAgenda] = useState(false)
   const [toast, setToast] = useState(null)
   if (!sessao) return null
   const emergencia = sessao.origem === 'env'
@@ -29,10 +33,15 @@ export default function SessaoUsuario({ comSair = false }) {
           <ShieldAlert size={12} className="shrink-0" /> Logado com acesso de emergência
         </p>
       )}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3">
         {!emergencia && (
           <button type="button" onClick={() => setTrocar(true)} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
             <KeyRound size={11} /> Trocar minha senha
+          </button>
+        )}
+        {!emergencia && (
+          <button type="button" onClick={() => setAgenda(true)} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
+            <CalendarDays size={11} /> Agenda no celular
           </button>
         )}
         <a href="/instalar" className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-texto-1 min-h-[28px]">
@@ -44,7 +53,18 @@ export default function SessaoUsuario({ comSair = false }) {
           </button>
         )}
       </div>
-      <TrocarSenhaModal open={trocar} onClose={() => setTrocar(false)} onTrocada={() => setToast('Senha alterada.')} />
+      {/* Janelas no <body>: a Sidebar é sticky (contexto de empilhamento próprio) — dentro dela o
+          modal ficava POR BAIXO do conteúdo da página (ex.: cabeçalho preso do calendário). */}
+      {createPortal(
+        <>
+          {/* Agenda no celular: janela (vale para qualquer nível — Configurações › Geral pode estar fechada). */}
+          <Modal open={agenda} onClose={() => setAgenda(false)} title="Agenda no celular">
+            {agenda && <AgendaCelularPanel emJanela />}
+          </Modal>
+          <TrocarSenhaModal open={trocar} onClose={() => setTrocar(false)} onTrocada={() => setToast('Senha alterada.')} />
+        </>,
+        document.body,
+      )}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )

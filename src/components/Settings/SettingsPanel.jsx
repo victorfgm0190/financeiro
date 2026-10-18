@@ -20,6 +20,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { mobileModules } from '../../mobile/modules'
 import { secoesConfigSoDesktop } from '../../mobile/navegacao'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import AgendaCelularPanel from './AgendaCelularPanel'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import PerfisMultiSelect from './PerfisMultiSelect'
@@ -603,7 +604,7 @@ export default function SettingsPanel() {
   // somente leitura — o fieldset desabilita botões e campos da seção. Atalhos são preferência
   // pessoal (sempre editáveis); Usuários tem guarda própria (só admin).
   const moduloDaSecao = MODULO_DA_ABA_CONFIG[abaAtual.id] || 'configuracoes'
-  const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' &&
+  const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' && secao !== 'agenda-celular' &&
     !(pode(moduloDaSecao, 'incluir') || pode(moduloDaSecao, 'editar') || pode(moduloDaSecao, 'excluir'))
 
   return (
@@ -1894,6 +1895,7 @@ export default function SettingsPanel() {
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
       {secao === 'depara-importacao' && <DeParaImportacaoPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
+      {secao === 'agenda-celular' && <AgendaCelularPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </fieldset>
       </div>

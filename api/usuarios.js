@@ -14,6 +14,7 @@ import { modeloConvite, urlDefinirSenha } from './_emailSenha.js'
 import { gerarTokenSenha } from './_senhaTokens.js'
 import { ipDoReq } from './_plataforma.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { aposEditarUsuario } from './_agendaFeed.js'
 
 // Cadastro de USUÁRIOS da organização do token. Só admin, sempre filtrando por req.user.orgId:
 //   GET                     → lista (nunca devolve senha_hash)
@@ -253,7 +254,11 @@ async function handler(req, res) {
     if (req.method === 'POST') return res.json({ ok: true, usuario: await criarUsuario(query, orgId, await parseBody(req), autor) })
     if (req.method === 'PATCH') {
       const body = await parseBody(req)
+      const antes = body.id ? await buscarDaOrg(query, orgId, String(body.id)) : null
       const usuario = await withTransaction((q) => editarUsuario(q, orgId, body, req.user))
+      // Agenda no celular (central): desativado → feed revogado; acesso mudou → feed esvaziado.
+      await aposEditarUsuario(req.ambiente?.sigla, antes, usuario)
+        .catch((err) => console.warn('[api/usuarios] agenda no celular:', err.message))
       return res.json({ ok: true, usuario })
     }
     return res.status(405).end()

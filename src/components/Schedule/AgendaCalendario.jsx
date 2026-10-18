@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, AlertTriangle, CheckCircle } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { occCampos } from '../../lib/camposSerie'
@@ -79,6 +79,24 @@ export default function AgendaCalendario({
   const [diaSel, setDiaSel] = useState(hoje)
   const [abertoMobile, setAbertoMobile] = useState(null)
   const toque = useRef(null)
+  // Cabeçalho preso (sticky): ao rolar, a faixa do padding do contêiner acima dele mostraria a grade
+  // passando — enquanto está preso, uma sombra da cor do card cobre essa faixa (e marca a borda).
+  const cardRef = useRef(null)
+  const topoRef = useRef(null)
+  const [preso, setPreso] = useState(false)
+  useEffect(() => {
+    const card = cardRef.current
+    let rolavel = card?.parentElement
+    while (rolavel && !/(auto|scroll)/.test(getComputedStyle(rolavel).overflowY)) rolavel = rolavel.parentElement
+    if (!rolavel) return
+    const medir = () => {
+      const t = topoRef.current?.getBoundingClientRect().top ?? 0
+      setPreso(t - (cardRef.current?.getBoundingClientRect().top ?? t) > 1)
+    }
+    medir()
+    rolavel.addEventListener('scroll', medir, { passive: true })
+    return () => rolavel.removeEventListener('scroll', medir)
+  }, [])
 
   const cal = useMemo(
     () => montarCalendario({ ym, status, rows, faturas, pagosLinhas, getNextOccurrences, hoje, accounts }),
@@ -213,13 +231,19 @@ export default function AgendaCalendario({
 
   return (
     <div className="space-y-3">
-      <div className="card space-y-3 p-3 sm:p-4">
-        {cabecalho}
-        {isMobile && <ResumoTotais totais={cal.totais} status={status} />}
-        <div onTouchStart={isMobile ? onTouchStart : undefined} onTouchEnd={isMobile ? onTouchEnd : undefined} className="select-none" style={isMobile ? { touchAction: 'pan-y' } : undefined}>
-          <div className="grid grid-cols-7 gap-px mb-1">
+      <div ref={cardRef} className="card p-0" onTouchStart={isMobile ? onTouchStart : undefined} onTouchEnd={isMobile ? onTouchEnd : undefined} style={isMobile ? { touchAction: 'pan-y' } : undefined}>
+        {/* Cabeçalho do mês + dias da semana PRESOS no topo ao rolar a grade (dentro do card: soltam
+            quando a grade sai da tela). A barra de status não é presa no calendário — senão cobria isto. */}
+        <div ref={topoRef} data-preso={preso || undefined}
+          className={`sticky top-0 z-10 bg-surface px-3 sm:px-4 pt-3 sm:pt-4 space-y-3 ${preso
+            ? 'shadow-[0_-24px_0_0_var(--color-surface),0_6px_8px_-6px_var(--color-overlay)]' : 'rounded-t-xl'}`}>
+          {cabecalho}
+          {isMobile && <ResumoTotais totais={cal.totais} status={status} />}
+          <div className="grid grid-cols-7 gap-px pb-1 select-none">
             {DIAS_SEMANA.map(d => <div key={d} className="text-center text-[11px] font-medium uppercase tracking-wide text-texto-3 py-1">{d}</div>)}
           </div>
+        </div>
+        <div className="select-none px-3 sm:px-4 pb-3 sm:pb-4">
           <div className="grid grid-cols-7 gap-px bg-borda/60 rounded-lg overflow-hidden border border-borda/60" role="grid" aria-label={`${NOMES_MES[mesNum - 1]} ${anoNum}`}>
             {cal.semanas.flat().map(({ data, doMes }) => {
               const info = cal.dias.get(data)

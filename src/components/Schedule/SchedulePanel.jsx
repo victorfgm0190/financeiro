@@ -3027,8 +3027,9 @@ export default function SchedulePanel() {
       </div>
 
       {/* Barra: Status | Período | Filtros (+ painel recolhível). Mesma em todas as abas. Fixa no
-          topo ao rolar apenas no desktop (md+), com o fundo da página por trás. */}
-      <div className="md:sticky md:top-0 md:z-20 bg-page -mx-1 px-1 py-1">
+          topo ao rolar apenas no desktop (md+), com o fundo da página por trás. Na Visão Calendário
+          NÃO fica presa: cobria o cabeçalho do mês, que lá é o que fica preso (AgendaCalendario). */}
+      <div className={`${emCalendario ? '' : 'md:sticky md:top-0 md:z-20'} bg-page -mx-1 px-1 py-1`}>
         <FilterBar
           status={opcoesStatus}
           statusAtual={emCalendario ? statusCal : statusAtual}
