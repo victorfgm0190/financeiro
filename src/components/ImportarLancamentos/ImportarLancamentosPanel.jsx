@@ -54,6 +54,47 @@ function Progresso({ progresso }) {
   )
 }
 
+// "Últimas importações": o botão "Desfazer importação" só aparece para quem pode EXCLUIR lançamentos
+// (a rota ?acao=desfazer também recusa).
+export function ListaLotes({ lotes, erroLotes, nomeConta, podeExcluir, ocupado, onRecarregar, onDesfazer }) {
+  return (
+    <section className="card space-y-2">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-texto-1">Últimas importações</h2>
+        <button className="p-1.5 rounded text-texto-3 hover:text-texto-1" onClick={onRecarregar} aria-label="Recarregar"><RefreshCw size={12} /></button>
+      </div>
+      {erroLotes && <p className="text-xs text-perigo">{erroLotes}</p>}
+      {!lotes.length && !erroLotes && <p className="text-xs text-texto-3">Nenhuma importação ainda.</p>}
+      <ul className="divide-y divide-borda/60">
+        {lotes.map(l => {
+          const incompleta = l.status === 'em_andamento' && l.gravados < l.qtd
+          // concluída, mas faltando lançamentos no banco = um "Desfazer" que parou no meio
+          const desfazerInterrompido = l.status === 'concluida' && l.gravados < l.qtd
+          return (
+            <li key={l.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <FileSpreadsheet size={14} className="text-texto-3" />
+              <span className="text-texto-1 font-medium">{nomeConta(l.conta_id)}</span>
+              <span className="text-texto-3">{dataHora(l.criado_em)} · {l.formato.toUpperCase()} · {l.arquivo || 'arquivo'}</span>
+              <span className="text-texto-2">{l.qtd} lanç. · +R$ {fmtValorBR(l.total_entradas)} / -R$ {fmtValorBR(l.total_saidas)}</span>
+              {l.status === 'desfeita' && <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">Desfeita em {dataHora(l.desfeita_em)}</span>}
+              {l.status === 'concluida' && !desfazerInterrompido && <span className="px-1.5 py-0.5 rounded bg-receita/15 text-receita">Concluída</span>}
+              {desfazerInterrompido && <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Desfazer interrompido: {l.gravados} de {l.qtd} ainda no banco</span>}
+              {l.status === 'em_andamento' && (incompleta
+                ? <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Importação incompleta ({l.gravados} de {l.qtd})</span>
+                : <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Em andamento</span>)}
+              {l.status !== 'desfeita' && podeExcluir && (
+                <button className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => onDesfazer(l)}>
+                  <Undo2 size={12} /> Desfazer importação
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 export default function ImportarLancamentosPanel() {
   const {
     profileAccounts, transactions, categories, payees, gerencialGroups, pode, addTransaction, deleteTransaction, addCategory, addPayees, recalcularSaldo,
@@ -371,40 +412,8 @@ export default function ImportarLancamentosPanel() {
         </>
       )}
 
-      <section className="card space-y-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-texto-1">Últimas importações</h2>
-          <button className="p-1.5 rounded text-texto-3 hover:text-texto-1" onClick={carregarLotes} aria-label="Recarregar"><RefreshCw size={12} /></button>
-        </div>
-        {erroLotes && <p className="text-xs text-perigo">{erroLotes}</p>}
-        {!lotes.length && !erroLotes && <p className="text-xs text-texto-3">Nenhuma importação ainda.</p>}
-        <ul className="divide-y divide-borda/60">
-          {lotes.map(l => {
-            const incompleta = l.status === 'em_andamento' && l.gravados < l.qtd
-            // concluída, mas faltando lançamentos no banco = um "Desfazer" que parou no meio
-            const desfazerInterrompido = l.status === 'concluida' && l.gravados < l.qtd
-            return (
-              <li key={l.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                <FileSpreadsheet size={14} className="text-texto-3" />
-                <span className="text-texto-1 font-medium">{nomeConta(l.conta_id)}</span>
-                <span className="text-texto-3">{dataHora(l.criado_em)} · {l.formato.toUpperCase()} · {l.arquivo || 'arquivo'}</span>
-                <span className="text-texto-2">{l.qtd} lanç. · +R$ {fmtValorBR(l.total_entradas)} / -R$ {fmtValorBR(l.total_saidas)}</span>
-                {l.status === 'desfeita' && <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">Desfeita em {dataHora(l.desfeita_em)}</span>}
-                {l.status === 'concluida' && !desfazerInterrompido && <span className="px-1.5 py-0.5 rounded bg-receita/15 text-receita">Concluída</span>}
-                {desfazerInterrompido && <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Desfazer interrompido: {l.gravados} de {l.qtd} ainda no banco</span>}
-                {l.status === 'em_andamento' && (incompleta
-                  ? <span className="px-1.5 py-0.5 rounded bg-aviso/15 text-aviso">Importação incompleta ({l.gravados} de {l.qtd})</span>
-                  : <span className="px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">Em andamento</span>)}
-                {l.status !== 'desfeita' && podeExcluir && (
-                  <button className="ml-auto btn-secondary !py-1 text-xs inline-flex items-center gap-1" disabled={ocupado} onClick={() => setDesfazer(l)}>
-                    <Undo2 size={12} /> Desfazer importação
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      </section>
+      <ListaLotes lotes={lotes} erroLotes={erroLotes} nomeConta={nomeConta} podeExcluir={podeExcluir} ocupado={ocupado}
+        onRecarregar={carregarLotes} onDesfazer={setDesfazer} />
 
       <Modal open={!!desfazer} onClose={() => setDesfazer(null)} title="Desfazer importação">
         {desfazer && (
