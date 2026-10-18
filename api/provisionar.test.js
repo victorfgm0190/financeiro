@@ -25,9 +25,10 @@ const { ESTRUTURA_BASE, MIGRACOES } = await import('./_sqlEmbutido.js')
 
 const SECRET = 'segredo-de-teste'
 const raiz = fileURLToPath(new URL('../supabase/', import.meta.url))
-const ARQ_ESTRUTURA = readFileSync(raiz + 'estrutura_base.sql', 'utf-8')
+const ler = (f) => readFileSync(f, 'utf-8').replace(/\r\n/g, '\n') // igual ao scripts/gerar-sql-embutido.js
+const ARQ_ESTRUTURA = ler(raiz + 'estrutura_base.sql')
 const ARQ_MIGRACOES = readdirSync(raiz + 'migrations').filter(f => f.endsWith('.sql')).sort()
-  .map(nome => ({ nome, sql: readFileSync(raiz + 'migrations/' + nome, 'utf-8') }))
+  .map(nome => ({ nome, sql: ler(raiz + 'migrations/' + nome) }))
 const SQL_BANCO_NOVO = ARQ_ESTRUTURA + '\n' + ARQ_MIGRACOES.map(m => m.sql).join('\n')
 
 const bancos = {}

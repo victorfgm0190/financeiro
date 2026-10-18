@@ -7,9 +7,10 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const raiz = fileURLToPath(new URL('../supabase/', import.meta.url))
-const estrutura = readFileSync(raiz + 'estrutura_base.sql', 'utf-8')
+const ler = (f) => readFileSync(f, 'utf-8').replace(/\r\n/g, '\n') // CRLF do checkout no Windows não muda o SQL
+const estrutura = ler(raiz + 'estrutura_base.sql')
 const migracoes = readdirSync(raiz + 'migrations').filter(f => f.endsWith('.sql')).sort()
-  .map(nome => ({ nome, sql: readFileSync(raiz + 'migrations/' + nome, 'utf-8') }))
+  .map(nome => ({ nome, sql: ler(raiz + 'migrations/' + nome) }))
 
 const js = `// GERADO por scripts/gerar-sql-embutido.js — não editar à mão.
 // Cópia de supabase/estrutura_base.sql e supabase/migrations/*.sql (em ordem de nome).
