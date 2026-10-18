@@ -1,0 +1,15 @@
+# Texto sempre com quebra de linha LF, no repositório E na pasta de trabalho (vale mesmo com
+# core.autocrlf=true no Windows): diff mostra só as linhas realmente mudadas.
+* text=auto eol=lf
+
+# Binários: sem conversão.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
