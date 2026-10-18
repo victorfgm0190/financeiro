@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import {
   Upload, FileText, Check, AlertCircle, Wand2, Save,
-  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil,
+  Link, X, Layers, ArrowRight, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight, RotateCcw, Pencil, Info,
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
@@ -15,7 +15,7 @@ import { extractLearnKeyword } from '../../lib/descMatch'
 import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura } from '../../lib/revisaoImportacao'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
@@ -1089,15 +1089,6 @@ function ConferenciaLinha({ label, valor, sub, tone }) {
   )
 }
 
-// Texto do resumo final da importação de fatura. `result` = { novos, existiam, atualizados } ou,
-// na reedição, { salvos }.
-function textoResultado(result) {
-  if (result.salvos != null) return `${result.salvos} lançamento${result.salvos !== 1 ? 's' : ''} salvo${result.salvos !== 1 ? 's' : ''}.`
-  const { novos, existiam, atualizados } = result
-  if (novos === 0 && atualizados === 0) return 'Nenhum lançamento novo — a fatura já estava no banco.'
-  return `${novos} novo${novos !== 1 ? 's' : ''} importado${novos !== 1 ? 's' : ''} · ${existiam} já existia${existiam !== 1 ? 'm' : ''} · ${atualizados} atualizado${atualizados !== 1 ? 's' : ''}`
-}
-
 function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
   const { arquivo, banco, status, erro, totalDeclarado } = conferencia
   const r2 = (n) => Math.round(n * 100) / 100
@@ -1311,6 +1302,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     if (num > 1) return row.date
     if (num === 1) return row._itau ? row.date : clampDateToFatura(row.date, row.faturaMonthYear, importClosingDay)
     return row._dateCartao || row.date
+  }
+
+  // Campos que a colisão mudaria no lançamento do banco (patchColisao, o mesmo da gravação). Vazio
+  // = o banco já está igual ao arquivo: a linha conta como "já existia" e NÃO é gravada — nenhum
+  // updateTransaction, logo nenhum recálculo de fatura/gerencial é disparado por ela.
+  const mudancasColisao = (row) => {
+    const tx = row._collisionTx
+    if (!tx) return []
+    const patch = patchColisao(row, tx, {
+      saveDate: computeSaveDate(row), faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: tx.serieId || row._serieId,
+    })
+    return camposAlteradosColisao(patch, tx, row)
   }
 
   // Equivalente para a CONCILIAÇÃO: os itens "Só no Itaú" são linhas CRUAS do CSV — não passam
@@ -2141,6 +2144,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const rowTxId = new Map() // linha → lançamento criado
     const futTxId = new Map() // parcela futura → lançamento criado
 
+    // Colisões que serão gravadas: as marcadas E com alguma diferença real para o banco.
+    const colisoesAplicar = resolvedRows.filter(r => r._collisionTx && !collisionSkip.has(r._id) && mudancasColisao(r).length > 0)
+
     // Item 0 — serie_id. A série reconhecida usa o serie_id que algum membro gravado já tenha; senão
     // o da linha. Os membros ainda sem serie_id recebem-no pelo fluxo normal de update (abaixo).
     const serieAlvo = new Map()     // linha → serie_id
@@ -2148,7 +2154,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     for (const row of resolvedRows) {
       const inst = row._installment
       if (!inst || (row.type || 'expense') !== 'expense') continue
-      const entra = toImport.includes(row) || (row._collisionTx && !collisionSkip.has(row._id))
+      const entra = toImport.includes(row) || colisoesAplicar.includes(row)
       if (!entra) continue
       const membros = membrosDaSerie({
         accountId: selectedAccount, base: inst.base, total: inst.total, amount: row.amount,
@@ -2235,29 +2241,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     // Item 7: colisões por installment_key — ATUALIZA o lançamento existente (UPDATE) em
     // vez de inserir/pular. Só as confirmadas (não desmarcadas pelo usuário na prévia).
-    const collisionsToApply = resolvedRows.filter(r => r._collisionTx && !collisionSkip.has(r._id))
+    // Idênticas ao banco ficam de fora (colisoesAplicar).
+    const collisionsToApply = colisoesAplicar
     const reservasRenomeadas = new Map()
     collisionsToApply.forEach(row => {
       const tx = row._collisionTx
       const saveDate = computeSaveDate(row)
       addFaturaAfetada(row.faturaMonthYear, saveDate)
       const novaDescricao = row.description || tx.description
-      updateTransaction(tx.id, {
-        date: saveDate,
-        dateCartao: row._dateCartao || tx.dateCartao || null,
-        // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
-        description: novaDescricao,
-        // "É o mesmo": a série manual podia estar com a numeração adiantada (Aramis 4/4 × 3/4 do
-        // extrato) — a parcela do arquivo prevalece. Na colisão por chave os números já são iguais.
-        installmentNum: row._installment?.num ?? tx.installmentNum ?? null,
-        installmentTotal: row._installment?.total ?? tx.installmentTotal ?? null,
-        serieId: serieAlvo.get(row._id) || tx.serieId || null,
-        categoryId: row.categoryId || null,
-        grupoGerencial: row.grupoGerencial || null,
-        faturaMonthYear: row.faturaMonthYear || null,
-        faturaRef: faturaRefFromMY(row.faturaMonthYear),
-        reservaFuncaoId: row._reservaFuncaoId || null,
-      })
+      updateTransaction(tx.id, patchColisao(row, tx, {
+        saveDate, faturaRef: faturaRefFromMY(row.faturaMonthYear), serieId: serieAlvo.get(row._id),
+      }))
       if (row._rateios?.length > 0) saveRateiosFor(tx.id, row._rateios)
       if (row.grupoGerencial) registrarReservaFuncao(row.faturaMonthYear, row.grupoGerencial, row._reservaFuncaoId, row.amount)
       serieBackfill.delete(tx.id)
@@ -2325,8 +2319,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       recalcularAgendamentosFatura(selectedAccount, y, m, reservaFuncaoByAccount)
     }
     // Recompute absoluto dos saldos das contas Ger. (Σ transferências) — o recalc por fatura só
-    // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a importação.
-    reconciliarGerencial(selectedAccount)
+    // ajusta o saldo incrementalmente; sem isto a Ger. fica defasada após a importação. Sem
+    // inserção nem atualização (só baixas de agendamento) nada mudou no gerencial: não roda.
+    if (toImport.length > 0 || collisionsToApply.length > 0) reconciliarGerencial(selectedAccount)
     // Garante o estado gerencial por lançamento (etapa A do Grupo G / resgate dos numerados),
     // idempotente. Necessário para faturas de CICLO PASSADO, que o motor (reconcileFaturaState)
     // ignora pela guarda faturaCicloNoPassado — sem isto os gerenciais não seriam materializados.
@@ -2355,8 +2350,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   // Linhas do arquivo que já estavam no banco e não serão gravadas: "já existe" e colisões que o
   // usuário optou por não atualizar. Parcelas futuras geradas ficam de fora (não vêm do arquivo).
+  // Colisão idêntica ao banco (nada a atualizar) também conta aqui.
   const contarJaExistiam = (linhas) => linhas.filter(r => !r._generated
-    && (r._isDuplicate || (r._collisionTx && collisionSkip.has(r._id)))).length
+    && (r._isDuplicate || (r._collisionTx && (collisionSkip.has(r._id) || mudancasColisao(r).length === 0)))).length
 
   // Nada novo e nada a atualizar: não grava nada — só fecha o fluxo com o resumo e confere a
   // fatura no banco (a mesma conferência da importação).
@@ -2468,7 +2464,8 @@ Importar mesmo assim no mês selecionado?`)) return
   const toImportCount = linhasAImportar(resolvedRows).length
   // Item 7: linhas que colidem com parcela já existente (mesma installment_key).
   const collisionRows = resolvedRows.filter(r => r._collisionTx)
-  const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id)).length
+  // Só as que mudam algo no banco: idênticas não entram no "+N↻" nem são gravadas.
+  const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id) && mudancasColisao(r).length > 0).length
 
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
   // Para cada lançamento do lote (tx_ids da importação) com date_cartao preenchida,
@@ -3469,7 +3466,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       {result !== null && scheduleMatchQueue.length === 0 && (
         <div className="card flex items-center gap-3 text-primary-fg">
           <Check size={20} />
-          <span className="font-medium">{textoResultado(result)}</span>
+          <span className="font-medium">{textoResumoImportacao(result)}</span>
           {baixasResult > 0 && (
             <span className="text-sm text-primary-fg">{baixasResult} ocorrência{baixasResult !== 1 ? 's' : ''} de agendamento baixada{baixasResult !== 1 ? 's' : ''}</span>
           )}
@@ -3574,8 +3571,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               </div>
             </div>
             {cabecalhoArquivo?.aberta === true && !editingImport && (
-              <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full border border-aviso/40 bg-aviso/10 text-aviso text-xs font-medium">
-                <AlertCircle size={12} /> Fatura aberta — valor parcial
+              <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full border border-borda-forte bg-surface-2 text-texto-2 text-xs font-medium">
+                <Info size={12} /> Fatura aberta — valor parcial
               </div>
             )}
             {cabecalhoArquivo && !editingImport && cabecalhoDivergente(cabecalhoArquivo) && (
@@ -3900,7 +3897,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {row._collisionTx
                           ? (row._mesmoConfirmado
                             ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do banco recebe o nome e a parcela do arquivo — ver seção 'atualizar?'">É o mesmo ↻</span>
-                            : <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Mesma parcela, mesma fatura e mesmo valor já no banco — ver seção 'atualizar?'">No banco ↻</span>)
+                            : mudancasColisao(row).length === 0
+                              ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3" title="Mesma parcela, mesma fatura e mesmo valor já no banco, sem nenhuma diferença — nada a atualizar">No banco ✓</span>
+                              : <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Mesma parcela, mesma fatura e mesmo valor já no banco — ver seção 'atualizar?'">No banco ↻</span>)
                           : row._dupLevel === 'certeza'
                             ? <span className="text-xs px-1.5 py-0.5 rounded bg-perigo-bg text-perigo" title="Mesma fatura, mesmo valor, mesma descrição-base e mesma parcela — já existe no banco">🔴 Já existe</span>
                             : row._dupLevel === 'possivel'
@@ -3985,7 +3984,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
               <div className="divide-y divide-borda">
                 {collisionRows.map(r => {
                   const tx = r._collisionTx
-                  const apply = !collisionSkip.has(r._id)
+                  // Idêntica ao banco: nada a gravar, mesmo marcada.
+                  const identica = mudancasColisao(r).length === 0
+                  const apply = !collisionSkip.has(r._id) && !identica
                   const nm = (arr, id) => (id && arr.find(x => x.id === id)?.name) || '—'
                   const dt = (s) => (s || '').split('-').reverse().join('/')
                   // O UPDATE da colisão NÃO grava `amount` — o valor do banco é o confirmado.
@@ -4009,8 +4010,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   return (
                     <div key={r._id} className={`px-3 py-2.5 ${apply ? '' : 'opacity-50'}`}>
                       <label className="flex items-center gap-2 mb-1.5 cursor-pointer">
-                        <input type="checkbox" checked={apply} onChange={() => toggleCollision(r._id)} className="accent-primary" />
+                        <input type="checkbox" checked={apply} disabled={identica} onChange={() => toggleCollision(r._id)} className="accent-primary" />
                         <span className="text-xs text-texto-2 truncate">{r.description}</span>
+                        {identica && <span className="shrink-0 text-[10px] text-texto-3">idêntico ao banco — nada a atualizar</span>}
                         {r._installment && (
                           <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-texto-2">{r._installment.num}/{r._installment.total}</span>
                         )}
@@ -4245,7 +4247,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         faturaCompleta={!!projecao && Math.abs(projecao.diferenca) <= TOLERANCIA_CONFERENCIA}
         onConcluir={() => {
           setShowImportPreview(false)
-          if (collisionsToApplyCount > 0) {
+          // Com 0 novos: há atualização real (colisão com diferença) ou baixa de agendamento
+          // marcada → handleImport grava SÓ isso; senão não grava nada (concluirSemImportar).
+          const temBaixas = [...baixasPorLinha.values()].some(b => b?.ativa)
+          if (collisionsToApplyCount > 0 || temBaixas) {
             try { handleImport() } catch (e) { setError('Erro ao importar: ' + (e?.message || e)) }
           } else concluirSemImportar()
         }}

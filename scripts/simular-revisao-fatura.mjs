@@ -8,13 +8,18 @@
 //
 // --todas lista todas as linhas; sem ele, só as que não são "Novo" simples.
 // --mesmo simula o clique em "É o mesmo" em todas as possíveis duplicatas.
+// No fim mostra, por colisão ("No banco"), os campos que o UPDATE mudaria (patchColisao) e o
+// resumo que a tela final daria confirmando tudo como está.
 import fs from 'node:fs'
 import pg from 'pg'
 import * as XLSX from 'xlsx'
 import { parseItauXLS } from '../src/lib/parsers/itauFatura.js'
 import { detectInstallment, detectParcela } from '../src/lib/installments.js'
-import { inferirSerieParcela } from '../src/lib/parcelas.js'
-import { resolverLinhasRevisao, projetarTotalFatura, fmtFatura, totalParcelasDoTx, numeroParcelaDoTx } from '../src/lib/revisaoImportacao.js'
+import { inferirSerieParcela, installmentSystemDate } from '../src/lib/parcelas.js'
+import {
+  resolverLinhasRevisao, projetarTotalFatura, fmtFatura, totalParcelasDoTx, numeroParcelaDoTx,
+  linhasAImportar, patchColisao, camposAlteradosColisao, textoResumoImportacao,
+} from '../src/lib/revisaoImportacao.js'
 
 const [, , file, accountId, faturaArg, ...flags] = process.argv
 if (!file || !accountId) {
@@ -35,8 +40,10 @@ const db = new pg.Client({ connectionString: process.env.NEON_DATABASE_URL })
 await db.connect()
 const { rows: accRows } = await db.query('SELECT id, name, closing_day FROM contas WHERE id = $1', [accountId])
 const { rows: txRows } = await db.query('SELECT * FROM lancamentos WHERE account_id = $1', [accountId])
+const { rows: cfgRows } = await db.query('SELECT financial_month_start_day FROM configuracoes LIMIT 1')
 await db.end()
 const closingDay = accRows[0]?.closing_day || 14
+const financialStartDay = cfgRows[0]?.financial_month_start_day || 1
 const transactions = txRows.map(r => ({
   id: r.id, type: r.type, accountId: r.account_id, amount: Number(r.amount),
   date: ymd(r.date), dateCartao: ymd(r.date_cartao), description: r.description || '',
@@ -44,7 +51,7 @@ const transactions = txRows.map(r => ({
   faturaMonthYear: r.fatura_month_year || null, installmentNum: r.installment_num ?? null,
   installmentTotal: r.installment_total ?? null, installmentOccurrence: r.installment_occurrence ?? null,
   serieId: r.serie_id || null, categoryId: r.category_id || '', grupoGerencial: r.grupo_gerencial || null,
-  reservaFuncaoId: r.reserva_funcao_id || null,
+  reservaFuncaoId: r.reserva_funcao_id || null, faturaRef: r.fatura_ref || null,
 }))
 
 // Mesma resolução de parcela do handleFile (ImportPanel) para o ramo Itaú.
@@ -102,3 +109,26 @@ if (proj.itens.length) {
   const soma = Math.round(proj.itens.reduce((s, i) => s + i.valor, 0) * 100) / 100
   console.log(`    ${brl(soma).padStart(12)}  (soma)`)
 }
+
+// Colisões: o que o UPDATE gravaria. Data de sistema do ramo Itaú (applyReferenceFatura +
+// computeSaveDate do ImportPanel): parcela > 1 → dia financeiro do mês anterior à fatura;
+// parcela 1 / à vista → date_cartao.
+const saveDateItau = (r) => {
+  const num = r._installment?.num || 1
+  return num > 1 ? installmentSystemDate(fatura, num, r._dateCartao, financialStartDay) : r._dateCartao
+}
+const faturaRefDe = (my) => { const [y, m] = (my || '').split('-'); return y && m ? `${m}/${y}` : null }
+const colisoes = resolved.filter(r => r._collisionTx)
+let atualizados = 0
+if (colisoes.length) console.log('\n  Colisões — campos que o UPDATE mudaria:')
+for (const r of colisoes) {
+  const tx = r._collisionTx
+  const patch = patchColisao(r, tx, { saveDate: saveDateItau(r), faturaRef: faturaRefDe(r.faturaMonthYear), serieId: tx.serieId || r._serieId })
+  const muda = camposAlteradosColisao(patch, tx, r)
+  if (muda.length) atualizados++
+  console.log(`    ${r.description.padEnd(40)} ${muda.length ? muda.map(k => `${k}: ${JSON.stringify(tx[k] ?? null)} → ${JSON.stringify(patch[k])}`).join('; ') : 'idêntico — nada a gravar'}`)
+}
+const existiam = resolved.filter(r => r._isDuplicate).length + (colisoes.length - atualizados)
+const novos = linhasAImportar(resolved).length
+console.log(`\n  Botão: Confirmar (${novos}${atualizados > 0 ? ` +${atualizados}↻` : ''})`)
+console.log(`  Tela final: ${textoResumoImportacao({ novos, existiam, atualizados })}\n`)

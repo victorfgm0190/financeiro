@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { resolverLinhasRevisao, projetarTotalFatura, compararNaFatura } from './revisaoImportacao'
+import {
+  resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao,
+} from './revisaoImportacao'
 
 const CARTAO = 'acc_card'
 const tx = (o) => ({ accountId: CARTAO, accountType: 'credit', type: 'expense', ...o })
@@ -155,5 +157,50 @@ describe('projetarTotalFatura', () => {
     expect(p.projetado).toBe(32)
     expect(p.itens).toEqual([expect.objectContaining({ tipo: 'so_no_banco', valor: -12 })])
     expect(p.itens.reduce((s, i) => s + i.valor, 0)).toBeCloseTo(p.diferenca, 2)
+  })
+})
+
+describe('colisão — só grava quando o banco muda', () => {
+  const banco = tx({
+    id: 't1', description: 'Luisinho Manutenc 9/10', date: '2026-10-01', dateCartao: '2026-03-02',
+    installmentNum: 9, installmentTotal: 10, serieId: 'ser_1', categoryId: 'cat_a', grupoGerencial: 'grp_1',
+    faturaMonthYear: '2026-11', faturaRef: '11/2026', reservaFuncaoId: null,
+  })
+  const linhaIgual = linha({
+    description: 'Luisinho Manutenc 9/10', _dateCartao: '2026-03-02', _installment: { num: 9, total: 10 },
+    categoryId: 'cat_a', grupoGerencial: 'grp_1', faturaMonthYear: '2026-11', _reservaFuncaoId: null,
+  })
+  const opts = { saveDate: '2026-10-01', faturaRef: '11/2026', serieId: 'ser_1' }
+
+  it('linha idêntica ao banco: nenhum campo muda', () => {
+    expect(camposAlteradosColisao(patchColisao(linhaIgual, banco, opts), banco, linhaIgual)).toEqual([])
+  })
+
+  it('vazio, null e undefined contam como iguais', () => {
+    const b = { ...banco, reservaFuncaoId: undefined, categoryId: '' }
+    const l = { ...linhaIgual, categoryId: '' }
+    expect(camposAlteradosColisao(patchColisao(l, b, opts), b, l)).toEqual([])
+  })
+
+  it('nome ou parcela diferentes são atualização', () => {
+    const l = { ...linhaIgual, description: 'Luisinho Manutencao 9/10' }
+    expect(camposAlteradosColisao(patchColisao(l, banco, opts), banco, l)).toEqual(['description'])
+    const b = { ...banco, installmentNum: 8 }
+    expect(camposAlteradosColisao(patchColisao(linhaIgual, b, opts), b, linhaIgual)).toEqual(['installmentNum'])
+  })
+
+  it('rateio na linha conta como mudança', () => {
+    const l = { ...linhaIgual, _rateios: [{ categoryId: 'x', amount: 1 }] }
+    expect(camposAlteradosColisao(patchColisao(l, banco, opts), banco, l)).toEqual(['rateios'])
+  })
+})
+
+describe('textoResumoImportacao', () => {
+  it('sem novos nem atualizados: fatura já estava no banco', () => {
+    expect(textoResumoImportacao({ novos: 0, existiam: 4, atualizados: 0 })).toBe('Nenhum lançamento novo — a fatura já estava no banco.')
+  })
+  it('números reais com plural', () => {
+    expect(textoResumoImportacao({ novos: 1, existiam: 3, atualizados: 2 })).toBe('1 novo importado · 3 já existiam · 2 atualizados')
+    expect(textoResumoImportacao({ salvos: 1 })).toBe('1 lançamento salvo.')
   })
 })

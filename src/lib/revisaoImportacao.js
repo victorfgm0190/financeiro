@@ -252,6 +252,48 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
   return out
 }
 
+// Campos que a confirmação grava no lançamento do banco quando a linha colide com ele (UPDATE em
+// vez de INSERT). `amount` fica de fora de propósito: o valor do banco é o confirmado.
+export function patchColisao(row, tx, { saveDate, faturaRef, serieId }) {
+  return {
+    date: saveDate,
+    dateCartao: row._dateCartao || tx.dateCartao || null,
+    // Regra A: a descrição real é a do extrato (a gerada antes podia ser "Parc2 11/12").
+    description: row.description || tx.description,
+    // "É o mesmo": a série manual podia estar com a numeração adiantada (Aramis 4/4 × 3/4 do
+    // extrato) — a parcela do arquivo prevalece. Na colisão por chave os números já são iguais.
+    installmentNum: row._installment?.num ?? tx.installmentNum ?? null,
+    installmentTotal: row._installment?.total ?? tx.installmentTotal ?? null,
+    serieId: serieId || tx.serieId || null,
+    categoryId: row.categoryId || null,
+    grupoGerencial: row.grupoGerencial || null,
+    faturaMonthYear: row.faturaMonthYear || null,
+    faturaRef: faturaRef ?? null,
+    reservaFuncaoId: row._reservaFuncaoId || null,
+  }
+}
+
+// Campos do patch que MUDAM o lançamento do banco ('' / null / undefined contam como vazio e
+// números comparam por valor). Lista vazia = o banco já está igual ao arquivo → nada a gravar.
+// Rateio novo na linha também conta como mudança.
+export function camposAlteradosColisao(patch, tx, row = null) {
+  const vazio = (v) => v == null || v === ''
+  const igual = (a, b) => (vazio(a) && vazio(b))
+    || (typeof a === 'number' || typeof b === 'number' ? Number(a) === Number(b) : a === b)
+  const out = Object.keys(patch).filter(k => !igual(patch[k], tx[k]))
+  if (row?._rateios?.length > 0) out.push('rateios')
+  return out
+}
+
+// Texto do resumo final da importação de fatura. `r` = { novos, existiam, atualizados } ou, na
+// reedição, { salvos }.
+export function textoResumoImportacao(r) {
+  const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
+  if (r.salvos != null) return `${pl(r.salvos, 'lançamento salvo', 'lançamentos salvos')}.`
+  if (r.novos === 0 && r.atualizados === 0) return 'Nenhum lançamento novo — a fatura já estava no banco.'
+  return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}`
+}
+
 // Linhas que a confirmação INSERE: selecionadas, sem "já existe" e sem colisão (que vira UPDATE).
 export function linhasAImportar(rows) {
   return (rows || []).filter(r => r.selected && !r._isDuplicate && !r._collisionTx)
