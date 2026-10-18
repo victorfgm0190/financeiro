@@ -74,3 +74,21 @@ export async function criarDatabase(nome, { env = process.env, fetch: f, dormir,
   await esperarOperacoes(env, json.operations, { fetch: f, dormir, esperaMs, limiteMs })
   return { criado: true }
 }
+
+// SÓ databases de cliente: trava independente de quem chama (nunca o neondb nem o central).
+export const RE_DATABASE_CLIENTE = /^cliente_[a-z0-9]+$/
+const PROTEGIDOS = ['neondb', 'finup_central', 'postgres']
+
+// Exclui o database do cliente e espera a operação. Já não existe → { excluido: false }.
+export async function excluirDatabase(nome, { env = process.env, fetch: f, dormir, esperaMs, limiteMs, protegidos = [] } = {}) {
+  if (!RE_DATABASE_CLIENTE.test(String(nome)) || [...PROTEGIDOS, ...protegidos].includes(nome)) {
+    throw new ErroNeon(`Database "${nome}" não pode ser excluído por aqui`, 400)
+  }
+  const { projeto, branch } = config(env)
+  if (!(await databaseExiste(nome, { env, fetch: f }))) return { excluido: false }
+  const { status, json } = await chamar(env, 'DELETE', `/projects/${projeto}/branches/${branch}/databases/${encodeURIComponent(nome)}`, null, { fetch: f })
+  if (status === 404) return { excluido: false }
+  if (status !== 200 && status !== 201 && status !== 202) throw new ErroNeon(`API do Neon (${status}) ao excluir o database: ${json.message || 'erro'}`)
+  await esperarOperacoes(env, json.operations, { fetch: f, dormir, esperaMs, limiteMs })
+  return { excluido: true }
+}

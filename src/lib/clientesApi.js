@@ -38,6 +38,11 @@ export const editarCliente = (dados) => chamar('/api/clientes', { method: 'PATCH
 // ({ passos: [{ id, rotulo, feito }], concluido, mensagem? }); a tela chama até concluir.
 export const aprovarCliente = (id) => chamar('/api/clientes?acao=aprovar', { method: 'POST', body: { id } })
 export const andamentoProvisionamento = (id) => chamar(`/api/clientes?${qs({ acao: 'provisionamento', id })}`)
+// Tentativas de "Esqueci minha senha" do ambiente do cliente e o "Liberar agora".
+export const tentativasSenha = (id) => chamar(`/api/clientes?${qs({ acao: 'tentativas-senha', id })}`)
+export const liberarSenha = (id) => chamar('/api/clientes?acao=liberar-senha', { method: 'POST', body: { id } })
+// Exclusão definitiva (só cancelado ou nunca aprovado; `confirmacao` = a sigla exata).
+export const excluirClienteApi = (id, confirmacao) => chamar('/api/clientes?acao=excluir', { method: 'POST', body: { id, confirmacao } })
 export const reenviarConviteCliente = (id) => chamar('/api/clientes?acao=reenviar-convite', { method: 'POST', body: { id } })
 export const mudarStatusCliente = (id, acao, motivo) =>
   chamar('/api/clientes?acao=status', { method: 'POST', body: { id, acao, motivo } }).then(r => r.cliente)

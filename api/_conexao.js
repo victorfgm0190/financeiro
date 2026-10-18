@@ -64,6 +64,13 @@ export function poolDoDatabase(nome) {
   return p
 }
 
+// Fecha e esquece o pool de um database (antes de excluí-lo no Neon: conexão aberta impede o DROP).
+export async function fecharPoolDoDatabase(nome) {
+  const p = pools.get(nome)
+  pools.delete(nome)
+  if (p?.end) await p.end().catch(() => {})
+}
+
 export const poolCentral = () => poolDoDatabase(nomeDatabaseCentral())
 
 // Roda `fn` com o ambiente `amb` ({ id, sigla, database_name, status }) como contexto.

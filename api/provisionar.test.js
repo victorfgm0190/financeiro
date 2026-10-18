@@ -33,7 +33,8 @@ const SQL_BANCO_NOVO = ARQ_ESTRUTURA + '\n' + ARQ_MIGRACOES.map(m => m.sql).join
 
 const bancos = {}
 const qde = (nome) => async (sql, params = []) => (await bancos[nome].query(sql, params)).rows
-let clienteCriado = false
+// Databases que "existem" no Neon simulado (o vm e o central sempre existem; os de cliente só depois do POST).
+const noNeon = new Set()
 
 // Foto de um banco: contagem + md5 do conteúdo de cada tabela.
 async function foto(nome) {
@@ -63,12 +64,12 @@ beforeAll(async () => {
     INSERT INTO reservas_funcoes (id, number, name) VALUES ('g2', '2', 'PharmaLog'), ('g3', '3', 'Contas Anuais');
     INSERT INTO account_mapping (grupo, nome_finup, nome_dindin) VALUES ('Itau Cofrinhos', 'Pharma', '5. 05 PHARMA LOG');
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
-  // Banco do cliente: só "existe" depois que a API do Neon (simulada) o cria.
-  bancos.cliente_mm = new PGlite()
+  // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
+  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww']) bancos[nome] = new PGlite()
 }, 120_000)
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
-const neon = { chamadas: [], falharCriacao: 0 }
+const neon = { chamadas: [], falharCriacao: 0, falharExclusao: 0 }
 let emails = []
 let falharEmail = 0
 const resp = (status, json) => ({ ok: status < 300, status, json: async () => json })
@@ -80,14 +81,23 @@ async function fetchFalso(url, init = {}) {
     return resp(200, { id: `re-${emails.length}` })
   }
   neon.chamadas.push(`${metodo} ${url.replace('https://console.neon.tech/api/v2', '')}`)
-  if (metodo === 'GET' && url.endsWith('/databases/cliente_mm')) return clienteCriado ? resp(200, { database: { name: 'cliente_mm' } }) : resp(404, { message: 'not found' })
+  const db = decodeURIComponent(url.match(/\/databases\/([^/?]+)$/)?.[1] || '')
+  if (metodo === 'GET' && db) return noNeon.has(db) ? resp(200, { database: { name: db } }) : resp(404, { message: 'not found' })
   if (metodo === 'POST' && url.endsWith('/databases')) {
     if (neon.falharCriacao > 0) { neon.falharCriacao--; return resp(500, { message: 'instabilidade simulada' }) }
-    expect(JSON.parse(init.body)).toEqual({ database: { name: 'cliente_mm', owner_name: 'neondb_owner' } })
-    clienteCriado = true
-    return resp(201, { database: { name: 'cliente_mm' }, operations: [{ id: 'op-1', action: 'create_database', status: 'running' }] })
+    const { database } = JSON.parse(init.body)
+    expect(database.owner_name).toBe('neondb_owner')
+    expect(database.name).toMatch(/^cliente_[a-z0-9]+$/)
+    noNeon.add(database.name)
+    return resp(201, { database, operations: [{ id: 'op-1', action: 'create_database', status: 'running' }] })
   }
-  if (metodo === 'GET' && url.endsWith('/operations/op-1')) return resp(200, { operation: { id: 'op-1', status: 'finished' } })
+  if (metodo === 'DELETE' && db) {
+    if (neon.falharExclusao > 0) { neon.falharExclusao--; return resp(500, { message: 'falha simulada ao excluir' }) }
+    if (!noNeon.has(db)) return resp(404, { message: 'not found' })
+    noNeon.delete(db)
+    return resp(200, { database: { name: db }, operations: [{ id: 'op-2', action: 'delete_database', status: 'running' }] })
+  }
+  if (metodo === 'GET' && /\/operations\/op-\d$/.test(url)) return resp(200, { operation: { status: 'finished' } })
   return resp(404, { message: `rota simulada inexistente: ${metodo} ${url}` })
 }
 
@@ -99,9 +109,10 @@ beforeEach(() => {
     NEON_API_KEY: 'neon-chave', NEON_PROJECT_ID: 'proj-1', NEON_BRANCH_ID: 'br-1',
   })
   delete process.env.ALLOW_ENV_ADMIN
+  const doNeon = (nome) => () => { if (!noNeon.has(nome)) throw new Error(`database ${nome} não existe no Neon`); return bancos[nome] }
   usarBancos({
     central: bancos.central, banco_vm: bancos.banco_vm,
-    cliente_mm: () => { if (!clienteCriado) throw new Error('database cliente_mm ainda não existe'); return bancos.cliente_mm },
+    cliente_mm: doNeon('cliente_mm'), cliente_zz: doNeon('cliente_zz'), cliente_ww: doNeon('cliente_ww'),
   })
   vi.stubGlobal('fetch', vi.fn(fetchFalso))
   vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -353,5 +364,202 @@ describe('rodapé do kit', () => {
   it('PF → nome; PJ → empresa', () => {
     expect(rodapeDoCliente({ tipo_pessoa: 'PF', nome: 'Ana Lima', empresa: 'X' })).toBe('Ana Lima')
     expect(rodapeDoCliente({ tipo_pessoa: 'PJ', nome: 'Ana Lima', empresa: 'Lima Contabilidade' })).toBe('Lima Contabilidade')
+  })
+})
+
+// ─── Quadro "Tentativas de senha" + "Liberar agora" ───────────────────────────────────────────────
+describe('tentativas de senha (Controle de Clientes)', () => {
+  const idDe = async (sigla) => (await qde('central')('SELECT id FROM plataforma_clientes WHERE sigla = $1', [sigla]))[0].id
+  const esqueci = (login) => chamar(senhaHandler, { url: '/api/senha?acao=esqueci', host: MM, body: { login } })
+
+  it('mostra login digitado, resultado, IP mascarado e o bloqueio; "Liberar agora" zera só este ambiente', async () => {
+    await qde('central')('DELETE FROM senha_pedidos')
+    const id = await idDe('mm')
+    await esqueci('ninguem')
+    for (let i = 0; i < 4; i++) await esqueci('admin') // 3 enviados + 1 bloqueado por usuário
+    // pedido de OUTRO ambiente (vm) não pode ser apagado pelo "liberar" do mm
+    await chamar(senhaHandler, { url: '/api/senha?acao=esqueci', body: { login: 'vmoreira', ambiente: 'vm' } })
+    const totalAntes = (await qde('central')('SELECT count(*)::int AS n FROM senha_pedidos'))[0].n
+
+    const r = await clientes({ method: 'GET', url: `/api/clientes?acao=tentativas-senha&id=${id}` })
+    expect(r.statusCode).toBe(200)
+    expect(r.body.pedidos).toHaveLength(5)
+    expect(r.body.pedidos.map(p => p.resultado).sort()).toEqual(['bloqueado_usuario', 'enviado', 'enviado', 'enviado', 'nao_encontrado'])
+    expect(r.body.pedidos.map(p => p.login)).toContain('ninguem')
+    for (const p of r.body.pedidos) expect(p.ip).toBe('10.1.x.x')
+    expect(JSON.stringify(r.body)).not.toContain('10.1.1.1')
+    expect(r.body.bloqueios).toEqual([expect.objectContaining({ tipo: 'usuario', alvo: 'admin' })])
+    expect(new Date(r.body.liberadoEm).getTime()).toBeGreaterThan(Date.now() + 50 * 60 * 1000)
+    expect(r.body.limites).toEqual({ porIpPorHora: 10, porUsuarioPorHora: 3 })
+
+    const lib = await clientes({ url: '/api/clientes?acao=liberar-senha', body: { id } })
+    expect(lib.statusCode).toBe(200)
+    // mm: 5 linhas de IP + 4 do usuário admin; o pedido do vm (usuário vmoreira existe lá) deixa 2 linhas que ficam
+    expect(lib.body.apagados).toBe(9)
+    expect(totalAntes).toBe(11)
+    expect((await qde('central')('SELECT count(*)::int AS n FROM senha_pedidos'))[0].n).toBe(2)
+    const depois = await clientes({ method: 'GET', url: `/api/clientes?acao=tentativas-senha&id=${id}` })
+    expect(depois.body).toMatchObject({ pedidos: [], bloqueios: [], liberadoEm: null })
+    const hist = await qde('central')("SELECT detalhe FROM plataforma_historico WHERE cliente_id = $1 AND evento = 'senha_liberada'", [id])
+    expect(hist[0].detalhe).toMatch(/^Limite de senha liberado por vmoreira/)
+    // de novo pode pedir
+    emails = []
+    await esqueci('admin')
+    expect(emails).toHaveLength(1)
+  })
+})
+
+// ─── Excluir cliente ────────────────────────────────────────────────────────────────────────────
+describe('excluir cliente', () => {
+  const excluir = (id, confirmacao) => clientes({ url: '/api/clientes?acao=excluir', body: { id, confirmacao } })
+  const status = (id, acao) => clientes({ url: '/api/clientes?acao=status', body: { id, acao } })
+  const novo = async (sigla, nome = `Cliente ${sigla}`) => {
+    const r = await clientes({ url: '/api/clientes', body: { nome, email: `${sigla}@exemplo.com`, sigla } })
+    expect(r.statusCode).toBe(200)
+    return r.body.cliente.id
+  }
+  const provisionar = async (id) => {
+    for (let i = 0; i < 10; i++) {
+      const r = await clientes({ url: '/api/clientes?acao=aprovar', body: { id } })
+      expect(r.statusCode).toBe(200)
+      if (r.body.concluido) return
+    }
+    throw new Error('não concluiu')
+  }
+  const sobrou = async (id, sigla) => {
+    const q = qde('central')
+    const n = async (sql, p) => (await q(`SELECT count(*)::int AS n FROM ${sql}`, p))[0].n
+    return {
+      cliente: await n('plataforma_clientes WHERE id = $1 OR sigla = $2', [id, sigla]),
+      historico: await n('plataforma_historico WHERE cliente_id = $1', [id]),
+      ambiente: await n('ambientes WHERE cliente_id = $1 OR sigla = $2', [id, sigla]),
+      handoff: await n("login_handoff h WHERE NOT EXISTS (SELECT 1 FROM ambientes a WHERE a.id = h.ambiente_id)"),
+      pedidos: await n("senha_pedidos WHERE ambiente_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ambientes a WHERE a.id = senha_pedidos.ambiente_id)"),
+    }
+  }
+
+  it('fluxo completo: provisiona zz, cancela, exclui → database some do Neon, nada sobra no central, auditoria, sigla livre', async () => {
+    const fotoVm = await foto('banco_vm')
+    const id = await novo('zz', 'Zélia Zanetti')
+    await provisionar(id)
+    expect(noNeon.has('cliente_zz')).toBe(true)
+    const [amb] = await qde('central')("SELECT id FROM ambientes WHERE sigla = 'zz'")
+    // rastros no central: pedido de senha e código de passagem do ambiente zz
+    await chamar(senhaHandler, { url: '/api/senha?acao=esqueci', host: 'zz.finup.app.br', body: { login: 'admin' } })
+    await qde('central')("INSERT INTO login_handoff (codigo_hash, ambiente_id, payload, expira_em) VALUES ('h-zz', $1, '{}', now())", [amb.id])
+
+    // ativo → recusado (precisa cancelar antes); a tela recebe exclusao.pode = false
+    let det = await clientes({ method: 'GET', url: `/api/clientes?id=${id}` })
+    expect(det.body.exclusao).toEqual({ pode: false, motivo: 'Cancele o cliente antes de excluir' })
+    let r = await excluir(id, 'zz')
+    expect(r.statusCode).toBe(409)
+    expect(noNeon.has('cliente_zz')).toBe(true)
+
+    expect((await status(id, 'cancelar')).body.cliente.status).toBe('cancelado')
+    det = await clientes({ method: 'GET', url: `/api/clientes?id=${id}` })
+    expect(det.body.exclusao).toEqual({ pode: true })
+    expect(det.body.ambiente).toMatchObject({ database_name: 'cliente_zz', status: 'cancelado' })
+
+    // sigla digitada errada → recusa, nada apagado
+    r = await excluir(id, 'zx')
+    expect(r.statusCode).toBe(400)
+    expect(r.body.error).toBe('A sigla digitada não confere')
+    expect(noNeon.has('cliente_zz')).toBe(true)
+    expect((await sobrou(id, 'zz')).cliente).toBe(1)
+
+    const deletesAntes = neon.chamadas.filter(c => c.startsWith('DELETE')).length
+    r = await excluir(id, ' ZZ ')
+    expect(r.statusCode).toBe(200)
+    expect(r.body).toMatchObject({ ok: true, sigla: 'zz' })
+    // o database sumiu do Neon (um DELETE, só dele) e não abre mais
+    const deletes = neon.chamadas.filter(c => c.startsWith('DELETE')).slice(deletesAntes)
+    expect(deletes).toEqual(['DELETE /projects/proj-1/branches/br-1/databases/cliente_zz'])
+    expect(noNeon.has('cliente_zz')).toBe(false)
+    // nada sobrou no central
+    expect(await sobrou(id, 'zz')).toEqual({ cliente: 0, historico: 0, ambiente: 0, handoff: 0, pedidos: 0 })
+    // auditoria sem senha nem token
+    const aud = await qde('central')("SELECT * FROM plataforma_exclusoes WHERE sigla = 'zz'")
+    expect(aud).toHaveLength(1)
+    expect(aud[0]).toMatchObject({ cliente_id: id, nome: 'Zélia Zanetti', database_name: 'cliente_zz', autor: 'vmoreira' })
+    expect(Object.keys(aud[0]).some(k => /senha|token|hash/.test(k))).toBe(false)
+    // sigla livre para outro cliente
+    const outro = await clientes({ url: '/api/clientes', body: { nome: 'Outro ZZ', email: 'outro@exemplo.com', sigla: 'zz' } })
+    expect(outro.statusCode).toBe(200)
+    // o vm não foi tocado
+    expect(await foto('banco_vm')).toEqual(fotoVm)
+  }, 120_000)
+
+  it('falha no Neon no meio → erro + histórico; "excluir" de novo continua sem repetir nada', async () => {
+    const id = await novo('ww')
+    await provisionar(id)
+    await status(id, 'cancelar')
+    neon.falharExclusao = 1
+    let r = await excluir(id, 'ww')
+    expect(r.statusCode).toBe(502)
+    expect((await qde('central')("SELECT evento FROM plataforma_historico WHERE cliente_id = $1 AND evento = 'excl_falhou'", [id]))).toHaveLength(1)
+    expect(noNeon.has('cliente_ww')).toBe(true)
+    r = await excluir(id, 'ww')
+    expect(r.statusCode).toBe(200)
+    expect(noNeon.has('cliente_ww')).toBe(false)
+    expect(await sobrou(id, 'ww')).toEqual({ cliente: 0, historico: 0, ambiente: 0, handoff: 0, pedidos: 0 })
+  }, 120_000)
+
+  it('nunca aprovado (só cadastro): exclui sem chamar o Neon', async () => {
+    const id = await novo('yy')
+    const antes = neon.chamadas.length
+    const r = await excluir(id, 'yy')
+    expect(r.statusCode).toBe(200)
+    expect(neon.chamadas.length).toBe(antes)
+    expect(await sobrou(id, 'yy')).toMatchObject({ cliente: 0, historico: 0 })
+  })
+
+  it('travas: vm e siglas reservadas, database que não é de cliente, status ativo, sigla errada', async () => {
+    const q = qde('central')
+    const antes = neon.chamadas.length
+    // vm (e reservadas): cadastro com a sigla vm direto no banco (o formulário nem aceita)
+    await q("INSERT INTO plataforma_clientes (id, nome, email, sigla, status) VALUES ('c-vm', 'Victor', 'v@v.com', 'vm', 'cancelado'), ('c-api', 'Api', 'a@a.com', 'api', 'cancelado')")
+    for (const [id, sigla] of [['c-vm', 'vm'], ['c-api', 'api']]) {
+      const r = await excluir(id, sigla)
+      expect(r.statusCode).toBe(409)
+      expect(r.body.error).toMatch(/reservada/)
+    }
+    expect((await q("SELECT status FROM ambientes WHERE sigla = 'vm'"))[0].status).toBe('ativo')
+    // database que não casa com cliente_<sigla> (neondb, finup_central, de outra sigla)
+    for (const [i, db] of ['finup_central', 'cliente_outro', 'neondbx', 'postgres'].entries()) {
+      const sigla = `tr${i}`
+      await q("INSERT INTO plataforma_clientes (id, nome, email, sigla, status) VALUES ($1, 'Trava', 't@t.com', $2, 'cancelado')", [`c-${sigla}`, sigla])
+      await q("INSERT INTO ambientes (sigla, nome, database_name, status, cliente_id) VALUES ($1, 'Trava', $2, 'cancelado', $3)", [sigla, db, `c-${sigla}`])
+      const r = await excluir(`c-${sigla}`, sigla)
+      expect(r.statusCode).toBe(409)
+      expect(r.body.error).toMatch(/não é um banco de cliente/)
+    }
+    // ativo (o mm) → precisa cancelar antes; sigla errada nunca passa
+    const mm = (await q("SELECT id FROM plataforma_clientes WHERE sigla = 'mm'"))[0].id
+    expect((await excluir(mm, 'mm')).statusCode).toBe(409)
+    expect(neon.chamadas.length).toBe(antes) // nada pedido ao Neon em nenhuma recusa
+    expect(noNeon.has('cliente_mm')).toBe(true)
+  })
+
+  it('a API do Neon recusa apagar neondb, finup_central ou nome fora de cliente_<sigla> (sem chamar o Neon)', async () => {
+    const { excluirDatabase } = await import('./_neon.js')
+    const antes = neon.chamadas.length
+    for (const nome of ['neondb', 'finup_central', 'postgres', 'cliente_', 'cliente_a;drop', 'Cliente_aa', 'outro_aa']) {
+      await expect(excluirDatabase(nome)).rejects.toThrow(/não pode ser excluído/)
+    }
+    await expect(excluirDatabase('cliente_xx', { protegidos: ['cliente_xx'] })).rejects.toThrow(/não pode ser excluído/)
+    expect(neon.chamadas.length).toBe(antes)
+  })
+
+  it('o central nunca pode ser o neondb (as plataforma_* antigas de lá não são tocadas)', async () => {
+    const { situacaoExclusao } = await import('./_excluirCliente.js')
+    const c = { id: 'c1', sigla: 'aa', status: 'cancelado' }
+    expect(situacaoExclusao(c, null, { central: 'neondb' })).toMatchObject({ pode: false })
+    expect(situacaoExclusao(c, null, { central: 'finup_central' })).toEqual({ pode: true })
+    const amb = { cliente_id: 'c1', sigla: 'aa', database_name: 'cliente_aa', status: 'cancelado' }
+    expect(situacaoExclusao(c, amb, { central: 'finup_central' })).toEqual({ pode: true })
+    expect(situacaoExclusao({ ...c, status: 'ativo' }, { ...amb, status: 'ativo' }, { central: 'finup_central' })).toMatchObject({ pode: false })
+    for (const db of ['finup_central', 'neondb', 'cliente_bb', 'postgres']) {
+      expect(situacaoExclusao(c, { ...amb, database_name: db }, { central: 'finup_central' })).toMatchObject({ pode: false })
+    }
   })
 })

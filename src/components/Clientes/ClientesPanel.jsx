@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink } from 'lucide-react'
+import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink, Unlock, Trash2 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
-  andamentoProvisionamento, reenviarConviteCliente,
+  andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi,
 } from '../../lib/clientesApi'
 import {
   STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
@@ -51,7 +51,8 @@ const ROTULO_EVENTO = {
   prov_estrutura: 'Provisionamento · estrutura', prov_kit: 'Provisionamento · kit básico',
   prov_admin: 'Provisionamento · admin', prov_convite: 'Provisionamento · convite',
   prov_ativar: 'Provisionamento · ambiente ativo', prov_falhou: 'Falha no provisionamento',
-  convite_reenviado: 'Convite reenviado',
+  convite_reenviado: 'Convite reenviado', senha_liberada: 'Limite de senha liberado',
+  excl_database: 'Exclusão · banco de dados', excl_falhou: 'Falha na exclusão',
 }
 
 function StatusBadge({ status }) {
@@ -176,11 +177,129 @@ function Info({ label, valor }) {
   )
 }
 
-function DetalheCliente({ id, onMudou, onProvisionar, onToast }) {
+const horaBrasilia = (v) => new Date(v).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })
+const ROTULO_RESULTADO = {
+  enviado: 'Enviado', nao_encontrado: 'Login não encontrado', bloqueado_ip: 'Bloqueado (limite por IP)',
+  bloqueado_usuario: 'Bloqueado (limite por usuário)', falha_envio: 'Falha no envio do e-mail', em_andamento: 'Em andamento',
+}
+const COR_RESULTADO = { enviado: 'text-receita', bloqueado_ip: 'text-perigo', bloqueado_usuario: 'text-perigo', falha_envio: 'text-perigo' }
+
+// Quadro "Tentativas de senha" (pedidos de "Esqueci minha senha" da última hora neste ambiente).
+// IP mascarado; nunca token. "Liberar agora" zera só os registros deste ambiente.
+function TentativasSenha({ id, onMudou, onToast }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState('')
+  const [liberando, setLiberando] = useState(false)
+  const carregar = useCallback(() => tentativasSenha(id).then(setDados).catch(e => setErro(e.message)), [id])
+  useEffect(() => { carregar() }, [carregar])
+  const liberar = async () => {
+    if (!window.confirm('Zerar o limite de tentativas de senha deste ambiente?')) return
+    setLiberando(true)
+    try {
+      const r = await liberarSenha(id)
+      onToast({ message: `Limite liberado (${r.apagados} registro${r.apagados === 1 ? '' : 's'} apagado${r.apagados === 1 ? '' : 's'})` })
+      await carregar()
+      onMudou()
+    } catch (e) {
+      onToast({ message: `Falha ao liberar: ${e.message}`, variant: 'error' })
+    } finally {
+      setLiberando(false)
+    }
+  }
+  if (erro) return <p className="text-xs text-perigo">{erro}</p>
+  if (!dados || dados.semAmbiente) return null
+  return (
+    <div className="border border-borda rounded-lg p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-texto-1">Tentativas de senha</h3>
+        <span className="text-[11px] text-texto-3">limite: {dados.limites.porIpPorHora}/h por IP · {dados.limites.porUsuarioPorHora}/h por usuário</span>
+        <button className="btn-secondary ml-auto inline-flex items-center gap-1.5 !py-1 text-xs" onClick={liberar} disabled={liberando}>
+          <Unlock size={12} /> Liberar agora
+        </button>
+      </div>
+      {dados.liberadoEm ? (
+        <p className="text-xs text-perigo">Pode tentar de novo a partir de {horaBrasilia(dados.liberadoEm)}
+          {dados.bloqueios.length > 0 && <span className="text-texto-3"> ({dados.bloqueios.map(b => `${b.tipo === 'ip' ? 'IP' : 'usuário'} ${b.alvo} até ${horaBrasilia(b.ate)}`).join(' · ')})</span>}
+        </p>
+      ) : (
+        <p className="text-xs text-receita">Liberado</p>
+      )}
+      {dados.pedidos.length === 0 ? (
+        <p className="text-xs text-texto-3">Nenhum pedido na última hora.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-texto-3 text-left"><th className="font-medium py-1 pr-3">Horário</th><th className="font-medium py-1 pr-3">Login digitado</th><th className="font-medium py-1 pr-3">Resultado</th><th className="font-medium py-1">IP</th></tr>
+            </thead>
+            <tbody>
+              {dados.pedidos.map((p, i) => (
+                <tr key={i} className="border-t border-borda/60">
+                  <td className="py-1 pr-3 text-texto-2 whitespace-nowrap">{horaBrasilia(p.quando)}</td>
+                  <td className="py-1 pr-3 text-texto-1 break-all">{p.login || '—'}</td>
+                  <td className={`py-1 pr-3 whitespace-nowrap ${COR_RESULTADO[p.resultado] || 'text-texto-2'}`}>{ROTULO_RESULTADO[p.resultado] || p.resultado || '—'}</td>
+                  <td className="py-1 text-texto-3 font-mono whitespace-nowrap">{p.ip}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// EXCLUIR CLIENTE: explica o que será apagado; o botão só habilita com a sigla exata digitada.
+function ExcluirClienteModal({ cliente, ambiente, onFechar, onExcluido }) {
+  const [digitado, setDigitado] = useState('')
+  const [excluindo, setExcluindo] = useState(false)
+  const [erro, setErro] = useState('')
+  const confere = digitado.trim().toLowerCase() === String(cliente.sigla || '')
+  const excluir = async () => {
+    setErro('')
+    setExcluindo(true)
+    try {
+      await excluirClienteApi(cliente.id, digitado.trim().toLowerCase())
+      onExcluido()
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setExcluindo(false)
+    }
+  }
+  return (
+    <Modal open onClose={excluindo ? () => {} : onFechar} title="Excluir cliente">
+      <div className="space-y-4 text-sm">
+        <p className="text-texto-1">Excluir <span className="font-semibold">{cliente.nome}</span> ({String(cliente.sigla).toUpperCase()}) <span className="text-perigo font-medium">de forma definitiva</span>. Será apagado:</p>
+        <ul className="list-disc pl-5 space-y-1 text-texto-2 text-xs">
+          {ambiente
+            ? <li>o banco de dados <span className="font-mono">{ambiente.database_name}</span> no Neon, com tudo o que o cliente lançou (contas, lançamentos, usuários, senhas);</li>
+            : <li>nenhum banco de dados (o cliente nunca foi aprovado);</li>}
+          <li>no banco central: o ambiente, os códigos de acesso, os registros de tentativas de senha, o histórico e o cadastro do cliente.</li>
+          <li>Fica só um registro de auditoria (sigla, nome, data e quem excluiu). A sigla fica livre para outro cliente.</li>
+        </ul>
+        <div>
+          <label className="label">Para confirmar, digite a sigla <span className="font-mono font-semibold">{String(cliente.sigla).toUpperCase()}</span></label>
+          <input className="input font-mono uppercase" value={digitado} onChange={e => setDigitado(e.target.value)} autoFocus autoComplete="off" spellCheck={false} />
+        </div>
+        {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={onFechar} disabled={excluindo}>Cancelar</button>
+          <button className="btn-danger inline-flex items-center gap-1.5" disabled={!confere || excluindo} onClick={excluir}>
+            <Trash2 size={14} /> {excluindo ? 'Excluindo…' : 'Excluir definitivamente'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido }) {
   const [dados, setDados] = useState(null)
   const [editando, setEditando] = useState(false)
   const [erro, setErro] = useState('')
   const [ocupado, setOcupado] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
 
   const carregar = useCallback(() => detalheCliente(id).then(setDados).catch(e => setErro(e.message)), [id])
   useEffect(() => { carregar() }, [carregar])
@@ -262,6 +381,22 @@ function DetalheCliente({ id, onMudou, onProvisionar, onToast }) {
         )}
       </div>
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
+
+      {dados.ambiente && <TentativasSenha id={id} onMudou={carregar} onToast={onToast} />}
+
+      {dados.exclusao?.pode ? (
+        <div className="flex justify-end">
+          <button className="btn-danger inline-flex items-center gap-1.5" disabled={ocupado} onClick={() => setExcluindo(true)}>
+            <Trash2 size={14} /> Excluir cliente
+          </button>
+        </div>
+      ) : ['ativo', 'suspenso', 'aprovado'].includes(c.status) && (
+        <p className="text-[11px] text-texto-3 text-right">Para excluir, cancele o cliente antes.</p>
+      )}
+      {excluindo && (
+        <ExcluirClienteModal cliente={c} ambiente={dados.ambiente} onFechar={() => setExcluindo(false)}
+          onExcluido={() => { setExcluindo(false); onToast({ message: `Cliente ${String(c.sigla).toUpperCase()} excluído` }); onExcluido() }} />
+      )}
 
       <div>
         <h3 className="text-sm font-semibold text-texto-1 mb-2">Histórico</h3>
@@ -451,7 +586,7 @@ export default function ClientesPanel({ onMudou = () => {} }) {
       </div>
 
       <Modal open={!!aberto} onClose={() => setAberto(null)} title="Cliente" size="lg">
-        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onProvisionar={setProvisionando} onToast={setToast} />}
+        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onProvisionar={setProvisionando} onToast={setToast} onExcluido={() => { setAberto(null); mudou() }} />}
       </Modal>
       <Modal open={novo} onClose={() => setNovo(false)} title="Novo cliente" size="lg">
         {novo && <ClienteForm onCancelar={() => setNovo(false)} onSalvo={(c) => { setNovo(false); setToast({ message: 'Cliente cadastrado' }); mudou(); setAberto(c.id) }} />}

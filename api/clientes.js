@@ -7,6 +7,8 @@ import {
   checarSigla, queryParam, statusValido,
 } from './_plataforma.js'
 import { provisionarProximoPasso, estadoProvisionamento, reenviarConvite } from './_provisionar.js'
+import { tentativasDoAmbiente, liberarLimiteDoAmbiente } from './_senhaLimite.js'
+import { excluirCliente, situacaoExclusaoDoCliente } from './_excluirCliente.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
@@ -25,6 +27,11 @@ import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 //                                cancelar/reativar também mudam ambientes.status no central (o
 //                                database do cliente NUNCA é apagado aqui)
 //   POST ?acao=reenviar-convite { id } → convite novo (48 h) + boas-vindas (cliente ativo)
+//   GET ?acao=tentativas-senha&id=x → quadro "Tentativas de senha" do ambiente (api/_senhaLimite.js)
+//   POST ?acao=liberar-senha { id } → zera o limite do "esqueci" daquele ambiente (só senha_pedidos dele)
+//   POST ?acao=excluir { id, confirmacao } → exclui o cliente (api/_excluirCliente.js): só cancelado ou
+//                                nunca aprovado, e `confirmacao` = a sigla exata
+//   POST com outra ?acao → 400 (nunca cai no "novo cliente")
 
 const CAMPOS_EDITAVEIS = ['nome', 'email', 'telefone', 'tipo_pessoa', 'documento', 'empresa', 'sigla', 'como_conheceu',
   'plano', 'valor_mensal', 'dia_vencimento', 'limite_usuarios', 'observacoes']
@@ -39,6 +46,12 @@ const TRANSICOES = {
 }
 // Status do AMBIENTE (central) em cada ação. Só mexe em ambiente que já existe; o database fica.
 const AMBIENTE_NA_ACAO = { suspender: 'suspenso', cancelar: 'cancelado', reativar: 'ativo' }
+
+// Ambiente do cliente (central), ou null.
+async function ambienteDoClienteId(id) {
+  const [amb] = await query('SELECT id, sigla, status FROM ambientes WHERE cliente_id = $1', [id])
+  return amb || null
+}
 
 const contarNovos = async (q) => (await q("SELECT count(*)::int AS n FROM plataforma_clientes WHERE status = 'pedido'"))[0]?.n || 0
 
@@ -126,12 +139,17 @@ async function handler(req, res) {
         return res.json(await checarSigla(query, queryParam(req, 'sigla'), queryParam(req, 'nome') || '', queryParam(req, 'id')))
       }
       if (acao === 'provisionamento') return res.json(await estadoProvisionamento(query, String(queryParam(req, 'id') || '')))
+      if (acao === 'tentativas-senha') {
+        const amb = await ambienteDoClienteId(String(queryParam(req, 'id') || ''))
+        return res.json(amb ? await tentativasDoAmbiente(query, amb.id) : { pedidos: [], bloqueios: [], liberadoEm: null, semAmbiente: true })
+      }
       const id = queryParam(req, 'id')
       if (id) {
         const cliente = await buscarCliente(query, id)
         if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' })
         const historico = await query('SELECT * FROM plataforma_historico WHERE cliente_id = $1 ORDER BY created_at DESC, id', [id])
-        return res.json({ cliente, historico })
+        const [ambiente] = await query('SELECT sigla, database_name, status FROM ambientes WHERE cliente_id = $1', [cliente.id])
+        return res.json({ cliente, historico, ambiente: ambiente || null, exclusao: await situacaoExclusaoDoCliente(query, cliente) })
       }
       const clientes = (await query('SELECT * FROM plataforma_clientes ORDER BY created_at DESC'))
         .map(c => ({ ...c, valor_mensal: c.valor_mensal == null ? null : Number(c.valor_mensal) }))
@@ -152,6 +170,18 @@ async function handler(req, res) {
       _limparCacheAmbientes() // suspensão/reativação vale já nesta instância (nas outras, em até 30 s)
       return res.json({ ok: true, cliente })
     }
+    if (req.method === 'POST' && acao === 'liberar-senha') {
+      const amb = await ambienteDoClienteId(String(body?.id || ''))
+      if (!amb) return res.status(404).json({ error: 'Cliente sem ambiente' })
+      const apagados = await liberarLimiteDoAmbiente(query, amb.id)
+      await registrarHistorico(query, String(body.id), 'senha_liberada', `Limite de senha liberado por ${autor} (${apagados} registro(s))`, autor)
+      return res.json({ ok: true, apagados })
+    }
+    if (req.method === 'POST' && acao === 'excluir') {
+      if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
+      return res.json(await excluirCliente(String(body.id), { confirmacao: body.confirmacao, autor }))
+    }
+    if (req.method === 'POST' && acao) return res.status(400).json({ error: 'Ação inválida' })
     if (req.method === 'POST') return res.json({ ok: true, cliente: await withTransaction(q => criarClienteManual(q, body, autor)) })
     if (req.method === 'PATCH') return res.json({ ok: true, cliente: await withTransaction(q => editarCliente(q, body, autor)) })
     return res.status(405).end()

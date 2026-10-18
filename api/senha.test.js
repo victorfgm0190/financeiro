@@ -10,7 +10,7 @@ import { _definirFabricaDePool } from './_conexao.js'
 // LINKS DE SENHA ("Esqueci minha senha" e convite) com o _db.js de verdade: um PGlite por database
 // (central, vm, A, B, C suspenso). E-mail = fetch do Resend interceptado.
 
-const { default: senhaHandler, RESPOSTA_ESQUECI, LIMITE_POR_HORA } = await import('./senha.js')
+const { default: senhaHandler, RESPOSTA_ESQUECI, LIMITE_IP_POR_HORA, LIMITE_USUARIO_POR_HORA } = await import('./senha.js')
 const { default: authHandler } = await import('./auth.js')
 const { default: usuariosHandler } = await import('./usuarios.js')
 const { ERRO_LINK } = await import('./_senhaTokens.js')
@@ -175,27 +175,35 @@ describe('esqueci minha senha', () => {
     expect(r.body).toEqual(RESPOSTA_ESQUECI)
   })
 
-  it(`limite: ${LIMITE_POR_HORA} por hora por IP (mesma resposta, sem e-mail acima do limite)`, async () => {
-    for (let i = 0; i < LIMITE_POR_HORA + 2; i++) {
-      const r = await esqueci(host('aa'), i % 2 ? 'ana' : 'alice', null, '192.168.0.1')
+  it(`limite: ${LIMITE_IP_POR_HORA} por hora por IP (conta mesmo login inexistente; mesma resposta, sem e-mail acima)`, async () => {
+    for (let i = 0; i < LIMITE_IP_POR_HORA; i++) {
+      const r = await esqueci(host('aa'), `ninguem${i}`, null, '192.168.0.1')
       expect(r.body).toEqual(RESPOSTA_ESQUECI)
     }
-    expect(emails).toHaveLength(LIMITE_POR_HORA)
+    const barrado = await esqueci(host('aa'), 'ana', null, '192.168.0.1')
+    expect(barrado.body).toEqual(RESPOSTA_ESQUECI)
+    expect(emails).toHaveLength(0)
     // outro IP continua podendo
     await esqueci(host('aa'), 'ana', null, '192.168.0.2')
-    expect(emails).toHaveLength(LIMITE_POR_HORA + 1)
+    expect(emails).toHaveLength(1)
+    // resultado gravado em cada pedido (quadro "Tentativas de senha")
+    const res = (await qde('central')("SELECT resultado, count(*)::int AS n FROM senha_pedidos WHERE chave LIKE 'ip:%' GROUP BY 1 ORDER BY 1"))
+    expect(res).toEqual([
+      { resultado: 'bloqueado_ip', n: 1 }, { resultado: 'enviado', n: 1 }, { resultado: 'nao_encontrado', n: LIMITE_IP_POR_HORA },
+    ])
   })
 
-  it(`limite: ${LIMITE_POR_HORA} por hora por usuário, de qualquer IP e por usuário ou e-mail`, async () => {
-    for (let i = 0; i < LIMITE_POR_HORA + 2; i++) await esqueci(host('aa'), i % 2 ? 'ana' : 'ana@teste.com', null, `172.16.0.${i}`)
-    expect(emails).toHaveLength(LIMITE_POR_HORA)
+  it(`limite: ${LIMITE_USUARIO_POR_HORA} por hora por usuário, de qualquer IP e por usuário ou e-mail`, async () => {
+    for (let i = 0; i < LIMITE_USUARIO_POR_HORA + 2; i++) await esqueci(host('aa'), i % 2 ? 'ana' : 'ana@teste.com', null, `172.16.0.${i}`)
+    expect(emails).toHaveLength(LIMITE_USUARIO_POR_HORA)
+    expect((await qde('central')("SELECT count(*)::int AS n FROM senha_pedidos WHERE chave LIKE 'ip:%' AND resultado = 'bloqueado_usuario'"))[0].n).toBe(2)
     // o limite é do usuário NAQUELE ambiente: a "ana" de B não foi afetada
     await esqueci(host('bb'), 'ana', null, '172.16.1.1')
-    expect(emails).toHaveLength(LIMITE_POR_HORA + 1)
+    expect(emails).toHaveLength(LIMITE_USUARIO_POR_HORA + 1)
     // pedidos com mais de 1 hora não contam
     await qde('central')("UPDATE senha_pedidos SET criado_em = now() - interval '61 minutes'")
     await esqueci(host('aa'), 'ana', null, '172.16.2.1')
-    expect(emails).toHaveLength(LIMITE_POR_HORA + 2)
+    expect(emails).toHaveLength(LIMITE_USUARIO_POR_HORA + 2)
   })
 })
 

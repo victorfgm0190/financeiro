@@ -156,7 +156,7 @@ describe('login fixo de emergência', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const p = await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })
     expect(p).toMatchObject({ papel: 'admin', origem: 'env', org: null })
-  })
+  }, 30_000) // PGlite novo dentro do teste: com a suíte inteira em paralelo passa dos 5 s padrão
 
   it('cria a organização "Victor" se ainda não houver nenhuma', async () => {
     await q('DELETE FROM organizacoes')
