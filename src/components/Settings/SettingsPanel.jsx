@@ -9,6 +9,7 @@ import { fmt } from '../shared/utils'
 import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
+import DeParaImportacaoPanel from './DeParaImportacaoPanel'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
 import AtalhosPanel from './AtalhosPanel'
@@ -1891,6 +1892,7 @@ export default function SettingsPanel() {
 
       {secao === 'favorecidos' && <FavorecidosPanel />}
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
+      {secao === 'depara-importacao' && <DeParaImportacaoPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}
         </fieldset>

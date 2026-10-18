@@ -542,6 +542,10 @@ export const txToRow = (tx) => ({
   // Tipo de documento (tipos_documento.id). NULL = sem tipo; o fallback de exibição (CC/ENV/RES)
   // nunca é gravado — ver src/lib/tiposDocumento.js.
   tipo_documento_id: tx.tipoDocumentoId || null,
+  // Importação padrão (src/lib/importacaoPadrao): lote e FITID do OFX. Ambiente sem as colunas
+  // (migração ainda não rodada) → o upsert as descarta (api/_db.js COLUNAS_OPCIONAIS).
+  importacao_id: tx.importacaoId || null,
+  fitid: tx.fitid || null,
   created_at: tx.createdAt || new Date().toISOString(),
   // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
   // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
@@ -592,6 +596,8 @@ export const rowToTx = (r) => ({
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
   tipoDocumentoId: r.tipo_documento_id || null,
+  importacaoId: r.importacao_id || null,
+  fitid: r.fitid || null,
   createdAt: r.created_at,
 })
 

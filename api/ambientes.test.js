@@ -77,7 +77,7 @@ beforeAll(async () => {
   await criarUsuario('banco_c', 'carla', 'senha-c-123')
   await qde('banco_a')("INSERT INTO lancamentos (id, date, amount, description) VALUES ('la1', '2026-10-01', 50, 'Mercado A')")
   await qde('banco_b')("INSERT INTO lancamentos (id, date, amount, description) VALUES ('lb1', '2026-10-01', 50, 'Mercado B')")
-}, 60_000)
+}, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 let envOriginal
 beforeEach(() => {

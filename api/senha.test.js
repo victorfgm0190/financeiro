@@ -17,7 +17,7 @@ const { ERRO_LINK } = await import('./_senhaTokens.js')
 
 const SECRET = 'segredo-de-teste'
 // Tabelas do app que as migrações alteram (o banco real vem de supabase/estrutura_base.sql).
-const ANTES_DAS_MIGRACOES = 'CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY);\n'
+const ANTES_DAS_MIGRACOES = 'CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY);\nCREATE TABLE IF NOT EXISTS lancamentos (id TEXT PRIMARY KEY, account_id TEXT);\n'
 const TABELAS_APP = `
   CREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());
   INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Org'), ('org2', 'Outra');
@@ -57,7 +57,7 @@ beforeAll(async () => {
   // MESMO login e e-mail em B: prova que nada atravessa de ambiente
   ids.anaB = await criarUsuario('banco_b', 'ana')
   ids.carla = await criarUsuario('banco_c', 'carla')
-}, 60_000)
+}, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 let envOriginal
 let emails

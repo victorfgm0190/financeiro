@@ -13,6 +13,7 @@ const PAGE_TITLES = {
   credit: 'Cartão de Crédito',
   schedule: 'Agendamentos',
   import: 'Importar Fatura',
+  'importar-lancamentos': 'Importar lançamentos',
   cashflow: 'Fluxo de Caixa Futuro',
   reservas: 'Controle de Reservas',
   budget: 'Orçamento por Categoria',

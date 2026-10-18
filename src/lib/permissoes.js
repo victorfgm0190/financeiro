@@ -15,7 +15,7 @@ export const MODULOS = [
   { id: 'painel', label: 'Painel / Início', paginas: ['dashboard'] },
   { id: 'contas', label: 'Contas', paginas: ['accounts'] },
   { id: 'cartao', label: 'Cartão de Crédito', paginas: ['credit'] },
-  { id: 'lancamentos', label: 'Lançamentos', paginas: ['transactions'] },
+  { id: 'lancamentos', label: 'Lançamentos', paginas: ['transactions', 'importar-lancamentos'] },
   { id: 'agendamentos', label: 'Agendamentos', paginas: ['schedule'] },
   { id: 'importar', label: 'Importar Fatura / Conciliação', paginas: ['import'] },
   { id: 'fluxo', label: 'Fluxo de Caixa', paginas: ['cashflow'] },

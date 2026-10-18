@@ -42,11 +42,18 @@ export function nomeDatabaseCentral(env = process.env) {
   return decodeURIComponent(new URL(env.CENTRAL_DATABASE_URL).pathname.replace(/^\//, ''))
 }
 
-const criarPoolPg = (nome) => new Pool({
-  connectionString: urlDoDatabase(nome),
-  ssl: { rejectUnauthorized: false },
-  max: 3,
-})
+function criarPoolPg(nome) {
+  const pool = new Pool({
+    connectionString: urlDoDatabase(nome),
+    ssl: { rejectUnauthorized: false },
+    max: 3,
+  })
+  // Conexão OCIOSA encerrada pelo servidor (o Neon suspende o compute e derruba as conexões:
+  // "terminating connection due to administrator command"). Sem este ouvinte o 'error' do pool
+  // derruba o processo; com ele, o pool descarta a conexão e abre outra na próxima consulta.
+  pool.on('error', (err) => console.warn(`[conexao] conexão ociosa encerrada (${nome}):`, err.message))
+  return pool
+}
 let fabrica = criarPoolPg
 
 // Testes: troca a fábrica (ex.: PGlite por database) e esvazia o cache.

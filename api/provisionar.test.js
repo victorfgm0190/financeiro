@@ -66,7 +66,7 @@ beforeAll(async () => {
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
   // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
   for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww']) bancos[nome] = new PGlite()
-}, 120_000)
+}, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
 const neon = { chamadas: [], falharCriacao: 0, falharExclusao: 0 }

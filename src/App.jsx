@@ -23,6 +23,7 @@ import TransactionsPanel from './components/Transactions/TransactionsPanel'
 import CreditCardPanel from './components/CreditCard/CreditCardPanel'
 import SchedulePanel from './components/Schedule/SchedulePanel'
 import ImportPanel from './components/Import/ImportPanel'
+import ImportarLancamentosPanel from './components/ImportarLancamentos/ImportarLancamentosPanel'
 import CashFlowPanel from './components/CashFlow/CashFlowPanel'
 import { proximaEfetiva } from './lib/fluxoCaixa'
 import ReservasPanel from './components/Reservas/ReservasPanel'
@@ -191,6 +192,7 @@ function AppContent() {
     credit: <CreditCardPanel />,
     schedule: <SchedulePanel />,
     import: <ImportPanel />,
+    'importar-lancamentos': <ImportarLancamentosPanel />,
     cashflow: <CashFlowPanel setActivePage={navigate} />,
     reservas:   <ReservasPanel />,
     envelopes:  <EnvelopesPanel />,

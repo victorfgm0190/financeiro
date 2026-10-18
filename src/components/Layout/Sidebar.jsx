@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'
@@ -16,6 +16,7 @@ const NAV = [
   { id: 'credit', label: 'Cartão de Crédito', icon: CreditCard },
   { id: 'schedule', label: 'Agendamentos', icon: Calendar },
   { id: 'import', label: 'Importar Fatura', icon: Upload },
+  { id: 'importar-lancamentos', label: 'Importar lançamentos', icon: FileSpreadsheet },
   { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
   { id: 'reservas',   label: 'Reservas',   icon: Layers  },
   { id: 'envelopes',  label: 'Envelopes',  icon: Package },

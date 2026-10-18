@@ -24,6 +24,8 @@ export const ORIGIN = {
   // Receita criada pelo botão "Lançar Rendimento" do card da conta (diferença entre o saldo
   // informado pelo usuário e o saldo atual). Manual na intenção, mas rastreável à parte.
   RENDIMENTO_MANUAL: 'rendimento_manual',
+  // Importação padrão de lançamentos (Excel gerado pelo Finup, .csv ou OFX) — um lote por arquivo.
+  IMPORTACAO_PADRAO: 'importacao_padrao',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).

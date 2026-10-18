@@ -2219,7 +2219,8 @@ export function AppProvider({ children }) {
   }
 
   const addCategory = useCallback((category) => {
-    const id = 'cat_' + Date.now()
+    // Id de fora (importação padrão cria várias de uma vez e precisa do id na hora) ganha do gerado.
+    const id = category.id || 'cat_' + Date.now()
     const group = (category.group || '').trim() || null
     update(d => ({
       ...d,

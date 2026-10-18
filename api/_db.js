@@ -1,4 +1,4 @@
-import { poolDoContexto } from './_conexao.js'
+import { poolDoContexto, bancoAtual } from './_conexao.js'
 
 // Todas as funções daqui usam o banco do AMBIENTE da requisição (api/_conexao.js): o handler roda
 // dentro de comAmbiente() (api/_ambiente.js). Sem contexto de ambiente, getPool() lança — nunca há
@@ -133,8 +133,40 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // Upsert usando um client JÁ em transação (quem chama faz BEGIN/COMMIT). É o miolo do upsertRows,
 // separado para endpoints que precisam gravar linhas + outra coisa (ex.: histórico de alterações)
 // na MESMA transação.
+// Colunas NOVAS que o app já manda, mas que um ambiente pode ainda não ter (migração não rodada
+// nele): saem do upsert em vez de derrubar o sync daquele ambiente. "Presente" fica em cache por
+// banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
+export const COLUNAS_OPCIONAIS = { lancamentos: ['importacao_id', 'fitid'] }
+const cacheColunasOpcionais = new Map()
+export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()
+
+async function colunasOpcionaisAusentes(client, table) {
+  const opcionais = COLUNAS_OPCIONAIS[table]
+  if (!opcionais) return []
+  const chave = `${bancoAtual()}:${table}`
+  let c = cacheColunasOpcionais.get(chave)
+  if (!c || (c.faltam.length && c.ate < Date.now())) {
+    const { rows } = await client.query(
+      'SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = ANY($2)',
+      [table, opcionais],
+    )
+    const tem = new Set(rows.map(r => r.column_name))
+    c = { faltam: opcionais.filter(col => !tem.has(col)), ate: Date.now() + 60_000 }
+    cacheColunasOpcionais.set(chave, c)
+  }
+  return c.faltam
+}
+
 export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id') {
   if (!rows || rows.length === 0) return 0
+  const faltam = await colunasOpcionaisAusentes(client, table)
+  if (faltam.length) {
+    rows = rows.map((r) => {
+      const copia = { ...r }
+      for (const col of faltam) delete copia[col]
+      return copia
+    })
+  }
   if (table === 'contas') await desligarFlagsUnicasAntes(client, rows)
   // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
   let lotes = [[rows, []]]
