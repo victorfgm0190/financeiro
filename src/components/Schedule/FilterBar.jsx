@@ -7,17 +7,18 @@ import { PERIODOS } from '../../lib/agendamentosFiltro'
 // Em tela estreita o segmentado ocupa a linha inteira; Período e Filtros descem para a de baixo.
 //   status: [{ id, label, count, icon }]   periodos: ids de PERIODOS
 //   extra: controle opcional ao lado do período (ex.: seletor de cartão)
+//   semPeriodo: esconde o Período (Visão Calendário — o mês navegado faz o papel dele)
 export default function FilterBar({
   status, statusAtual, onStatus,
   periodos, periodoAtual, onPeriodo,
   filtrosAtivos = 0, aberto = false, onToggle,
-  extra = null, children,
+  extra = null, children, semPeriodo = false,
 }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {/* STATUS — segmentado */}
-        <div role="radiogroup" aria-label="Status" className="flex w-full sm:w-auto rounded-lg border border-borda-forte bg-surface-2 p-0.5">
+        <div role="radiogroup" aria-label="Status" className="flex w-full sm:w-auto max-w-full overflow-x-auto rounded-lg border border-borda-forte bg-surface-2 p-0.5">
           {status.map(s => {
             const ativo = s.id === statusAtual
             const Icone = s.icon
@@ -45,7 +46,7 @@ export default function FilterBar({
         <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
           {extra}
           {/* PERÍODO */}
-          <label className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
+          {!semPeriodo && <label className="flex items-center gap-1.5 flex-1 sm:flex-none min-w-0">
             <span className="text-xs text-texto-3 shrink-0">Período:</span>
             <select
               className="input py-1.5 text-xs w-full sm:w-auto"
@@ -54,7 +55,7 @@ export default function FilterBar({
             >
               {periodos.map(p => <option key={p} value={p}>{PERIODOS[p]}</option>)}
             </select>
-          </label>
+          </label>}
           {/* FILTROS */}
           <button
             type="button"

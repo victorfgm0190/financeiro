@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -47,6 +47,8 @@ import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO } from '../../lib
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import AgendaMobile from './AgendaMobile'
+import AgendaCalendario from './AgendaCalendario'
+import { faturasSemAgendamento, lerVisaoAgenda, salvarVisaoAgenda } from '../../lib/agendaCalendario'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -817,6 +819,10 @@ function ScheduleRow({
   // Detalhe do card no celular (AgendaMobile): mantém o "+ N faturas seguintes" junto do chevron,
   // como era; no desktop ele vai para a linha de badges e a célula tem largura mínima.
   detalheMobile = false,
+  // Calendário: ocorrência SEGUINTE de um agendamento ({ data, amount, antesDe }). Só leitura +
+  // Editar — as ações agem sempre na próxima pendente (nextDate), então pagar/pular aqui cairia em
+  // outra ocorrência. Linha esmaecida e o aviso "Antes, efetive a de dd/mm" no lugar dos botões.
+  futura = null,
 }) {
   // Provisão de despesa exibe badge "Provisão". O botão "Efetivar" aparece enquanto houver uma
   // próxima ocorrência a efetivar: para "Uma vez", até provisao_efetivada virar true; para
@@ -862,7 +868,7 @@ function ScheduleRow({
   // Atual" do formulário (ver scheduleDisplayDueDate). As ações seguem usando nextDate.
   const displayDueDate = scheduleDisplayDueDate(schedule, nextDate, getNextOccurrences, today)
 
-  const daysLate = displayDueDate && displayDueDate < today
+  const daysLate = !futura && displayDueDate && displayDueDate < today
     ? differenceInDays(parseISO(today), parseISO(displayDueDate))
     : 0
 
@@ -876,7 +882,7 @@ function ScheduleRow({
   const [showHistorico, setShowHistorico] = useState(false)
   const { temHistorico } = useApp()
   const comHistorico = temHistorico('agendamento', schedule.id)
-  const hasFuture = futureItems.length > 0
+  const hasFuture = !futura && futureItems.length > 0
   const toggleExpand = () => setExpanded(v => !v)
 
   // Histórico de pagamentos: ocorrências já registradas (registered) cruzadas com os
@@ -884,7 +890,7 @@ function ScheduleRow({
   // Pareamento por data mais próxima (consome cada lançamento uma vez); sem lançamento
   // vinculado, usa a data prevista e o valor efetivo da ocorrência (override individual).
   const { profileTransactions, transactions, schedules: todosSchedules } = useApp()
-  const hasHistory = registered.length > 0
+  const hasHistory = !futura && registered.length > 0
   const canExpand = hasFuture || hasHistory
   const paymentHistory = useMemo(() => {
     const reg = schedule.registered || []
@@ -914,7 +920,7 @@ function ScheduleRow({
   //    occurrenceType 'installment', que pré-conta os consumidos ANTES da âncora.
   const isRecorrente = (schedule.frequency || 'once') !== 'once'
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
-  const effAmount = nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
+  const effAmount = futura ? futura.amount : nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
   const handlePular = () => {
     if (!nextDate) return
     if (!isRecorrente) { setShowPularUnico(true); return }
@@ -947,7 +953,7 @@ function ScheduleRow({
 
   return (
     <>
-      <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
+      <tr className={`border-b border-borda/50 hover:bg-surface-hover/20 transition-colors group ${daysLate > 0 ? 'bg-perigo/5' : ''} ${!nextDate || futura ? 'opacity-60' : ''} ${isSelected ? 'bg-primary/5' : ''} ${canConfirm && nextDate && schedule.confirmado ? 'border-l-2 border-l-primary bg-primary/[0.03]' : ''}`}>
         {/* Checkbox */}
         {selectionMode && (
           <td className="px-3 py-3 w-8">
@@ -967,7 +973,9 @@ function ScheduleRow({
 
         {/* Próxima Data */}
         <td className="px-3 py-3 whitespace-nowrap">
-          {nextDate ? (
+          {futura ? (
+            <p className="text-xs text-texto-2 font-medium">{fmtDate(futura.data)}</p>
+          ) : nextDate ? (
             <div>
               <p className="text-xs text-texto-2 font-medium">{fmtDate(displayDueDate)}</p>
               {daysLate > 0 && (
@@ -1057,7 +1065,7 @@ function ScheduleRow({
                 {totalDone}/{schedule.installments}x
               </span>
             )}
-            {canConfirm && nextDate && podeEditar && (
+            {canConfirm && nextDate && podeEditar && !futura && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onToggleConfirmado(schedule.id) }}
@@ -1167,7 +1175,12 @@ function ScheduleRow({
         {/* Ações */}
         <td className={`px-3 py-3 w-px whitespace-nowrap align-middle ${acoesFixas}`}>
           <div className="flex flex-col items-end gap-1.5">
-          {((isProvisaoPendente && podeEditar) || nCobertas > 0) && (
+          {futura && (
+            <span className="text-[11px] text-texto-3 whitespace-nowrap" title="As ações valem para a próxima ocorrência pendente">
+              Antes, efetive a de {fmtDate(futura.antesDe).slice(0, 5)}
+            </span>
+          )}
+          {!futura && ((isProvisaoPendente && podeEditar) || nCobertas > 0) && (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {isProvisaoPendente && podeEditar && (
               <button
@@ -1198,7 +1211,7 @@ function ScheduleRow({
           </div>
           )}
           <div className="flex items-center justify-end gap-1 flex-nowrap">
-            {nextDate && podeEditar && (
+            {nextDate && podeEditar && !futura && (
               <>
                 <button
                   onClick={() => setShowPay(true)}
@@ -1233,7 +1246,7 @@ function ScheduleRow({
             {podeEditar && <button onClick={() => onEditSchedule(schedule)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0" title="Editar agendamento" aria-label="Editar">
               <Edit2 size={13} />
             </button>}
-            {podeExcluir && <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
+            {podeExcluir && !futura && <button onClick={() => setShowExcluir(true)} className="btn-amber w-8 h-8 p-0 justify-center shrink-0 hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg" title="Excluir agendamento" aria-label="Excluir">
               <Trash2 size={13} />
             </button>}
           </div>
@@ -1702,7 +1715,9 @@ const SELECTION_GROUP_META = {
 }
 const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null }) {
+// `calendario` ({ status, faturas, pagosLinhas, renderFatura }): mostra a Visão Calendário em vez da
+// tabela, com as MESMAS linhas (buildScheduleGroups) e a mesma linha de ações (ScheduleRow).
+function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null }) {
   const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode } = useApp()
   // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
   const podeSelecionar = pode('agendamentos', 'editar')
@@ -1884,7 +1899,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     showToastMsg(`${count} agendamento${count !== 1 ? 's' : ''} pulado${count !== 1 ? 's' : ''}`)
   }
 
-  if (schedules.length === 0) {
+  if (schedules.length === 0 && !calendario) {
     return (
       <div className="card text-center py-12">
         <Calendar size={32} className="text-texto-3 mx-auto mb-3" />
@@ -1908,6 +1923,39 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     rateiosBySchedule: rateiosByLancamento,
     tiposDocumento,
     cols,
+  }
+
+  if (calendario) {
+    return (
+      <>
+        <AgendaCalendario
+          rows={rows}
+          faturas={calendario.faturas}
+          pagosLinhas={calendario.pagosLinhas}
+          status={calendario.status}
+          getNextOccurrences={getNextOccurrences}
+          accounts={accounts}
+          hoje={today}
+          isMobile={isMobile}
+          renderFatura={calendario.renderFatura}
+          renderLinha={(item, { mobile }) => (
+            <ScheduleRow
+              key={item.key}
+              schedule={item.schedule}
+              nextDate={item.row.nextDate}
+              futureItems={item.proxima ? (item.row.futureItems || []) : []}
+              isSerie={item.row.isSerie}
+              futura={item.proxima ? null : { data: item.data, amount: item.amount, antesDe: item.antesDe }}
+              {...rowProps}
+              selectionMode={false}
+              isSelected={false}
+              detalheMobile={mobile}
+            />
+          )}
+        />
+        {toast && <Toast message={toast} />}
+      </>
+    )
   }
 
   // Celular: lista por semana (AgendaMobile) — o status (A pagar/Provisões/Pagos) vem da barra do
@@ -2438,7 +2486,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
-    activeProfileId, settings, tiposDocumento, transactions, pode,
+    activeProfileId, settings, tiposDocumento, transactions, pode, usuario,
   } = useApp()
   // Nível de acesso: criar agendamento/provisão = incluir; Executar Gerenciais cria lançamentos.
   const podeIncluirAgend = pode('agendamentos', 'incluir')
@@ -2453,6 +2501,13 @@ export default function SchedulePanel() {
   const [showExecutarGer, setShowExecutarGer] = useState(false)
 
   const isMobile = useIsMobile()
+  // Visão Lista | Calendário, lembrada por usuário. O calendário NÃO mexe no Período da lista
+  // (só o esconde): ao voltar para a Lista, o período é o de antes.
+  const [visao, setVisao] = useState(() => lerVisaoAgenda(usuario?.id))
+  const trocarVisao = (v) => { setVisao(v); salvarVisaoAgenda(usuario?.id, v) }
+  const emCalendario = visao === 'calendario'
+  // Status "Todos" (pendentes + pagos, totais separados) existe só no calendário.
+  const [calTodos, setCalTodos] = useState(false)
   const [activeTab, setActiveTab] = useState('conta')
   // Status e período POR ABA (FilterBar), lembrados no localStorage (lib/agendamentosFiltro).
   const [filtrosPorAba, setFiltrosPorAba] = useState(
@@ -2828,7 +2883,55 @@ export default function SchedulePanel() {
     anuais: { apagar: pendingContasAnuais, pagos: nPagos, resgates: raVisiveis.length },
   }[activeTab]
   const ICONE_STATUS = { apagar: Calendar, provisoes: Hourglass, pagos: History, resgates: ArrowLeftRight }
-  const opcoesStatus = STATUS_POR_ABA[activeTab].map(id => ({ id, label: STATUS[id].label, count: contagemStatus[id], icon: ICONE_STATUS[id] }))
+  const opcoesStatus = [
+    ...STATUS_POR_ABA[activeTab].map(id => ({ id, label: STATUS[id].label, count: contagemStatus[id], icon: ICONE_STATUS[id] })),
+    ...(emCalendario ? [{ id: 'todos', label: 'Todos', icon: List }] : []),
+  ]
+  const statusCal = calTodos ? 'todos' : statusAtual
+  const escolherStatusBarra = (id) => {
+    if (id === 'todos') { setCalTodos(true); return }
+    setCalTodos(false)
+    escolherStatus(id)
+  }
+
+  // ── Visão Calendário: os MESMOS filtros da lista, sem o Período (o mês navegado faz o papel dele)
+  // e sem as datas De/Até do Personalizado. Pendentes = status A pagar (ou Provisões/Resgates).
+  const calSchedules = useMemo(() => {
+    if (!emCalendario || statusCal === 'pagos') return []
+    const st = statusCal === 'provisoes' ? 'provisoes' : 'apagar'
+    const porStatus = filtrarPorStatusPeriodo(displaySchedules, { status: st, periodo: 'futuros' }, getNextOccurrences, hojeStr)
+    const buscados = filtrarAgendamentos(porStatus, {
+      desc: fltDesc, payee: fltPayee, categoryId: fltCat,
+      min: fltMin !== '' ? parseFloat(fltMin) : null,
+      max: fltMax !== '' ? parseFloat(fltMax) : null,
+    }, getNextOccurrences, hojeStr)
+    const porValor = selValores.size === 0
+      ? buscados
+      : buscados.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
+    const porTipo = filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
+    return filtroContasAtivo ? filtrarPorContas(porTipo, selContas) : porTipo
+  }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])
+  const calPagos = useMemo(() => {
+    if (!emCalendario || (statusCal !== 'pagos' && statusCal !== 'todos')) return []
+    const buscados = filtrarPagamentos(pagosLinhas, {
+      desc: fltDesc, payee: fltPayee, categoryId: fltCat,
+      min: fltMin !== '' ? parseFloat(fltMin) : null,
+      max: fltMax !== '' ? parseFloat(fltMax) : null,
+    })
+    return filtrarPorTipoDocumento(filtrarPagamentos(buscados, { valores: selValores }), selTipos, tiposDocumento)
+  }, [emCalendario, statusCal, pagosLinhas, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento])
+  // Faturas do contas_a_pagar (aba Cartão), pelo vencimento — menos as que já têm o agendamento
+  // pagamento_fatura da mesma fatura (senão a fatura apareceria duas vezes no dia).
+  const calFaturas = useMemo(() => {
+    if (!emCalendario || activeTab !== 'cartao' || statusCal === 'pagos') return []
+    const d = fltDesc.trim().toLowerCase()
+    const min = fltMin !== '' ? parseFloat(fltMin) : null
+    const max = fltMax !== '' ? parseFloat(fltMax) : null
+    const filtradas = viewInvoice.filter(p =>
+      (!d || (p.description || '').toLowerCase().includes(d)) &&
+      (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
+    return faturasSemAgendamento(filtradas, faturaPaymentSchedules)
+  }, [emCalendario, activeTab, statusCal, viewInvoice, faturaPaymentSchedules, fltDesc, fltMin, fltMax])
 
   // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
   const extrasTipoFiltro = useMemo(() => [
@@ -2878,6 +2981,15 @@ export default function SchedulePanel() {
           <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-label="Visão" className="flex rounded-lg border border-borda-forte bg-surface-2 p-0.5">
+            {[['lista', 'Lista', List], ['calendario', 'Calendário', CalendarDays]].map(([id, label, Icone]) => (
+              <button key={id} type="button" role="radio" aria-checked={visao === id} onClick={() => trocarVisao(id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  visao === id ? 'bg-primary text-white shadow-sm' : 'text-texto-2 hover:text-texto-1 hover:bg-surface-hover'}`}>
+                <Icone size={12} /> {label}
+              </button>
+            ))}
+          </div>
           {provisoesPendentes.length > 0 && podeExecutarGer && (
             <button className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
@@ -2919,8 +3031,9 @@ export default function SchedulePanel() {
       <div className="md:sticky md:top-0 md:z-20 bg-page -mx-1 px-1 py-1">
         <FilterBar
           status={opcoesStatus}
-          statusAtual={statusAtual}
-          onStatus={escolherStatus}
+          statusAtual={emCalendario ? statusCal : statusAtual}
+          onStatus={emCalendario ? escolherStatusBarra : escolherStatus}
+          semPeriodo={emCalendario}
           periodos={opcoesPeriodo(statusAtual)}
           periodoAtual={periodoAtual}
           onPeriodo={escolherPeriodo}
@@ -3054,7 +3167,23 @@ export default function SchedulePanel() {
         </div>
       )}
 
-      {abaPagos && isMobile ? (
+      {emCalendario ? (
+        <SchedulesTable
+          schedules={calSchedules}
+          agruparSeries={false}
+          accounts={activeTab === 'conta' ? accounts : allAccounts}
+          efetivarProvisao={activeTab === 'conta' ? efetivarProvisao : undefined}
+          calendario={{
+            status: statusCal,
+            faturas: calFaturas,
+            pagosLinhas: calPagos,
+            renderFatura: (p) => (
+              <PayableCard payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
+            ),
+          }}
+          {...propsTabela}
+        />
+      ) : abaPagos && isMobile ? (
         // Celular: os pagos na lista por semana, com o detalhe (estornar, histórico…) ao tocar.
         <SchedulesTable schedules={basePagos} pagosLinhas={pagosVisiveis} accounts={allAccounts} {...propsTabela} />
       ) : abaPagos ? (
