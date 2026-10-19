@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 import { compararGruposPadrao } from '../../lib/ordemCategorias'
+import { moverFoco } from '../../lib/foco'
 
 // Ordem padrão de grupos (GROUP_ORDER/alfabética). Listas de CATEGORIA já chegam ordenadas pela
 // ordem salva (ordenarCategorias) e passam `preserveGroupOrder`; este é só o fallback.
@@ -37,6 +38,12 @@ function computeMenuStyle(rect) {
 
 // options: [{ id, label, group? }]
 // onChange: (id: string) => void   (id='' means cleared)
+//
+// Teclado (vale para todas as telas que usam o componente): Space/Enter/↓ ou digitar abre (o que
+// foi digitado já filtra); ↑/↓ navegam; Enter escolhe; Esc fecha. Depois de escolher ou fechar, o
+// foco VOLTA para o gatilho — o campo de busca mora num portal que é desmontado, e o foco caía no
+// <body> (o Tab seguinte saía do modal). Tab com o menu aberto fecha e segue para o próximo campo.
+// Delete/Backspace com o menu fechado limpa (o "×" é só para o mouse, fora da ordem do Tab).
 export default function SearchableSelect({
   options,
   value,
@@ -50,6 +57,8 @@ export default function SearchableSelect({
   sections = null,            // [{ key, label }] — blocos de topo, na ordem dada, casados por `option.section`
                               // (opção sem seção conhecida cai no último). Dentro de cada bloco, o
                               // agrupamento por `group` é o de sempre.
+  triggerClassName = 'input', // classe do gatilho (tabelas usam versões compactas)
+  compacto = false,           // itens do menu em texto pequeno (tabelas de importação)
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -113,37 +122,67 @@ export default function SearchableSelect({
 
   const getIdx = (id) => idxMap[id === '' ? '__empty' : id] ?? -1
 
-  const openDropdown = () => {
+  const openDropdown = (busca = '') => {
     if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect())
     setOpen(true)
-    setSearch('')
+    setSearch(busca)
     setActive(-1)
     // O foco é aplicado no useEffect [open] abaixo, depois que o painel é renderizado.
   }
 
-  const closeDropdown = () => {
+  // `devolverFoco`: o gatilho recebe o foco de volta (o campo de busca vai ser desmontado).
+  const closeDropdown = (devolverFoco = false) => {
     setOpen(false)
     setSearch('')
     setActive(-1)
+    if (devolverFoco) triggerRef.current?.focus()
   }
 
   const handleSelect = (id) => {
     onChange(id)
-    closeDropdown()
+    closeDropdown(true)
   }
 
+  // Ao digitar, o destaque vai para o primeiro resultado (Enter já escolhe) até o usuário navegar.
+  const primeiro = allItems.findIndex(it => it.id !== '')
+  const ativo = active >= 0 ? active : (search.trim() ? (primeiro >= 0 ? primeiro : (allItems.length ? 0 : -1)) : -1)
+
   const handleKeyDown = (e) => {
+    // Ctrl+Enter é "gravar" (atalho do modal): não escolhe item, passa adiante.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActive(a => Math.min(a + 1, allItems.length - 1))
+      setActive(Math.min(ativo + 1, allItems.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setActive(a => Math.max(a - 1, 0))
-    } else if (e.key === 'Enter' && active >= 0 && active < allItems.length) {
+      setActive(Math.max(ativo - 1, 0))
+    } else if (e.key === 'Enter') {
       e.preventDefault()
-      handleSelect(allItems[active].id)
+      if (ativo >= 0 && ativo < allItems.length) handleSelect(allItems[ativo].id)
     } else if (e.key === 'Escape') {
-      closeDropdown()
+      // Só o menu fecha: o modal em volta continua aberto.
+      e.preventDefault()
+      e.stopPropagation()
+      closeDropdown(true)
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      closeDropdown(true)
+      moverFoco(triggerRef.current, e.shiftKey)
+    }
+  }
+
+  // Gatilho com o menu fechado.
+  const handleTriggerKeyDown = (e) => {
+    if (open) return
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      openDropdown()
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && value && !required) {
+      e.preventDefault()
+      onChange('')
+    } else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault()
+      openDropdown(e.key)
     }
   }
 
@@ -173,15 +212,17 @@ export default function SearchableSelect({
   }, [open])
 
   useEffect(() => {
-    if (active >= 0 && listRef.current) {
+    if (ativo >= 0 && listRef.current) {
       const items = listRef.current.querySelectorAll('[data-item]')
-      items[active]?.scrollIntoView({ block: 'nearest' })
+      items[ativo]?.scrollIntoView({ block: 'nearest' })
     }
-  }, [active])
+  }, [ativo])
+
+  const tamItem = compacto ? 'py-1.5 text-xs' : 'py-2 text-sm'
 
   const itemClass = (id) => {
     const idx = getIdx(id)
-    if (idx === active) return 'bg-surface-hover text-texto-1'
+    if (idx === ativo) return 'bg-surface-hover text-texto-1'
     if (id && id === value) return 'bg-primary/15 text-primary-fg'
     if (!id) return 'text-texto-3 hover:bg-surface-hover'
     return 'text-texto-2 hover:bg-surface-hover'
@@ -192,15 +233,21 @@ export default function SearchableSelect({
       <button
         ref={triggerRef}
         type="button"
-        onClick={openDropdown}
-        className={`input flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-texto-3' : ''}`}
+        onClick={() => (open ? closeDropdown(true) : openDropdown())}
+        onKeyDown={handleTriggerKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`${triggerClassName} flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-texto-3' : ''}`}
       >
         <span className="flex-1 truncate min-w-0">{selected ? selected.label : placeholder}</span>
         <div className="flex items-center gap-1 shrink-0">
           {value && !required && (
             <span
+              tabIndex={-1}
+              aria-hidden="true"
               className="p-0.5 rounded text-texto-3 hover:text-texto-2"
-              onMouseDown={e => { e.stopPropagation(); onChange('') }}
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange('') }}
+              onClick={e => e.stopPropagation()}
             >
               <X size={12} />
             </span>
@@ -244,7 +291,8 @@ export default function SearchableSelect({
                 type="button"
                 data-item
                 onClick={() => handleSelect('')}
-                className={`w-full text-left px-3 py-2 text-sm transition-colors ${itemClass('')}`}
+                tabIndex={-1}
+                className={`w-full text-left px-3 ${tamItem} transition-colors ${itemClass('')}`}
               >
                 {placeholder}
               </button>
@@ -264,7 +312,8 @@ export default function SearchableSelect({
                       type="button"
                       data-item
                       onClick={() => handleSelect(opt.id)}
-                      className={`w-full text-left px-3 py-2 text-sm truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
+                      tabIndex={-1}
+                      className={`w-full text-left px-3 ${tamItem} truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
                     >
                       {opt.label}
                     </button>
@@ -282,7 +331,8 @@ export default function SearchableSelect({
                       type="button"
                       data-item
                       onClick={() => handleSelect(opt.id)}
-                      className={`w-full text-left px-3 py-2 text-sm pl-5 truncate transition-colors ${itemClass(opt.id)}`}
+                      tabIndex={-1}
+                      className={`w-full text-left px-3 ${tamItem} pl-5 truncate transition-colors ${itemClass(opt.id)}`}
                     >
                       {opt.label}
                     </button>
