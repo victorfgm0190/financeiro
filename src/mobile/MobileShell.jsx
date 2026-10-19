@@ -7,6 +7,8 @@ import ActionSheet from './ActionSheet'
 import PerfilChips from './PerfilChips'
 import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { TelaCarregando, AvisoDesatualizado } from './Carregando'
+import IndicadorSync from '../components/Offline/IndicadorSync'
+import FaixaOffline from '../components/Offline/FaixaOffline'
 
 
 // Layout mobile: conteúdo com scroll + barra inferior [aba aba (+) aba aba]. Tudo vem de
@@ -93,6 +95,8 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
         style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}
       >
         <ScrollScopeContext.Provider value={scrollCtx}>
+          <FaixaOffline />
+          <IndicadorSync faixa />
           {saldos === 'desatualizado' && modulo.id !== 'mais' && <AvisoDesatualizado />}
           {modulo.perfil && !Tela && <div className="mb-4"><PerfilChips /></div>}
           {conteudo}

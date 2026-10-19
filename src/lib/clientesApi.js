@@ -1,8 +1,9 @@
-import { authHeaders, clearTokenAndRedirect } from './api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao } from './api'
 
 // Clientes da plataforma: Controle de Clientes (/api/clientes, só PLATAFORMA_ADMIN) e o pedido
 // público (/api/cadastro-publico e /api/sigla-disponivel, sem login).
 async function chamar(url, { method = 'GET', body, autenticado = true } = {}) {
+  exigirConexao(url, method)
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...(autenticado ? authHeaders() : {}) },

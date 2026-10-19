@@ -1,7 +1,8 @@
-import { authHeaders, clearTokenAndRedirect } from './api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao } from './api'
 
 // Agenda no celular (/api/agenda-feed) + links de assinatura do feed (/api/agenda, pública).
 async function chamar(url, { method = 'GET', body } = {}) {
+  exigirConexao(url, method)
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

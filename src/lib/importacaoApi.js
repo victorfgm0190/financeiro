@@ -1,8 +1,9 @@
-import { authHeaders, clearTokenAndRedirect } from './api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao } from './api'
 
 // Importação padrão de lançamentos: lotes e de-para (/api/importacoes-lancamentos). Os lançamentos
 // vão pelo sync de sempre (addTransaction no app).
 async function chamar(url, { method = 'GET', body } = {}) {
+  exigirConexao(url, method)
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

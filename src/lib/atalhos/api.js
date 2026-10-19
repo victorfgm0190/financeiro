@@ -1,7 +1,8 @@
-import { authHeaders, clearTokenAndRedirect } from '../api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao } from '../api'
 
 // Atalhos do usuário logado — sempre via /api/atalhos (o Neon não é acessado do browser).
 async function chamar(url, { method = 'GET', body } = {}) {
+  exigirConexao(url, method)
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

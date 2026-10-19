@@ -1,7 +1,8 @@
-import { authHeaders, clearTokenAndRedirect } from './api'
+import { authHeaders, clearTokenAndRedirect, exigirConexao } from './api'
 
 // Cadastro de usuários (Configurações › Usuários) e troca da própria senha — sempre via /api/usuarios.
 async function chamar(url, { method = 'GET', body } = {}) {
+  exigirConexao(url, method)
   const res = await fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

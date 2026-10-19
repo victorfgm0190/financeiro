@@ -3,7 +3,7 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { User, Building2, Search, ChevronDown, LogOut } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { clearTokenAndRedirect } from '../../lib/api'
+import SairModal from '../Offline/SairModal'
 import { cabecalhoDaPagina } from './cabecalhoPagina'
 
 const PAGE_TITLES = {
@@ -31,6 +31,7 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
   const { perfis: comPerfis, periodo: comPeriodo } = cabecalhoDaPagina(page)
   const profiles = comPerfis ? perfisDoApp : []
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [sair, setSair] = useState(false)
 
   const activeProfile = profiles.find(p => p.id === activeProfileId) || null
 
@@ -160,13 +161,14 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
         </div>
 
         <button
-          onClick={clearTokenAndRedirect}
+          onClick={() => setSair(true)}
           title="Sair"
           aria-label="Sair"
           className="shrink-0 p-2 rounded-lg text-texto-2 hover:text-perigo hover:bg-perigo-bg transition-colors"
         >
           <LogOut size={18} />
         </button>
+        <SairModal open={sair} onClose={() => setSair(false)} />
       </div>
     </header>
   )

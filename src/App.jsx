@@ -32,6 +32,8 @@ import EnvelopesPanel from './components/Envelopes/EnvelopesPanel'
 import BudgetPanel from './components/Budget/BudgetPanel'
 import ReportsPanel from './components/Reports/ReportsPanel'
 import AlertsPanel from './components/Alerts/AlertsPanel'
+import FaixaOffline from './components/Offline/FaixaOffline'
+import SoComInternet from './components/Offline/SoComInternet'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
@@ -194,8 +196,8 @@ function AppContent() {
     transactions: <TransactionsPanel />,
     credit: <CreditCardPanel />,
     schedule: <SchedulePanel />,
-    import: <ImportPanel />,
-    'importar-lancamentos': <ImportarLancamentosPanel />,
+    import: <SoComInternet titulo="Importar Fatura"><ImportPanel /></SoComInternet>,
+    'importar-lancamentos': <SoComInternet titulo="Importar lançamentos"><ImportarLancamentosPanel /></SoComInternet>,
     cashflow: <CashFlowPanel setActivePage={navigate} />,
     reservas:   <ReservasPanel />,
     envelopes:  <EnvelopesPanel />,
@@ -204,7 +206,7 @@ function AppContent() {
     reports: <ReportsPanel />,
     alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
-    clientes: <ClientesPanel onMudou={atualizarPlataforma} />,
+    clientes: <SoComInternet titulo="Clientes Finup"><ClientesPanel onMudou={atualizarPlataforma} /></SoComInternet>,
   }
 
   // Modais/toasts globais — iguais no desktop e no mobile.
@@ -259,6 +261,7 @@ function AppContent() {
         <Header page={paginaVisivel} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
           <ScrollScopeContext.Provider value={scrollCtx}>
+            <FaixaOffline />
             {panels[paginaVisivel] ?? panels.dashboard}
           </ScrollScopeContext.Provider>
         </main>

@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
 import {
   loadFromDb, seedDefaults, pingDb,
-  sincronizarEstado, criarConfirmado,
   accountToRow, txToRow, scheduleToRow,
   saveRateios, deleteRateios,
   bulkUpdateTransactionsApi,
@@ -16,12 +15,13 @@ import {
   createReserveLedgerRows,
 } from '../lib/db'
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
-import { getToken, getSessao, noAmbientePrincipal } from '../lib/api'
+import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia } from '../lib/camposSerie'
 import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
-import { saveLocal, loadLocal } from '../lib/storage'
+import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo } from '../lib/armazenamentoLocal'
+import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
@@ -32,7 +32,7 @@ import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveisDuplicados } from '../lib/autoRegistro'
-import { reaplicarPendencias, tentarReconectar } from '../lib/syncSeguro'
+import { tentarReconectar } from '../lib/syncSeguro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -749,15 +749,25 @@ export function AppProvider({ children }) {
   // Operação bloqueada por falta de Conta central no perfil do item (exibida por AvisoOperacao).
   const [avisoOperacao, setAvisoOperacao] = useState(null)
   const prevDataRef = useRef(null)
-  const syncTimerRef = useRef(null)
   const retryTimerRef = useRef(null)
-  const fullSyncRef = useRef(false)
-  // Só quem carregou do banco nesta sessão pode enviar (src/lib/syncSeguro.js). `confirmadoRef`:
-  // assinatura de cada linha no último estado confirmado pelo banco — o sync envia só o que
-  // difere dele. `origemLocalRef`: de onde veio o estado antes do load ('cache' | 'padrao').
+  // Modo sem internet (src/lib/filaOffline.js, src/lib/armazenamentoLocal.js): estado e FILA de
+  // alterações pendentes no IndexedDB deste ambiente/usuário. Só quem carregou do banco nesta
+  // sessão envia; `origemLocalRef`: de onde veio o estado antes do load ('cache' | 'padrao') —
+  // sem cache, o que se edita antes do load é sobre dados fictícios e não entra na fila.
   const carregouDoBancoRef = useRef(false)
-  const confirmadoRef = useRef(null)
   const origemLocalRef = useRef('padrao')
+  const [armazenamento] = useState(() => {
+    const nome = nomeDoBanco(getSessao())
+    return criarArmazenamento(nome ? backendIndexedDb(nome) : null)
+  })
+  const filaRef = useRef(new Map())
+  const enviandoRef = useRef(false)
+  const envioTimerRef = useRef(null)
+  const estadoTimerRef = useRef(null)
+  const dbStatusRef = useRef('connecting')
+  const [filaPendentes, setFilaPendentes] = useState([])
+  const [erroArmazenamento, setErroArmazenamento] = useState(null)
+  const [armazenamentoPersistente, setArmazenamentoPersistente] = useState(null)
   const autoRegisterDoneRef = useRef(false)
   const recalcSaldosDoneRef = useRef(false)
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
@@ -894,12 +904,95 @@ export function AppProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // ── Fila de alterações pendentes (modo sem internet) ────────────────────────
+  const atualizarPendentes = () => setFilaPendentes([...filaRef.current.values()])
+
+  // Junta entradas à fila e grava no aparelho. Falha ao gravar (quota, modo privado) não perde o
+  // que está na memória, mas avisa: fechar o app agora perderia as alterações.
+  const enfileirar = (novas) => {
+    if (!novas.length) return
+    const mudaram = mesclarNaFila(filaRef.current, novas)
+    armazenamento.gravarEntradas(mudaram).then(ok => {
+      setErroArmazenamento(ok ? null : (armazenamento.ultimoErro || 'erro'))
+    })
+    atualizarPendentes()
+  }
+
+  const tirarDaFila = (chaves) => {
+    if (!chaves.length) return
+    for (const c of chaves) filaRef.current.delete(c)
+    armazenamento.removerEntradas(chaves)
+    atualizarPendentes()
+  }
+
+  // Envia a fila ao banco (só depois de um load que deu certo nesta sessão). O que foi enviado sai
+  // da fila; o resto fica para a próxima tentativa.
+  const enviarPendentes = async () => {
+    if (enviandoRef.current || !carregouDoBancoRef.current || dbStatusRef.current !== 'connected') return
+    const entradas = [...filaRef.current.values()]
+    if (!entradas.length) return
+    enviandoRef.current = true
+    setSyncing(true)
+    let enviadas
+    try {
+      enviadas = await enviarFila(entradas)
+      setSyncError(prev => (prev ? null : prev))
+    } catch (err) {
+      enviadas = err?.enviadas || []
+      if (err?.exclusaoRecusada) {
+        // O usuário recusou a exclusão em massa: as exclusões daquela tabela saem da fila (foi o
+        // pedido dele) e o app volta ao estado do banco.
+        const tabela = err.dados?.tabela
+        const tabelas = tabela === 'cartoes' ? ['contas'] : [tabela]
+        const recusadas = entradas.filter(e => e.op === 'apagar' && tabelas.includes(e.tabela)).map(e => e.chave)
+        tirarDaFila(recusadas)
+        window.location.reload()
+        return
+      }
+      console.error('[sync] falha ao enviar pendências:', err?.message || err)
+      setDbStatus('local')
+      if (!ehErroDeRede(err)) {
+        setSyncError('Não foi possível enviar algumas alterações. Elas continuam guardadas no aparelho e o app tenta de novo.')
+      }
+    } finally {
+      const removidas = removerEnviadas(filaRef.current, enviadas)
+      if (removidas.length) armazenamento.removerEntradas(removidas)
+      atualizarPendentes()
+      enviandoRef.current = false
+      setSyncing(false)
+    }
+    // Entrou coisa nova durante o envio: manda em seguida.
+    if (filaRef.current.size && dbStatusRef.current === 'connected') agendarEnvio()
+  }
+
+  const agendarEnvio = () => {
+    if (envioTimerRef.current) clearTimeout(envioTimerRef.current)
+    envioTimerRef.current = setTimeout(() => { enviarPendentes() }, 500)
+  }
+
+  // Rateios (endpoint próprio): sem conexão, entram na fila; com conexão, vão direto — e uma
+  // entrada antiga do mesmo lançamento sai da fila para não ser reenviada por cima.
+  const persistirRateios = (lancamentoId, lista) => {
+    if (!carregouDoBancoRef.current || dbStatusRef.current !== 'connected') {
+      if (carregouDoBancoRef.current || origemLocalRef.current === 'cache') enfileirar([entradaRateios(lancamentoId, lista)])
+      return
+    }
+    tirarDaFila([`lancamento_rateios:${lancamentoId}`])
+    const p = lista ? saveRateios(lancamentoId, lista) : deleteRateios(lancamentoId)
+    p.catch(err => {
+      console.error('[rateios]', err?.message || err)
+      if (ehErroDeRede(err)) enfileirar([entradaRateios(lancamentoId, lista)])
+    })
+  }
+
+  // Chamado pelos callbacks de rateio (memoizados): sempre a versão atual.
+  const persistirRateiosRef = useRef(persistirRateios)
+  useEffect(() => { persistirRateiosRef.current = persistirRateios })
+
   // ── Resultado de um /api/load que deu certo ─────────────────────────────────
-  // Usado na abertura e na reconexão de quem abriu sem conseguir carregar. `pendentes` (só na
-  // reconexão): { base, origem } — o estado que o app tinha ao entrar no modo Local. Os dados do
-  // banco passam a valer e só o que mudou no Local é reaplicado, item por item; se a base era o
-  // defaultData (navegador sem cache), nada é reaplicado: aquelas edições foram sobre dados fictícios.
-  const aplicarCargaDoBanco = async (result, pendentes = null) => {
+  // Na abertura e na reconexão de quem abriu sem conseguir carregar: os dados do banco passam a
+  // valer e a FILA do aparelho é reaplicada por cima (o que ainda não chegou ao banco).
+  const aplicarCargaDoBanco = async (result) => {
     if (result.status === 'connected') {
       // Supabase tem dados do usuário — é a fonte autoritativa
       const merged = {
@@ -936,36 +1029,27 @@ export function AppProvider({ children }) {
         localStorage.removeItem('finup_reserve_funcs') // banco é autoritativo — limpa legado
       }
 
-      // O que o banco confirmou (reserveFunctions do banco, não a migração do legado, que
-      // precisa ser enviada). O sync compara com isto e envia só as diferenças.
-      const doBanco = { ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }
-      confirmadoRef.current = criarConfirmado(doBanco)
+      // prev = banco + fila (reserveFunctions do banco: a migração do legado acima ainda precisa
+      // ir para a fila). O efeito de sync só enfileira o que diferir disso.
+      const pendentes = [...filaRef.current.values()]
+      const doBanco = aplicarFilaSobreDados({ ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }, pendentes)
+      const dados = aplicarFilaSobreDados(merged, pendentes)
       carregouDoBancoRef.current = true
       setDbStatus('connected')
-      setData((local) => {
+      setData(() => {
         prevDataRef.current = doBanco
-        if (!pendentes) return merged
-        if (pendentes.origem !== 'cache') {
-          console.warn('[finup] reconexão: o app abriu sem cache e sem banco; alterações feitas nesse modo Local foram descartadas')
-          return merged
-        }
-        const { dados, houvePendencias } = reaplicarPendencias(pendentes.base, local, merged)
-        if (houvePendencias) console.info('[finup] reconexão: alterações do modo Local reaplicadas sobre os dados do banco')
         return dados
       })
-      if (!pendentes) saveLocal(merged)
       return true
     } else if (result.status === 'empty') {
       // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase.
       // SÓ no ambiente principal: o defaultData traz o plano de contas do Victor, e banco de
       // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
-      // Banco vazio = nada confirmado: o próximo sync envia tudo.
-      confirmadoRef.current = criarConfirmado({})
       carregouDoBancoRef.current = true
       setDbStatus('connected')
       if (noAmbientePrincipal()) {
         try { await seedDefaults(defaultData) } catch {}
-        fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
+        enfileirar(mudancasEntre(EMPTY_PREV, dataRef.current))
       }
       fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
       return true
@@ -973,95 +1057,97 @@ export function AppProvider({ children }) {
     return false
   }
 
-  // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
+  // ── Inicialização: banco é o storage principal; o IndexedDB do aparelho é cache e fila ──
   useEffect(() => {
-    // 1. Carrega cache local para renderização imediata enquanto conecta ao Supabase
-    const local = loadLocal()
-    if (local) {
-      const merged = { ...defaultData, ...local, settings: { ...defaultData.settings, ...(local.settings || {}) } }
-      // Migração: garante grupos de dívida/empréstimo mesmo em dados existentes
-      const groups = merged.accountGroups || []
-      const missingGroups = DEFAULT_ACCOUNT_GROUPS.filter(
-        dg => dg.behavior && !groups.some(g => g.behavior === dg.behavior)
-      )
-      if (missingGroups.length > 0) merged.accountGroups = [...groups, ...missingGroups]
-      setData(merged)
-      prevDataRef.current = merged
-      origemLocalRef.current = 'cache'
-    } else {
-      prevDataRef.current = defaultData
-      origemLocalRef.current = 'padrao'
-    }
-    setInitialized(true)
+    let cancelado = false
+    const arm = armazenamento
+    ;(async () => {
+      // 1. Estado e fila do aparelho, para abrir rápido (e sem internet). Na primeira abertura com
+      //    esta versão, o cache antigo do localStorage é movido para o IndexedDB.
+      const local = (await arm.lerEstado()) || (await migrarDoLocalStorage(arm))
+      const fila = await arm.lerFila()
+      if (cancelado) return
+      for (const e of fila) filaRef.current.set(e.chave, e)
+      atualizarPendentes()
+      if (local) {
+        const merged = { ...defaultData, ...local, settings: { ...defaultData.settings, ...(local.settings || {}) } }
+        // Migração: garante grupos de dívida/empréstimo mesmo em dados existentes
+        const groups = merged.accountGroups || []
+        const missingGroups = DEFAULT_ACCOUNT_GROUPS.filter(
+          dg => dg.behavior && !groups.some(g => g.behavior === dg.behavior)
+        )
+        if (missingGroups.length > 0) merged.accountGroups = [...groups, ...missingGroups]
+        setData(merged)
+        prevDataRef.current = merged
+        origemLocalRef.current = 'cache'
+      } else {
+        prevDataRef.current = defaultData
+        origemLocalRef.current = 'padrao'
+      }
+      setInitialized(true)
 
-    // 2. Conecta ao Neon via API (storage principal) — substitui cache local quando disponível
-    loadFromDb(defaultData).then(async (result) => {
+      // 2. Banco (fonte autoritativa): substitui o cache e reaplica a fila.
+      const result = await loadFromDb(defaultData)
+      if (cancelado) return
       if (await aplicarCargaDoBanco(result)) return
-      // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback.
-      // Em modo Local nada é enviado; na reconexão o app recarrega antes (efeito de retry).
-      console.warn('[finup] Fallback para localStorage (Neon indisponível):', result.status, result.error || '')
+      // Banco indisponível (sem internet, schema ausente ou erro): modo Local. Nada é enviado; as
+      // alterações vão para a fila e, na reconexão, o app recarrega antes (efeito de retry).
+      console.warn('[finup] Sem conexão com o banco — modo Local:', result.status, result.error || '')
       setDbStatus('local')
-    })
+    })()
+
+    // Armazenamento persistente: sem ele o navegador pode apagar o IndexedDB se faltar espaço.
+    try {
+      const st = navigator?.storage
+      if (st?.persisted) {
+        st.persisted().then(ja => (ja ? true : (st.persist ? st.persist() : false)))
+          .then(ok => { if (!cancelado) setArmazenamentoPersistente(!!ok) })
+          .catch(() => { if (!cancelado) setArmazenamentoPersistente(false) })
+      } else {
+        setArmazenamentoPersistente(false)
+      }
+    } catch { setArmazenamentoPersistente(false) }
+
+    return () => { cancelado = true }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Sync: localStorage (sempre) + Supabase (quando conectado) ───────────────
+  // ── Cada mudança: grava o estado no aparelho, enfileira o que mudou e agenda o envio ──
   useEffect(() => {
     if (!initialized) return
+    // Estado completo (cache) com debounce; a fila é gravada na hora, abaixo.
+    if (estadoTimerRef.current) clearTimeout(estadoTimerRef.current)
+    estadoTimerRef.current = setTimeout(() => {
+      armazenamento.gravarEstado(data).then(ok => {
+        if (!ok && armazenamento.ultimoErro === 'quota') setErroArmazenamento('quota')
+      })
+    }, 1500)
 
-    // Sempre persiste no localStorage imediatamente
-    saveLocal(data)
+    const prev = prevDataRef.current
+    prevDataRef.current = data
+    // Sem cache e antes do load, o estado é o defaultData (fictício): nada entra na fila.
+    if (prev && prev !== data && (carregouDoBancoRef.current || origemLocalRef.current === 'cache')) {
+      enfileirar(mudancasEntre(prev, data))
+    }
+    if (dbStatus === 'connected') agendarEnvio()
+  }, [data, initialized, dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Sync Supabase apenas quando conectado
-    if (dbStatus !== 'connected') return
+  useEffect(() => {
+    dbStatusRef.current = dbStatus
+    // Funções que dependem do servidor (importações, financiamento, usuários…) avisam
+    // "Disponível só com internet" em vez de tentar (src/lib/api.js).
+    definirSemConexao(dbStatus === 'local')
+  }, [dbStatus])
 
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
-    syncTimerRef.current = setTimeout(async () => {
-      // Nunca envia sem ter carregado do banco nesta sessão: o estado seria o cache ou o
-      // defaultData, e ia por cima do Neon (o que zerou `configuracoes` em 15/10/2026).
-      if (!carregouDoBancoRef.current || !confirmadoRef.current) return
-      setSyncing(true)
-      // Full sync só no banco vazio (seed): reseta prev para enviar tudo
-      if (fullSyncRef.current) {
-        fullSyncRef.current = false
-        prevDataRef.current = EMPTY_PREV
-      }
-
-      const prev = prevDataRef.current
-      if (!prev) { setSyncing(false); return }
-
-      try {
-        // Só as linhas novas ou alteradas em relação ao confirmado (src/lib/db.js).
-        await sincronizarEstado(prev, data, confirmadoRef.current)
-        // Só marca como sincronizado quando o Neon confirmou TODAS as tabelas do lote.
-        prevDataRef.current = data
-        setSyncError(prev => (prev ? null : prev)) // limpa erro anterior sem re-render à toa
-      } catch (err) {
-        // Exclusão em massa recusada pelo usuário (api/_syncTrava.js): volta ao estado do banco.
-        if (err?.exclusaoRecusada) { window.location.reload(); return }
-        // NÃO avança prevDataRef: as tabelas seguem "sujas" e serão reenviadas no próximo
-        // sync (ou ao reconectar). Torna o erro visível e ativa o retry (dbStatus).
-        console.error('[sync] falha ao sincronizar com o Neon:', err?.message || err)
-        setDbStatus('local')
-        setSyncError('Erro ao sincronizar dados com o servidor. Suas alterações estão salvas localmente e serão reenviadas automaticamente.')
-      } finally {
-        setSyncing(false)
-      }
-    }, 500)
-
-    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }
-  }, [data, initialized, dbStatus])
-
-  // ── Retry automático quando offline — tenta reconectar a cada 30s ────────────
-  // Quem já carregou do banco nesta sessão volta a 'connected' e o sync envia só o que ficou
-  // pendente. Quem nunca carregou RECARREGA antes de enviar qualquer coisa: os dados do banco
-  // passam a valer e só as alterações do modo Local são reaplicadas (aplicarCargaDoBanco).
+  // ── Reconexão: a cada 30 s em modo Local, ao voltar a internet e ao voltar a ficar visível ──
+  // Quem já carregou do banco nesta sessão volta a 'connected' e envia a fila. Quem nunca carregou
+  // RECARREGA antes de enviar qualquer coisa (aplicarCargaDoBanco reaplica a fila sobre o banco).
   useEffect(() => {
     if (dbStatus !== 'local') {
       if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
       return
     }
     let tentando = false
-    retryTimerRef.current = setInterval(async () => {
+    const tentar = async () => {
       if (tentando) return
       tentando = true
       try {
@@ -1071,15 +1157,45 @@ export function AppProvider({ children }) {
           carregar: () => loadFromDb(defaultData),
         })
         if (r.acao === 'enviar-pendentes') setDbStatus('connected')
-        else if (r.acao === 'recarregado') {
-          await aplicarCargaDoBanco(r.result, { base: prevDataRef.current, origem: origemLocalRef.current })
-        }
+        else if (r.acao === 'recarregado') await aplicarCargaDoBanco(r.result)
       } finally {
         tentando = false
       }
-    }, 30000)
-    return () => { if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null } }
+    }
+    const aoVoltar = () => { if (document.visibilityState !== 'hidden') tentar() }
+    retryTimerRef.current = setInterval(tentar, 30000)
+    window.addEventListener('online', tentar)
+    document.addEventListener('visibilitychange', aoVoltar)
+    return () => {
+      if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
+      window.removeEventListener('online', tentar)
+      document.removeEventListener('visibilitychange', aoVoltar)
+    }
   }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Conectado: envia o pendente ao voltar a ficar visível (no iPhone não há envio em segundo plano)
+  // e entra em modo Local assim que o navegador avisa que a internet caiu.
+  useEffect(() => {
+    if (dbStatus !== 'connected') return
+    const aoVoltar = () => { if (document.visibilityState !== 'hidden') enviarPendentes() }
+    const caiu = () => setDbStatus('local')
+    document.addEventListener('visibilitychange', aoVoltar)
+    window.addEventListener('offline', caiu)
+    return () => {
+      document.removeEventListener('visibilitychange', aoVoltar)
+      window.removeEventListener('offline', caiu)
+    }
+  }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sair: apaga o estado e a fila deste ambiente/usuário no aparelho (e o cache antigo).
+  const apagarDadosDoAparelho = async () => {
+    if (estadoTimerRef.current) clearTimeout(estadoTimerRef.current)
+    estadoTimerRef.current = null
+    filaRef.current.clear()
+    atualizarPendentes()
+    apagarCacheAntigo()
+    return armazenamento.apagarTudo()
+  }
 
   const update = useCallback((updater) => {
     setData(prev => typeof updater === 'function' ? updater(prev) : updater)
@@ -1156,7 +1272,7 @@ export function AppProvider({ children }) {
       valor: Number(r.valor) || 0,
       descricao: r.descricao || '',
     }))
-    saveRateios(lancamentoId, lista).catch(e => console.error('[rateios] save', e.message))
+    persistirRateiosRef.current(lancamentoId, lista)
     update(d => {
       const outros = (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId)
       const novos = lista.map(r => ({ ...r, lancamentoId }))
@@ -1182,7 +1298,7 @@ export function AppProvider({ children }) {
 
   const deleteRateiosFor = useCallback((lancamentoId) => {
     if (!lancamentoId) return
-    deleteRateios(lancamentoId).catch(e => console.error('[rateios] delete', e.message))
+    persistirRateiosRef.current(lancamentoId, null)
     update(d => ({ ...d, rateios: (d.rateios || []).filter(r => r.lancamentoId !== lancamentoId) }))
   }, [update])
 
@@ -2072,7 +2188,7 @@ export function AppProvider({ children }) {
 
     // Remove os rateios do lançamento excluído no banco (quando houver).
     if ((before.rateios || []).some(r => r.lancamentoId === id)) {
-      deleteRateios(id).catch(e => console.error('[rateios] delete', e.message))
+      persistirRateiosRef.current(id, null)
     }
 
     // Recalcula os agendamentos das faturas afetadas (gatilho: deleção de gasto de cartão).
@@ -5540,6 +5656,12 @@ export function AppProvider({ children }) {
       syncError,
       syncing,
       dismissSyncError: () => setSyncError(null),
+      // Modo sem internet: fila de pendências, envio manual e dados do aparelho.
+      filaPendentes,
+      enviarPendentes,
+      apagarDadosDoAparelho,
+      erroArmazenamento,
+      armazenamentoPersistente,
       getFinancialPeriod,
       getAccountSaldos,
       getFluxoCaixaPrincipal,

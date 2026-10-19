@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays } from 'lucide-react'
-import { getSessao, clearTokenAndRedirect } from '../../lib/api'
+import { getSessao } from '../../lib/api'
+import SairModal from '../Offline/SairModal'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
 import AgendaCelularPanel from '../Settings/AgendaCelularPanel'
 import Modal from '../shared/Modal'
@@ -15,6 +16,7 @@ export default function SessaoUsuario({ comSair = false }) {
   const [trocar, setTrocar] = useState(false)
   const [agenda, setAgenda] = useState(false)
   const [toast, setToast] = useState(null)
+  const [sair, setSair] = useState(false)
   if (!sessao) return null
   const emergencia = sessao.origem === 'env'
 
@@ -48,7 +50,7 @@ export default function SessaoUsuario({ comSair = false }) {
           <Smartphone size={11} /> Instalar no celular
         </a>
         {comSair && (
-          <button type="button" onClick={clearTokenAndRedirect} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-perigo min-h-[28px]">
+          <button type="button" onClick={() => setSair(true)} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-perigo min-h-[28px]">
             <LogOut size={11} /> Sair
           </button>
         )}
@@ -57,6 +59,7 @@ export default function SessaoUsuario({ comSair = false }) {
           modal ficava POR BAIXO do conteúdo da página (ex.: cabeçalho preso do calendário). */}
       {createPortal(
         <>
+          <SairModal open={sair} onClose={() => setSair(false)} />
           {/* Agenda no celular: janela (vale para qualquer nível — Configurações › Geral pode estar fechada). */}
           <Modal open={agenda} onClose={() => setAgenda(false)} title="Agenda no celular">
             {agenda && <AgendaCelularPanel emJanela />}

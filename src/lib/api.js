@@ -22,6 +22,22 @@ export function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// Modo sem internet (AppContext liga quando o banco não responde). Gravações que dependem do
+// servidor — importações, financiamento, usuários, edição em massa… — avisam em vez de tentar. As
+// do sync (fila de pendências) não passam por aqui.
+export const MSG_SO_COM_INTERNET = 'Disponível só com internet. Conecte-se e tente de novo.'
+let semConexao = false
+export function definirSemConexao(v) { semConexao = !!v }
+export const estaSemConexao = () => semConexao
+const ROTAS_DA_FILA = new Set(['/api/sync', '/api/sync-srf', '/api/lancamento-rateios'])
+export function exigirConexao(path, method = 'GET') {
+  if (!semConexao || String(method).toUpperCase() === 'GET') return
+  if (ROTAS_DA_FILA.has(String(path).split('?')[0])) return
+  const err = new Error(MSG_SO_COM_INTERNET)
+  err.semConexao = true
+  throw err
+}
+
 // Remove o token e volta à tela de login. Chamado no logout e quando a API responde 401
 // (token expirado/inválido) — evita o app ficar preso num estado sem sessão.
 export function clearTokenAndRedirect() {

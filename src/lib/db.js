@@ -1,9 +1,6 @@
 import { installmentKey } from './installments.js'
-import { authHeaders, clearTokenAndRedirect, gravacaoPermitida } from './api.js'
-import {
-  assinaturasDe, linhasNovasOuAlteradas, registrarConfirmadas, idsApagados,
-  assinaturasDaConfiguracao, camposAlterados, textoConfirmacaoExclusao,
-} from './syncSeguro.js'
+import { authHeaders, clearTokenAndRedirect, gravacaoPermitida, exigirConexao } from './api.js'
+import { idsApagados, textoConfirmacaoExclusao } from './syncSeguro.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
@@ -35,6 +32,7 @@ const SEM_PERMISSAO = Object.freeze({ ok: true, skipped: true, semPermissao: tru
 
 async function apiPost(path, body) {
   if (!gravacaoPermitida(path, 'POST', body)) return SEM_PERMISSAO
+  exigirConexao(path, 'POST')
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -100,6 +98,7 @@ export async function bulkUpdateTransactionsApi(ids, { date = null, categoryId, 
 
 async function apiPut(path, body) {
   if (!gravacaoPermitida(path, 'PUT', body)) return SEM_PERMISSAO
+  exigirConexao(path, 'PUT')
   const res = await fetch(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -116,6 +115,7 @@ async function apiPut(path, body) {
 
 async function apiDelete(path) {
   if (!gravacaoPermitida(path, 'DELETE')) return SEM_PERMISSAO
+  exigirConexao(path, 'DELETE')
   const res = await fetch(path, { method: 'DELETE', headers: { ...authHeaders() } })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
@@ -1181,7 +1181,7 @@ let confirmadorExclusaoEmMassa = (dados) =>
   window.confirm(textoConfirmacaoExclusao(dados))
 export function definirConfirmadorExclusaoEmMassa(fn) { confirmadorExclusaoEmMassa = fn }
 
-async function postSync(body) {
+export async function postSync(body) {
   try {
     return await apiPost('/api/sync', body)
   } catch (err) {
@@ -1194,18 +1194,13 @@ async function postSync(body) {
   }
 }
 
-// `confirmado` (Map id → assinatura, src/lib/syncSeguro.js): com ele, só vão as linhas novas ou
-// diferentes do último estado que o banco confirmou — e o Map é atualizado quando o servidor
-// responde OK. Sem ele (restauração de backup, seed), vai a tabela inteira.
-// `confirmarExclusaoEmMassa`: pedido explícito do usuário (restauração) — o servidor não recusa.
-export async function syncSection(table, prevItems, currItems, toRow, { confirmado, confirmarExclusaoEmMassa } = {}) {
+// Tabela inteira (restauração de backup, seed). O dia a dia vai pela fila (src/lib/filaOffline.js),
+// que envia só os itens alterados. `confirmarExclusaoEmMassa`: pedido explícito do usuário
+// (restauração) — o servidor não recusa.
+export async function syncSection(table, prevItems, currItems, toRow, { confirmarExclusaoEmMassa } = {}) {
   try {
     const toDelete = idsApagados(prevItems, currItems)
-    const todas = (currItems || []).map(toRow)
-    const { linhas: enviadas, assinaturas } = confirmado
-      ? linhasNovasOuAlteradas(confirmado, todas)
-      : { linhas: todas, assinaturas: [] }
-    if (confirmado && enviadas.length === 0 && toDelete.length === 0) return { ok: true, skipped: true }
+    const enviadas = (currItems || []).map(toRow)
     const r = await postSync({
       type: 'section',
       table,
@@ -1213,7 +1208,6 @@ export async function syncSection(table, prevItems, currItems, toRow, { confirma
       delete: toDelete,
       ...(confirmarExclusaoEmMassa ? { confirmarExclusaoEmMassa: true } : {}),
     })
-    if (confirmado && !r?.semPermissao) registrarConfirmadas(confirmado, assinaturas, toDelete)
     // 200 não é prova de escrita. O endpoint devolve quantas linhas gravou; mandar N e gravar 0
     // é o cenário "salvei, deu OK e sumiu no F5", que antes não deixava rastro nenhum.
     if (enviadas.length > 0 && r?.written && r.written.upserted === 0) {
@@ -1247,7 +1241,7 @@ export async function syncSrf(scheduleId, rows) {
 // Assinatura estável de um conjunto de linhas de um schedule (ordem-independente) — usada para
 // pular agendamentos cujo detalhamento não mudou entre prev e curr (o motor regenera de forma
 // determinística: mesmo id ⇒ mesmos valores).
-function srfSignature(rows) {
+export function srfSignature(rows) {
   return (rows || [])
     .map(r => `${r.id}:${r.valor}:${r.reservaFuncaoId ?? ''}:${r.sourceLancamentoId ?? ''}:${r.faturaRef ?? ''}`)
     .sort()
@@ -1288,32 +1282,22 @@ export const cardToRow = (c) => ({
   due_day: c.dueDay || null,
 })
 
-// `confirmado`: { contas: Map, cartoes: Map } — mesma regra do syncSection.
-export async function syncAccounts(prevAccounts, currAccounts, { confirmado, confirmarExclusaoEmMassa } = {}) {
+// Tabela inteira de contas + cartões (restauração de backup); o dia a dia vai pela fila.
+export async function syncAccounts(prevAccounts, currAccounts, { confirmarExclusaoEmMassa } = {}) {
   try {
     const toDelete = idsApagados(prevAccounts, currAccounts)
     const prevCards = (prevAccounts || []).filter((a) => a.type === 'credit')
     const currCards = (currAccounts || []).filter((a) => a.type === 'credit')
     const deleteCards = idsApagados(prevCards, currCards)
 
-    const contas = (currAccounts || []).map(accountToRow)
-    const cartoes = currCards.map(cardToRow)
-    const c = confirmado ? linhasNovasOuAlteradas(confirmado.contas, contas) : { linhas: contas, assinaturas: [] }
-    const k = confirmado ? linhasNovasOuAlteradas(confirmado.cartoes, cartoes) : { linhas: cartoes, assinaturas: [] }
-    if (confirmado && !c.linhas.length && !k.linhas.length && !toDelete.length && !deleteCards.length) return
-
-    const r = await postSync({
+    await postSync({
       type: 'accounts',
-      upsert: c.linhas,
+      upsert: (currAccounts || []).map(accountToRow),
       delete: toDelete,
-      cards: k.linhas,
+      cards: currCards.map(cardToRow),
       deleteCards,
       ...(confirmarExclusaoEmMassa ? { confirmarExclusaoEmMassa: true } : {}),
     })
-    if (confirmado && !r?.semPermissao) {
-      registrarConfirmadas(confirmado.contas, c.assinaturas, toDelete)
-      registrarConfirmadas(confirmado.cartoes, k.assinaturas, deleteCards)
-    }
   } catch (err) {
     console.error('[db] sync accounts:', err.message)
     throw err
@@ -1350,24 +1334,34 @@ export const settingsToRow = (settings, costCenters) => ({
   mobile_home_cards: settings.mobileHomeCards ?? null,
 })
 
-// `confirmado` (assinatura por chave): envia só as chaves que mudaram, e elas vão em
-// `camposAlterados` — o sinal que a trava do servidor exige para trocar um valor preenchido por
-// vazio/padrão. Sem `confirmado` (seed) vai a linha inteira SEM camposAlterados: o servidor só
-// preenche o que estiver vazio. `todosAlterados` (restauração de backup): tudo é intencional.
-export async function syncSettings(settings, costCenters, { confirmado, todosAlterados } = {}) {
+// Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
+// fora de settings). A fila (src/lib/filaOffline.js) guarda os valores já como colunas.
+export const CHAVE_APP_DA_CONFIGURACAO = {
+  financial_month_start_day: 'financialMonthStartDay',
+  financial_month_mode: 'financialMonthMode',
+  currency: 'currency',
+  recurring_match_exceptions: 'recurringMatchExceptions',
+  category_groups: 'categoryGroups',
+  category_groups_ordem_manual: 'categoryGroupsOrdemManual',
+  balance_snapshot: 'lastBalanceSnapshot',
+  estorno_cartao_enabled: 'estornoCartaoEnabled',
+  estorno_cartao_category_id: 'estornoCartaoCategoryId',
+  faturas_fechadas: 'faturasFechadas',
+  mobile_home_cards: 'mobileHomeCards',
+}
+
+// Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).
+export async function enviarConfiguracoes(valores, campos) {
+  return apiPost('/api/sync', { type: 'settings', data: valores, camposAlterados: campos })
+}
+
+// Linha inteira de configurações. Seed: SEM camposAlterados — a trava do servidor só preenche o
+// que estiver vazio. `todosAlterados` (restauração de backup): tudo é intencional. O dia a dia vai
+// pela fila, só com as colunas alteradas (enviarConfiguracoes).
+export async function syncSettings(settings, costCenters, { todosAlterados } = {}) {
   try {
-    const linha = settingsToRow(settings || {}, costCenters)
-    let data = linha
-    let campos
-    if (confirmado) {
-      campos = camposAlterados(confirmado, linha)
-      if (campos.length === 0) return
-      data = Object.fromEntries(campos.map(k => [k, linha[k]]))
-    } else if (todosAlterados) {
-      campos = Object.keys(linha)
-    }
-    const r = await apiPost('/api/sync', { type: 'settings', data, ...(campos ? { camposAlterados: campos } : {}) })
-    if (confirmado && !r?.semPermissao) Object.assign(confirmado, assinaturasDaConfiguracao(data))
+    const data = settingsToRow(settings || {}, costCenters)
+    await apiPost('/api/sync', { type: 'settings', data, ...(todosAlterados ? { camposAlterados: Object.keys(data) } : {}) })
   } catch (err) {
     console.error('[db] sync settings:', err.message)
     throw err
@@ -1408,41 +1402,6 @@ export const SECOES_SYNC = [
   { chave: 'reserveFunctions', tabela: 'reserve_functions', toRow: reserveFunctionToRow },
   { chave: 'favorecidoAliases', tabela: 'favorecido_alias', toRow: favorecidoAliasToRow },
 ]
-
-// "Confirmado" de um estado que acabou de vir do banco (ou {} quando o banco está vazio): a
-// assinatura de cada linha de cada tabela. O sync compara com isto para enviar só o que mudou.
-export function criarConfirmado(dados) {
-  const d = dados || {}
-  const conf = {}
-  for (const { chave, tabela, toRow } of SECOES_SYNC) conf[tabela] = assinaturasDe((d[chave] || []).map(toRow))
-  conf.contas = assinaturasDe((d.accounts || []).map(accountToRow))
-  conf.cartoes = assinaturasDe((d.accounts || []).filter(a => a.type === 'credit').map(cardToRow))
-  conf.configuracoes = d.settings ? assinaturasDaConfiguracao(settingsToRow(d.settings, d.costCenters)) : {}
-  return conf
-}
-
-// Um ciclo do sync do AppContext: envia ao Neon o que mudou entre `prev` (último estado
-// sincronizado) e `data`. Seção cujo array não mudou de referência nem é olhada; dentro dela, só
-// vão as linhas novas ou diferentes do `confirmado` (criarConfirmado) — nunca a tabela inteira,
-// que desfazia as edições de outro aparelho aberto no mesmo ambiente. Apagados: ids de `prev`
-// que sumiram de `data`. Devolve quantas seções foram enviadas (0 = nada a fazer).
-export async function sincronizarEstado(prev, data, confirmado) {
-  const tasks = []
-  if (prev.accounts !== data.accounts)
-    tasks.push(syncAccounts(prev.accounts, data.accounts, { confirmado: { contas: confirmado.contas, cartoes: confirmado.cartoes } }))
-  for (const { chave, tabela, toRow } of SECOES_SYNC) {
-    if (prev[chave] !== data[chave])
-      tasks.push(syncSection(tabela, prev[chave] || [], data[chave] || [], toRow, { confirmado: confirmado[tabela] }))
-  }
-  if (prev.payees !== data.payees)
-    tasks.push(syncPayees(prev.payees, data.payees))
-  if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
-    tasks.push(syncScheduleReservaFuncoes(prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || []))
-  if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
-    tasks.push(syncSettings(data.settings, data.costCenters, { confirmado: confirmado.configuracoes }))
-  await Promise.all(tasks)
-  return tasks.length
-}
 
 export async function restoreFullBackup(backup, accountMapping) {
   const empty = {

@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'
 import ThemeToggle from '../ThemeToggle'
 import SessaoUsuario from './SessaoUsuario'
+import IndicadorSync from '../Offline/IndicadorSync'
 import ShortcutHint from '../shared/ShortcutHint'
 import { useTituloAtalho } from '../../context/atalhosHooks'
 
@@ -87,8 +88,9 @@ export default function Sidebar({ active, setActive, alertCount, plataforma }) {
         ))}
       </nav>
       <div className="px-4 pt-3 pb-2 border-t border-borda space-y-2.5">
-        <div>
+        <div className="space-y-1">
           <DbStatusBadge status={dbStatus} />
+          <IndicadorSync />
         </div>
 
         <ThemeToggle compacto />

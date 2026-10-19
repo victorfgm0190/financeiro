@@ -4,7 +4,6 @@ import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
-import { STORAGE_KEY } from '../../lib/storage'
 import { fmt } from '../shared/utils'
 import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
@@ -85,7 +84,15 @@ export default function SettingsPanel() {
     recalcularAgendamentosFatura,
     reconciliarGerencial,
     data,
+    filaPendentes,
+    apagarDadosDoAparelho,
   } = useApp()
+  // Pendências não enviadas: restaurar backup ou apagar os dados do aparelho as perderia.
+  const avisoPendencias = () => {
+    if (!filaPendentes.length) return false
+    alert(`Há ${filaPendentes.length} alteração(ões) ainda não enviada(s) ao banco. Envie antes (indicador de sincronização, no rodapé).`)
+    return true
+  }
 
   const aplicAccounts = accounts.filter(a => a.contaAplicacao)
   const [startDay, setStartDay] = useState(settings.financialMonthStartDay || 1)
@@ -528,6 +535,7 @@ export default function SettingsPanel() {
 
   const handleImportConfirm = async () => {
     if (!pendingImport) return
+    if (avisoPendencias()) return
     const accountMapping = pendingImport.parsed._accountMapping
     const cleanData = { ...pendingImport.parsed }
     delete cleanData._exportedAt
@@ -535,9 +543,10 @@ export default function SettingsPanel() {
     delete cleanData._accountMapping
     setImporting(true)
     try {
-      // Restaura no Neon (fonte autoritativa); só então grava o cache local e recarrega.
+      // Restaura no Neon (fonte autoritativa) e recarrega a partir dele.
       await restoreFullBackup(cleanData, accountMapping)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanData))
+      // O banco foi substituído: o estado guardado no aparelho fica velho — recarrega do banco.
+      await apagarDadosDoAparelho()
       window.location.reload()
     } catch (err) {
       setImporting(false)
@@ -1903,7 +1912,7 @@ export default function SettingsPanel() {
       <ConfirmDialog
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        onConfirm={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload() }}
+        onConfirm={() => { if (avisoPendencias()) return; apagarDadosDoAparelho().then(() => window.location.reload()) }}
         title="Apagar Todos os Dados"
         message="Tem certeza? Todos os dados (contas, lançamentos, agendamentos) serão apagados permanentemente."
         danger
