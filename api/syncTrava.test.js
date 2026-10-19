@@ -11,6 +11,7 @@ vi.mock('./_db.js', async () => {
   const query = async (sql, params = []) => (await estado.db.query(sql, params)).rows
   return {
     query,
+    ErroIdentificador: real.ErroIdentificador,
     parseBody: async (req) => req.body || {},
     upsertRows: async (table, rows, conflictCol = 'id') => {
       if (!rows?.length) return 0

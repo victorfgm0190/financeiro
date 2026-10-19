@@ -9,6 +9,18 @@
 // Origem: em 15/10/2026 a linha `configuracoes` voltou ao defaultData (dia 1, faturas_fechadas {},
 // category_groups []) porque um navegador sem dados do banco fez full-sync ao reconectar.
 
+// Tabelas que o `type: 'section'` do /api/sync pode gravar: as de SECOES_SYNC (src/lib/db.js, o
+// sync genérico do app e da fila offline) + o de-para Dindin. Lista FECHADA: o nome da tabela vem
+// do navegador e entra no SQL, então qualquer outra (usuarios, membros, senha_tokens…) é recusada
+// com 400 antes de tocar no banco. Contas/cartões, favorecidos e configuracoes têm `type` próprio;
+// detalhamento, rateios e tipos de documento têm endpoint próprio. api/syncTabelas.test.js
+// confere que a lista bate com SECOES_SYNC.
+export const TABELAS_DO_SYNC = new Set([
+  'lancamentos', 'agendamentos', 'categorias', 'orcamento', 'regras_classificacao', 'gerencial_rules',
+  'reservas_funcoes', 'reservas', 'envelopes', 'grupos_conta', 'perfis', 'card_imports',
+  'reserve_functions', 'favorecido_alias', 'account_mapping',
+])
+
 // Valores que contam como "padrão" em configuracoes (os do defaultData / syncSettings).
 export const PADRAO_CONFIGURACOES = {
   financial_month_start_day: 1,

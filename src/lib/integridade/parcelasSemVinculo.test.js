@@ -231,7 +231,7 @@ describe('Causa da perda do vínculo: UPDATE não apaga mais os campos de parcel
   it('o upsert de lancamentos preserva installment_num/total/key e serie_id quando chega NULL', () => {
     const cols = ['id', 'description', ...CAMPOS_PARCELA_PROTEGIDOS, 'amount']
     const sql = montarUpsertSql('lancamentos', cols, 1, 'id', CAMPOS_PARCELA_PROTEGIDOS)
-    for (const c of CAMPOS_PARCELA_PROTEGIDOS) expect(sql).toContain(`"${c}" = COALESCE(EXCLUDED."${c}", lancamentos."${c}")`)
+    for (const c of CAMPOS_PARCELA_PROTEGIDOS) expect(sql).toContain(`"${c}" = COALESCE(EXCLUDED."${c}", "lancamentos"."${c}")`)
     expect(sql).toContain('"description" = EXCLUDED."description"')
     expect(sql).toContain('"amount" = EXCLUDED."amount"')
   })

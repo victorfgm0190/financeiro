@@ -1,10 +1,10 @@
-import { upsertRows, deleteRows, parseBody, query } from './_db.js'
+import { upsertRows, deleteRows, parseBody, query, ErroIdentificador } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
-import { filtrarConfiguracoes, conferirExclusaoEmMassa, logRecusa } from './_syncTrava.js'
+import { filtrarConfiguracoes, conferirExclusaoEmMassa, logRecusa, TABELAS_DO_SYNC } from './_syncTrava.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -38,20 +38,28 @@ async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
   try {
+    const corpo = await parseBody(req)
+    // O nome da tabela vem do navegador e entra no SQL: fora da lista fechada → 400, antes de
+    // qualquer consulta (a autorização abaixo já lê a tabela). `table` ausente também é 400.
+    if (corpo?.type === 'section') {
+      const { table } = corpo
+      if (!table || typeof table !== 'string') {
+        return res.status(400).json({ error: 'sync section sem `table`' })
+      }
+      if (!TABELAS_DO_SYNC.has(table)) {
+        logRecusa('tabela_fora_da_lista', { tabela: String(table).slice(0, 60) })
+        return res.status(400).json({ error: 'Tabela não permitida no sync', codigo: 'tabela_nao_permitida' })
+      }
+    }
     // Permissão do módulo da tabela (e perfis permitidos): grava só o que o usuário pode; nada
     // permitido → 403 (api/_permissoesApi.js).
-    const body = await autorizarSync(query, req.user, await parseBody(req))
+    const body = await autorizarSync(query, req.user, corpo)
     const { type } = body
     const confirmado = body.confirmarExclusaoEmMassa === true
 
     if (type === 'section') {
       // Sync genérico: upsert + delete por id
       const { table, upsert, delete: toDelete } = body
-      // `table` ausente montaria `INSERT INTO undefined` e voltaria como 500 genérico, sem dizer
-      // que o problema foi o payload. Sai como 400, que é o que de fato é.
-      if (!table || typeof table !== 'string') {
-        return res.status(400).json({ error: 'sync section sem `table`' })
-      }
       // De-para Dindin só existe no ambiente principal (api/account-mapping.js).
       if (table === 'account_mapping' && req.ambiente?.sigla !== AMBIENTE_PRINCIPAL) {
         return res.status(403).json({ error: 'De-para Dindin disponível só no ambiente principal' })
@@ -118,7 +126,7 @@ async function handler(req, res) {
 
     return res.status(400).json({ error: `Unknown sync type: ${type}` })
   } catch (err) {
-    if (err instanceof ErroHttp) return res.status(err.status).json({ error: err.message })
+    if (err instanceof ErroHttp || err instanceof ErroIdentificador) return res.status(err.status).json({ error: err.message })
     console.error('[api/sync]', err.message)
     res.status(500).json({ error: err.message })
   }

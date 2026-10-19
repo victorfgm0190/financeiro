@@ -23,21 +23,41 @@ const MAX_CHUNK_ROWS = 500
 export const CAMPOS_PARCELA_PROTEGIDOS = ['installment_num', 'installment_total', 'installment_key', 'serie_id']
 export const FLAG_LIMPAR_PARCELA = '_limpar_parcela'
 
+// Nome de tabela/coluna não vai como parâmetro ($n): entra no texto do SQL. Por isso só passa nome
+// simples em minúsculas (sem aspas, espaço, ponto-e-vírgula…), e sempre entre aspas duplas — nada
+// que veio do navegador vira SQL. Fora do padrão → ErroIdentificador (400 no /api/sync).
+export const IDENT = /^[a-z_][a-z0-9_]*$/
+export class ErroIdentificador extends Error {
+  constructor(message) {
+    super(message)
+    this.status = 400
+  }
+}
+export function citarIdent(nome) {
+  if (typeof nome !== 'string' || !IDENT.test(nome)) {
+    throw new ErroIdentificador(`Nome inválido de tabela/coluna: ${JSON.stringify(String(nome).slice(0, 60))}`)
+  }
+  return `"${nome}"`
+}
+
 // SQL do upsert de um lote. `preservarSeNulo`: colunas cujo valor gravado vence um NULL de entrada.
 export function montarUpsertSql(table, cols, nRows, conflictCol, preservarSeNulo = []) {
+  const t = citarIdent(table)
+  const conflito = citarIdent(conflictCol)
   let idx = 1
   const values = Array.from({ length: nRows }, () => `(${cols.map(() => `$${idx++}`).join(', ')})`).join(', ')
   // Quando cols só tem a coluna de conflito, o SET fica vazio ("DO UPDATE SET " sem nada
   // depois) → "syntax error at end of input". Nesse caso não há o que atualizar: DO NOTHING.
   const updateCols = cols.filter(c => c !== conflictCol)
   const preservar = new Set(preservarSeNulo)
-  const set = (c) => preservar.has(c)
-    ? `"${c}" = COALESCE(EXCLUDED."${c}", ${table}."${c}")`
-    : `"${c}" = EXCLUDED."${c}"`
+  const set = (c) => {
+    const col = citarIdent(c)
+    return preservar.has(c) ? `${col} = COALESCE(EXCLUDED.${col}, ${t}.${col})` : `${col} = EXCLUDED.${col}`
+  }
   const conflictClause = updateCols.length === 0
-    ? `ON CONFLICT ("${conflictCol}") DO NOTHING`
-    : `ON CONFLICT ("${conflictCol}") DO UPDATE SET ${updateCols.map(set).join(', ')}`
-  return `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(', ')}) VALUES ${values} ${conflictClause}`
+    ? `ON CONFLICT (${conflito}) DO NOTHING`
+    : `ON CONFLICT (${conflito}) DO UPDATE SET ${updateCols.map(set).join(', ')}`
+  return `INSERT INTO ${t} (${cols.map(citarIdent).join(', ')}) VALUES ${values} ${conflictClause}`
 }
 
 // Separa as linhas de lancamentos em protegidas × limpeza intencional e tira a flag (não é coluna).
@@ -157,8 +177,41 @@ async function colunasOpcionaisAusentes(client, table) {
   return c.faltam
 }
 
+// Colunas reais da tabela, em cache por banco. Coluna desconhecida relê o banco uma vez antes de
+// recusar (a migração pode ter rodado com a instância quente).
+const cacheColunasDaTabela = new Map()
+export const _limparCacheColunasDaTabela = () => cacheColunasDaTabela.clear()
+
+async function colunasDaTabela(client, table, { reler = false } = {}) {
+  const chave = `${bancoAtual()}:${table}`
+  let cols = cacheColunasDaTabela.get(chave)
+  if (!cols || reler) {
+    const { rows } = await client.query(
+      'SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1',
+      [table],
+    )
+    cols = new Set(rows.map(r => r.column_name))
+    if (cols.size) cacheColunasDaTabela.set(chave, cols)
+  }
+  return cols
+}
+
+// Toda chave das linhas tem de ser coluna da tabela (em QUALQUER linha, não só na primeira).
+// Tabela sem colunas = não existe. As duas saem como ErroIdentificador (400) antes de gravar.
+async function conferirColunas(client, table, rows) {
+  const chaves = new Set()
+  for (const r of rows) for (const k of Object.keys(r)) if (!(table === 'lancamentos' && k === FLAG_LIMPAR_PARCELA)) chaves.add(k)
+  for (const k of chaves) citarIdent(k)
+  let reais = await colunasDaTabela(client, table)
+  if ([...chaves].some(k => !reais.has(k))) reais = await colunasDaTabela(client, table, { reler: true })
+  if (!reais.size) throw new ErroIdentificador(`Tabela inexistente: ${table}`)
+  const desconhecidas = [...chaves].filter(k => !reais.has(k))
+  if (desconhecidas.length) throw new ErroIdentificador(`Coluna inexistente em ${table}: ${desconhecidas.slice(0, 5).join(', ')}`)
+}
+
 export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id') {
   if (!rows || rows.length === 0) return 0
+  citarIdent(table)
   const faltam = await colunasOpcionaisAusentes(client, table)
   if (faltam.length) {
     rows = rows.map((r) => {
@@ -167,6 +220,7 @@ export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id'
       return copia
     })
   }
+  await conferirColunas(client, table, rows)
   if (table === 'contas') await desligarFlagsUnicasAntes(client, rows)
   // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
   let lotes = [[rows, []]]
@@ -229,7 +283,7 @@ export async function withTransaction(fn) {
 export async function deleteRows(table, ids, col = 'id') {
   if (!ids || ids.length === 0) return 0
   const { rowCount } = await getPool().query(
-    `DELETE FROM ${table} WHERE "${col}" = ANY($1)`, [ids],
+    `DELETE FROM ${citarIdent(table)} WHERE ${citarIdent(col)} = ANY($1)`, [ids],
   )
   return rowCount ?? 0
 }
