@@ -39,12 +39,13 @@ export const ehTabelaInexistente = (err) => err?.code === '42P01'
 export const estaBloqueado = (estado, agora) =>
   !!estado?.bloqueado_ate && new Date(estado.bloqueado_ate).getTime() > agora.getTime()
 
-export function estadoAposFalha(estado, agora) {
+// `limite`: o padrão é o do cadastro; o acesso de emergência passa o seu (mais rígido, api/auth.js).
+export function estadoAposFalha(estado, agora, { max = MAX_TENTATIVAS, bloqueioMs = BLOQUEIO_MS } = {}) {
   const vencido = !!estado?.bloqueado_ate && !estaBloqueado(estado, agora)
   const tentativas = (vencido ? 0 : Number(estado?.tentativas_falhas) || 0) + 1
   return {
     tentativas_falhas: tentativas,
-    bloqueado_ate: tentativas >= MAX_TENTATIVAS ? new Date(agora.getTime() + BLOQUEIO_MS) : null,
+    bloqueado_ate: tentativas >= max ? new Date(agora.getTime() + bloqueioMs) : null,
   }
 }
 

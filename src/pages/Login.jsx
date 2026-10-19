@@ -67,6 +67,9 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Acesso de emergência (ADMIN_USER/ADMIN_PASS, api/auth.js): modo separado do login normal, com
+  // bloqueio próprio. Só no endereço principal — em <sigla>.finup.app.br o link nem aparece.
+  const [emergencia, setEmergencia] = useState(false)
 
   // Os parâmetros (?esqueci, ?senha) já foram lidos: saem da URL.
   useEffect(() => { if (window.location.search) window.history.replaceState(null, '', window.location.pathname) }, [])
@@ -100,7 +103,10 @@ export default function Login() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // Usuário ou e-mail, sem diferenciar maiúsculas (VMOREIRA = vmoreira); a senha vai como digitada.
-        body: JSON.stringify({ username: username.trim().toLowerCase(), password, ...ambienteDoPedido() }),
+        body: JSON.stringify({
+          username: username.trim().toLowerCase(), password, ...ambienteDoPedido(),
+          ...(emergencia && doEndereco.principal ? { emergencia: true } : {}),
+        }),
       })
       if (!res.ok) {
         setError(res.status === 401 ? 'Usuário, senha ou ambiente inválidos.' : 'Falha ao entrar. Tente novamente.')
@@ -177,6 +183,7 @@ export default function Login() {
              onSubmit com preventDefault continua fazendo o login por fetch. */
           <form method="post" action="/api/auth" onSubmit={handleSubmit} className="bg-surface border border-borda rounded-xl p-6 space-y-4 shadow-2xl">
             {aviso && <Aviso>{aviso}</Aviso>}
+            {emergencia && <Aviso>Acesso de emergência: use o usuário e a senha de recuperação.</Aviso>}
             <CampoAmbiente doEndereco={doEndereco} valor={ambiente} onChange={setAmbiente} autoFocus={!ambiente} />
 
             <div>
@@ -224,13 +231,24 @@ export default function Login() {
               disabled={loading || !username || !password || (doEndereco.principal && !ambiente)}
               className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <LogIn size={15} /> {loading ? 'Entrando…' : 'Entrar'}
+              <LogIn size={15} /> {loading ? 'Entrando…' : emergencia ? 'Entrar (emergência)' : 'Entrar'}
             </button>
             <div className="text-center">
               <button type="button" onClick={() => alternarEsqueci(true)} className="text-xs text-texto-3 hover:text-texto-1 underline underline-offset-2">
                 Esqueci minha senha
               </button>
             </div>
+            {doEndereco.principal && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setEmergencia(v => !v); setError('') }}
+                  className="text-[11px] text-texto-3 hover:text-texto-2 underline underline-offset-2"
+                >
+                  {emergencia ? 'Voltar ao login normal' : 'Acesso de emergência'}
+                </button>
+              </div>
+            )}
             {doEndereco.principal && (
               <a href="/quero-ser-cliente" className="btn-secondary w-full flex items-center justify-center gap-2">
                 <UserPlus size={15} /> Quero me tornar cliente

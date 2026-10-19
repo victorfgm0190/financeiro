@@ -152,12 +152,23 @@ describe('login por ambiente', () => {
     expect(decodificar((await login(host('aa'), 'ana', 'senha-a-123', 'bb')).body.token).amb_sigla).toBe('aa')
   })
 
-  it('login fixo de emergência só vale no ambiente vm', async () => {
+  it('acesso de emergência só no endereço principal e no ambiente vm; fora disso, a resposta genérica', async () => {
     Object.assign(process.env, { ALLOW_ENV_ADMIN: 'true', ADMIN_USER: 'emergencia', ADMIN_PASS: 'senha-fixa-123' })
-    const vm = await login('www.finup.app.br', 'emergencia', 'senha-fixa-123', 'vm')
+    const emergencia = (h, ambiente) => chamar(authHandler, {
+      url: '/api/auth', host: h, body: { username: 'emergencia', password: 'senha-fixa-123', ambiente, emergencia: true },
+    })
+    const vm = await emergencia('www.finup.app.br', 'vm')
     expect(vm.statusCode).toBe(200)
     expect(decodificar(vm.body.token)).toMatchObject({ origem: 'env', amb_sigla: 'vm' })
-    expect((await login(host('aa'), 'emergencia', 'senha-fixa-123')).statusCode).toBe(401)
+    expect((await emergencia('localhost:5173')).statusCode).toBe(200)
+    // endereço de cliente: recusado, mesmo com as credenciais certas
+    const cliente = await emergencia(host('aa'))
+    expect(cliente.statusCode).toBe(401)
+    expect(cliente.body).toEqual({ error: ERRO_LOGIN })
+    // www com o ambiente de um cliente: recusado
+    expect((await emergencia('www.finup.app.br', 'aa')).body).toEqual({ error: ERRO_LOGIN })
+    // o login normal não aceita mais o ADMIN_PASS
+    expect((await login('www.finup.app.br', 'emergencia', 'senha-fixa-123', 'vm')).statusCode).toBe(401)
   })
 
   it('bloqueio por tentativas fica no banco do ambiente', async () => {

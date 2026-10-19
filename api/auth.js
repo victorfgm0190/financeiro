@@ -13,18 +13,18 @@ import {
 } from './_usuarios.js'
 import { normalizarPermissoes, normalizarPerfis } from '../src/lib/permissoes.js'
 
-// Login por USUÁRIO ou E-MAIL. Dois modos convivendo nesta fase de transição, na ordem:
+// Login por USUÁRIO ou E-MAIL, em dois modos SEPARADOS (um não trava o outro):
 //   a) procura o usuário (username ou e-mail, sem maiúsculas/espaços) na tabela usuarios;
-//   b) CADASTRO (principal): ativo, não bloqueado e senha = senha_hash → entra (origem 'db');
-//   c) LOGIN FIXO de emergência: se não entrou por (b), ALLOW_ENV_ADMIN === 'true', o login é o
-//      ADMIN_USER (ou o e-mail do usuário cujo username = ADMIN_USER) e a senha = ADMIN_PASS → entra
-//      (origem 'env'), MESMO com o cadastro bloqueado ou inativo: é o acesso de recuperação. Se o
-//      usuário existe na tabela, o token é DELE (sub/org/nome), com papel forçado 'admin'.
-//      Também cobre a tabela inexistente (migração não rodada) ou o banco fora do ar.
-//   d) falhas: o cadastro só conta tentativa se a senha também não for o ADMIN_PASS (quando o login
-//      fixo se aplica); o login fixo tem bloqueio próprio (login_bloqueios). Sucesso pelo login fixo
-//      não mexe nas tentativas do cadastro.
-//   e) a resposta de erro é sempre a mesma: não revela se o usuário existe, está inativo ou bloqueado.
+//   b) CADASTRO (normal): ativo, não bloqueado e senha = senha_hash → entra (origem 'db'). Falha
+//      conta só no cadastro: 5 erros → bloqueado por 15 min.
+//   c) ACESSO DE EMERGÊNCIA: só com `emergencia: true` (link "Acesso de emergência" da tela de login,
+//      só no ambiente principal — em endereço de cliente o pedido é recusado). ALLOW_ENV_ADMIN ===
+//      'true', o login é o ADMIN_USER (ou o e-mail do usuário cujo username = ADMIN_USER) e a senha =
+//      ADMIN_PASS → entra (origem 'env'), MESMO com o cadastro bloqueado ou inativo: é a recuperação.
+//      Se o usuário existe na tabela, o token é DELE (sub/org/nome), com papel forçado 'admin'. Também
+//      cobre a tabela inexistente (migração não rodada) ou o banco fora do ar. Bloqueio próprio, mais
+//      rígido (LIMITE_EMERGENCIA): 3 erros por usuário e 5 por IP → 30 min (login_bloqueios).
+//   d) a resposta de erro é sempre a mesma: não revela se o usuário existe, está inativo ou bloqueado.
 // Sucesso → JWT { sub, org, nivel, papel, permissoes, perfis, trocarSenha, username, nome, origem,
 // amb, amb_sigla } válido por 12h.
 //
@@ -150,9 +150,42 @@ export function payloadDoCadastro(u) {
   }
 }
 
+// Limites do acesso de emergência: mais rígidos que os do cadastro (5 / 15 min) e em DUAS chaves de
+// login_bloqueios — por usuário (env:<ADMIN_USER>) e por IP (envip:<ip>, qualquer usuário digitado).
+export const LIMITE_EMERGENCIA = {
+  usuario: { max: 3, bloqueioMs: 30 * 60 * 1000 },
+  ip: { max: 5, bloqueioMs: 30 * 60 * 1000 },
+}
+
+// Acesso de emergência (pedido com `emergencia: true`, link da tela de login no ambiente principal):
+// confere SÓ o ADMIN_PASS e conta SÓ nos bloqueios de emergência — o cadastro não é tocado. Entra
+// mesmo com o cadastro bloqueado ou inativo (é a recuperação). REMOVER ANTES DA COMERCIALIZAÇÃO.
+async function autenticarEmergencia(q, login, senha, cadastro, { env, agora, ip }) {
+  const ligado = env.ALLOW_ENV_ADMIN === 'true' && !!normUser(env.ADMIN_USER) && !!env.ADMIN_PASS
+  if (!ligado) { await compararFicticio(senha); return null }
+  const chaveIp = `envip:${ip || 'desconhecido'}`
+  const estadoIp = await lerBloqueioEnv(q, chaveIp)
+  if (estaBloqueado(estadoIp, agora)) { await compararFicticio(senha); return null }
+
+  const chave = `env:${normUser(env.ADMIN_USER)}`
+  const fixo = loginFixoAplicavel(env, login, cadastro)
+  const estado = fixo ? await lerBloqueioEnv(q, chave) : null
+  if (fixo && !estaBloqueado(estado, agora) && igualSeguro(senha, env.ADMIN_PASS)) {
+    if (estado.tentativas_falhas || estado.bloqueado_ate) await gravarBloqueioEnv(q, chave, { tentativas_falhas: 0, bloqueado_ate: null })
+    return payloadLoginFixo(q, login, cadastro, agora)
+  }
+  // Falha (usuário errado, senha errada ou usuário bloqueado): conta no IP; e no usuário, se é o dele.
+  await gravarBloqueioEnv(q, chaveIp, estadoAposFalha(estadoIp, agora, LIMITE_EMERGENCIA.ip))
+  if (fixo && !estaBloqueado(estado, agora)) await gravarBloqueioEnv(q, chave, estadoAposFalha(estado, agora, LIMITE_EMERGENCIA.usuario))
+  return null
+}
+
 // Núcleo do login (testável com qualquer `q(sql, params) → rows`). Devolve o payload do JWT ou null.
 // O campo do formulário continua se chamando `username`, mas aceita usuário ou e-mail.
-export async function autenticar(q, { username, password } = {}, { env = process.env, agora = new Date() } = {}) {
+// Dois modos que NÃO se misturam (um não trava o outro):
+//   • normal: só a senha do cadastro; falha conta só no cadastro (5 erros → 15 min);
+//   • `emergencia: true`: só o ADMIN_PASS, com bloqueio próprio (autenticarEmergencia).
+export async function autenticar(q, { username, password, emergencia = false } = {}, { env = process.env, agora = new Date(), ip = null } = {}) {
   const login = normUser(username)
   const senha = String(password ?? '')
   if (!login || !senha) return null
@@ -163,9 +196,11 @@ export async function autenticar(q, { username, password } = {}, { env = process
     ;[cadastro] = await q(SQL_USUARIO, [login])
   } catch (err) {
     // Tabela inexistente é esperado antes da migração; qualquer outra falha do banco também segue
-    // para o login fixo (se aplicável), para o acesso de emergência funcionar com o banco instável.
+    // (sem cadastro), para o acesso de emergência funcionar com o banco instável.
     if (!ehTabelaInexistente(err)) console.error('[api/auth] falha ao consultar usuarios:', err.message)
   }
+
+  if (emergencia === true) return autenticarEmergencia(q, login, senha, cadastro, { env, agora, ip })
 
   // (b) cadastro (sem cadastro utilizável, um compare fictício iguala o tempo de resposta)
   const utilizavel = cadastroUtilizavel(cadastro, agora)
@@ -174,24 +209,7 @@ export async function autenticar(q, { username, password } = {}, { env = process
     await q('UPDATE usuarios SET tentativas_falhas = 0, bloqueado_ate = NULL, ultimo_login = $2 WHERE id = $1', [cadastro.id, agora])
     return payloadDoCadastro(cadastro)
   }
-
-  // (c) login fixo — REMOVER LOGIN FIXO ANTES DA COMERCIALIZAÇÃO
-  const fixo = loginFixoAplicavel(env, login, cadastro)
-  const senhaFixaOk = fixo && igualSeguro(senha, env.ADMIN_PASS)
-  if (fixo) {
-    const chave = `env:${normUser(env.ADMIN_USER)}`
-    const estado = await lerBloqueioEnv(q, chave)
-    if (!estaBloqueado(estado, agora)) {
-      if (senhaFixaOk) {
-        if (estado.tentativas_falhas || estado.bloqueado_ate) await gravarBloqueioEnv(q, chave, { tentativas_falhas: 0, bloqueado_ate: null })
-        return payloadLoginFixo(q, login, cadastro, agora)
-      }
-      await gravarBloqueioEnv(q, chave, estadoAposFalha(estado, agora))
-    }
-  }
-
-  // (d) falha no cadastro: só conta se a senha também não for a do login fixo
-  if (utilizavel && !senhaFixaOk) await registrarFalhaCadastro(q, cadastro, agora)
+  if (utilizavel) await registrarFalhaCadastro(q, cadastro, agora)
   return null
 }
 
@@ -223,6 +241,13 @@ export async function consumirCodigoPassagem(q, codigo, sigla, { agora = new Dat
   return r || null
 }
 
+// IP de quem tenta (bloqueio por IP do acesso de emergência). Na Vercel, o 1º do x-forwarded-for.
+export function ipDoReq(req) {
+  const h = req?.headers || {}
+  const xff = String(h['x-forwarded-for'] || '').split(',')[0].trim()
+  return xff || String(h['x-real-ip'] || '').trim() || req?.socket?.remoteAddress || null
+}
+
 // Sem o login fixo de emergência (vale só no ambiente principal).
 const semLoginFixo = (env) => ({ ...env, ALLOW_ENV_ADMIN: 'false', ADMIN_USER: '', ADMIN_PASS: '' })
 
@@ -234,8 +259,15 @@ async function entrar(req, res, body, secret) {
     await compararFicticio(String(body.password ?? '')) // mesmo tempo de resposta de uma senha errada
     return res.status(401).json({ error: ERRO_LOGIN })
   }
+  // Acesso de emergência só no endereço principal e no ambiente principal; fora disso, a mesma
+  // resposta de uma senha errada.
+  const emergencia = body.emergencia === true
+  if (emergencia && (!doEndereco.principal || amb.sigla !== AMBIENTE_PRINCIPAL)) {
+    await compararFicticio(String(body.password ?? ''))
+    return res.status(401).json({ error: ERRO_LOGIN })
+  }
   const env = amb.sigla === AMBIENTE_PRINCIPAL ? process.env : semLoginFixo(process.env)
-  const base = await rodarNoAmbiente(amb, () => autenticar(query, body, { env }))
+  const base = await rodarNoAmbiente(amb, () => autenticar(query, { ...body, emergencia }, { env, ip: ipDoReq(req) }))
   if (!base) return res.status(401).json({ error: ERRO_LOGIN })
   const payload = comAmbienteNoPayload(base, amb)
 

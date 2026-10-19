@@ -58,8 +58,9 @@ ambiente existente (`siglaOcupada` olha `plataforma_clientes` e `ambientes`).
   endereço: no www só vale token do `vm`; em `<sigla>.finup.app.br` só da sigla. Token antigo (sem
   `amb`) vale como `vm` até expirar.
 - Ambiente inexistente, suspenso ou senha errada → sempre "Usuário, senha ou ambiente inválidos".
-- Bloqueio por tentativas: por usuário, no banco do ambiente. Login fixo de emergência
-  (`ADMIN_USER`/`ADMIN_PASS`) só no `vm`.
+- Bloqueio por tentativas: por usuário, no banco do ambiente (5 erros → 15 min). Acesso de emergência
+  (`ADMIN_USER`/`ADMIN_PASS`) só pelo link "Acesso de emergência" da tela de login, só no endereço
+  principal e no `vm`, com bloqueio próprio (3 erros por usuário e 5 por IP → 30 min); um não trava o outro.
 - Login no www com sigla de **cliente**: a API grava um código de uso único (60 s, só o hash) em
   `login_handoff` e responde `{ redirect: "https://<sigla>.finup.app.br/entrar?c=<código>" }`. A página
   `/entrar` chama `POST /api/auth?acao=trocar-codigo`, salva o token no localStorage daquele endereço e
@@ -217,8 +218,9 @@ ambiente existente (`siglaOcupada` olha `plataforma_clientes` e `ambientes`).
   endereço: no www só vale token do `vm`; em `<sigla>.finup.app.br` só da sigla. Token antigo (sem
   `amb`) vale como `vm` até expirar.
 - Ambiente inexistente, suspenso ou senha errada → sempre "Usuário, senha ou ambiente inválidos".
-- Bloqueio por tentativas: por usuário, no banco do ambiente. Login fixo de emergência
-  (`ADMIN_USER`/`ADMIN_PASS`) só no `vm`.
+- Bloqueio por tentativas: por usuário, no banco do ambiente (5 erros → 15 min). Acesso de emergência
+  (`ADMIN_USER`/`ADMIN_PASS`) só pelo link "Acesso de emergência" da tela de login, só no endereço
+  principal e no `vm`, com bloqueio próprio (3 erros por usuário e 5 por IP → 30 min); um não trava o outro.
 - Login no www com sigla de **cliente**: a API grava um código de uso único (60 s, só o hash) em
   `login_handoff` e responde `{ redirect: "https://<sigla>.finup.app.br/entrar?c=<código>" }`. A página
   `/entrar` chama `POST /api/auth?acao=trocar-codigo`, salva o token no localStorage daquele endereço e

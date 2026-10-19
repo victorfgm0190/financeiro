@@ -124,59 +124,71 @@ describe('login por cadastro', () => {
   })
 })
 
-describe('login fixo de emergência', () => {
+describe('acesso de emergência (emergencia: true)', () => {
+  const emerg = (login, password, { env = ENV_ON, agora = AGORA, ip = '10.0.0.1' } = {}) =>
+    autenticar(q, { username: login, password, emergencia: true }, { env, agora, ip })
+
   it('funciona com ALLOW_ENV_ADMIN=true: papel admin, org da primeira organização, origem env, loga o uso', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const p = await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })
+    const p = await emerg('emergencia', 'senha-fixa-123')
     expect(p).toMatchObject({ sub: 'env:emergencia', org: 'org1', papel: 'admin', username: 'emergencia', origem: 'env' })
     expect(warn.mock.calls[0][0]).toMatch(/LOGIN VIA ADMIN FIXO.*2026-10-14T12:00:00/)
   })
 
+  it('o login normal NÃO aceita o ADMIN_PASS', async () => {
+    expect(await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })).toBeNull()
+  })
+
   it('recusado com ALLOW_ENV_ADMIN=false ou ausente — mesma resposta genérica', async () => {
     for (const allow of ['false', undefined]) {
-      const env = { ...ENV_ON, ALLOW_ENV_ADMIN: allow }
-      expect(await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env, agora: AGORA })).toBeNull()
+      expect(await emerg('emergencia', 'senha-fixa-123', { env: { ...ENV_ON, ALLOW_ENV_ADMIN: allow } })).toBeNull()
     }
     Object.assign(process.env, { ADMIN_USER: 'emergencia', ADMIN_PASS: 'senha-fixa-123', ALLOW_ENV_ADMIN: 'false' })
-    const r = await chamar(authHandler, { method: 'POST', body: { username: 'emergencia', password: 'senha-fixa-123' } })
+    const r = await chamar(authHandler, { method: 'POST', body: { username: 'emergencia', password: 'senha-fixa-123', emergencia: true } })
     expect(r.statusCode).toBe(401)
     expect(r.body).toEqual({ error: ERRO_LOGIN })
   })
 
   it('outro usuário do cadastro NÃO entra com o ADMIN_PASS', async () => {
     await criarUsuario({ username: 'gislaine', papel: 'usuario', email: 'g@exemplo.com' })
-    for (const login of ['gislaine', 'g@exemplo.com']) {
-      expect(await autenticar(q, { username: login, password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })).toBeNull()
-    }
+    for (const login of ['gislaine', 'g@exemplo.com']) expect(await emerg(login, 'senha-fixa-123')).toBeNull()
   })
 
-  it('sem a migração (tabela usuarios inexistente) cai no login fixo com org null', async () => {
+  it('sem a migração (tabela usuarios inexistente) entra com org null', async () => {
     estado.db = new PGlite()
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const p = await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })
-    expect(p).toMatchObject({ papel: 'admin', origem: 'env', org: null })
+    expect(await emerg('emergencia', 'senha-fixa-123')).toMatchObject({ papel: 'admin', origem: 'env', org: null })
   }, 30_000) // PGlite novo dentro do teste: com a suíte inteira em paralelo passa dos 5 s padrão
 
   it('cria a organização "Victor" se ainda não houver nenhuma', async () => {
     await q('DELETE FROM organizacoes')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const p = await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: AGORA })
-    const orgs = await q('SELECT id, nome FROM organizacoes')
-    expect(orgs).toEqual([{ id: p.org, nome: 'Victor' }])
+    const p = await emerg('emergencia', 'senha-fixa-123')
+    expect(await q('SELECT id, nome FROM organizacoes')).toEqual([{ id: p.org, nome: 'Victor' }])
   })
 
-  it('5 falhas bloqueiam o login fixo por 15 minutos', async () => {
+  it('3 erros por usuário bloqueiam a emergência por 30 minutos', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    for (let i = 0; i < 5; i++) await autenticar(q, { username: 'emergencia', password: 'errada' }, { env: ENV_ON, agora: AGORA })
-    expect(await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: depois(10) })).toBeNull()
-    expect(await autenticar(q, { username: 'emergencia', password: 'senha-fixa-123' }, { env: ENV_ON, agora: depois(16) })).not.toBeNull()
+    for (let i = 0; i < 3; i++) await emerg('emergencia', 'errada', { ip: `10.0.0.${i}` })
+    expect(await emerg('emergencia', 'senha-fixa-123', { agora: depois(29), ip: '10.9.9.9' })).toBeNull()
+    expect(await emerg('emergencia', 'senha-fixa-123', { agora: depois(31), ip: '10.9.9.9' })).not.toBeNull()
+  })
+
+  it('5 erros do mesmo IP (com usuários diferentes) bloqueiam aquele IP por 30 minutos', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const login of ['a', 'b', 'c', 'd', 'e']) await emerg(login, 'qualquer', { ip: '200.1.1.1' })
+    expect(await emerg('emergencia', 'senha-fixa-123', { ip: '200.1.1.1', agora: depois(10) })).toBeNull()
+    // outro IP segue entrando (o usuário não acumulou erro: eram outros logins)
+    expect(await emerg('emergencia', 'senha-fixa-123', { ip: '200.2.2.2', agora: depois(10) })).not.toBeNull()
+    expect(await emerg('emergencia', 'senha-fixa-123', { ip: '200.1.1.1', agora: depois(31) })).not.toBeNull()
   })
 })
 
-describe('transição: ADMIN_USER = vmoreira também cadastrado — as duas senhas valem', () => {
+describe('cadastro e emergência não se travam (ADMIN_USER = vmoreira também cadastrado)', () => {
   const ENV_V = { ALLOW_ENV_ADMIN: 'true', ADMIN_USER: 'VMoreira', ADMIN_PASS: 'senha-fixa-123' }
-  const entrar = (login, password, env = ENV_V, agora = AGORA) => autenticar(q, { username: login, password }, { env, agora })
+  const normal = (login, password, agora = AGORA) => autenticar(q, { username: login, password }, { env: ENV_V, agora })
+  const emerg = (login, password, agora = AGORA, ip = '10.0.0.1') => autenticar(q, { username: login, password, emergencia: true }, { env: ENV_V, agora, ip })
   const cadastro = async (id) => (await q('SELECT tentativas_falhas, bloqueado_ate FROM usuarios WHERE id = $1', [id]))[0]
   let id
   beforeEach(async () => {
@@ -184,48 +196,37 @@ describe('transição: ADMIN_USER = vmoreira também cadastrado — as duas senh
     id = await criarUsuario({ username: 'vmoreira', papel: 'usuario', email: 'victor@exemplo.com' })
   })
 
-  it('entra com a senha do cadastro (origem db)', async () => {
-    expect(await entrar('vmoreira', 'senha-certa-1')).toMatchObject({ sub: id, nivel: 'operador', origem: 'db' })
+  it('5 erros no cadastro → cadastro travado; a emergência funciona', async () => {
+    for (let i = 0; i < 5; i++) await normal('vmoreira', 'errada-xx')
+    expect(estaBloqueadoAgora(await cadastro(id))).toBe(true)
+    expect(await normal('vmoreira', 'senha-certa-1')).toBeNull()
+    expect(await q('SELECT * FROM login_bloqueios')).toEqual([]) // nada contou na emergência
+    expect(await emerg('vmoreira', 'senha-fixa-123')).toMatchObject({ sub: id, origem: 'env', papel: 'admin' })
   })
 
-  it('entra com o ADMIN_PASS: origem env, token do próprio usuário, papel admin, tentativas intactas', async () => {
+  it('3 erros na emergência → emergência travada; o cadastro funciona', async () => {
+    for (let i = 0; i < 3; i++) await emerg('vmoreira', 'errada-xx')
+    expect(await emerg('vmoreira', 'senha-fixa-123')).toBeNull()
+    expect((await cadastro(id)).tentativas_falhas).toBe(0) // nada contou no cadastro
+    expect(await normal('vmoreira', 'senha-certa-1')).toMatchObject({ sub: id, origem: 'db' })
+  })
+
+  it('emergência: token do próprio usuário, papel admin, tentativas do cadastro intactas', async () => {
     await q('UPDATE usuarios SET tentativas_falhas = 2 WHERE id = $1', [id])
-    const p = await entrar('vmoreira', 'senha-fixa-123')
+    const p = await emerg('vmoreira', 'senha-fixa-123')
     expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos', trocarSenha: false, username: 'vmoreira', nome: 'VMOREIRA', origem: 'env' })
     expect((await cadastro(id)).tentativas_falhas).toBe(2)
   })
 
-  it('bloqueado ou inativo no cadastro: o ADMIN_PASS ainda entra (recuperação); a senha do cadastro não', async () => {
-    for (let i = 0; i < 5; i++) await entrar('vmoreira', 'errada-xx')
-    expect(estaBloqueadoAgora(await cadastro(id))).toBe(true)
-    expect(await entrar('vmoreira', 'senha-certa-1')).toBeNull()
-    // O login fixo também contou as 5 falhas (bloqueio próprio): espera os 15 min dele.
-    expect(await entrar('vmoreira', 'senha-fixa-123', ENV_V, depois(10))).toBeNull()
-    await q('DELETE FROM login_bloqueios')
-    expect(await entrar('vmoreira', 'senha-fixa-123', ENV_V, depois(10))).toMatchObject({ sub: id, origem: 'env' })
-    await q('UPDATE usuarios SET ativo = false, tentativas_falhas = 0, bloqueado_ate = NULL WHERE id = $1', [id])
-    expect(await entrar('vmoreira', 'senha-fixa-123')).toMatchObject({ sub: id, origem: 'env' })
-    expect(await entrar('vmoreira', 'senha-certa-1')).toBeNull()
+  it('inativo no cadastro: a emergência ainda entra (recuperação); a senha do cadastro não', async () => {
+    await q('UPDATE usuarios SET ativo = false WHERE id = $1', [id])
+    expect(await emerg('vmoreira', 'senha-fixa-123')).toMatchObject({ sub: id, origem: 'env' })
+    expect(await normal('vmoreira', 'senha-certa-1')).toBeNull()
   })
 
-  it('ALLOW_ENV_ADMIN=false: o ADMIN_PASS não funciona, só a senha do cadastro', async () => {
-    const off = { ...ENV_V, ALLOW_ENV_ADMIN: 'false' }
-    expect(await entrar('vmoreira', 'senha-fixa-123', off)).toBeNull()
-    expect(await entrar('vmoreira', 'senha-certa-1', off)).toMatchObject({ origem: 'db' })
-  })
-
-  it('login pelo e-mail funciona com as duas senhas', async () => {
-    expect(await entrar(' Victor@Exemplo.COM ', 'senha-certa-1')).toMatchObject({ sub: id, origem: 'db' })
-    expect(await entrar('victor@exemplo.com', 'senha-fixa-123')).toMatchObject({ sub: id, origem: 'env', papel: 'admin' })
-  })
-
-  it('falhas: ADMIN_PASS com o login fixo bloqueado não conta tentativa no cadastro; senha errada conta nos dois', async () => {
-    await entrar('vmoreira', 'errada-xx')
-    expect((await cadastro(id)).tentativas_falhas).toBe(1)
-    expect((await q('SELECT tentativas_falhas FROM login_bloqueios'))[0].tentativas_falhas).toBe(1)
-    await q("UPDATE login_bloqueios SET bloqueado_ate = now() + interval '1 day'")
-    expect(await entrar('vmoreira', 'senha-fixa-123', ENV_V, new Date())).toBeNull()
-    expect((await cadastro(id)).tentativas_falhas).toBe(1)
+  it('emergência pelo e-mail do usuário funciona; a senha do cadastro não vale na emergência', async () => {
+    expect(await emerg('victor@exemplo.com', 'senha-fixa-123')).toMatchObject({ sub: id, origem: 'env', papel: 'admin' })
+    expect(await emerg('vmoreira', 'senha-certa-1')).toBeNull()
   })
 })
 
