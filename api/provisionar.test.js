@@ -24,6 +24,7 @@ const { KIT_CATEGORIAS, KIT_GRUPOS_CONTA, KIT_GRUPOS_GERENCIAIS, KIT_TIPOS_DOCUM
 const { ESTRUTURA_BASE, MIGRACOES } = await import('./_sqlEmbutido.js')
 
 const SECRET = 'segredo-de-teste'
+const CHAVE_DB = crypto.randomBytes(32).toString('base64')
 const raiz = fileURLToPath(new URL('../supabase/', import.meta.url))
 const ler = (f) => readFileSync(f, 'utf-8').replace(/\r\n/g, '\n') // igual ao scripts/gerar-sql-embutido.js
 const ARQ_ESTRUTURA = ler(raiz + 'estrutura_base.sql')
@@ -106,7 +107,7 @@ beforeEach(() => {
   envOriginal = { ...process.env }
   Object.assign(process.env, {
     JWT_SECRET: SECRET, PLATAFORMA_ADMIN: 'vmoreira', RESEND_API_KEY: 're_teste', EMAIL_FROM: 'Finup <nao-responda@finup.app.br>',
-    NEON_API_KEY: 'neon-chave', NEON_PROJECT_ID: 'proj-1', NEON_BRANCH_ID: 'br-1',
+    NEON_API_KEY: 'neon-chave', NEON_PROJECT_ID: 'proj-1', NEON_BRANCH_ID: 'br-1', FINUP_DB_KEY: CHAVE_DB,
   })
   delete process.env.ALLOW_ENV_ADMIN
   const doNeon = (nome) => () => { if (!noNeon.has(nome)) throw new Error(`database ${nome} não existe no Neon`); return bancos[nome] }
@@ -186,7 +187,7 @@ describe('provisionamento do cliente (Aprovar)', () => {
     // 1º passo (ambiente) ok
     let r = await aprovar()
     expect(r.statusCode).toBe(200)
-    expect(r.body.passos.map(p => p.feito)).toEqual([true, false, false, false, false, false, false])
+    expect(r.body.passos.map(p => p.feito)).toEqual([true, false, false, false, false, false, false, false])
     expect(r.body.cliente.status).toBe('aprovado')
     const [amb] = await qde('central')("SELECT * FROM ambientes WHERE sigla = 'mm'")
     expect(amb).toMatchObject({ database_name: 'cliente_mm', status: 'provisionando', cliente_id: clienteId })
@@ -198,6 +199,9 @@ describe('provisionamento do cliente (Aprovar)', () => {
     expect(r.body.error).toMatch(/instabilidade simulada/)
     // tentar de novo: cria o database e segue
     r = await aprovar()
+    expect(r.statusCode).toBe(200)
+    expect(r.body.proximo).toBe('usuario')
+    r = await aprovar() // usuário próprio do banco
     expect(r.statusCode).toBe(200)
     expect(r.body.proximo).toBe('estrutura')
 
@@ -232,6 +236,31 @@ describe('provisionamento do cliente (Aprovar)', () => {
     expect(neon.chamadas.filter(c => c.startsWith('POST'))).toHaveLength(2)
     expect(neon.chamadas.some(c => c.startsWith('DELETE'))).toBe(false)
   }, 120_000)
+
+  it('usuário próprio (R7): papel restrito, dono do banco e de TODAS as tabelas do provisionamento, senha só cifrada', async () => {
+    const q = qde('cliente_mm')
+    const [papel] = await q(`SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolinherit, rolcanlogin, rolconfig
+      FROM pg_roles WHERE rolname = 'cliente_mm_app'`)
+    expect(papel).toMatchObject({ rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false, rolinherit: false, rolcanlogin: true })
+    expect(papel.rolconfig.sort()).toEqual(['idle_in_transaction_session_timeout=60s', 'statement_timeout=25s'])
+    expect(await q("SELECT g.rolname FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = 'cliente_mm_app'")).toEqual([])
+    expect((await q('SELECT pg_get_userbyid(datdba) AS dono FROM pg_database WHERE datname = current_database()'))[0].dono).toBe('cliente_mm_app')
+    // estrutura, migrações, kit e admin rodaram com SET LOCAL ROLE: tudo nasce com dono cliente_mm_app
+    const donos = await q("SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public'")
+    expect(donos).toEqual([{ tableowner: 'cliente_mm_app' }])
+    expect((await q("SELECT count(*)::int AS n FROM pg_tables WHERE schemaname = 'public'"))[0].n).toBeGreaterThan(40)
+    // CONNECT: PUBLIC fora; o papel dentro
+    const [{ acl }] = await q('SELECT datacl::text AS acl FROM pg_database WHERE datname = current_database()')
+    expect(acl).not.toMatch(/(^|[{,])=[A-Za-z]*c/)
+    expect(acl).toMatch(/cliente_mm_app=[A-Za-z]*c/)
+    // central: só a cifra (decifra com a chave e o ambiente certos; senha nunca em texto)
+    const [amb] = await qde('central')("SELECT id, db_usuario, db_senha_cifrada FROM ambientes WHERE sigla = 'mm'")
+    expect(amb.db_usuario).toBe('cliente_mm_app')
+    expect(amb.db_senha_cifrada).toMatch(/^v1./)
+    const { decifrarSenha, aadDoAmbiente } = await import('./_cifraDb.js')
+    expect(decifrarSenha(amb.db_senha_cifrada, aadDoAmbiente(amb.id, 'cliente_mm'))).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(() => decifrarSenha(amb.db_senha_cifrada, aadDoAmbiente(amb.id, 'cliente_zz'))).toThrow()
+  })
 
   it('ambiente ativo no central, com a versão das migrações', async () => {
     const [amb] = await qde('central')("SELECT status, schema_versao FROM ambientes WHERE sigla = 'mm'")

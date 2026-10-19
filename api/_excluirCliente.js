@@ -1,5 +1,6 @@
 import { centralQuery, withCentralTransaction, _limparCacheAmbientes } from './_central.js'
-import { nomeDatabaseCentral, fecharPoolDoDatabase } from './_conexao.js'
+import { nomeDatabaseCentral, fecharPoolDoDatabase, poolAdminDoDatabase } from './_conexao.js'
+import { papelDoBanco } from './_usuarioBanco.js'
 import { ErroHttp } from './_usuarios.js'
 import { buscarCliente, registrarHistorico } from './_plataforma.js'
 import { excluirDatabase, RE_DATABASE_CLIENTE, ErroNeon } from './_neon.js'
@@ -20,7 +21,7 @@ import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 const PROTEGIDOS = ['neondb', 'finup_central']
 
 async function ambienteDoCliente(q, c) {
-  const [amb] = await q('SELECT * FROM ambientes WHERE cliente_id = $1 OR sigla = $2 ORDER BY (cliente_id = $1) DESC LIMIT 1', [c.id, c.sigla])
+  const [amb] = await q('SELECT id, sigla, nome, database_name, status, cliente_id FROM ambientes WHERE cliente_id = $1 OR sigla = $2 ORDER BY (cliente_id = $1) DESC LIMIT 1', [c.id, c.sigla])
   return amb || null
 }
 
@@ -48,6 +49,21 @@ export async function situacaoExclusaoDoCliente(q, c) {
   return situacaoExclusao(c, await ambienteDoCliente(q, c))
 }
 
+// Usuário próprio do banco (R7, api/_usuarioBanco.js): antes do DROP o database volta para o
+// neondb_owner (o Neon exclui como sempre excluiu); depois, o papel <database>_app é removido.
+// Banco que já não existe (nova tentativa) → segue.
+async function devolverDonoAoAdmin(database) {
+  try {
+    await poolAdminDoDatabase(database).query(
+      "DO $ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO CURRENT_USER', current_database()); END $")
+  } catch (err) {
+    console.warn(`[excluirCliente] dono de ${database} não devolvido:`, err.message)
+  }
+}
+async function excluirPapel(database) {
+  await poolAdminDoDatabase(nomeDatabaseCentral()).query(`DROP ROLE IF EXISTS "${papelDoBanco(database)}"`)
+}
+
 export async function excluirCliente(clienteId, { confirmacao, autor = null, neon = {} } = {}) {
   const c = await buscarCliente(centralQuery, clienteId)
   if (!c) throw new ErroHttp(404, 'Cliente não encontrado')
@@ -62,8 +78,10 @@ export async function excluirCliente(clienteId, { confirmacao, autor = null, neo
     const [{ feito }] = await centralQuery("SELECT count(*) > 0 AS feito FROM plataforma_historico WHERE cliente_id = $1 AND evento = 'excl_database'", [c.id])
     if (!feito) {
       try {
+        await devolverDonoAoAdmin(amb.database_name)
         await fecharPoolDoDatabase(amb.database_name)
         const { excluido } = await excluirDatabase(amb.database_name, { ...neon, protegidos: [nomeDatabaseCentral()] })
+        await excluirPapel(amb.database_name)
         await registrarHistorico(centralQuery, c.id, 'excl_database', `Database ${amb.database_name} ${excluido ? 'excluído do Neon' : 'já não existia no Neon'}`, autor)
       } catch (err) {
         const msg = err instanceof ErroNeon || err instanceof ErroHttp ? err.message : `erro interno (${err.message})`

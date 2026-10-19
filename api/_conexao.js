@@ -1,12 +1,17 @@
 import process from 'node:process'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import pg from 'pg'
+import { decifrarSenha, aadDoAmbiente } from './_cifraDb.js'
 const { Pool } = pg
 
 // CONEXÃO POR AMBIENTE (multi-cliente, um database por cliente no MESMO projeto Neon).
 //
-// A URL de um ambiente é a CENTRAL_DATABASE_URL com o nome do database trocado pelo
-// ambientes.database_name — mesmo host, mesmo usuário. Nenhuma URL/senha mora em tabela.
+// Cada database de ambiente tem usuário Postgres próprio (<database>_app, api/_usuarioBanco.js),
+// com a senha cifrada no central (ambientes.db_usuario / db_senha_cifrada, chave FINUP_DB_KEY).
+// Banco ainda sem usuário próprio → FALLBACK: ADMIN_DATABASE_URL (neondb_owner; na falta dela, a
+// CENTRAL_DATABASE_URL, como era antes) com o nome do database trocado. FINUP_DB_ESTRITO=true
+// desliga o fallback. O central usa a CENTRAL_DATABASE_URL. Provisionamento, exclusão e scripts
+// usam poolAdminDoDatabase() (neondb_owner).
 // Um Pool por database, em cache no módulo (a instância quente da Vercel reaproveita).
 //
 // O ambiente da requisição viaja num AsyncLocalStorage: comAmbiente() (api/_ambiente.js) resolve o
@@ -27,13 +32,52 @@ export class ErroSemAmbiente extends Error {
 // Nome de database aceito (evita que um valor estranho na tabela vire outra coisa na URL).
 const NOME_DATABASE = /^[a-z0-9_]{1,63}$/
 
+// URL do usuário administrador (neondb_owner): ADMIN_DATABASE_URL ou, enquanto ela não existe,
+// a CENTRAL_DATABASE_URL (que até a migração do central também é do neondb_owner).
+function urlAdmin(env) {
+  const base = env.ADMIN_DATABASE_URL || env.CENTRAL_DATABASE_URL
+  if (!base) throw new Error('ADMIN_DATABASE_URL / CENTRAL_DATABASE_URL não configurada')
+  return base
+}
+
+// URL de um database com o usuário administrador.
 export function urlDoDatabase(nome, env = process.env) {
   if (!NOME_DATABASE.test(String(nome || ''))) throw new Error(`database_name inválido: ${nome}`)
-  const base = env.CENTRAL_DATABASE_URL
-  if (!base) throw new Error('CENTRAL_DATABASE_URL não configurada')
-  const u = new URL(base)
+  const u = new URL(urlAdmin(env))
   u.pathname = `/${nome}`
   return u.toString()
+}
+
+// Credencial do database no central (null se o ambiente não tem usuário próprio, ou se as colunas
+// ainda não existem no central — migração 2026-10-19 não aplicada).
+async function credencialNoCentral(nome) {
+  try {
+    const { rows } = await poolCentral().query(
+      'SELECT id, db_usuario, db_senha_cifrada FROM ambientes WHERE database_name = $1', [nome])
+    return rows[0] || null
+  } catch (err) {
+    if (err.code === '42703') return null
+    throw err
+  }
+}
+
+// Configuração do Pool de um database: { origem: 'central' | 'papel' | 'fallback', ...opções do pg }.
+export async function configDoPool(nome, { env = process.env, buscarCredencial = credencialNoCentral } = {}) {
+  if (nome === nomeDatabaseCentral(env)) return { origem: 'central', connectionString: env.CENTRAL_DATABASE_URL }
+  const cred = await buscarCredencial(nome)
+  if (cred?.db_usuario && cred?.db_senha_cifrada) {
+    const u = new URL(urlAdmin(env))
+    return {
+      origem: 'papel',
+      host: u.hostname,
+      port: Number(u.port) || 5432,
+      database: nome,
+      user: cred.db_usuario,
+      password: decifrarSenha(cred.db_senha_cifrada, aadDoAmbiente(cred.id, nome), env),
+    }
+  }
+  if (env.FINUP_DB_ESTRITO === 'true') throw new Error(`Database ${nome} sem usuário próprio (FINUP_DB_ESTRITO ligado)`)
+  return { origem: 'fallback', connectionString: urlDoDatabase(nome, env) }
 }
 
 // Nome do database central (o da própria CENTRAL_DATABASE_URL).
@@ -42,23 +86,42 @@ export function nomeDatabaseCentral(env = process.env) {
   return decodeURIComponent(new URL(env.CENTRAL_DATABASE_URL).pathname.replace(/^\//, ''))
 }
 
-function criarPoolPg(nome) {
-  const pool = new Pool({
-    connectionString: urlDoDatabase(nome),
-    ssl: { rejectUnauthorized: false },
-    max: 3,
-  })
+function novoPool(opcoes, rotulo) {
+  const pool = new Pool({ ...opcoes, ssl: { rejectUnauthorized: false }, max: 3 })
   // Conexão OCIOSA encerrada pelo servidor (o Neon suspende o compute e derruba as conexões:
   // "terminating connection due to administrator command"). Sem este ouvinte o 'error' do pool
   // derruba o processo; com ele, o pool descarta a conexão e abre outra na próxima consulta.
-  pool.on('error', (err) => console.warn(`[conexao] conexão ociosa encerrada (${nome}):`, err.message))
+  pool.on('error', (err) => console.warn(`[conexao] conexão ociosa encerrada (${rotulo}):`, err.message))
   return pool
+}
+
+// Pool que resolve a credencial na primeira consulta (ela mora no central: busca assíncrona).
+// Falha ao resolver ou senha recusada (28P01, ex.: senha trocada) → sai do cache e a próxima
+// requisição resolve de novo.
+function criarPoolPg(nome) {
+  let pronto = null
+  const obter = () => (pronto ??= configDoPool(nome).then(({ origem, ...opcoes }) => {
+    console.log(`[conexao] ${nome}: ${origem === 'papel' ? `usuário próprio (${opcoes.user})` : origem}`)
+    return novoPool(opcoes, nome)
+  }).catch((err) => { pronto = null; throw err }))
+  const esquecerSeSenhaRecusada = (err) => {
+    if (err?.code === '28P01' && pools.get(nome) === wrapper) pools.delete(nome)
+    throw err
+  }
+  const wrapper = {
+    query: async (...args) => (await obter()).query(...args).catch(esquecerSeSenhaRecusada),
+    connect: async () => (await obter()).connect().catch(esquecerSeSenhaRecusada),
+    end: async () => { if (pronto) await (await pronto.catch(() => null))?.end() },
+  }
+  return wrapper
 }
 let fabrica = criarPoolPg
 
-// Testes: troca a fábrica (ex.: PGlite por database) e esvazia o cache.
+// Testes: troca a fábrica (ex.: PGlite por database) e esvazia o cache. A fábrica recebe
+// (nome, { admin }) — admin = pool do neondb_owner (poolAdminDoDatabase).
 export function _definirFabricaDePool(fn) {
   fabrica = fn || criarPoolPg
+  fabricaAdmin = fn ? (nome) => fn(nome, { admin: true }) : criarPoolAdminPg
   pools.clear()
 }
 
@@ -71,11 +134,26 @@ export function poolDoDatabase(nome) {
   return p
 }
 
-// Fecha e esquece o pool de um database (antes de excluí-lo no Neon: conexão aberta impede o DROP).
+// Pool do neondb_owner num database (provisionamento, exclusão): nunca o das requisições.
+const criarPoolAdminPg = (nome) => novoPool({ connectionString: urlDoDatabase(nome) }, `${nome} admin`)
+let fabricaAdmin = criarPoolAdminPg
+export function poolAdminDoDatabase(nome) {
+  const chave = `admin:${nome}`
+  let p = pools.get(chave)
+  if (!p) {
+    p = fabricaAdmin(nome)
+    pools.set(chave, p)
+  }
+  return p
+}
+
+// Fecha e esquece os pools de um database (antes de excluí-lo no Neon: conexão aberta impede o DROP).
 export async function fecharPoolDoDatabase(nome) {
-  const p = pools.get(nome)
-  pools.delete(nome)
-  if (p?.end) await p.end().catch(() => {})
+  for (const chave of [nome, `admin:${nome}`]) {
+    const p = pools.get(chave)
+    pools.delete(chave)
+    if (p?.end) await p.end().catch(() => {})
+  }
 }
 
 export const poolCentral = () => poolDoDatabase(nomeDatabaseCentral())

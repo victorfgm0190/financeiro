@@ -1,7 +1,8 @@
 import crypto from 'node:crypto'
 import { centralQuery, withCentralTransaction, _limparCacheAmbientes } from './_central.js'
-import { rodarNoAmbiente } from './_conexao.js'
-import { withTransaction } from './_db.js'
+import { rodarNoAmbiente, poolAdminDoDatabase } from './_conexao.js'
+import { cifrarSenha, aadDoAmbiente } from './_cifraDb.js'
+import { papelDoBanco, gerarSenhaDoBanco, verificadorScram, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco } from './_usuarioBanco.js'
 import { ErroHttp, hashSenha } from './_usuarios.js'
 import { buscarCliente, registrarHistorico, siglaOcupada } from './_plataforma.js'
 import { criarDatabase, ErroNeon } from './_neon.js'
@@ -28,6 +29,7 @@ import { problemaSigla, DOMINIO_CLIENTES } from '../src/lib/plataforma.js'
 export const PASSOS = [
   { id: 'ambiente', rotulo: 'Registro do ambiente' },
   { id: 'database', rotulo: 'Banco de dados no Neon' },
+  { id: 'usuario', rotulo: 'Usuário próprio do banco' },
   { id: 'estrutura', rotulo: 'Estrutura (tabelas e migrações)' },
   { id: 'kit', rotulo: 'Kit básico' },
   { id: 'admin', rotulo: 'Organização e usuário admin' },
@@ -60,7 +62,8 @@ export function mensagemBoasVindas(c) {
 }
 
 async function ambienteDoCliente(q, c) {
-  const [amb] = await q('SELECT * FROM ambientes WHERE cliente_id = $1 OR sigla = $2 ORDER BY (cliente_id = $1) DESC LIMIT 1', [c.id, c.sigla])
+  // Sem db_senha_cifrada: o ambiente daqui nunca carrega a senha do banco.
+  const [amb] = await q('SELECT id, sigla, nome, database_name, status, cliente_id, schema_versao FROM ambientes WHERE cliente_id = $1 OR sigla = $2 ORDER BY (cliente_id = $1) DESC LIMIT 1', [c.id, c.sigla])
   return amb || null
 }
 
@@ -84,8 +87,17 @@ export async function estadoProvisionamento(q, clienteId) {
   }
 }
 
-// Transação no banco do CLIENTE (o _db.js aponta para ele dentro de rodarNoAmbiente).
-const noCliente = (amb, fn) => rodarNoAmbiente(amb, () => withTransaction(fn))
+// Transação no banco do CLIENTE como neondb_owner (pool admin), com SET LOCAL ROLE <database>_app
+// quando o usuário próprio já existe: tabelas e linhas do provisionamento nascem com dono certo, sem os
+// limites de tempo das sessões do papel. rodarNoAmbiente mantém o contexto para quem lê o ambiente.
+const noCliente = (amb, fn) => rodarNoAmbiente(amb, async () => {
+  const client = await poolAdminDoDatabase(amb.database_name).connect()
+  try {
+    return await comoDonoDoBanco(client, amb.database_name, fn)
+  } finally {
+    client.release()
+  }
+})
 
 async function idDoAdmin(q) {
   const [u] = await q("SELECT id FROM usuarios WHERE username = 'admin'")
@@ -130,6 +142,33 @@ const EXECUTAR = {
     const amb = await ambienteDoCliente(q, c)
     const { criado } = await criarDatabase(amb.database_name, neon)
     return `${amb.database_name} ${criado ? 'criado' : 'já existia'}`
+  },
+  // b2) Usuário Postgres próprio do banco (R7): papel <database>_app, dono do banco, CONNECT só para
+  // ele e o neondb_owner, senha cifrada no central. Repetir = senha nova (o ambiente ainda não está no ar).
+  async usuario(q, c) {
+    const amb = await ambienteDoCliente(q, c)
+    const papel = papelDoBanco(amb.database_name)
+    const senha = gerarSenhaDoBanco()
+    const cifrada = cifrarSenha(senha, aadDoAmbiente(amb.id, amb.database_name)) // sem FINUP_DB_KEY → erro antes de mexer no banco
+    const client = await poolAdminDoDatabase(amb.database_name).connect()
+    let situacao
+    try {
+      const aq = async (sql, params = []) => (await client.query(sql, params)).rows
+      await client.query('BEGIN')
+      try {
+        situacao = await criarOuAtualizarPapel(aq, papel, verificadorScram(senha))
+        await transferirDono(aq, papel)
+        await fecharConexao(aq, papel)
+        await client.query('COMMIT')
+      } catch (err) {
+        try { await client.query('ROLLBACK') } catch { /* ignore */ }
+        throw err
+      }
+    } finally {
+      client.release()
+    }
+    await q('UPDATE ambientes SET db_usuario = $2, db_senha_cifrada = $3, updated_at = now() WHERE id = $1', [amb.id, papel, cifrada])
+    return `${papel} ${situacao}`
   },
   // c) Estrutura base + migrações, numa transação, registradas em _migracoes.
   async estrutura(q, c) {

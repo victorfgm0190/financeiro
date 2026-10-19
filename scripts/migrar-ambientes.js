@@ -6,6 +6,10 @@
 // mão antes deste script): as primeiras `schema_versao` migrações são REGISTRADAS como aplicadas
 // sem rodar de novo (linha de base) — o seed do 'vm' no central já nasce com schema_versao = 2.
 //
+// Conecta como neondb_owner (ADMIN_DATABASE_URL, ou CENTRAL_DATABASE_URL) e roda cada migração numa
+// transação com SET LOCAL ROLE <database>_app quando o banco já tem usuário próprio (R7): as tabelas
+// novas nascem com o dono certo, e o SET LOCAL vale até atrás do PgBouncer em modo transação.
+//
 // Uso (na raiz do projeto):
 //   node --env-file=.env.local scripts/migrar-ambientes.js --dry-run   ← só lista o que faria
 //   node --env-file=.env.local scripts/migrar-ambientes.js
@@ -16,6 +20,7 @@ import pg from 'pg'
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { urlDoDatabase } from '../api/_conexao.js'
+import { comoDonoDoBanco } from '../api/_usuarioBanco.js'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
@@ -56,21 +61,22 @@ try {
       if (!base.length && !pendentes.length) console.log('  em dia')
       if (dryRun) continue
 
-      await db.query(`CREATE TABLE IF NOT EXISTS _migracoes (
-        nome TEXT PRIMARY KEY,
-        aplicada_em TIMESTAMPTZ NOT NULL DEFAULT now(),
-        linha_de_base BOOLEAN NOT NULL DEFAULT false
-      )`)
-      for (const m of base) await db.query('INSERT INTO _migracoes (nome, linha_de_base) VALUES ($1, true) ON CONFLICT DO NOTHING', [m])
+      await comoDonoDoBanco(db, amb.database_name, async (q) => {
+        await q(`CREATE TABLE IF NOT EXISTS _migracoes (
+          nome TEXT PRIMARY KEY,
+          aplicada_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+          linha_de_base BOOLEAN NOT NULL DEFAULT false
+        )`)
+        for (const m of base) await q('INSERT INTO _migracoes (nome, linha_de_base) VALUES ($1, true) ON CONFLICT DO NOTHING', [m])
+      })
       for (const m of pendentes) {
-        await db.query('BEGIN')
         try {
-          await db.query(readFileSync(dir + m, 'utf-8'))
-          await db.query('INSERT INTO _migracoes (nome) VALUES ($1)', [m])
-          await db.query('COMMIT')
+          await comoDonoDoBanco(db, amb.database_name, async (q, client) => {
+            await client.query(readFileSync(dir + m, 'utf-8'))
+            await q('INSERT INTO _migracoes (nome) VALUES ($1)', [m])
+          })
           console.log(`  ✔ ${m}`)
         } catch (err) {
-          await db.query('ROLLBACK')
           throw new Error(`[${amb.sigla}] ${m}: ${err.message}`, { cause: err })
         }
       }
