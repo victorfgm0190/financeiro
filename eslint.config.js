@@ -18,4 +18,9 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  // Funções da Vercel e scripts rodam no Node (process, Buffer…), não no navegador.
+  {
+    files: ['api/**/*.js', 'scripts/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
 ])
