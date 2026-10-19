@@ -24,6 +24,10 @@ export default function ImportPreviewModal({
   faturaCompleta = false,
   onConcluir,
   verificacoes = [],
+  // Fatura FUTURA (fora do ciclo atual): o motor não cria a etapa A; a cobertura é do Executar
+  // Gerenciais. onResolverGerencial(ids) abre esse modal com só as despesas sem cobertura marcadas.
+  faturaFutura = false,
+  onResolverGerencial = null,
 }) {
   // Toggle local (não persiste): mostra a data em que a transferência gerencial (etapa A)
   // será criada, ao lado de cada item do Grupo G.
@@ -83,6 +87,12 @@ export default function ImportPreviewModal({
   }
   const jaNaGer = round2(gGravadosNaFatura.reduce((s, e) => round2(s + coberturaNaGer(e)), 0))
   const gSemCobertura = gGravadosNaFatura.filter(e => Math.abs(coberturaNaGer(e) - (Number(e.amount) || 0)) > 0.01)
+  // Fatura futura com despesas confirmadas sem cobertura: "Resolver" abre o Executar Gerenciais
+  // (execução manual, como sempre); senão volta para a revisão.
+  const resolverG = faturaFutura && onResolverGerencial && gSemCobertura.length
+    ? () => onResolverGerencial(gSemCobertura.map(e => e.id))
+    : onCancel
+  const novasParcelasG = itemsG.filter(r => (Number(r._installment?.num) || 1) > 1)
   // Fatura G INTEIRA (as já gravadas + as novas) × o que a Ger. terá (já lá + o transferido
   // agora, uma etapa A por despesa nova). Antes o total G era só o das novas, e toda reimportação
   // parcial (fatura aberta de novo) acusava "Divergência" com tudo certo. Agora só diverge quando
@@ -143,7 +153,8 @@ export default function ImportPreviewModal({
   const checks = [
     ...(itemsG.length > 0 ? [grupoGOk
       ? { id: 'grupoG', status: 'ok', titulo: `Saldo esperado do gerencial (${gerName}) confere` }
-      : { id: 'grupoG', status: 'acao', titulo: `Saldo esperado do gerencial (${gerName}) não confere`, detalhe: `Esperado ${fmt(saldoEsperado)} × fatura G ${fmt(totalFaturaG)}.${gSemCobertura.length ? ` Sem cobertura na Ger.: ${gSemCobertura.slice(0, 3).map(e => e.description).join(', ')}${gSemCobertura.length > 3 ? ` e mais ${gSemCobertura.length - 3}` : ''}.` : ''}`, onResolver: onCancel }] : []),
+      : { id: 'grupoG', status: 'acao', titulo: `Saldo esperado do gerencial (${gerName}) não confere`, detalhe: `Esperado ${fmt(saldoEsperado)} × fatura G ${fmt(totalFaturaG)}.${gSemCobertura.length ? ` Sem cobertura na Ger.: ${gSemCobertura.slice(0, 3).map(e => e.description).join(', ')}${gSemCobertura.length > 3 ? ` e mais ${gSemCobertura.length - 3}` : ''}.` : ''}`, onResolver: resolverG }] : []),
+    ...(faturaFutura && novasParcelasG.length ? [{ id: 'grupoGnovas', status: 'info', titulo: `${novasParcelasG.length} parcela(s) 2..N do Grupo G entram nesta fatura futura`, detalhe: 'Depois de importar, a cobertura delas na Ger. é pelo Executar Gerenciais (o próximo Resumo aponta as que faltarem).' }] : []),
     ...verificacoes,
   ]
   const pendencias = checks.filter(c => c.status === 'acao')

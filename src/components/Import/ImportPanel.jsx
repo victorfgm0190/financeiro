@@ -24,6 +24,8 @@ import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERAN
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
+import ExecutarGerenciaisModal from '../Schedule/ExecutarGerenciaisModal'
+import { posicaoDaFatura } from '../../lib/cicloFatura'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
@@ -1228,6 +1230,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     rateiosByLancamento, saveRateiosFor,
     reserveFunctions, settings, updateSettings, data,
     isFaturaFechada, syncing, atualizarCamposLancamentos,
+    getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais,
   } = useApp()
   const favorecidoAliases = data?.favorecidoAliases || []
 
@@ -1291,6 +1294,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // depois da importação, sem perguntar de novo.
   const [decisoesRecorrentes, setDecisoesRecorrentes] = useState(() => new Map())
   const [resolvendoRecorrente, setResolvendoRecorrente] = useState(null)
+  // Resumo → Grupo G sem cobertura numa fatura futura → Executar Gerenciais com essas parcelas.
+  const [resolvendoGerencial, setResolvendoGerencial] = useState(null) // { ids }
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
   const [estornoModal, setEstornoModal] = useState(null)
@@ -4420,6 +4425,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         financialMonthStartDay={financialStartDay}
         faturaCompleta={!!projecao && Math.abs(projecao.diferencaReal) <= TOLERANCIA_CONFERENCIA}
         verificacoes={verificacoes}
+        faturaFutura={posicaoDaFatura(faturaMonthYear, selectedAcc?.dueDay, settings?.financialMonthStartDay, settings?.financialMonthMode) === 'futura'}
+        onResolverGerencial={(ids) => setResolvendoGerencial({ ids })}
         onConcluir={() => {
           setShowImportPreview(false)
           // Com 0 novos: há atualização real (colisão com diferença) ou baixa de agendamento
@@ -4430,6 +4437,20 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           } else concluirSemImportar()
         }}
       />
+
+      {resolvendoGerencial && (
+        <ExecutarGerenciaisModal
+          provisoes={getProvisoesPendentes()}
+          faturasInfo={getFaturasProvisaoGerencial()}
+          accounts={accounts}
+          financialMonthStartDay={settings?.financialMonthStartDay || 1}
+          financialMonthMode={settings?.financialMonthMode || 'custom'}
+          preSelecionados={resolvendoGerencial.ids}
+          filtroInicial={{ fatura: faturaMonthYear, cartao: selectedAccount }}
+          onClose={() => setResolvendoGerencial(null)}
+          onConfirm={(ids) => { executarProvisoesGerenciais(ids); setResolvendoGerencial(null) }}
+        />
+      )}
 
       {resolvendoRecorrente && (
         <ScheduleMatchModal
