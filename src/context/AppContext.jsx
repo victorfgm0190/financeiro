@@ -18,7 +18,8 @@ import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/rese
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
-import { comCamposDaOcorrencia } from '../lib/camposSerie'
+import { comCamposDaOcorrencia, ESCOPO } from '../lib/camposSerie'
+import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
 import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo } from '../lib/armazenamentoLocal'
 import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
@@ -27,7 +28,7 @@ import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
-import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
@@ -4722,6 +4723,35 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // "Cobrança recorrente detectada" → "Sim, baixar agendamento": baixa a ocorrência da mesma
+  // fatura pelo valor do lançamento (o do cartão), ligada a ele — sem segundo lançamento —, grava
+  // previsto × realizado em historico_alteracoes e recalcula gerencial/resgates do cartão.
+  const baixarCobrancaRecorrente = useCallback(({ schedule, tx, meta, atualizarFuturas = false }) => {
+    const atual = dataRef.current.schedules.find(s => s.id === schedule.id) || schedule
+    const conta = dataRef.current.accounts.find(a => a.id === (tx.accountId || atual.accountId))
+    const ehCartao = conta?.type === 'credit' || tx.accountType === 'credit'
+    const occ = ocorrenciaDaCobranca(atual, tx, ehCartao ? (conta?.closingDay || 14) : 31)
+    if (!occ) return null
+    const realizado = Number(tx.amount) || 0
+    const novo = baixarPeloValor(atual, { occurrenceDate: occ.date, meta, previsto: occ.amount, realizado, atualizarFuturas })
+    update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === atual.id ? novo : s)) }))
+
+    const loteId = novoLoteId()
+    const itens = [{ id: atual.id, ocorrenciaData: occ.date, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'amount', de: occ.amount, para: realizado }] }]
+    if (atualizarFuturas && Number(atual.amount) !== realizado) {
+      itens.push({ id: atual.id, escopo: ESCOPO.PROXIMAS, mudancas: [{ campo: 'amount', de: Number(atual.amount) || 0, para: realizado }] })
+    }
+    const historico = Math.abs(occ.amount - realizado) > 0.005 || atualizarFuturas ? linhasHistorico({ entidade: 'agendamento', itens, loteId, motivo: 'Baixa pelo valor do cartão' }) : []
+    registrarEdicao({ agendamentos: [novo], historico, loteId }).catch(e => console.error('[baixa] histórico:', e?.message || e))
+
+    if (ehCartao && conta?.id) {
+      const [y, m] = (tx.faturaMonthYear || occ.fatura || '').split('-')
+      if (y && m) recalcularAgendamentosFatura(conta.id, y, m)
+      reconciliarGerencial(conta.id)
+    }
+    return { occurrenceDate: occ.date, previsto: occ.amount, realizado }
+  }, [update, registrarEdicao, recalcularAgendamentosFatura, reconciliarGerencial])
+
   // Regra C: baixa como "já no cartão" todas as ocorrências pendentes deste agendamento que um
   // lançamento do cartão já cobre. Só por ação do usuário — o índice sozinho nunca altera nada.
   const baixarComoJaNoCartao = useCallback((scheduleId) => {
@@ -5650,7 +5680,7 @@ export function AppProvider({ children }) {
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
-      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered,
+      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente,
       addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,

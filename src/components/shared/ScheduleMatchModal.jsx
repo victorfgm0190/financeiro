@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { RefreshCw, BellOff } from 'lucide-react'
 import { fmt, fmtDate } from './utils'
 
@@ -7,9 +8,12 @@ const FREQ_LABELS = {
   quadrimestral: 'Quadrimestral', semiannual: 'Semestral', annual: 'Anual',
 }
 
+// "Sim, baixar agendamento" baixa SEMPRE pelo valor do lançamento (o do cartão), ligado a ele.
+// onRegister({ atualizarFuturas }) — atualizarFuturas: as próximas ocorrências passam a esse valor.
 export default function ScheduleMatchModal({ schedule, tx, categories, remaining = 0, onRegister, onKeep, onNeverAsk }) {
   const cat = categories.find(c => c.id === schedule.categoryId)
   const diff = Math.abs(schedule.amount - Number(tx.amount))
+  const [atualizarFuturas, setAtualizarFuturas] = useState(false)
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
@@ -86,13 +90,22 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
               Diferença de {fmt(diff)} em relação ao valor agendado
             </p>
           )}
+          <p className="text-xs text-texto-1 text-center">
+            Será baixado por <span className="font-semibold">{fmt(tx.amount)}</span> (valor do cartão)
+          </p>
+          {diff > 0.01 && (
+            <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
+              <input type="checkbox" className="accent-primary mt-0.5" checked={atualizarFuturas} onChange={e => setAtualizarFuturas(e.target.checked)} />
+              <span>Atualizar também as próximas ocorrências para {fmt(tx.amount)}</span>
+            </label>
+          )}
         </div>
 
         {/* Ações */}
         <div className="px-5 pb-5 space-y-2">
           <button
             className="btn-primary w-full flex items-center justify-center gap-2"
-            onClick={onRegister}
+            onClick={() => onRegister({ atualizarFuturas })}
           >
             <RefreshCw size={13} /> Sim, baixar agendamento
           </button>

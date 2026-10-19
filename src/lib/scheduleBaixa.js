@@ -180,6 +180,30 @@ export function planejarBaixas({ linhas, futuras = [], schedules, transactions, 
 // histórico e a aba "Pagos" casarem pela id e não por proximidade de data.
 export const metaBaixaGerada = (lancamentoId) => ({ tipo: TIPO_BAIXA.PAGO, lancamento_id: lancamentoId || null, import_id: null })
 
+// "Cobrança recorrente detectada": a ocorrência que o lançamento paga é a pendente da MESMA
+// fatura (cartão) ou do mesmo mês (conta: closingDay 31); sem ela, a próxima pendente.
+// Devolve { date, fatura, amount } (amount = previsto da ocorrência) ou null.
+export function ocorrenciaDaCobranca(schedule, tx, closingDay = 14) {
+  const pendentes = ocorrenciasPendentes(schedule, closingDay)
+  if (!pendentes.length) return null
+  const fatura = tx?.faturaMonthYear || faturaDaData(tx?.date, closingDay)
+  return pendentes.find(o => o.fatura === fatura) || pendentes[0]
+}
+
+// Previsto × realizado no registro da ocorrência (registered_meta): a baixa é sempre pelo valor
+// do lançamento (o do cartão); o previsto fica para conferência. As já pagas não mudam.
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+export const metaBaixaComValor = (meta, previsto, realizado) =>
+  ({ ...(meta || {}), valor_previsto: r2(previsto), valor_realizado: r2(realizado) })
+
+// Baixa pelo valor do lançamento. `atualizarFuturas` (opção do usuário, ex.: assinatura em dólar):
+// o valor base do agendamento passa a ser o realizado — vale só para as ocorrências pendentes
+// sem valor próprio; as já pagas guardam o delas no meta.
+export function baixarPeloValor(s, { occurrenceDate, meta, previsto, realizado, atualizarFuturas = false }) {
+  const baixado = aplicarBaixa(s, occurrenceDate, metaBaixaComValor(meta, previsto, realizado))
+  return atualizarFuturas ? { ...baixado, amount: r2(realizado) } : baixado
+}
+
 // Baixa UMA ocorrência: mesma transição do markScheduleRegistered (registered + avanço de
 // next_occurrence), mais o meta quando informado.
 export function aplicarBaixa(s, occurrenceDate, meta = null) {

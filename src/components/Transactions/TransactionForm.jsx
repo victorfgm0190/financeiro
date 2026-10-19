@@ -117,7 +117,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
     addTransaction, updateTransaction, addPayee, addCostCenter,
     addSchedule, updateSchedule, deleteSchedule,
-    findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, getNextOccurrences,
+    findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
     reserveFunctions, settings, findLinkedResgate, activeProfileId, categoryGroupOrder,
     registrarEdicao, temHistorico, profiles, pode,
@@ -986,11 +986,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
 
   if (step === 'schedule-match' && scheduleMatch) {
-    const handleRegister = () => {
-      const nextOccs = getNextOccurrences(scheduleMatch.schedule, 3)
-      const dateToMark = nextOccs[0] || scheduleMatch.tx.date
-      // Meta liga a baixa ao lançamento recém-criado (ele não leva schedule_id).
-      markScheduleRegistered(scheduleMatch.schedule.id, dateToMark, metaBaixaGerada(scheduleMatch.txId))
+    const handleRegister = ({ atualizarFuturas = false } = {}) => {
+      // Pelo valor do lançamento, na ocorrência da mesma fatura; o meta liga a baixa ao lançamento
+      // recém-criado (ele não leva schedule_id).
+      baixarCobrancaRecorrente({ schedule: scheduleMatch.schedule, tx: scheduleMatch.tx, meta: metaBaixaGerada(scheduleMatch.txId), atualizarFuturas })
       onClose()
     }
     return (
