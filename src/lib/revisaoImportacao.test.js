@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao,
-  aguardandoLancamentoDoBanco,
+  aguardandoLancamentoDoBanco, avaliarConferencia,
 } from './revisaoImportacao'
 
 const CARTAO = 'acc_card'
@@ -249,3 +249,19 @@ describe('fatura aberta: parcelas que o banco ainda não lançou', () => {
 })
 
 const r2 = (n) => Math.round(n * 100) / 100
+
+describe('avaliarConferencia (pós-importação)', () => {
+  const arquivo = { total: 8365.51, qtd: 87 }
+  it('fatura aberta: arquivo + parcelas aguardando = banco → confere', () => {
+    const r = avaliarConferencia(arquivo, { total: 8645.42, qtd: 89 }, { qtd: 2, total: 279.91 })
+    expect(r).toMatchObject({ ok: true, diff: 0, esperado: 8645.42, qtdEsperada: 89, aguardando: { qtd: 2, total: 279.91 } })
+  })
+  it('sem aguardando, a mesma diferença continua acusando', () => {
+    expect(avaliarConferencia(arquivo, { total: 8645.42, qtd: 89 })).toMatchObject({ ok: false, diff: 279.91, qtdEsperada: 87 })
+  })
+  it('diferença além das aguardando segue divergente; sem banco ainda, diff null', () => {
+    expect(avaliarConferencia(arquivo, { total: 8700, qtd: 90 }, { qtd: 2, total: 279.91 }).ok).toBe(false)
+    expect(avaliarConferencia(arquivo, null, { qtd: 2, total: 279.91 })).toMatchObject({ ok: false, diff: null })
+    expect(avaliarConferencia(arquivo, { ok: true }, { qtd: 2, total: 279.91 })).toMatchObject({ ok: false, diff: null })
+  })
+})

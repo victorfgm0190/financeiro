@@ -384,6 +384,21 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
   }
 }
 
+// Conferência pós-importação (arquivo × o que está gravado no banco). Em fatura ABERTA, as parcelas
+// "aguardando o banco" (projeção da série sem linha no arquivo) estão gravadas mas o arquivo ainda
+// não as traz: arquivo + aguardando = banco → confere. `aguardando` = { qtd, total } (total com o
+// sinal de valorComSinal, o mesmo de arquivo.total e banco.total). diff = banco − esperado.
+export function avaliarConferencia(arquivo, banco, aguardando = null, tolerancia = 0.01) {
+  const ag = aguardando?.qtd ? { qtd: aguardando.qtd, total: r2(aguardando.total) } : { qtd: 0, total: 0 }
+  const esperado = r2((Number(arquivo?.total) || 0) + ag.total)
+  // Resposta sem total numérico (erro / incompleta) nunca confere.
+  const diff = banco && Number.isFinite(Number(banco.total)) ? r2(Number(banco.total) - esperado) : null
+  return {
+    aguardando: ag, esperado, qtdEsperada: (arquivo?.qtd || 0) + ag.qtd, diff,
+    ok: diff != null && Math.abs(diff) <= tolerancia,
+  }
+}
+
 function fmtFatura(my) {
   if (!my) return '—'
   const [y, m] = my.split('-')

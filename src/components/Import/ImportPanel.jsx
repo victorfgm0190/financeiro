@@ -17,7 +17,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco } from '../../lib/revisaoImportacao'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -34,6 +34,9 @@ import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import { camposHerdadosProjecao } from '../../lib/herancaCampos'
+import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
+import { linhasHistorico, novoLoteId } from '../../lib/historico'
+import { ESCOPO } from '../../lib/camposSerie'
 import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
 import TransactionForm from '../Transactions/TransactionForm'
@@ -336,7 +339,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [dbMappings, setDbMappings] = useState([])
-  const { addTransaction, gerencialGroups } = useApp()
+  const { addTransaction, gerencialGroups, schedules, settings } = useApp()
   // Planilha de outro banco (conta corrente): mapeamento → modelo do usuário (import_layouts).
   const [mapeador, setMapeador] = useState(null) // { tabela, nomeArquivo }
   const [modelos, setModelos] = useState([])
@@ -383,9 +386,14 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
       // OFX: o mesmo FITID já importado nesta conta é duplicata exata.
       const dupFitid = !!row.fitid && !!resolvedAccountId && transactions.some(t => t.fitid === row.fitid && t.accountId === resolvedAccountId)
       const dup = resolvedAccountId ? (dupFitid || isDuplicate(rowWithAccount, transactions)) : false
-      return { ...rowWithAccount, _isDuplicate: dup, _isIgnored: false, selected: row.selected && !dup }
+      // "O agendamento manda": casou com um agendamento recorrente desta conta → herda dele grupo,
+      // função de reserva, categoria, favorecido e tipo de documento (lib/agendamentoManda).
+      const agendamento = row.type !== 'transfer' && resolvedAccountId
+        ? agendamentoQueManda({ ...rowWithAccount, type: row.type }, schedules, { excecoes: settings?.recurringMatchExceptions || [] })
+        : null
+      return { ...rowWithAccount, _agendamento: agendamento, _isDuplicate: dup, _isIgnored: false, selected: row.selected && !dup }
     })
-  }, [parsedRows, accountMapping, transactions, dbMapIndex])
+  }, [parsedRows, accountMapping, transactions, dbMapIndex, schedules, settings])
 
   // Linhas de uma conta só (OFX / planilha de outro banco): a tela pede para mapear a "conta do
   // arquivo" a uma conta do Finup, como faz com as contas do Dindin.
@@ -462,6 +470,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
         date: row.date,
         description: row.description,
         grupoGerencial: defaultGrupoD,
+        ...(row._agendamento ? patchLancamentoDoAgendamento(row._agendamento) : {}),
         origin: ORIGIN.IMPORTACAO_FATURA,
         ...(row.fitid ? { fitid: row.fitid } : {}),
       })
@@ -612,6 +621,12 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
                           ? <span className="text-xs px-1.5 py-0.5 rounded bg-surface-2 text-texto-3">Ignorado</span>
                           : <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg">Novo</span>
                       }
+                      {row._agendamento && !row._isDuplicate && !row._isIgnored && (
+                        <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary-fg whitespace-nowrap"
+                          title={`Grupo, função, categoria, favorecido e tipo de documento vêm do agendamento "${row._agendamento.description}"`}>
+                          do agendamento
+                        </span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -721,6 +736,7 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
     faturaMonthYear: row.faturaMonthYear || null,
     faturaRef: faturaRefFromMY(row.faturaMonthYear),
     reservaFuncaoId: row._reservaFuncaoId || null,
+    tipoDocumentoId: row.tipoDocumentoId || null,
     installmentNum: row._installment?.num || null,
     installmentTotal: row._installment?.total || null,
     // Ordinal entre gêmeas (2ª em diante) — sem ele a installment_key sai igual à da 1ª e o
@@ -1145,7 +1161,9 @@ function ConferenciaLinha({ label, valor, sub, tone }) {
 function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
   const { arquivo, banco, status, erro, totalDeclarado } = conferencia
   const r2 = (n) => Math.round(n * 100) / 100
-  const diff = banco ? r2(banco.total - arquivo.total) : null
+  // Fatura aberta: parcelas da série gravadas que o arquivo ainda não traz entram no esperado.
+  const { diff, aguardando, qtdEsperada } = avaliarConferencia(arquivo, banco, conferencia.aguardando)
+  const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`
   const diffParse = totalDeclarado != null ? r2(arquivo.total - totalDeclarado) : null
   const parseOk = diffParse == null || Math.abs(diffParse) <= TOLERANCIA_CONFERENCIA
 
@@ -1158,9 +1176,11 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
         {status === 'divergente' && <AlertCircle size={18} className="text-perigo" />}
         <span className="font-medium text-sm">
           {status === 'pendente' && 'Conferindo a fatura no banco…'}
-          {status === 'ok' && (conferencia.faturaAberta
-            ? 'Confere com o parcial de hoje (fatura ainda aberta)'
-            : 'Fatura confere com o arquivo')}
+          {status === 'ok' && (aguardando.qtd
+            ? `Fatura confere ✓ (${plural(aguardando.qtd, 'parcela aguardando', 'parcelas aguardando')} o banco)`
+            : conferencia.faturaAberta
+              ? 'Confere com o parcial de hoje (fatura ainda aberta)'
+              : 'Fatura confere com o arquivo')}
           {status === 'divergente' && 'Fatura NÃO confere com o arquivo'}
           {status === 'erro' && 'Não foi possível conferir a fatura'}
         </span>
@@ -1181,6 +1201,13 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
           valor={fmt(arquivo.total)}
           sub={`${arquivo.qtd} lançamento${arquivo.qtd !== 1 ? 's' : ''} · ${fmt(arquivo.despesas)} em despesas − ${fmt(arquivo.estornos)} em ${arquivo.qtdEstornos} estorno${arquivo.qtdEstornos !== 1 ? 's' : ''}`}
         />
+        {aguardando.qtd > 0 && (
+          <ConferenciaLinha
+            label="Aguardando o banco"
+            valor={fmt(aguardando.total)}
+            sub={`${plural(aguardando.qtd, 'parcela prevista', 'parcelas previstas')} da fatura aberta`}
+          />
+        )}
         <ConferenciaLinha
           label="Soma no banco"
           valor={banco ? fmt(banco.total) : '—'}
@@ -1208,8 +1235,8 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
 
       {status === 'divergente' && banco && (
         <p className="text-xs text-perigo">
-          {banco.qtd !== arquivo.qtd
-            ? `O banco tem ${banco.qtd} lançamento${banco.qtd !== 1 ? 's' : ''} contra ${arquivo.qtd} do arquivo`
+          {banco.qtd !== qtdEsperada
+            ? `O banco tem ${banco.qtd} lançamento${banco.qtd !== 1 ? 's' : ''} contra ${arquivo.qtd} do arquivo${aguardando.qtd ? ` + ${aguardando.qtd} aguardando` : ''}`
             : 'A quantidade bate, mas os valores divergem'}
           {banco.qtdEstornos !== arquivo.qtdEstornos && ` — estornos: ${banco.qtdEstornos} no banco × ${arquivo.qtdEstornos} no arquivo`}
           . Use a Conciliação de Fatura para localizar a diferença.
@@ -1231,6 +1258,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     reserveFunctions, settings, updateSettings, data,
     isFaturaFechada, syncing, atualizarCamposLancamentos,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais,
+    updateSchedule, registrarEdicao,
   } = useApp()
   const favorecidoAliases = data?.favorecidoAliases || []
 
@@ -1679,6 +1707,17 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         }
       }
 
+      // "O agendamento manda": a linha que casa com um agendamento recorrente deste cartão herda
+      // dele grupo, função de reserva, categoria, favorecido e tipo de documento — acima das regras,
+      // da série e das sugestões do histórico (lib/agendamentoManda).
+      const excecoesRecorrentes = settings?.recurringMatchExceptions || []
+      for (let i = 0; i < processed.length; i++) {
+        const row = processed[i]
+        if (row._generated || (row.type || 'expense') !== 'expense') continue
+        const s = agendamentoQueManda({ ...row, accountId: resolvedAccountId }, schedules, { excecoes: excecoesRecorrentes })
+        if (s) processed[i] = aplicarAgendamentoNaLinha(row, s)
+      }
+
       const sortedRows = processed.sort((a, b) => a.faturaMonthYear.localeCompare(b.faturaMonthYear) || a.date.localeCompare(b.date))
 
       // Mês de referência.
@@ -1959,6 +1998,32 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const updateRow = (id, changes) => setRows(prev => prev.map(r => r._id === id ? { ...r, ...changes } : r))
 
+  // Linha que herdou do agendamento: trocar grupo/função/categoria na revisão pergunta se o
+  // agendamento também muda. A resposta "Sim" fica na linha (_atualizarAgendamento) e só é
+  // gravada no agendamento quando a importação é confirmada.
+  const [perguntaAgendamento, setPerguntaAgendamento] = useState(null) // { rowId, schedule, divergencias }
+  const editarLinhaDoAgendamento = (row, changes) => {
+    updateRow(row._id, changes)
+    if (!row._doAgendamento) return
+    const schedule = schedules.find(s => s.id === row._doAgendamento.scheduleId)
+    const divergencias = divergenciasDaEdicao(schedule, changes)
+    if (divergencias.length) setPerguntaAgendamento({ rowId: row._id, schedule, divergencias })
+  }
+  const responderAgendamento = (atualizar) => {
+    const p = perguntaAgendamento
+    if (!p) return
+    setRows(prev => prev.map(r => {
+      if (r._id !== p.rowId) return r
+      const atual = { ...(r._atualizarAgendamento || {}) }
+      for (const d of p.divergencias) {
+        if (atualizar) atual[d.campo] = d.para
+        else delete atual[d.campo]
+      }
+      return { ...r, _atualizarAgendamento: Object.keys(atual).length ? atual : null }
+    }))
+    setPerguntaAgendamento(null)
+  }
+
   // ITEM 6 — ao classificar uma linha, oferece propagar a MESMA classificação às demais linhas do
   // MESMO fornecedor (keyword + descSimilarity ≥ 0.75) ainda NÃO editadas manualmente. Toast some
   // em 5s. `changes` = { categoryId?, grupoGerencial?, _reservaFuncaoId? } aplicado à origem.
@@ -2063,6 +2128,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (!updates.grupoGerencial && row.grupoGerencial === grupoD) {
         // keep default
       }
+
+      // Campos que vieram do agendamento recorrente não são sobrescritos pelas regras.
+      for (const k of row._doAgendamento?.campos || []) delete updates[k]
 
       return Object.keys(updates).length ? { ...row, ...updates } : row
     }))
@@ -2377,6 +2445,22 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       }
     }
 
+    // "Atualizar também o agendamento?" → Sim na revisão: o agendamento recebe o que o usuário
+    // trocou na linha (vale para as próximas ocorrências), com histórico.
+    for (const row of toImport) {
+      if (!row._atualizarAgendamento || !row._doAgendamento) continue
+      const s = schedules.find(x => x.id === row._doAgendamento.scheduleId)
+      if (!s) continue
+      const { changes, mudancas } = mudancasNoAgendamento(s, Object.entries(row._atualizarAgendamento).map(([campo, para]) => ({ campo, para })))
+      if (!mudancas.length) continue
+      updateSchedule(s.id, changes)
+      const loteAg = novoLoteId()
+      registrarEdicao({
+        agendamentos: [{ ...s, ...changes }], loteId: loteAg,
+        historico: linhasHistorico({ entidade: 'agendamento', itens: [{ id: s.id, escopo: ESCOPO.PROXIMAS, mudancas }], loteId: loteAg, motivo: 'Importação de fatura: atualizado pelo lançamento' }),
+      }).catch(e => console.error('[importacao] histórico do agendamento:', e?.message || e))
+    }
+
     if (toImport.length > 0 || scheduleBaixas.length > 0) {
       const dates = toImport.map(r => computeSaveDate(r)).sort()
       const mesAno = faturaMonthYear || dates[0]?.slice(0, 7)
@@ -2529,6 +2613,11 @@ Importar mesmo assim no mês selecionado?`)) return
       totalDeclarado: declarado ?? null,
       // Fatura ainda aberta: o arquivo é o PARCIAL de hoje, não o valor final.
       faturaAberta: cabecalhoArquivo?.aberta === true,
+      // Parcelas da série que o banco ainda não lançou (as mesmas do bloco âmbar da revisão): estão
+      // gravadas, o arquivo não as traz — a conferência soma ao arquivo.
+      aguardando: (cabecalhoArquivo?.aberta === true && faturaMY === faturaMonthYear && projecao?.itensAguardando?.length)
+        ? { qtd: projecao.itensAguardando.length, total: projecao.aguardando }
+        : null,
       banco: null, status: 'pendente', erro: '',
     })
   }
@@ -2544,9 +2633,9 @@ Importar mesmo assim no mês selecionado?`)) return
       fetchFaturaConferencia(conferencia.accountId, conferencia.faturaMonthYear)
         .then(banco => {
           if (cancelado) return
-          const diff = Math.abs(banco.total - conferencia.arquivo.total)
+          const { ok } = avaliarConferencia(conferencia.arquivo, banco, conferencia.aguardando, TOLERANCIA_CONFERENCIA)
           setConferencia(c => (c && c.status === 'pendente'
-            ? { ...c, banco, status: diff > TOLERANCIA_CONFERENCIA ? 'divergente' : 'ok' }
+            ? { ...c, banco, status: ok ? 'ok' : 'divergente' }
             : c))
         })
         .catch(err => {
@@ -3959,6 +4048,14 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                             description={row.description}
                             onChange={inst => updateRow(row._id, { _installment: inst, _serieId: inst ? (row._serieId || newSerieId()) : null })}
                           />
+                          {row._doAgendamento && (!row._dbTx || row._collisionTx) && (
+                            <span
+                              className="text-[10px] bg-primary/15 text-primary-fg px-1.5 py-0.5 rounded whitespace-nowrap shrink-0"
+                              title={`Grupo, função, categoria, favorecido e tipo de documento vêm do agendamento "${row._doAgendamento.descricao}"${row._atualizarAgendamento ? ' — o agendamento será atualizado com o que você trocou' : ''}`}
+                            >
+                              do agendamento{row._atualizarAgendamento ? ' ✎' : ''}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2">
@@ -3991,7 +4088,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                                   changes.grupoGerencial = cat.defaultGerencialGroup
                                   changes._gerEdit = true
                                 }
-                                updateRow(row._id, changes)
+                                editarLinhaDoAgendamento(row, changes)
                                 if (newCat) learnClassification(row.description, newCat, row.payee, { dayOfMonth: new Date(row.date + 'T00:00:00').getDate(), amountApprox: row.amount, grupoGerencial: changes.grupoGerencial || row.grupoGerencial, reservaFuncaoId: row._reservaFuncaoId })
                                 if (newCat) offerApplyToAll(row, changes.grupoGerencial ? { categoryId: newCat, grupoGerencial: changes.grupoGerencial } : { categoryId: newCat })
                               }}
@@ -4030,7 +4127,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                           onChange={e => {
                             const g = e.target.value
                             // `_gerEdit`: escolha manual — na colisão, prevalece sobre o grupo do banco.
-                            updateRow(row._id, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true, _gerEdit: true })
+                            editarLinhaDoAgendamento(row, { grupoGerencial: g, _reservaFuncaoId: null, _manualEdit: true, _gerEdit: true })
                             offerApplyToAll(row, { grupoGerencial: g, _reservaFuncaoId: null })
                           }}
                         >
@@ -4056,7 +4153,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                               <select
                                 className={`mt-1 block bg-surface-2 border ${pendente ? 'border-aviso' : 'border-borda-campo'} text-texto-2 rounded px-2 py-1 text-xs focus:outline-none w-24`}
                                 value={row._reservaFuncaoId || ''}
-                                onChange={e => updateRow(row._id, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
+                                onChange={e => editarLinhaDoAgendamento(row, { _reservaFuncaoId: e.target.value || null, _suggestedReserva: false, _manualEdit: true, _gerEdit: true })}
                                 title="Função de reserva do resgate"
                               >
                                 <option value="">— Selecionar —</option>
@@ -4437,6 +4534,40 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           } else concluirSemImportar()
         }}
       />
+
+      {perguntaAgendamento && (() => {
+        const rotulo = (campo, v) => {
+          if (v == null || v === '') return '—'
+          if (campo === 'grupoGerencial') { const g = gerencialGroups.find(x => x.id === v); return g ? `${g.number} · ${g.name}` : v }
+          if (campo === 'categoryId') { const c = categories.find(x => x.id === v); return c ? `${c.icon} ${c.name}` : v }
+          if (campo === 'reservaFuncaoId') return (reserveFunctions || []).find(f => f.id === v)?.name || v
+          return String(v)
+        }
+        return (
+          <Modal open onClose={() => responderAgendamento(false)} title="Atualizar também o agendamento?" size="sm">
+            <div className="space-y-3 text-sm">
+              <p className="text-texto-2">
+                Este lançamento veio do agendamento <span className="font-medium text-texto-1">{perguntaAgendamento.schedule?.description}</span>. Você trocou:
+              </p>
+              <ul className="text-xs space-y-1">
+                {perguntaAgendamento.divergencias.map(d => (
+                  <li key={d.campo} className="flex flex-wrap gap-1">
+                    <span className="text-texto-3">{CAMPOS_DO_AGENDAMENTO.find(c => c.campo === d.campo)?.rotulo}:</span>
+                    <span className="text-texto-2 line-through">{rotulo(d.campo, d.de)}</span>
+                    <span className="text-texto-3">→</span>
+                    <span className="text-texto-1 font-medium">{rotulo(d.campo, d.para)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-texto-3">"Sim" muda o agendamento (próximas ocorrências) quando você confirmar a importação.</p>
+              <div className="flex gap-2 pt-1">
+                <button className="btn-secondary flex-1" onClick={() => responderAgendamento(false)}>Só neste lançamento</button>
+                <button className="btn-primary flex-1" onClick={() => responderAgendamento(true)}>Sim</button>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       {resolvendoGerencial && (
         <ExecutarGerenciaisModal

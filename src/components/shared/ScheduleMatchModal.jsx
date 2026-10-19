@@ -9,11 +9,17 @@ const FREQ_LABELS = {
 }
 
 // "Sim, baixar agendamento" baixa SEMPRE pelo valor do lançamento (o do cartão), ligado a ele.
-// onRegister({ atualizarFuturas }) — atualizarFuturas: as próximas ocorrências passam a esse valor.
-export default function ScheduleMatchModal({ schedule, tx, categories, remaining = 0, onRegister, onKeep, onNeverAsk }) {
+// onRegister({ atualizarFuturas, usarDoAgendamento, atualizarAgendamento }) — atualizarFuturas: as
+// próximas ocorrências passam a esse valor. `diferencas` (Novo Lançamento): campos em que o
+// lançamento difere do agendamento ([{ campo, rotulo, deLancamento, doAgendamento }], já como texto).
+// O agendamento manda: por padrão o lançamento fica com os campos dele; manter os do lançamento
+// pergunta se o agendamento também muda.
+export default function ScheduleMatchModal({ schedule, tx, categories, remaining = 0, diferencas = [], onRegister, onKeep, onNeverAsk }) {
   const cat = categories.find(c => c.id === schedule.categoryId)
   const diff = Math.abs(schedule.amount - Number(tx.amount))
   const [atualizarFuturas, setAtualizarFuturas] = useState(false)
+  const [usarDoAgendamento, setUsarDoAgendamento] = useState(true)
+  const [atualizarAgendamento, setAtualizarAgendamento] = useState(false)
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
@@ -93,6 +99,37 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
           <p className="text-xs text-texto-1 text-center">
             Será baixado por <span className="font-semibold">{fmt(tx.amount)}</span> (valor do cartão)
           </p>
+          {diferencas.length > 0 && (
+            <div className="rounded-lg border border-borda p-3 space-y-2">
+              <p className="text-xs text-texto-2">Campos diferentes do agendamento:</p>
+              <ul className="text-xs space-y-0.5">
+                {diferencas.map(d => (
+                  <li key={d.campo}><span className="text-texto-3">{d.rotulo}:</span> <span className="text-texto-2">{d.deLancamento}</span> <span className="text-texto-3">→ agendamento:</span> <span className="text-texto-1 font-medium">{d.doAgendamento}</span></li>
+                ))}
+              </ul>
+              <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer">
+                <input type="radio" name="campos-agendamento" className="accent-primary" checked={usarDoAgendamento} onChange={() => setUsarDoAgendamento(true)} />
+                Usar os do agendamento
+              </label>
+              <label className="flex items-center gap-2 text-xs text-texto-2 cursor-pointer">
+                <input type="radio" name="campos-agendamento" className="accent-primary" checked={!usarDoAgendamento} onChange={() => setUsarDoAgendamento(false)} />
+                Manter os deste lançamento
+              </label>
+              {!usarDoAgendamento && (
+                <div className="pl-5 space-y-1">
+                  <p className="text-xs text-texto-2">Atualizar também o agendamento?</p>
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-texto-2 cursor-pointer">
+                      <input type="radio" name="atualizar-agendamento" className="accent-primary" checked={atualizarAgendamento} onChange={() => setAtualizarAgendamento(true)} /> Sim
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-texto-2 cursor-pointer">
+                      <input type="radio" name="atualizar-agendamento" className="accent-primary" checked={!atualizarAgendamento} onChange={() => setAtualizarAgendamento(false)} /> Só neste lançamento
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {diff > 0.01 && (
             <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
               <input type="checkbox" className="accent-primary mt-0.5" checked={atualizarFuturas} onChange={e => setAtualizarFuturas(e.target.checked)} />
@@ -105,7 +142,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
         <div className="px-5 pb-5 space-y-2">
           <button
             className="btn-primary w-full flex items-center justify-center gap-2"
-            onClick={() => onRegister({ atualizarFuturas })}
+            onClick={() => onRegister({ atualizarFuturas, usarDoAgendamento, atualizarAgendamento: !usarDoAgendamento && atualizarAgendamento })}
           >
             <RefreshCw size={13} /> Sim, baixar agendamento
           </button>

@@ -20,6 +20,7 @@ import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia, ESCOPO } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
+import { casaAgendamento } from '../lib/agendamentoManda'
 import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
 import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo } from '../lib/armazenamentoLocal'
 import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
@@ -4680,23 +4681,8 @@ export function AppProvider({ children }) {
     const txPayee = (tx.payee || '').toLowerCase().trim()
     if (txPayee && exceptions.includes(txPayee)) return null
 
-    return data.schedules.find(schedule => {
-      if (schedule.transactionType !== 'expense') return false
-      if (Math.abs(schedule.amount - Number(tx.amount)) > 0.50) return false
-      const sPayee = (schedule.payee || '').toLowerCase().trim()
-      const txDesc = (tx.description || '').toLowerCase()
-      const sDesc = (schedule.description || '').toLowerCase()
-      // Payee match takes priority
-      if (txPayee && sPayee) {
-        return txPayee === sPayee || txPayee.includes(sPayee) || sPayee.includes(txPayee)
-      }
-      // Fallback: first significant word of schedule description in tx description
-      if (txDesc && sDesc) {
-        const keyword = sDesc.split(/\s+/).find(w => w.length > 3)
-        return keyword ? txDesc.includes(keyword) : false
-      }
-      return false
-    }) || null
+    // Valor ±R$ 0,50 + favorecido (ou 1ª palavra significativa da descrição) — lib/agendamentoManda.
+    return data.schedules.find(schedule => casaAgendamento(tx, schedule)) || null
   }, [data.schedules, data.settings.recurringMatchExceptions])
 
   const addRecurringMatchException = useCallback((payee) => {

@@ -25,6 +25,7 @@ import {
   serieKeyDe, mensagemAplicada,
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
+import { diferencasLancamentoAgendamento, patchLancamentoDoAgendamento, mudancasNoAgendamento } from '../../lib/agendamentoManda'
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 import RateioModal from '../shared/RateioModal'
@@ -120,7 +121,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente,
     rateiosByLancamento, saveRateiosFor, deleteRateiosFor,
     reserveFunctions, settings, findLinkedResgate, activeProfileId, categoryGroupOrder,
-    registrarEdicao, temHistorico, profiles, pode,
+    registrarEdicao, temHistorico, profiles, pode, tiposDocumento = [],
   } = useApp()
   // Nível de acesso: registrar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('lancamentos', initial?.id ? 'editar' : 'incluir')
@@ -986,16 +987,41 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
 
   if (step === 'schedule-match' && scheduleMatch) {
-    const handleRegister = ({ atualizarFuturas = false } = {}) => {
+    const { schedule: agMatch, tx: txMatch, txId: txIdMatch } = scheduleMatch
+    // "O agendamento manda": campos em que o lançamento salvo difere do agendamento.
+    const diferencas = diferencasLancamentoAgendamento(txMatch, agMatch)
+    const rotuloCampo = (campo, v) => {
+      if (v == null || v === '') return '—'
+      if (campo === 'grupoGerencial') { const g = gerencialGroups.find(x => x.id === v); return g ? `${g.number} · ${g.name}` : v }
+      if (campo === 'categoryId') { const c = categories.find(x => x.id === v); return c ? `${c.icon} ${c.name}` : v }
+      if (campo === 'reservaFuncaoId') return (reserveFunctions || []).find(f => f.id === v)?.name || v
+      if (campo === 'tipoDocumentoId') return tiposDocumento.find(t => t.id === v)?.nome || v
+      return String(v)
+    }
+    const handleRegister = ({ atualizarFuturas = false, usarDoAgendamento = true, atualizarAgendamento = false } = {}) => {
       // Pelo valor do lançamento, na ocorrência da mesma fatura; o meta liga a baixa ao lançamento
       // recém-criado (ele não leva schedule_id).
-      baixarCobrancaRecorrente({ schedule: scheduleMatch.schedule, tx: scheduleMatch.tx, meta: metaBaixaGerada(scheduleMatch.txId), atualizarFuturas })
+      baixarCobrancaRecorrente({ schedule: agMatch, tx: txMatch, meta: metaBaixaGerada(txIdMatch), atualizarFuturas })
+      if (diferencas.length && usarDoAgendamento && txIdMatch) {
+        updateTransaction(txIdMatch, patchLancamentoDoAgendamento(agMatch))
+      } else if (diferencas.length && atualizarAgendamento) {
+        const { changes, mudancas } = mudancasNoAgendamento(agMatch, diferencas.map(d => ({ campo: d.campo, para: d.deLancamento })))
+        if (mudancas.length) {
+          updateSchedule(agMatch.id, changes)
+          const loteId = novoLoteId()
+          registrarEdicao({
+            agendamentos: [{ ...agMatch, ...changes }], loteId,
+            historico: linhasHistorico({ entidade: 'agendamento', itens: [{ id: agMatch.id, escopo: ESCOPO.PROXIMAS, mudancas }], loteId, motivo: 'Novo lançamento: atualizado pelo lançamento' }),
+          }).catch(e => console.error('[lancamento] histórico do agendamento:', e?.message || e))
+        }
+      }
       onClose()
     }
     return (
       <ScheduleMatchModal
-        schedule={scheduleMatch.schedule}
-        tx={scheduleMatch.tx}
+        schedule={agMatch}
+        tx={txMatch}
+        diferencas={diferencas.map(d => ({ ...d, deLancamento: rotuloCampo(d.campo, d.deLancamento), doAgendamento: rotuloCampo(d.campo, d.doAgendamento) }))}
         categories={categories}
         onRegister={handleRegister}
         onKeep={onClose}
