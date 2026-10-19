@@ -111,6 +111,18 @@ export function totalParcelasDoTx(t) {
   if (t.installmentTotal != null && t.installmentTotal !== '') return Number(t.installmentTotal)
   return detectParcela(t.description || '')?.total ?? null
 }
+// Parcela de série (parcelado no cartão): total > 1, nº > 1 ou ligada a uma série gravada.
+export function ehParcelaDeSerie(t) {
+  return (totalParcelasDoTx(t) || 0) > 1 || (numeroParcelaDoTx(t) || 0) > 1 || !!t?.serieId
+}
+
+// Fatura ABERTA (valor parcial): parcela de série gravada na fatura e sem linha no arquivo é a
+// parcela prevista que o banco ainda não lançou — não é divergência, e nunca pode ser apagada,
+// sugerida para exclusão nem empurrada por causa disso (conciliação, confirmação, nada).
+export function aguardandoLancamentoDoBanco(t, { aberta }) {
+  return !!aberta && ehParcelaDeSerie(t)
+}
+
 // Da linha: o _installment resolvido na carga (coluna Parcelamento, série inferida ou override
 // manual) e, sem ele, o "ParcN" do texto.
 export function numeroParcelaDaLinha(r) {
@@ -312,7 +324,9 @@ function representanteNoBanco(r) {
 //   projetado = o que já está gravado na fatura + as linhas que serão inseridas nela.
 // A diferença é explicada item a item (soma exata): linha do arquivo que não entra, lançamento
 // gravado sem linha no arquivo e par linha × banco com valores diferentes.
-export function projetarTotalFatura(resolvedRows, { fatura, accountId, transactions, closingDay = 14 }) {
+// `aberta` (fatura aberta, valor parcial): parcela de série sem linha no arquivo vira
+// 'aguardando_banco' (informativo) e sai da divergência — arquivo + aguardando = projetado.
+export function projetarTotalFatura(resolvedRows, { fatura, accountId, transactions, closingDay = 14, aberta = false }) {
   const linhas = (resolvedRows || []).filter(r => !r._generated)
   const naFatura = (transactions || []).filter(t =>
     t.accountId === accountId && (t.type === 'expense' || t.type === 'income') && !t.isEspelho
@@ -343,10 +357,20 @@ export function projetarTotalFatura(resolvedRows, { fatura, accountId, transacti
   }
   for (const t of naFatura) {
     if (representados.has(t.id)) continue
+    if (aguardandoLancamentoDoBanco(t, { aberta })) {
+      itens.push({ tipo: 'aguardando_banco', tx: t, valor: r2(-valorComSinal(t)), motivo: 'parcela prevista que o banco ainda não lançou nesta fatura aberta' })
+      continue
+    }
     itens.push({ tipo: 'so_no_banco', tx: t, valor: r2(-valorComSinal(t)), motivo: 'gravado na fatura, sem linha correspondente no arquivo' })
   }
   projetado = r2(projetado)
-  return { arquivo, projetado, diferenca: r2(arquivo - projetado), itens }
+  const itensAguardando = itens.filter(i => i.tipo === 'aguardando_banco')
+  const itensDivergencia = itens.filter(i => i.tipo !== 'aguardando_banco')
+  const aguardando = r2(-itensAguardando.reduce((s, i) => s + i.valor, 0))
+  return {
+    arquivo, projetado, diferenca: r2(arquivo - projetado), itens,
+    aguardando, itensAguardando, itensDivergencia, diferencaReal: r2(arquivo + aguardando - projetado),
+  }
 }
 
 function fmtFatura(my) {

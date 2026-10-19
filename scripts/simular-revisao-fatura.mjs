@@ -33,7 +33,7 @@ const ymd = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : (v ? Stri
 
 const wb = XLSX.read(fs.readFileSync(file), { type: 'buffer', cellDates: true })
 const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' })
-const { rows: parsed, faturaMY } = parseItauXLS(aoa)
+const { rows: parsed, faturaMY, cabecalho } = parseItauXLS(aoa)
 const fatura = (faturaArg && /^\d{4}-\d{2}$/.test(faturaArg)) ? faturaArg : faturaMY
 
 const db = new pg.Client({ connectionString: process.env.NEON_DATABASE_URL })
@@ -73,7 +73,7 @@ if (mesmo) {
   const escolha = new Map(resolved.filter(r => r._dupLevel === 'possivel').map(r => [r._id, r._dupTx.id]))
   resolved = resolverLinhasRevisao(rows.map(r => escolha.has(r._id) ? { ...r, _mesmoQueId: escolha.get(r._id) } : r), { accountId, transactions, closingDay })
 }
-const proj = projetarTotalFatura(resolved, { fatura, accountId, transactions, closingDay })
+const proj = projetarTotalFatura(resolved, { fatura, accountId, transactions, closingDay, aberta: cabecalho?.aberta === true })
 
 const parc = (t) => { const n = numeroParcelaDoTx(t), tt = totalParcelasDoTx(t); return n ? ` ${n}${tt ? '/' + tt : ''}` : '' }
 const status = (r) => r._collisionTx ? (r._mesmoConfirmado ? 'É o mesmo ↻' : 'No banco ↻')
@@ -100,13 +100,19 @@ console.log('\n  Status:', Object.entries(cont).map(([k, v]) => `${k}: ${v}`).jo
 console.log(`\n  Total do arquivo            ${brl(proj.arquivo).padStart(14)}`)
 console.log(`  Total projetado da fatura   ${brl(proj.projetado).padStart(14)}`)
 console.log(`  Diferença                   ${brl(proj.diferenca).padStart(14)}   ${Math.abs(proj.diferenca) <= 0.01 ? 'OK' : '*** NÃO CONFERE ***'}`)
-if (proj.itens.length) {
-  console.log('\n  Itens que explicam a diferença (arquivo − projetado):')
-  for (const it of proj.itens) {
+if (proj.itensAguardando.length) {
+  console.log(`\n  Fatura aberta — parcelas previstas que o banco ainda não lançou (${brl(proj.aguardando)}):`)
+  for (const it of proj.itensAguardando) console.log(`    ${brl(-it.valor).padStart(12)}  ${descTx(it.tx)}`)
+  console.log(`  Arquivo + aguardando = projetado: ${brl(proj.arquivo)} + ${brl(proj.aguardando)} = ${brl(proj.projetado)}   ${Math.abs(proj.diferencaReal) <= 0.01 ? 'OK' : '*** NÃO CONFERE ***'}`)
+}
+console.log(`  Diferença real (divergência) ${brl(proj.diferencaReal).padStart(13)}   ${Math.abs(proj.diferencaReal) <= 0.01 ? 'OK' : '*** NÃO CONFERE ***'}`)
+if (proj.itensDivergencia.length) {
+  console.log('\n  Itens que explicam a divergência (arquivo − projetado):')
+  for (const it of proj.itensDivergencia) {
     const d = it.linha ? `${it.linha.description} (${it.linha._dateCartao})` : descTx(it.tx)
     console.log(`    ${brl(it.valor).padStart(12)}  ${d} — ${it.motivo}`)
   }
-  const soma = Math.round(proj.itens.reduce((s, i) => s + i.valor, 0) * 100) / 100
+  const soma = Math.round(proj.itensDivergencia.reduce((s, i) => s + i.valor, 0) * 100) / 100
   console.log(`    ${brl(soma).padStart(12)}  (soma)`)
 }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao,
+  aguardandoLancamentoDoBanco,
 } from './revisaoImportacao'
 
 const CARTAO = 'acc_card'
@@ -204,3 +205,47 @@ describe('textoResumoImportacao', () => {
     expect(textoResumoImportacao({ salvos: 1 })).toBe('1 lançamento salvo.')
   })
 })
+
+describe('fatura aberta: parcelas que o banco ainda não lançou', () => {
+  const opts = (transactions, aberta) => ({ fatura: '2026-11', accountId: CARTAO, transactions, closingDay: 13, aberta })
+  // O caso real (Itaú Personalite, Nov/2026): Yelumseg Parc2 e Parc4 gravadas na fatura, fora do arquivo.
+  const banco = [
+    tx({ id: 'y2', description: 'Yelumseg Parc2 08/12', amount: 205.61, faturaMonthYear: '2026-11', installmentNum: 2, installmentTotal: 12, serieId: 's1' }),
+    tx({ id: 'y4', description: 'Yelumseg Parc4', amount: 74.30, faturaMonthYear: '2026-11', serieId: 's2' }),
+    tx({ id: 'pad', description: 'Padaria', amount: 20, faturaMonthYear: '2026-11' }),
+  ]
+  const rows = [linha({ _id: 0, description: 'Padaria', amount: 20, faturaMonthYear: '2026-11' })]
+
+  it('aberta: parcelas sem linha no arquivo são "aguardando", não divergência; arquivo + aguardando = projetado', () => {
+    const p = projetarTotalFatura(resolver(rows, banco), opts(banco, true))
+    expect(p.diferenca).toBe(-279.91)
+    expect(p.itensAguardando.map(i => i.tx.id)).toEqual(['y2', 'y4'])
+    expect(p.aguardando).toBe(279.91)
+    expect(p.itensDivergencia).toEqual([])
+    expect(p.diferencaReal).toBe(0)
+    expect(r2(p.arquivo + p.aguardando)).toBe(p.projetado)
+  })
+
+  it('fechada: o comportamento de sempre (divergência real no banner vermelho)', () => {
+    const p = projetarTotalFatura(resolver(rows, banco), opts(banco, false))
+    expect(p.itensAguardando).toEqual([])
+    expect(p.itensDivergencia.map(i => i.tipo)).toEqual(['so_no_banco', 'so_no_banco'])
+    expect(p.diferencaReal).toBe(-279.91)
+  })
+
+  it('aberta: lançamento sem linha no arquivo que NÃO é parcela continua como divergência', () => {
+    const comAvista = [...banco, tx({ id: 'av', description: 'Restaurante', amount: 50, faturaMonthYear: '2026-11' })]
+    const p = projetarTotalFatura(resolver(rows, comAvista), opts(comAvista, true))
+    expect(p.itensDivergencia.map(i => i.tx.id)).toEqual(['av'])
+    expect(p.diferencaReal).toBe(-50)
+  })
+
+  it('aguardandoLancamentoDoBanco: só parcela de série e só com a fatura aberta', () => {
+    expect(aguardandoLancamentoDoBanco(banco[0], { aberta: true })).toBe(true)
+    expect(aguardandoLancamentoDoBanco(banco[1], { aberta: true })).toBe(true)
+    expect(aguardandoLancamentoDoBanco(banco[2], { aberta: true })).toBe(false)
+    expect(aguardandoLancamentoDoBanco(banco[0], { aberta: false })).toBe(false)
+  })
+})
+
+const r2 = (n) => Math.round(n * 100) / 100

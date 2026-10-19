@@ -15,7 +15,7 @@ import { extractLearnKeyword } from '../../lib/descMatch'
 import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura } from '../../lib/revisaoImportacao'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
@@ -1200,6 +1200,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Cabeçalho do arquivo Itaú aberto ({ vencimento, mesVencimento, mesTitulo, aberta } — ver
   // extractItauCabecalho); null quando o arquivo não é do Itaú.
   const [cabecalhoArquivo, setCabecalhoArquivo] = useState(null)
+  // Fatura aberta (valor parcial): parcelas da série sem linha no arquivo estão só aguardando o banco.
+  const faturaAbertaArquivo = cabecalhoArquivo?.aberta === true
   const [filename, setFilename] = useState('')
   const [rows, setRows] = useState([])
   const [cardInfo, setCardInfo] = useState({ cardName: '', faturaStr: '' })
@@ -2535,7 +2537,8 @@ Importar mesmo assim no mês selecionado?`)) return
     ? null
     : projetarTotalFatura(resolvedRows, {
       fatura: faturaMonthYear, accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
-    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport])
+      aberta: cabecalhoArquivo?.aberta === true,
+    }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, cabecalhoArquivo])
   const [verDiferencas, setVerDiferencas] = useState(true)
 
   // Item 4 — heurística de "dia de fechamento errado": quantas linhas À VISTA (num<=1) têm a
@@ -2786,7 +2789,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
   const confirmarConciliacao = () => {
     const importar = concSoItau.filter(i => i.acao === 'importar')
-    const excluir = concSoSistema.filter(i => i.acao === 'excluir')
+    // Proteção: parcela prevista que o banco ainda não lançou (fatura aberta) nunca é apagada.
+    const excluir = concSoSistema.filter(i => i.acao === 'excluir' && !aguardandoLancamentoDoBanco(i, { aberta: faturaAbertaArquivo }))
 
     // Grupo numerado multi-função (Reservas Anuais): função obrigatória nos itens a importar.
     // Destaca as linhas pendentes (borda laranja no select) e rola até a 1ª, sem confirmar.
@@ -2807,7 +2811,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
     // date_cartao, categoria, grupo, função de reserva, favorecido, descrição, notes, num/total,
     // serie_id e rateio são preservados (updateTransaction faz merge parcial dos campos enviados).
     const faturasEmpurrao = new Set() // YYYY-MM afetados (antiga + nova) → recálculo de agendamentos
-    if (faturaEncerrada) {
+    if (faturaEncerrada && !faturaAbertaArquivo) {
       for (const item of concSoSistema) {
         if (item.acao === 'excluir' || !isParcelaEmpurravel(item)) continue
         const oldMY = item.faturaMonthYear || faturaMonthYear
@@ -3006,7 +3010,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         {concError && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {concError}</div>}
 
         {/* Toggle "Fatura encerrada" — só quando há parcelas de série em "Só no sistema" */}
-        {hasParcelaSistema && (
+        {/* Fatura aberta: nada é empurrado — as parcelas ausentes só não foram lançadas ainda. */}
+        {hasParcelaSistema && !faturaAbertaArquivo && (
           <div className="card flex flex-col gap-2 py-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -3217,6 +3222,11 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-texto-1 truncate" title={item.description}>{item.description}</span>
                           <CrossBadge level={item._crossLevel} />
+                          {aguardandoLancamentoDoBanco(item, { aberta: faturaAbertaArquivo }) && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap" title="Parcela prevista que o banco ainda não lançou nesta fatura aberta — não pode ser excluída">
+                              Aguardando lançamento do banco
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className={`px-3 py-2 text-right text-xs font-semibold whitespace-nowrap ${item.type === 'income' ? 'text-receita' : 'text-despesa'}`}>
@@ -3229,11 +3239,13 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                               checked={item.acao === 'manter'} onChange={() => setSistemaAcao(item.id, 'manter')} />
                             <span className="text-texto-2">Manter</span>
                           </label>
-                          <label className="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" className="accent-perigo" name={`sys_${item.id}`}
-                              checked={item.acao === 'excluir'} onChange={() => setSistemaAcao(item.id, 'excluir')} />
-                            <span className="text-perigo">Excluir</span>
-                          </label>
+                          {!aguardandoLancamentoDoBanco(item, { aberta: faturaAbertaArquivo }) && (
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input type="radio" className="accent-perigo" name={`sys_${item.id}`}
+                                checked={item.acao === 'excluir'} onChange={() => setSistemaAcao(item.id, 'excluir')} />
+                              <span className="text-perigo">Excluir</span>
+                            </label>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -3640,21 +3652,42 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   </div>
                   <div className="flex items-baseline gap-2" title={`O que a fatura ${fmtFatura(faturaMonthYear)} terá no banco depois da confirmação: o já gravado nela + as linhas que serão inseridas`}>
                     <span className="text-xs text-texto-2">Total projetado da fatura:</span>
-                    <span className={`text-lg font-bold ${Math.abs(projecao.diferenca) > 0.01 ? 'text-perigo' : 'text-texto-1'}`}>{fmt(projecao.projetado)}</span>
+                    <span className={`text-lg font-bold ${Math.abs(projecao.diferencaReal) > 0.01 ? 'text-perigo' : 'text-texto-1'}`}>{fmt(projecao.projetado)}</span>
                   </div>
                 </div>
               )}
             </div>
-            {projecao && Math.abs(projecao.diferenca) > 0.01 && (
+            {projecao && projecao.itensAguardando.length > 0 && (
+              <div className="rounded border border-aviso/40 bg-aviso/10 px-3 py-2 space-y-1.5">
+                <p className="flex items-center gap-2 text-xs font-semibold text-aviso">
+                  <Info size={14} className="shrink-0" />
+                  Parcelas previstas que o banco ainda não lançou nesta fatura aberta
+                </p>
+                <ul className="space-y-0.5">
+                  {projecao.itensAguardando.map(it => (
+                    <li key={it.tx.id} className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-texto-2 min-w-0">
+                      <span className="w-20 shrink-0 text-right font-semibold text-texto-1">{fmt(-it.valor)}</span>
+                      <span className="truncate">{it.tx.description}</span>
+                      <span className="text-texto-3">— aguardando lançamento do banco</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-texto-2">
+                  Total do arquivo {fmt(projecao.arquivo)} + aguardando {fmt(projecao.aguardando)} = total projetado {fmt(projecao.projetado)}
+                  {Math.abs(projecao.diferencaReal) <= 0.01 && <Check size={13} className="text-receita" aria-label="confere" />}
+                </p>
+              </div>
+            )}
+            {projecao && Math.abs(projecao.diferencaReal) > 0.01 && (
               <div className="rounded border border-perigo/40 bg-perigo-bg px-3 py-2">
                 <button type="button" className="flex items-center gap-2 text-xs font-semibold text-perigo w-full text-left" onClick={() => setVerDiferencas(v => !v)}>
                   <AlertCircle size={14} className="shrink-0" />
-                  Diferença de {fmt(projecao.diferenca)} entre o arquivo e a fatura projetada — {projecao.itens.length} linha{projecao.itens.length !== 1 ? 's' : ''} explica{projecao.itens.length !== 1 ? 'm' : ''}
+                  Diferença de {fmt(projecao.diferencaReal)} entre o arquivo e a fatura projetada — {projecao.itensDivergencia.length} linha{projecao.itensDivergencia.length !== 1 ? 's' : ''} explica{projecao.itensDivergencia.length !== 1 ? 'm' : ''}
                   <span className="ml-auto text-[10px] font-normal">{verDiferencas ? 'ocultar' : 'ver'}</span>
                 </button>
                 {verDiferencas && (
                   <ul className="mt-1.5 space-y-0.5">
-                    {projecao.itens.map((it, i) => {
+                    {projecao.itensDivergencia.map((it, i) => {
                       const ref = it.linha || it.tx
                       return (
                         <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-texto-2 min-w-0">
