@@ -12,7 +12,9 @@ import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment, detectParcela, installmentKey } from '../../lib/installments'
 import { extractLearnKeyword } from '../../lib/descMatch'
-import { parseGenericCsv, mapGenericRows, loadCsvMapping, saveCsvMapping } from '../../lib/parsers/genericCsvParser'
+import { deOfx, paraLinhaCartao, paraLinhaConta, lerCsv, aplicarModelo, acharModelo } from '../../lib/importers/index.js'
+import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
+import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
 import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco } from '../../lib/revisaoImportacao'
@@ -333,6 +335,10 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   const [result, setResult] = useState(null)
   const [dbMappings, setDbMappings] = useState([])
   const { addTransaction, gerencialGroups } = useApp()
+  // Planilha de outro banco (conta corrente): mapeamento → modelo do usuário (import_layouts).
+  const [mapeador, setMapeador] = useState(null) // { tabela, nomeArquivo }
+  const [modelos, setModelos] = useState([])
+  useEffect(() => { listarModelosImportacao().then(setModelos).catch(() => {}) }, [])
 
   const defaultGrupoD = gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D'
 
@@ -372,18 +378,43 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
         : (accountMapping[row.fromAccount] || null)
 
       const rowWithAccount = { ...row, accountId: resolvedAccountId, toAccountId }
-      const dup = resolvedAccountId ? isDuplicate(rowWithAccount, transactions) : false
+      // OFX: o mesmo FITID já importado nesta conta é duplicata exata.
+      const dupFitid = !!row.fitid && !!resolvedAccountId && transactions.some(t => t.fitid === row.fitid && t.accountId === resolvedAccountId)
+      const dup = resolvedAccountId ? (dupFitid || isDuplicate(rowWithAccount, transactions)) : false
       return { ...rowWithAccount, _isDuplicate: dup, _isIgnored: false, selected: row.selected && !dup }
     })
   }, [parsedRows, accountMapping, transactions, dbMapIndex])
+
+  // Linhas de uma conta só (OFX / planilha de outro banco): a tela pede para mapear a "conta do
+  // arquivo" a uma conta do Finup, como faz com as contas do Dindin.
+  const carregarDeUmaConta = (registros, nomeConta) => {
+    const parsed = paraLinhaConta(registros, nomeConta)
+    if (parsed.length === 0) { setError('Nenhum lançamento encontrado no arquivo.'); return }
+    const match = fuzzyMatchAccount(nomeConta, accounts)
+    setParsedRows(parsed)
+    setAccountNames([nomeConta])
+    setAccountMapping(match ? { [nomeConta]: match.id } : {})
+  }
 
   const handleFile = async (file) => {
     setError('')
     setResult(null)
     try {
-      const rows = await parseFile(file)
+      if (/\.ofx$/i.test(file.name)) {
+        const { registros, banco, conta } = deOfx(decodificarOfx(new Uint8Array(await file.arrayBuffer())), { tipo: 'conta' })
+        carregarDeUmaConta(registros, `Extrato OFX ${[banco, conta].filter(Boolean).join(' ') || file.name}`)
+        return
+      }
+      const rows = /\.csv$/i.test(file.name) ? lerCsv(await readFileAsText(file)).linhas : await parseFile(file)
       const { rows: parsed, accountNames: names } = parseDindinCC(rows)
-      if (parsed.length === 0) { setError('Nenhum lançamento encontrado no arquivo.'); return }
+      if (parsed.length === 0) {
+        // Não é do Dindin: planilha de outro banco → modelo pelo cabeçalho ou mapeamento.
+        const tabela = { linhas: rows }
+        const modelo = acharModelo(tabela, 'conta', modelos)
+        if (!modelo) { setMapeador({ tabela, nomeArquivo: file.name }); return }
+        carregarDeUmaConta(aplicarModelo(tabela, modelo.mapeamento).registros, `${modelo.nome} (${file.name})`)
+        return
+      }
 
       // Auto-map: DB mapping tem prioridade, depois fuzzy match
       const autoMap = {}
@@ -430,6 +461,7 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
         description: row.description,
         grupoGerencial: defaultGrupoD,
         origin: ORIGIN.IMPORTACAO_FATURA,
+        ...(row.fitid ? { fitid: row.fitid } : {}),
       })
     })
     setResult(toImport.length)
@@ -456,8 +488,25 @@ function ContaCorrenteTab({ accounts, accountGroups, transactions }) {
   if (parsedRows.length === 0) {
     return (
       <div className="space-y-4">
-        <DropZone onFile={handleFile} label="Selecionar arquivo de Conta Corrente (XLS/XLSX)" />
+        <DropZone
+          onFile={handleFile}
+          label="Selecionar arquivo de Conta Corrente (XLS/XLSX/CSV/OFX)"
+          subtitle="Dindin, OFX de qualquer banco ou planilha de outro banco (mapeamento salvo como modelo)"
+          accept=".xlsx,.xls,.csv,.ofx"
+        />
         {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
+        {mapeador && (
+          <CsvColumnMapperModal
+            tabela={mapeador.tabela}
+            tipo="conta"
+            onSalvar={async (modelo) => {
+              const salvo = await salvarModeloImportacao(modelo)
+              setModelos(lista => [...lista.filter(m => !(m.tipo === salvo.tipo && m.assinatura === salvo.assinatura)), salvo])
+            }}
+            onImportar={({ registros }) => { const nome = mapeador.nomeArquivo; setMapeador(null); carregarDeUmaConta(registros, `Arquivo ${nome}`) }}
+            onClose={() => setMapeador(null)}
+          />
+        )}
       </div>
     )
   }
@@ -676,6 +725,8 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
     // índice único absorve esta linha na outra.
     installmentOccurrence: row._installmentOccurrence || null,
     serieId: row._serieId || null,
+    // OFX: identificador do banco (duplicata exata na próxima importação).
+    ...(row.fitid ? { fitid: row.fitid } : {}),
     _fromImport: true,
   }
 }
@@ -1221,7 +1272,19 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const [closingDayWarnDismissed, setClosingDayWarnDismissed] = useState(false)
   const [applyAllToast, setApplyAllToast] = useState(null) // { count, similarIds, changes }
   const applyAllTimerRef = useRef(null)
-  const [csvMapper, setCsvMapper] = useState(null) // { file, headers, rows } — CSV genérico não reconhecido
+  const [csvMapper, setCsvMapper] = useState(null) // { file, tabela, tipo } — planilha de banco não reconhecida
+  // Modelos de importação do usuário (/api/import-layouts). Na primeira vez, os mapeamentos antigos
+  // do localStorage vão para a tabela (migração idempotente; falhou → ficam no navegador).
+  const [modelosImportacao, setModelosImportacao] = useState([])
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const migrados = await migrarMapeamentosAntigos()
+      const lista = migrados || await listarModelosImportacao()
+      if (vivo) setModelosImportacao(lista)
+    })().catch(err => console.warn('[importação] modelos:', err.message))
+    return () => { vivo = false }
+  }, [])
   const [showImportPreview, setShowImportPreview] = useState(false)
   // Cobrança recorrente com valor diferente, resolvida ANTES de confirmar (botão "Resolver" do
   // Resumo): row._id → { acao: 'register' | 'keep' | 'never', atualizarFuturas }. Aplicada logo
@@ -1382,23 +1445,23 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         faturaStr = preParsed.faturaStr || ''
         faturaMY = preParsed.faturaMY || ''
         isItau = !!preParsed.isItau
+      } else if (/\.ofx$/i.test(file.name)) {
+        // OFX (qualquer banco): compras negativas, estornos positivos; pagamento da fatura fora.
+        const { registros } = deOfx(decodificarOfx(new Uint8Array(await file.arrayBuffer())), { tipo: 'cartao' })
+        parsed = paraLinhaCartao(registros, categories)
       } else if (/\.csv$/i.test(file.name)) {
         const text = await readFileAsText(file)
         if (isItauCSV(text)) {
           isItau = true
           ;({ rows: parsed, cardName, faturaStr, faturaMY, cabecalho } = parseItauCSV(text, categories))
         } else {
-          // ITEM 8: CSV genérico (Nubank/Bradesco/C6/…) → mapeamento de colunas. Aplica um mapeamento
-          // salvo se já houver; senão abre o CsvColumnMapperModal (que re-chama handleFile via preParsed).
-          const gen = parseGenericCsv(text)
-          if (gen.headers.length === 0 || gen.rows.length === 0) { setError('CSV vazio ou ilegível.'); return }
-          const saved = loadCsvMapping(gen.headers)
-          if (saved) {
-            parsed = mapGenericRows(gen.rows, saved, categories)
-          } else {
-            setCsvMapper({ file, headers: gen.headers, rows: gen.rows })
-            return
-          }
+          // CSV de outro banco: modelo (do usuário ou pronto) pela assinatura do cabeçalho; sem
+          // modelo, abre o mapeamento (que re-chama handleFile via preParsed).
+          const tabela = lerCsv(text)
+          if (!tabela.linhas.length) { setError('CSV vazio ou ilegível.'); return }
+          const modelo = acharModelo(tabela, 'cartao', modelosImportacao)
+          if (!modelo) { setCsvMapper({ file, tabela, tipo: 'cartao' }); return }
+          parsed = paraLinhaCartao(aplicarModelo(tabela, modelo.mapeamento).registros, categories)
         }
       } else {
         const rawRows = await parseFile(file)
@@ -1411,6 +1474,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
           isItau = true
         } else {
           ;({ cardName, faturaStr, rows: parsed } = parseDindinCartao(rawRows))
+          // Nem Itaú nem Dindin: planilha de outro banco → modelo pelo cabeçalho ou mapeamento.
+          if (parsed.length === 0) {
+            const tabela = { linhas: rawRows }
+            const modelo = acharModelo(tabela, 'cartao', modelosImportacao)
+            if (!modelo) { setCsvMapper({ file, tabela, tipo: 'cartao' }); return }
+            parsed = paraLinhaCartao(aplicarModelo(tabela, modelo.mapeamento).registros, categories)
+          }
         }
       }
 
@@ -3575,9 +3645,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
           <DropZone
             onFile={handleFile}
-            label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV)"
-            subtitle="Formato Dindin (XLS) ou Itaú (CSV) — fatura detectada automaticamente"
-            accept=".xlsx,.xls,.csv"
+            label="Selecionar arquivo de Cartão de Crédito (XLS/XLSX/CSV/OFX)"
+            subtitle="Itaú, Dindin, OFX de qualquer banco ou planilha de outro banco (mapeamento salvo como modelo)"
+            accept=".xlsx,.xls,.csv,.ofx"
           />
 
           {/* Conciliar Fatura: compara o CSV do Itaú com a fatura já existente no sistema. */}
@@ -4310,16 +4380,17 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
       {csvMapper && (
         <CsvColumnMapperModal
-          headers={csvMapper.headers}
-          previewRows={csvMapper.rows.slice(0, 3)}
-          initialMapping={loadCsvMapping(csvMapper.headers)}
-          onSave={(mapping) => { saveCsvMapping(csvMapper.headers, mapping); setCorrigirToast('Mapeamento salvo.') }}
-          onConfirm={(mapping) => {
-            saveCsvMapping(csvMapper.headers, mapping)
-            const mapped = mapGenericRows(csvMapper.rows, mapping, categories)
+          tabela={csvMapper.tabela}
+          tipo={csvMapper.tipo}
+          onSalvar={async (modelo) => {
+            const salvo = await salvarModeloImportacao(modelo)
+            setModelosImportacao(lista => [...lista.filter(m => !(m.tipo === salvo.tipo && m.assinatura === salvo.assinatura)), salvo])
+            setCorrigirToast(`Modelo "${salvo.nome}" salvo.`)
+          }}
+          onImportar={({ registros }) => {
             const file = csvMapper.file
             setCsvMapper(null)
-            handleFile(file, { parsed: mapped, isItau: false })
+            handleFile(file, { parsed: paraLinhaCartao(registros, categories), isItau: false })
           }}
           onClose={() => setCsvMapper(null)}
         />

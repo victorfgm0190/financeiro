@@ -202,6 +202,17 @@ export function resolverLinhasRevisao(rows, { accountId, transactions, closingDa
     if (tx && !usados.has(tx.id)) marcarColisao(r, tx, true)
   }
 
+  // 0b. OFX: o mesmo FITID (identificador do banco) já gravado neste cartão é o mesmo lançamento.
+  const porFitid = new Map(doCartao.filter(t => t.fitid).map(t => [t.fitid, t]))
+  for (const r of out) {
+    if (resolvida.has(r._id) || !r.fitid) continue
+    const tx = porFitid.get(r.fitid)
+    if (!tx || usados.has(tx.id)) continue
+    usados.add(tx.id)
+    resolvida.add(r._id)
+    Object.assign(r, { _isDuplicate: true, _dupLevel: 'certeza', _dbTx: tx, selected: false })
+  }
+
   // 1. Colisão de parcela (mesma chave ou série inferida), restrita à fatura da linha.
   const pendentesPossivel = new Map() // linha → candidato de arredondamento (chave igual, valor ≠)
   for (const r of out) {

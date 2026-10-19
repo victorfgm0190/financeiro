@@ -146,6 +146,7 @@ const ROTAS = [
   [/^transactions-bulk-update$/, () => M('lancamentos', 'editar')],
   [/^lancamento-rateios$/, () => M('lancamentos', 'editar')],
   [/^importacoes-pendentes$/, () => M('importar', 'incluir')],
+  [/^import-layouts$/, () => M('importar', 'incluir')],
   [/^(reserve-periods|reserve-snapshots|reserve-adjustments|reserve-daily-ledger)$/, (m) => PORMETODO('reservas')[m]],
   [/^(fluxo-datas-provisorias|fluxo-provisorios|fluxo-consultas)$/, (m) => PORMETODO('fluxo')[m]],
   [/^tipos-documento$/, (m) => PORMETODO('cadastros')[m]],

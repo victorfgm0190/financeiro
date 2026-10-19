@@ -27,5 +27,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-10-19_sincronizar_agenda.sql",
   "sql": "-- ============================================================\n-- AGENDA NO CELULAR: escolher quais agendamentos vão para o feed .ics. Coluna nova com padrão\n-- true: todo agendamento existente continua sincronizando (nenhum dado muda). O calendário dentro\n-- do app mostra todos; o feed exporta só sincronizar_agenda = true. Idempotente; num banco sem a\n-- tabela agendamentos (bancos de teste das migrações) não faz nada.\n-- ============================================================\n\nDO $$\nBEGIN\n  IF to_regclass('agendamentos') IS NOT NULL THEN\n    ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS sincronizar_agenda BOOLEAN NOT NULL DEFAULT true;\n  END IF;\nEND $$;\n"
+ },
+ {
+  "nome": "2026-10-19b_import_layouts.sql",
+  "sql": "-- ============================================================\n-- MODELOS DE IMPORTAÇÃO (planilha de banco não reconhecida → mapeamento salvo), por usuário.\n-- Os modelos prontos de bancos ficam no código (src/lib/importers). Só cria; idempotente.\n-- Mesmo DDL de api/import-layouts.js (que também cria a tabela se faltar).\n-- ============================================================\n\nCREATE TABLE IF NOT EXISTS import_layouts (\n  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,\n  user_id TEXT NOT NULL,\n  nome TEXT NOT NULL,\n  banco TEXT,\n  tipo TEXT NOT NULL CHECK (tipo IN ('cartao', 'conta')),\n  assinatura TEXT NOT NULL,\n  mapeamento JSONB NOT NULL DEFAULT '{}'::jsonb,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  UNIQUE (user_id, tipo, assinatura)\n);\n"
  }
 ]

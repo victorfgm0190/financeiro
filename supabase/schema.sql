@@ -1090,3 +1090,18 @@ CREATE TABLE IF NOT EXISTS plataforma_cadastro_envios (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_plataforma_cadastro_envios_ip ON plataforma_cadastro_envios (ip, created_at);
+
+-- Modelos de importação (planilha de banco não reconhecida → mapeamento salvo), por usuário.
+-- Os modelos prontos de bancos ficam no código (src/lib/importers). API: /api/import-layouts.
+CREATE TABLE IF NOT EXISTS import_layouts (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT NOT NULL,
+  nome TEXT NOT NULL,
+  banco TEXT,
+  tipo TEXT NOT NULL CHECK (tipo IN ('cartao', 'conta')),
+  assinatura TEXT NOT NULL,
+  mapeamento JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, tipo, assinatura)
+);
