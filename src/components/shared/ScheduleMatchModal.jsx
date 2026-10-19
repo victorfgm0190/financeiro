@@ -131,10 +131,14 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
             </div>
           )}
           {diff > 0.01 && (
-            <label className="flex items-start gap-2 text-xs text-texto-2 cursor-pointer">
-              <input type="checkbox" className="accent-primary mt-0.5" checked={atualizarFuturas} onChange={e => setAtualizarFuturas(e.target.checked)} />
-              <span>Atualizar também as próximas ocorrências para {fmt(tx.amount)}</span>
-            </label>
+            // Só a caixinha é clicável: o texto não é <label>, para um clique perto do botão não
+            // marcar sem querer (a opção muda o valor base do agendamento).
+            <div className="flex items-start gap-2 text-xs text-texto-2">
+              <input type="checkbox" className="accent-primary mt-0.5 cursor-pointer shrink-0" checked={atualizarFuturas}
+                aria-label={`Atualizar também as próximas ocorrências para ${fmt(tx.amount)}`}
+                onChange={e => setAtualizarFuturas(e.target.checked)} />
+              <span className="select-none">Atualizar também as próximas ocorrências para {fmt(tx.amount)}</span>
+            </div>
           )}
         </div>
 
