@@ -50,6 +50,8 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
       const lista = focaveis(painel)
       if (!lista.length) return
       const atual = document.activeElement
+      // Foco num painel de modal próprio aberto por cima (ex.: ScheduleMatchModal): é dele.
+      if (!painel.contains(atual) && atual?.closest?.('[data-modal-painel]')) return
       const primeiro = lista[0]
       const ultimo = lista[lista.length - 1]
       if (!painel.contains(atual)) { e.preventDefault(); (e.shiftKey ? ultimo : primeiro).focus() }

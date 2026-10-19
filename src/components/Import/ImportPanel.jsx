@@ -18,7 +18,7 @@ import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchCo
 import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
-import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA } from '../../lib/scheduleBaixa'
+import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR } from '../../lib/scheduleBaixa'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -1223,6 +1223,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const applyAllTimerRef = useRef(null)
   const [csvMapper, setCsvMapper] = useState(null) // { file, headers, rows } — CSV genérico não reconhecido
   const [showImportPreview, setShowImportPreview] = useState(false)
+  // Cobrança recorrente com valor diferente, resolvida ANTES de confirmar (botão "Resolver" do
+  // Resumo): row._id → { acao: 'register' | 'keep' | 'never', atualizarFuturas }. Aplicada logo
+  // depois da importação, sem perguntar de novo.
+  const [decisoesRecorrentes, setDecisoesRecorrentes] = useState(() => new Map())
+  const [resolvendoRecorrente, setResolvendoRecorrente] = useState(null)
   const [showConciliarPreview, setShowConciliarPreview] = useState(false)
   // Modal de configuração de estornos (1ª importação/conciliação com estorno). { count, onDecide }.
   const [estornoModal, setEstornoModal] = useState(null)
@@ -1355,6 +1360,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   const handleFile = async (file, preParsed = null) => {
     setError('')
+    setDecisoesRecorrentes(new Map())
     setResult(null)
     setMatchQueue([])
     setEditingImport(null)
@@ -2337,7 +2343,18 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       if (baixasPorLinha.has(row._id)) return
       const saveDate = computeSaveDate(row)
       const s = findMatchingSchedule({ type: 'expense', accountType: 'credit', amount: row.amount, payee: row.payee, description: row.description, date: saveDate })
-      if (s) pending.push({ schedule: s, lancamentoId: rowTxId.get(row._id) || null, importId, tx: { type: 'expense', accountType: 'credit', accountId: selectedAccount, amount: row.amount, payee: row.payee, description: row.description, date: saveDate, faturaMonthYear: row.faturaMonthYear || faturaMonthYear } })
+      if (!s) return
+      const item = { schedule: s, lancamentoId: rowTxId.get(row._id) || null, importId, tx: { type: 'expense', accountType: 'credit', accountId: selectedAccount, amount: row.amount, payee: row.payee, description: row.description, date: saveDate, faturaMonthYear: row.faturaMonthYear || faturaMonthYear } }
+      // Resolvida no Resumo da Importação: aplica a decisão e não pergunta de novo.
+      const dec = decisoesRecorrentes.get(row._id)
+      if (dec) {
+        if (dec.acao === 'register') baixarCobrancaRecorrente({
+          schedule: s, tx: item.tx, atualizarFuturas: dec.atualizarFuturas,
+          meta: item.lancamentoId ? { tipo: TIPO_BAIXA.IMPORTADO, lancamento_id: item.lancamentoId, import_id: importId || null } : null,
+        })
+        return
+      }
+      pending.push(item)
     })
 
     // Conferência: o arquivo diz quanto a fatura vale; o banco tem que dizer o mesmo.
@@ -2543,6 +2560,53 @@ Importar mesmo assim no mês selecionado?`)) return
       aberta: cabecalhoArquivo?.aberta === true,
     }), [resolvedRows, faturaMonthYear, selectedAccount, selectedAcc, transactions, editingImport, cabecalhoArquivo])
   const [verDiferencas, setVerDiferencas] = useState(true)
+
+  // Cobranças recorrentes que a importação vai detectar com valor DIFERENTE do agendado (acima da
+  // tolerância da baixa automática): viram "Precisa de ação" no Resumo da Importação.
+  const recorrentesDivergentes = useMemo(() => {
+    if (!showImportPreview) return []
+    return linhasAImportar(resolvedRows)
+      .filter(r => (r.type || 'expense') === 'expense' && !baixasPorLinha.has(r._id))
+      .map(r => {
+        const tx = { type: 'expense', accountType: 'credit', accountId: selectedAccount, amount: r.amount, payee: r.payee, description: r.description, date: computeSaveDate(r), faturaMonthYear: r.faturaMonthYear || faturaMonthYear }
+        const schedule = findMatchingSchedule(tx)
+        return schedule && Math.abs(Number(schedule.amount) - Number(r.amount)) > BAIXA_TOLERANCIA_VALOR ? { row: r, schedule, tx } : null
+      })
+      .filter(Boolean)
+  }, [showImportPreview, resolvedRows, baixasPorLinha, findMatchingSchedule, selectedAccount, faturaMonthYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bloco "Verificações" do Resumo: ok | info | acao (onResolver abre o que resolve).
+  const verificacoes = useMemo(() => {
+    const out = []
+    if (projecao) {
+      if (Math.abs(projecao.diferencaReal) > TOLERANCIA_CONFERENCIA) {
+        out.push({ id: 'divergencia', status: 'acao', titulo: `Diferença de ${fmt(projecao.diferencaReal)} entre o arquivo e a fatura projetada`, detalhe: `${projecao.itensDivergencia.length} lançamento(s) sem correspondência ou com valor diferente — revise antes de confirmar.`, onResolver: () => setShowImportPreview(false) })
+      } else {
+        out.push({ id: 'fatura', status: 'ok', titulo: 'Total do arquivo confere com a fatura projetada' })
+      }
+      if (projecao.itensAguardando.length) {
+        out.push({ id: 'aguardando', status: 'info', titulo: `${projecao.itensAguardando.length} parcela(s) aguardando lançamento do banco (${fmt(projecao.aguardando)})`, detalhe: 'Fatura aberta: parcelas previstas que o banco ainda não lançou. Não bloqueia.' })
+      }
+    }
+    for (const it of recorrentesDivergentes) {
+      const dec = decisoesRecorrentes.get(it.row._id)
+      const nome = it.schedule.description || it.row.description
+      if (dec) {
+        out.push({ id: `rec-${it.row._id}`, status: 'ok', titulo: `Cobrança recorrente "${nome}": ${dec.acao === 'register' ? `será baixada por ${fmt(it.row.amount)} (valor do cartão)` : 'agendamento mantido'}` })
+      } else {
+        out.push({ id: `rec-${it.row._id}`, status: 'acao', titulo: `Cobrança recorrente "${nome}" com valor diferente`, detalhe: `Cartão ${fmt(it.row.amount)} × agendado ${fmt(it.schedule.amount)}.`, onResolver: () => setResolvendoRecorrente(it) })
+      }
+    }
+    return out
+  }, [projecao, recorrentesDivergentes, decisoesRecorrentes])
+
+  const decidirRecorrente = (acao, opts = {}) => {
+    const it = resolvendoRecorrente
+    if (!it) return
+    if (acao === 'never') addRecurringMatchException(it.tx.payee || it.tx.description)
+    setDecisoesRecorrentes(prev => new Map(prev).set(it.row._id, { acao, atualizarFuturas: !!opts.atualizarFuturas }))
+    setResolvendoRecorrente(null)
+  }
 
   // Item 4 — heurística de "dia de fechamento errado": quantas linhas À VISTA (num<=1) têm a
   // date_cartao FORA da janela da fatura de referência p/ o closingDay do cartão. Parcelas antigas
@@ -4280,7 +4344,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
         faturaMesAno={faturaMonthYear}
         reserveFunctions={reserveFunctions}
         financialMonthStartDay={financialStartDay}
-        faturaCompleta={!!projecao && Math.abs(projecao.diferenca) <= TOLERANCIA_CONFERENCIA}
+        faturaCompleta={!!projecao && Math.abs(projecao.diferencaReal) <= TOLERANCIA_CONFERENCIA}
+        verificacoes={verificacoes}
         onConcluir={() => {
           setShowImportPreview(false)
           // Com 0 novos: há atualização real (colisão com diferença) ou baixa de agendamento
@@ -4291,6 +4356,17 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           } else concluirSemImportar()
         }}
       />
+
+      {resolvendoRecorrente && (
+        <ScheduleMatchModal
+          schedule={resolvendoRecorrente.schedule}
+          tx={resolvendoRecorrente.tx}
+          categories={categories}
+          onRegister={(opts) => decidirRecorrente('register', opts)}
+          onKeep={() => decidirRecorrente('keep')}
+          onNeverAsk={() => decidirRecorrente('never')}
+        />
+      )}
 
       {estornoModal && (
         <EstornoConfigModal

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CheckCircle2, Info, AlertTriangle } from 'lucide-react'
 import Modal from '../shared/Modal'
 import { fmt, fmtDate } from '../shared/utils'
 import { installmentSystemDate } from '../../lib/parcelas'
@@ -9,7 +10,9 @@ const round2 = (n) => Math.round(n * 100) / 100
 //  • Grupo G: total da fatura G vs. saldo já na subconta Ger. e quanto será transferido.
 //  • Grupos numerados: resgates por função e o status do agendamento de resgate da fatura
 //    (já executado / já agendado / será criado).
-// O botão de destaque é "Revisar" (volta sem confirmar); "Confirmar mesmo assim" é discreto.
+// No topo, "Verificações": cada item ✅ OK | ℹ️ Informativo | ⚠️ Precisa de ação (`verificacoes`
+// vêm do ImportPanel; o Grupo G é conferido aqui). Sem ⚠️ → "Confirmar importação" (verde). Com
+// ⚠️ → "X pendências", "Resolver pendências" (abre a primeira) e "Confirmar mesmo assim".
 // Sem nenhum item NOVO (só "já existe" / atualizações) e com a fatura projetada batendo com o
 // arquivo (`faturaCompleta`), o aviso "Nenhum item gerencial" não se aplica: o modal diz que a
 // fatura já está completa e oferece só "Concluir" (`onConcluir`).
@@ -20,6 +23,7 @@ export default function ImportPreviewModal({
   mode = 'import', // 'import' | 'conciliar' — muda o título e o sufixo "não duplica" no status
   faturaCompleta = false,
   onConcluir,
+  verificacoes = [],
 }) {
   // Toggle local (não persiste): mostra a data em que a transferência gerencial (etapa A)
   // será criada, ao lado de cada item do Grupo G.
@@ -48,24 +52,40 @@ export default function ImportPreviewModal({
 
   // ── Seção 1: Grupo G ──────────────────────────────────────────────────────
   const itemsG = grupoG ? toImport.filter(r => r.grupoGerencial === grupoG.id) : []
-  const totalFaturaG = round2(itemsG.reduce((s, r) => s + (Number(r.amount) || 0), 0))
+  const novosG = round2(itemsG.reduce((s, r) => s + (Number(r.amount) || 0), 0))
   const gerName = `Ger. ${apelido}`
   // "Já na conta Ger." DESTA fatura = soma das etapas A (tx_gerA_<expenseId>) já criadas para
   // as despesas G desta fatura específica. NÃO usar account.balance: ele mistura entradas/saídas
   // de outros períodos. A etapa A não tem faturaMonthYear, então escopamos pela despesa de origem
   // (que tem), buscando a etapa A determinística tx_gerA_<id> em transactions.
   const txIndex = new Map((transactions || []).map(t => [t.id, t]))
-  const jaNaGer = round2((transactions || [])
-    .filter(t =>
-      t.type === 'expense' && t.accountType === 'credit' &&
-      t.accountId === card.id &&
-      grupoG && t.grupoGerencial === grupoG.id &&
-      t.faturaMonthYear === faturaMesAno)
-    .reduce((s, e) => {
-      const a = txIndex.get(`tx_gerA_${e.id}`)
-      return a ? round2(s + (Number(a.amount) || 0)) : s
-    }, 0))
-  const aTransferir = round2(Math.max(0, totalFaturaG - jaNaGer))
+  const gGravadosNaFatura = (transactions || []).filter(t =>
+    t.type === 'expense' && t.accountType === 'credit' &&
+    t.accountId === card.id &&
+    grupoG && t.grupoGerencial === grupoG.id &&
+    t.faturaMonthYear === faturaMesAno)
+  // Cobertura da despesa na Ger.: a etapa A (tx_gerA_<id>) ou, sem ela, a provisão gerencial
+  // "manual" ligada ao gasto (transferência com parentTxId/sourceExpenseId) — a mesma regra do
+  // motor, que pula a etapa A quando essa provisão existe.
+  const provisaoPorGasto = new Map()
+  for (const t of transactions || []) {
+    if (t.type !== 'transfer') continue
+    for (const ref of new Set([t.parentTxId, t.sourceExpenseId].filter(Boolean))) {
+      provisaoPorGasto.set(ref, round2((provisaoPorGasto.get(ref) || 0) + (Number(t.amount) || 0)))
+    }
+  }
+  const coberturaNaGer = (e) => {
+    const a = txIndex.get(`tx_gerA_${e.id}`)
+    return a ? (Number(a.amount) || 0) : (provisaoPorGasto.get(e.id) || 0)
+  }
+  const jaNaGer = round2(gGravadosNaFatura.reduce((s, e) => round2(s + coberturaNaGer(e)), 0))
+  const gSemCobertura = gGravadosNaFatura.filter(e => Math.abs(coberturaNaGer(e) - (Number(e.amount) || 0)) > 0.01)
+  // Fatura G INTEIRA (as já gravadas + as novas) × o que a Ger. terá (já lá + o transferido
+  // agora, uma etapa A por despesa nova). Antes o total G era só o das novas, e toda reimportação
+  // parcial (fatura aberta de novo) acusava "Divergência" com tudo certo. Agora só diverge quando
+  // falta a etapa A de alguma despesa G já gravada.
+  const totalFaturaG = round2(gGravadosNaFatura.reduce((s, e) => s + (Number(e.amount) || 0), 0) + novosG)
+  const aTransferir = novosG
   const saldoEsperado = round2(jaNaGer + aTransferir)
   const grupoGOk = Math.abs(saldoEsperado - totalFaturaG) < 0.01
 
@@ -117,9 +137,41 @@ export default function ImportPreviewModal({
   const semNovos = toImport.length === 0
   const completa = semNovos && faturaCompleta
 
+  const checks = [
+    ...(itemsG.length > 0 ? [grupoGOk
+      ? { id: 'grupoG', status: 'ok', titulo: `Saldo esperado do gerencial (${gerName}) confere` }
+      : { id: 'grupoG', status: 'acao', titulo: `Saldo esperado do gerencial (${gerName}) não confere`, detalhe: `Esperado ${fmt(saldoEsperado)} × fatura G ${fmt(totalFaturaG)}.${gSemCobertura.length ? ` Sem cobertura na Ger.: ${gSemCobertura.slice(0, 3).map(e => e.description).join(', ')}${gSemCobertura.length > 3 ? ` e mais ${gSemCobertura.length - 3}` : ''}.` : ''}`, onResolver: onCancel }] : []),
+    ...verificacoes,
+  ]
+  const pendencias = checks.filter(c => c.status === 'acao')
+  const resolverPrimeira = () => (pendencias.find(c => c.onResolver)?.onResolver || onCancel)()
+  const confirmar = semNovos ? (onConcluir || onConfirm) : onConfirm
+
   return (
     <Modal open={open} onClose={onCancel} title={`${isConciliar ? 'Resumo da Conciliação' : 'Resumo da Importação'} — ${apelido} ${faturaMesAno || ''}`} size="lg">
       <div className="space-y-5">
+        {checks.length > 0 && (
+          <div className="rounded-lg border border-borda-forte p-3 space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-texto-3">Verificações</p>
+            <ul className="space-y-1.5">
+              {checks.map(c => (
+                <li key={c.id} className="flex items-start gap-2 text-sm">
+                  {c.status === 'ok' ? <CheckCircle2 size={15} className="text-receita shrink-0 mt-0.5" aria-label="OK" />
+                    : c.status === 'info' ? <Info size={15} className="text-aviso shrink-0 mt-0.5" aria-label="Informativo" />
+                      : <AlertTriangle size={15} className="text-perigo shrink-0 mt-0.5" aria-label="Precisa de ação" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-texto-1">{c.titulo}</p>
+                    {c.detalhe && <p className="text-xs text-texto-3">{c.detalhe}</p>}
+                  </div>
+                  {c.status === 'acao' && c.onResolver && (
+                    <button type="button" className="btn-secondary text-xs py-1 px-2 shrink-0" onClick={c.onResolver}>Resolver</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {completa && (
           <p className="text-sm text-texto-2">Fatura já está completa no banco. Nada novo a importar.</p>
         )}
@@ -152,7 +204,7 @@ export default function ImportPreviewModal({
               </button>
             </div>
             <div className="text-sm text-texto-2 space-y-1">
-              <div className="flex justify-between"><span>{isConciliar ? `Fatura grupo G (${itemsG.length} ${itemsG.length === 1 ? 'novo' : 'novos'})` : 'Fatura grupo G'}:</span><span className="font-semibold">{fmt(totalFaturaG)}</span></div>
+              <div className="flex justify-between"><span>Fatura grupo G (gravados + {itemsG.length} {itemsG.length === 1 ? 'novo' : 'novos'}):</span><span className="font-semibold">{fmt(totalFaturaG)}</span></div>
               <div className="flex justify-between text-texto-2"><span>✅ Já na conta {gerName}:</span><span>{fmt(jaNaGer)}</span></div>
               <div className="flex justify-between text-texto-2"><span>⏳ {isConciliar ? 'Novos a transferir' : 'Será transferido agora'}:</span><span>{fmt(aTransferir)}</span></div>
               <div className="border-t border-borda-forte my-1" />
@@ -211,13 +263,21 @@ export default function ImportPreviewModal({
           </div>
         ))}
 
-        <div className="flex gap-3 justify-end pt-2">
-          {completa
-            ? <button className="btn-primary text-sm" onClick={onConcluir || onConfirm}>Concluir</button>
-            : <>
-                <button className="btn-secondary text-sm" onClick={semNovos ? (onConcluir || onConfirm) : onConfirm}>Confirmar mesmo assim</button>
-                <button className="btn-primary text-sm" onClick={onCancel}>← Revisar</button>
-              </>}
+        <div className="flex flex-wrap items-center gap-3 justify-end pt-2">
+          {pendencias.length > 0 ? (
+            <>
+              <span className="text-xs text-perigo mr-auto">{pendencias.length} {pendencias.length === 1 ? 'pendência' : 'pendências'}</span>
+              <button className="btn-secondary text-sm" onClick={confirmar}>Confirmar mesmo assim</button>
+              <button className="btn-primary text-sm" onClick={resolverPrimeira}>Resolver pendências</button>
+            </>
+          ) : completa ? (
+            <button className="btn-primary text-sm" onClick={onConcluir || onConfirm}>Concluir</button>
+          ) : (
+            <>
+              <button className="btn-secondary text-sm" onClick={onCancel}>← Revisar</button>
+              <button className="btn-primary text-sm" onClick={confirmar}>{isConciliar ? 'Confirmar conciliação' : 'Confirmar importação'}</button>
+            </>
+          )}
         </div>
       </div>
     </Modal>

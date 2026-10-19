@@ -18,7 +18,7 @@ export default function ScheduleMatchModal({ schedule, tx, categories, remaining
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-overlay" />
-      <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md">
+      <div data-modal-painel="" role="dialog" aria-modal="true" className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-md">
 
         {/* Header */}
         <div className="flex items-start gap-3 p-5 border-b border-borda">
