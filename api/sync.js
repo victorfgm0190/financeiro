@@ -4,6 +4,7 @@ import { autorizarSync } from './_permissoesApi.js'
 import { ErroHttp } from './_usuarios.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { filtrarConfiguracoes, conferirExclusaoEmMassa, logRecusa } from './_syncTrava.js'
 
 // POST /api/sync — único caminho de escrita do app para o Neon. O cliente manda uma "section"
 // (tabela + linhas a inserir/atualizar + ids a apagar) e este endpoint aplica.
@@ -21,6 +22,17 @@ function logSync(rotulo, recebido, gravado) {
   console.log(`[api/sync] ${rotulo}`, JSON.stringify({ recebido, gravado }))
 }
 
+// Exclusão em massa sem confirmação (api/_syncTrava.js): 409 com os contadores, que o app usa para
+// perguntar ao usuário e reenviar com confirmarExclusaoEmMassa.
+function recusarExclusao(res, bloqueio) {
+  logRecusa('exclusao_em_massa', bloqueio)
+  return res.status(409).json({
+    error: `Exclusão em massa recusada: ${bloqueio.apagar} de ${bloqueio.total} linhas de ${bloqueio.tabela}`,
+    codigo: 'exclusao_em_massa',
+    ...bloqueio,
+  })
+}
+
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
@@ -30,6 +42,7 @@ async function handler(req, res) {
     // permitido → 403 (api/_permissoesApi.js).
     const body = await autorizarSync(query, req.user, await parseBody(req))
     const { type } = body
+    const confirmado = body.confirmarExclusaoEmMassa === true
 
     if (type === 'section') {
       // Sync genérico: upsert + delete por id
@@ -43,6 +56,8 @@ async function handler(req, res) {
       if (table === 'account_mapping' && req.ambiente?.sigla !== AMBIENTE_PRINCIPAL) {
         return res.status(403).json({ error: 'De-para Dindin disponível só no ambiente principal' })
       }
+      const bloqueio = await conferirExclusaoEmMassa(query, table, toDelete, { confirmado })
+      if (bloqueio) return recusarExclusao(res, bloqueio)
       const recebido = { table, upsert: upsert?.length ?? 0, delete: toDelete?.length ?? 0 }
       const [deleted, upserted] = await Promise.all([
         deleteRows(table, toDelete),
@@ -55,6 +70,9 @@ async function handler(req, res) {
     } else if (type === 'accounts') {
       // Contas + cartões (tabelas separadas)
       const { upsert, delete: toDelete, cards, deleteCards } = body
+      const bloqueio = await conferirExclusaoEmMassa(query, 'contas', toDelete, { confirmado })
+        || await conferirExclusaoEmMassa(query, 'cartoes', deleteCards, { confirmado })
+      if (bloqueio) return recusarExclusao(res, bloqueio)
       const [contasDeleted, contasUpserted] = await Promise.all([
         deleteRows('contas', toDelete),
         upsertRows('contas', upsert),
@@ -77,6 +95,8 @@ async function handler(req, res) {
     } else if (type === 'payees') {
       // Favorecidos usam name como PK
       const { add, remove } = body
+      const bloqueio = await conferirExclusaoEmMassa(query, 'favorecidos', remove, { coluna: 'name', confirmado })
+      if (bloqueio) return recusarExclusao(res, bloqueio)
       const [deleted, upserted] = await Promise.all([
         deleteRows('favorecidos', remove, 'name'),
         upsertRows('favorecidos', (add || []).map(name => ({ name })), 'name'),
@@ -87,10 +107,13 @@ async function handler(req, res) {
 
     } else if (type === 'settings') {
       // Linha única na tabela configuracoes (id = 1)
-      const { data } = body
-      const upserted = await upsertRows('configuracoes', [{ id: 1, ...data }], 'id')
-      logSync('settings', { keys: Object.keys(data || {}).length }, { upserted })
-      return res.json({ ok: true, written: { upserted } })
+      // Valor preenchido não vira vazio/padrão sem camposAlterados (api/_syncTrava.js).
+      const [atual] = await query('SELECT * FROM configuracoes WHERE id = 1')
+      const { data, recusados } = filtrarConfiguracoes(atual, body.data, body.camposAlterados)
+      if (recusados.length) logRecusa('settings', { campos: recusados, recebidos: Object.keys(body.data || {}).length })
+      const upserted = Object.keys(data).length ? await upsertRows('configuracoes', [{ id: 1, ...data }], 'id') : 0
+      logSync('settings', { keys: Object.keys(body.data || {}).length }, { upserted })
+      return res.json({ ok: true, written: { upserted }, recusados })
     }
 
     return res.status(400).json({ error: `Unknown sync type: ${type}` })

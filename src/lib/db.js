@@ -1,5 +1,9 @@
 import { installmentKey } from './installments.js'
 import { authHeaders, clearTokenAndRedirect, gravacaoPermitida } from './api.js'
+import {
+  assinaturasDe, linhasNovasOuAlteradas, registrarConfirmadas, idsApagados,
+  assinaturasDaConfiguracao, camposAlterados,
+} from './syncSeguro.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
 
@@ -38,10 +42,13 @@ async function apiPost(path, body) {
   })
   if (res.status === 401) { onUnauthorized() }
   if (!res.ok) {
-    let detalhe = ''
-    try { detalhe = (await res.json())?.error || '' } catch { /* corpo não-JSON */ }
+    let corpo = null
+    try { corpo = await res.json() } catch { /* corpo não-JSON */ }
+    const detalhe = corpo?.error || ''
     const err = new Error(`POST ${path} → ${res.status}${detalhe ? `: ${detalhe}` : ''}`)
     err.status = res.status
+    err.codigo = corpo?.codigo || null
+    err.dados = corpo
     throw err
   }
   return res.json()
@@ -1167,18 +1174,46 @@ export async function pingDb() {
 
 // ─── Sync helpers ─────────────────────────────────────────────────────────────
 
-export async function syncSection(table, prevItems, currItems, toRow) {
+// Exclusão em massa recusada pelo servidor (409 exclusao_em_massa, ver api/_syncTrava.js): pergunta
+// ao usuário e, se ele confirmar, reenvia com a confirmação explícita. Trocável nos testes.
+let confirmadorExclusaoEmMassa = ({ tabela, apagar, total }) =>
+  typeof window !== 'undefined' && typeof window.confirm === 'function' &&
+  window.confirm(`Esta gravação vai apagar ${apagar} de ${total} registros de "${tabela}" de uma vez.\n\nConfirmar a exclusão?`)
+export function definirConfirmadorExclusaoEmMassa(fn) { confirmadorExclusaoEmMassa = fn }
+
+async function postSync(body) {
   try {
-    const prevIds = new Set((prevItems || []).map((i) => i.id))
-    const currIds = new Set((currItems || []).map((i) => i.id))
-    const toDelete = [...prevIds].filter((id) => !currIds.has(id))
-    const enviadas = (currItems || []).map(toRow)
-    const r = await apiPost('/api/sync', {
+    return await apiPost('/api/sync', body)
+  } catch (err) {
+    if (err.status !== 409 || err.codigo !== 'exclusao_em_massa' || body.confirmarExclusaoEmMassa) throw err
+    if (!(await confirmadorExclusaoEmMassa(err.dados || {}))) {
+      err.exclusaoRecusada = true
+      throw err
+    }
+    return apiPost('/api/sync', { ...body, confirmarExclusaoEmMassa: true })
+  }
+}
+
+// `confirmado` (Map id → assinatura, src/lib/syncSeguro.js): com ele, só vão as linhas novas ou
+// diferentes do último estado que o banco confirmou — e o Map é atualizado quando o servidor
+// responde OK. Sem ele (restauração de backup, seed), vai a tabela inteira.
+// `confirmarExclusaoEmMassa`: pedido explícito do usuário (restauração) — o servidor não recusa.
+export async function syncSection(table, prevItems, currItems, toRow, { confirmado, confirmarExclusaoEmMassa } = {}) {
+  try {
+    const toDelete = idsApagados(prevItems, currItems)
+    const todas = (currItems || []).map(toRow)
+    const { linhas: enviadas, assinaturas } = confirmado
+      ? linhasNovasOuAlteradas(confirmado, todas)
+      : { linhas: todas, assinaturas: [] }
+    if (confirmado && enviadas.length === 0 && toDelete.length === 0) return { ok: true, skipped: true }
+    const r = await postSync({
       type: 'section',
       table,
       upsert: enviadas,
       delete: toDelete,
+      ...(confirmarExclusaoEmMassa ? { confirmarExclusaoEmMassa: true } : {}),
     })
+    if (confirmado && !r?.semPermissao) registrarConfirmadas(confirmado, assinaturas, toDelete)
     // 200 não é prova de escrita. O endpoint devolve quantas linhas gravou; mandar N e gravar 0
     // é o cenário "salvei, deu OK e sumiu no F5", que antes não deixava rastro nenhum.
     if (enviadas.length > 0 && r?.written && r.written.upserted === 0) {
@@ -1245,45 +1280,54 @@ export async function syncScheduleReservaFuncoes(prevItems, currItems) {
   if (tasks.length > 0) await Promise.all(tasks)
 }
 
-export async function syncAccounts(prevAccounts, currAccounts) {
+export const cardToRow = (c) => ({
+  id: c.id,
+  credit_limit: c.creditLimit || 0,
+  credit_debt: c.creditDebt || 0,
+  closing_day: c.closingDay || null,
+  due_day: c.dueDay || null,
+})
+
+// `confirmado`: { contas: Map, cartoes: Map } — mesma regra do syncSection.
+export async function syncAccounts(prevAccounts, currAccounts, { confirmado, confirmarExclusaoEmMassa } = {}) {
   try {
-    const prevIds = new Set((prevAccounts || []).map((a) => a.id))
-    const currIds = new Set(currAccounts.map((a) => a.id))
-    const toDelete = [...prevIds].filter((id) => !currIds.has(id))
-
+    const toDelete = idsApagados(prevAccounts, currAccounts)
     const prevCards = (prevAccounts || []).filter((a) => a.type === 'credit')
-    const currCards = currAccounts.filter((a) => a.type === 'credit')
-    const prevCardIds = new Set(prevCards.map((c) => c.id))
-    const currCardIds = new Set(currCards.map((c) => c.id))
-    const deleteCards = [...prevCardIds].filter((id) => !currCardIds.has(id))
+    const currCards = (currAccounts || []).filter((a) => a.type === 'credit')
+    const deleteCards = idsApagados(prevCards, currCards)
 
-    await apiPost('/api/sync', {
+    const contas = (currAccounts || []).map(accountToRow)
+    const cartoes = currCards.map(cardToRow)
+    const c = confirmado ? linhasNovasOuAlteradas(confirmado.contas, contas) : { linhas: contas, assinaturas: [] }
+    const k = confirmado ? linhasNovasOuAlteradas(confirmado.cartoes, cartoes) : { linhas: cartoes, assinaturas: [] }
+    if (confirmado && !c.linhas.length && !k.linhas.length && !toDelete.length && !deleteCards.length) return
+
+    const r = await postSync({
       type: 'accounts',
-      upsert: currAccounts.map(accountToRow),
+      upsert: c.linhas,
       delete: toDelete,
-      cards: currCards.map((c) => ({
-        id: c.id,
-        credit_limit: c.creditLimit || 0,
-        credit_debt: c.creditDebt || 0,
-        closing_day: c.closingDay || null,
-        due_day: c.dueDay || null,
-      })),
+      cards: k.linhas,
       deleteCards,
+      ...(confirmarExclusaoEmMassa ? { confirmarExclusaoEmMassa: true } : {}),
     })
+    if (confirmado && !r?.semPermissao) {
+      registrarConfirmadas(confirmado.contas, c.assinaturas, toDelete)
+      registrarConfirmadas(confirmado.cartoes, k.assinaturas, deleteCards)
+    }
   } catch (err) {
     console.error('[db] sync accounts:', err.message)
     throw err
   }
 }
 
-export async function syncPayees(prevPayees, currPayees) {
+export async function syncPayees(prevPayees, currPayees, { confirmarExclusaoEmMassa } = {}) {
   try {
     const prev = new Set(prevPayees || [])
     const curr = new Set(currPayees || [])
     const remove = [...prev].filter((p) => !curr.has(p))
     const add = [...curr].filter((p) => !prev.has(p))
     if (add.length > 0 || remove.length > 0) {
-      await apiPost('/api/sync', { type: 'payees', add, remove })
+      await postSync({ type: 'payees', add, remove, ...(confirmarExclusaoEmMassa ? { confirmarExclusaoEmMassa: true } : {}) })
     }
   } catch (err) {
     console.error('[db] sync payees:', err.message)
@@ -1291,25 +1335,39 @@ export async function syncPayees(prevPayees, currPayees) {
   }
 }
 
-export async function syncSettings(settings, costCenters) {
+export const settingsToRow = (settings, costCenters) => ({
+  financial_month_start_day: settings.financialMonthStartDay ?? 1,
+  financial_month_mode: settings.financialMonthMode || 'custom',
+  currency: settings.currency ?? 'BRL',
+  cost_centers: costCenters ?? [],
+  recurring_match_exceptions: settings.recurringMatchExceptions ?? [],
+  category_groups: settings.categoryGroups ?? [],
+  category_groups_ordem_manual: !!settings.categoryGroupsOrdemManual,
+  balance_snapshot: settings.lastBalanceSnapshot || null,
+  estorno_cartao_enabled: settings.estornoCartaoEnabled ?? null,
+  estorno_cartao_category_id: settings.estornoCartaoCategoryId ?? null,
+  faturas_fechadas: settings.faturasFechadas ?? {},
+  mobile_home_cards: settings.mobileHomeCards ?? null,
+})
+
+// `confirmado` (assinatura por chave): envia só as chaves que mudaram, e elas vão em
+// `camposAlterados` — o sinal que a trava do servidor exige para trocar um valor preenchido por
+// vazio/padrão. Sem `confirmado` (seed) vai a linha inteira SEM camposAlterados: o servidor só
+// preenche o que estiver vazio. `todosAlterados` (restauração de backup): tudo é intencional.
+export async function syncSettings(settings, costCenters, { confirmado, todosAlterados } = {}) {
   try {
-    await apiPost('/api/sync', {
-      type: 'settings',
-      data: {
-        financial_month_start_day: settings.financialMonthStartDay ?? 1,
-        financial_month_mode: settings.financialMonthMode || 'custom',
-        currency: settings.currency ?? 'BRL',
-        cost_centers: costCenters ?? [],
-        recurring_match_exceptions: settings.recurringMatchExceptions ?? [],
-        category_groups: settings.categoryGroups ?? [],
-        category_groups_ordem_manual: !!settings.categoryGroupsOrdemManual,
-        balance_snapshot: settings.lastBalanceSnapshot || null,
-        estorno_cartao_enabled: settings.estornoCartaoEnabled ?? null,
-        estorno_cartao_category_id: settings.estornoCartaoCategoryId ?? null,
-        faturas_fechadas: settings.faturasFechadas ?? {},
-        mobile_home_cards: settings.mobileHomeCards ?? null,
-      },
-    })
+    const linha = settingsToRow(settings || {}, costCenters)
+    let data = linha
+    let campos
+    if (confirmado) {
+      campos = camposAlterados(confirmado, linha)
+      if (campos.length === 0) return
+      data = Object.fromEntries(campos.map(k => [k, linha[k]]))
+    } else if (todosAlterados) {
+      campos = Object.keys(linha)
+    }
+    const r = await apiPost('/api/sync', { type: 'settings', data, ...(campos ? { camposAlterados: campos } : {}) })
+    if (confirmado && !r?.semPermissao) Object.assign(confirmado, assinaturasDaConfiguracao(data))
   } catch (err) {
     console.error('[db] sync settings:', err.message)
     throw err
@@ -1332,6 +1390,60 @@ export async function restoreAccountMappings(rows) {
 // Restaura um backup completo no Neon: faz upsert de tudo que está no backup e
 // remove do banco o que não existir mais nele (substituição total). Usa o estado
 // atual do Neon como "prev" para calcular as exclusões por id.
+// Seções gravadas pelo syncSection genérico: chave no estado do app → tabela → mapper.
+// Contas/cartões, favorecidos, detalhamento (srf) e configurações têm sync próprio.
+export const SECOES_SYNC = [
+  { chave: 'transactions', tabela: 'lancamentos', toRow: txToRow },
+  { chave: 'schedules', tabela: 'agendamentos', toRow: scheduleToRow },
+  { chave: 'categories', tabela: 'categorias', toRow: categoryToRow },
+  { chave: 'budgets', tabela: 'orcamento', toRow: budgetToRow },
+  { chave: 'classificationRules', tabela: 'regras_classificacao', toRow: ruleToRow },
+  { chave: 'gerencialRules', tabela: 'gerencial_rules', toRow: gerencialRuleToRow },
+  { chave: 'gerencialGroups', tabela: 'reservas_funcoes', toRow: gerencialGroupToRow },
+  { chave: 'payables', tabela: 'reservas', toRow: payableToRow },
+  { chave: 'envelopes', tabela: 'envelopes', toRow: envelopeToRow },
+  { chave: 'accountGroups', tabela: 'grupos_conta', toRow: accountGroupToRow },
+  { chave: 'profiles', tabela: 'perfis', toRow: perfilToRow },
+  { chave: 'cardImports', tabela: 'card_imports', toRow: importToRow },
+  { chave: 'reserveFunctions', tabela: 'reserve_functions', toRow: reserveFunctionToRow },
+  { chave: 'favorecidoAliases', tabela: 'favorecido_alias', toRow: favorecidoAliasToRow },
+]
+
+// "Confirmado" de um estado que acabou de vir do banco (ou {} quando o banco está vazio): a
+// assinatura de cada linha de cada tabela. O sync compara com isto para enviar só o que mudou.
+export function criarConfirmado(dados) {
+  const d = dados || {}
+  const conf = {}
+  for (const { chave, tabela, toRow } of SECOES_SYNC) conf[tabela] = assinaturasDe((d[chave] || []).map(toRow))
+  conf.contas = assinaturasDe((d.accounts || []).map(accountToRow))
+  conf.cartoes = assinaturasDe((d.accounts || []).filter(a => a.type === 'credit').map(cardToRow))
+  conf.configuracoes = d.settings ? assinaturasDaConfiguracao(settingsToRow(d.settings, d.costCenters)) : {}
+  return conf
+}
+
+// Um ciclo do sync do AppContext: envia ao Neon o que mudou entre `prev` (último estado
+// sincronizado) e `data`. Seção cujo array não mudou de referência nem é olhada; dentro dela, só
+// vão as linhas novas ou diferentes do `confirmado` (criarConfirmado) — nunca a tabela inteira,
+// que desfazia as edições de outro aparelho aberto no mesmo ambiente. Apagados: ids de `prev`
+// que sumiram de `data`. Devolve quantas seções foram enviadas (0 = nada a fazer).
+export async function sincronizarEstado(prev, data, confirmado) {
+  const tasks = []
+  if (prev.accounts !== data.accounts)
+    tasks.push(syncAccounts(prev.accounts, data.accounts, { confirmado: { contas: confirmado.contas, cartoes: confirmado.cartoes } }))
+  for (const { chave, tabela, toRow } of SECOES_SYNC) {
+    if (prev[chave] !== data[chave])
+      tasks.push(syncSection(tabela, prev[chave] || [], data[chave] || [], toRow, { confirmado: confirmado[tabela] }))
+  }
+  if (prev.payees !== data.payees)
+    tasks.push(syncPayees(prev.payees, data.payees))
+  if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
+    tasks.push(syncScheduleReservaFuncoes(prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || []))
+  if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
+    tasks.push(syncSettings(data.settings, data.costCenters, { confirmado: confirmado.configuracoes }))
+  await Promise.all(tasks)
+  return tasks.length
+}
+
 export async function restoreFullBackup(backup, accountMapping) {
   const empty = {
     accounts: [], transactions: [], schedules: [], categories: [], budgets: [],
@@ -1339,35 +1451,30 @@ export async function restoreFullBackup(backup, accountMapping) {
     payees: [], envelopes: [], accountGroups: [], profiles: [], cardImports: [],
     reserveFunctions: [],
   }
-  let prev = empty
+  // Sem ler o banco não dá para saber o que apagar: a restauração sairia pela metade (grava o
+  // backup por cima e deixa no banco o que não está nele). Cancela antes de gravar qualquer coisa.
+  let current
   try {
-    const current = await loadFromDb({ settings: {}, costCenters: [] })
-    if (current.status === 'connected') prev = { ...empty, ...current.data }
+    current = await loadFromDb({ settings: {}, costCenters: [] })
   } catch (err) {
-    console.error('[db] restore: falha ao ler estado atual do Neon:', err.message)
+    current = { status: 'error', error: err.message }
   }
+  if (current.status !== 'connected' && current.status !== 'empty') {
+    console.error('[db] restore: falha ao ler estado atual do Neon:', current.error || current.status)
+    throw new Error('Não foi possível ler o banco antes de restaurar. Nada foi gravado; tente de novo.')
+  }
+  const prev = current.status === 'connected' ? { ...empty, ...current.data } : empty
 
   const d = backup
-  // Mesma estratégia (e ordem) do full-sync de AppContext — FK contas→cartões é
-  // tratada internamente por syncAccounts; demais tabelas não têm FK restritiva.
+  // Restauração é substituição total pedida pelo usuário: tabela inteira, exclusão em massa
+  // confirmada e todas as chaves de configuração como alteradas. FK contas→cartões é tratada
+  // internamente por syncAccounts; demais tabelas não têm FK restritiva.
+  const opts = { confirmarExclusaoEmMassa: true }
   await Promise.all([
-    syncAccounts(prev.accounts, d.accounts || []),
-    syncSection('lancamentos', prev.transactions, d.transactions || [], txToRow),
-    syncSection('agendamentos', prev.schedules, d.schedules || [], scheduleToRow),
-    syncSection('categorias', prev.categories, d.categories || [], categoryToRow),
-    syncSection('orcamento', prev.budgets, d.budgets || [], budgetToRow),
-    syncSection('regras_classificacao', prev.classificationRules, d.classificationRules || [], ruleToRow),
-    syncSection('gerencial_rules', prev.gerencialRules, d.gerencialRules || [], gerencialRuleToRow),
-    syncSection('reservas_funcoes', prev.gerencialGroups, d.gerencialGroups || [], gerencialGroupToRow),
-    syncSection('reservas', prev.payables, d.payables || [], payableToRow),
-    syncPayees(prev.payees, d.payees || []),
-    syncSection('envelopes', prev.envelopes, d.envelopes || [], envelopeToRow),
-    syncSection('grupos_conta', prev.accountGroups, d.accountGroups || [], accountGroupToRow),
-    syncSection('perfis', prev.profiles, d.profiles || [], perfilToRow),
-    syncSection('card_imports', prev.cardImports, d.cardImports || [], importToRow),
-    syncSection('reserve_functions', prev.reserveFunctions, d.reserveFunctions || [], reserveFunctionToRow),
-    syncSection('favorecido_alias', prev.favorecidoAliases || [], d.favorecidoAliases || [], favorecidoAliasToRow),
-    syncSettings(d.settings || {}, d.costCenters || []),
+    syncAccounts(prev.accounts, d.accounts || [], opts),
+    ...SECOES_SYNC.map(({ chave, tabela, toRow }) => syncSection(tabela, prev[chave] || [], d[chave] || [], toRow, opts)),
+    syncPayees(prev.payees, d.payees || [], opts),
+    syncSettings(d.settings || {}, d.costCenters || [], { todosAlterados: true }),
   ])
 
   await restoreAccountMappings(accountMapping)

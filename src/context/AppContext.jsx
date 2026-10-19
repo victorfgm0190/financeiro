@@ -2,12 +2,9 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, us
 import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
 import {
   loadFromDb, seedDefaults, pingDb,
-  syncSection, syncAccounts, syncPayees, syncSettings,
-  accountToRow, txToRow, scheduleToRow, categoryToRow,
-  budgetToRow, ruleToRow, gerencialGroupToRow, payableToRow, envelopeToRow, accountGroupToRow, perfilToRow,
-  importToRow, gerencialRuleToRow, reserveFunctionToRow, favorecidoAliasToRow,
+  sincronizarEstado, criarConfirmado,
+  accountToRow, txToRow, scheduleToRow,
   saveRateios, deleteRateios,
-  syncScheduleReservaFuncoes,
   bulkUpdateTransactionsApi,
   fetchReservePeriods, createReservePeriod, deleteReservePeriodApi,
   fetchDatasProvisorias, upsertDataProvisoria, deleteDatasProvisoriasApi,
@@ -35,6 +32,7 @@ import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas } from '../lib/autoRegistro'
+import { reaplicarPendencias, tentarReconectar } from '../lib/syncSeguro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -754,6 +752,12 @@ export function AppProvider({ children }) {
   const syncTimerRef = useRef(null)
   const retryTimerRef = useRef(null)
   const fullSyncRef = useRef(false)
+  // Só quem carregou do banco nesta sessão pode enviar (src/lib/syncSeguro.js). `confirmadoRef`:
+  // assinatura de cada linha no último estado confirmado pelo banco — o sync envia só o que
+  // difere dele. `origemLocalRef`: de onde veio o estado antes do load ('cache' | 'padrao').
+  const carregouDoBancoRef = useRef(false)
+  const confirmadoRef = useRef(null)
+  const origemLocalRef = useRef('padrao')
   const autoRegisterDoneRef = useRef(false)
   const recalcSaldosDoneRef = useRef(false)
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
@@ -890,6 +894,85 @@ export function AppProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // ── Resultado de um /api/load que deu certo ─────────────────────────────────
+  // Usado na abertura e na reconexão de quem abriu sem conseguir carregar. `pendentes` (só na
+  // reconexão): { base, origem } — o estado que o app tinha ao entrar no modo Local. Os dados do
+  // banco passam a valer e só o que mudou no Local é reaplicado, item por item; se a base era o
+  // defaultData (navegador sem cache), nada é reaplicado: aquelas edições foram sobre dados fictícios.
+  const aplicarCargaDoBanco = async (result, pendentes = null) => {
+    if (result.status === 'connected') {
+      // Supabase tem dados do usuário — é a fonte autoritativa
+      const merged = {
+        ...result.data,
+        accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
+        profiles: result.data.profiles ?? [],
+        cardImports: result.data.cardImports ?? [],
+        reserveFunctions: result.data.reserveFunctions ?? [],
+        rateios: result.data.rateios ?? [],
+        scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
+        favorecidoAliases: result.data.favorecidoAliases ?? [],
+      }
+      setTiposDocumento(ordenarTipos(result.tiposDocumento || []))
+
+      // Migração: funções de reserva do localStorage → Neon.
+      // O localStorage só é limpo quando o banco já tem as funções (evita perda em reload
+      // antes do sync concluir).
+      let legado = []
+      try { legado = JSON.parse(localStorage.getItem('finup_reserve_funcs') || '[]') } catch { legado = [] }
+      if (merged.reserveFunctions.length === 0 && Array.isArray(legado) && legado.length > 0) {
+        merged.reserveFunctions = legado.map((f, i) => ({
+          id: f.id || ('res_' + Date.now() + '_' + i),
+          name: f.name || 'Função',
+          accountId: f.accountId || null,
+          saldoInicial: Number(f.saldoInicial) || 0,
+          entradas: Number(f.entradas) || 0,
+          saidas: Number(f.saidas) || 0,
+          despesaAnual: Number(f.despesaAnual) || 0,
+          depositoMensal: Number(f.depositoMensal) || 0,
+          mesVencimento: f.mesVencimento ?? null,
+          ordem: i,
+        }))
+      } else if (merged.reserveFunctions.length > 0) {
+        localStorage.removeItem('finup_reserve_funcs') // banco é autoritativo — limpa legado
+      }
+
+      // O que o banco confirmou (reserveFunctions do banco, não a migração do legado, que
+      // precisa ser enviada). O sync compara com isto e envia só as diferenças.
+      const doBanco = { ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }
+      confirmadoRef.current = criarConfirmado(doBanco)
+      carregouDoBancoRef.current = true
+      setDbStatus('connected')
+      setData((local) => {
+        prevDataRef.current = doBanco
+        if (!pendentes) return merged
+        if (pendentes.origem !== 'cache') {
+          console.warn('[finup] reconexão: o app abriu sem cache e sem banco; alterações feitas nesse modo Local foram descartadas')
+          return merged
+        }
+        const { dados, houvePendencias } = reaplicarPendencias(pendentes.base, local, merged)
+        if (houvePendencias) console.info('[finup] reconexão: alterações do modo Local reaplicadas sobre os dados do banco')
+        return dados
+      })
+      if (!pendentes) saveLocal(merged)
+      return true
+    } else if (result.status === 'empty') {
+      // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase.
+      // SÓ no ambiente principal: o defaultData traz o plano de contas do Victor, e banco de
+      // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
+      // Banco vazio = nada confirmado: o próximo sync envia tudo.
+      confirmadoRef.current = criarConfirmado({})
+      carregouDoBancoRef.current = true
+      setDbStatus('connected')
+      if (noAmbientePrincipal()) {
+        try { await seedDefaults(defaultData) } catch {}
+        fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
+      }
+      fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
+      return true
+    }
+    return false
+  }
+
   // ── Inicialização: Supabase é o storage principal, localStorage é cache rápido ──
   useEffect(() => {
     // 1. Carrega cache local para renderização imediata enquanto conecta ao Supabase
@@ -904,70 +987,20 @@ export function AppProvider({ children }) {
       if (missingGroups.length > 0) merged.accountGroups = [...groups, ...missingGroups]
       setData(merged)
       prevDataRef.current = merged
+      origemLocalRef.current = 'cache'
     } else {
       prevDataRef.current = defaultData
+      origemLocalRef.current = 'padrao'
     }
     setInitialized(true)
 
     // 2. Conecta ao Neon via API (storage principal) — substitui cache local quando disponível
     loadFromDb(defaultData).then(async (result) => {
-      if (result.status === 'connected') {
-        // Supabase tem dados do usuário — é a fonte autoritativa
-        setDbStatus('connected')
-        const merged = {
-          ...result.data,
-          accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
-          profiles: result.data.profiles ?? [],
-          cardImports: result.data.cardImports ?? [],
-          reserveFunctions: result.data.reserveFunctions ?? [],
-          rateios: result.data.rateios ?? [],
-          scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
-          favorecidoAliases: result.data.favorecidoAliases ?? [],
-        }
-        setTiposDocumento(ordenarTipos(result.tiposDocumento || []))
-
-        // Migração: funções de reserva do localStorage → Neon.
-        // O localStorage só é limpo quando o banco já tem as funções (evita perda em reload
-        // antes do sync concluir).
-        let legado = []
-        try { legado = JSON.parse(localStorage.getItem('finup_reserve_funcs') || '[]') } catch { legado = [] }
-        if (merged.reserveFunctions.length === 0 && Array.isArray(legado) && legado.length > 0) {
-          merged.reserveFunctions = legado.map((f, i) => ({
-            id: f.id || ('res_' + Date.now() + '_' + i),
-            name: f.name || 'Função',
-            accountId: f.accountId || null,
-            saldoInicial: Number(f.saldoInicial) || 0,
-            entradas: Number(f.entradas) || 0,
-            saidas: Number(f.saidas) || 0,
-            despesaAnual: Number(f.despesaAnual) || 0,
-            depositoMensal: Number(f.depositoMensal) || 0,
-            mesVencimento: f.mesVencimento ?? null,
-            ordem: i,
-          }))
-        } else if (merged.reserveFunctions.length > 0) {
-          localStorage.removeItem('finup_reserve_funcs') // banco é autoritativo — limpa legado
-        }
-
-        setData(() => {
-          prevDataRef.current = { ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }
-          return merged
-        })
-        saveLocal(merged)
-      } else if (result.status === 'empty') {
-        // Supabase acessível mas sem dados do usuário — migra dados locais para o Supabase.
-        // SÓ no ambiente principal: o defaultData traz o plano de contas do Victor, e banco de
-        // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
-        setDbStatus('connected')
-        if (noAmbientePrincipal()) {
-          try { await seedDefaults(defaultData) } catch {}
-          fullSyncRef.current = true  // dispara push completo dos dados locais no próximo sync
-        }
-        fetchTiposDocumento().then(l => setTiposDocumento(ordenarTipos(l))).catch(() => {})
-      } else {
-        // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback
-        console.warn('[finup] Fallback para localStorage (Neon indisponível):', result.status, result.error || '')
-        setDbStatus('local')
-      }
+      if (await aplicarCargaDoBanco(result)) return
+      // Supabase indisponível (schema ausente ou erro de rede) — usa localStorage como fallback.
+      // Em modo Local nada é enviado; na reconexão o app recarrega antes (efeito de retry).
+      console.warn('[finup] Fallback para localStorage (Neon indisponível):', result.status, result.error || '')
+      setDbStatus('local')
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -983,8 +1016,11 @@ export function AppProvider({ children }) {
 
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
     syncTimerRef.current = setTimeout(async () => {
+      // Nunca envia sem ter carregado do banco nesta sessão: o estado seria o cache ou o
+      // defaultData, e ia por cima do Neon (o que zerou `configuracoes` em 15/10/2026).
+      if (!carregouDoBancoRef.current || !confirmadoRef.current) return
       setSyncing(true)
-      // Se full sync pedido (reconexão ou seed vazio), reseta prev para forçar push total
+      // Full sync só no banco vazio (seed): reseta prev para enviar tudo
       if (fullSyncRef.current) {
         fullSyncRef.current = false
         prevDataRef.current = EMPTY_PREV
@@ -993,58 +1029,17 @@ export function AppProvider({ children }) {
       const prev = prevDataRef.current
       if (!prev) { setSyncing(false); return }
 
-      const tasks = []
-
-      if (prev.accounts !== data.accounts)
-        tasks.push(syncAccounts(prev.accounts, data.accounts))
-      if (prev.transactions !== data.transactions)
-        tasks.push(syncSection('lancamentos', prev.transactions, data.transactions, txToRow))
-      if (prev.schedules !== data.schedules)
-        tasks.push(syncSection('agendamentos', prev.schedules, data.schedules, scheduleToRow))
-      if (prev.categories !== data.categories)
-        tasks.push(syncSection('categorias', prev.categories, data.categories, categoryToRow))
-      if (prev.budgets !== data.budgets)
-        tasks.push(syncSection('orcamento', prev.budgets, data.budgets, budgetToRow))
-      if (prev.classificationRules !== data.classificationRules)
-        tasks.push(syncSection('regras_classificacao', prev.classificationRules, data.classificationRules, ruleToRow))
-      if (prev.gerencialRules !== data.gerencialRules)
-        tasks.push(syncSection('gerencial_rules', prev.gerencialRules, data.gerencialRules, gerencialRuleToRow))
-      if (prev.gerencialGroups !== data.gerencialGroups)
-        tasks.push(syncSection('reservas_funcoes', prev.gerencialGroups, data.gerencialGroups, gerencialGroupToRow))
-      if (prev.payables !== data.payables)
-        tasks.push(syncSection('reservas', prev.payables, data.payables, payableToRow))
-      if (prev.payees !== data.payees)
-        tasks.push(syncPayees(prev.payees, data.payees))
-      if (prev.envelopes !== data.envelopes)
-        tasks.push(syncSection('envelopes', prev.envelopes, data.envelopes, envelopeToRow))
-      if (prev.accountGroups !== data.accountGroups)
-        tasks.push(syncSection('grupos_conta', prev.accountGroups, data.accountGroups, accountGroupToRow))
-      if (prev.profiles !== data.profiles)
-        tasks.push(syncSection('perfis', prev.profiles, data.profiles, perfilToRow))
-      if (prev.cardImports !== data.cardImports)
-        tasks.push(syncSection('card_imports', prev.cardImports || [], data.cardImports || [], importToRow))
-      if (prev.reserveFunctions !== data.reserveFunctions)
-        tasks.push(syncSection('reserve_functions', prev.reserveFunctions || [], data.reserveFunctions || [], reserveFunctionToRow))
-      if (prev.favorecidoAliases !== data.favorecidoAliases)
-        tasks.push(syncSection('favorecido_alias', prev.favorecidoAliases || [], data.favorecidoAliases || [], favorecidoAliasToRow))
-      if (prev.scheduleReservaFuncoes !== data.scheduleReservaFuncoes)
-        tasks.push(syncScheduleReservaFuncoes(prev.scheduleReservaFuncoes || [], data.scheduleReservaFuncoes || []))
-      if (prev.settings !== data.settings || prev.costCenters !== data.costCenters)
-        tasks.push(syncSettings(data.settings, data.costCenters))
-
-      if (tasks.length === 0) {
-        prevDataRef.current = data
-        setSyncing(false)
-        return
-      }
       try {
-        await Promise.all(tasks)
+        // Só as linhas novas ou alteradas em relação ao confirmado (src/lib/db.js).
+        await sincronizarEstado(prev, data, confirmadoRef.current)
         // Só marca como sincronizado quando o Neon confirmou TODAS as tabelas do lote.
         prevDataRef.current = data
         setSyncError(prev => (prev ? null : prev)) // limpa erro anterior sem re-render à toa
       } catch (err) {
+        // Exclusão em massa recusada pelo usuário (api/_syncTrava.js): volta ao estado do banco.
+        if (err?.exclusaoRecusada) { window.location.reload(); return }
         // NÃO avança prevDataRef: as tabelas seguem "sujas" e serão reenviadas no próximo
-        // sync (ou no full-sync ao reconectar). Torna o erro visível e ativa o retry (dbStatus).
+        // sync (ou ao reconectar). Torna o erro visível e ativa o retry (dbStatus).
         console.error('[sync] falha ao sincronizar com o Neon:', err?.message || err)
         setDbStatus('local')
         setSyncError('Erro ao sincronizar dados com o servidor. Suas alterações estão salvas localmente e serão reenviadas automaticamente.')
@@ -1057,18 +1052,30 @@ export function AppProvider({ children }) {
   }, [data, initialized, dbStatus])
 
   // ── Retry automático quando offline — tenta reconectar a cada 30s ────────────
+  // Quem já carregou do banco nesta sessão volta a 'connected' e o sync envia só o que ficou
+  // pendente. Quem nunca carregou RECARREGA antes de enviar qualquer coisa: os dados do banco
+  // passam a valer e só as alterações do modo Local são reaplicadas (aplicarCargaDoBanco).
   useEffect(() => {
     if (dbStatus !== 'local') {
       if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null }
       return
     }
+    let tentando = false
     retryTimerRef.current = setInterval(async () => {
-      const ok = await pingDb()
-      if (ok) {
-        clearInterval(retryTimerRef.current)
-        retryTimerRef.current = null
-        fullSyncRef.current = true  // push tudo ao reconectar
-        setDbStatus('connected')
+      if (tentando) return
+      tentando = true
+      try {
+        const r = await tentarReconectar({
+          carregouDoBanco: carregouDoBancoRef.current,
+          ping: pingDb,
+          carregar: () => loadFromDb(defaultData),
+        })
+        if (r.acao === 'enviar-pendentes') setDbStatus('connected')
+        else if (r.acao === 'recarregado') {
+          await aplicarCargaDoBanco(r.result, { base: prevDataRef.current, origem: origemLocalRef.current })
+        }
+      } finally {
+        tentando = false
       }
     }, 30000)
     return () => { if (retryTimerRef.current) { clearInterval(retryTimerRef.current); retryTimerRef.current = null } }
@@ -1221,8 +1228,11 @@ export function AppProvider({ children }) {
   }, [profileTransactions, activeProfile, data.accounts, rateiosByLancamento])
 
   // ── Registrar automático na inicialização ───────────────────────────────────
+  // Só depois de um load que deu certo (dbStatus 'connected'): sobre o cache, o resultado era
+  // descartado quando o load chegava — ou, com o load falhando, ia para o banco na reconexão e
+  // podia duplicar parcelas que outro aparelho já tinha registrado.
   useEffect(() => {
-    if (!initialized || autoRegisterDoneRef.current) return
+    if (!initialized || dbStatus !== 'connected' || autoRegisterDoneRef.current) return
     autoRegisterDoneRef.current = true
     const todayStr = format(new Date(), 'yyyy-MM-dd')
     // Rateios a propagar para os lançamentos auto-registrados. Chave estável
@@ -1332,7 +1342,7 @@ export function AppProvider({ children }) {
         collectedRateios.forEach(({ txId, rateios }) => saveRateiosFor(txId, rateios))
       }, 0)
     }
-  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialized, dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Recálculo automático dos saldos ao abrir o app ──────────────────────────
   // Uma vez por sessão, realinha account.balance/projectedBalance com os lançamentos, usando a
