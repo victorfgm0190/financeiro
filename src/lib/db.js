@@ -661,6 +661,8 @@ export const scheduleToRow = (s) => ({
   // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (herdadas pelo lançamento).
   categoria_cnpj_id: s.categoriaCnpjId || null,
   categoria_cpf_id: s.categoriaCpfId || null,
+  // Agenda no celular: false = fica fora do feed .ics (o calendário do app mostra todos).
+  sincronizar_agenda: s.sincronizarAgenda !== false,
 })
 
 export const rowToSchedule = (r) => ({
@@ -702,6 +704,7 @@ export const rowToSchedule = (r) => ({
   tipoDocumentoId: r.tipo_documento_id || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
+  sincronizarAgenda: r.sincronizar_agenda !== false,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada

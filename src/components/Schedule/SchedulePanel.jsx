@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -1054,7 +1054,7 @@ function ScheduleRow({
                 )}
               </button>
             )}
-            <p className="text-xs text-texto-1 font-medium whitespace-normal break-words min-w-0 flex-1" title={occ.description}>{occ.description}{comHistorico && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
+            <p className="text-xs text-texto-1 font-medium whitespace-normal break-words min-w-0 flex-1" title={occ.description}>{occ.description}{comHistorico && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}{schedule.sincronizarAgenda !== false && <Smartphone size={11} className="inline-block ml-1.5 align-middle text-texto-3" aria-label="Sincroniza com a agenda do celular"><title>Sincroniza com a agenda do celular</title></Smartphone>}</p>
           </div>
           {/* Linha de badges: status, tipo de movimentação, grupo (letra), fatura etc. */}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -1760,7 +1760,7 @@ const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 // `calendario` ({ status, faturas, pagosLinhas, renderFatura }): mostra a Visão Calendário em vez da
 // tabela, com as MESMAS linhas (buildScheduleGroups) e a mesma linha de ações (ScheduleRow).
 function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null }) {
-  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode } = useApp()
+  const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode, definirSincronizarAgenda } = useApp()
   // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
   const podeSelecionar = pode('agendamentos', 'editar')
   // Detalhamento por função (resgate_reserva): scheduleId → [{ name, valor }] (maior 1º).
@@ -2087,6 +2087,27 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
             >
               <SkipForward size={12} /> Pular selecionados
             </button>
+            {/* Agenda do celular (em lote): marca/desmarca e envia o feed na hora */}
+            {podeSelecionar && (
+              <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-primary/20">
+                <button
+                  onClick={() => { const n = definirSincronizarAgenda(selectedIds, true); showToastMsg(`${n} agendamento${n !== 1 ? 's' : ''} na agenda do celular`) }}
+                  disabled={selectedIds.length === 0}
+                  title="Sincronizar os selecionados com a agenda do celular"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 hover:bg-surface-hover rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Smartphone size={12} /> Sincronizar
+                </button>
+                <button
+                  onClick={() => { const n = definirSincronizarAgenda(selectedIds, false); showToastMsg(`${n} agendamento${n !== 1 ? 's' : ''} fora da agenda do celular`) }}
+                  disabled={selectedIds.length === 0}
+                  title="Tirar os selecionados da agenda do celular"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-surface-2 ring-1 ring-inset ring-borda-forte text-texto-2 hover:bg-surface-hover rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Smartphone size={12} /> Não sincronizar
+                </button>
+              </div>
+            )}
             {/* Definir tipo de documento (em massa) */}
             <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-primary/20">
               <select
@@ -2600,6 +2621,8 @@ export default function SchedulePanel() {
   const setFltFrom = (v) => setData('from', v)
   const setFltTo = (v) => setData('to', v)
   const { desc: fltDesc, payee: fltPayee, cat: fltCat, min: fltMin, max: fltMax } = av
+  const fltAgenda = av.agenda || ''
+  const setFltAgenda = (v) => setAvancado('agenda', v)
   const setFltDesc = (v) => setAvancado('desc', v)
   const setFltPayee = (v) => setAvancado('payee', v)
   const setFltCat = (v) => setAvancado('cat', v)
@@ -2611,9 +2634,9 @@ export default function SchedulePanel() {
   // Multi-select de tipo de documento (chaves de chaveFiltroTipo; SEM_TIPO = "Sem tipo").
   const selTipos = useMemo(() => new Set(av.tipos), [av.tipos])
   const setSelTipos = (set) => setAvancado('tipos', [...set])
-  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0 || selTipos.size > 0
+  const hasActiveFilter = fltFrom || fltTo || fltDesc.trim() || fltPayee.trim() || fltCat || fltMin !== '' || fltMax !== '' || selValores.size > 0 || selTipos.size > 0 || !!fltAgenda
   const clearFilters = () => atualizarFiltrosAba(f => ({ ...f, avancados: AVANCADOS_VAZIOS, datas: { from: '', to: '' } }))
-  const filtrosAvancadosAtivos = contarFiltrosAvancados({ desc: fltDesc, payee: fltPayee, categoryId: fltCat, tipos: selTipos, min: fltMin, max: fltMax, valores: selValores })
+  const filtrosAvancadosAtivos = contarFiltrosAvancados({ desc: fltDesc, payee: fltPayee, categoryId: fltCat, tipos: selTipos, min: fltMin, max: fltMax, valores: selValores, agenda: fltAgenda })
   // Etiquetas removíveis dos filtros ativos — sob a barra, mesmo com o painel recolhido.
   const etiquetas = etiquetasFiltros(
     { avancados: av, datas: fAba.datas, periodo: fAba.periodos[fAba.status] },
@@ -2846,8 +2869,9 @@ export default function SchedulePanel() {
       desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: dataDe, to: dataAte,
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
+      agenda: fltAgenda,
     }, getNextOccurrences, hojeStr)
-  }, [filteredSchedules, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax, getNextOccurrences, hojeStr])
+  }, [filteredSchedules, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax, fltAgenda, getNextOccurrences, hojeStr])
 
   // Status "Pagos" (qualquer aba): uma linha por ocorrência PAGA dos agendamentos da aba,
   // inclusive das séries em andamento (lib/ocorrenciasRegistradas). Período = data do pagamento;
@@ -2946,13 +2970,14 @@ export default function SchedulePanel() {
       desc: fltDesc, payee: fltPayee, categoryId: fltCat,
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
+      agenda: fltAgenda,
     }, getNextOccurrences, hojeStr)
     const porValor = selValores.size === 0
       ? buscados
       : buscados.filter(s => selValores.has(Math.round((Number(s.amount) || 0) * 100) / 100))
     const porTipo = filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
     return filtroContasAtivo ? filtrarPorContas(porTipo, selContas) : porTipo
-  }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])
+  }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, fltAgenda, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])
   const calPagos = useMemo(() => {
     if (!emCalendario || (statusCal !== 'pagos' && statusCal !== 'todos')) return []
     const buscados = filtrarPagamentos(pagosLinhas, {
@@ -3121,6 +3146,14 @@ export default function SchedulePanel() {
             <div>
               <label className="label text-xs">Tipo de documento</label>
               <TipoDocumentoFiltro tipos={tiposDocumento} extras={extrasTipoFiltro} selected={selTipos} onChange={setSelTipos} />
+            </div>
+            <div>
+              <label className="label text-xs">Agenda do celular</label>
+              <select className="input py-1.5 text-xs" value={fltAgenda} onChange={e => setFltAgenda(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="sim">Sincroniza</option>
+                <option value="nao">Não sincroniza</option>
+              </select>
             </div>
             {/* Valor: faixa Mín./Máx. num campo só. O botão "Valor" ao lado é OUTRO filtro: escolhe
                 valores exatos da lista. */}

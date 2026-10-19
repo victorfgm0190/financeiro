@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { gerarFeed } from '../lib/agendaFeed'
-import { obterAgendaFeed, publicarAgendaFeed, EVENTO_AGENDA_FEED } from '../lib/agendaFeedApi'
+import { obterAgendaFeed, publicarAgendaFeed, EVENTO_AGENDA_FEED, EVENTO_AGENDA_PUBLICAR_JA } from '../lib/agendaFeedApi'
 import { enderecoDoAmbiente } from '../lib/ambienteHost'
 
 // AGENDA NO CELULAR — gera o .ics do feed do usuário logado NO NAVEGADOR (dados já carregados) e
 // envia ao central só o que mudou (hash sem DTSTAMP) ou o que não foi gerado hoje (a janela anda):
 //   • ao abrir o app (depois do /api/load);
 //   • 15 s depois da última mudança em agendamentos, faturas, contas, categorias ou favorecidos;
-//   • quando a tela cria o feed ou muda as opções (evento EVENTO_AGENDA_FEED).
+//   • quando a tela cria o feed ou muda as opções (evento EVENTO_AGENDA_FEED);
+//   • na hora em que "Sincronizar com a agenda do celular" muda (EVENTO_AGENDA_PUBLICAR_JA).
 // Mudança feita por OUTRO usuário só entra quando o dono abrir o app (a tela avisa).
 const ESPERA_ABRIR_MS = 5000
 const ESPERA_MUDANCA_MS = 15000
@@ -81,7 +82,14 @@ export function useAgendaFeed() {
   // A tela criou o feed / mudou as opções.
   useEffect(() => {
     const ouvir = (e) => { feedRef.current = e.detail || null; if (feedRef.current) agendar(0) }
+    // 300 ms: o estado novo (agendamento marcado/desmarcado) já está no dadosRef.
+    const ja = () => { if (feedRef.current) agendar(300) }
     window.addEventListener(EVENTO_AGENDA_FEED, ouvir)
-    return () => { window.removeEventListener(EVENTO_AGENDA_FEED, ouvir); clearTimeout(timerRef.current) }
+    window.addEventListener(EVENTO_AGENDA_PUBLICAR_JA, ja)
+    return () => {
+      window.removeEventListener(EVENTO_AGENDA_FEED, ouvir)
+      window.removeEventListener(EVENTO_AGENDA_PUBLICAR_JA, ja)
+      clearTimeout(timerRef.current)
+    }
   }, [agendar])
 }

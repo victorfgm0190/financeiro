@@ -162,3 +162,16 @@ describe('.ics do feed', () => {
     expect(feed({ schedules: [...SCHEDULES] }).despesa.hash).toBe(a.despesa.hash)
   })
 })
+
+describe('Agenda no celular: só os agendamentos marcados para sincronizar', () => {
+  beforeAll(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-18T12:00:00')) })
+  afterAll(() => vi.useRealTimers())
+  const ids = (itens) => [...itens.despesa, ...itens.receita].map(i => i.schedule?.id || i.scheduleId || i.id)
+  it('sincronizar_agenda = false fica fora do feed; o resto continua', () => {
+    const comTodos = itensDoFeed({ ...DADOS })
+    const semIptu = itensDoFeed({ ...DADOS, schedules: SCHEDULES.map(s => (s.id === 'iptu' ? { ...s, sincronizarAgenda: false } : s)) })
+    expect(JSON.stringify(ids(comTodos))).toContain('iptu')
+    expect(JSON.stringify(ids(semIptu))).not.toContain('iptu')
+    expect(semIptu.receita.length).toBe(comTodos.receita.length)
+  })
+})

@@ -35,3 +35,10 @@ export const EVENTO_AGENDA_FEED = 'finup:agenda-feed'
 export const avisarFeedMudou = (feed) => {
   try { window.dispatchEvent(new CustomEvent(EVENTO_AGENDA_FEED, { detail: feed })) } catch { /* ignore */ }
 }
+
+// Mudou o que vai para a agenda ("Sincronizar com a agenda do celular", individual ou em lote):
+// regera e envia o feed na hora, sem esperar o próximo carregamento nem os 15 s de espera.
+export const EVENTO_AGENDA_PUBLICAR_JA = 'finup:agenda-publicar-ja'
+export const publicarAgendaJa = () => {
+  try { window.dispatchEvent(new CustomEvent(EVENTO_AGENDA_PUBLICAR_JA)) } catch { /* ignore */ }
+}

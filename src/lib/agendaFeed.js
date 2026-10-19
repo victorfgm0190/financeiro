@@ -56,7 +56,9 @@ export function itensDoFeed({ schedules = [], payables = [], accounts = [], getN
   const vazio = { despesa: [], receita: [] }
   if (!podeVer) return vazio
   const { ini, fim } = janelaDoFeed(hoje)
-  const base = schedules.filter(s => !zerado(s, getNextOccurrences))
+  // Só os marcados para a agenda do celular (sincronizar_agenda). A fatura de um agendamento
+  // pagamento_fatura desmarcado também não volta pelo contas_a_pagar (agFatura usa todos).
+  const base = schedules.filter(s => s.sincronizarAgenda !== false && !zerado(s, getNextOccurrences))
   const pendentes = filtrarPorStatusPeriodo(base, { status: 'apagar', periodo: 'futuros' }, getNextOccurrences, hoje)
   const rows = buildScheduleGroups(pendentes, getNextOccurrences, { agruparSeries: false })
   const itens = ocorrenciasPendentes(rows, getNextOccurrences, { ini, fim, hoje, accounts })

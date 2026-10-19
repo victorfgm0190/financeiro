@@ -54,13 +54,16 @@ export function dataExibidaAgendamento(s, getNextOccurrences, todayStr) {
 
 // Filtros em tempo real da lista. Cada filtro é independente (nenhum zera outro). Data De/Até são
 // inclusivos e comparados como dia 'YYYY-MM-DD' contra a data EXIBIDA.
-export function filtrarAgendamentos(schedules, { desc = '', payee = '', categoryId = '', from = '', to = '', min = null, max = null }, getNextOccurrences, todayStr) {
+// `agenda`: '' (todos) | 'sim' (sincroniza com a agenda do celular) | 'nao' (não sincroniza).
+export function filtrarAgendamentos(schedules, { desc = '', payee = '', categoryId = '', from = '', to = '', min = null, max = null, agenda = '' }, getNextOccurrences, todayStr) {
   const d = desc.trim().toLowerCase()
   const p = payee.trim().toLowerCase()
   const de = diaLocal(from)
   const ate = diaLocal(to)
-  if (!d && !p && !categoryId && !de && !ate && min === null && max === null) return schedules
+  if (!d && !p && !categoryId && !de && !ate && min === null && max === null && !agenda) return schedules
   return schedules.filter(s => {
+    if (agenda === 'sim' && s.sincronizarAgenda === false) return false
+    if (agenda === 'nao' && s.sincronizarAgenda !== false) return false
     if (d && !(s.description || '').toLowerCase().includes(d)) return false
     if (p && !(s.payee || '').toLowerCase().includes(p)) return false
     if (categoryId && s.categoryId !== categoryId) return false
@@ -165,16 +168,16 @@ export function filtrarFaturasPorPeriodo(payables, periodo, hoje) {
 
 // Badge do botão "Filtros": quantos filtros AVANÇADOS estão ativos (descrição, favorecido,
 // categoria, tipo de documento, valor). Datas não contam — elas são o Período "Personalizado".
-export function contarFiltrosAvancados({ desc = '', payee = '', categoryId = '', tipos = null, min = '', max = '', valores = null } = {}) {
+export function contarFiltrosAvancados({ desc = '', payee = '', categoryId = '', tipos = null, min = '', max = '', valores = null, agenda = '' } = {}) {
   return [
-    !!desc.trim(), !!payee.trim(), !!categoryId, (tipos?.size || 0) > 0,
+    !!desc.trim(), !!payee.trim(), !!categoryId, (tipos?.size || 0) > 0, !!agenda,
     min !== '' || max !== '' || (valores?.size || 0) > 0,
   ].filter(Boolean).length
 }
 
 // Filtros avançados de uma aba (independentes por aba). tipos/valores são arrays no estado
 // guardado (Set não serializa); a tela converte para Set.
-export const AVANCADOS_VAZIOS = { desc: '', payee: '', cat: '', min: '', max: '', tipos: [], valores: [] }
+export const AVANCADOS_VAZIOS = { desc: '', payee: '', cat: '', min: '', max: '', tipos: [], valores: [], agenda: '' }
 const str = (v) => (typeof v === 'string' ? v : '')
 const arr = (v) => (Array.isArray(v) ? v : [])
 export function avancadosValidos(v) {
@@ -182,6 +185,7 @@ export function avancadosValidos(v) {
     desc: str(v?.desc), payee: str(v?.payee), cat: str(v?.cat), min: str(v?.min), max: str(v?.max),
     tipos: arr(v?.tipos).filter(x => typeof x === 'string'),
     valores: arr(v?.valores).map(Number).filter(Number.isFinite),
+    agenda: v?.agenda === 'sim' || v?.agenda === 'nao' ? v.agenda : '',
   }
 }
 
@@ -222,6 +226,7 @@ export function etiquetasFiltros({ avancados, datas, periodo }, { nomeCategoria 
   if (a.payee.trim()) out.push({ chave: 'payee', texto: `Favorecido: ${a.payee.trim()}` })
   if (a.cat) out.push({ chave: 'cat', texto: `Categoria: ${nomeCategoria(a.cat)}` })
   if (a.tipos.length) out.push({ chave: 'tipos', texto: `Tipo: ${a.tipos.map(nomeTipo).join(', ')}` })
+  if (a.agenda) out.push({ chave: 'agenda', texto: a.agenda === 'sim' ? 'Agenda: sincroniza' : 'Agenda: não sincroniza' })
   const faixa = a.min !== '' || a.max !== ''
   if (faixa || a.valores.length) {
     const partes = []

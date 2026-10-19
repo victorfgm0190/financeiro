@@ -966,6 +966,8 @@ CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id);
 -- Também criadas pela API (api/load.js).
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cnpj_id TEXT;
 ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT;
+-- Agenda no celular: só os agendamentos marcados vão para o feed .ics (o calendário do app mostra todos).
+ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS sincronizar_agenda BOOLEAN NOT NULL DEFAULT true;
 
 -- ATALHOS DE TECLADO por usuário (Configurações › Cadastros › Atalhos). As ações são fixas no
 -- código (src/lib/atalhos/registry.js); só o que o usuário ALTEROU fica aqui — ação sem linha usa o

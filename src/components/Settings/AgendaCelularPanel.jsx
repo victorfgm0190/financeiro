@@ -29,7 +29,10 @@ function Escolha({ ativo, onClick, children, disabled }) {
 
 // `emJanela`: dentro do Modal do menu do usuário (sem o card e sem o título, que o Modal já tem).
 export default function AgendaCelularPanel({ emJanela = false }) {
-  const { usuario, pode } = useApp()
+  const { usuario, pode, schedules } = useApp()
+  // Quantos vão para a agenda: despesas e receitas (transferências nunca entram no feed).
+  const elegiveis = (schedules || []).filter(sc => sc.transactionType === 'expense' || sc.transactionType === 'income')
+  const sincronizados = elegiveis.filter(sc => sc.sincronizarAgenda !== false).length
   const [estado, setEstado] = useState({ carregando: true, configurado: false, feed: null })
   const [tipos, setTipos] = useState(TIPOS_FEED)
   const [mostrarValores, setMostrarValores] = useState(true)
@@ -87,6 +90,10 @@ export default function AgendaCelularPanel({ emJanela = false }) {
         <p className="text-xs text-texto-3">
           Veja os agendamentos pendentes e as faturas em aberto na agenda do iPhone ou no Google Agenda,
           de 30 dias atrás até 12 meses à frente.
+        </p>
+        <p className="text-xs text-texto-2 mt-1.5">
+          <strong className="font-semibold">{sincronizados} de {elegiveis.length}</strong> agendamentos sincronizados.
+          {' '}Escolha quais em cada agendamento ("Sincronizar com a agenda do celular") ou em lote na lista de Agendamentos.
         </p>
       </div>
 
@@ -168,8 +175,8 @@ export default function AgendaCelularPanel({ emJanela = false }) {
           <div className="flex items-start gap-2 text-xs text-texto-2 bg-surface-2 border border-borda rounded-lg px-3 py-2">
             <Info size={14} className="shrink-0 mt-0.5 text-texto-3" />
             <span>
-              <strong className="font-semibold">Atualiza quando você abre o Finup.</strong> O Google pode levar algumas horas
-              para atualizar; o iPhone, até 1 h. A agenda é só para consulta: pagar e editar continuam no Finup.
+              <strong className="font-semibold">Atualiza quando você abre o Finup</strong> e na hora em que você marca ou desmarca
+              um agendamento. O Google pode levar algumas horas para atualizar uma agenda assinada; o iPhone, até 1 h. A agenda é só para consulta: pagar e editar continuam no Finup.
             </span>
           </div>
         </>

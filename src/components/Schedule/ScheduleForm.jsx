@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo } from 'react'
 import { Info, X, History, AlertTriangle } from 'lucide-react'
+import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
@@ -55,6 +56,7 @@ const TIPS = {
   installments: 'Total de vezes que este lançamento se repetirá antes de ser encerrado automaticamente.',
   remindDaysBefore: 'Exibe um alerta no painel X dias antes do vencimento para que você não se esqueça.',
   autoRegister: 'Registra o lançamento automaticamente na data agendada, sem precisar confirmar manualmente.',
+  sincronizarAgenda: 'Envia as ocorrências deste agendamento para a agenda assinada no celular (Agenda no celular). O calendário dentro do app mostra todos.',
   gerencial: 'Define como o dinheiro se move ao efetivar: G=débito direto; 1=reserva em poupança; 2..N=resgate de conta específica; D=só registra (já debitado).',
 }
 
@@ -291,6 +293,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     installments: initial?.installments ?? 0,
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
     autoRegister: initial?.autoRegister ?? true,
+    sincronizarAgenda: initial?.sincronizarAgenda !== false,
     grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial?.grupoGerencial) || null,
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
@@ -675,6 +678,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       if (rateioRows.length > 0) saveRateiosFor(schedId, rateioRows)
       else if (hadRateio) deleteRateiosFor(schedId)
     }
+    // Agenda no celular: mudou o que vai para o feed → envia já.
+    if ((initial?.sincronizarAgenda !== false) !== form.sincronizarAgenda) publicarAgendaJa()
     onClose()
   }
 
@@ -1116,6 +1121,13 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
               Registrar Automático<Tooltip text={TIPS.autoRegister} />
             </span>
             <Toggle value={form.autoRegister} onChange={v => set('autoRegister', v)} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-texto-2 inline-flex items-center">
+              Sincronizar com a agenda do celular<Tooltip text={TIPS.sincronizarAgenda} />
+            </span>
+            <Toggle value={form.sincronizarAgenda} onChange={v => set('sincronizarAgenda', v)} />
           </div>
         </div>
 

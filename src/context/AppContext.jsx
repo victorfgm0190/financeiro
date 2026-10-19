@@ -34,6 +34,7 @@ import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveisDuplicados } from '../lib/autoRegistro'
 import { tentarReconectar } from '../lib/syncSeguro'
+import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -4723,6 +4724,17 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // Agenda no celular (em lote): marca/desmarca "Sincronizar com a agenda do celular" e regera o
+  // feed na hora. Devolve quantos mudaram.
+  const definirSincronizarAgenda = useCallback((ids, valor) => {
+    const alvo = new Set(ids || [])
+    const n = dataRef.current.schedules.filter(s => alvo.has(s.id) && (s.sincronizarAgenda !== false) !== valor).length
+    if (!n) return 0
+    update(d => ({ ...d, schedules: d.schedules.map(s => (alvo.has(s.id) && (s.sincronizarAgenda !== false) !== valor ? { ...s, sincronizarAgenda: valor } : s)) }))
+    publicarAgendaJa()
+    return n
+  }, [update])
+
   // "Cobrança recorrente detectada" → "Sim, baixar agendamento": baixa a ocorrência da mesma
   // fatura pelo valor do lançamento (o do cartão), ligada a ele — sem segundo lançamento —, grava
   // previsto × realizado em historico_alteracoes e recalcula gerencial/resgates do cartão.
@@ -5680,7 +5692,7 @@ export function AppProvider({ children }) {
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
-      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente,
+      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente, definirSincronizarAgenda,
       addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, opcoesPeriodo, periodoPadrao, contarFiltrosAvancados, lerFiltrosAba, etiquetasFiltros, AVANCADOS_VAZIOS } from './agendamentosFiltro'
+import { filtrarAgendamentos, dataExibidaAgendamento, diaLocal, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, opcoesPeriodo, periodoPadrao, contarFiltrosAvancados, lerFiltrosAba, etiquetasFiltros, AVANCADOS_VAZIOS, avancadosValidos } from './agendamentosFiltro'
 
 // getNextOccurrences simplificado: devolve a(s) próxima(s) data(s) ORIGINAL(is) declaradas no fixture.
 const getNext = (s, n = 1) => (s._next || []).slice(0, n)
@@ -125,7 +125,7 @@ describe('FilterBar — status × período (substitui os chips sem perder combin
     })
     expect(lerFiltrosAba('conta', raw)).toEqual({
       status: 'pagos', periodos: { apagar: 'next30', provisoes: 'futuros', pagos: 'tudo' },
-      avancados: { desc: 'TV', payee: '', cat: '', min: '', max: '', tipos: ['CC'], valores: [150] },
+      avancados: { desc: 'TV', payee: '', cat: '', min: '', max: '', tipos: ['CC'], valores: [150], agenda: '' },
       datas: { from: '', to: '' },
     })
     expect(lerFiltrosAba('anuais', raw)).toMatchObject({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes', resgates: 'tudo' }, avancados: AVANCADOS_VAZIOS })
@@ -143,5 +143,20 @@ describe('FilterBar — status × período (substitui os chips sem perder combin
     ])
     // datas só contam no Personalizado
     expect(etiquetasFiltros({ avancados: AVANCADOS_VAZIOS, datas: { from: '2026-10-01' }, periodo: 'mes' })).toEqual([])
+  })
+})
+
+describe('filtro "Agenda do celular"', () => {
+  const lista = [{ id: 'a', description: 'A' }, { id: 'b', description: 'B', sincronizarAgenda: false }, { id: 'c', description: 'C', sincronizarAgenda: true }]
+  const gnoVazio = () => []
+  it('Sincroniza / Não sincroniza / Todos', () => {
+    expect(filtrarAgendamentos(lista, { agenda: 'sim' }, gnoVazio, '2026-10-19').map(s => s.id)).toEqual(['a', 'c'])
+    expect(filtrarAgendamentos(lista, { agenda: 'nao' }, gnoVazio, '2026-10-19').map(s => s.id)).toEqual(['b'])
+    expect(filtrarAgendamentos(lista, { agenda: '' }, gnoVazio, '2026-10-19')).toBe(lista)
+  })
+  it('conta como filtro avançado e vira etiqueta', () => {
+    expect(contarFiltrosAvancados({ agenda: 'nao' })).toBe(1)
+    expect(etiquetasFiltros({ avancados: { ...AVANCADOS_VAZIOS, agenda: 'nao' } }).map(e => e.texto)).toEqual(['Agenda: não sincroniza'])
+    expect(avancadosValidos({ agenda: 'x' }).agenda).toBe('')
   })
 })
