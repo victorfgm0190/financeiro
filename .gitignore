@@ -35,3 +35,6 @@ graphify-out/
 backup_*.json
 *backup*.json
 backups/
+
+# documentos privados (dados reais, auditorias) — nunca versionar nada desta pasta
+docs/privado/
