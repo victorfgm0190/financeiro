@@ -20,7 +20,7 @@ import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchCo
 import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
-import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR } from '../../lib/scheduleBaixa'
+import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel, divergenciaMesArquivo } from '../../lib/competenciaFatura'
 import { favorecidoDaImportacao, favorecidoPorAlias } from '../../lib/favorecidos'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -2351,21 +2351,24 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
     // Baixas de agendamento (regras A e B): mesmo caminho do "Pagar" (markScheduleRegistered),
     // mais o registered_meta. Tipos diferentes de "pago" não criam lançamento — apontam um.
-    const baixar = (scheduleId, occurrenceDate, tipo, lancamentoId) => {
-      markScheduleRegistered(scheduleId, occurrenceDate, { tipo, lancamento_id: lancamentoId, import_id: importId })
+    // Sempre pelo valor do cartão: previsto × realizado no registro da ocorrência, igual à baixa
+    // pelo modal "Cobrança recorrente detectada".
+    const baixar = (scheduleId, occurrenceDate, tipo, lancamentoId, valores = null) => {
+      const meta = { tipo, lancamento_id: lancamentoId, import_id: importId }
+      markScheduleRegistered(scheduleId, occurrenceDate, valores ? metaBaixaComValor(meta, valores.previsto, valores.realizado) : meta)
       scheduleBaixas.push({ scheduleId, occurrenceDate, txId: lancamentoId, tipo })
     }
     for (const row of resolvedRows) {
       const b = baixasPorLinha.get(row._id)
       if (!b?.ativa) continue
       const { scheduleId, occurrenceDate } = b.escolhido
-      if (b.tipo === TIPO_BAIXA.JA_NO_CARTAO) { baixar(scheduleId, occurrenceDate, b.tipo, b.existenteId); continue }
+      if (b.tipo === TIPO_BAIXA.JA_NO_CARTAO) { baixar(scheduleId, occurrenceDate, b.tipo, b.existenteId, b.escolhido); continue }
       const txId = rowTxId.get(row._id)
       if (!txId) continue
-      baixar(scheduleId, occurrenceDate, TIPO_BAIXA.IMPORTADO, txId)
+      baixar(scheduleId, occurrenceDate, TIPO_BAIXA.IMPORTADO, txId, b.escolhido)
       for (const c of b.coberturas) {
         const lancamentoId = c.existenteId || futTxId.get(c.parcelaId)
-        if (lancamentoId) baixar(c.scheduleId, c.occurrenceDate, TIPO_BAIXA.COBERTA_PARCELA, lancamentoId)
+        if (lancamentoId) baixar(c.scheduleId, c.occurrenceDate, TIPO_BAIXA.COBERTA_PARCELA, lancamentoId, c)
       }
     }
 

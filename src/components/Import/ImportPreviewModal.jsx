@@ -59,11 +59,14 @@ export default function ImportPreviewModal({
   // de outros períodos. A etapa A não tem faturaMonthYear, então escopamos pela despesa de origem
   // (que tem), buscando a etapa A determinística tx_gerA_<id> em transactions.
   const txIndex = new Map((transactions || []).map(t => [t.id, t]))
+  // Projeção de parcela 2..N (sem date_cartao) fica de fora, como no motor: ela só ganha cobertura
+  // quando a fatura dela for importada e a compra virar confirmada.
+  const ehProjecaoParcela = (t) => (Number(t.installmentNum) > 1 || t.parentTxId != null) && !t.dateCartao
   const gGravadosNaFatura = (transactions || []).filter(t =>
     t.type === 'expense' && t.accountType === 'credit' &&
     t.accountId === card.id &&
     grupoG && t.grupoGerencial === grupoG.id &&
-    t.faturaMonthYear === faturaMesAno)
+    t.faturaMonthYear === faturaMesAno && !ehProjecaoParcela(t))
   // Cobertura da despesa na Ger.: a etapa A (tx_gerA_<id>) ou, sem ela, a provisão gerencial
   // "manual" ligada ao gasto (transferência com parentTxId/sourceExpenseId) — a mesma regra do
   // motor, que pula a etapa A quando essa provisão existe.

@@ -92,7 +92,8 @@ export function candidatosBaixa({ description, payee, amount, type, faturaMonthY
       s.payee ? descSimilarity(baseLinha, s.payee) : 0,
       (s.payee && payee) ? descSimilarity(payee, s.payee) : 0,
     )
-    out.push({ scheduleId: s.id, description: s.description || '', occurrenceDate: occ.date, fatura: occ.fatura, sim })
+    // previsto/realizado: valor da ocorrência × valor da linha do cartão (vão para o registered_meta).
+    out.push({ scheduleId: s.id, description: s.description || '', occurrenceDate: occ.date, fatura: occ.fatura, sim, previsto: occ.amount, realizado: Number(amount) || 0 })
   }
   return out.sort((a, b) => b.sim - a.sim || a.occurrenceDate.localeCompare(b.occurrenceDate))
 }
@@ -132,7 +133,7 @@ export function coberturaDaSerie(schedule, parcelas, closingDay = 14, tomadas = 
       && !usadas.has(`${schedule.id}|${x.date}`))
     if (!o) continue
     usadas.add(`${schedule.id}|${o.date}`)
-    out.push({ scheduleId: schedule.id, occurrenceDate: o.date, parcelaId: p.id, existenteId: p.existenteId || null })
+    out.push({ scheduleId: schedule.id, occurrenceDate: o.date, parcelaId: p.id, existenteId: p.existenteId || null, previsto: o.amount, realizado: Number(p.amount) || 0 })
   }
   return out
 }

@@ -43,3 +43,13 @@ describe('baixa pelo valor do cartão', () => {
     expect(metaBaixaComValor(null, 1 / 3, 2 / 3)).toEqual({ valor_previsto: 0.33, valor_realizado: 0.67 })
   })
 })
+
+describe('baixa automática (regras A e B) também leva o valor do cartão', () => {
+  it('candidato traz previsto (ocorrência) × realizado (linha do cartão) para o registered_meta', async () => {
+    const { candidatosBaixa } = await import('./scheduleBaixa.js')
+    const card = { id: 'card_1', closingDay: 13 }
+    const [c] = candidatosBaixa({ description: 'Anthropic* Claude Sub', amount: 582.68, type: 'expense', faturaMonthYear: '2026-11' }, [assinatura()], card)
+    expect(c).toMatchObject({ occurrenceDate: '2026-10-15', previsto: 582.66, realizado: 582.68 })
+    expect(metaBaixaComValor(meta, c.previsto, c.realizado)).toMatchObject({ valor_previsto: 582.66, valor_realizado: 582.68 })
+  })
+})
