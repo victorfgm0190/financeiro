@@ -58,7 +58,48 @@ function getScheduleAlerts(schedules, getNextOccurrences) {
   return alerts
 }
 
-function VencimentosPanel() {
+// Ocorrências que o registro automático deixou pendentes por achar um lançamento parecido
+// (possiveisDuplicados, src/lib/autoRegistro.js). Resolve-se em Agendamentos: vincular ou registrar.
+function PossiveisDuplicados({ setActivePage }) {
+  const { possiveisDuplicados, schedules, transactions } = useApp()
+  const itens = []
+  for (const [scheduleId, porData] of possiveisDuplicados || []) {
+    const schedule = schedules.find(s => s.id === scheduleId)
+    for (const [data, txId] of porData) itens.push({ schedule, data, tx: transactions.find(t => t.id === txId), chave: `${scheduleId}|${data}` })
+  }
+  if (!itens.length) return null
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-texto-2 mb-3">Possíveis duplicados ({itens.length})</h2>
+      <div className="space-y-3">
+        {itens.map(({ schedule, data, tx, chave }) => (
+          <div key={chave} className="card border border-aviso/50 bg-aviso/5 flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-aviso" />
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-texto-1">{schedule?.description || 'Agendamento'}</p>
+                  <span className="badge bg-aviso/15 text-aviso">possível duplicado — confira</span>
+                </div>
+                <p className="text-xs text-texto-3 mt-1">
+                  Ocorrência de {format(parseISO(data), 'dd/MM/yyyy')} não registrada automaticamente: já existe
+                  {tx ? <> “{tx.description || tx.payee || 'sem descrição'}” de {format(parseISO(String(tx.date).slice(0, 10)), 'dd/MM/yyyy')}, <span className="text-texto-2 font-medium">{fmt(tx.amount)}</span></> : ' um lançamento parecido'}.
+                </p>
+              </div>
+            </div>
+            {setActivePage && (
+              <button onClick={() => setActivePage('schedule')} className="text-xs text-primary-fg hover:underline shrink-0">
+                Conferir em Agendamentos
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function VencimentosPanel({ setActivePage }) {
   const { profileAccounts: accounts, profileSchedules: schedules, getNextOccurrences } = useApp()
   const [notificationsEnabled, setNotificationsEnabled] = useState(Notification?.permission === 'granted')
   const [dismissed, setDismissed] = useState([])
@@ -130,6 +171,8 @@ function VencimentosPanel() {
           </button>
         )}
       </div>
+
+      <PossiveisDuplicados setActivePage={setActivePage} />
 
       <div>
         <h2 className="text-sm font-semibold text-texto-2 mb-3">
@@ -228,7 +271,8 @@ function VencimentosPanel() {
         </div>
         <p className="text-xs text-texto-3">
           Agendamentos com <span className="text-texto-2">Registrar Automático</span> ativado são baixados automaticamente
-          na data de vencimento ao abrir o app. Agendamentos com <span className="text-texto-2">Lembrar com Antecedência</span> geram alertas
+          na data de vencimento ao abrir o app — nunca em cartão de crédito (esses entram pelo Importar Fatura) e nunca
+          quando já existe um lançamento parecido (aí a ocorrência fica pendente como possível duplicado). Agendamentos com <span className="text-texto-2">Lembrar com Antecedência</span> geram alertas
           acima X dias antes da próxima ocorrência.
         </p>
       </div>
@@ -253,7 +297,7 @@ export default function AlertsPanel({ setActivePage, integridadePendentes = 0 })
           </button>
         ))}
       </div>
-      {aba === 'vencimentos' ? <VencimentosPanel /> : <IntegridadePanel setActivePage={setActivePage} />}
+      {aba === 'vencimentos' ? <VencimentosPanel setActivePage={setActivePage} /> : <IntegridadePanel setActivePage={setActivePage} />}
     </div>
   )
 }

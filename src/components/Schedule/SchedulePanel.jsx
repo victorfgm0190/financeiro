@@ -164,7 +164,10 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados } = useApp()
+  // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
+  const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
+  const duplicado = duplicadoId ? transactions.find(t => t.id === duplicadoId) : null
   // Parcela de financiamento: o agendamento carrega o desdobramento principal/juros e o elo com
   // financing_installments (colunas gravadas por api/financiamento/*, só de leitura no app). Com
   // ele o modal deixa de registrar a transferência conta→dívida e passa a baixar a parcela pelo
@@ -676,6 +679,28 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
             </>
           )}
+          {duplicado && (
+            <div className="rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2.5 space-y-2">
+              <p className="text-xs font-medium text-aviso">⚠ Possível duplicado — confira</p>
+              <p className="text-xs text-texto-2">
+                O registro automático não criou esta ocorrência porque já existe um lançamento parecido:
+              </p>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="flex-1 min-w-0">
+                  <p className="text-texto-1 truncate">{duplicado.description || duplicado.payee || '(sem descrição)'}</p>
+                  <p className="text-texto-3">{fmtDate(duplicado.date)} · {fmt(duplicado.amount)}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs py-1 px-2 shrink-0"
+                  onClick={() => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(duplicado.id)); onClose() }}
+                >
+                  Vincular a este lançamento
+                </button>
+              </div>
+              <p className="text-[11px] text-texto-3">Se não for o mesmo, use “Registrar mesmo assim”.</p>
+            </div>
+          )}
           {/* Baixa apontando um lançamento que já existe (sem gerar outro). Fora do resgate com
               detalhamento (um lançamento por função) e da parcela de financiamento (endpoint). */}
           {!parcelaFin && !hasDetalhe && (
@@ -703,7 +728,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
             </button>
           ) : (
             <button className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk} onClick={handleConfirm}>
-              <CheckCircle size={14} /> Confirmar {TAB_LABELS[tab]}
+              <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : `Confirmar ${TAB_LABELS[tab]}`}
             </button>
           )}
         </div>
@@ -851,7 +876,7 @@ function ScheduleRow({
   // Regra C: ocorrências pendentes que um lançamento do cartão já cobre (cartão, fatura, valor,
   // data ±3 dias e descrição — ver txCobrindoOcorrencia). Só sinaliza — o agendamento não muda até
   // o usuário baixar. O tooltip cita o lançamento casado para conferência antes de baixar.
-  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode } = useApp()
+  const { coberturaCartao, baixarComoJaNoCartao, transactions: todasTxs, pode, possiveisDuplicados } = useApp()
   // Nível de acesso (src/lib/permissoes.js): pagar/estornar/pular/efetivar/confirmar/editar = editar;
   // excluir = excluir. Sem permissão o botão some (a API também barra).
   const podeEditar = pode('agendamentos', 'editar')
@@ -863,6 +888,13 @@ function ScheduleRow({
     return `${fmtDate(d)} ↔ ${t ? `${fmtDate(t.date)} ${t.description || '(sem descrição)'} ${fmt(t.amount)}` : txId}`
   }).join('\n') : ''
   const isInstallment = schedule.occurrenceType === 'installment'
+  // Auto-registro que não criou a ocorrência por achar um lançamento parecido (src/lib/autoRegistro.js).
+  const duplicados = possiveisDuplicados?.get(schedule.id)
+  const nDuplicados = duplicados?.size || 0
+  const tituloDuplicados = nDuplicados ? [...duplicados].map(([d, txId]) => {
+    const t = todasTxs?.find(x => x.id === txId)
+    return `${fmtDate(d)} ↔ ${t ? `${fmtDate(t.date)} ${t.description || '(sem descrição)'} ${fmt(t.amount)}` : txId}`
+  }).join('\n') : ''
 
   // Data exibida na coluna e usada no badge "em atraso": casa com o campo "Data de Vencimento
   // Atual" do formulário (ver scheduleDisplayDueDate). As ações seguem usando nextDate.
@@ -1180,7 +1212,7 @@ function ScheduleRow({
               Antes, efetive a de {fmtDate(futura.antesDe).slice(0, 5)}
             </span>
           )}
-          {!futura && ((isProvisaoPendente && podeEditar) || nCobertas > 0) && (
+          {!futura && ((isProvisaoPendente && podeEditar) || nCobertas > 0 || nDuplicados > 0) && (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {isProvisaoPendente && podeEditar && (
               <button
@@ -1189,6 +1221,16 @@ function ScheduleRow({
                 className="flex items-center gap-1 h-7 px-2.5 text-xs bg-ambar/15 text-ambar rounded-md hover:bg-ambar/25 transition-colors font-medium"
               >
                 <Hourglass size={12} /> Efetivar Provisão
+              </button>
+            )}
+            {nDuplicados > 0 && (
+              <button
+                type="button"
+                onClick={() => podeEditar && setShowPay(true)}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-aviso/15 text-aviso whitespace-nowrap"
+                title={`O registro automático não criou esta ocorrência: já existe um lançamento parecido (ocorrência ↔ lançamento):\n${tituloDuplicados}\nAbra para vincular a ele ou registrar mesmo assim.`}
+              >
+                ⚠ possível duplicado — confira{nDuplicados > 1 ? ` (${nDuplicados})` : ''}
               </button>
             )}
             {nCobertas > 0 && (

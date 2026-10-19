@@ -27,11 +27,11 @@ import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
-import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
-import { ocorrenciasVencidas } from '../lib/autoRegistro'
+import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveisDuplicados } from '../lib/autoRegistro'
 import { reaplicarPendencias, tentarReconectar } from '../lib/syncSeguro'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
@@ -1245,9 +1245,13 @@ export function AppProvider({ children }) {
       let accounts = prev.accounts
       let transactions = prev.transactions
       let changed = false
+      // Lançamentos já ligados a alguma baixa: não contam como possível duplicado.
+      const vinculados = lancamentosVinculados(prev.schedules, prev.transactions)
 
       for (const scheduleBase of prev.schedules) {
         if (!scheduleBase.autoRegister) continue
+        // Nunca em cartão de crédito: lançamento de cartão entra pelo Importar Fatura.
+        if (tocaCartao(scheduleBase, prev.accounts)) continue
         // Vencimento pela data EFETIVA (override da prévia): ocorrência adiada espera a nova data,
         // antecipada dispara antes. Lançamento na data efetiva; registered na chave ORIGINAL.
         const pending = ocorrenciasVencidas(scheduleBase, todayStr)
@@ -1257,6 +1261,11 @@ export function AppProvider({ children }) {
         for (const { occurrenceDate, date, amount: occAmount } of pending) {
           // Campos da parcela com o override da ocorrência ("Só esta parcela") aplicado.
           const schedule = comCamposDaOcorrencia(scheduleBase, occurrenceDate, accounts)
+          if (tocaCartao(schedule, accounts)) continue
+          // Possível duplicado (lançamento parecido já no banco, ex.: importado do extrato): não
+          // cria; a ocorrência fica pendente com o selo "possível duplicado — confira"
+          // (possiveisDuplicados, abaixo), para o usuário vincular ou registrar mesmo assim.
+          if (buscarPossivelDuplicado(schedule, { date, amount: occAmount }, prev.transactions, { vinculados })) continue
           changed = true
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
           // occAmount = valor EFETIVO da ocorrência (sem override, o valor base). Vale para o
@@ -2981,6 +2990,15 @@ export function AppProvider({ children }) {
   // (mesmo cartão, valor ±R$ 0,05, mesma fatura). Map(scheduleId → Map(data → id do lançamento)).
   const coberturaCartao = useMemo(
     () => mapaCobertura({ schedules: data.schedules, transactions: data.transactions, accounts: data.accounts }),
+    [data.schedules, data.transactions, data.accounts],
+  )
+  // Ocorrências vencidas de agendamentos automáticos que o auto-registro deixou de criar por haver um
+  // lançamento parecido (src/lib/autoRegistro.js). Map(scheduleId → Map(data → id do lançamento)).
+  const possiveisDuplicados = useMemo(
+    () => mapaPossiveisDuplicados({
+      schedules: data.schedules, transactions: data.transactions, accounts: data.accounts,
+      hojeStr: format(new Date(), 'yyyy-MM-dd'),
+    }),
     [data.schedules, data.transactions, data.accounts],
   )
   // Ocorrências para PROJEÇÃO (fluxos, previstos da fatura, Fluxo Futuro): getNextOccurrences sem
@@ -5532,6 +5550,7 @@ export function AppProvider({ children }) {
       getNextOccurrences,
       getOccurrencesProjecao,
       coberturaCartao,
+      possiveisDuplicados,
       baixarComoJaNoCartao,
       classifyByRules,
       learnClassification,
