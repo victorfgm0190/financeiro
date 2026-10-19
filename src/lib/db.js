@@ -2,7 +2,7 @@ import { installmentKey } from './installments.js'
 import { authHeaders, clearTokenAndRedirect, gravacaoPermitida } from './api.js'
 import {
   assinaturasDe, linhasNovasOuAlteradas, registrarConfirmadas, idsApagados,
-  assinaturasDaConfiguracao, camposAlterados,
+  assinaturasDaConfiguracao, camposAlterados, textoConfirmacaoExclusao,
 } from './syncSeguro.js'
 
 // ─── Helpers fetch ────────────────────────────────────────────────────────────
@@ -1176,9 +1176,9 @@ export async function pingDb() {
 
 // Exclusão em massa recusada pelo servidor (409 exclusao_em_massa, ver api/_syncTrava.js): pergunta
 // ao usuário e, se ele confirmar, reenvia com a confirmação explícita. Trocável nos testes.
-let confirmadorExclusaoEmMassa = ({ tabela, apagar, total }) =>
+let confirmadorExclusaoEmMassa = (dados) =>
   typeof window !== 'undefined' && typeof window.confirm === 'function' &&
-  window.confirm(`Esta gravação vai apagar ${apagar} de ${total} registros de "${tabela}" de uma vez.\n\nConfirmar a exclusão?`)
+  window.confirm(textoConfirmacaoExclusao(dados))
 export function definirConfirmadorExclusaoEmMassa(fn) { confirmadorExclusaoEmMassa = fn }
 
 async function postSync(body) {

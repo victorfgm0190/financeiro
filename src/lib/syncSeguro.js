@@ -78,6 +78,20 @@ export async function tentarReconectar({ carregouDoBanco, ping, carregar }) {
   return { acao: 'recarregado', result: await carregar() }
 }
 
+// Pergunta da exclusão em massa (409 de api/_syncTrava.js) com o nome que aparece na tela, nunca o
+// nome técnico da tabela: "Isso vai apagar 120 de 400 lançamentos. Confirma?"
+export const NOMES_NA_TELA = {
+  lancamentos: 'lançamentos', agendamentos: 'agendamentos', categorias: 'categorias', orcamento: 'itens do orçamento',
+  regras_classificacao: 'regras de classificação', gerencial_rules: 'regras gerenciais', reservas_funcoes: 'grupos gerenciais',
+  reservas: 'contas a pagar', envelopes: 'envelopes', grupos_conta: 'grupos de contas', perfis: 'perfis',
+  card_imports: 'importações de fatura', reserve_functions: 'funções de reserva', favorecido_alias: 'apelidos de favorecido',
+  contas: 'contas', cartoes: 'cartões', favorecidos: 'favorecidos',
+}
+
+export function textoConfirmacaoExclusao({ tabela, apagar, total }) {
+  return `Isso vai apagar ${apagar} de ${total} ${NOMES_NA_TELA[tabela] || 'registros'}. Confirma?`
+}
+
 // Listas com `id` que o sync grava. `payees` (strings) e `settings` (objeto) têm regra própria.
 export const LISTAS_SINCRONIZADAS = [
   'accounts', 'transactions', 'schedules', 'categories', 'budgets', 'classificationRules',

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   assinaturasDe, linhasNovasOuAlteradas, registrarConfirmadas, idsApagados,
   assinaturasDaConfiguracao, camposAlterados, acaoNaReconexao, tentarReconectar, reaplicarPendencias,
+  textoConfirmacaoExclusao,
 } from './syncSeguro.js'
 
 describe('linhas novas ou alteradas em relação ao confirmado', () => {
@@ -63,6 +64,14 @@ describe('reconexão', () => {
     const carregar = vi.fn()
     expect((await tentarReconectar({ carregouDoBanco: true, ping: async () => true, carregar })).acao).toBe('enviar-pendentes')
     expect(carregar).not.toHaveBeenCalled()
+  })
+})
+
+describe('pergunta da exclusão em massa', () => {
+  it('usa o nome da tela, não o da tabela', () => {
+    expect(textoConfirmacaoExclusao({ tabela: 'lancamentos', apagar: 120, total: 400 })).toBe('Isso vai apagar 120 de 400 lançamentos. Confirma?')
+    expect(textoConfirmacaoExclusao({ tabela: 'agendamentos', apagar: 6, total: 20 })).toBe('Isso vai apagar 6 de 20 agendamentos. Confirma?')
+    expect(textoConfirmacaoExclusao({ tabela: 'tabela_nova', apagar: 5, total: 10 })).toBe('Isso vai apagar 5 de 10 registros. Confirma?')
   })
 })
 
