@@ -4,7 +4,7 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { gerarPlanoParcelas, PAPEIS, r2 } from '../../lib/contratos/parcelas'
-import { planoVinculo } from '../../lib/contratos/vinculo'
+import { planoVinculo, SCORE_FORTE } from '../../lib/contratos/vinculo'
 import { hojeStr, fmtYm } from '../../lib/contratos/datas'
 
 const MAX_PREVIA = 12
@@ -19,7 +19,7 @@ const FREQ_LABELS = {
 //   geracao: true = contrato recém-criado — "Não vincular" ainda gera as parcelas.
 export default function VinculoModal({ contrato, candidatos, apartirDe = null, geracao = false, onClose, onConcluido }) {
   const { vincularEGerarContrato, indicesContratos } = useApp()
-  const [sel, setSel] = useState(() => Object.fromEntries(candidatos.map((c, i) => [c.schedule.id, { on: i === 0 && c.score >= 50, papel: c.papel }])))
+  const [sel, setSel] = useState(() => Object.fromEntries(candidatos.map(c => [c.schedule.id, { on: c.score >= SCORE_FORTE, papel: c.papel }])))
   const [manter, setManter] = useState({})
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)

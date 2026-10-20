@@ -52,7 +52,7 @@ describe('planoVinculo (D2)', () => {
   it('série com pagos vira parcelada até os consumidos e não tem mais pendentes', () => {
     const s = ag({ id: 'a', registered: ['2026-01-10', '2026-02-10'], skipped: ['2026-03-10'], nextOccurrence: '2026-04-10' })
     const p = planoVinculo(s, 'aluguel', 'c1')
-    expect(p.changes).toEqual({ contratoId: 'c1', contratoPapel: 'aluguel', occurrenceType: 'installment', installments: 3 })
+    expect(p.changes).toEqual({ contratoId: 'c1', contratoPapel: 'aluguel', occurrenceType: 'installment', installments: 3, nextOccurrence: '2026-04-10' })
     expect(p.cobertas).toEqual(['2026-01', '2026-02', '2026-03'])
     expect(computeOccurrences({ ...s, ...p.changes }, 5)).toEqual([])
   })

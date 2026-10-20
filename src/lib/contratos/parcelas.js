@@ -4,10 +4,19 @@
 // parcela gravam a mesma linha). Contrato = linha da tabela `contratos` (snake_case, como vem da API).
 // Parcela paga (registered) nunca muda; reajuste/aditivo/renovação só mexem nas pendentes.
 import { ymDe, addMeses, diaNoMes, diaDe } from './datas.js'
+import { computeOccurrences } from '../occurrences.js'
+import { occEfetiva } from '../fluxoCaixa.js'
 
 export const STATUS_CONTRATO = { ativo: 'Ativo', encerrado: 'Encerrado', rescindido: 'Rescindido', suspenso: 'Suspenso' }
 export const PAPEIS = { aluguel: 'Aluguel', condominio: 'Condomínio', iptu: 'IPTU', seguro: 'Seguro', multa: 'Multa' }
 export const PASSO_MESES = { mensal: 1, trimestral: 3, semestral: 6, anual: 12, unica: 0 }
+export const PERIODICIDADES = { mensal: 'mensal', trimestral: 'trimestral', semestral: 'semestral', anual: 'anual', unica: 'única' }
+
+// Frequência exibida de uma parcela de contrato (no lugar de "Única"): "Contrato · mensal".
+export function rotuloFrequencia(contrato, papel) {
+  const per = papel === 'condominio' ? 'mensal' : contrato?.periodicidade || 'mensal'
+  return `Contrato · ${PERIODICIDADES[per] || per}`
+}
 // Contrato sem data de fim: parcelas até 12 meses à frente, estendidas sozinhas (garantirParcelas).
 export const HORIZONTE_MESES = 12
 
@@ -19,6 +28,13 @@ export const parcelaPaga = (s) => (s?.registered || []).length > 0
 
 export function rotuloContrato(c) {
   return c?.objeto || (c?.numero ? `Contrato ${c.numero}` : '') || c?.favorecido || 'Contrato'
+}
+
+// Rótulo usado na descrição da parcela: objeto ou número do contrato; sem eles, o favorecido do
+// PRÓPRIO papel (o condomínio nunca leva o nome de quem recebe o aluguel).
+export function rotuloDoPapel(c, papel) {
+  const fav = papel === 'condominio' ? c?.favorecido_condominio || c?.favorecido : c?.favorecido
+  return c?.objeto || (c?.numero ? `Contrato ${c.numero}` : '') || fav || 'Contrato'
 }
 
 // Primeira data com o dia de vencimento a partir do início do contrato.
@@ -86,6 +102,24 @@ export function taxaReajuste(contrato, indices) {
   return a == null ? null : Number(a) / 100
 }
 
+// Índice usado na projeção, guardado na composição da parcela projetada (aparece na tela e permite
+// recalcular quando o índice chega). taxa_pct null = índice ainda desconhecido (projeção a 0%).
+export function refProjecao(contrato, indices) {
+  if (contrato.indice_reajuste === 'NENHUM') return null
+  if (contrato.indice_reajuste === 'FIXO') return { indice: 'FIXO', taxa_pct: Number(contrato.percentual_fixo) || 0, competencia: null }
+  const idx = indices?.[contrato.indice_reajuste]
+  return { indice: contrato.indice_reajuste, taxa_pct: idx?.acumulado_12m ?? null, competencia: idx?.competencia ?? null }
+}
+
+export function textoProjecao(p) {
+  if (!p) return ''
+  if (p.taxa_pct == null) return `projeção sem ${p.indice} (0%) — recalcula quando o índice chegar`
+  const pct = String(p.taxa_pct).replace('.', ',')
+  if (p.indice === 'FIXO') return `projeção fixa ${pct}% a.a.`
+  const ate = p.competencia ? `${p.competencia.slice(5)}/${p.competencia.slice(0, 4)}` : '—'
+  return `projeção ${p.indice} ${pct}% (12m até ${ate})`
+}
+
 // Base (aluguel contratual, sem bonificação) de cada ciclo 0..ultimo. Ciclo confirmado (boleto
 // conferido) vale como está; os seguintes projetam a partir do último valor conhecido.
 export function basesPorCiclo(contrato, ultimoCiclo, { indices, confirmados = {} } = {}) {
@@ -129,6 +163,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
   const bases = basesPorCiclo(contrato, ultimoCiclo, { indices, confirmados })
   const bonifValor = r2(contrato.bonificacao_valor)
   const bonifMeses = Number(contrato.bonificacao_meses) || 0
+  const projecao = refProjecao(contrato, indices)
 
   const mantida = (papel, ym, comp) => {
     const v = valoresMantidos?.[papel]?.[ym]
@@ -144,6 +179,7 @@ export function gerarPlanoParcelas(contrato, { hoje, indices, confirmados = {}, 
     if (bonifValor > 0 && v.numero <= bonifMeses) itens.push({ tipo: 'bonificacao', desc: 'Bonificação', valor: -bonifValor })
     const composicao = mantida('aluguel', v.competencia, {
       ciclo, base, itens, total: somaItens(itens), numero: v.numero, total_parcelas: totalAluguel,
+      ...(status === 'projetado' ? { projecao } : {}),
     })
     out.push({
       id: idParcela(contrato.id, 'aluguel', v.competencia), papel: 'aluguel', numero: v.numero, total: totalAluguel,
@@ -176,7 +212,7 @@ export function agendamentoDaParcela(contrato, p) {
   const condominio = p.papel === 'condominio'
   return {
     id: p.id,
-    description: `${PAPEIS[p.papel] || p.papel} · ${rotuloContrato(contrato)}`,
+    description: `${PAPEIS[p.papel] || p.papel} · ${rotuloDoPapel(contrato, p.papel)}`,
     transactionType: contrato.tipo === 'receber' ? 'income' : 'expense',
     accountId: contrato.conta_id || null,
     toAccountId: null,
@@ -298,10 +334,52 @@ export function valorAtual(contrato, schedules) {
   return p ? r2(p.amount) : r2(contrato.valor_base)
 }
 
+// Menor vencimento PENDENTE entre todos os papéis e séries vinculadas, pela data efetiva (com a
+// exceção da ocorrência). → agendamento com startDate/amount efetivos, ou null.
 export function proximaParcela(contrato, schedules) {
-  return (schedules || [])
-    .filter(s => s.contratoId === contrato.id && (s.frequency || 'once') === 'once' && !parcelaPaga(s))
-    .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)))[0] || null
+  let melhor = null
+  for (const s of schedules || []) {
+    if (s.contratoId !== contrato.id) continue
+    const base = computeOccurrences(s, 1)[0]
+    if (!base) continue
+    const { date, amount } = occEfetiva(s, base)
+    if (!melhor || date < melhor.startDate) melhor = { ...s, startDate: date, amount, dataBase: base }
+  }
+  return melhor
+}
+
+// Linhas da ficha: parcelas geradas + séries vinculadas (cada ocorrência paga vira uma linha, só
+// leitura). Paga mostra o lançamento (data e valor pagos). Ordenadas por vencimento.
+export function linhasDoContrato(contrato, schedules, transactions = []) {
+  const txPorId = new Map(transactions.map(t => [t.id, t]))
+  const lancamentoDe = (s, d) => {
+    const id = s.registeredMeta?.[d]?.lancamento_id
+    return (id && txPorId.get(id)) || transactions.find(t => t.scheduleId === s.id && (t.dataOcorrencia || t.date) === d) || null
+  }
+  const out = []
+  for (const s of schedules || []) {
+    if (s.contratoId !== contrato.id) continue
+    const vinculada = !ehParcelaGerada(s, contrato.id)
+    const papel = s.contratoPapel || 'aluguel'
+    const unica = (s.frequency || 'once') === 'once'
+    const linha = (d, paga) => {
+      const eff = occEfetiva(s, d)
+      const tx = paga ? lancamentoDe(s, d) : null
+      return {
+        key: unica ? s.id : `${s.id}@${d}`, schedule: s, papel, vinculada, paga,
+        vencimento: tx?.date || eff.date, valor: r2(tx ? tx.amount : eff.amount),
+        projetado: !paga && s.valorStatus === 'projetado',
+        numero: s.composicao?.numero ?? null, total: s.composicao?.total_parcelas ?? null, composicao: s.composicao || null,
+      }
+    }
+    if (unica) {
+      out.push(linha(s.startDate, parcelaPaga(s)))
+      continue
+    }
+    for (const d of s.registered || []) out.push(linha(d, true))
+    for (const d of computeOccurrences(s, 24)) out.push(linha(d, false))
+  }
+  return out.sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)) || a.papel.localeCompare(b.papel))
 }
 
 // "Confirmar reajuste" numa parcela projetada (ou paga com outro valor): novoBase vira a base do
@@ -335,4 +413,27 @@ export function planoConfirmacaoReajuste(contrato, schedules, parcelaId, novoBas
   }
   const percentual = baseAnterior ? Math.round((base / baseAnterior - 1) * 1e6) / 1e4 : null
   return { ciclo: k, baseAnterior, percentual, mudancas }
+}
+
+// Manutenção ao abrir o app (contrato ativo): descrição das pendentes conforme o contrato e, com
+// o índice conhecido, reprojeção das parcelas ainda PROJETADAS (inclusive as calculadas sem
+// índice). Nunca toca paga, confirmada ou de valor manual. → [{ id, antes, changes }]
+export function planoManutencao(contrato, schedules, { hoje, indices } = {}) {
+  const inicio = inicioDasParcelas(contrato, schedules)
+  if (!inicio) return []
+  const conhecido = refProjecao(contrato, indices)?.taxa_pct != null
+  const plano = gerarPlanoParcelas(contrato, { hoje, indices, confirmados: confirmadosDe(contrato, schedules), apartirDe: inicio })
+  const { atualizar } = planejarSincronizacao(contrato, schedules, plano, {
+    excluidas: contrato.excluidas || [], cobertas: cobertasDoContrato(contrato, schedules), apartirDe: inicio,
+  })
+  const out = []
+  for (const m of atualizar) {
+    const ch = {}
+    if ('description' in m.changes) ch.description = m.changes.description
+    if (conhecido && m.antes.valorStatus === 'projetado' && !valorManual(m.antes)) {
+      for (const k of ['amount', 'composicao', 'valorStatus']) if (k in m.changes) ch[k] = m.changes[k]
+    }
+    if (Object.keys(ch).length) out.push({ id: m.id, antes: m.antes, changes: ch })
+  }
+  return out
 }

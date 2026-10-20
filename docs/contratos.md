@@ -34,6 +34,9 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
   - O contrato não gera parcelas nos meses que a série já cobre.
 - **Exclusão de parcela.** Passa pelo modal do contrato. A parcela excluída é registrada em evento `edicao_parcela` e não volta quando as parcelas são geradas de novo.
 - **Contrato sem data de fim.** Ao abrir o app, as parcelas são estendidas até 12 meses à frente, só criando competências depois da última que já existe.
+- **Manutenção ao abrir o app** (contrato ativo): a descrição das pendentes segue o contrato e, com o índice conhecido, as parcelas ainda PROJETADAS são recalculadas. Parcela projetada sem índice fica no valor anterior (0%) e guarda `composicao.projecao.taxa_pct = null`.
+- **Índices.** O SGS do Banco Central é consultado por intervalo de datas (30 meses). O `ultimos/N` aceita no máximo 20 valores e, acima disso, responde HTTP 200 com `{"erro":{}}`.
+- **Edição de parcela de contrato.** Frequência, ocorrência e data-base (competência) ficam travadas. O vencimento muda pela exceção da ocorrência (`overrides[data-base].date`).
 - **Conta do contrato.** Só conta corrente comum; cartão de crédito fica de fora nesta 1ª versão.
 
 ## Pendências registradas (não corrigir sem pedido)

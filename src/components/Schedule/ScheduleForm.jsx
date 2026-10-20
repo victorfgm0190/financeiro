@@ -1,3 +1,4 @@
+import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import { useState, useRef, useMemo } from 'react'
 import { Info, X, History, AlertTriangle } from 'lucide-react'
 import { publicarAgendaJa } from '../../lib/agendaFeedApi'
@@ -198,7 +199,7 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId } = useApp()
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
@@ -265,6 +266,12 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   const ehFinanciamento = !!initial?.id && !!chaveSerieFinanciamento(initial)
   const ehRecorrente = !!initial?.id && !ehMotor && !ehFinanciamento && (initial.frequency || 'once') !== 'once'
   const occInicial = ehRecorrente && ancoraSalva ? occCampos(serieBase, ancoraSalva) : null
+  // Parcela de contrato (src/lib/contratos): frequência, ocorrência e data-base (competência) são do
+  // contrato. O vencimento muda pela exceção da ocorrência (overrides[data-base].date), como na
+  // parcela de financiamento — a baixa continua casando com a data-base.
+  const ehParcelaContrato = !!initial?.id && !!initial.contratoId && (initial.frequency || 'once') === 'once'
+  const vencInicial = ehParcelaContrato ? occEfetiva(serieBase, serieBase.startDate).date : null
+  const [vencTocado, setVencTocado] = useState(false)
   const [escopoPendente, setEscopoPendente] = useState(null) // { mudancas, nProximas, nPendentes, conflitos }
   // Edição de uma ocorrência pela prévia aguardando o "aplicar às próximas?".
   const [chipPendente, setChipPendente] = useState(null) // { occDate, mudancas, nProximas, nPendentes, conflitos }
@@ -489,7 +496,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   // campo foi tocado (o mesmo critério que já protegia a âncora).
   const camposAntes = serieBase?.id ? {
     amount: occInicial ? occInicial.amount : serieBase.amount,
-    date: ancoraExibida || null,
+    date: (ehParcelaContrato ? vencInicial : ancoraExibida) || null,
     categoryId: (occInicial ? occInicial.categoryId : serieBase.categoryId) || null,
     categoriaCnpjId: (occInicial ? occInicial.categoriaCnpjId : serieBase.categoriaCnpjId) || null,
     categoriaCpfId: (occInicial ? occInicial.categoriaCpfId : serieBase.categoriaCpfId) || null,
@@ -502,7 +509,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
   } : null
   const camposDoForm = (f) => ({
     amount: Number(f.amount),
-    ...(ancoraTocada ? { date: f.nextOccurrence || null } : {}),
+    ...(ehParcelaContrato
+      ? (vencTocado ? { date: f.overrides?.[f.startDate]?.date || f.startDate } : {})
+      : (ancoraTocada ? { date: f.nextOccurrence || null } : {})),
     categoryId: f.categoryId || null,
     ...categoriasPerfisDe(f),
     description: f.description || null,
@@ -1008,7 +1017,15 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           />
         </div>
 
-        {/* Frequência */}
+        {/* Frequência — parcela de contrato: do contrato, só leitura */}
+        {ehParcelaContrato ? (
+          <div>
+            <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
+            <div className="input bg-surface-2/60 text-texto-2 cursor-not-allowed" title="Definida pelo contrato">
+              {rotuloFrequencia(contratoPorId?.(initial.contratoId), initial.contratoPapel)}
+            </div>
+          </div>
+        ) : (
         <div>
           <LabelTip tip={TIPS.frequency}>Frequência</LabelTip>
           <SearchableSelect
@@ -1019,8 +1036,37 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             required
           />
         </div>
+        )}
 
-        {/* Data de Início */}
+        {/* Data de Início — parcela de contrato: data-base travada + vencimento editável */}
+        {ehParcelaContrato ? (
+          <>
+            <div>
+              <LabelTip tip="Mês da parcela no contrato (chave da baixa). Definido pelo contrato.">Data-base (competência)</LabelTip>
+              <DateInput className="input opacity-60 cursor-not-allowed" value={form.startDate} onChange={() => {}} disabled />
+            </div>
+            <div>
+              <LabelTip tip="Quando esta parcela vence. Muda só esta parcela; a data-base continua a mesma.">Data de vencimento</LabelTip>
+              <DateInput
+                className="input"
+                value={form.overrides?.[form.startDate]?.date || form.startDate}
+                onChange={e => {
+                  const v = e.target.value
+                  setVencTocado(true)
+                  setForm(f => {
+                    const ov = { ...(f.overrides?.[f.startDate] || {}) }
+                    if (!v || v === f.startDate) delete ov.date
+                    else ov.date = v
+                    const overrides = { ...(f.overrides || {}) }
+                    if (Object.keys(ov).length) overrides[f.startDate] = ov
+                    else delete overrides[f.startDate]
+                    return { ...f, overrides }
+                  })
+                }}
+              />
+            </div>
+          </>
+        ) : (
         <div>
           <LabelTip tip={TIPS.startDate} required>Data de Início</LabelTip>
           <DateInput
@@ -1030,6 +1076,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             required
           />
         </div>
+        )}
 
         {/* Data de Vencimento Atual — re-ancora a série (só p/ frequências recorrentes) */}
         {form.frequency && form.frequency !== 'once' && (

@@ -6,7 +6,8 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { fmt, fmtDate } from '../shared/utils'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { buscarContratoApi } from '../../lib/contratosApi'
-import { gerarPlanoParcelas, proximoReajuste, PAPEIS, r2, rotuloContrato } from '../../lib/contratos/parcelas'
+import { gerarPlanoParcelas, proximoReajuste, PAPEIS, r2, rotuloContrato, textoProjecao } from '../../lib/contratos/parcelas'
+import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { hojeStr, ymDe, fmtYm } from '../../lib/contratos/datas'
 import VinculoModal from './VinculoModal'
@@ -54,32 +55,6 @@ function paraContrato(f) {
   }
 }
 
-function validarEtapa(i, f) {
-  if (i === 0) {
-    if (!f.perfil_id) return 'Escolha o perfil.'
-    if (!txt(f.favorecido).trim()) return 'Informe o favorecido (imobiliária ou proprietário).'
-    if (!f.data_inicio) return 'Informe o início da vigência.'
-    if (!f.sem_fim && !f.data_fim) return 'Informe o fim da vigência ou marque "Sem data de fim".'
-    if (!f.sem_fim && f.data_fim < f.data_inicio) return 'O fim da vigência é antes do início.'
-    if (f.link_anexo && !/^https?:\/\//i.test(f.link_anexo)) return 'O link do anexo deve começar com http:// ou https://.'
-  }
-  if (i === 1) {
-    if (!f.conta_id) return 'Escolha a conta de pagamento.'
-    if (!(num(f.valor_base) > 0)) return 'Informe o valor do aluguel.'
-    const d = int(f.dia_vencimento)
-    if (!(d >= 1 && d <= 31)) return 'Dia de vencimento entre 1 e 31.'
-    if (f.bonificacao_valor && !(num(f.bonificacao_valor) >= 0)) return 'Bonificação inválida.'
-    if (num(f.bonificacao_valor) > 0 && !(int(f.bonificacao_meses) > 0)) return 'Informe por quantos meses vale a bonificação.'
-  }
-  if (i === 2 && f.indice_reajuste === 'FIXO' && num(f.percentual_fixo) == null) return 'Informe o percentual fixo.'
-  if (i === 3 && f.tem_condominio) {
-    if (!(num(f.valor_condominio_previsto) > 0)) return 'Informe o valor previsto do condomínio.'
-    const d = int(f.dia_vencimento_condominio)
-    if (f.dia_vencimento_condominio && !(d >= 1 && d <= 31)) return 'Dia de vencimento do condomínio entre 1 e 31.'
-  }
-  return ''
-}
-
 const Campo = ({ label, children, className = '' }) => (
   <div className={className}><label className="label">{label}</label>{children}</div>
 )
@@ -94,13 +69,14 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
   const edicao = !!contrato
   const hoje = hojeStr()
   const tipoCtr = tiposDocumento.find(t => t.sigla === 'CTR' && t.ativo !== false)
+  const moradia = sugerirCategoria(categories, 'expense')
   const [f, setF] = useState(() => formDoContrato(contrato, {
     tipo: 'pagar', modalidade: 'aluguel', perfil_id: activeProfileId || profiles[0]?.id || '', objeto: '', numero: '',
     favorecido: '', favorecido_condominio: '', data_inicio: hoje, data_fim: '', sem_fim: false, renovacao_automatica: false,
     aviso_previo_dias: '30', valor_base: '', periodicidade: 'mensal', dia_vencimento: '', bonificacao_valor: '',
-    bonificacao_meses: '', conta_id: '', categoria_id: '', centro_custo: '', tipo_documento_id: tipoCtr?.id || '',
+    bonificacao_meses: '', conta_id: '', categoria_id: moradia, centro_custo: '', tipo_documento_id: tipoCtr?.id || '',
     indice_reajuste: 'IPCA', percentual_fixo: '', mes_base_reajuste: '', tipo_imovel: 'apartamento', tem_condominio: false,
-    valor_condominio_previsto: '', dia_vencimento_condominio: '', categoria_condominio_id: '', link_anexo: '',
+    valor_condominio_previsto: '', dia_vencimento_condominio: '', categoria_condominio_id: moradia, link_anexo: '',
     observacao: '', status: 'ativo',
   }))
   const [itens, setItens] = useState([])
@@ -215,7 +191,12 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
       {etapa === 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Campo label="Tipo">
-            <select className="input" value={f.tipo} onChange={e => set('tipo', e.target.value)} disabled={edicao}>
+            <select className="input" value={f.tipo} disabled={edicao} onChange={e => {
+              const t = e.target.value
+              const sug = sugerirCategoria(categories, t === 'receber' ? 'income' : 'expense')
+              setErro('')
+              setF(p => ({ ...p, tipo: t, categoria_id: sug, categoria_condominio_id: sug }))
+            }}>
               <option value="pagar">A pagar (sou o inquilino)</option>
               <option value="receber">A receber (sou o proprietário)</option>
             </select>
@@ -232,35 +213,35 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <Campo label="Número do contrato (opcional)">
-            <input className="input" value={f.numero} onChange={e => set('numero', e.target.value)} maxLength={60} />
+            <input autoComplete="off" className="input" value={f.numero} onChange={e => set('numero', e.target.value)} maxLength={60} />
           </Campo>
           <Campo label="Objeto (ex.: Apto 302 — Ed. Sol)" className="sm:col-span-2">
-            <input className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
+            <input autoComplete="off" className="input" value={f.objeto} onChange={e => set('objeto', e.target.value)} maxLength={200} />
           </Campo>
           <Campo label={f.tipo === 'receber' ? 'Inquilino (favorecido)' : 'Favorecido do aluguel (imobiliária / proprietário)'} className="sm:col-span-2">
             <FavorecidoAutocomplete value={f.favorecido} onChange={v => set('favorecido', v)} suggestions={payees || []} />
           </Campo>
           <Campo label="Início da vigência">
-            <input type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
+            <input autoComplete="off" type="date" className="input" value={f.data_inicio} onChange={e => set('data_inicio', e.target.value)} />
           </Campo>
           <Campo label="Fim da vigência">
-            <input type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
+            <input autoComplete="off" type="date" className="input" value={f.sem_fim ? '' : f.data_fim} disabled={f.sem_fim} onChange={e => set('data_fim', e.target.value)} />
             <label className="flex items-center gap-2 text-xs text-texto-2 mt-1">
-              <input type="checkbox" className="accent-primary" checked={f.sem_fim} onChange={e => set('sem_fim', e.target.checked)} />
+              <input autoComplete="off" type="checkbox" className="accent-primary" checked={f.sem_fim} onChange={e => set('sem_fim', e.target.checked)} />
               Sem data de fim (gera 12 meses à frente e estende sozinho)
             </label>
           </Campo>
           <Campo label="Aviso prévio (dias)">
-            <input type="number" min="0" max="365" className="input" value={f.aviso_previo_dias} onChange={e => set('aviso_previo_dias', e.target.value)} />
+            <input autoComplete="off" type="number" min="0" max="365" className="input" value={f.aviso_previo_dias} onChange={e => set('aviso_previo_dias', e.target.value)} />
           </Campo>
           <Campo label="Renovação">
             <label className="flex items-center gap-2 text-sm text-texto-2 mt-2">
-              <input type="checkbox" className="accent-primary" checked={!!f.renovacao_automatica} onChange={e => set('renovacao_automatica', e.target.checked)} />
+              <input autoComplete="off" type="checkbox" className="accent-primary" checked={!!f.renovacao_automatica} onChange={e => set('renovacao_automatica', e.target.checked)} />
               Renovação automática
             </label>
           </Campo>
           <Campo label="Link do contrato (anexo)" className="sm:col-span-2">
-            <input className="input" value={f.link_anexo} onChange={e => set('link_anexo', e.target.value)} placeholder="https://drive.google.com/…" />
+            <input autoComplete="off" className="input" value={f.link_anexo} onChange={e => set('link_anexo', e.target.value)} placeholder="https://drive.google.com/…" />
           </Campo>
           <Campo label="Observação" className="sm:col-span-2">
             <textarea className="input min-h-[60px]" value={f.observacao} onChange={e => set('observacao', e.target.value)} maxLength={2000} />
@@ -281,7 +262,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <CategorySelect categories={categories} value={f.categoria_id} onChange={v => set('categoria_id', v)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
           <Campo label="Valor do aluguel (contratual)">
-            <input className="input" inputMode="decimal" value={f.valor_base} onChange={e => set('valor_base', e.target.value)} placeholder="3.900,00" />
+            <input autoComplete="off" className="input" inputMode="decimal" value={f.valor_base} onChange={e => set('valor_base', e.target.value)} placeholder="3.900,00" />
           </Campo>
           <Campo label="Periodicidade">
             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
@@ -290,7 +271,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </select>
           </Campo>
           <Campo label="Dia de vencimento">
-            <input type="number" min="1" max="31" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
+            <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento} onChange={e => set('dia_vencimento', e.target.value)} />
           </Campo>
           <Campo label="Tipo de documento">
             <select className="input" value={f.tipo_documento_id} onChange={e => set('tipo_documento_id', e.target.value)}>
@@ -306,10 +287,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           <div />
           <Campo label="Bonificação por mês (desconto)">
-            <input className="input" inputMode="decimal" value={f.bonificacao_valor} onChange={e => set('bonificacao_valor', e.target.value)} placeholder="200,00" />
+            <input autoComplete="off" className="input" inputMode="decimal" value={f.bonificacao_valor} onChange={e => set('bonificacao_valor', e.target.value)} placeholder="200,00" />
           </Campo>
           <Campo label="Bonificação nos primeiros (meses)">
-            <input type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} />
+            <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} />
           </Campo>
           {num(f.bonificacao_valor) > 0 && num(f.valor_base) > 0 && (
             <p className="sm:col-span-2 text-xs text-texto-2">
@@ -326,18 +307,22 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               <option value="IPCA">IPCA</option><option value="IGPM">IGP-M</option>
               <option value="FIXO">Percentual fixo</option><option value="NENHUM">Sem reajuste</option>
             </select>
-            {indice && (
-              <p className="text-[11px] text-texto-3 mt-1">
-                {indice.acumulado_12m != null
-                  ? `Acumulado em 12 meses até ${fmtYm(indice.competencia)}: ${String(indice.acumulado_12m).replace('.', ',')}% (Banco Central)`
-                  : indice.aviso || 'Índice indisponível'}
-                {indice.aviso && indice.acumulado_12m != null ? ` — ${indice.aviso}` : ''}
-              </p>
+            {(f.indice_reajuste === 'IPCA' || f.indice_reajuste === 'IGPM') && (
+              indice?.acumulado_12m != null ? (
+                <p className="text-[11px] text-texto-2 mt-1">
+                  Acumulado em 12 meses até {fmtYm(indice.competencia)}: <strong className="text-texto-1">{String(indice.acumulado_12m).replace('.', ',')}%</strong> (Banco Central) — é o usado na projeção.
+                  {indice.aviso && <span className="block text-aviso">⚠ {indice.aviso}</span>}
+                </p>
+              ) : (
+                <p className="text-[11px] text-aviso mt-1">
+                  ⚠ {indice ? indice.aviso || 'Índice indisponível.' : 'Buscando o índice no Banco Central…'} As parcelas projetadas ficam no valor atual (0%) e são recalculadas sozinhas quando o índice chegar.
+                </p>
+              )
             )}
           </Campo>
           {f.indice_reajuste === 'FIXO' && (
             <Campo label="Percentual fixo ao ano (%)">
-              <input className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="5,00" />
+              <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="5,00" />
             </Campo>
           )}
           {f.indice_reajuste !== 'NENHUM' && (
@@ -366,7 +351,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             </Campo>
             <Campo label="Condomínio">
               <label className="flex items-center gap-2 text-sm text-texto-2 mt-2">
-                <input type="checkbox" className="accent-primary" checked={!!f.tem_condominio} onChange={e => set('tem_condominio', e.target.checked)} />
+                <input autoComplete="off" type="checkbox" className="accent-primary" checked={!!f.tem_condominio} onChange={e => set('tem_condominio', e.target.checked)} />
                 Tem condomínio (gera as parcelas mensais)
               </label>
             </Campo>
@@ -376,10 +361,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                   <FavorecidoAutocomplete value={f.favorecido_condominio} onChange={v => set('favorecido_condominio', v)} suggestions={payees || []} placeholder="Condomínio / administradora" />
                 </Campo>
                 <Campo label="Valor previsto">
-                  <input className="input" inputMode="decimal" value={f.valor_condominio_previsto} onChange={e => set('valor_condominio_previsto', e.target.value)} />
+                  <input autoComplete="off" className="input" inputMode="decimal" value={f.valor_condominio_previsto} onChange={e => set('valor_condominio_previsto', e.target.value)} />
                 </Campo>
                 <Campo label="Dia de vencimento do condomínio">
-                  <input type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
+                  <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
                 </Campo>
                 <Campo label="Categoria do condomínio" className="sm:col-span-2">
                   <CategorySelect categories={categories} value={f.categoria_condominio_id} onChange={v => set('categoria_condominio_id', v)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
@@ -400,14 +385,14 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               const setI = (k, v) => setItens(p => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
               return (
                 <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_110px_120px_110px_32px] gap-2 items-end p-2 rounded-lg bg-surface-2/60">
-                  <input className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Descrição" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
+                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Descrição" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
                   <select className="input py-1.5 text-sm" value={it.grupo} onChange={e => setI('grupo', e.target.value)}>
                     {Object.entries(GRUPOS_ITEM).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                   <select className="input py-1.5 text-sm" value={it.responsavel} onChange={e => setI('responsavel', e.target.value)}>
                     <option value="inquilino">Inquilino</option><option value="proprietario">Proprietário</option>
                   </select>
-                  <input className="input py-1.5 text-sm" inputMode="decimal" placeholder="Valor" value={it.valor_previsto} onChange={e => setI('valor_previsto', e.target.value)} />
+                  <input autoComplete="off" className="input py-1.5 text-sm" inputMode="decimal" placeholder="Valor" value={it.valor_previsto} onChange={e => setI('valor_previsto', e.target.value)} />
                   <button type="button" className="p-1.5 text-texto-3 hover:text-perigo" title="Remover" onClick={() => setItens(p => p.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
                 </div>
               )
@@ -420,7 +405,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
         <div className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
             <Campo label="Gerar parcelas a partir de">
-              <input type="month" className="input" value={apartirDe} min={ymDe(f.data_inicio)} onChange={e => setApartirDe(e.target.value || ymDe(hoje))} />
+              <input autoComplete="off" type="month" className="input" value={apartirDe} min={ymDe(f.data_inicio)} onChange={e => setApartirDe(e.target.value || ymDe(hoje))} />
             </Campo>
             <p className="text-xs text-texto-3 pb-2">
               {planoNovo.length} parcela(s){f.sem_fim ? ' — sem data de fim: 12 meses à frente, estendidas sozinhas' : ''}. Antes de gerar, procuro agendamentos parecidos para vincular.
@@ -463,7 +448,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 }
 
 function Composicao({ c }) {
-  return (c?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`).join(' ')
+  return [...(c?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`), c?.projecao ? textoProjecao(c.projecao) : ''].filter(Boolean).join(' · ')
 }
 
 function PreviaTabela({ linhas }) {

@@ -7,6 +7,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { buscarContratoApi } from '../../lib/contratosApi'
 import {
   PAPEIS, STATUS_CONTRATO, ehParcelaGerada, parcelaPaga, valorAtual, proximaParcela, rotuloContrato, r2,
+  linhasDoContrato, textoProjecao,
 } from '../../lib/contratos/parcelas'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
@@ -67,6 +68,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const doContrato = useMemo(() => (contrato ? schedules.filter(s => s.contratoId === contrato.id) : []), [schedules, contrato])
   const parcelas = useMemo(() => doContrato.filter(s => ehParcelaGerada(s, contrato.id))
     .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)) || String(a.contratoPapel).localeCompare(String(b.contratoPapel))), [doContrato, contrato])
+  const linhas = useMemo(() => (contrato ? linhasDoContrato(contrato, doContrato, transactions) : []), [contrato, doContrato, transactions])
   const vinculadas = useMemo(() => doContrato.filter(s => !ehParcelaGerada(s, contrato.id)), [doContrato, contrato])
   // Pagamentos: lançamentos das parcelas do contrato e das séries vinculadas (só leitura).
   const pagamentos = useMemo(() => {
@@ -85,10 +87,10 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const projetadas = parcelas.filter(s => s.valorStatus === 'projetado' && !parcelaPaga(s) && s.contratoPapel === 'aluguel')
   const indice = indicesContratos[contrato.indice_reajuste]
   const listas = {
-    pendentes: parcelas.filter(s => !parcelaPaga(s)),
-    pagas: parcelas.filter(parcelaPaga),
-    projetadas: parcelas.filter(s => s.valorStatus === 'projetado' && !parcelaPaga(s)),
-    todas: parcelas,
+    pendentes: linhas.filter(l => !l.paga),
+    pagas: linhas.filter(l => l.paga),
+    projetadas: linhas.filter(l => l.projetado),
+    todas: linhas,
   }
 
   const buscarVinculos = () => {
@@ -144,6 +146,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
           {contrato.indice_reajuste === 'FIXO' ? `Fixo ${String(contrato.percentual_fixo ?? 0).replace('.', ',')}%`
             : contrato.indice_reajuste === 'NENHUM' ? 'Sem reajuste'
               : `${contrato.indice_reajuste}${indice?.acumulado_12m != null ? ` ${String(indice.acumulado_12m).replace('.', ',')}% (12m até ${fmtYm(indice.competencia)})` : ''}`}
+          {indice?.aviso && contrato.indice_reajuste !== 'FIXO' && <span className="block text-[11px] text-aviso">⚠ {indice.aviso}</span>}
         </Info>
         <Info rotulo="Bonificação">{contrato.bonificacao_valor > 0 ? `${fmt(contrato.bonificacao_valor)} × ${contrato.bonificacao_meses} meses` : '—'}</Info>
         <Info rotulo="Condomínio">{contrato.tem_condominio ? `${fmt(contrato.valor_condominio_previsto)} · ${contrato.favorecido_condominio || '—'}` : 'Não'}</Info>
@@ -199,23 +202,28 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {listas[aba].map(s => {
-                const paga = parcelaPaga(s)
+              {listas[aba].map(l => {
+                const s = l.schedule
+                const comp = [
+                  ...(l.composicao?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`),
+                  l.composicao?.projecao && l.projetado ? textoProjecao(l.composicao.projecao) : '',
+                  l.vinculada ? `série vinculada: ${s.description}` : '',
+                ].filter(Boolean).join(' · ')
                 return (
-                  <tr key={s.id} className="border-b border-borda/50">
-                    <td className="px-2 py-1.5 text-texto-2">{s.composicao?.numero ?? '—'}{s.composicao?.total_parcelas ? `/${s.composicao.total_parcelas}` : ''}</td>
-                    <td className="px-2 py-1.5 text-texto-2">{PAPEIS[s.contratoPapel]}</td>
-                    <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(s.startDate)}</td>
-                    <td className="px-2 py-1.5 text-texto-3 hidden sm:table-cell">{(s.composicao?.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`).join(' ')}</td>
-                    <td className="px-2 py-1.5 text-right text-texto-1 font-medium whitespace-nowrap">{fmt(s.amount)}</td>
+                  <tr key={l.key} className="border-b border-borda/50">
+                    <td className="px-2 py-1.5 text-texto-2">{l.numero ?? '—'}{l.total ? `/${l.total}` : ''}</td>
+                    <td className="px-2 py-1.5 text-texto-2">{PAPEIS[l.papel]}</td>
+                    <td className="px-2 py-1.5 text-texto-2 whitespace-nowrap">{fmtDate(l.vencimento)}</td>
+                    <td className="px-2 py-1.5 text-texto-3 hidden sm:table-cell">{comp}</td>
+                    <td className="px-2 py-1.5 text-right text-texto-1 font-medium whitespace-nowrap">{fmt(l.valor)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      {paga ? <span className="text-primary-fg">Paga</span>
-                        : s.valorStatus === 'projetado' ? (
+                      {l.paga ? <span className="text-primary-fg">Paga</span>
+                        : l.projetado ? (
                           <span className="inline-flex items-center gap-1.5">
                             <span className="text-aviso outline-dashed outline-1 outline-borda-forte rounded px-1">Projetado</span>
-                            {podeEditar && s.contratoPapel === 'aluguel' && <button className="text-primary-fg hover:underline" onClick={() => setReajusteDe(s)}>Confirmar</button>}
+                            {podeEditar && l.papel === 'aluguel' && !l.vinculada && <button className="text-primary-fg hover:underline" onClick={() => setReajusteDe(s)}>Confirmar</button>}
                           </span>
-                        ) : <span className="text-texto-2">{s.startDate < hoje ? 'Em atraso' : 'Pendente'}</span>}
+                        ) : <span className="text-texto-2">{l.vencimento < hoje ? 'Em atraso' : 'Pendente'}</span>}
                     </td>
                   </tr>
                 )

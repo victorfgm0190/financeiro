@@ -6,6 +6,7 @@ import {
 import {
   gerarPlanoParcelas, planejarSincronizacao, confirmadosDe, cobertasDoContrato, inicioDasParcelas,
   ehParcelaGerada, parcelaPaga, planoConfirmacaoReajuste, proximoReajuste, parcelasDoPapel, r2, rotuloContrato,
+  planoManutencao,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
 import { hojeStr, ymDe } from '../lib/contratos/datas'
@@ -226,26 +227,32 @@ export function useContratos({ habilitado, update, dataRef, dbConectado, registr
     setContratos(prev => prev.filter(c => c.id !== contrato.id))
   }, [update])
 
-  // Contrato ativo sem data de fim: estende as parcelas até 12 meses à frente, uma vez por sessão,
-  // depois do load do banco (ids determinísticos: outro aparelho fazendo o mesmo grava a mesma linha).
+  // Uma vez por sessão, depois do load do banco, para cada contrato ativo:
+  //   • sem data de fim: estende as parcelas até 12 meses à frente (ids determinísticos: outro
+  //     aparelho fazendo o mesmo grava a mesma linha);
+  //   • manutenção: descrição das pendentes e reprojeção das PROJETADAS com o índice atual (as que
+  //     nasceram sem índice, a 0%, ganham o valor certo aqui).
   const garantidoRef = useRef(false)
   useEffect(() => {
     if (!habilitado || !dbConectado || !carregados || garantidoRef.current) return
     garantidoRef.current = true
     ;(async () => {
       const criar = []
+      const atualizar = []
       for (const c of contratos) {
-        if (c.status !== 'ativo' || c.data_fim) continue
+        if (c.status !== 'ativo') continue
         const lista = dataRef.current.schedules
         if (!inicioDasParcelas(c, lista)) continue
         const idx = await indicesPara(c)
+        atualizar.push(...planoManutencao(c, lista, { hoje: hojeStr(), indices: idx }))
+        if (c.data_fim) continue
         const plano = gerarPlanoParcelas(c, {
           hoje: hojeStr(), indices: idx, confirmados: confirmadosDe(c, lista), apartirDe: inicioDasParcelas(c, lista),
           valorCondominio: valorCondominioPago(c, lista, dataRef.current.transactions),
         })
         criar.push(...planejarSincronizacao(c, lista, plano, { excluidas: c.excluidas || [], cobertas: cobertasDoContrato(c, lista), soExtender: true }).criar)
       }
-      if (criar.length) update(d => ({ ...d, schedules: aplicarMudancas(d.schedules, { criar }) }))
+      if (criar.length || atualizar.length) update(d => ({ ...d, schedules: aplicarMudancas(d.schedules, { criar, atualizar }) }))
     })().catch(err => console.warn('[contratos] extensão das parcelas falhou:', err.message))
   }, [habilitado, dbConectado, carregados, contratos, dataRef, indicesPara, update])
 

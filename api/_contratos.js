@@ -86,6 +86,13 @@ export function normalizarContrato(body, { parcial = false } = {}) {
   const ini = 'data_inicio' in dados ? dados.data_inicio : null
   if (fim && ini && fim < ini) return { erro: 'data_fim: antes do início' }
   if (dados.indice_reajuste === 'FIXO' && dados.percentual_fixo == null && !parcial) return { erro: 'percentual_fixo: obrigatório com reajuste FIXO' }
+  if ('bonificacao_valor' in dados && dados.bonificacao_valor > 0 && !(dados.bonificacao_meses > 0)) {
+    return { erro: 'bonificacao_meses: obrigatório quando há bonificação' }
+  }
+  if (!parcial) {
+    if (!dados.categoria_id) return { erro: 'categoria_id: obrigatória' }
+    if (dados.tem_condominio && !dados.categoria_condominio_id) return { erro: 'categoria_condominio_id: obrigatória com condomínio' }
+  }
   return { dados }
 }
 

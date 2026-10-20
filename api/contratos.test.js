@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { normalizarContrato } from './_contratos.js'
-import { lerSerieSgs, comAcumulado12m } from './indices.js'
+import { lerSerieSgs, comAcumulado12m, urlSgs, indiceAtual } from './indices.js'
 import { regraDaRota, pode } from '../src/lib/permissoes.js'
 
 // /api/contratos, /api/contrato-itens e /api/contrato-eventos num Postgres de verdade (PGlite), com a
@@ -43,7 +43,7 @@ const chamar = async (h, method, { body, url = '/api/contratos', user } = {}) =>
 const CONTRATO = {
   perfil_id: 'pf', tipo: 'pagar', modalidade: 'aluguel', objeto: 'Apto 302', favorecido: 'Imob Silva',
   data_inicio: '2026-01-10', data_fim: '2028-06-30', valor_base: 3900, periodicidade: 'mensal', dia_vencimento: 10,
-  indice_reajuste: 'IPCA', bonificacao_valor: 200, bonificacao_meses: 3, conta_id: 'cc1', status: 'ativo',
+  indice_reajuste: 'IPCA', bonificacao_valor: 200, bonificacao_meses: 3, conta_id: 'cc1', status: 'ativo', categoria_id: 'cat-alug',
 }
 
 beforeEach(async () => {
@@ -130,11 +130,19 @@ describe('/api/contratos', () => {
 })
 
 describe('validação e regras', () => {
+  it('normalizarContrato: bonificação exige meses; categorias obrigatórias na criação', () => {
+    const b = { tipo: 'pagar', data_inicio: '2026-01-01', categoria_id: 'c' }
+    expect(normalizarContrato({ ...b, bonificacao_valor: 200 }).erro).toMatch(/bonificacao_meses/)
+    expect(normalizarContrato({ ...b, bonificacao_valor: 200, bonificacao_meses: 3 }).erro).toBeUndefined()
+    expect(normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01' }).erro).toMatch(/categoria_id/)
+    expect(normalizarContrato({ ...b, tem_condominio: true }).erro).toMatch(/categoria_condominio_id/)
+    expect(normalizarContrato({ valor_base: 10 }, { parcial: true }).erro).toBeUndefined()
+  })
   it('normalizarContrato: padrões e datas', () => {
-    const { dados } = normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01' })
+    const { dados } = normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01', categoria_id: 'c' })
     expect(dados).toMatchObject({ modalidade: 'aluguel', periodicidade: 'mensal', indice_reajuste: 'IPCA', status: 'ativo', aviso_previo_dias: 30 })
-    expect(normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01', data_fim: '2025-01-01' }).erro).toMatch(/antes do início/)
-    expect(normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01', indice_reajuste: 'FIXO' }).erro).toMatch(/percentual_fixo/)
+    expect(normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01', data_fim: '2025-01-01', categoria_id: 'c' }).erro).toMatch(/antes do início/)
+    expect(normalizarContrato({ tipo: 'pagar', data_inicio: '2026-01-01', indice_reajuste: 'FIXO', categoria_id: 'c' }).erro).toMatch(/percentual_fixo/)
   })
   it('rotas no mapa de permissões; módulo de plano bloqueia sem o plano', () => {
     expect(regraDaRota('/api/contratos', 'POST')).toEqual({ modulo: 'contratos', acao: 'incluir' })
@@ -150,5 +158,25 @@ describe('validação e regras', () => {
     const ac = comAcumulado12m(serie)
     expect(ac[10].acumulado_12m).toBeNull()
     expect(ac[11].acumulado_12m).toBeCloseTo(6.1678, 3)
+  })
+  it('índices: consulta por intervalo de datas (nunca "ultimos/N") e {"erro":{}} é erro', () => {
+    const u = urlSgs('IPCA', new Date(Date.UTC(2026, 9, 20)))
+    expect(u).toBe('https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial=01/04/2024&dataFinal=20/10/2026')
+    expect(u).not.toMatch(/ultimos/)
+    expect(() => lerSerieSgs({ erro: {} })).toThrow(/resposta inesperada/)
+  })
+  it('índices: grava o cache e devolve o acumulado; BC com erro e sem cache → aviso com o motivo', async () => {
+    const serie = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date(Date.UTC(2024, 3 + i, 1))
+      return { data: `01/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`, valor: '0.4' }
+    })
+    const erro = await indiceAtual('IGPM', { fetcher: async () => ({ ok: true, json: async () => ({ erro: {} }) }) })
+    expect(erro).toMatchObject({ acumulado_12m: null, fonte: null })
+    expect(erro.aviso).toMatch(/resposta inesperada/)
+    const ok = await indiceAtual('IPCA', { fetcher: async () => ({ ok: true, json: async () => serie }) })
+    expect(ok).toMatchObject({ indice: 'IPCA', competencia: '2026-09', fonte: 'bcb' })
+    expect(ok.acumulado_12m).toBeCloseTo(4.9070, 3)
+    const cache = await indiceAtual('IPCA', { fetcher: async () => { throw new Error('não devia chamar') } })
+    expect(cache.fonte).toBe('cache')
   })
 })

@@ -19,6 +19,7 @@ import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
 import SeloContrato from '../Contratos/SeloContrato'
+import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
@@ -969,8 +970,11 @@ function ScheduleRow({
   //    occurrenceType 'installment', que pré-conta os consumidos ANTES da âncora.
   const isRecorrente = (schedule.frequency || 'once') !== 'once'
   // Agendamento de contrato: excluir/pular nunca apaga em silêncio — o modal do contrato pergunta.
-  const { contratosHabilitado } = useApp()
+  const { contratosHabilitado, contratoPorId } = useApp()
   const deContrato = !!schedule.contratoId && contratosHabilitado
+  const rotuloFreq = deContrato && (schedule.frequency || 'once') === 'once'
+    ? rotuloFrequencia(contratoPorId(schedule.contratoId), schedule.contratoPapel)
+    : FREQ_LABELS[schedule.frequency] || schedule.frequency
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
   const effAmount = futura ? futura.amount : nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
   const handlePular = () => {
@@ -1080,7 +1084,7 @@ function ScheduleRow({
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             {/* Abaixo de 1440px a coluna Frequência some: a frequência vira selo aqui. */}
             <span className="min-[1440px]:hidden text-xs bg-surface-hover/60 text-texto-2 px-1.5 py-0.5 rounded whitespace-nowrap">
-              {FREQ_LABELS[schedule.frequency] || schedule.frequency}
+              {rotuloFreq}
             </span>
             {/* Série de fatura (desktop): o "+ N faturas seguintes" fica aqui, fora da linha do título,
                 para não espremer a descrição. */}
@@ -1222,7 +1226,7 @@ function ScheduleRow({
 
         {/* Frequência */}
         <td className="px-3 py-3 w-24 whitespace-nowrap hidden min-[1440px]:table-cell">
-          <span className="text-xs text-texto-3">{FREQ_LABELS[schedule.frequency] || schedule.frequency}</span>
+          <span className="text-xs text-texto-3">{rotuloFreq}</span>
         </td>
 
         {/* Ações */}

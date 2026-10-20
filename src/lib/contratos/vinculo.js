@@ -2,7 +2,7 @@
 // Busca: favorecido igual/semelhante (sem acento, sem maiúsculas, abreviações como "imob." =
 // "imobiliaria", casamento por prefixo de palavra) OU descrição com "aluguel"/"condominio";
 // recorrente, valor ±20% e dia de vencimento próximo pesam a favor. Cada candidato traz os motivos.
-import { computeOccurrences } from '../occurrences.js'
+import { computeOccurrences, advanceByFrequency } from '../occurrences.js'
 import { agendamentoDoMotor } from '../camposSerie.js'
 import { ymDe, diaDe } from './datas.js'
 import { r2 } from './parcelas.js'
@@ -40,6 +40,9 @@ export function similaridadeNome(a, b) {
 }
 
 const SEMELHANTE = 0.6
+// Pontuação a partir da qual o candidato já vem marcado no modal (favorecido igual, ou descrição
+// + favorecido semelhante).
+export const SCORE_FORTE = 50
 
 // Candidatos ao vínculo, por pontuação. → [{ schedule, score, motivos, papel, pagas, pendentes, proxima }]
 export function candidatosVinculo(contrato, schedules) {
@@ -52,30 +55,26 @@ export function candidatosVinculo(contrato, schedules) {
     if (s.transactionType !== tipoTx) continue
     const motivos = []
     let score = 0
-    let papel = null
+    let papelFav = null
     const simF = similaridadeNome(s.payee, contrato.favorecido)
     const simC = contrato.favorecido_condominio ? similaridadeNome(s.payee, contrato.favorecido_condominio) : 0
     if (simC >= SEMELHANTE && simC > simF) {
       score += simC >= 0.99 ? 50 : 35
       motivos.push(simC >= 0.99 ? 'favorecido do condomínio igual' : 'favorecido do condomínio semelhante')
-      papel = 'condominio'
+      papelFav = 'condominio'
     } else if (simF >= SEMELHANTE) {
       score += simF >= 0.99 ? 50 : 35
       motivos.push(simF >= 0.99 ? 'favorecido igual' : 'favorecido semelhante')
-      papel = 'aluguel'
+      papelFav = 'aluguel'
     }
     const desc = ` ${normalizarNome(s.description)} `
-    if (desc.includes(' aluguel ')) {
-      score += 25
-      motivos.push('descrição com "aluguel"')
-      papel = papel || 'aluguel'
-    }
-    if (desc.includes(' condominio ')) {
-      score += 25
-      motivos.push('descrição com "condomínio"')
-      if (papel !== 'condominio' && simF < 0.99) papel = 'condominio'
-    }
+    const temAluguel = desc.includes(' aluguel ')
+    const temCond = desc.includes(' condominio ')
+    if (temAluguel) { score += 25; motivos.push('descrição com "aluguel"') }
+    if (temCond) { score += 25; motivos.push('descrição com "condomínio"') }
     if (!score) continue
+    // A descrição decide o papel; só sem ela (ou com as duas palavras) vale o favorecido.
+    const papel = temAluguel && !temCond ? 'aluguel' : temCond && !temAluguel ? 'condominio' : papelFav || 'aluguel'
 
     const recorrente = (s.frequency || 'once') !== 'once'
     if (recorrente) { score += 10; motivos.push('recorrente') }
@@ -91,7 +90,7 @@ export function candidatosVinculo(contrato, schedules) {
     const consumidas = pagas + (s.skipped || []).length
     const pendentes = !recorrente ? (pagas ? 0 : 1)
       : s.occurrenceType === 'installment' ? Math.max(0, (Number(s.installments) || 0) - consumidas) : null
-    out.push({ schedule: s, score, motivos, papel: papel || 'aluguel', pagas, pendentes, proxima })
+    out.push({ schedule: s, score, motivos, papel, pagas, pendentes, proxima })
   }
   return out.sort((a, b) => b.score - a.score)
 }
@@ -113,8 +112,14 @@ export function planoVinculo(serie, papel, contratoId) {
   }
   const consumidas = [...(serie.registered || []), ...(serie.skipped || [])]
   if (consumidas.length) {
+    // A âncora vai para depois da última consumida: a pré-contagem do motor (consumidas antes da
+    // âncora) fecha o total e não sobra pendente — nem uma mais antiga que ficou sem pagar.
+    const ultima = consumidas.slice().sort().at(-1)
     return {
-      changes: { ...base, occurrenceType: 'installment', installments: consumidas.length },
+      changes: {
+        ...base, occurrenceType: 'installment', installments: consumidas.length,
+        nextOccurrence: advanceByFrequency(ultima, serie.frequency),
+      },
       cobertas: [...new Set(consumidas.map(ymDe))],
       antes,
     }
