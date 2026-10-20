@@ -23,6 +23,7 @@ export const MODULOS = [
   { id: 'envelopes', label: 'Envelopes', paginas: ['envelopes'] },
   { id: 'orcamento', label: 'Orçamento', paginas: ['budget'] },
   { id: 'patrimonio', label: 'Patrimônio', paginas: ['patrimonio'] },
+  { id: 'contratos', label: 'Contratos', paginas: ['contratos'] },
   { id: 'relatorios', label: 'Relatórios', paginas: ['reports'] },
   { id: 'alertas', label: 'Alertas / Integridade', paginas: ['alerts'] },
   { id: 'cadastros', label: 'Configurações › Cadastros e Regras', paginas: [] },
@@ -69,10 +70,16 @@ export function permissoesDoNivel(nivel, permissoes) {
   return out
 }
 
-// pode(usuario, modulo, acao). `usuario` = { nivel, permissoes } (sessão do token ou linha do banco).
-// Sem usuário/nivel → nada. modulo '*' = "pode gravar em algum módulo".
+// Módulos opcionais do plano do ambiente (ambientes.modulos no central): desligado = ninguém vê nem
+// grava, nem o admin. `usuario.modulos` vem do token (front) ou de req.ambiente (API, sempre fresco).
+export const MODULOS_DE_PLANO = new Set(['contratos'])
+export const moduloNoPlano = (usuario, modulo) => !MODULOS_DE_PLANO.has(modulo) || usuario?.modulos?.[modulo] === true
+
+// pode(usuario, modulo, acao). `usuario` = { nivel, permissoes, modulos } (sessão do token ou linha
+// do banco). Sem usuário/nivel → nada. modulo '*' = "pode gravar em algum módulo".
 export function pode(usuario, modulo, acao = 'ver') {
   if (!usuario?.nivel) return false
+  if (!moduloNoPlano(usuario, modulo)) return false
   if (usuario.nivel === 'admin') return true
   const efetivas = permissoesDoNivel(usuario.nivel, usuario.permissoes)
   if (modulo === '*') return Object.values(efetivas).some(p => p.incluir || p.editar || p.excluir)
@@ -150,6 +157,8 @@ const ROTAS = [
   [/^(reserve-periods|reserve-snapshots|reserve-adjustments|reserve-daily-ledger)$/, (m) => PORMETODO('reservas')[m]],
   [/^(fluxo-datas-provisorias|fluxo-provisorios|fluxo-consultas)$/, (m) => PORMETODO('fluxo')[m]],
   [/^tipos-documento$/, (m) => PORMETODO('cadastros')[m]],
+  [/^(contratos|contrato-itens|contrato-eventos)$/, (m) => PORMETODO('contratos')[m]],
+  [/^indices$/, () => null],
   [/^integridade$/, () => M('alertas', 'editar')],
   [/^historico$/, () => M('*', 'editar')],
   [/^(bem\/migrate|backfill-ger-rastreabilidade)$/, () => M('configuracoes', 'editar')],

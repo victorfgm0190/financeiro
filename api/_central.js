@@ -34,7 +34,7 @@ const CACHE_MS = 30_000
 const cache = new Map()
 export const _limparCacheAmbientes = () => cache.clear()
 
-const SQL_AMBIENTE = 'SELECT id, sigla, nome, database_name, status, cliente_id, schema_versao FROM ambientes'
+const SQL_AMBIENTE = 'SELECT id, sigla, nome, database_name, status, cliente_id, schema_versao, modulos FROM ambientes'
 
 export async function buscarAmbientePorSigla(sigla, { agora = Date.now() } = {}) {
   const s = String(sigla || '').trim().toLowerCase()

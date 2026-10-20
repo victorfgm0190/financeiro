@@ -17,7 +17,7 @@
 //               `component` com cabeçalho próprio (Início) os colocam elas mesmas.
 import {
   Home, TrendingUp, Calendar, LayoutGrid, PiggyBank, Mail, Plus, CalendarPlus, ArrowLeftRight,
-  Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard, Briefcase,
+  Wallet, CreditCard, List, PieChart, ChartPie, Gem, BarChart3, Bell, Settings, LayoutDashboard, Briefcase, FileSignature,
 } from 'lucide-react'
 import InicioMobile from './InicioMobile'
 import MaisMobile from './MaisMobile'
@@ -39,6 +39,7 @@ export const mobileModules = [
   { id: 'painel',        label: 'Painel completo', icon: LayoutDashboard, place: 'more', group: 'Planejamento e análise', page: 'dashboard' },
   { id: 'orcamento',     label: 'Orçamento',       icon: PieChart,       place: 'more', group: 'Planejamento e análise', page: 'budget', saldo: true },
   { id: 'patrimonio',    label: 'Patrimônio',      icon: Gem,            place: 'more', group: 'Planejamento e análise', page: 'patrimonio', saldo: true },
+  { id: 'contratos',     label: 'Contratos',       icon: FileSignature,  place: 'more', group: 'Planejamento e análise', page: 'contratos' },
   { id: 'relatorios',    label: 'Relatórios',      icon: BarChart3,      place: 'more', group: 'Planejamento e análise', page: 'reports', saldo: true },
   { id: 'alertas',       label: 'Alertas',         icon: Bell,           place: 'more', group: 'Planejamento e análise', page: 'alerts' },
 

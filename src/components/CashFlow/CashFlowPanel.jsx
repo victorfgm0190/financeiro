@@ -24,6 +24,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import SeloParcela from '../shared/SeloParcela'
+import SeloContrato from '../Contratos/SeloContrato'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import { resolverTipoDocumento, itemDaLinhaFluxo } from '../../lib/tiposDocumento'
 import { statusConfirmacaoLinha, STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
@@ -113,6 +114,15 @@ export default function CashFlowPanel({ setActivePage }) {
   // Selo "x/N" das linhas REALIZADAS geradas por agendamento parcelado (data_ocorrencia gravada).
   const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   const seloDaLinha = (r) => (r.real || r._lancamento ? seloDe(ctxDoc.txPorId.get(r._key)) : null)
+  // Selo "Contrato" (e "Projetado"): parcela prevista, ou lançamento gerado por parcela de contrato.
+  const contratoDaLinha = (r) => {
+    const s = r._scheduleId ? ctxDoc.agPorId.get(r._scheduleId) : null
+    if (s?.contratoId) return { schedule: s }
+    const t = r.real || r._lancamento ? ctxDoc.txPorId.get(r._key) : null
+    const origem = t?.scheduleId ? ctxDoc.agPorId.get(t.scheduleId) : null
+    if (origem?.contratoId) return { schedule: origem }
+    return t?.contratoId ? { contratoId: t.contratoId } : null
+  }
 
   const [toast, setToast] = useState(null)
   const avisar = (message, variant = 'success') => setToast({ message, variant })
@@ -863,6 +873,7 @@ export default function CashFlowPanel({ setActivePage }) {
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</span>
                             <SeloParcela rotulo={seloDaLinha(r)} />
+                            {contratoDaLinha(r) && <SeloContrato {...contratoDaLinha(r)} />}
                             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${BADGE[tipo]}`}>{tipo}</span>
                           </div>
                         </td>

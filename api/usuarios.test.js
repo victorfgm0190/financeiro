@@ -332,7 +332,7 @@ describe('middleware', () => {
     const { requireAuth } = await import('./_auth.js')
     const req = { headers: { authorization: `Bearer ${token({ user: 'vmoreira', role: 'admin' })}` } }
     expect(requireAuth(req, resposta())).toBe(true)
-    expect(req.user).toEqual({ id: 'env:vmoreira', orgId: null, nivel: 'admin', papel: 'admin', permissoes: {}, perfis: 'todos', username: 'vmoreira', nome: 'vmoreira', origem: 'env' })
+    expect(req.user).toEqual({ id: 'env:vmoreira', orgId: null, nivel: 'admin', papel: 'admin', permissoes: {}, perfis: 'todos', username: 'vmoreira', nome: 'vmoreira', origem: 'env', modulos: {} })
   })
 })
 

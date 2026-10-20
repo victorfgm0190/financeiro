@@ -16,6 +16,7 @@ import {
 } from '../lib/db'
 import { buildDailyLedgerRows, localDateStr as ledgerDateStr } from '../lib/reserveDailyLedger'
 import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../lib/api'
+import { useContratos } from '../hooks/useContratos'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia, ESCOPO } from '../lib/camposSerie'
@@ -2598,6 +2599,12 @@ export function AppProvider({ children }) {
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
     if (antes) reconciliarPorAgendamento([antes])
   }, [update, reconciliarPorAgendamento])
+
+  // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
+  const contratosCtx = useContratos({
+    habilitado: podeNivel(usuario, 'contratos', 'ver'), update, dataRef,
+    dbConectado: dbStatus === 'connected', registrarEdicao,
+  })
 
   // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.
   // Usado pelos painéis de exclusão para avisar que o resgate vinculado também será removido.
@@ -5649,6 +5656,7 @@ export function AppProvider({ children }) {
       addReserveFunction, updateReserveFunction, deleteReserveFunction, reorderReserveFunctions,
       reservePeriods, reserveAdjustments, reserveSnapshots,
       datasProvisorias, salvarDataProvisoria, removerDatasProvisorias,
+      ...contratosCtx,
       tiposDocumento, addTipoDocumento, updateTipoDocumento, deleteTipoDocumento, reordenarTiposDocumento,
       recarregarTiposDocumento, setTipoDocumentoEmMassa,
       registrarEdicao, temHistorico,

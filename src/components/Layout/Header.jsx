@@ -19,6 +19,7 @@ const PAGE_TITLES = {
   budget: 'Orçamento por Categoria',
   reports: 'Relatórios',
   patrimonio: 'Patrimônio',
+  contratos: 'Contratos',
   envelopes: 'Envelopes',
   alerts: 'Alertas de Vencimento',
   settings: 'Configurações',

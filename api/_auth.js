@@ -33,6 +33,7 @@ export function usuarioDoToken(p) {
     username,
     nome: p.nome ?? username,
     origem: p.origem ?? 'env',
+    modulos: p.modulos || {},
   }
 }
 
@@ -52,6 +53,8 @@ export function requireAuth(req, res) {
     return false
   }
   req.user = usuarioDoToken(payload)
+  // Plano do ambiente: vale o do central (comAmbiente), não o do token — que só muda no próximo login.
+  if (req.ambiente) req.user.modulos = req.ambiente.modulos || {}
   const regra = regraDaRota(rotaDoReq(req), req.method)
   if (!atendeRegra(req.user, regra)) {
     res.status(403).json({ error: 'Sem permissão para esta operação', modulo: regra.modulo, acao: regra.acao })

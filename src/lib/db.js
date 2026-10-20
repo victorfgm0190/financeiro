@@ -563,6 +563,9 @@ export const txToRow = (tx) => ({
   fitid: tx.fitid || null,
   // Gerado por agendamento: data-BASE da ocorrência baixada (não a do pagamento). Só exibição.
   data_ocorrencia: tx.dataOcorrencia || null,
+  // Contratos: lançamento de uma parcela de contrato e a composição do valor pago.
+  contrato_id: tx.contratoId || null,
+  composicao: tx.composicao || null,
   created_at: tx.createdAt || new Date().toISOString(),
   // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
   // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
@@ -616,6 +619,8 @@ export const rowToTx = (r) => ({
   importacaoId: r.importacao_id || null,
   fitid: r.fitid || null,
   dataOcorrencia: r.data_ocorrencia || null,
+  contratoId: r.contrato_id || null,
+  composicao: r.composicao || null,
   createdAt: r.created_at,
 })
 
@@ -666,6 +671,13 @@ export const scheduleToRow = (s) => ({
   categoria_cpf_id: s.categoriaCpfId || null,
   // Agenda no celular: false = fica fora do feed .ics (o calendário do app mostra todos).
   sincronizar_agenda: s.sincronizarAgenda !== false,
+  // Contratos (src/lib/contratos): parcela = agendamento com contrato_id + papel; valor_status
+  // 'projetado' = reajuste ainda não confirmado; composicao = como o valor é formado (base,
+  // bonificação, créditos…). Ambiente sem as colunas → o upsert as descarta (COLUNAS_OPCIONAIS).
+  contrato_id: s.contratoId || null,
+  contrato_papel: s.contratoPapel || null,
+  valor_status: s.valorStatus || 'confirmado',
+  composicao: s.composicao || null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -708,6 +720,10 @@ export const rowToSchedule = (r) => ({
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
   sincronizarAgenda: r.sincronizar_agenda !== false,
+  contratoId: r.contrato_id || null,
+  contratoPapel: r.contrato_papel || null,
+  valorStatus: r.valor_status || 'confirmado',
+  composicao: r.composicao || null,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada

@@ -74,6 +74,7 @@ export function getSessao() {
       trocarSenha: !!p.trocarSenha,
       origem: p.origem ?? 'env',
       ambSigla: p.amb_sigla ?? 'vm',
+      modulos: p.modulos || {},
     }
   } catch {
     return null

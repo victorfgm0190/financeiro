@@ -8,7 +8,7 @@ const U = (nivel, permissoes = {}) => ({ nivel, permissoes })
 
 describe('níveis', () => {
   it('admin pode tudo', () => {
-    for (const m of MODULOS) for (const a of ['ver', 'incluir', 'editar', 'excluir']) expect(pode(U('admin'), m.id, a)).toBe(true)
+    for (const m of MODULOS) for (const a of ['ver', 'incluir', 'editar', 'excluir']) expect(pode({ ...U('admin'), modulos: { contratos: true } }, m.id, a)).toBe(true)
   })
   it('operador: tudo, menos Usuários e Configurações; Cadastros só ver', () => {
     const op = U('operador')

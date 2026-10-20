@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, CreditCard, Calendar,
   Bell, TrendingUp, PieChart, BarChart3, Settings, Upload,
-  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet,
+  Wallet, Loader, Layers, Package, Cloud, AlertTriangle, User, Building2, Gem, Briefcase, FileSpreadsheet, FileSignature,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from './RodapeIdentidade'
@@ -23,6 +23,7 @@ const NAV = [
   { id: 'envelopes',  label: 'Envelopes',  icon: Package },
   { id: 'budget',     label: 'Orçamento',  icon: PieChart },
   { id: 'patrimonio', label: 'Patrimônio', icon: Gem },
+  { id: 'contratos', label: 'Contratos', icon: FileSignature },
   { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'alerts', label: 'Alertas', icon: Bell },
   { id: 'settings', label: 'Configurações', icon: Settings },

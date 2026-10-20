@@ -108,3 +108,16 @@ describe('série de fatura × filtros', () => {
     expect(buildScheduleGroups([rec], getNext)[0].isSerie).toBeUndefined()
   })
 })
+
+describe('parcelas de contrato', () => {
+  it('agrupam por contrato e papel; rótulo de parcelas', () => {
+    const p = (id, data, papel = 'aluguel') => ({ id, contratoId: 'c1', contratoPapel: papel, frequency: 'once', startDate: data, amount: 100, registered: [], skipped: [] })
+    expect(seriesKeyOf(p('a', '2026-11-10'))).toBe('contrato|c1|aluguel')
+    expect(seriesKeyOf({ ...p('x', '2026-11-10'), frequency: 'monthly' })).toBeNull()
+    const lista = [p('a', '2026-11-10'), p('b', '2026-12-10'), p('c', '2026-11-08', 'condominio')]
+    const g = buildScheduleGroups(lista, (s) => [s.startDate])
+    expect(g).toHaveLength(2)
+    expect(g.find(x => x.schedule.contratoPapel === 'aluguel').futureItems).toHaveLength(1)
+    expect(rotuloFaturasSeguintes(2, 'parcela')).toBe('+ 2 parcelas seguintes')
+  })
+})

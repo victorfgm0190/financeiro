@@ -37,6 +37,8 @@ import SoComInternet from './components/Offline/SoComInternet'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
+import ContratosPanel from './components/Contratos/ContratosPanel'
+import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
@@ -203,6 +205,7 @@ function AppContent() {
     envelopes:  <EnvelopesPanel />,
     budget:     <BudgetPanel />,
     patrimonio: <PatrimonioPanel setActivePage={navigate} />,
+    contratos: <SoComInternet titulo="Contratos"><ContratosPanel /></SoComInternet>,
     reports: <ReportsPanel />,
     alerts: <AlertsPanel setActivePage={navigate} integridadePendentes={integridadePendentes} />,
     settings: <SettingsPanel />,
@@ -229,6 +232,7 @@ function AppContent() {
         <Toast message={syncError} variant="error" duration={8000} onClose={dismissSyncError} />
       )}
       <MonthStartModal />
+      <ContratoFichaHost />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <AtalhosAjudaModal />
       <ModoAltAtalhos />

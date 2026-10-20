@@ -18,6 +18,8 @@ import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import SeloContrato from '../Contratos/SeloContrato'
+import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
 import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
 import Modal from '../shared/Modal'
@@ -966,11 +968,14 @@ function ScheduleRow({
   //    mas o valor persistido travava o "Em atraso" e desalinhava a contagem de parcelas de
   //    occurrenceType 'installment', que pré-conta os consumidos ANTES da âncora.
   const isRecorrente = (schedule.frequency || 'once') !== 'once'
+  // Agendamento de contrato: excluir/pular nunca apaga em silêncio — o modal do contrato pergunta.
+  const { contratosHabilitado } = useApp()
+  const deContrato = !!schedule.contratoId && contratosHabilitado
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
   const effAmount = futura ? futura.amount : nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
   const handlePular = () => {
     if (!nextDate) return
-    if (!isRecorrente) { setShowPularUnico(true); return }
+    if (!isRecorrente) { if (deContrato) setShowExcluir(true); else setShowPularUnico(true); return }
     const proximo = getNextOccurrences?.(schedule, 2)[1] || null
     skipScheduleOccurrence(schedule.id, nextDate)
     onToast?.(proximo
@@ -1064,7 +1069,7 @@ function ScheduleRow({
                     somam); o texto deixa claro que há outras faturas dentro do "› N". */}
                 {detalheMobile && isSerie && hasFuture && (
                   <span className="text-[10px] font-normal text-texto-3 whitespace-nowrap ml-0.5">
-                    {rotuloFaturasSeguintes(futureItems.length)}
+                    {rotuloFaturasSeguintes(futureItems.length, schedule.contratoId ? 'parcela' : 'fatura')}
                   </span>
                 )}
               </button>
@@ -1081,7 +1086,7 @@ function ScheduleRow({
                 para não espremer a descrição. */}
             {!detalheMobile && isSerie && hasFuture && (
               <span className="shrink-0 text-[10px] bg-surface-hover/40 text-texto-2 px-1.5 py-0.5 rounded whitespace-nowrap">
-                {rotuloFaturasSeguintes(futureItems.length)}
+                {rotuloFaturasSeguintes(futureItems.length, schedule.contratoId ? 'parcela' : 'fatura')}
               </span>
             )}
             {isProvisao && !schedule.provisaoEfetivada && (
@@ -1112,6 +1117,7 @@ function ScheduleRow({
                 {seloParcela}
               </span>
             )}
+            {schedule.contratoId && <SeloContrato schedule={schedule} />}
             {canConfirm && nextDate && podeEditar && !futura && (
               <button
                 type="button"
@@ -1393,7 +1399,11 @@ function ScheduleRow({
         />
       )}
 
-      {showExcluir && (
+      {showExcluir && deContrato && (
+        <ExcluirParcelaContratoModal schedule={schedule} onClose={() => setShowExcluir(false)} />
+      )}
+
+      {showExcluir && !deContrato && (
         <ExcluirModal
           schedule={schedule}
           nextDate={nextDate}

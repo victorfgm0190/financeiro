@@ -26,8 +26,9 @@ export const ambienteDoReq = (req, env = process.env) => ambienteDoHost(hostDoRe
 // principal: vale como ele até expirar (12 h).
 export const siglaDoToken = (p) => (p?.amb ? String(p.amb_sigla || '').toLowerCase() || null : AMBIENTE_PRINCIPAL)
 
-// Campos do ambiente no payload do JWT.
-export const comAmbienteNoPayload = (payload, amb) => ({ ...payload, amb: amb.id, amb_sigla: amb.sigla })
+// Campos do ambiente no payload do JWT. `modulos` = módulos do plano (só para a interface; a API
+// confere o do central a cada requisição).
+export const comAmbienteNoPayload = (payload, amb) => ({ ...payload, amb: amb.id, amb_sigla: amb.sigla, modulos: amb.modulos || {} })
 
 export function comAmbiente(handler) {
   const envolvido = async function rotaComAmbiente(req, res) {

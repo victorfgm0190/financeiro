@@ -7,9 +7,9 @@ import { scheduleDisplayDueDate } from './agendamentosFiltro.js'
 // Quantas ocorrências futuras listar ao expandir um agendamento recorrente de valor fixo.
 export const FUTURE_OCC_COUNT = 12
 
-// Texto ao lado do "› N" numa linha de série de fatura.
-export function rotuloFaturasSeguintes(n) {
-  return `+ ${n} fatura${n !== 1 ? 's' : ''} seguinte${n !== 1 ? 's' : ''}`
+// Texto ao lado do "› N" numa linha de série (faturas do cartão ou parcelas de contrato).
+export function rotuloFaturasSeguintes(n, item = 'fatura') {
+  return `+ ${n} ${item}${n !== 1 ? 's' : ''} seguinte${n !== 1 ? 's' : ''}`
 }
 
 // Tipos de agendamento de cartão/gerencial que o motor gera UM POR FATURA (frequency 'once',
@@ -20,6 +20,8 @@ const SERIES_TIPOS = new Set(['pagamento_fatura', 'resgate_reserva', 'gerencial_
 // fluxo. Para o resgate, accountId (conta-origem) entra na chave → origens distintas ficam
 // separadas. Devolve null para agendamentos que NÃO são série de fatura.
 export function seriesKeyOf(s) {
+  // Parcelas de contrato: um agendamento 'once' por mês (src/lib/contratos) → uma linha por papel.
+  if (s.contratoId && (s.frequency || 'once') === 'once') return `contrato|${s.contratoId}|${s.contratoPapel || ''}`
   if (SERIES_TIPOS.has(s.tipo)) {
     // Série = faturas de UM cartão. Sem cartão não é série de fatura — ex.: o resgate avulso de
     // "Será pago com reserva" (tipo resgate_reserva, sem cardId). Antes a chave saía
