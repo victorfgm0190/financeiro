@@ -5292,10 +5292,12 @@ export function AppProvider({ children }) {
   // jaProvisionada de getProvisoesPendentes: parentTxId OU etapa A determinística tx_gerA_).
   // Usada pelo seletor de Fatura do modal "Executar Provisões" para, opcionalmente, ocultar as
   // faturas já totalmente executadas. Espelha exatamente os filtros de getProvisoesPendentes.
+  // `cartoes` ({ [cardId]: pendente }): a mesma flag por cartão — o modal esconde a fatura
+  // (cartão + mês) fechada e paga, então precisa saber quais cartões têm parcelas em cada mês.
   const getFaturasProvisaoGerencial = useCallback(() => {
     const g1 = data.gerencialGroups?.find(g => g.number === 1)
     if (!g1) return []
-    const byFatura = new Map() // ym (YYYY-MM) → pendente (boolean)
+    const byFatura = new Map() // ym (YYYY-MM) → { [cardId]: pendente (boolean) }
     for (const tx of data.transactions) {
       if (tx.type !== 'expense' || tx.accountType !== 'credit') continue
       if (tx.grupoGerencial !== g1.id || !tx.faturaMonthYear) continue
@@ -5304,10 +5306,12 @@ export function AppProvider({ children }) {
         t.type === 'transfer' && t.grupoGerencial === g1.id &&
         (t.parentTxId === tx.id || t.id === etapaAId(tx.id))
       )
-      byFatura.set(tx.faturaMonthYear, (byFatura.get(tx.faturaMonthYear) || false) || !jaProvisionada)
+      const cartoes = byFatura.get(tx.faturaMonthYear) || {}
+      cartoes[tx.accountId] = !!cartoes[tx.accountId] || !jaProvisionada
+      byFatura.set(tx.faturaMonthYear, cartoes)
     }
     return [...byFatura.entries()]
-      .map(([ym, pendente]) => ({ ym, pendente }))
+      .map(([ym, cartoes]) => ({ ym, pendente: Object.values(cartoes).some(Boolean), cartoes }))
       .sort((a, b) => a.ym.localeCompare(b.ym)) // YYYY-MM ordena cronologicamente
   }, [data.gerencialGroups, data.transactions])
 

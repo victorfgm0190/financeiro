@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, CheckCircle } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { prevMonthScheduleDate } from '../../lib/fatura'
 import { useCamadaModal } from '../../context/atalhosHooks'
+import { useApp } from '../../context/AppContext'
 import { faturaNoCicloAtual } from '../../lib/cicloFatura'
 
 // "Executar Gerenciais" (Agendamentos e Resumo da Importação): provisões das parcelas do Grupo G
@@ -34,7 +35,22 @@ function dataLancamentoProvisao(p, financialMonthStartDay) {
   return p.date
 }
 
-export default function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], accounts, financialMonthStartDay = 1, financialMonthMode = 'custom', onConfirm, onClose, preSelecionados = null, filtroInicial = null }) {
+export default function ExecutarGerenciaisModal({ provisoes: todasProvisoes, faturasInfo = [], accounts, financialMonthStartDay = 1, financialMonthMode = 'custom', onConfirm, onClose, preSelecionados = null, filtroInicial = null }) {
+  // Fatura (cartão + mês) fechada E paga some do modal inteiro (dropdown, "Todas as faturas" e
+  // "Mostrar já executadas"). Critérios já existentes: fechada = isFaturaFechada (o mesmo do
+  // dropdown de meses do Importar Fatura); paga = isFaturaPaga do Cartão de Crédito ou
+  // fechadaAntiga (fechada anterior à última fatura paga conta como paga — creditLimitUsage).
+  const { isFaturaFechada, creditUsageByCard } = useApp()
+  const faturaQuitada = useCallback((cardId, ym) => {
+    if (!cardId || !ym || !isFaturaFechada(cardId, ym)) return false
+    const f = creditUsageByCard[cardId]?.faturas.find(x => x.billKey === ym)
+    return !!(f && (f.isFaturaPaga || f.fechadaAntiga))
+  }, [isFaturaFechada, creditUsageByCard])
+  const provisoes = useMemo(
+    () => todasProvisoes.filter(p => !faturaQuitada(p.cardId, p.faturaMonthYear)),
+    [todasProvisoes, faturaQuitada]
+  )
+
   // Pré-seleção inicial: apenas provisões da fatura do ciclo atual. Passadas/futuras iniciam
   // desmarcadas (o usuário pode marcar manualmente). Filtros de fatura/cartão são independentes.
   // Com `preSelecionados` (Resumo da Importação → Resolver): só essas parcelas marcadas.
@@ -57,13 +73,24 @@ export default function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], a
 
   // Opções do seletor de Fatura. Padrão (mostrarExecutadas=false): só faturas PENDENTES (≥1 parcela
   // Grupo G sem tx_gerA_). Marcado: inclui as já executadas. `faturasInfo` traz TODAS as faturas
-  // parceladas do Grupo G com a flag `pendente`; fallback p/ as faturas das provisões (compat).
+  // parceladas do Grupo G com a flag `pendente` por cartão; fallback p/ as faturas das provisões
+  // (compat). Só contam os cartões do filtro de Cartão cuja fatura não está fechada e paga.
+  // `aberta` = algum desses cartões com a fatura não fechada (alvo da troca automática abaixo).
   const faturaOptions = useMemo(() => {
-    const base = faturasInfo.length
-      ? faturasInfo.filter(f => mostrarExecutadas || f.pendente).map(f => f.ym)
-      : provisoes.map(p => p.faturaMonthYear).filter(Boolean)
-    return [...new Set(base)].sort() // YYYY-MM ordena cronologicamente
-  }, [faturasInfo, provisoes, mostrarExecutadas])
+    if (!faturasInfo.length) {
+      const base = provisoes.filter(p => !cartaoFiltro || p.cardId === cartaoFiltro)
+      return [...new Set(base.map(p => p.faturaMonthYear).filter(Boolean))].sort()
+        .map(ym => ({ ym, aberta: base.some(p => p.faturaMonthYear === ym && !isFaturaFechada(p.cardId, ym)) }))
+    }
+    return faturasInfo
+      .map(f => {
+        const cartoes = Object.entries(f.cartoes || {})
+          .filter(([id]) => (!cartaoFiltro || id === cartaoFiltro) && !faturaQuitada(id, f.ym))
+        if (!cartoes.some(([, pendente]) => mostrarExecutadas || pendente)) return null
+        return { ym: f.ym, aberta: cartoes.some(([id]) => !isFaturaFechada(id, f.ym)) }
+      })
+      .filter(Boolean) // faturasInfo já vem em ordem cronológica
+  }, [faturasInfo, provisoes, mostrarExecutadas, cartaoFiltro, faturaQuitada, isFaturaFechada])
   const cartaoOptions = useMemo(() => {
     const ids = [...new Set(provisoes.map(p => p.cardId).filter(Boolean))]
     return ids
@@ -80,27 +107,29 @@ export default function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], a
     [provisoes, faturaFiltro, cartaoFiltro]
   )
 
-  // Ao mudar um filtro, manter checados apenas os que continuam visíveis (nunca re-seleciona).
-  // Prune feito no próprio handler (ação do usuário) com os filtros já atualizados.
-  const pruneSelected = (fat, cart) => {
-    const visibleIds = new Set(provisoes.filter(p => matchFiltros(p, fat, cart)).map(p => p.id))
-    setSelected(prev => new Set([...prev].filter(id => visibleIds.has(id))))
-  }
-  const handleFaturaFiltro = (val) => { setFaturaFiltro(val); pruneSelected(val, cartaoFiltro) }
-  const handleCartaoFiltro = (val) => { setCartaoFiltro(val); pruneSelected(faturaFiltro, val) }
-  // Ao DESmarcar "mostrar já executadas", se a fatura selecionada era executada (não é mais opção),
-  // volta para "Todas as faturas" — evita um filtro apontando p/ uma fatura oculta.
-  const handleMostrarExecutadas = (checked) => {
-    setMostrarExecutadas(checked)
-    if (!checked && faturaFiltro && !faturasInfo.some(f => f.ym === faturaFiltro && f.pendente)) {
-      handleFaturaFiltro('')
-    }
+  // Trocar Fatura ou Cartão limpa a seleção.
+  const handleFaturaFiltro = (val) => { setFaturaFiltro(val); setSelected(new Set()) }
+  const handleCartaoFiltro = (val) => { setCartaoFiltro(val); setSelected(new Set()) }
+  // Fatura selecionada que saiu da lista (troca de cartão, "Mostrar já executadas" desmarcado,
+  // fatura fechada e paga): passa para a primeira fatura aberta disponível (ou a primeira da lista).
+  // Ajuste feito no próprio render (padrão do React p/ estado derivado), não num efeito.
+  if (faturaFiltro && !faturaOptions.some(o => o.ym === faturaFiltro)) {
+    handleFaturaFiltro((faturaOptions.find(o => o.aberta) || faturaOptions[0])?.ym || '')
   }
 
   // Contador, total e confirmação consideram só itens visíveis E marcados.
   const selectedVisible = visibleProvisoes.filter(p => selected.has(p.id))
   const selCount = selectedVisible.length
   const total = selectedVisible.reduce((s, p) => s + p.amount, 0)
+
+  // "Selecionar todas": marca/desmarca as parcelas visíveis (a lista só tem provisões pendentes,
+  // então as já executadas nunca entram). Parcial → checkbox indeterminado (traço).
+  const todasMarcadas = visibleProvisoes.length > 0 && selCount === visibleProvisoes.length
+  const selecionarTodasRef = useRef(null)
+  useEffect(() => {
+    if (selecionarTodasRef.current) selecionarTodasRef.current.indeterminate = selCount > 0 && !todasMarcadas
+  }, [selCount, todasMarcadas])
+  const toggleTodas = () => setSelected(todasMarcadas ? new Set() : new Set(visibleProvisoes.map(p => p.id)))
 
   // Overlay próprio (não usa o Modal): vira camada para os atalhos da tela não dispararem por trás.
   const painelRef = useRef(null)
@@ -128,7 +157,7 @@ export default function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], a
                 onChange={e => handleFaturaFiltro(e.target.value)}
               >
                 <option value="">Todas as faturas</option>
-                {faturaOptions.map(ym => (
+                {faturaOptions.map(({ ym }) => (
                   <option key={ym} value={ym}>{faturaLabel(ym)}</option>
                 ))}
               </select>
@@ -151,10 +180,21 @@ export default function ExecutarGerenciaisModal({ provisoes, faturasInfo = [], a
             <input
               type="checkbox"
               checked={mostrarExecutadas}
-              onChange={e => handleMostrarExecutadas(e.target.checked)}
+              onChange={e => setMostrarExecutadas(e.target.checked)}
               className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0"
             />
             <span className="text-xs text-texto-2">Mostrar já executadas</span>
+          </label>
+          <label className={`flex items-center gap-2 select-none ${visibleProvisoes.length ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+            <input
+              ref={selecionarTodasRef}
+              type="checkbox"
+              checked={todasMarcadas}
+              disabled={visibleProvisoes.length === 0}
+              onChange={toggleTodas}
+              className="w-4 h-4 rounded accent-primary cursor-pointer shrink-0 disabled:cursor-not-allowed"
+            />
+            <span className="text-xs text-texto-2">Selecionar todas</span>
           </label>
         </div>
 
