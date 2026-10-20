@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import Modal from '../shared/Modal'
 import SearchableSelect from '../shared/SearchableSelect'
-import DateInput from '../shared/DateInput'
+import DataPagamentoField from '../shared/DataPagamentoField'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -61,7 +61,7 @@ export default function EfetivarModal({ prov, onConfirmar, onClose }) {
         {modo === 'lancamento' && (
           <div>
             <label className="label">Data do lançamento</label>
-            <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} />
+            <DataPagamentoField value={date} onChange={e => setDate(e.target.value)} vencimento={prov.date} />
           </div>
         )}
         <div>

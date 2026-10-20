@@ -11,6 +11,7 @@ import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
+import DataPagamentoField from '../shared/DataPagamentoField'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
@@ -222,6 +223,9 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   const occ = nextDate ? occEfetiva(schedule, nextDate) : { date: today, amount: schedule.amount }
   const occAmount = valorParaInput(occ.amount)
   const occDate = occ.date || today
+  // Vencimento dos atalhos "Hoje"/"Vencimento" do campo Data: a data efetiva da ocorrência
+  // (sem ocorrência pendente não há vencimento — o campo nasce em hoje, como antes).
+  const occVenc = nextDate ? occDate : null
 
   const [payAccountId, setPayAccountId] = useState(schedule.accountId || '')
   const [payPayee, setPayPayee] = useState(schedule.payee || '')
@@ -541,7 +545,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Data</label>
-                <DateInput className="input" value={finDate} onChange={e => setFinDate(e.target.value)} />
+                <DataPagamentoField value={finDate} onChange={e => setFinDate(e.target.value)} vencimento={nextDate} />
               </div>
               {finErro && <p className="text-xs text-despesa">{finErro}</p>}
             </>
@@ -566,7 +570,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Data</label>
-                <DateInput className="input" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -605,7 +609,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Data</label>
-                <DateInput className="input" value={recDate} onChange={e => setRecDate(e.target.value)} />
+                <DataPagamentoField value={recDate} onChange={e => setRecDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -676,7 +680,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               )}
               <div>
                 <label className="label">Data</label>
-                <DateInput className="input" value={trfDate} onChange={e => setTrfDate(e.target.value)} />
+                <DataPagamentoField value={trfDate} onChange={e => setTrfDate(e.target.value)} vencimento={occVenc} />
               </div>
               <div>
                 <label className="label">Anotações</label>
@@ -1443,7 +1447,8 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
   const ov = !isOnce && occDate ? schedule.overrides?.[occDate] : null
 
   const [amount, setAmount] = useState(String(ov?.amount ?? schedule.amount ?? ''))
-  const [date, setDate] = useState(ov?.date || (isOnce ? schedule.startDate : occDate) || format(new Date(), 'yyyy-MM-dd'))
+  const vencimento = ov?.date || (isOnce ? schedule.startDate : occDate) || null
+  const [date, setDate] = useState(vencimento || format(new Date(), 'yyyy-MM-dd'))
 
   const func = schedule.reservaFuncaoId
     ? (reserveFunctions || []).find(f => f.id === schedule.reservaFuncaoId)
@@ -1486,10 +1491,7 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
             </div>
             <div>
               <label className="label">Data real *</label>
-              <input
-                type="date" className="input"
-                value={date} onChange={e => setDate(e.target.value)}
-              />
+              <DataPagamentoField value={date} onChange={e => setDate(e.target.value)} vencimento={vencimento} />
             </div>
           </div>
 
@@ -1597,7 +1599,12 @@ function ResumoLote({ resumo }) {
 
 function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   const { scheduleReservaFuncoes } = useApp()
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  // Vencimento de cada linha = data efetiva da ocorrência pendente (a mesma do registro
+  // individual); a data geral só tem vencimento quando todas as linhas vencem no mesmo dia.
+  const vencDe = (r) => (r.nextDate ? occEfetiva(r.schedule, r.nextDate).date || r.nextDate : null)
+  const vencimentos = [...new Set(selectedRows.map(vencDe))]
+  const vencComum = vencimentos.length === 1 ? vencimentos[0] : null
+  const [date, setDate] = useState(vencComum || '')
   // Valor efetivo da ocorrência pendente — valor inicial do input.
   const valorDe = valorOcorrencia
   // Resgate com detalhamento por função: o valor vem das linhas do detalhamento (igual ao
@@ -1609,7 +1616,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   // Por linha: valor (texto) e data; dataEditada = o usuário mexeu na data daquela linha, e a
   // data geral do topo deixa de sobrescrevê-la.
   const [itens, setItens] = useState(() => Object.fromEntries(selectedRows.map(r => [
-    r.schedule.id, { valor: valorParaInput(valorDe(r)), date: format(new Date(), 'yyyy-MM-dd'), dataEditada: false },
+    r.schedule.id, { valor: valorParaInput(valorDe(r)), date: vencDe(r) || format(new Date(), 'yyyy-MM-dd'), dataEditada: false },
   ])))
   const setItem = (id, patch) => setItens(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   const onDataGeral = (v) => {
@@ -1655,12 +1662,8 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
           {/* Date picker */}
           <div>
             <label className="label">Data de registro</label>
-            <DateInput
-              className="input"
-              value={date}
-              onChange={e => onDataGeral(e.target.value)}
-            />
-            <p className="text-[11px] text-texto-3 mt-1">Aplicada a todos os itens cuja data não foi alterada individualmente.</p>
+            <DataPagamentoField value={date} onChange={e => onDataGeral(e.target.value)} vencimento={vencComum} />
+            <p className="text-[11px] text-texto-3 mt-1">Cada item abre no próprio vencimento. A data geral é aplicada a todos os itens cuja data não foi alterada individualmente.</p>
           </div>
 
           {/* List of selected items */}
@@ -1720,10 +1723,12 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                     <span className={`text-[11px] ${ruim ? 'text-perigo' : 'text-texto-3'}`}>
                       {ruim ? (it?.date ? 'Informe um valor maior que zero.' : 'Informe a data.') : detalhado ? 'Valor do detalhamento por função' : 'Data do lançamento'}
                     </span>
-                    <DateInput
-                      className="input !py-1 !px-2 text-xs w-36 shrink-0"
+                    <DataPagamentoField
+                      compact
+                      className="input !py-1 !px-2 text-xs"
                       value={it?.date || ''}
                       onChange={e => setItem(schedule.id, { date: e.target.value, dataEditada: true })}
+                      vencimento={vencDe(r)}
                     />
                   </div>
                 </div>

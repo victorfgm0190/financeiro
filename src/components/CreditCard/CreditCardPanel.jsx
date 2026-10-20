@@ -15,6 +15,9 @@ import { agendamentosPrevistosDaFatura } from '../../lib/gerencialPrevistos'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
+import DataPagamentoField from '../shared/DataPagamentoField'
+import { dataPadraoPagamento, hojeSP } from '../../lib/dataPagamento'
+import { dueDateInMonth } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -27,7 +30,6 @@ import TransactionForm from '../Transactions/TransactionForm'
 import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
-import DateInput from '../shared/DateInput'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
@@ -467,7 +469,7 @@ export default function CreditCardPanel() {
   const saveScroll = useScrollSaver()
   const [showPayModal, setShowPayModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
-  const [payDate, setPayDate] = useState(today())
+  const [payDate, setPayDate] = useState(hojeSP)
   const [payFromAccount, setPayFromAccount] = useState('')
   const [showNewTx, setShowNewTx] = useState(false)
   const [editTx, setEditTx] = useState(null)
@@ -488,6 +490,14 @@ export default function CreditCardPanel() {
     () => accounts.find(a => a.id === selectedCardId) || creditCards[0] || null,
     [accounts, selectedCardId, creditCards]
   )
+  // Vencimento da fatura selecionada (mês da fatura + dia de vencimento do cartão, clampado ao
+  // fim do mês): data padrão do "Pagar Fatura". Sem dueDay cadastrado não há vencimento.
+  const vencimentoFatura = useMemo(() => {
+    if (!billKey || !selectedCard?.dueDay) return null
+    const [y, m] = billKey.split('-').map(Number)
+    const d = dueDateInMonth(y, m - 1, Number(selectedCard.dueDay))
+    return `${y}-${String(m).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [billKey, selectedCard])
 
   // ── Revisar › Competência fora do lugar ─────────────────────────────────────
   // Gasto do cartão em fatura implausível e reserva gerencial (Ger. do cartão) com fatura divergente
@@ -943,7 +953,7 @@ export default function CreditCardPanel() {
           </button>}
           {podeIncluir && <button
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm"
-            onClick={() => { setShowPayModal(true); setPayAmount(String(billTotal)) }}
+            onClick={() => { setShowPayModal(true); setPayAmount(String(billTotal)); setPayDate(dataPadraoPagamento(vencimentoFatura)) }}
           >
             <DollarSign size={14} /> Pagar Fatura
           </button>}
@@ -1546,7 +1556,7 @@ export default function CreditCardPanel() {
           </div>
           <div>
             <label className="label">Data do Pagamento</label>
-            <DateInput className="input" value={payDate} onChange={e => setPayDate(e.target.value)} />
+            <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={vencimentoFatura} />
           </div>
           <div className="flex gap-3">
             <button className="btn-secondary flex-1" onClick={() => setShowPayModal(false)}>Cancelar</button>

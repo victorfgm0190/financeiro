@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { fmt } from '../shared/utils'
-import DateInput from '../shared/DateInput'
+import DataPagamentoField from '../shared/DataPagamentoField'
+import { dataPadraoPagamento } from '../../lib/dataPagamento'
 import { pagarParcela } from '../../lib/bemApi'
-import { fmtData, hojeIso, calcularRateio, round2 } from './bemUtils'
+import { fmtData, calcularRateio, round2 } from './bemUtils'
 
 export default function PagarParcelaModal({
   bem, financiamento, parcela, contasCorrentes, contaCentralId = '', avisoContaCentral = null, onCancel, onSuccess, onErro,
@@ -11,7 +12,7 @@ export default function PagarParcelaModal({
   // Pagamento parcial anterior já abateu parte da parcela — o padrão é quitar o que falta.
   const restante = round2(Math.max(0, (parcela.total_provisioned || 0) - (parcela.total_pago || 0)))
   const [valorPago, setValorPago] = useState(String(restante))
-  const [dataPagamento, setDataPagamento] = useState(hojeIso())
+  const [dataPagamento, setDataPagamento] = useState(() => dataPadraoPagamento(parcela.data_vencimento))
   const [contaOrigemId, setContaOrigemId] = useState(
     financiamento?.conta_origem_id
       || contaCentralId
@@ -84,10 +85,10 @@ export default function PagarParcelaModal({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="label">Data do Pagamento *</label>
-          <DateInput className="input" required value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} />
+          <DataPagamentoField required value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} vencimento={parcela.data_vencimento} />
         </div>
         <div>
           <label className="label">Conta de Origem</label>
