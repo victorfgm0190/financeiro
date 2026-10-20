@@ -29,7 +29,7 @@ const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-rece
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
   const isMobile = useIsMobile()
-  const { schedules: todosAgendamentos, markScheduleRegistered, pode } = useApp()
+  const { schedules: todosAgendamentos, markScheduleRegistered, marcarDataOcorrencia, pode } = useApp()
   // Vincular grava a baixa: só com permissão de editar agendamentos.
   const podeVincular = pode('agendamentos', 'editar')
   const resumo = useMemo(() => resumoRegistradas(schedule, transactions), [schedule, transactions])
@@ -166,7 +166,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                     transactions={transactions}
                     schedules={todosAgendamentos}
                     accounts={accounts}
-                    onVincular={(txId) => { markScheduleRegistered(schedule.id, vinculando, metaBaixaGerada(txId)); setVinculando(null) }}
+                    onVincular={(txId) => { markScheduleRegistered(schedule.id, vinculando, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, vinculando); setVinculando(null) }}
                   />
                   <button type="button" className="text-[11px] text-texto-3 hover:text-texto-2" onClick={() => setVinculando(null)}>Cancelar</button>
                 </div>

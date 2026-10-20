@@ -141,6 +141,8 @@ async function handler(req, res) {
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS categoria_cpf_id TEXT`)
     // Agenda no celular: o feed .ics exporta só os agendamentos com sincronizar_agenda (padrão true).
     await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS sincronizar_agenda BOOLEAN NOT NULL DEFAULT true`)
+    // Lançamento gerado por agendamento: data-BASE da ocorrência baixada (selo "x/N" dos parcelados).
+    await query(`ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS data_ocorrencia TEXT`)
     // Ocorrências de agendamento baixadas por uma importação de fatura
     // ([{ scheduleId, occurrenceDate, txId }]) — o estorno da importação as reabre.
     await query(`ALTER TABLE card_imports ADD COLUMN IF NOT EXISTS schedule_baixas JSONB NOT NULL DEFAULT '[]'::jsonb`)

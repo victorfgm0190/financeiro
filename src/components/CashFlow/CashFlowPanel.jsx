@@ -23,6 +23,8 @@ import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
+import SeloParcela from '../shared/SeloParcela'
+import { criarSeloParcela } from '../../lib/numeroParcela'
 import { resolverTipoDocumento, itemDaLinhaFluxo } from '../../lib/tiposDocumento'
 import { statusConfirmacaoLinha, STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
 import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
@@ -108,6 +110,9 @@ export default function CashFlowPanel({ setActivePage }) {
     contaPorId: new Map(accounts.map(a => [a.id, a])),
   }), [transactions, schedules, accounts])
   const docDaLinha = (r) => resolverTipoDocumento(itemDaLinhaFluxo(r, ctxDoc), tiposDocumento)
+  // Selo "x/N" das linhas REALIZADAS geradas por agendamento parcelado (data_ocorrencia gravada).
+  const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
+  const seloDaLinha = (r) => (r.real || r._lancamento ? seloDe(ctxDoc.txPorId.get(r._key)) : null)
 
   const [toast, setToast] = useState(null)
   const avisar = (message, variant = 'success') => setToast({ message, variant })
@@ -685,7 +690,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 horizonte={horizonte}
                 qtdContas={contas.length}
                 corSaldo={corSaldo}
-                subtitulo={(r) => `${catName(r.categoryId)} · ${accName(contaDaLinha(r, accountIds))}`}
+                subtitulo={(r) => [catName(r.categoryId), accName(contaDaLinha(r, accountIds)), seloDaLinha(r)].filter(Boolean).join(' · ')}
                 statusCelula={statusCelula}
                 docBadge={(r) => <TipoDocumentoBadge tipo={docDaLinha(r)} />}
                 docDaLinha={docDaLinha}
@@ -857,6 +862,7 @@ export default function CashFlowPanel({ setActivePage }) {
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-xs truncate max-w-xs ${r.ativa ? 'text-texto-1' : 'text-texto-3 line-through'}`} title={r.description}>{r.description}</span>
+                            <SeloParcela rotulo={seloDaLinha(r)} />
                             <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${BADGE[tipo]}`}>{tipo}</span>
                           </div>
                         </td>

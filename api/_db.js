@@ -156,7 +156,7 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // Colunas NOVAS que o app já manda, mas que um ambiente pode ainda não ter (migração não rodada
 // nele): saem do upsert em vez de derrubar o sync daquele ambiente. "Presente" fica em cache por
 // banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
-export const COLUNAS_OPCIONAIS = { lancamentos: ['importacao_id', 'fitid'], agendamentos: ['sincronizar_agenda'] }
+export const COLUNAS_OPCIONAIS = { lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia'], agendamentos: ['sincronizar_agenda'] }
 const cacheColunasOpcionais = new Map()
 export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()
 

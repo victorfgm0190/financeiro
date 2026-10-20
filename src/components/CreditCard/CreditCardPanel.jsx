@@ -480,7 +480,7 @@ export default function CreditCardPanel() {
   // Parcelados: duplica só a parcela clicada (num/total/parentTxId descartados).
   const handleDuplicate = (tx, newDate) => {
     // eslint-disable-next-line no-unused-vars
-    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, dataOcorrencia, ...rest } = tx
     setEditTx({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
   }
 

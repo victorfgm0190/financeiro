@@ -20,6 +20,8 @@ import ReconciledTotals from '../shared/ReconciledTotals'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
+import SeloParcela from '../shared/SeloParcela'
+import { criarSeloParcela } from '../../lib/numeroParcela'
 
 // ─── Credit fatura helpers ──────────────────────────────────────────────────
 
@@ -106,7 +108,9 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico, pode } = useApp()
+  const { profileTransactions: transactions, schedules, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico, pode } = useApp()
+  // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
+  const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   // Nível de acesso (lançamentos): novo/duplicar/estornar = incluir; reconciliar = editar; excluir = excluir.
   const podeIncluir = pode('lancamentos', 'incluir')
   const podeEditar = pode('lancamentos', 'editar')
@@ -129,7 +133,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
   // fatura/dateCartao. NÃO salva sozinho. Parcelados: só a parcela clicada.
   const handleDuplicate = (tx, newDate) => {
     // eslint-disable-next-line no-unused-vars
-    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, dataOcorrencia, ...rest } = tx
     setEditTx({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
     setShowEdit(true)
   }
@@ -249,7 +253,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                   key={tx.id}
                   type="expense"
                   title={tx.payee || tx.description || 'Despesa'}
-                  subtitle={tx.payee ? tx.description : null}
+                  subtitle={[tx.payee ? tx.description : null, seloDe(tx)].filter(Boolean).join(' · ') || null}
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.amount}
                   dimmed={!tx.reconciled}
@@ -284,7 +288,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                     <tr key={tx.id} className="border-b border-borda/50 hover:bg-surface-hover/30 transition-colors">
                       <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
-                        <p className="text-texto-1 text-sm">{tx.description}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
+                        <p className="text-texto-1 text-sm">{tx.description}{seloDe(tx) && <span className="ml-1.5 align-middle"><SeloParcela rotulo={seloDe(tx)} /></span>}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
                         {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">

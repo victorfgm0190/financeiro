@@ -22,6 +22,8 @@ import ReconcileBadge from '../shared/ReconcileBadge'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
+import SeloParcela from '../shared/SeloParcela'
+import { criarSeloParcela } from '../../lib/numeroParcela'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -205,7 +207,7 @@ function ReconcileBtn({ reconciled, onClick }) {
   return <ReconcileBadge reconciled={reconciled} onClick={onClick} />
 }
 
-function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect, mostrarEditar = true }) {
+function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDuplicate, onDelete, onToggleReconcile, todayStr, selectMode, selected, onToggleSelect, mostrarEditar = true, seloParcela = null }) {
   const { tx } = row
   const delta = txDelta(tx, accountId)
   const isIn = delta > 0
@@ -269,6 +271,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
               : <ArrowUpCircle size={12} className="text-despesa shrink-0" />
           }
           <span className="text-xs text-texto-1 truncate" title={historico}>{historico}</span>
+          <SeloParcela rotulo={seloParcela} />
           {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">
@@ -496,6 +499,8 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton, atalhoNovoTx }) {
   const tituloNovoTx = useTituloAtalho('Novo Lançamento', atalhoNovoTx)
   const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos, pode } = useApp()
+  // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
+  const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   // Nível de acesso (src/lib/permissoes.js): lançamentos do extrato — incluir/editar/excluir.
   const podeIncluirTx = pode('lancamentos', 'incluir')
   const podeEditarTx = pode('lancamentos', 'editar')
@@ -584,7 +589,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
   const handleDuplicate = (tx, newDate) => {
     if (!onEdit) return
     // eslint-disable-next-line no-unused-vars
-    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, ...rest } = tx
+    const { id, createdAt, scheduleId, origin, gerencialScheduleId, reservaAuto, parentTxId, installmentNum, installmentTotal, installmentKey, faturaMonthYear, dateCartao, dataOcorrencia, ...rest } = tx
     onEdit({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
   }
 
@@ -1384,6 +1389,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
                     selectMode={selectMode}
                     selected={selectedIds.has(row.tx.id)}
                     onToggleSelect={toggleSelect}
+                    seloParcela={seloDe(row.tx)}
                   />
                 )
               )}
@@ -1433,6 +1439,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
           const subtitle = isTransfer
             ? `${fromAcc ? (fromAcc.apelido || fromAcc.name) : '—'} → ${toAcc ? (toAcc.apelido || toAcc.name) : '—'}`
             : (tx.payee && tx.description && tx.description !== tx.payee ? tx.description : null)
+          const selo = seloDe(tx)
           const title = tx.payee || tx.description ||
             (tx.type === 'income' ? 'Receita' : tx.type === 'expense' ? 'Despesa' : 'Transferência')
           const isSelected = selectedIds.has(tx.id)
@@ -1441,7 +1448,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
               key={i}
               type={tx.type}
               title={title}
-              subtitle={subtitle}
+              subtitle={selo ? [subtitle, selo].filter(Boolean).join(' · ') : subtitle}
               dateLabel={fmtDate(tx.date)}
               amount={Math.abs(delta)}
               dimmed={selectMode ? false : !tx.reconciled}

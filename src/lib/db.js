@@ -561,6 +561,8 @@ export const txToRow = (tx) => ({
   // (migração ainda não rodada) → o upsert as descarta (api/_db.js COLUNAS_OPCIONAIS).
   importacao_id: tx.importacaoId || null,
   fitid: tx.fitid || null,
+  // Gerado por agendamento: data-BASE da ocorrência baixada (não a do pagamento). Só exibição.
+  data_ocorrencia: tx.dataOcorrencia || null,
   created_at: tx.createdAt || new Date().toISOString(),
   // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
   // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
@@ -613,6 +615,7 @@ export const rowToTx = (r) => ({
   tipoDocumentoId: r.tipo_documento_id || null,
   importacaoId: r.importacao_id || null,
   fitid: r.fitid || null,
+  dataOcorrencia: r.data_ocorrencia || null,
   createdAt: r.created_at,
 })
 

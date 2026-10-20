@@ -165,7 +165,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia } = useApp()
   // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
   const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
   const duplicado = duplicadoId ? transactions.find(t => t.id === duplicadoId) : null
@@ -315,6 +315,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
           categoryId: l.categoria_id || '',
           description: l.descricao,
           scheduleId: schedule.id,
+          dataOcorrencia: nextDate || today,
           origin: ORIGIN.PAGAMENTO_DIVIDA,
         })
       }
@@ -362,6 +363,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         // Tipo de documento e centro de custo não estão no modal → herdam do agendamento.
         ...camposHerdadosNoPagamento(schedule),
         scheduleId: schedule.id,
+        dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
@@ -392,6 +394,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         // Recebimento não tem select de grupo: grupo, tipo de documento e centro de custo herdam.
         ...camposHerdadosNoPagamento(schedule, {}, { incluirGrupo: true }),
         scheduleId: schedule.id,
+        dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
@@ -416,6 +419,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
         reservaFuncaoId: schedule.reservaFuncaoId || autoFuncId,
         ...categoriasEntrePerfis(trfFromAcc, trfToAcc, { categoriaCnpjId: trfCatCnpj, categoriaCpfId: trfCatCpf }),
         scheduleId: schedule.id,
+        dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, metaBaixaGerada(txId))
@@ -711,7 +715,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               transactions={transactions}
               schedules={todosAgendamentos}
               accounts={accounts}
-              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); onClose() }}
+              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, nextDate || today); onClose() }}
             />
           )}
         </div>

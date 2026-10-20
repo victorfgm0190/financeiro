@@ -32,3 +32,21 @@ export function rotuloParcela(schedule, dataOcorrencia) {
   const p = getNumeroParcela(schedule, dataOcorrencia)
   return p ? `${p.numero}/${p.total}` : null
 }
+
+// Selo "x/N" de um LANÇAMENTO gerado por agendamento: só com data_ocorrencia gravada (a data-BASE
+// da ocorrência baixada). O agendamento vem do schedule_id ou, no "Vincular a lançamento existente"
+// (que não grava schedule_id), do registered_meta que aponta o lançamento. Agendamento não
+// parcelado → null. Devolve uma função (tx) → "2/4" | null, montada uma vez por lista.
+export function criarSeloParcela(schedules = []) {
+  const porId = new Map()
+  const porMeta = new Map()
+  for (const s of schedules || []) {
+    porId.set(s.id, s)
+    for (const m of Object.values(s.registeredMeta || {})) if (m?.lancamento_id) porMeta.set(m.lancamento_id, s)
+  }
+  return (tx) => {
+    if (!tx?.dataOcorrencia) return null
+    const s = (tx.scheduleId && porId.get(tx.scheduleId)) || porMeta.get(tx.id)
+    return s ? rotuloParcela(s, tx.dataOcorrencia) : null
+  }
+}

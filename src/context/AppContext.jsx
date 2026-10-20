@@ -1409,6 +1409,8 @@ export function AppProvider({ children }) {
             costCenter: schedule.costCenter || null,
             date,
             scheduleId: schedule.id,
+            // Data-BASE da ocorrência baixada (não a do lançamento): selo "x/N" dos parcelados.
+            dataOcorrencia: occurrenceDate,
             reservaFuncaoId: schedule.reservaFuncaoId || null,
             // O lançamento efetivado herda o tipo de documento do agendamento.
             tipoDocumentoId: schedule.tipoDocumentoId || null,
@@ -2765,6 +2767,7 @@ export function AppProvider({ children }) {
           costCenter: schedule.costCenter,
           date,
           scheduleId,
+          dataOcorrencia: occurrenceDate,
           reservaFuncaoId: srf.reservaFuncaoId,
           tipoDocumentoId: schedule.tipoDocumentoId || null,
           ...categoriasPerfis,
@@ -2812,6 +2815,7 @@ export function AppProvider({ children }) {
         costCenter: schedule.costCenter,
         date,
         scheduleId,
+        dataOcorrencia: occurrenceDate,
         reservaFuncaoId: schedule.reservaFuncaoId || null,
         // O lançamento efetivado herda o tipo de documento do agendamento.
         tipoDocumentoId: schedule.tipoDocumentoId || null,
@@ -4710,6 +4714,16 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // "Vincular a lançamento existente": grava no lançamento a data-BASE da ocorrência baixada (selo
+  // "x/N" dos parcelados). Só esse campo — sem o recálculo de fatura do updateTransaction.
+  const marcarDataOcorrencia = useCallback((txId, data) => {
+    if (!txId || !data) return
+    update(d => ({
+      ...d,
+      transactions: d.transactions.map(t => t.id === txId ? { ...t, dataOcorrencia: String(data).slice(0, 10) } : t),
+    }))
+  }, [update])
+
   // Agenda no celular (em lote): marca/desmarca "Sincronizar com a agenda do celular" e regera o
   // feed na hora. Devolve quantos mudaram.
   const definirSincronizarAgenda = useCallback((ids, valor) => {
@@ -5678,7 +5692,7 @@ export function AppProvider({ children }) {
       addAccountGroup, updateAccountGroup, deleteAccountGroup, moveAccountGroup, reorderAccountGroups, moveAccount,
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
-      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente, definirSincronizarAgenda,
+      findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, marcarDataOcorrencia, baixarCobrancaRecorrente, definirSincronizarAgenda,
       addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,

@@ -20,6 +20,8 @@ import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
 import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/herancaCampos'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
+import SeloParcela from '../shared/SeloParcela'
+import { criarSeloParcela } from '../../lib/numeroParcela'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoRegistros, irmasLancamento, parcelaCartaoPendente,
   serieKeyDe, mensagemAplicada,
@@ -123,6 +125,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     reserveFunctions, settings, findLinkedResgate, activeProfileId, categoryGroupOrder,
     registrarEdicao, temHistorico, profiles, pode, tiposDocumento = [],
   } = useApp()
+  // Lançamento gerado por agendamento parcelado: "Parcela x/N" pela data_ocorrencia gravada.
+  const seloParcela = useMemo(() => (initial?.id ? criarSeloParcela(schedules)(initial) : null), [initial, schedules])
   // Nível de acesso: registrar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('lancamentos', initial?.id ? 'editar' : 'incluir')
 
@@ -1323,7 +1327,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {initial?.id && (
-        <div className="flex justify-end -mb-2">
+        <div className="flex items-center justify-end gap-2 -mb-2">
+          {seloParcela && (
+            <span className="mr-auto flex items-center gap-1.5 text-xs text-texto-2" title={`Ocorrência de ${fmtDate(initial.dataOcorrencia)} do agendamento`}>
+              Parcela <SeloParcela rotulo={seloParcela} />
+            </span>
+          )}
           <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
             <History size={13} /> Histórico
             {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
