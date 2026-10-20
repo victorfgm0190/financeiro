@@ -4,6 +4,7 @@ import { publicarAgendaJa } from '../../lib/agendaFeedApi'
 import { useApp } from '../../context/AppContext'
 import { today, fmt, buildAccountSelectOptions } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { rotuloParcela } from '../../lib/numeroParcela'
 import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
@@ -406,6 +407,8 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
     skipped: [],
   }
   const preview = form.startDate && form.frequency ? getNextOccurrences(previewSchedule, 12) : []
+  // "x/N" de cada card: com as puladas REAIS do formulário (pulada consome a posição).
+  const scheduleParcela = { ...previewSchedule, installments: Number(form.installments) || 0, skipped: form.skipped }
 
   // Valor efetivo da próxima ocorrência do agendamento já salvo (respeita override individual).
   // Mostrado abaixo do campo Valor quando difere do valor base, para o usuário saber que a
@@ -1233,6 +1236,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                     } hover:ring-1 hover:ring-borda-forte`}
                   >
                     <span className={isSkipped ? 'line-through opacity-40' : ''}>{dataBR(isSkipped ? date : ef.date)}</span>
+                    {rotuloParcela(scheduleParcela, date) && (
+                      <span className="block text-[9px] text-texto-3 mt-0.5">{rotuloParcela(scheduleParcela, date)}</span>
+                    )}
                     {isSkipped ? (
                       <span className="block text-[9px] text-texto-3 mt-0.5">Pulado</span>
                     ) : (

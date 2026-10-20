@@ -17,6 +17,7 @@ import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import { rotuloParcela } from '../../lib/numeroParcela'
 import FilterBar from './FilterBar'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -888,6 +889,12 @@ function ScheduleRow({
     return `${fmtDate(d)} ↔ ${t ? `${fmtDate(t.date)} ${t.description || '(sem descrição)'} ${fmt(t.amount)}` : txId}`
   }).join('\n') : ''
   const isInstallment = schedule.occurrenceType === 'installment'
+  // Selo "x/N": número da ocorrência mostrada (a próxima pendente, ou a seguinte no calendário).
+  // Encerrado (sem próxima) → quantas foram consumidas.
+  const dataParcela = futura ? (futura.original || futura.data) : nextDate
+  const seloParcela = isInstallment
+    ? (dataParcela ? rotuloParcela(schedule, dataParcela) : (schedule.frequency || 'once') !== 'once' ? `${totalDone}/${schedule.installments}` : null)
+    : null
   // Auto-registro que não criou a ocorrência por achar um lançamento parecido (src/lib/autoRegistro.js).
   const duplicados = possiveisDuplicados?.get(schedule.id)
   const nDuplicados = duplicados?.size || 0
@@ -1092,9 +1099,9 @@ function ScheduleRow({
                 <List size={10} /> Ver gastos
               </button>
             )}
-            {isInstallment && (
-              <span className="text-xs bg-surface-hover/60 text-texto-2 px-1 py-0.5 rounded whitespace-nowrap">
-                {totalDone}/{schedule.installments}x
+            {seloParcela && (
+              <span className="text-xs bg-surface-hover/60 text-texto-2 px-1 py-0.5 rounded whitespace-nowrap" title="Parcela desta ocorrência">
+                {seloParcela}
               </span>
             )}
             {canConfirm && nextDate && podeEditar && !futura && (
@@ -1308,7 +1315,12 @@ function ScheduleRow({
                   <ul className="space-y-0.5 max-w-md">
                     {futureItems.map((it, i) => (
                       <li key={i} className="flex items-center justify-between gap-4 text-xs py-0.5 border-b border-borda/30 last:border-0">
-                        <span className="text-texto-2">{fmtDate(it.date)}</span>
+                        <span className="text-texto-2">
+                          {fmtDate(it.date)}
+                          {isInstallment && it.base && rotuloParcela(schedule, it.base) && (
+                            <span className="ml-2 text-[10px] text-texto-3">{rotuloParcela(schedule, it.base)}</span>
+                          )}
+                        </span>
                         <span className="text-texto-2 font-medium">{fmt(it.amount)}</span>
                       </li>
                     ))}
@@ -1987,7 +1999,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
               nextDate={item.row.nextDate}
               futureItems={item.proxima ? (item.row.futureItems || []) : []}
               isSerie={item.row.isSerie}
-              futura={item.proxima ? null : { data: item.data, amount: item.amount, antesDe: item.antesDe }}
+              futura={item.proxima ? null : { data: item.data, original: item.original, amount: item.amount, antesDe: item.antesDe }}
               {...rowProps}
               selectionMode={false}
               isSelected={false}
