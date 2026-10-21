@@ -16,7 +16,7 @@ describe('rota de Configurações no hash', () => {
     expect(parseConfigHash('#config')).toEqual({ aba: 'geral', secao: 'periodo' })
     expect(parseConfigHash('#config/regras')).toEqual({ aba: 'regras', secao: 'classificacao' })
     expect(parseConfigHash('#config/xyz/abc')).toEqual({ aba: 'geral', secao: 'periodo' })
-    expect(parseConfigHash('#config/dados/categorias')).toEqual({ aba: 'dados', secao: 'backup' })
+    expect(parseConfigHash('#config/dados/categorias')).toEqual({ aba: 'dados', secao: 'dados-aparelho' })
   })
 
   it('ida e volta', () => {
@@ -39,7 +39,7 @@ describe('rota de Configurações no hash', () => {
       ['periodo', 'estornos', 'perfis', 'agenda-celular'],
       ['categorias', 'centros-custo', 'grupos-contas', 'controle-gerencial', 'favorecidos', 'tipos-documento', 'depara-importacao', 'atalhos'],
       ['classificacao', 'grupo-gerencial'],
-      ['backup', 'importacao', 'manutencao'],
+      ['dados-aparelho', 'backup', 'importacao', 'manutencao'],
       ['usuarios'],
       ['zona-perigo'],
     ])

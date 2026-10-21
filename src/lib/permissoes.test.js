@@ -64,7 +64,9 @@ describe('rotas e tabelas', () => {
 
 describe('navegação', () => {
   it('páginas e Configurações por permissão', () => {
-    expect(podeVerPagina(U('consulta'), 'settings')).toBe(false)
+    // Configurações abre para todos (Consulta vê só Dados › Dados deste aparelho).
+    expect(podeVerPagina(U('consulta'), 'settings')).toBe(true)
+    expect(podeVerPagina(null, 'settings')).toBe(false)
     expect(podeVerPagina(U('operador'), 'settings')).toBe(true)
     expect(podeVerPagina(U('personalizado', { reservas: { ver: true } }), 'reservas')).toBe(true)
     expect(podeVerPagina(U('personalizado'), 'budget')).toBe(false)
@@ -73,6 +75,6 @@ describe('navegação', () => {
     expect(podeVerModuloMobile(U('consulta'), { id: 'lancamento' })).toBe(false)
     expect(podeVerModuloMobile(U('operador'), { id: 'lancamento' })).toBe(true)
     expect(podeVerModuloMobile(U('consulta'), { id: 'inicio' })).toBe(true)
-    expect(podeVerModuloMobile(U('consulta'), { id: 'configuracoes', page: 'settings' })).toBe(false)
+    expect(podeVerModuloMobile(U('consulta'), { id: 'configuracoes', page: 'settings' })).toBe(true)
   })
 })

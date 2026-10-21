@@ -35,6 +35,9 @@ export const CONFIG_ABAS = [
   {
     id: 'dados', label: 'Dados',
     secoes: [
+      // todos: visível a TODOS os níveis (até Consulta), mesmo sem acesso ao resto da aba — apagar os
+      // dados do próprio aparelho não mexe na nuvem.
+      { id: 'dados-aparelho', label: 'Dados deste aparelho', todos: true },
       { id: 'backup', label: 'Backup' },
       { id: 'importacao', label: 'Importação' },
       { id: 'manutencao', label: 'Manutenção' },

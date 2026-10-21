@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight } from 'lucide-react'
+import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import { noAmbientePrincipal } from '../../lib/api'
@@ -20,6 +20,7 @@ import { mobileModules } from '../../mobile/modules'
 import { secoesConfigSoDesktop } from '../../mobile/navegacao'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import AgendaCelularPanel from './AgendaCelularPanel'
+import SairModal from '../Offline/SairModal'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import PerfisMultiSelect from './PerfisMultiSelect'
@@ -109,6 +110,7 @@ export default function SettingsPanel() {
   const [newGRule, setNewGRule] = useState({ contains: '', isParcelado: 'any', minAmount: '', maxAmount: '', grupoGerencialId: '' })
   const [newCC, setNewCC] = useState('')
   const [confirmReset, setConfirmReset] = useState(false)
+  const [apagarAparelho, setApagarAparelho] = useState(false)
   const [recalcStatus, setRecalcStatus] = useState({ running: false, total: 0, done: 0, totalBalance: 0, totalProjected: 0 })
   const [corrigirStatus, setCorrigirStatus] = useState(null)
   const [faturaStatus, setFaturaStatus] = useState({ running: false, total: 0, done: 0, finished: false })
@@ -600,10 +602,13 @@ export default function SettingsPanel() {
   // Abas por módulo (src/lib/permissoes.js): Usuários só admin; Geral/Dados/Zona de perigo =
   // Configurações do sistema; Cadastros/Regras = Cadastros (operador vê, não edita).
   const ehAdmin = pode('usuarios', 'ver')
+  // Seção `todos` (Dados › Dados deste aparelho) aparece mesmo sem acesso ao módulo da aba.
   const abas = CONFIG_ABAS
-    .filter(a => pode(MODULO_DA_ABA_CONFIG[a.id] || 'configuracoes', 'ver'))
-    // Importação histórica Dindin: só no ambiente principal ('vm').
-    .map(a => ({ ...a, secoes: a.secoes.filter(s => !ocultas.has(s.id) && (s.id !== 'importacao' || noAmbientePrincipal())) }))
+    .map(a => {
+      const veAba = pode(MODULO_DA_ABA_CONFIG[a.id] || 'configuracoes', 'ver')
+      // Importação histórica Dindin: só no ambiente principal ('vm').
+      return { ...a, secoes: a.secoes.filter(s => (veAba || s.todos) && !ocultas.has(s.id) && (s.id !== 'importacao' || noAmbientePrincipal())) }
+    })
     .filter(a => a.secoes.length > 0)
   const abaAtual = abas.find(a => a.id === rota.aba) || abas[0]
   const secao = abaAtual.secoes.some(s => s.id === rota.secao) ? rota.secao : abaAtual.secoes[0].id
@@ -613,7 +618,7 @@ export default function SettingsPanel() {
   // somente leitura — o fieldset desabilita botões e campos da seção. Atalhos são preferência
   // pessoal (sempre editáveis); Usuários tem guarda própria (só admin).
   const moduloDaSecao = MODULO_DA_ABA_CONFIG[abaAtual.id] || 'configuracoes'
-  const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' && secao !== 'agenda-celular' &&
+  const somenteLeitura = secao !== 'atalhos' && secao !== 'usuarios' && secao !== 'agenda-celular' && !secaoAtual.todos &&
     !(pode(moduloDaSecao, 'incluir') || pode(moduloDaSecao, 'editar') || pode(moduloDaSecao, 'excluir'))
 
   return (
@@ -1886,6 +1891,21 @@ export default function SettingsPanel() {
             </div>
           )}
         </div>
+      </div>
+      )}
+
+      {/* Dados deste aparelho: só o navegador/celular — nada na nuvem. Visível a todos os níveis. */}
+      {secao === 'dados-aparelho' && (
+      <div className="card border border-perigo/40">
+        <h2 className="text-sm font-semibold text-texto-1 mb-2 flex items-center gap-2">
+          <Smartphone size={14} /> Dados deste aparelho
+        </h2>
+        <p className="text-xs text-texto-3 mb-3">
+          Apaga os dados salvos neste navegador/celular e encerra a sessão. Seus dados na nuvem NÃO são
+          afetados. Use em computador compartilhado.
+        </p>
+        <button type="button" className="btn-danger" onClick={() => setApagarAparelho(true)}>Sair e apagar dados deste aparelho</button>
+        <SairModal open={apagarAparelho} onClose={() => setApagarAparelho(false)} />
       </div>
       )}
 

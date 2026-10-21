@@ -93,9 +93,10 @@ export const podeGravar = (usuario, modulo) =>
 // Módulo de uma página do App (page id) — páginas fora da lista (ex.: 'settings') → null.
 export const moduloDaPagina = (pagina) => MODULOS.find(m => m.paginas.includes(pagina))?.id || null
 
-// Página visível no menu? 'settings' aparece se houver qualquer parte de Configurações visível.
+// Página visível no menu? 'settings' aparece para qualquer nível: Dados › "Dados deste aparelho"
+// (apagar os dados do próprio aparelho) vale para todos — Consulta só enxerga essa seção.
 export function podeVerPagina(usuario, pagina) {
-  if (pagina === 'settings') return ['cadastros', 'configuracoes', 'usuarios'].some(m => pode(usuario, m, 'ver'))
+  if (pagina === 'settings') return !!usuario?.nivel
   const mod = moduloDaPagina(pagina)
   return mod ? pode(usuario, mod, 'ver') : true
 }
@@ -111,7 +112,8 @@ export function podeVerModuloMobile(usuario, m) {
   return m.page ? podeVerPagina(usuario, m.page) : true
 }
 
-// Abas de Configurações (configRota.CONFIG_ABAS) → módulo.
+// Abas de Configurações (configRota.CONFIG_ABAS) → módulo. Seção com `todos: true` (Dados › Dados
+// deste aparelho) aparece para todos os níveis, mesmo sem o módulo da aba.
 export const MODULO_DA_ABA_CONFIG = {
   geral: 'configuracoes', cadastros: 'cadastros', regras: 'cadastros', dados: 'configuracoes',
   usuarios: 'usuarios', perigo: 'configuracoes',
