@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import jwt from 'jsonwebtoken'
-import { SQL_CENTRAL, usarBancos } from './_testes/pglite.js'
+import { SQL_CENTRAL, usarBancos, poolPGlite } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
 
 // PROVISIONAMENTO de um cliente (Etapa 2, Parte B) com o _db.js de verdade: um PGlite por database
@@ -66,11 +66,11 @@ beforeAll(async () => {
     INSERT INTO account_mapping (grupo, nome_finup, nome_dindin) VALUES ('Itau Cofrinhos', 'Pharma', '5. 05 PHARMA LOG');
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
   // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
-  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww']) bancos[nome] = new PGlite()
+  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh']) bancos[nome] = new PGlite()
 }, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
-const neon = { chamadas: [], falharCriacao: 0, falharExclusao: 0 }
+const neon = { chamadas: [], falharCriacao: 0, falharExclusao: 0, antesDoDelete: null }
 let emails = []
 let falharEmail = 0
 const resp = (status, json) => ({ ok: status < 300, status, json: async () => json })
@@ -95,6 +95,7 @@ async function fetchFalso(url, init = {}) {
   if (metodo === 'DELETE' && db) {
     if (neon.falharExclusao > 0) { neon.falharExclusao--; return resp(500, { message: 'falha simulada ao excluir' }) }
     if (!noNeon.has(db)) return resp(404, { message: 'not found' })
+    if (neon.antesDoDelete) await neon.antesDoDelete(db)
     noNeon.delete(db)
     return resp(200, { database: { name: db }, operations: [{ id: 'op-2', action: 'delete_database', status: 'running' }] })
   }
@@ -110,10 +111,12 @@ beforeEach(() => {
     NEON_API_KEY: 'neon-chave', NEON_PROJECT_ID: 'proj-1', NEON_BRANCH_ID: 'br-1', FINUP_DB_KEY: CHAVE_DB,
   })
   delete process.env.ALLOW_ENV_ADMIN
-  const doNeon = (nome) => () => { if (!noNeon.has(nome)) throw new Error(`database ${nome} não existe no Neon`); return bancos[nome] }
+  // Banco que não existe responde como o Postgres (3D000).
+  const doNeon = (nome) => () => { if (!noNeon.has(nome)) throw Object.assign(new Error(`database ${nome} não existe no Neon`), { code: '3D000' }); return bancos[nome] }
   usarBancos({
     central: bancos.central, banco_vm: bancos.banco_vm,
     cliente_mm: doNeon('cliente_mm'), cliente_zz: doNeon('cliente_zz'), cliente_ww: doNeon('cliente_ww'),
+    cliente_kk: doNeon('cliente_kk'), cliente_jj: doNeon('cliente_jj'), cliente_hh: doNeon('cliente_hh'),
   })
   vi.stubGlobal('fetch', vi.fn(fetchFalso))
   vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -121,7 +124,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
-afterEach(() => { process.env = envOriginal; vi.unstubAllGlobals(); vi.restoreAllMocks() })
+afterEach(() => { process.env = envOriginal; neon.antesDoDelete = null; vi.unstubAllGlobals(); vi.restoreAllMocks() })
 afterAll(() => { _definirFabricaDePool(null) })
 
 function resposta() {
@@ -532,6 +535,91 @@ describe('excluir cliente', () => {
     expect(r.statusCode).toBe(200)
     expect(noNeon.has('cliente_ww')).toBe(false)
     expect(await sobrou(id, 'ww')).toEqual({ cliente: 0, historico: 0, ambiente: 0, handoff: 0, pedidos: 0 })
+  }, 120_000)
+
+  // R7: o papel vive no cluster (no Neon, um papel criado em cliente_kk existe também no central). No
+  // PGlite cada database é uma instância; por isso o teste cria o mesmo papel no central e confere lá.
+  const donoDoBanco = async (nome) => (await bancos[nome].query('SELECT pg_get_userbyid(datdba) AS d FROM pg_database WHERE datname = current_database()')).rows[0].d
+  const papelExiste = async (nome, papel) => (await bancos[nome].query('SELECT 1 FROM pg_roles WHERE rolname = $1', [papel])).rows.length > 0
+
+  it('usuário próprio (R7): o banco volta ao admin ANTES do DROP e o papel <database>_app é removido', async () => {
+    const id = await novo('kk')
+    await provisionar(id)
+    expect(await donoDoBanco('cliente_kk')).toBe('cliente_kk_app')
+    await bancos.central.exec('CREATE ROLE cliente_kk_app')
+    await status(id, 'cancelar')
+
+    let donoNoDrop = null
+    neon.antesDoDelete = async (db) => { if (db === 'cliente_kk') donoNoDrop = await donoDoBanco('cliente_kk') }
+    const r = await excluir(id, 'kk')
+    expect(r.statusCode).toBe(200)
+    // (a) no momento do DELETE no Neon o dono já era o admin (postgres no PGlite = neondb_owner no Neon)
+    expect(donoNoDrop).toBe('postgres')
+    expect(noNeon.has('cliente_kk')).toBe(false)
+    // (b) o papel não existe mais
+    expect(await papelExiste('central', 'cliente_kk_app')).toBe(false)
+    // nada de falha engolida com aviso
+    expect(console.warn).not.toHaveBeenCalledWith(expect.stringContaining('[excluirCliente]'), expect.anything())
+    expect(await sobrou(id, 'kk')).toEqual({ cliente: 0, historico: 0, ambiente: 0, handoff: 0, pedidos: 0 })
+  }, 120_000)
+
+  it('usuário próprio (R7): se o dono não volta ao admin, a exclusão PARA (sem DROP no Neon, sem apagar o papel)', async () => {
+    const id = await novo('jj')
+    await provisionar(id)
+    await bancos.central.exec('CREATE ROLE cliente_jj_app')
+    await status(id, 'cancelar')
+    // o pool admin do cliente_jj recusa o ALTER DATABASE (ex.: permissão negada)
+    const negado = Object.assign(new Error('must be able to SET ROLE "cliente_jj_app"'), { code: '42501' })
+    const real = poolPGlite(bancos.cliente_jj)
+    const fabrica = (nome, { admin } = {}) => {
+      if (nome === 'cliente_jj' && admin) return { ...real, query: async (sql, p) => { if (/ALTER DATABASE/.test(sql)) throw negado; return real.query(sql, p) } }
+      if (nome === 'central') return poolPGlite(bancos.central)
+      if (nome === 'cliente_jj') return real
+      throw new Error(`teste: database "${nome}" não existe`)
+    }
+    _definirFabricaDePool(fabrica)
+
+    const deletesAntes = neon.chamadas.filter(c => c.startsWith('DELETE')).length
+    let r = await excluir(id, 'jj')
+    expect(r.statusCode).toBe(500)
+    expect(neon.chamadas.filter(c => c.startsWith('DELETE')).length).toBe(deletesAntes)
+    expect(noNeon.has('cliente_jj')).toBe(true)
+    expect(await donoDoBanco('cliente_jj')).toBe('cliente_jj_app')
+    expect(await papelExiste('central', 'cliente_jj_app')).toBe(true)
+    const hist = await qde('central')("SELECT detalhe FROM plataforma_historico WHERE cliente_id = $1 AND evento = 'excl_falhou'", [id])
+    expect(hist).toHaveLength(1)
+    expect(hist[0].detalhe).toMatch(/dono de cliente_jj não devolvido/)
+    expect((await sobrou(id, 'jj')).cliente).toBe(1)
+
+    // permissão de volta → "excluir" de novo conclui
+    _definirFabricaDePool((nome) => poolPGlite(bancos[nome]))
+    r = await excluir(id, 'jj')
+    expect(r.statusCode).toBe(200)
+    expect(noNeon.has('cliente_jj')).toBe(false)
+    expect(await papelExiste('central', 'cliente_jj_app')).toBe(false)
+  }, 120_000)
+
+  it('usuário próprio (R7): DROP feito e papel não removido → "excluir" de novo pula o dono (3D000) e remove o papel', async () => {
+    const id = await novo('hh')
+    await provisionar(id)
+    await bancos.central.exec('CREATE ROLE cliente_hh_app')
+    await status(id, 'cancelar')
+    let falharDropRole = 1
+    _definirFabricaDePool((nome, { admin } = {}) => {
+      if (!(nome in bancos)) throw new Error(`teste: database "${nome}" não existe`)
+      const pool = poolPGlite(nome === 'cliente_hh' ? () => { if (!noNeon.has('cliente_hh')) throw Object.assign(new Error('não existe'), { code: '3D000' }); return bancos.cliente_hh } : bancos[nome])
+      if (nome !== 'central' || !admin) return pool
+      return { ...pool, query: async (sql, p) => { if (/DROP ROLE/.test(sql) && falharDropRole-- > 0) throw new Error('falha simulada no DROP ROLE'); return pool.query(sql, p) } }
+    })
+
+    let r = await excluir(id, 'hh')
+    expect(r.statusCode).toBe(500)
+    expect(noNeon.has('cliente_hh')).toBe(false) // o DROP no Neon já aconteceu
+    expect(await papelExiste('central', 'cliente_hh_app')).toBe(true)
+    r = await excluir(id, 'hh')
+    expect(r.statusCode).toBe(200)
+    expect(await papelExiste('central', 'cliente_hh_app')).toBe(false)
+    expect(await sobrou(id, 'hh')).toEqual({ cliente: 0, historico: 0, ambiente: 0, handoff: 0, pedidos: 0 })
   }, 120_000)
 
   it('nunca aprovado (só cadastro): exclui sem chamar o Neon', async () => {

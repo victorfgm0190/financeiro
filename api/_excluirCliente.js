@@ -51,13 +51,15 @@ export async function situacaoExclusaoDoCliente(q, c) {
 
 // Usuário próprio do banco (R7, api/_usuarioBanco.js): antes do DROP o database volta para o
 // neondb_owner (o Neon exclui como sempre excluiu); depois, o papel <database>_app é removido.
-// Banco que já não existe (nova tentativa) → segue.
+// Banco que já não existe (nova tentativa, 3D000) → segue. Qualquer outra falha PARA a exclusão:
+// sem o dono devolvido não se pede o DROP ao Neon.
 async function devolverDonoAoAdmin(database) {
   try {
     await poolAdminDoDatabase(database).query(
-      "DO $ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO CURRENT_USER', current_database()); END $")
+      "DO $$ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO CURRENT_USER', current_database()); END $$")
   } catch (err) {
-    console.warn(`[excluirCliente] dono de ${database} não devolvido:`, err.message)
+    if (err?.code === '3D000') return
+    throw new Error(`dono de ${database} não devolvido ao admin: ${err.message}`, { cause: err })
   }
 }
 async function excluirPapel(database) {
