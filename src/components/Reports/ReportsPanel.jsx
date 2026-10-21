@@ -15,6 +15,8 @@ import FluxoCaixaPorConta from './FluxoCaixaPorConta'
 import { useThemeColors } from '../../hooks/useTheme'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { corSerie, estiloTooltip } from '../../lib/chartPalette'
+import SeletorModoValor from '../Contratos/SeletorModoValor'
+import { lancamentosNoModo, MODO_VALOR_PADRAO, CATEGORIA_CREDITO_PROPRIETARIO } from '../../lib/contratos/despesaReal'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -37,6 +39,7 @@ export default function ReportsPanel() {
   const reservaSet = useMemo(() => new Set(accounts.filter(a => a.isReserva).map(a => a.id)), [accounts])
   const reservaDespesaFuncSet = useMemo(() => reservaDespesaFuncIds(reserveFunctions), [reserveFunctions])
   const [selectedMonth, setSelectedMonth] = useState(0)
+  const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
   const [showRelatorioFatura, setShowRelatorioFatura] = useState(false)
   const [showDemonstrativo, setShowDemonstrativo] = useState(false)
   const [showFavorecido, setShowFavorecido] = useState(false)
@@ -67,19 +70,20 @@ export default function ReportsPanel() {
   const categoryData = useMemo(() => {
     if (!currentMonthData) return []
     const totals = {}
-    transactions
+    lancamentosNoModo(transactions, modoValor)
       .filter(tx => countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) && tx.date >= currentMonthData.start && tx.date <= currentMonthData.end && tx.categoryId)
       .forEach(tx => {
         totals[tx.categoryId] = (totals[tx.categoryId] || 0) + tx.amount
       })
     return Object.entries(totals)
       .map(([id, value]) => {
-        const cat = categories.find(c => c.id === id)
-        return { name: cat ? `${cat.icon} ${cat.name}` : id, value }
+        const cat = id === CATEGORIA_CREDITO_PROPRIETARIO.id ? CATEGORIA_CREDITO_PROPRIETARIO : categories.find(c => c.id === id)
+        return { name: cat ? [cat.icon, cat.name].filter(Boolean).join(' ') : id, value }
       })
+      .filter(c => c.value > 0.005)
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
-  }, [transactions, categories, currentMonthData, aplicSet, reservaDespesaFuncSet, reservaSet])
+  }, [transactions, categories, currentMonthData, aplicSet, reservaDespesaFuncSet, reservaSet, modoValor])
 
   const totalIncome = last6Months.reduce((s, m) => s + m.income, 0) / 6
   const totalExpense = last6Months.reduce((s, m) => s + m.expense, 0) / 6
@@ -230,6 +234,7 @@ export default function ReportsPanel() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-texto-2">Despesas por Categoria</h2>
+            <SeletorModoValor value={modoValor} onChange={setModoValor} />
             <select
               className="input w-auto text-xs py-1.5"
               value={selectedMonth}

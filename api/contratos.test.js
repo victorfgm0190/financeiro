@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { normalizarContrato } from './_contratos.js'
 import { lerSerieSgs, comAcumulado12m, urlSgs, indiceAtual } from './indices.js'
 import { regraDaRota, pode } from '../src/lib/permissoes.js'
+import { KIT_REGRAS_ITENS } from './_kitBasico.js'
 
 // /api/contratos, /api/contrato-itens e /api/contrato-eventos num Postgres de verdade (PGlite), com a
 // migração do módulo. Plano do ambiente, perfis permitidos, lista branca de campos, conta ≠ cartão.
@@ -31,8 +32,11 @@ vi.mock('./_ambiente.js', () => ({ comAmbiente: (h) => h }))
 const { default: contratos } = await import('./contratos.js')
 const { default: itens } = await import('./contrato-itens.js')
 const { default: eventos } = await import('./contrato-eventos.js')
+const { default: regras } = await import('./contrato-regras.js')
+const { default: creditos } = await import('./contrato-creditos.js')
 
 const MIGRACAO = readFileSync(new URL('../supabase/migrations/2026-10-20b_contratos.sql', import.meta.url), 'utf-8')
+const MIGRACAO_E2 = readFileSync(new URL('../supabase/migrations/2026-10-21_contratos_creditos.sql', import.meta.url), 'utf-8')
 const resposta = () => ({ statusCode: 200, body: undefined, status(c) { this.statusCode = c; return this }, json(b) { this.body = b; return this }, end() { return this }, setHeader() {} })
 const chamar = async (h, method, { body, url = '/api/contratos', user } = {}) => {
   estado.user = user || { id: 'u1', nivel: 'admin', perfis: 'todos' }
@@ -59,6 +63,10 @@ beforeEach(async () => {
     INSERT INTO cartoes VALUES ('card1');
   `)
   await estado.db.exec(MIGRACAO)
+  await estado.db.exec(MIGRACAO_E2)
+  for (const [padrao, tipo] of KIT_REGRAS_ITENS) {
+    await estado.db.query(`INSERT INTO contrato_regras_itens (padrao, tipo_match, responsavel) VALUES ($1, $2, 'proprietario')`, [padrao, tipo])
+  }
 })
 
 describe('/api/contratos', () => {
@@ -181,5 +189,43 @@ describe('validação e regras', () => {
     expect(ok.acumulado_12m).toBeCloseTo(4.9070, 3)
     const cache = await indiceAtual('IPCA', { fetcher: async () => { throw new Error('não devia chamar') } })
     expect(cache.fonte).toBe('cache')
+  })
+})
+
+describe('/api/contrato-regras e /api/contrato-creditos (Entrega 2)', () => {
+  it('seed das regras globais e regra do contrato', async () => {
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
+    const g = await chamar(regras, 'GET', { url: '/api/contrato-regras' })
+    expect(g.body.regras.filter(r => !r.contrato_id).map(r => r.padrao).sort()).toEqual(
+      ['chamada de capital', 'fundo de obras', 'fundo de reserva', 'fundo trabalhista', 'obra', 'taxa extra'])
+    const nova = await chamar(regras, 'POST', { url: '/api/contrato-regras', body: { contrato_id: body.contrato.id, padrao: 'Espaço Gourmet', tipo_match: 'comeca_com', responsavel: 'inquilino' } })
+    expect(nova.body.regra).toMatchObject({ contrato_id: body.contrato.id, responsavel: 'inquilino' })
+    expect((await chamar(regras, 'POST', { url: '/api/contrato-regras', body: { padrao: 'x', responsavel: 'vizinho' } })).statusCode).toBe(400)
+    const doContrato = await chamar(regras, 'GET', { url: `/api/contrato-regras?contrato_id=${body.contrato.id}` })
+    expect(doContrato.body.regras).toHaveLength(7)
+  })
+
+  it('crédito: cria aberto, compensa, entra no total da lista e exclui', async () => {
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
+    const id = body.contrato.id
+    const c = await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: {
+      contrato_id: id, origem_lancamento_id: 'tx_c', descricao: 'Condomínio 05/12', valor: 104.85, data_origem: '2026-12-05',
+      itens: [{ desc: 'Fundo de Reserva', valor: 79.10 }, { desc: 'Fundo Trabalhista', valor: 25.75 }],
+    } })
+    expect(c.body.credito).toMatchObject({ status: 'aberto', valor: 104.85 })
+    expect((await chamar(contratos, 'GET')).body.contratos[0].creditos_abertos).toBe(104.85)
+    const comp = await chamar(creditos, 'PUT', { url: '/api/contrato-creditos', body: { id: c.body.credito.id, status: 'compensado', compensado_em_lancamento_id: 'tx_a', data_compensacao: '2026-12-15' } })
+    expect(comp.body.credito).toMatchObject({ status: 'compensado', compensado_em_lancamento_id: 'tx_a', valor: 104.85 })
+    expect((await chamar(contratos, 'GET')).body.contratos[0].creditos_abertos).toBe(0)
+    expect((await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: { contrato_id: id, valor: -1, itens: [] } })).statusCode).toBe(400)
+    await chamar(creditos, 'DELETE', { url: `/api/contrato-creditos?id=${c.body.credito.id}` })
+    expect((await chamar(creditos, 'GET', { url: `/api/contrato-creditos?contrato_id=${id}` })).body.creditos).toEqual([])
+  })
+
+  it('perfil sem acesso não vê o crédito', async () => {
+    const { body } = await chamar(contratos, 'POST', { body: { contrato: CONTRATO } })
+    await chamar(creditos, 'POST', { url: '/api/contrato-creditos', body: { contrato_id: body.contrato.id, valor: 10, itens: [] } })
+    const restrito = { id: 'u2', nivel: 'operador', perfis: ['pj'] }
+    expect((await chamar(creditos, 'GET', { url: '/api/contrato-creditos', user: restrito })).body.creditos).toEqual([])
   })
 })

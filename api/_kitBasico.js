@@ -54,6 +54,13 @@ export const KIT_TIPOS_DOCUMENTO = SEED_TIPOS_DOCUMENTO.map(([nome]) => nome)
 
 export const KIT_DIA_INICIO_MES = 1
 
+// Regras globais dos itens do boleto do condomínio (módulo Contratos): itens do proprietário.
+// Mesma lista do sql/contratos_entrega2.sql.
+export const KIT_REGRAS_ITENS = [
+  ['fundo de reserva', 'comeca_com'], ['fundo trabalhista', 'comeca_com'], ['fundo de obras', 'comeca_com'],
+  ['obra', 'contem'], ['chamada de capital', 'contem'], ['taxa extra', 'contem'],
+]
+
 // Rodapé da barra lateral: nome do cliente, ou da empresa se PJ.
 export const rodapeDoCliente = (c) => String((c.tipo_pessoa === 'PJ' && c.empresa) || c.nome || '').trim() || null
 
@@ -79,4 +86,9 @@ export async function aplicarKitBasico(q, cliente) {
   }
   const { sql, params } = sqlSeedTiposDocumento() // só com a tabela vazia
   await q(sql, params)
+  for (const [padrao, tipo] of KIT_REGRAS_ITENS) {
+    await q(`INSERT INTO contrato_regras_itens (contrato_id, padrao, tipo_match, responsavel, observacao)
+      SELECT NULL, $1, $2, 'proprietario', 'Padrão do sistema (editável)'
+       WHERE NOT EXISTS (SELECT 1 FROM contrato_regras_itens WHERE contrato_id IS NULL AND padrao = $1)`, [padrao, tipo])
+  }
 }

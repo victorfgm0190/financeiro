@@ -36,3 +36,14 @@ export const registrarEventoContratoApi = async (contratoId, evento) =>
   (await chamar('/api/contrato-eventos', { method: 'POST', body: { contrato_id: contratoId, ...evento } })).evento
 
 export const buscarIndiceApi = (indice) => chamar(`/api/indices?indice=${q(indice)}`)
+
+// Entrega 2: regras de itens do boleto e créditos do proprietário.
+export const listarRegrasApi = async () => (await chamar('/api/contrato-regras')).regras || []
+export const criarRegraApi = async (regra) => (await chamar('/api/contrato-regras', { method: 'POST', body: regra })).regra
+export const atualizarRegraApi = async (regra) => (await chamar('/api/contrato-regras', { method: 'PUT', body: regra })).regra
+export const excluirRegraApi = (id) => chamar(`/api/contrato-regras?id=${q(id)}`, { method: 'DELETE' })
+
+export const listarCreditosApi = async () => (await chamar('/api/contrato-creditos')).creditos || []
+export const criarCreditoApi = async (credito) => (await chamar('/api/contrato-creditos', { method: 'POST', body: credito })).credito
+export const atualizarCreditoApi = async (credito) => (await chamar('/api/contrato-creditos', { method: 'PUT', body: credito })).credito
+export const excluirCreditoApi = (id) => chamar(`/api/contrato-creditos?id=${q(id)}`, { method: 'DELETE' })

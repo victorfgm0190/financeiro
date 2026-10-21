@@ -39,6 +39,7 @@ import { ehHashConfig } from './lib/configRota'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
+import ContratoEfetivacaoHost from './components/Contratos/ContratoEfetivacaoHost'
 import MonthStartModal from './components/shared/MonthStartModal'
 import GlobalSearch from './components/shared/GlobalSearch'
 import Login from './pages/Login'
@@ -233,6 +234,7 @@ function AppContent() {
       )}
       <MonthStartModal />
       <ContratoFichaHost />
+      <ContratoEfetivacaoHost />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
       <AtalhosAjudaModal />
       <ModoAltAtalhos />

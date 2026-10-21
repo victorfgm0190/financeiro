@@ -5,6 +5,8 @@ import { fmt, fmtSinal } from '../shared/utils'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
+import SeletorModoValor from '../Contratos/SeletorModoValor'
+import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despesaReal'
 
 export default function BudgetPanel() {
   const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
@@ -15,6 +17,7 @@ export default function BudgetPanel() {
   const [editBudget, setEditBudget] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [form, setForm] = useState({ categoryId: '', amount: '' })
+  const [modoValor, setModoValor] = useState(MODO_VALOR_PADRAO)
 
   const period = getFinancialPeriod()
 
@@ -25,13 +28,13 @@ export default function BudgetPanel() {
 
   const categorySpent = useMemo(() => {
     const spent = {}
-    transactions
+    lancamentosNoModo(transactions, modoValor)
       .filter(tx => tx.type === 'expense' && tx.date >= periodStr.start && tx.date <= periodStr.end)
       .forEach(tx => {
         if (tx.categoryId) spent[tx.categoryId] = (spent[tx.categoryId] || 0) + tx.amount
       })
     return spent
-  }, [transactions, periodStr])
+  }, [transactions, periodStr, modoValor])
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0)
   const totalSpent = budgets.reduce((s, b) => s + (categorySpent[b.categoryId] || 0), 0)
@@ -80,7 +83,9 @@ export default function BudgetPanel() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-texto-2">Orçamentos por Categoria</h2>
+        <h2 className="text-sm font-semibold text-texto-2 flex flex-wrap items-center gap-2">
+          Orçamentos por Categoria <SeletorModoValor value={modoValor} onChange={setModoValor} />
+        </h2>
         {podeIncluir && (
           <button className="btn-primary flex items-center gap-2" onClick={() => { setEditBudget(null); setForm({ categoryId: '', amount: '' }); setShowForm(true) }}>
             <Plus size={14} /> Novo Orçamento

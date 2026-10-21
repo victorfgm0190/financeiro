@@ -39,8 +39,27 @@ Contratos de aluguel (e serviço) ligados aos agendamentos. O plano completo est
 - **Edição de parcela de contrato.** Frequência, ocorrência e data-base (competência) ficam travadas. O vencimento muda pela exceção da ocorrência (`overrides[data-base].date`).
 - **Conta do contrato.** Só conta corrente comum; cartão de crédito fica de fora nesta 1ª versão.
 
+## Entrega 2 — pagamento, condomínio e créditos
+
+- **Gancho de efetivação (P5).** `registerScheduleOccurrence`, `markScheduleRegistered` (baixa que aponta um lançamento pago ou importado), `baixarCobrancaRecorrente` e o auto-registro chamam `posEfetivacaoRef` → `useContratos.notificarEfetivacao`.
+  - Uma fila é processada quando o estado já tem a baixa e o lançamento.
+  - A decisão é pura: `src/lib/contratos/efetivacao.js`.
+  - As perguntas aparecem no `ContratoEfetivacaoHost` (composição do boleto; "aplicar às próximas do ciclo?").
+  - `baixarComoJaNoCartao` não dispara: contrato não aceita cartão.
+- **Estorno/exclusão.** `reverseTransaction` e `deleteTransaction` chamam `reverterEfetivacaoRef`. O crédito compensado volta a aberto; o gerado (se ainda aberto) sai; um evento é registrado.
+- **Composição do boleto** (`ComposicaoBoletoModal`): digitar, colar texto (`parsearTextoBoleto`) ou foto (em breve, `imagemBoleto.js`).
+  - Regras em `contrato_regras_itens`: a do contrato vence a global, "começa com" vence "contém".
+  - A soma dos itens tem de ser igual ao valor pago.
+  - "Pular" usa a composição estimada, marcada para revisar.
+- **Créditos do proprietário** (`contrato_creditos`): só controle, nunca lançamento.
+  - Cada crédito aberto abate no PRÓXIMO ALUGUEL PENDENTE com vencimento ≥ data do crédito (`src/lib/contratos/creditos.js`).
+  - "Não abater neste mês" adia o abatimento (`composicao.creditos_adiados`).
+- **Relatórios.** "Despesa real / Valor pago" (`src/lib/contratos/despesaReal.js`) no relatório por categoria e no Orçado×Realizado. A pizza do Painel segue em valor pago.
+- **Edição de parcela de contrato.** Usa a regra de registros separados (como a parcela de financiamento) e registra o evento `edicao_parcela`.
+- **Regras globais iniciais.** Vêm do kit básico (clientes novos) e de `sql/contratos_entrega2.sql` (bancos existentes).
+
 ## Pendências registradas (não corrigir sem pedido)
 
 - `registerScheduleOccurrence` (`AppContext.jsx`): no resgate com detalhamento por função, o `newTxId` devolvido não corresponde a nenhum lançamento.
 - Pagamento de parcela de financiamento pelo Patrimônio (`api/financiamento/parcela/[id]/pagar.js`): marca `registered` só no servidor, sem `registered_meta` e sem atualizar o estado do app.
-- Para corrigir no início da Entrega 2, mostrando o diff antes: `reverseTransaction` usa `tx.date` em vez de `dataOcorrencia` e não limpa `registeredMeta`; `deleteTransaction` deixa a baixa órfã.
+- (Corrigido em 3031c84) `reverseTransaction` pela data da ocorrência e limpando `registeredMeta`; `deleteTransaction` reabrindo a baixa.

@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
@@ -1338,6 +1339,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
           </button>
         </div>
+      )}
+      {initial?.id && initial.contratoId && (
+        // Composição editada aqui muda o valor do lançamento: o campo Valor acompanha, para o
+        // Salvar do formulário não gravar o valor antigo por cima.
+        <ComposicaoCard txId={initial.id} onValorAlterado={(v) => setForm(f => ({ ...f, amount: v }))} />
       )}
       {showRateio && (
         <RateioModal

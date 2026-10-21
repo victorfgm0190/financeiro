@@ -199,7 +199,7 @@ function buildCatOpts(categories, type) {
 
 
 export default function ScheduleForm({ initial, onClose, onAviso }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato } = useApp()
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
@@ -530,6 +530,14 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       const occDate = ancoraSalva || pendentes[0]
       return { tipo: 'A', occDate, pendentes, nProximas: pendentes.filter(d => d > occDate).length, nPendentes: pendentes.length }
     }
+    // Parcela de contrato: as irmãs são as outras parcelas do mesmo contrato e papel (mesma regra de
+    // registros separados da parcela de financiamento — "Só esta" / "Esta e as próximas").
+    if (ehParcelaContrato) {
+      const irmas = (schedules || []).filter(s => s.id !== initial.id && s.contratoId === initial.contratoId
+        && s.contratoPapel === initial.contratoPapel && (s.frequency || 'once') === 'once')
+      const pend = irmas.filter(agendamentoUnicoPendente)
+      return { tipo: 'F', irmas, nProximas: pend.filter(s => (s.startDate || '') > (initial.startDate || '')).length, nPendentes: pend.length + 1 }
+    }
     if (ehFinanciamento) {
       const irmas = irmasFinanciamento(initial, schedules)
       const pend = irmas.filter(agendamentoUnicoPendente)
@@ -682,6 +690,16 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       // banco não tem).
       const ok = await salvarEdicao(data, mudancas, ctx, decisao)
       if (!ok) return
+      // Parcela de contrato editada à mão: evento na linha do tempo do contrato (antes/depois).
+      if (ehParcelaContrato && mudancas.length) {
+        registrarEventoContrato?.(initial.contratoId, {
+          tipo: 'edicao_parcela',
+          detalhes: {
+            acao: 'edicao', parcela_id: initial.id, vencimento: initial.startDate, papel: initial.contratoPapel,
+            escopo: decisao?.escopo || 'parcela', campos: Object.fromEntries(mudancas.map(m => [m.campo, { de: m.de ?? null, para: m.para ?? null }])),
+          },
+        }).catch(err => console.warn('[contratos] evento de edição não gravado:', err.message))
+      }
     } else {
       schedId = addSchedule(data)
     }

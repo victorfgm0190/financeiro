@@ -784,6 +784,11 @@ export function AppProvider({ children }) {
   // add/update/deleteTransaction de cartão antes da sua declaração.
   const reconcileGerencialRef = useRef(null)
   const dataRef = useRef(data)
+  // Módulo de Contratos (useContratos): gancho chamado por TODOS os pontos que baixam uma ocorrência
+  // (posEfetivacaoContrato) e pelo estorno/exclusão de lançamento (reverterEfetivacaoContrato).
+  // Agendamento sem contrato: o gancho não faz nada.
+  const posEfetivacaoRef = useRef(null)
+  const reverterEfetivacaoRef = useRef(null)
 
   // ── Reservas: histórico de períodos e ajustes ──────────────────────────────
   // Vivem fora do objeto `data` (que é sincronizado por diff debounced): são gravados
@@ -1359,6 +1364,8 @@ export function AppProvider({ children }) {
     // (scheduleId|date) para que o double-invoke do StrictMode sobrescreva (e não
     // duplique) com o txId efetivamente commitado.
     const collectedRateios = new Map()
+    // Ocorrências de parcelas de contrato baixadas aqui (gancho do módulo, mesma chave estável).
+    const collectedContratos = new Map()
 
     setData(prev => {
       let schedules = prev.schedules
@@ -1459,6 +1466,9 @@ export function AppProvider({ children }) {
           // Meta aponta o lançamento gerado (ligação explícita para histórico / aba Pagos).
           schedules = schedules.map(s => s.id === schedule.id
             ? aplicarBaixa(s, occurrenceDate, metaBaixaGerada(txId)) : s)
+          if (scheduleBase.contratoId) {
+            collectedContratos.set(`${schedule.id}|${occurrenceDate}`, { scheduleId: schedule.id, occurrenceDate, lancamentoId: txId, auto: true })
+          }
         }
       }
 
@@ -1473,6 +1483,9 @@ export function AppProvider({ children }) {
         collectedRateios.forEach(({ txId, rateios }) => saveRateiosFor(txId, rateios))
       }, 0)
     }
+    setTimeout(() => {
+      if (collectedContratos.size > 0) posEfetivacaoRef.current?.([...collectedContratos.values()])
+    }, 0)
   }, [initialized, dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Recálculo automático dos saldos ao abrir o app ──────────────────────────
@@ -2199,6 +2212,7 @@ export function AppProvider({ children }) {
     if ((before.rateios || []).some(r => r.lancamentoId === id)) {
       persistirRateiosRef.current(id, null)
     }
+    if (txBefore) reverterEfetivacaoRef.current?.(txBefore)
 
     // Recalcula os agendamentos das faturas afetadas (gatilho: deleção de gasto de cartão).
     const seen = new Set()
@@ -2311,6 +2325,7 @@ export function AppProvider({ children }) {
 
       return { ...d, accounts, transactions, schedules }
     })
+    if (txBefore) reverterEfetivacaoRef.current?.(txBefore)
 
     const seen = new Set()
     for (const [cardId, mesAno] of faturasParaRecalcular) {
@@ -2595,8 +2610,12 @@ export function AppProvider({ children }) {
   // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
   const contratosCtx = useContratos({
     habilitado: podeNivel(usuario, 'contratos', 'ver'), update, dataRef,
-    dbConectado: dbStatus === 'connected', registrarEdicao, reverseTransaction,
+    dbConectado: dbStatus === 'connected', registrarEdicao, reverseTransaction, updateTransaction, dados: data,
   })
+  useEffect(() => {
+    posEfetivacaoRef.current = contratosCtx.notificarEfetivacao
+    reverterEfetivacaoRef.current = contratosCtx.reverterEfetivacaoContrato
+  }, [contratosCtx.notificarEfetivacao, contratosCtx.reverterEfetivacaoContrato])
 
   // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.
   // Usado pelos painéis de exclusão para avisar que o resgate vinculado também será removido.
@@ -2901,6 +2920,7 @@ export function AppProvider({ children }) {
     if (schedReg?.transactionType === 'expense' && acctReg?.type === 'credit') {
       recalcFaturaRef.current?.(acctReg.id, date, null)
     }
+    posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate, lancamentoId: newTxId }])
     return newTxId
   }, [update, saveRateiosFor])
 
@@ -4711,6 +4731,9 @@ export function AppProvider({ children }) {
       ...d,
       schedules: d.schedules.map(s => s.id === scheduleId ? aplicarBaixa(s, date, meta) : s),
     }))
+    if (meta?.lancamento_id && meta.tipo !== TIPO_BAIXA.JA_NO_CARTAO && meta.tipo !== TIPO_BAIXA.COBERTA_PARCELA) {
+      posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate: date, lancamentoId: meta.lancamento_id }])
+    }
   }, [update])
 
   // "Vincular a lançamento existente": grava no lançamento a data-BASE da ocorrência baixada (selo
@@ -4746,6 +4769,7 @@ export function AppProvider({ children }) {
     const realizado = Number(tx.amount) || 0
     const novo = baixarPeloValor(atual, { occurrenceDate: occ.date, meta, previsto: occ.amount, realizado, atualizarFuturas })
     update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === atual.id ? novo : s)) }))
+    posEfetivacaoRef.current?.([{ scheduleId: atual.id, occurrenceDate: occ.date, lancamentoId: tx.id }])
 
     const loteId = novoLoteId()
     const itens = [{ id: atual.id, ocorrenciaData: occ.date, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'amount', de: occ.amount, para: realizado }] }]

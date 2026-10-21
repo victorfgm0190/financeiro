@@ -181,10 +181,61 @@ export async function substituirItens(q, contratoId, itens) {
 export const hojeIso = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 
 // NUMERIC chega do pg como texto: as linhas saem com número de verdade.
-const NUMERICOS = ['valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo']
+const NUMERICOS = ['valor_base', 'percentual_fixo', 'bonificacao_valor', 'valor_condominio_previsto', 'valor_previsto', 'percentual', 'valor_anterior', 'valor_novo', 'valor', 'creditos_abertos']
 export function comNumeros(row) {
   if (!row) return row
   const out = { ...row }
   for (const k of NUMERICOS) if (k in out && out[k] != null) out[k] = Number(out[k])
   return out
+}
+
+// ─── Entrega 2: regras de itens do boleto e créditos do proprietário ────────────────────────────
+
+export function normalizarRegra(b) {
+  const padrao = String(b?.padrao ?? '').trim().slice(0, 120)
+  if (!padrao) return { erro: 'padrao: obrigatório' }
+  const tipo = umDe(['comeca_com', 'contem'], { obrigatorio: true })(b.tipo_match || 'contem')
+  const resp = umDe(['inquilino', 'proprietario'], { obrigatorio: true })(b.responsavel)
+  if (tipo.erro) return { erro: `tipo_match: ${tipo.erro}` }
+  if (resp.erro) return { erro: `responsavel: ${resp.erro}` }
+  const obs = texto(300)(b.observacao)
+  if (obs.erro) return { erro: `observacao: ${obs.erro}` }
+  return { regra: { padrao, tipo_match: tipo.v, responsavel: resp.v, observacao: obs.v } }
+}
+
+// Itens de origem do crédito: [{ desc, valor }] (os do proprietário no boleto do condomínio).
+function itensDoCredito(itens) {
+  if (!Array.isArray(itens)) return { erro: 'itens: lista obrigatória' }
+  if (itens.length > 100) return { erro: 'itens: no máximo 100' }
+  const out = []
+  for (const i of itens) {
+    const desc = String(i?.desc ?? '').trim().slice(0, 200)
+    const v = Math.round(Number(i?.valor) * 100) / 100
+    if (!desc || !Number.isFinite(v)) return { erro: 'itens: cada item precisa de desc e valor' }
+    out.push({ desc, valor: v })
+  }
+  return { itens: out }
+}
+
+export function normalizarCredito(b, { parcial = false } = {}) {
+  const dados = {}
+  const campos = {
+    origem_lancamento_id: texto(120), origem_agendamento_id: texto(160), descricao: texto(200),
+    valor: numero({ min: 0 }), data_origem: data(), status: umDe(['aberto', 'compensado']),
+    compensado_em_lancamento_id: texto(120), compensado_em_agendamento_id: texto(160), data_compensacao: data(),
+  }
+  for (const [k, validar] of Object.entries(campos)) {
+    if (parcial && !(k in (b || {}))) continue
+    const r = validar(b?.[k])
+    if (r.erro) return { erro: `${k}: ${r.erro}` }
+    dados[k] = r.v
+  }
+  if (!parcial || 'itens' in (b || {})) {
+    const r = itensDoCredito(b?.itens ?? [])
+    if (r.erro) return { erro: r.erro }
+    dados.itens = r.itens
+  }
+  if (!parcial && dados.valor == null) return { erro: 'valor: obrigatório' }
+  if (!parcial && !dados.status) dados.status = 'aberto'
+  return { dados }
 }

@@ -20,7 +20,7 @@ const { default: pingHandler } = await import('./ping.js')
 const { default: syncHandler } = await import('./sync.js')
 const { default: mappingHandler } = await import('./account-mapping.js')
 const { PASSOS } = await import('./_provisionar.js')
-const { KIT_CATEGORIAS, KIT_GRUPOS_CONTA, KIT_GRUPOS_GERENCIAIS, KIT_TIPOS_DOCUMENTO, KIT_CENTROS_DE_CUSTO, rodapeDoCliente } = await import('./_kitBasico.js')
+const { KIT_CATEGORIAS, KIT_GRUPOS_CONTA, KIT_GRUPOS_GERENCIAIS, KIT_TIPOS_DOCUMENTO, KIT_CENTROS_DE_CUSTO, KIT_REGRAS_ITENS, rodapeDoCliente } = await import('./_kitBasico.js')
 const { ESTRUTURA_BASE, MIGRACOES } = await import('./_sqlEmbutido.js')
 
 const SECRET = 'segredo-de-teste'
@@ -275,6 +275,7 @@ describe('provisionamento do cliente (Aprovar)', () => {
     expect((await q('SELECT name FROM grupos_conta ORDER BY "order"')).map(r => r.name)).toEqual(KIT_GRUPOS_CONTA.map(g => g[1]))
     expect((await q('SELECT name, fixed FROM reservas_funcoes ORDER BY id')).map(r => r.name)).toEqual(KIT_GRUPOS_GERENCIAIS.map(g => g[2]))
     expect((await q('SELECT nome FROM tipos_documento ORDER BY ordem')).map(r => r.nome)).toEqual(KIT_TIPOS_DOCUMENTO)
+    expect((await q('SELECT padrao FROM contrato_regras_itens WHERE contrato_id IS NULL ORDER BY padrao')).map(r => r.padrao)).toEqual(KIT_REGRAS_ITENS.map(r => r[0]).sort())
     const [cfg] = await q('SELECT financial_month_start_day, cost_centers, rodape_titulo, rodape_frase FROM configuracoes')
     expect(cfg).toEqual({ financial_month_start_day: 1, cost_centers: KIT_CENTROS_DE_CUSTO, rodape_titulo: 'Marina Mendes', rodape_frase: null })
     expect(await q('SELECT * FROM account_mapping')).toEqual([])

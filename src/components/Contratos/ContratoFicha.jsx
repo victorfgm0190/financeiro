@@ -11,6 +11,8 @@ import {
 } from '../../lib/contratos/parcelas'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
 import { pendentesForaDaVigencia } from '../../lib/contratos/estorno'
+import { distribuirCreditos } from '../../lib/contratos/creditos'
+import ComposicaoBoletoModal from './ComposicaoBoletoModal'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
 import ContratoWizard from './ContratoWizard'
 import VinculoModal from './VinculoModal'
@@ -30,6 +32,8 @@ function resumoEvento(e) {
   if (e.tipo === 'edicao_parcela' && d.acao === 'exclusao') return `Parcela de ${fmtDate(d.vencimento)} excluída`
   if (e.tipo === 'edicao_parcela' && d.acao === 'estorno_reaberta') return `Pagamento de ${fmtDate(d.vencimento)} estornado — parcela reaberta${d.status_contrato && d.status_contrato !== 'ativo' ? ` (contrato ${d.status_contrato})` : ''}`
   if (e.tipo === 'edicao_parcela' && d.acao === 'estorno_cancelada') return `Pagamento de ${fmtDate(d.vencimento)} estornado — parcela cancelada`
+  if (e.tipo === 'edicao_parcela' && d.acao === 'reversao_creditos') return `Lançamento estornado/excluído — créditos: ${(d.creditos_reabertos || []).length} reaberto(s), ${(d.creditos_removidos || []).length} removido(s)${(d.creditos_mantidos || []).length ? `, ${d.creditos_mantidos.length} já abatido(s) mantido(s)` : ''}`
+  if (e.tipo === 'edicao_parcela' && d.acao === 'edicao') return `Parcela de ${fmtDate(d.vencimento)} editada: ${Object.keys(d.campos || {}).join(', ')}${d.escopo === 'proximas' ? ' (esta e as próximas)' : ''}`
   if (e.tipo === 'aditivo') return Object.keys(d.campos || {}).join(', ')
   if (e.tipo === 'renovacao') return `Fim ${fmtDate(d.de)} → ${fmtDate(d.para)}`
   if (e.tipo === 'rescisao') return `Saída ${fmtDate(d.data_saida)} · ${(d.canceladas || []).length} pendente(s) cancelada(s)${d.motivo ? ` · ${d.motivo}` : ''}`
@@ -47,11 +51,12 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   const {
     contratoPorId, schedules, transactions, accounts, profiles, categories, indicesContratos, carregarIndice, pode,
     planejarParcelasContrato, aplicarParcelasContrato, atualizarContrato, desvincularDoContrato, rescindirContrato,
-    excluirContrato,
+    excluirContrato, creditosContratos, adiarCreditoNaParcela, editarComposicaoLancamento,
   } = useApp()
   const contrato = contratoPorId(id)
   const [extra, setExtra] = useState({ itens: [], eventos: [] })
   const [aba, setAba] = useState('pendentes')
+  const [revisar, setRevisar] = useState(null)
   const [modal, setModal] = useState(acaoInicial === 'rescindir' ? 'rescindir' : null)
   const [reajusteDe, setReajusteDe] = useState(null)
   const [vinculo, setVinculo] = useState(null)
@@ -82,6 +87,13 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
   }, [doContrato, transactions, id])
 
   if (!contrato) return <p className="text-sm text-texto-3">Contrato não encontrado (ou ainda carregando).</p>
+
+  const creditos = (creditosContratos || []).filter(c => c.contrato_id === contrato.id)
+    .sort((a, b) => String(b.data_origem).localeCompare(String(a.data_origem)))
+  const destino = distribuirCreditos(contrato, schedules, creditos)
+  const parcelaDoCredito = new Map()
+  for (const [parcelaId, lista] of destino) for (const c of lista) parcelaDoCredito.set(c.id, schedules.find(s => s.id === parcelaId))
+  const estimadas = pagamentos.filter(t => t.composicao?.estimada)
 
   const conta = accounts.find(a => a.id === contrato.conta_id)
   const perfil = profiles.find(p => p.id === contrato.perfil_id)
@@ -193,6 +205,14 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         </div>
       )}
 
+      {estimadas.length > 0 && (
+        <p className="text-xs text-aviso bg-surface-2/60 rounded-lg px-3 py-2">
+          ⚠ {estimadas.length} composição(ões) do condomínio estimada(s) — revisar: {estimadas.map(t => (
+            <button key={t.id} className="underline mr-2" onClick={() => setRevisar(t)}>{fmtDate(t.date)} {fmt(t.amount)}</button>
+          ))}
+        </p>
+      )}
+
       <div>
         <div className="flex flex-wrap gap-1 mb-2">
           {[['pendentes', 'Pendentes'], ['projetadas', 'Projetadas'], ['pagas', 'Pagas'], ['todas', 'Todas']].map(([k, r]) => (
@@ -200,7 +220,45 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
               {r} ({listas[k].length})
             </button>
           ))}
+          <button onClick={() => setAba('creditos')} className={`text-xs px-2 py-1 rounded ${aba === 'creditos' ? 'bg-primary/15 text-primary-fg font-semibold' : 'text-texto-2 hover:bg-surface-hover'}`}>
+            Créditos do proprietário ({creditos.filter(c => c.status === 'aberto').length} aberto(s))
+          </button>
         </div>
+        {aba === 'creditos' ? (
+          <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-surface">
+                <tr className="text-texto-3 border-b border-borda">
+                  <th className="px-2 py-1.5 text-left">Origem</th><th className="px-2 py-1.5 text-left hidden sm:table-cell">Itens</th>
+                  <th className="px-2 py-1.5 text-right">Valor</th><th className="px-2 py-1.5 text-left">Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {creditos.map(c => {
+                  const alvo = parcelaDoCredito.get(c.id)
+                  return (
+                    <tr key={c.id} className="border-b border-borda/50 align-top">
+                      <td className="px-2 py-1.5 text-texto-2">{c.descricao || '—'}</td>
+                      <td className="px-2 py-1.5 text-texto-3 hidden sm:table-cell">{(c.itens || []).map(i => `${i.desc} ${fmt(i.valor)}`).join(' · ')}</td>
+                      <td className="px-2 py-1.5 text-right text-texto-1 font-medium whitespace-nowrap">{fmt(c.valor)}</td>
+                      <td className="px-2 py-1.5">
+                        {c.status === 'compensado'
+                          ? <span className="text-primary-fg">Abatido no aluguel pago em {fmtDate(c.data_compensacao)}</span>
+                          : alvo ? (
+                            <span className="inline-flex flex-wrap items-center gap-1.5">
+                              <span className="text-texto-2">Aberto — abate no aluguel de {fmtDate(alvo.startDate)}</span>
+                              {podeEditar && <button className="text-primary-fg hover:underline" onClick={() => adiarCreditoNaParcela(alvo.id, c.id)}>Não abater neste mês</button>}
+                            </span>
+                          ) : <span className="text-aviso">Aberto — sem aluguel pendente para abater</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+                {creditos.length === 0 && <tr><td colSpan={4} className="px-2 py-3 text-center text-texto-3">Nenhum crédito do proprietário.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        ) : (
         <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-surface">
@@ -241,6 +299,7 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -250,7 +309,10 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
             <ul className="space-y-0.5 max-h-48 overflow-y-auto">
               {pagamentos.map(t => (
                 <li key={t.id} className="flex justify-between gap-2 text-xs">
-                  <span className="text-texto-2 truncate">{fmtDate(t.date)} · {t.description}</span>
+                  <span className="text-texto-2 truncate">
+                    {fmtDate(t.date)} · {t.description}
+                    {t.composicao?.estimada && <button className="ml-1.5 text-aviso underline" onClick={() => setRevisar(t)}>estimada — revisar</button>}
+                  </span>
                   <span className="text-texto-1 whitespace-nowrap">{fmt(t.amount)}</span>
                 </li>
               ))}
@@ -295,6 +357,16 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         message="O contrato e as parcelas pendentes saem; agendamentos vinculados ficam, sem o contrato. Não pode ser desfeito."
         onConfirm={() => excluirContrato(contrato).then(onClose).catch(e => setErro(e.message))}
       />
+      {revisar && (
+        <ComposicaoBoletoModal contrato={contrato} tx={revisar} composicaoInicial={revisar.composicao} modo="edicao"
+          onConfirmar={async ({ composicao }) => {
+            const r = await editarComposicaoLancamento(revisar, composicao)
+            if (!r.ok) throw new Error(r.aviso)
+            setRevisar(null)
+            setAviso('Composição revisada.')
+          }}
+          onClose={() => setRevisar(null)} />
+      )}
       {reajusteDe && <ConfirmarReajusteModal contrato={contrato} parcela={reajusteDe} onClose={() => setReajusteDe(null)} onConfirmado={() => { setAviso('Reajuste confirmado.'); recarregar() }} />}
       {vinculo && (
         <VinculoModal contrato={contrato} candidatos={vinculo} onClose={() => setVinculo(null)}

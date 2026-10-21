@@ -16,10 +16,15 @@ import {
 //   PUT  { id, contrato, evento? } → altera os campos enviados (+ evento, mesma transação)
 //   DELETE ?id=x                 → exclui (409 se alguma parcela gerada já foi paga)
 
-const SQL_LISTA = `SELECT c.*,
-    COALESCE((SELECT json_agg(e.detalhes->>'parcela_id') FROM contrato_eventos e
-               WHERE e.contrato_id = c.id AND e.tipo = 'edicao_parcela' AND e.detalhes->>'acao' = 'exclusao'), '[]'::json) AS excluidas
-  FROM contratos c`
+const SQL_EXCLUIDAS = `COALESCE((SELECT json_agg(e.detalhes->>'parcela_id') FROM contrato_eventos e
+               WHERE e.contrato_id = c.id AND e.tipo = 'edicao_parcela' AND e.detalhes->>'acao' = 'exclusao'), '[]'::json) AS excluidas`
+// Créditos abertos só depois da migração da Entrega 2 (sem a tabela, a lista sai sem a coluna).
+const SQL_CREDITOS = `COALESCE((SELECT sum(cr.valor) FROM contrato_creditos cr
+               WHERE cr.contrato_id = c.id AND cr.status = 'aberto'), 0) AS creditos_abertos`
+async function sqlLista() {
+  const [{ t } = {}] = await query("SELECT to_regclass('contrato_creditos') IS NOT NULL AS t")
+  return `SELECT c.*, ${SQL_EXCLUIDAS}${t ? `, ${SQL_CREDITOS}` : ''} FROM contratos c`
+}
 
 // Conta do contrato: tem de ser conta (cartão fica de fora na 1ª versão) e, com perfis restritos,
 // de um perfil permitido. Devolve a mensagem de erro ou null.
@@ -48,9 +53,10 @@ async function handler(req, res) {
         ])
         return res.json({ contrato: comNumeros(c), itens: itens.map(comNumeros), eventos: eventos.map(comNumeros) })
       }
+      const lista = await sqlLista()
       const rows = perfis
-        ? await query(`${SQL_LISTA} WHERE c.perfil_id = ANY($1) ORDER BY c.created_at DESC`, [perfis])
-        : await query(`${SQL_LISTA} ORDER BY c.created_at DESC`)
+        ? await query(`${lista} WHERE c.perfil_id = ANY($1) ORDER BY c.created_at DESC`, [perfis])
+        : await query(`${lista} ORDER BY c.created_at DESC`)
       return res.json({ contratos: rows.map(comNumeros) })
     }
 
