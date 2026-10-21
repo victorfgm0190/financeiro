@@ -77,6 +77,9 @@ describe('/api/contratos', () => {
     expect((await chamar(contratos, 'POST', { body: { contrato: { ...CONTRATO, conta_id: 'card1' } } })).statusCode).toBe(400)
     expect((await chamar(contratos, 'POST', { body: { contrato: { ...CONTRATO, link_anexo: 'javascript:alert(1)' } } })).statusCode).toBe(400)
     expect((await chamar(contratos, 'POST', { body: { contrato: { ...CONTRATO, tipo: 'x' } } })).statusCode).toBe(400)
+    const objeto = await chamar(contratos, 'POST', { body: { contrato: { ...CONTRATO, categoria_id: { target: { value: 'x' } } } } })
+    expect(objeto.statusCode).toBe(400)
+    expect(objeto.body.error).toMatch(/categoria_id: deve ser texto/)
   })
 
   it('PUT altera só os campos enviados (lista branca) e grava o evento na mesma transação', async () => {

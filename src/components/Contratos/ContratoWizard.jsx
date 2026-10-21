@@ -259,7 +259,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <p className="text-[11px] text-texto-3 mt-1">Cartão de crédito não é aceito nesta versão.</p>
           </Campo>
           <Campo label="Categoria do aluguel">
-            <CategorySelect categories={categories} value={f.categoria_id} onChange={v => set('categoria_id', v)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
+            <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
           <Campo label="Valor do aluguel (contratual)">
             <input autoComplete="off" className="input" inputMode="decimal" value={f.valor_base} onChange={e => set('valor_base', e.target.value)} placeholder="3.900,00" />
@@ -367,7 +367,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                   <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
                 </Campo>
                 <Campo label="Categoria do condomínio" className="sm:col-span-2">
-                  <CategorySelect categories={categories} value={f.categoria_condominio_id} onChange={v => set('categoria_condominio_id', v)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
+                  <CategorySelect categories={categories} value={f.categoria_condominio_id} onChange={e => set('categoria_condominio_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
                 </Campo>
               </>
             )}

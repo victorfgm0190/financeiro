@@ -6,6 +6,7 @@ import { pode, temTodosPerfis } from '../src/lib/permissoes.js'
 const DATA = /^\d{4}-\d{2}-\d{2}$/
 const texto = (max) => (v) => {
   if (v == null || v === '') return { v: null }
+  if (typeof v !== 'string' && typeof v !== 'number') return { erro: 'deve ser texto' }
   const s = String(v).trim().slice(0, max)
   return { v: s || null }
 }
