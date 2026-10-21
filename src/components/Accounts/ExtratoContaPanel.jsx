@@ -9,6 +9,7 @@ import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtSinal, fmtDate, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import EstornoLancamentoDialog from '../Contratos/EstornoLancamentoDialog'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -498,7 +499,7 @@ function NettedRow({ row, accountId, accounts, balance, onToggleReconcile, selec
 // atalhoNovoTx: id da ação de atalho que a tela registrou para o mesmo onNewTx (só para o tooltip).
 export default function ExtratoContaPanel({ account: accountProp, onClose, onEdit, onNewTx, onDelete, backButton, atalhoNovoTx }) {
   const tituloNovoTx = useTituloAtalho('Novo Lançamento', atalhoNovoTx)
-  const { transactions, schedules, accounts, settings, reverseTransaction, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos, pode } = useApp()
+  const { transactions, schedules, accounts, settings, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, getAccountSaldos, pode } = useApp()
   // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
   const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   // Nível de acesso (src/lib/permissoes.js): lançamentos do extrato — incluir/editar/excluir.
@@ -552,14 +553,6 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
 
-  const handleReverse = (tx) => {
-    reverseTransaction(tx.id)
-    setConfirmEstorno(null)
-    const msg = tx.scheduleId
-      ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
-      : 'Lançamento estornado.'
-    showToast(msg)
-  }
 
   const handleDelete = (tx) => {
     const r = findLinkedResgate(tx.id)
@@ -1475,19 +1468,9 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
         })}
       </div>
 
-      <ConfirmDialog
-        open={!!confirmEstorno}
-        onClose={() => setConfirmEstorno(null)}
-        onConfirm={() => handleReverse(confirmEstorno)}
-        title="Estornar Lançamento"
-        message={
-          confirmEstorno?.scheduleId
-            ? `Estornar este lançamento? O agendamento voltará para pendente na data ${fmtDate(confirmEstorno?.date)}.`
-            : 'Estornar este lançamento? Esta ação não pode ser desfeita.'
-        }
-        confirmLabel="Confirmar Estorno"
-        danger
-      />
+      {confirmEstorno && (
+        <EstornoLancamentoDialog tx={confirmEstorno} onClose={() => setConfirmEstorno(null)} onFeito={showToast} />
+      )}
 
       <ConfirmDialog
         open={!!confirmDelete}

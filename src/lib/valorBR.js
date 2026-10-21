@@ -21,3 +21,18 @@ export function valorParaInput(v) {
   if (v === '' || v == null || !Number.isFinite(n)) return ''
   return n.toFixed(2).replace('.', ',')
 }
+
+// Enquanto digita: só dígitos, ponto e vírgula; no máximo 2 casas depois da vírgula ("100,000" → "100,00").
+export function digitandoValorBR(s) {
+  const t = String(s ?? '').replace(/[^\d.,]/g, '')
+  const i = t.indexOf(',')
+  if (i < 0) return t
+  return t.slice(0, i + 1) + t.slice(i + 1).replace(/[.,]/g, '').slice(0, 2)
+}
+
+// Valor formatado no padrão BR com milhar e 2 casas ("3.900,00"). Vazio quando não numérico.
+export function valorBRFormatado(v) {
+  const n = typeof v === 'number' ? v : parseValorBR(v)
+  if (v === '' || v == null || !Number.isFinite(n)) return ''
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}

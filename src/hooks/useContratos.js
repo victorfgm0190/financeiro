@@ -9,6 +9,7 @@ import {
   planoManutencao,
 } from '../lib/contratos/parcelas'
 import { planoVinculo, planoDesvinculo } from '../lib/contratos/vinculo'
+import { analisarEstorno, cancelarOcorrencia } from '../lib/contratos/estorno'
 import { hojeStr, ymDe } from '../lib/contratos/datas'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { ESCOPO } from '../lib/camposSerie'
@@ -40,7 +41,7 @@ function valorCondominioPago(contrato, schedules, transactions) {
   return r2(tx ? tx.amount : ultima.amount)
 }
 
-export function useContratos({ habilitado, update, dataRef, dbConectado, registrarEdicao }) {
+export function useContratos({ habilitado, update, dataRef, dbConectado, registrarEdicao, reverseTransaction }) {
   const [contratos, setContratos] = useState([])
   const [carregados, setCarregados] = useState(false)
   const [indices, setIndices] = useState({})
@@ -256,6 +257,28 @@ export function useContratos({ habilitado, update, dataRef, dbConectado, registr
     })().catch(err => console.warn('[contratos] extensão das parcelas falhou:', err.message))
   }, [habilitado, dbConectado, carregados, contratos, dataRef, indicesPara, update])
 
+  // Estorno de lançamento que pagou parcela de contrato. reabrir = false: a ocorrência reaberta pelo
+  // estorno fica cancelada (pulada) — usado em contrato rescindido/encerrado, quando o usuário
+  // responde "Não". Sempre registra o evento na linha do tempo.
+  const estornarLancamentoContrato = useCallback(async (tx, { reabrir = true } = {}) => {
+    const a = analisarEstorno(tx, dataRef.current.schedules, (id) => contratos.find(c => c.id === id) || null)
+    reverseTransaction(tx.id)
+    if (!a?.schedule || !a.ocorrencia) return a
+    if (!reabrir) {
+      update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === a.schedule.id ? cancelarOcorrencia(s, a.ocorrencia) : s)) }))
+    }
+    if (a.contrato) {
+      await registrarEvento(a.contrato.id, {
+        tipo: 'edicao_parcela', valor_anterior: r2(tx.amount),
+        detalhes: {
+          acao: reabrir ? 'estorno_reaberta' : 'estorno_cancelada', parcela_id: a.schedule.id, lancamento_id: tx.id,
+          vencimento: a.ocorrencia, papel: a.schedule.contratoPapel, status_contrato: a.contrato.status,
+        },
+      }).catch(err => console.warn('[contratos] evento de estorno não gravado:', err.message))
+    }
+    return a
+  }, [dataRef, contratos, reverseTransaction, update, registrarEvento])
+
   const abrirFichaContrato = useCallback((id, acao = null) => setFichaAberta(id ? { id, acao } : null), [])
   const fecharFichaContrato = useCallback(() => setFichaAberta(null), [])
   const contratoPorId = useCallback((id) => contratos.find(c => c.id === id) || null, [contratos])
@@ -266,7 +289,7 @@ export function useContratos({ habilitado, update, dataRef, dbConectado, registr
     recarregarContratos, carregarIndice, criarContrato, atualizarContrato, excluirContrato, salvarItensContrato: salvarItens,
     registrarEventoContrato: registrarEvento, planejarParcelasContrato: planejarParcelas, aplicarParcelasContrato: aplicarParcelas,
     vincularEGerarContrato: vincularEGerar, desvincularDoContrato: desvincular, confirmarReajusteContrato: confirmarReajuste,
-    excluirParcelaContrato: excluirParcela, rescindirContrato: rescindir,
+    excluirParcelaContrato: excluirParcela, rescindirContrato: rescindir, estornarLancamentoContrato,
     fichaContratoAberta: fichaAberta, abrirFichaContrato, fecharFichaContrato,
   }
 }

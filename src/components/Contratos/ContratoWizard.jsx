@@ -4,7 +4,8 @@ import { useApp } from '../../context/AppContext'
 import CategorySelect from '../shared/CategorySelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { fmt, fmtDate } from '../shared/utils'
-import { parseValorBR, valorParaInput } from '../../lib/valorBR'
+import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
+import CampoValor from './CampoValor'
 import { buscarContratoApi } from '../../lib/contratosApi'
 import { gerarPlanoParcelas, proximoReajuste, PAPEIS, r2, rotuloContrato, textoProjecao } from '../../lib/contratos/parcelas'
 import { validarEtapa, sugerirCategoria } from '../../lib/contratos/validacao'
@@ -30,8 +31,8 @@ function formDoContrato(c, padrao) {
   return {
     ...padrao, ...Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v ?? ''])),
     sem_fim: !c.data_fim,
-    valor_base: valorParaInput(c.valor_base), bonificacao_valor: valorParaInput(c.bonificacao_valor || ''),
-    valor_condominio_previsto: valorParaInput(c.valor_condominio_previsto ?? ''),
+    valor_base: valorBRFormatado(c.valor_base), bonificacao_valor: c.bonificacao_valor ? valorBRFormatado(c.bonificacao_valor) : '',
+    valor_condominio_previsto: valorBRFormatado(c.valor_condominio_previsto ?? ''),
     percentual_fixo: c.percentual_fixo == null ? '' : String(c.percentual_fixo).replace('.', ','),
   }
 }
@@ -93,7 +94,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
 
   useEffect(() => {
     if (!edicao) return
-    buscarContratoApi(contrato.id).then(r => setItens((r.itens || []).map(i => ({ ...i, valor_previsto: valorParaInput(i.valor_previsto ?? '') })))).catch(() => {})
+    buscarContratoApi(contrato.id).then(r => setItens((r.itens || []).map(i => ({ ...i, valor_previsto: valorBRFormatado(i.valor_previsto ?? '') })))).catch(() => {})
   }, [edicao, contrato?.id])
 
   useEffect(() => {
@@ -262,7 +263,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
           <Campo label="Valor do aluguel (contratual)">
-            <input autoComplete="off" className="input" inputMode="decimal" value={f.valor_base} onChange={e => set('valor_base', e.target.value)} placeholder="3.900,00" />
+            <CampoValor value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="Digite o valor do aluguel" />
           </Campo>
           <Campo label="Periodicidade">
             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
@@ -287,7 +288,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           <div />
           <Campo label="Bonificação por mês (desconto)">
-            <input autoComplete="off" className="input" inputMode="decimal" value={f.bonificacao_valor} onChange={e => set('bonificacao_valor', e.target.value)} placeholder="200,00" />
+            <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Ex.: 200,00 (deixe vazio se não houver)" />
           </Campo>
           <Campo label="Bonificação nos primeiros (meses)">
             <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} />
@@ -322,7 +323,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           {f.indice_reajuste === 'FIXO' && (
             <Campo label="Percentual fixo ao ano (%)">
-              <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="5,00" />
+              <input autoComplete="off" className="input" inputMode="decimal" value={f.percentual_fixo} onChange={e => set('percentual_fixo', e.target.value)} placeholder="Ex.: 5,00" />
             </Campo>
           )}
           {f.indice_reajuste !== 'NENHUM' && (
@@ -361,7 +362,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                   <FavorecidoAutocomplete value={f.favorecido_condominio} onChange={v => set('favorecido_condominio', v)} suggestions={payees || []} placeholder="Condomínio / administradora" />
                 </Campo>
                 <Campo label="Valor previsto">
-                  <input autoComplete="off" className="input" inputMode="decimal" value={f.valor_condominio_previsto} onChange={e => set('valor_condominio_previsto', e.target.value)} />
+                  <CampoValor value={f.valor_condominio_previsto} onChange={v => set('valor_condominio_previsto', v)} placeholder="Digite o valor previsto" />
                 </Campo>
                 <Campo label="Dia de vencimento do condomínio">
                   <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
@@ -392,7 +393,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
                   <select className="input py-1.5 text-sm" value={it.responsavel} onChange={e => setI('responsavel', e.target.value)}>
                     <option value="inquilino">Inquilino</option><option value="proprietario">Proprietário</option>
                   </select>
-                  <input autoComplete="off" className="input py-1.5 text-sm" inputMode="decimal" placeholder="Valor" value={it.valor_previsto} onChange={e => setI('valor_previsto', e.target.value)} />
+                  <CampoValor className="input py-1.5 text-sm" placeholder="Valor" value={it.valor_previsto} onChange={v => setI('valor_previsto', v)} />
                   <button type="button" className="p-1.5 text-texto-3 hover:text-perigo" title="Remover" onClick={() => setItens(p => p.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
                 </div>
               )

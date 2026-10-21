@@ -10,6 +10,7 @@ import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import Modal from '../shared/Modal'
 import ConfirmDialog from '../shared/ConfirmDialog'
+import EstornoLancamentoDialog from '../Contratos/EstornoLancamentoDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
@@ -108,7 +109,7 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, schedules, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, reverseTransaction, setReconciled, temHistorico, pode } = useApp()
+  const { profileTransactions: transactions, schedules, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, temHistorico, pode } = useApp()
   // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
   const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   // Nível de acesso (lançamentos): novo/duplicar/estornar = incluir; reconciliar = editar; excluir = excluir.
@@ -138,14 +139,6 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
     setShowEdit(true)
   }
 
-  const handleReverse = (tx) => {
-    reverseTransaction(tx.id)
-    setConfirmEstorno(null)
-    const msg = tx.scheduleId
-      ? `Lançamento estornado. Agendamento restaurado para ${fmtDate(tx.date)}.`
-      : 'Lançamento estornado.'
-    showToast(msg)
-  }
 
   const label = getBillLabel(billKey)
   const txs = useMemo(() =>
@@ -411,19 +404,9 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
         confirmLabel={confirmDelete && findLinkedResgate(confirmDelete.id) ? 'Excluir ambos' : undefined}
         danger
       />
-      <ConfirmDialog
-        open={!!confirmEstorno}
-        onClose={() => setConfirmEstorno(null)}
-        onConfirm={() => handleReverse(confirmEstorno)}
-        title="Estornar Lançamento"
-        message={
-          confirmEstorno?.scheduleId
-            ? `Estornar este lançamento? O agendamento voltará para pendente na data ${fmtDate(confirmEstorno?.date)}.`
-            : 'Estornar este lançamento? Esta ação não pode ser desfeita.'
-        }
-        confirmLabel="Confirmar Estorno"
-        danger
-      />
+      {confirmEstorno && (
+        <EstornoLancamentoDialog tx={confirmEstorno} onClose={() => setConfirmEstorno(null)} onFeito={showToast} />
+      )}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   )

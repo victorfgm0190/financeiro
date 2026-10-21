@@ -54,3 +54,21 @@ describe('valorParaInput', () => {
     for (const v of [0.5, 341.7, 1234.56, 12345678.9]) expect(parseValorBR(valorParaInput(v))).toBe(v)
   })
 })
+
+describe('digitação e formatação com 2 casas', () => {
+  it('digitandoValorBR corta a 3ª casa e o que não é número', async () => {
+    const { digitandoValorBR } = await import('./valorBR')
+    expect(digitandoValorBR('100,000')).toBe('100,00')
+    expect(digitandoValorBR('R$ 3.900,5')).toBe('3.900,5')
+    expect(digitandoValorBR('1,2,3')).toBe('1,23')
+    expect(digitandoValorBR('abc')).toBe('')
+  })
+  it('valorBRFormatado: milhar e 2 casas', async () => {
+    const { valorBRFormatado } = await import('./valorBR')
+    expect(valorBRFormatado('3900')).toBe('3.900,00')
+    expect(valorBRFormatado('100,5')).toBe('100,50')
+    expect(valorBRFormatado(1234.567)).toBe('1.234,57')
+    expect(valorBRFormatado('')).toBe('')
+    expect(valorBRFormatado('x')).toBe('')
+  })
+})

@@ -19,7 +19,7 @@ import { getToken, getSessao, noAmbientePrincipal, definirSemConexao } from '../
 import { useContratos } from '../hooks/useContratos'
 import { ordenarTipos } from '../lib/tiposDocumento'
 import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
-import { comCamposDaOcorrencia, ESCOPO } from '../lib/camposSerie'
+import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
 import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
@@ -30,7 +30,7 @@ import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
 import { installmentKey } from '../lib/installments'
 import { advanceByFrequency, computeOccurrences, registerAndAdvance } from '../lib/occurrences'
 import { aplicarRenomeacao, nomeFavorecido } from '../lib/favorecidos'
-import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor } from '../lib/scheduleBaixa'
+import { desfazerBaixa, aplicarBaixa, baixasDaImportacao, mapaCobertura, ocorrenciasProjetadas, TIPO_BAIXA, metaBaixaGerada, lancamentosVinculados, ocorrenciaDaCobranca, baixarPeloValor, reabrirBaixasDoLancamento } from '../lib/scheduleBaixa'
 import { extractLearnKeyword } from '../lib/descMatch'
 import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa'
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
@@ -2158,6 +2158,9 @@ export function AppProvider({ children }) {
 
       reverseBalance(tx)
       let transactions = d.transactions.filter(t => t.id !== id)
+      // Reabre as ocorrências que este lançamento baixou (sem isso a baixa ficava órfã, com a meta
+      // apontando um lançamento apagado). Agendamentos do motor da fatura ficam com o motor.
+      const schedules = reabrirBaixasDoLancamento(d.schedules, tx, { ignorar: agendamentoDoMotor })
 
       // Grupo G: remove a transferência imediata (etapa A) vinculada a este gasto.
       if (tx.grupoGerencial && tx.type === 'expense' && tx.accountType === 'credit') {
@@ -2189,7 +2192,7 @@ export function AppProvider({ children }) {
         transactions = transactions.filter(t => !espIds.has(t.id))
       }
 
-      return { ...d, accounts, transactions, rateios: (d.rateios || []).filter(r => r.lancamentoId !== id && !childIds.has(r.lancamentoId)) }
+      return { ...d, accounts, transactions, schedules, rateios: (d.rateios || []).filter(r => r.lancamentoId !== id && !childIds.has(r.lancamentoId)) }
     })
 
     // Remove os rateios do lançamento excluído no banco (quando houver).
@@ -2262,28 +2265,17 @@ export function AppProvider({ children }) {
 
       reverseBalance(tx)
 
-      // Desfaz o registro da ocorrência no agendamento vinculado (estorno reabre a ocorrência
-      // e o agendamento volta a pendente). pagamento_fatura mantém o comportamento original
-      // (o motor de fatura tem lógica própria de creditDebt/reconciliação).
-      let schedules = d.schedules
+      // Estorno reabre a ocorrência que o lançamento baixou e o agendamento volta a pendente: pela
+      // meta (lancamento_id) ou pela data da OCORRÊNCIA (dataOcorrencia) — a do pagamento pode ser
+      // outra —, apagando a meta e recuando next_occurrence (scheduleBaixa.reabrirBaixasDoLancamento).
+      // pagamento_fatura mantém o comportamento original (o motor de fatura tem lógica própria de
+      // creditDebt/reconciliação).
+      const ehFatura = (s) => s.tipo === 'pagamento_fatura'
+      let schedules = reabrirBaixasDoLancamento(d.schedules, tx, { ignorar: ehFatura })
       if (tx.scheduleId) {
-        schedules = d.schedules.map(s => {
-          if (s.id !== tx.scheduleId) return s
-          if (s.tipo === 'pagamento_fatura') {
-            return { ...s, registered: (s.registered || []).filter(r => r !== tx.date) }
-          }
-          if ((s.frequency || 'once') === 'once') {
-            // Única ocorrência possível — limpa o registro inteiro. Cobre pagamento com a data
-            // editada no modal (registered guarda a data da OCORRÊNCIA; tx.date, a do pagamento).
-            return { ...s, registered: [], confirmado: false }
-          }
-          // Recorrente: reabre a ocorrência pela data do lançamento e RECUA next_occurrence
-          // para ela quando necessário (registerAndAdvance avançou a âncora ao pagar).
-          const registered = (s.registered || []).filter(r => r !== tx.date)
-          if (registered.length === (s.registered || []).length) return s // ocorrência não encontrada
-          const nextOccurrence = (s.nextOccurrence && s.nextOccurrence <= tx.date) ? s.nextOccurrence : tx.date
-          return { ...s, registered, nextOccurrence, confirmado: false }
-        })
+        schedules = schedules.map(s => (s.id === tx.scheduleId && ehFatura(s)
+          ? { ...s, registered: (s.registered || []).filter(r => r !== tx.date) }
+          : s))
       }
       let transactions = d.transactions.filter(t => t.id !== id)
 
@@ -2603,7 +2595,7 @@ export function AppProvider({ children }) {
   // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
   const contratosCtx = useContratos({
     habilitado: podeNivel(usuario, 'contratos', 'ver'), update, dataRef,
-    dbConectado: dbStatus === 'connected', registrarEdicao,
+    dbConectado: dbStatus === 'connected', registrarEdicao, reverseTransaction,
   })
 
   // Chain ID: agendamento de resgate avulso vinculado a um lançamento (source_tx_id), se houver.

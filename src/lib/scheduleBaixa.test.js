@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   candidatosBaixa, atribuirBaixas, planejarBaixas, aplicarBaixa, desfazerBaixa, baixasDaImportacao,
   mapaCobertura, ocorrenciasProjetadas, isOcorrenciaCobertaPorCartao, faturaDaData, faturaDoLancamento,
-  lancamentosVinculados, TIPO_BAIXA,
+  lancamentosVinculados, TIPO_BAIXA, ocorrenciasDoLancamento, reabrirBaixasDoLancamento,
 } from './scheduleBaixa'
+import { agendamentoDoMotor } from './camposSerie'
 import { computeOccurrences } from './occurrences'
 import { detectParcela } from './installments'
 import { inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, addMonthToFatura } from './parcelas'
@@ -285,5 +286,51 @@ describe('regra C — critérios de cobertura', () => {
   it('lançamento já vinculado a outro agendamento não cobre', () => {
     const real = tx('real', '2026-10-25', 'CABELOS FILHOS', 120, '2026-11', { scheduleId: 'outro' })
     expect(mapaCobertura({ schedules: [cabelos], transactions: [real], accounts }).size).toBe(0)
+  })
+})
+
+describe('estorno/exclusão de lançamento reabre a baixa (reverseTransaction / deleteTransaction)', () => {
+  const mensal = (o = {}) => ({
+    id: 'sch_a', frequency: 'monthly', startDate: '2026-08-10', amount: 100, overrides: {}, skipped: [],
+    registered: ['2026-08-10', '2026-09-10'],
+    registeredMeta: { '2026-08-10': { tipo: 'pago', lancamento_id: 'tx_ago' }, '2026-09-10': { tipo: 'pago', lancamento_id: 'tx_set' } },
+    nextOccurrence: '2026-10-10', ...o,
+  })
+
+  it('pago com data diferente da ocorrência: reabre a OCORRÊNCIA, apaga a meta e recua a âncora', () => {
+    const tx = { id: 'tx_set', scheduleId: 'sch_a', date: '2026-09-14', dataOcorrencia: '2026-09-10' }
+    const [s] = reabrirBaixasDoLancamento([mensal()], tx)
+    expect(s.registered).toEqual(['2026-08-10'])
+    expect(s.registeredMeta).toEqual({ '2026-08-10': { tipo: 'pago', lancamento_id: 'tx_ago' } })
+    expect(s.nextOccurrence).toBe('2026-09-10')
+    expect(computeOccurrences(s, 1)).toEqual(['2026-09-10'])
+  })
+
+  it('sem meta (legado): pela dataOcorrencia; sem ela, pela data do lançamento', () => {
+    const semMeta = mensal({ registeredMeta: {} })
+    expect(ocorrenciasDoLancamento(semMeta, { id: 'x', scheduleId: 'sch_a', date: '2026-09-14', dataOcorrencia: '2026-09-10' })).toEqual(['2026-09-10'])
+    expect(ocorrenciasDoLancamento(semMeta, { id: 'x', scheduleId: 'sch_a', date: '2026-09-10' })).toEqual(['2026-09-10'])
+    expect(ocorrenciasDoLancamento(semMeta, { id: 'x', scheduleId: 'sch_a', date: '2026-09-14' })).toEqual([])
+  })
+
+  it('lançamento vinculado sem scheduleId ("Vincular", cobrança recorrente): acha pela meta', () => {
+    const tx = { id: 'tx_ago', scheduleId: null, date: '2026-08-11' }
+    const [s] = reabrirBaixasDoLancamento([mensal()], tx)
+    expect(s.registered).toEqual(['2026-09-10'])
+    expect(s.registeredMeta['2026-08-10']).toBeUndefined()
+  })
+
+  it("'once': reabre e limpa a meta; legado sem ocorrência identificada limpa o registro", () => {
+    const unico = { id: 'sch_u', frequency: 'once', startDate: '2026-10-10', registered: ['2026-10-10'], registeredMeta: { '2026-10-10': { lancamento_id: 'tx_u' } }, confirmado: true }
+    const [s] = reabrirBaixasDoLancamento([unico], { id: 'tx_u', scheduleId: 'sch_u', date: '2026-10-12' })
+    expect(s).toMatchObject({ registered: [], registeredMeta: {}, confirmado: false })
+    const [l] = reabrirBaixasDoLancamento([{ ...unico, registeredMeta: {} }], { id: 'outro', scheduleId: 'sch_u', date: '2026-10-12' })
+    expect(l).toMatchObject({ registered: [], registeredMeta: {} })
+  })
+
+  it('não mexe em agendamento de outro lançamento nem nos ignorados (motor da fatura)', () => {
+    const lista = [mensal(), { id: 'fsch_card_202610_pagamento_fatura', tipo: 'pagamento_fatura', frequency: 'once', startDate: '2026-10-05', registered: ['2026-10-05'], registeredMeta: { '2026-10-05': { lancamento_id: 'tx_f' } } }]
+    expect(reabrirBaixasDoLancamento(lista, { id: 'tx_outro', scheduleId: null, date: '2026-09-10' })).toBe(lista)
+    expect(reabrirBaixasDoLancamento(lista, { id: 'tx_f', scheduleId: lista[1].id, date: '2026-10-05' }, { ignorar: agendamentoDoMotor })).toBe(lista)
   })
 })

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
-import { parseValorBR, valorParaInput } from '../../lib/valorBR'
+import { parseValorBR, valorBRFormatado } from '../../lib/valorBR'
+import CampoValor from './CampoValor'
 import { r2 } from '../../lib/contratos/parcelas'
 
 // "Confirmar reajuste" de uma parcela de aluguel: aceita a projeção ou o valor do boleto (aluguel
@@ -10,7 +11,7 @@ import { r2 } from '../../lib/contratos/parcelas'
 export default function ConfirmarReajusteModal({ contrato, parcela, onClose, onConfirmado }) {
   const { confirmarReajusteContrato } = useApp()
   const projetado = r2(parcela?.composicao?.base ?? parcela?.amount)
-  const [valor, setValor] = useState(valorParaInput(projetado))
+  const [valor, setValor] = useState(valorBRFormatado(projetado))
   const [escopo, setEscopo] = useState('ciclo')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -38,7 +39,7 @@ export default function ConfirmarReajusteModal({ contrato, parcela, onClose, onC
         </p>
         <div>
           <label className="label">Aluguel contratual reajustado (sem bonificação)</label>
-          <input className="input" inputMode="decimal" value={valor} onChange={e => { setErro(''); setValor(e.target.value) }} autoFocus />
+          <CampoValor value={valor} onChange={v => { setErro(''); setValor(v) }} autoFocus />
           {bonif !== 0 && <p className="text-[11px] text-texto-3 mt-1">Esta parcela ainda tem bonificação de {fmt(-bonif)}, descontada do total.</p>}
         </div>
         <fieldset className="space-y-1.5">

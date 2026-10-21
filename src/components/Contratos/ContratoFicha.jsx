@@ -10,6 +10,7 @@ import {
   linhasDoContrato, textoProjecao,
 } from '../../lib/contratos/parcelas'
 import { candidatosVinculo } from '../../lib/contratos/vinculo'
+import { pendentesForaDaVigencia } from '../../lib/contratos/estorno'
 import { hojeStr, addMesesData, fmtYm } from '../../lib/contratos/datas'
 import ContratoWizard from './ContratoWizard'
 import VinculoModal from './VinculoModal'
@@ -27,6 +28,8 @@ function resumoEvento(e) {
   }
   if (e.tipo === 'vinculo' || e.tipo === 'desvinculo') return `${d.descricao || d.agendamento_id || ''}${d.papel ? ` (${PAPEIS[d.papel] || d.papel})` : ''}`
   if (e.tipo === 'edicao_parcela' && d.acao === 'exclusao') return `Parcela de ${fmtDate(d.vencimento)} excluída`
+  if (e.tipo === 'edicao_parcela' && d.acao === 'estorno_reaberta') return `Pagamento de ${fmtDate(d.vencimento)} estornado — parcela reaberta${d.status_contrato && d.status_contrato !== 'ativo' ? ` (contrato ${d.status_contrato})` : ''}`
+  if (e.tipo === 'edicao_parcela' && d.acao === 'estorno_cancelada') return `Pagamento de ${fmtDate(d.vencimento)} estornado — parcela cancelada`
   if (e.tipo === 'aditivo') return Object.keys(d.campos || {}).join(', ')
   if (e.tipo === 'renovacao') return `Fim ${fmtDate(d.de)} → ${fmtDate(d.para)}`
   if (e.tipo === 'rescisao') return `Saída ${fmtDate(d.data_saida)} · ${(d.canceladas || []).length} pendente(s) cancelada(s)${d.motivo ? ` · ${d.motivo}` : ''}`
@@ -135,6 +138,12 @@ export default function ContratoFicha({ id, acaoInicial = null, onClose }) {
         </div>
       )}
       {aviso && <p className="text-xs text-primary-fg">{aviso}</p>}
+      {pendentesForaDaVigencia(contrato, linhas).length > 0 && (
+        <p className="text-xs text-aviso bg-surface-2/60 rounded-lg px-3 py-2">
+          ⚠ Contrato {STATUS_CONTRATO[contrato.status].toLowerCase()} com {pendentesForaDaVigencia(contrato, linhas).length} parcela(s) pendente(s)
+          (reaberta(s) por estorno): {pendentesForaDaVigencia(contrato, linhas).map(l => `${PAPEIS[l.papel]} ${fmtDate(l.vencimento)}`).join(', ')}.
+        </p>
+      )}
       {erro && <p className="text-xs text-perigo">{erro}</p>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-surface-2/60">

@@ -226,6 +226,45 @@ export function desfazerBaixa(s, occurrenceDate) {
   return { ...s, registered, registeredMeta, nextOccurrence, confirmado: false }
 }
 
+// Ocorrências que o lançamento `tx` baixou neste agendamento: pela meta (lancamento_id) — cobre o
+// "Vincular" e a cobrança recorrente, em que o lançamento nem tem scheduleId; sem meta, e só no
+// agendamento do scheduleId dele, pela data da OCORRÊNCIA gravada (dataOcorrencia) e, no legado,
+// pela data do lançamento. Nunca pela data do pagamento quando ela difere da ocorrência.
+export function ocorrenciasDoLancamento(s, tx) {
+  const reg = new Set(s.registered || [])
+  const porMeta = Object.entries(s.registeredMeta || {})
+    .filter(([d, m]) => m?.lancamento_id === tx.id && reg.has(d))
+    .map(([d]) => d)
+  if (porMeta.length) return porMeta
+  if (!tx.scheduleId || s.id !== tx.scheduleId) return []
+  if (tx.dataOcorrencia && reg.has(tx.dataOcorrencia)) return [tx.dataOcorrencia]
+  if (reg.has(tx.date)) return [tx.date]
+  return []
+}
+
+// Estorno ou exclusão de um lançamento: reabre, em cada agendamento, as ocorrências que ele baixou
+// (desfazerBaixa: tira de registered, apaga a meta e recua next_occurrence). Agendamento 'once'
+// ligado pelo scheduleId sem ocorrência identificada (legado) tem o registro limpo, como antes.
+// `ignorar(s)`: agendamentos que ficam como estão. Devolve a MESMA lista quando nada muda.
+export function reabrirBaixasDoLancamento(schedules, tx, { ignorar = () => false } = {}) {
+  if (!tx) return schedules
+  let mudou = false
+  const out = schedules.map(s => {
+    if (ignorar(s)) return s
+    const datas = ocorrenciasDoLancamento(s, tx)
+    if (datas.length) {
+      mudou = true
+      return datas.reduce((acc, d) => desfazerBaixa(acc, d), s)
+    }
+    if (s.id === tx.scheduleId && (s.frequency || 'once') === 'once' && (s.registered || []).length) {
+      mudou = true
+      return { ...s, registered: [], registeredMeta: {}, confirmado: false }
+    }
+    return s
+  })
+  return mudou ? out : schedules
+}
+
 // Ocorrências que uma importação baixou (importado / ja_no_cartao / coberta_parcela).
 export function baixasDaImportacao(s, importId) {
   if (!importId) return []
