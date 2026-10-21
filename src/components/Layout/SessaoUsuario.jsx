@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays } from 'lucide-react'
+import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays, Trash2 } from 'lucide-react'
 import { getSessao } from '../../lib/api'
 import SairModal from '../Offline/SairModal'
+import { useSair } from '../Offline/useSair'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
 import AgendaCelularPanel from '../Settings/AgendaCelularPanel'
 import Modal from '../shared/Modal'
@@ -16,7 +17,8 @@ export default function SessaoUsuario({ comSair = false }) {
   const [trocar, setTrocar] = useState(false)
   const [agenda, setAgenda] = useState(false)
   const [toast, setToast] = useState(null)
-  const [sair, setSair] = useState(false)
+  const [apagar, setApagar] = useState(false)
+  const { sair, saindo } = useSair()
   if (!sessao) return null
   const emergencia = sessao.origem === 'env'
 
@@ -50,16 +52,22 @@ export default function SessaoUsuario({ comSair = false }) {
           <Smartphone size={11} /> Instalar no celular
         </a>
         {comSair && (
-          <button type="button" onClick={() => setSair(true)} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-perigo min-h-[28px]">
-            <LogOut size={11} /> Sair
+          <button type="button" onClick={sair} disabled={saindo} className="flex items-center gap-1 text-[11px] text-texto-3 hover:text-perigo min-h-[28px] disabled:opacity-50">
+            <LogOut size={11} /> {saindo ? 'Saindo…' : 'Sair'}
           </button>
         )}
       </div>
+      {/* Opção separada e discreta, logo abaixo de "Sair" (no celular, a última do menu Mais). */}
+      {comSair && (
+        <button type="button" onClick={() => setApagar(true)} disabled={saindo} className="flex items-center gap-1 text-[10px] text-perigo/80 hover:text-perigo min-h-[24px] disabled:opacity-50">
+          <Trash2 size={10} /> Sair e apagar dados deste aparelho
+        </button>
+      )}
       {/* Janelas no <body>: a Sidebar é sticky (contexto de empilhamento próprio) — dentro dela o
           modal ficava POR BAIXO do conteúdo da página (ex.: cabeçalho preso do calendário). */}
       {createPortal(
         <>
-          <SairModal open={sair} onClose={() => setSair(false)} />
+          <SairModal open={apagar} onClose={() => setApagar(false)} />
           {/* Agenda no celular: janela (vale para qualquer nível — Configurações › Geral pode estar fechada). */}
           <Modal open={agenda} onClose={() => setAgenda(false)} title="Agenda no celular">
             {agenda && <AgendaCelularPanel emJanela />}

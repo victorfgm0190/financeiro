@@ -3,53 +3,62 @@ import Modal from '../shared/Modal'
 import { useApp } from '../../context/AppContext'
 import { clearTokenAndRedirect } from '../../lib/api'
 
-// Sair com pendências: nunca descarta sem o usuário pedir — "Enviar e sair" (com internet) ou
-// "Cancelar". Sem pendências: oferece apagar os dados deste aparelho (computador compartilhado).
+// "Sair e apagar dados deste aparelho" (computador compartilhado). Com pendências, avisa que elas
+// se perdem e oferece "Sincronizar e depois apagar" como ação principal.
 export default function SairModal({ open, onClose }) {
-  const { filaPendentes, enviarPendentes, dbStatus, apagarDadosDoAparelho } = useApp()
-  const [ocupado, setOcupado] = useState(false)
+  const { filaPendentes, sincronizarAntesDeSair, dbStatus, apagarDadosDoAparelho } = useApp()
+  const [ocupado, setOcupado] = useState(null)
   const [erro, setErro] = useState('')
   const pendentes = filaPendentes.length
   const online = dbStatus === 'connected'
 
-  const enviarESair = async () => {
-    setOcupado(true)
-    setErro('')
-    try { await enviarPendentes() } finally { setOcupado(false) }
-  }
-  const sair = async (apagar) => {
-    setOcupado(true)
-    if (apagar) await apagarDadosDoAparelho()
+  const apagarESair = async () => {
+    setOcupado('apagar')
+    await apagarDadosDoAparelho()
     clearTokenAndRedirect()
+  }
+  const sincronizarEApagar = async () => {
+    setOcupado('sincronizar')
+    setErro('')
+    const restam = await sincronizarAntesDeSair()
+    if (restam > 0) {
+      setOcupado(null)
+      setErro('Não foi possível enviar tudo agora. Nada foi apagado.')
+      return
+    }
+    await apagarESair()
   }
 
   return (
-    <Modal open={open} onClose={ocupado ? () => {} : onClose} title="Sair">
-      {pendentes > 0 ? (
-        <div className="space-y-4">
-          <p className="text-sm text-texto-1">
-            Há {pendentes} {pendentes === 1 ? 'alteração não enviada' : 'alterações não enviadas'} para o banco.
-          </p>
-          {!online && <p className="text-xs text-aviso">Sem internet agora: conecte-se para enviar antes de sair.</p>}
-          {erro && <p className="text-xs text-perigo">{erro}</p>}
-          <div className="flex gap-2 justify-end">
-            <button type="button" className="btn-secondary" onClick={onClose} disabled={ocupado}>Cancelar</button>
-            <button type="button" className="btn-primary disabled:opacity-40" onClick={enviarESair} disabled={!online || ocupado}>
-              {ocupado ? 'Enviando…' : 'Enviar e sair'}
+    <Modal open={open} onClose={ocupado ? () => {} : onClose} title="Apagar dados deste aparelho">
+      <div className="space-y-4">
+        <p className="text-sm text-texto-1">
+          Os dados salvos neste aparelho serão apagados e você sairá. Seus dados na nuvem NÃO são afetados.
+          Recomendado em computador compartilhado.
+        </p>
+        {pendentes > 0 && (
+          <div className="text-sm text-aviso bg-surface-2 border border-aviso/40 rounded-lg px-3 py-2 space-y-1">
+            <p>
+              {pendentes === 1
+                ? 'Existe 1 alteração ainda não enviada para a nuvem. Se apagar agora, ela será perdida.'
+                : `Existem ${pendentes} alterações ainda não enviadas para a nuvem. Se apagar agora, elas serão perdidas.`}
+            </p>
+            {!online && <p className="text-xs">Sem internet agora: conecte-se para sincronizar antes de apagar.</p>}
+          </div>
+        )}
+        {erro && <p className="text-xs text-perigo">{erro}</p>}
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={!!ocupado}>Cancelar</button>
+          <button type="button" className="btn-danger disabled:opacity-40" onClick={apagarESair} disabled={!!ocupado}>
+            {ocupado === 'apagar' ? 'Apagando…' : 'Apagar e sair'}
+          </button>
+          {pendentes > 0 && (
+            <button type="button" className="btn-primary disabled:opacity-40" onClick={sincronizarEApagar} disabled={!online || !!ocupado}>
+              {ocupado === 'sincronizar' ? 'Sincronizando…' : 'Sincronizar e depois apagar'}
             </button>
-          </div>
+          )}
         </div>
-      ) : (
-        <div className="space-y-4">
-          <p className="text-sm text-texto-1">Apagar os dados deste aparelho?</p>
-          <p className="text-xs text-texto-3">Recomendado em computador compartilhado. No seu aparelho, manter deixa o app abrir mais rápido e sem internet.</p>
-          <div className="flex flex-wrap gap-2 justify-end">
-            <button type="button" className="btn-secondary" onClick={onClose} disabled={ocupado}>Cancelar</button>
-            <button type="button" className="btn-secondary" onClick={() => sair(false)} disabled={ocupado}>Não, só sair</button>
-            <button type="button" className="btn-primary" onClick={() => sair(true)} disabled={ocupado}>Sim, apagar e sair</button>
-          </div>
-        </div>
-      )}
+      </div>
     </Modal>
   )
 }

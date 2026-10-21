@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { criarArmazenamento, backendMemoria, migrarDoLocalStorage, nomeDoBanco, apagarCacheAntigo } from './armazenamentoLocal.js'
+import { criarArmazenamento, backendMemoria, migrarDoLocalStorage, nomeDoBanco, apagarCacheAntigo, garantirCacheDoUsuario } from './armazenamentoLocal.js'
 import { STORAGE_KEY } from './storage.js'
 
 const lsFalso = (inicial = {}) => {
@@ -84,5 +84,49 @@ describe('migração do cache antigo (localStorage → IndexedDB)', () => {
     ls.setItem(STORAGE_KEY, '{}')
     apagarCacheAntigo(ls)
     expect(ls.m.has(STORAGE_KEY)).toBe(false)
+  })
+})
+
+describe('garantirCacheDoUsuario (login com outro usuário)', () => {
+  const idbFalso = (nomes) => {
+    const bancos = new Set(nomes)
+    return {
+      bancos,
+      databases: async () => [...bancos].map(name => ({ name })),
+      deleteDatabase: (n) => { const r = {}; setTimeout(() => { bancos.delete(n); r.onsuccess?.() }); return r },
+    }
+  }
+  const sessao = (id, ambSigla = 'vm') => ({ id, ambSigla })
+
+  it('apaga o cache de outro usuário e grava o novo dono', async () => {
+    const idb = idbFalso(['finup_vm_1', 'finup_vm_2', 'outro_app'])
+    const ls = lsFalso({ finup_cache_dono: 'finup_vm_1', [STORAGE_KEY]: '{}', finup_reserve_balances: '{}', finup_ultimo_ambiente: 'vm' })
+    const apagados = await garantirCacheDoUsuario(sessao(2), { idb, ls })
+    expect(apagados).toEqual(['finup_vm_1'])
+    expect([...idb.bancos]).toEqual(['finup_vm_2', 'outro_app'])
+    expect(ls.m.get('finup_cache_dono')).toBe('finup_vm_2')
+    expect(ls.m.has(STORAGE_KEY)).toBe(false)
+    expect(ls.m.has('finup_reserve_balances')).toBe(false)
+    expect(ls.m.get('finup_ultimo_ambiente')).toBe('vm')
+  })
+
+  it('mesmo usuário: não apaga nada (a fila guardada segue para o envio)', async () => {
+    const idb = idbFalso(['finup_vm_2'])
+    const ls = lsFalso({ finup_cache_dono: 'finup_vm_2', finup_reserve_balances: '{"a":1}' })
+    expect(await garantirCacheDoUsuario(sessao(2), { idb, ls })).toEqual([])
+    expect([...idb.bancos]).toEqual(['finup_vm_2'])
+    expect(ls.m.get('finup_reserve_balances')).toBe('{"a":1}')
+  })
+
+  it('sem dono gravado (aparelho antigo) e sem databases(): só grava o dono', async () => {
+    const ls = lsFalso()
+    expect(await garantirCacheDoUsuario(sessao(7, 'AB'), { idb: { deleteDatabase: vi.fn() }, ls })).toEqual([])
+    expect(ls.m.get('finup_cache_dono')).toBe('finup_ab_7')
+  })
+
+  it('sem sessão: não faz nada', async () => {
+    const ls = lsFalso({ finup_cache_dono: 'finup_vm_1' })
+    expect(await garantirCacheDoUsuario(null, { idb: idbFalso([]), ls })).toEqual([])
+    expect(ls.m.get('finup_cache_dono')).toBe('finup_vm_1')
   })
 })

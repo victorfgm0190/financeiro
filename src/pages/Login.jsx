@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lock, User, LogIn, UserPlus, Building2, Mail, ArrowLeft } from 'lucide-react'
-import { AUTH_TOKEN_KEY } from '../lib/api'
+import { AUTH_TOKEN_KEY, getSessao } from '../lib/api'
+import { garantirCacheDoUsuario } from '../lib/armazenamentoLocal'
 import { ambienteDoHost } from '../lib/ambienteHost'
 
 // Último ambiente digitado no www (só conveniência deste navegador).
@@ -118,6 +119,8 @@ export default function Login() {
       if (redirect) { window.location.assign(redirect); return }
       if (!token) { setError('Resposta inválida do servidor.'); return }
       localStorage.setItem(AUTH_TOKEN_KEY, token)
+      // Cache local de outro usuário sai antes de o app carregar (computador compartilhado).
+      await garantirCacheDoUsuario(getSessao())
       // Navegação REAL, não troca de estado: o Safari do iPhone só oferece "Salvar senha" (Chaves
       // do iCloud / Face ID) quando vê o formulário preenchido sair numa navegação. Os campos não
       // são limpos antes disso de propósito.

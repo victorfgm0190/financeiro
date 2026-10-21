@@ -23,7 +23,7 @@ import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/campos
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
 import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
-import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo } from '../lib/armazenamentoLocal'
+import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo, apagarDadosLocalStorage } from '../lib/armazenamentoLocal'
 import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
 import { installmentSystemDate, faturaToDate } from '../lib/parcelas'
@@ -1196,14 +1196,31 @@ export function AppProvider({ children }) {
     }
   }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sair: apaga o estado e a fila deste ambiente/usuário no aparelho (e o cache antigo).
+  // "Sair e apagar dados deste aparelho": apaga o estado e a fila deste ambiente/usuário no
+  // aparelho (e os dados dele no localStorage).
   const apagarDadosDoAparelho = async () => {
     if (estadoTimerRef.current) clearTimeout(estadoTimerRef.current)
     estadoTimerRef.current = null
     filaRef.current.clear()
     atualizarPendentes()
     apagarCacheAntigo()
+    apagarDadosLocalStorage()
     return armazenamento.apagarTudo()
+  }
+
+  // Antes de sair: tenta enviar a fila (espera um envio em andamento terminar). Sem internet ou
+  // passado o `limite`, desiste — a fila fica no aparelho para o próximo login do mesmo usuário.
+  // Devolve quantas alterações continuam pendentes.
+  const sincronizarAntesDeSair = async (limite = 15000) => {
+    const fim = Date.now() + limite
+    const esperar = () => new Promise(ok => setTimeout(ok, 100))
+    while (filaRef.current.size && dbStatusRef.current === 'connected' && Date.now() < fim) {
+      if (enviandoRef.current) { await esperar(); continue }
+      const antes = filaRef.current.size
+      await Promise.race([enviarPendentes(), new Promise(ok => setTimeout(ok, Math.max(0, fim - Date.now())))])
+      if (filaRef.current.size >= antes) break // não andou (erro ou ainda não carregou do banco)
+    }
+    return filaRef.current.size
   }
 
   const update = useCallback((updater) => {
@@ -5730,6 +5747,7 @@ export function AppProvider({ children }) {
       filaPendentes,
       enviarPendentes,
       apagarDadosDoAparelho,
+      sincronizarAntesDeSair,
       erroArmazenamento,
       armazenamentoPersistente,
       getFinancialPeriod,

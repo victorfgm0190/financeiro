@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AUTH_TOKEN_KEY } from '../lib/api'
+import { AUTH_TOKEN_KEY, getSessao } from '../lib/api'
+import { garantirCacheDoUsuario } from '../lib/armazenamentoLocal'
 
 // /entrar?c=<código> — chegada do login feito no www com o ambiente de um cliente. Troca o código de
 // passagem (uso único, 60 s) pelo token DESTE endereço, salva no localStorage daqui, tira o código da
@@ -21,6 +22,8 @@ export default function EntrarComCodigo() {
         const corpo = await res.json().catch(() => ({}))
         if (!res.ok || !corpo.token) { setErro(corpo.error || 'Não foi possível entrar.'); return }
         localStorage.setItem(AUTH_TOKEN_KEY, corpo.token)
+        // Cache local de outro usuário sai antes de o app carregar (computador compartilhado).
+        await garantirCacheDoUsuario(getSessao())
         window.location.replace('/')
       })
       .catch(() => setErro('Erro de rede. Verifique sua conexão.'))

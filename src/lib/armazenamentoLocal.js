@@ -128,3 +128,49 @@ export async function migrarDoLocalStorage(armazenamento, ls = globalThis.localS
 export function apagarCacheAntigo(ls = globalThis.localStorage) {
   try { ls?.removeItem(STORAGE_KEY) } catch { /* indisponível */ }
 }
+
+// Dados do aparelho guardados fora do IndexedDB que também são de UM usuário (o cache antigo e o
+// override de saldo das reservas). Saem junto quando o aparelho é limpo ou troca de dono.
+const CHAVES_DE_DADOS_LS = [STORAGE_KEY, 'finup_reserve_balances']
+export function apagarDadosLocalStorage(ls = globalThis.localStorage) {
+  for (const k of CHAVES_DE_DADOS_LS) {
+    try { ls?.removeItem(k) } catch { /* indisponível */ }
+  }
+}
+
+// Dono do cache deste aparelho: o nomeDoBanco da última sessão que entrou.
+export const DONO_DO_CACHE_KEY = 'finup_cache_dono'
+
+const apagarBanco = (idb, nome) => new Promise((ok) => {
+  try {
+    const r = idb.deleteDatabase(nome)
+    // Bloqueado (outra aba aberta): o navegador apaga quando ela fechar — não segura o login.
+    r.onsuccess = r.onerror = r.onblocked = () => ok()
+  } catch { ok() }
+})
+
+// Login: o cache local de OUTRO usuário (ou de outro ambiente) é apagado antes de o app carregar —
+// em computador compartilhado, quem entra nunca abre com os dados (nem com a fila) de quem saiu.
+// Outro dono = o gravado em DONO_DO_CACHE_KEY ou qualquer banco finup_* que não seja o desta sessão
+// (indexedDB.databases(), onde houver). Grava o dono novo no fim. Nunca lança; no máximo `limite` ms.
+export async function garantirCacheDoUsuario(sessao, { idb = globalThis.indexedDB, ls = globalThis.localStorage, limite = 3000 } = {}) {
+  const atual = nomeDoBanco(sessao)
+  if (!atual) return []
+  const trabalho = (async () => {
+    const outros = new Set()
+    let dono = null
+    try { dono = ls?.getItem(DONO_DO_CACHE_KEY) ?? null } catch { /* indisponível */ }
+    if (dono && dono !== atual) outros.add(dono)
+    try {
+      for (const { name } of (await idb?.databases?.()) || []) {
+        if (name && name.startsWith('finup_') && name !== atual) outros.add(name)
+      }
+    } catch { /* databases() indisponível (Firefox antigo) — fica só o dono gravado */ }
+    if (idb) await Promise.all([...outros].map(n => apagarBanco(idb, n)))
+    if (outros.size) apagarDadosLocalStorage(ls)
+    try { ls?.setItem(DONO_DO_CACHE_KEY, atual) } catch { /* indisponível */ }
+    return [...outros]
+  })()
+  const tempo = new Promise(ok => setTimeout(() => ok([]), limite))
+  try { return await Promise.race([trabalho, tempo]) } catch { return [] }
+}
