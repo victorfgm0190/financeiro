@@ -15,23 +15,63 @@
 //                              (testarLimites: BEGIN/ROLLBACK).
 //   ... rollback <database>    desfaz tudo do papel daquele banco (supabase/rollback/r7-usuario-por-ambiente.sql).
 //   ... reabrir <database>     GRANT CONNECT TO PUBLIC (desfaz o "fechar").
+//
+// BANCO CENTRAL (finup_central, R7 Fase 3): não tem linha em ambientes e não guarda a própria senha.
+//   criar finup_central      papel finup_central_app (cria ou TROCA a senha — a Vercel precisa da nova),
+//                            dono das tabelas; a URL vai para a linha CENTRAL_APP_DATABASE_URL do
+//                            .env.local (scripts/_papelCentral.js), sem aparecer na tela.
+//   verificar finup_central  conecta com a CENTRAL_APP_DATABASE_URL do .env.local.
+//   rollback finup_central   desfaz o papel e tira a linha do .env.local. ANTES, a Vercel tem de voltar
+//                            à CENTRAL_DATABASE_URL antiga (a do .env.local), senão o site cai.
+//   copiar central           põe a CENTRAL_APP_DATABASE_URL na área de transferência (Set-Clipboard),
+//                            sem imprimir nada — para colar na Vercel.
 
 import process from 'node:process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral, configTlsVerificado } from '../api/_conexao.js'
 import { cifrarSenha, aadDoAmbiente } from '../api/_cifraDb.js'
 import {
   papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, testarLimites,
 } from '../api/_usuarioBanco.js'
+import { NOME_ENV_CENTRAL_APP, lerLinhaEnv, removerLinhaEnv, definirLinhaEnv, urlDoPapel, opcoesDaUrl } from './_papelCentral.js'
+
+const ARQUIVO_ENV = fileURLToPath(new URL('../.env.local', import.meta.url))
+const lerEnvLocal = () => readFileSync(ARQUIVO_ENV, 'utf-8')
+const urlCentralApp = () => {
+  const url = lerLinhaEnv(lerEnvLocal(), NOME_ENV_CENTRAL_APP)
+  if (!url) throw new Error(`${NOME_ENV_CENTRAL_APP} não está no .env.local (rode: criar finup_central)`)
+  return url
+}
 
 const [acao, database] = process.argv.slice(2)
+
+// copiar central: só arquivo + área de transferência (sem banco). O valor vai pela entrada padrão do
+// PowerShell — não aparece na linha de comando nem na tela.
+if (acao === 'copiar') {
+  try {
+    if (!['central', 'finup_central'].includes(database)) throw new Error('Uso: node scripts/db-usuario-ambiente.js copiar central')
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Set-Clipboard -Value ([Console]::In.ReadToEnd())'],
+      { input: urlCentralApp(), stdio: ['pipe', 'ignore', 'pipe'] })
+    if (r.error || r.status !== 0) throw new Error(`Set-Clipboard falhou (código ${r.status ?? r.error?.code})`)
+    console.log(`✔ ${NOME_ENV_CENTRAL_APP} copiada para a área de transferência (cole na Vercel como CENTRAL_DATABASE_URL)`)
+  } catch (err) {
+    console.error('✖', err.message)
+    process.exitCode = 1
+  }
+  process.exit()
+}
+
 const ACOES = ['criar', 'ajustar', 'fechar', 'verificar', 'rollback', 'reabrir']
 if (!ACOES.includes(acao) || !/^[a-z0-9_]{1,59}$/.test(database || '')) {
-  console.error(`Uso: node --env-file=.env.local scripts/db-usuario-ambiente.js <${ACOES.join('|')}> <database>`)
+  console.error(`Uso: node --env-file=.env.local scripts/db-usuario-ambiente.js <${ACOES.join('|')}> <database>  |  copiar central`)
   process.exit(1)
 }
 const BANCOS = ['neondb', 'finup_central', 'cliente_teste1', 'postgres']
 const papel = papelDoBanco(database)
+const ehCentral = database === nomeDatabaseCentral()
 
 const ssl = { rejectUnauthorized: false }
 async function comAdmin(db, fn, { tlsVerificado = false } = {}) {
@@ -49,7 +89,22 @@ async function transacao(c, fn) {
   try { const r = await fn(); await c.query('COMMIT'); return r } catch (err) { await c.query('ROLLBACK').catch(() => {}); throw err }
 }
 
+// Central: papel + dono das tabelas; a URL nova vai para o .env.local (o central não guarda a própria
+// senha). Se a gravação do arquivo falhar, o papel já tem a senha nova: rode criar de novo.
+async function criarCentral() {
+  const senha = gerarSenhaDoBanco()
+  const r = await comAdmin(database, (q, c) => transacao(c, async () => ({
+    situacao: await criarOuAtualizarPapel(q, papel, senha),
+    objetos: await transferirDono(q, papel),
+  })), { tlsVerificado: true })
+  writeFileSync(ARQUIVO_ENV, definirLinhaEnv(lerEnvLocal(), NOME_ENV_CENTRAL_APP, urlDoPapel(urlDoDatabase(database), papel, senha)))
+  console.log(`✔ ${papel} ${r.situacao} · ${r.objetos} objeto(s) transferido(s), CREATE no schema public, banco com o neondb_owner`)
+  console.log(`  URL gravada no .env.local como ${NOME_ENV_CENTRAL_APP} (não exibida). Para colar na Vercel: node scripts/db-usuario-ambiente.js copiar central`)
+  if (r.situacao === 'atualizado') console.log('  ⚠ senha TROCADA: se a Vercel já usava o papel, atualize a CENTRAL_DATABASE_URL lá e faça Redeploy')
+}
+
 async function criar() {
+  if (ehCentral) return criarCentral()
   const [amb] = await comCentral(q => q('SELECT id, sigla, database_name FROM ambientes WHERE database_name = $1', [database]))
   if (!amb) throw new Error(`nenhum ambiente com database ${database} no central`)
   const senha = gerarSenhaDoBanco()
@@ -85,8 +140,12 @@ async function reabrir() {
 }
 
 async function rollback() {
-  await comCentral(q => q('UPDATE ambientes SET db_usuario = NULL, db_senha_cifrada = NULL, updated_at = now() WHERE database_name = $1', [database]))
-  console.log('  central: credencial removida (o /api volta ao neondb_owner)')
+  if (ehCentral) {
+    console.log('  (central) a Vercel tem de estar de volta à CENTRAL_DATABASE_URL antiga antes deste rollback')
+  } else {
+    await comCentral(q => q('UPDATE ambientes SET db_usuario = NULL, db_senha_cifrada = NULL, updated_at = now() WHERE database_name = $1', [database]))
+    console.log('  central: credencial removida (o /api volta ao neondb_owner)')
+  }
   await comAdmin(database, (q, c) => transacao(c, async () => {
     const [existe] = await q('SELECT 1 FROM pg_roles WHERE rolname = $1', [papel])
     if (!existe) return console.log(`  ${papel} não existe`)
@@ -96,6 +155,10 @@ async function rollback() {
     await q(`DROP OWNED BY "${papel}"`)
     await q(`DROP ROLE "${papel}"`)
   }))
+  if (ehCentral) {
+    writeFileSync(ARQUIVO_ENV, removerLinhaEnv(lerEnvLocal(), NOME_ENV_CENTRAL_APP))
+    console.log(`  ${NOME_ENV_CENTRAL_APP} removida do .env.local`)
+  }
   console.log(`✔ ${papel} removido; ${database} de volta ao neondb_owner e aberto para PUBLIC`)
 }
 
@@ -134,10 +197,16 @@ async function verificar() {
       `SELECT datname, has_database_privilege($1, datname, 'CONNECT') AS c FROM pg_database WHERE NOT datistemplate ORDER BY 1`, [papel])).map(x => [x.datname, x.c])))
     console.log('  ACL dos bancos:', Object.fromEntries((await q('SELECT datname, datacl::text FROM pg_database WHERE NOT datistemplate ORDER BY 1')).map(x => [x.datname, x.datacl])))
   })
-  const cfg = await configDoPool(database)
-  if (cfg.origem !== 'papel') throw new Error(`o central não tem credencial de ${database} (origem: ${cfg.origem})`)
-  const opcoes = { ...cfg }
-  delete opcoes.origem
+  let opcoes
+  if (ehCentral) {
+    opcoes = opcoesDaUrl(urlCentralApp())
+    if (opcoes.user !== papel) throw new Error(`${NOME_ENV_CENTRAL_APP} não é do ${papel}`)
+  } else {
+    const cfg = await configDoPool(database)
+    if (cfg.origem !== 'papel') throw new Error(`o central não tem credencial de ${database} (origem: ${cfg.origem})`)
+    opcoes = { ...cfg }
+    delete opcoes.origem
+  }
   console.log(`\nConexões reais como ${papel}:`)
   for (const db of [database, ...BANCOS.filter(b => b !== database)]) {
     const t = await tentarConectar(opcoes, db)
