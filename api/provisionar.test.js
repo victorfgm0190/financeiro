@@ -66,7 +66,7 @@ beforeAll(async () => {
     INSERT INTO account_mapping (grupo, nome_finup, nome_dindin) VALUES ('Itau Cofrinhos', 'Pharma', '5. 05 PHARMA LOG');
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
   // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
-  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh']) bancos[nome] = new PGlite()
+  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh', 'cliente_ll']) bancos[nome] = new PGlite()
 }, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
@@ -117,6 +117,7 @@ beforeEach(() => {
     central: bancos.central, banco_vm: bancos.banco_vm,
     cliente_mm: doNeon('cliente_mm'), cliente_zz: doNeon('cliente_zz'), cliente_ww: doNeon('cliente_ww'),
     cliente_kk: doNeon('cliente_kk'), cliente_jj: doNeon('cliente_jj'), cliente_hh: doNeon('cliente_hh'),
+    cliente_ll: doNeon('cliente_ll'),
   })
   vi.stubGlobal('fetch', vi.fn(fetchFalso))
   vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -263,6 +264,11 @@ describe('provisionamento do cliente (Aprovar)', () => {
     const { decifrarSenha, aadDoAmbiente } = await import('./_cifraDb.js')
     expect(decifrarSenha(amb.db_senha_cifrada, aadDoAmbiente(amb.id, 'cliente_mm'))).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(() => decifrarSenha(amb.db_senha_cifrada, aadDoAmbiente(amb.id, 'cliente_zz'))).toThrow()
+    // a senha foi em texto no CREATE ROLE e o banco guardou só o hash SCRAM
+    const senha = decifrarSenha(amb.db_senha_cifrada, aadDoAmbiente(amb.id, 'cliente_mm'))
+    const [{ rolpassword }] = await q("SELECT rolpassword FROM pg_authid WHERE rolname = 'cliente_mm_app'")
+    expect(rolpassword).toMatch(/^SCRAM-SHA-256\$/)
+    expect(rolpassword).not.toContain(senha)
   })
 
   it('ambiente ativo no central, com a versão das migrações', async () => {
@@ -391,6 +397,47 @@ describe('provisionamento do cliente (Aprovar)', () => {
     // reativar um cancelado que já esteve no ar → ativo de novo
     expect((await status('reativar')).body.cliente.status).toBe('ativo')
   })
+})
+
+describe('usuário próprio (R7): senha em texto só por TLS verificado e nunca em log', () => {
+  it('CREATE ROLE só na conexão verificada; erro no CREATE ROLE não vaza a senha (log, histórico, resposta)', async () => {
+    const novo = await clientes({ url: '/api/clientes', body: { nome: 'Lia Lopes', email: 'lia@exemplo.com', sigla: 'll' } })
+    const id = novo.body.cliente.id
+    const aprovar = () => clientes({ url: '/api/clientes?acao=aprovar', body: { id } })
+    await aprovar() // ambiente
+    expect((await aprovar()).body.proximo).toBe('usuario') // database
+
+    let senha = null
+    const roleSemTls = []
+    const doNeon = () => { if (!noNeon.has('cliente_ll')) throw new Error('não existe'); return bancos.cliente_ll }
+    _definirFabricaDePool((nome, { tlsVerificado } = {}) => {
+      if (!(nome in bancos)) throw new Error(`teste: database "${nome}" não existe`)
+      const pool = poolPGlite(nome === 'cliente_ll' ? doNeon : bancos[nome])
+      const query = async (sql, p) => {
+        if (/ROLE .* PASSWORD/.test(sql)) {
+          if (!tlsVerificado) roleSemTls.push(nome)
+          senha = sql.match(/PASSWORD '([^']+)'/)[1]
+          // o "driver" ecoa o SQL na mensagem e pendura o SQL no erro
+          throw Object.assign(new Error(`syntax error in: ${sql}`), { code: '42601', query: sql })
+        }
+        return pool.query(sql, p)
+      }
+      return { query, connect: async () => ({ query, release() {} }) }
+    })
+
+    const r = await aprovar()
+    expect(r.statusCode).toBe(500)
+    expect(senha).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(roleSemTls).toEqual([])
+    expect(JSON.stringify(r.body)).not.toContain(senha)
+    const hist = await qde('central')('SELECT evento, detalhe FROM plataforma_historico WHERE cliente_id = $1', [id])
+    expect(JSON.stringify(hist)).not.toContain(senha)
+    expect(hist.find(h => h.evento === 'prov_falhou').detalhe).toMatch(/papel cliente_ll_app recusado pelo banco \[42601\]: syntax error in: .*PASSWORD '\*\*\*'/)
+    for (const m of ['log', 'info', 'warn', 'error']) expect(JSON.stringify(console[m].mock.calls)).not.toContain(senha)
+    // nada gravado: sem papel e sem credencial no central
+    expect((await qde('cliente_ll')("SELECT 1 FROM pg_roles WHERE rolname = 'cliente_ll_app'"))).toEqual([])
+    expect((await qde('central')("SELECT db_usuario FROM ambientes WHERE sigla = 'll'"))[0].db_usuario).toBeNull()
+  }, 120_000)
 })
 
 describe('rodapé do kit', () => {

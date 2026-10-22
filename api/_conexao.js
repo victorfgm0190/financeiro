@@ -122,6 +122,7 @@ let fabrica = criarPoolPg
 export function _definirFabricaDePool(fn) {
   fabrica = fn || criarPoolPg
   fabricaAdmin = fn ? (nome) => fn(nome, { admin: true }) : criarPoolAdminPg
+  fabricaVerificada = fn ? (nome) => fn(nome, { admin: true, tlsVerificado: true }).connect() : criarConexaoAdminVerificada
   pools.clear()
 }
 
@@ -133,6 +134,23 @@ export function poolDoDatabase(nome) {
   }
   return p
 }
+
+// Conexão do neondb_owner COM o certificado do servidor conferido, para o CREATE/ALTER ROLE (a senha
+// vai em texto: o Neon não aceita verificador SCRAM). Só esse caminho; as outras conexões continuam
+// como estão (item P1 separado). sslmode=verify-full na URL porque o pg dá prioridade ao sslmode da
+// connection string sobre a opção ssl.
+export function configTlsVerificado(url) {
+  const u = new URL(url)
+  u.searchParams.set('sslmode', 'verify-full')
+  return { connectionString: u.toString(), ssl: { rejectUnauthorized: true } }
+}
+async function criarConexaoAdminVerificada(nome) {
+  const c = new pg.Client(configTlsVerificado(urlDoDatabase(nome)))
+  await c.connect()
+  return { query: (...args) => c.query(...args), release: () => c.end().catch(() => {}) }
+}
+let fabricaVerificada = criarConexaoAdminVerificada
+export const conexaoAdminVerificada = (nome) => fabricaVerificada(nome)
 
 // Pool do neondb_owner num database (provisionamento, exclusão): nunca o das requisições.
 const criarPoolAdminPg = (nome) => novoPool({ connectionString: urlDoDatabase(nome) }, `${nome} admin`)

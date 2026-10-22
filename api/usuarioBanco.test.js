@@ -1,11 +1,11 @@
 import crypto from 'node:crypto'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { cifrarSenha, decifrarSenha, aadDoAmbiente, ErroCifra } from './_cifraDb.js'
 import {
-  papelDoBanco, gerarSenhaDoBanco, verificadorScram, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco,
+  papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco, ErroPapel,
 } from './_usuarioBanco.js'
-import { configDoPool, urlDoDatabase } from './_conexao.js'
+import { configDoPool, urlDoDatabase, configTlsVerificado } from './_conexao.js'
 
 // R7 — usuário Postgres próprio por ambiente (docs/grafity-2026-10.md §5.5): cifra da senha, papel
 // restrito num Postgres de verdade (PGlite) e a escolha da credencial do pool.
@@ -39,24 +39,37 @@ describe('cifra da senha (AES-256-GCM)', () => {
   })
 })
 
-describe('papel e verificador SCRAM', () => {
+describe('papel e senha', () => {
   it('nome do papel = <database>_app; nome estranho é recusado', () => {
     expect(papelDoBanco('cliente_teste1')).toBe('cliente_teste1_app')
     for (const ruim of ['', 'a-b', 'A', 'x"; DROP', 'a'.repeat(60)]) expect(() => papelDoBanco(ruim)).toThrow()
   })
 
-  it('verificador no formato do pg_authid, sem a senha', () => {
+  it('senha gerada só com caracteres seguros num literal SQL; fora do formato é recusada sem ecoar o valor', async () => {
+    expect(gerarSenhaDoBanco()).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    const q = async () => []
+    for (const ruim of ["abc'; DROP ROLE x; --" + 'a'.repeat(40), 'curta', '']) {
+      const err = await criarOuAtualizarPapel(q, 'cliente_x_app', ruim).catch(e => e)
+      expect(err.message).toBe('senha do banco fora do formato esperado')
+    }
+  })
+
+  it('erro no CREATE ROLE: sobe só mensagem (sem a senha) e código, nunca o SQL; nada no console', async () => {
     const senha = gerarSenhaDoBanco()
-    expect(senha).toMatch(/^[A-Za-z0-9_-]{43}$/)
-    const v = verificadorScram(senha)
-    expect(v).toMatch(/^SCRAM-SHA-256\$4096:[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/)
-    expect(v).not.toContain(senha)
-    // mesmo salt → mesmo verificador; e confere com a definição do RFC 5802 (StoredKey = H(HMAC(Hi, "Client Key")))
-    const salt = Buffer.from('0123456789abcdef')
-    expect(verificadorScram(senha, { salt })).toBe(verificadorScram(senha, { salt }))
-    const hi = crypto.pbkdf2Sync(senha, salt, 4096, 32, 'sha256')
-    const stored = crypto.createHash('sha256').update(crypto.createHmac('sha256', hi).update('Client Key').digest()).digest('base64')
-    expect(verificadorScram(senha, { salt }).split('$')[2].split(':')[0]).toBe(stored)
+    const espiar = ['log', 'info', 'warn', 'error'].map(m => vi.spyOn(console, m).mockImplementation(() => {}))
+    // o "driver" ecoa o SQL inteiro na mensagem e pendura o SQL no erro
+    const q = async (sql) => {
+      if (/^SELECT/.test(sql)) return []
+      throw Object.assign(new Error(`Neon only supports being given plaintext passwords: ${sql}`), { code: 'XX000', query: sql })
+    }
+    const err = await criarOuAtualizarPapel(q, 'cliente_x_app', senha).catch(e => e)
+    expect(err).toBeInstanceOf(ErroPapel)
+    expect(err.code).toBe('XX000')
+    expect(err.message).toMatch(/^papel cliente_x_app recusado pelo banco \[XX000\]: Neon only supports/)
+    expect(err.cause).toBeUndefined()
+    expect(err.query).toBeUndefined()
+    expect(JSON.stringify({ msg: err.message, stack: err.stack, ...err })).not.toContain(senha)
+    for (const s of espiar) { expect(JSON.stringify(s.mock.calls)).not.toContain(senha); s.mockRestore() }
   })
 })
 
@@ -70,12 +83,15 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
     await db.exec('CREATE TABLE antes (id TEXT PRIMARY KEY); CREATE SEQUENCE seq_solta; CREATE VIEW v_antes AS SELECT id FROM antes')
   }, 30_000)
 
-  it('cria restrito, com limites, dono de tudo; senha nunca no SQL; repetir troca a senha', async () => {
+  it('cria restrito, com limites, dono de tudo; senha só no CREATE ROLE e guardada como SCRAM; repetir troca a senha', async () => {
     const senha = gerarSenhaDoBanco()
-    expect(await criarOuAtualizarPapel(q, 'cliente_x_app', verificadorScram(senha))).toBe('criado')
+    expect(await criarOuAtualizarPapel(q, 'cliente_x_app', senha)).toBe('criado')
     expect(await transferirDono(q, 'cliente_x_app')).toBe(3)
     await fecharConexao(q, 'cliente_x_app')
-    expect(sqls.join('\n')).not.toContain(senha)
+    expect(sqls.filter(s => s.includes(senha))).toEqual([expect.stringMatching(/^CREATE ROLE "cliente_x_app" .* PASSWORD '/)])
+    const [{ rolpassword }] = await q("SELECT rolpassword FROM pg_authid WHERE rolname = 'cliente_x_app'")
+    expect(rolpassword).toMatch(/^SCRAM-SHA-256\$/)
+    expect(rolpassword).not.toContain(senha)
 
     const [r] = await q("SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolinherit, rolconnlimit, rolconfig FROM pg_roles WHERE rolname = 'cliente_x_app'")
     expect(r).toMatchObject({ rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false, rolinherit: false, rolconnlimit: 30 })
@@ -86,14 +102,15 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
     // o usuário atual (neondb_owner em produção) é membro do papel com INHERIT e SET — não o contrário
     expect(await q("SELECT m.inherit_option, m.set_option FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid WHERE g.rolname = 'cliente_x_app'"))
       .toEqual([{ inherit_option: true, set_option: true }])
-    expect(await criarOuAtualizarPapel(q, 'cliente_x_app', verificadorScram(gerarSenhaDoBanco()))).toBe('atualizado')
+    expect(await criarOuAtualizarPapel(q, 'cliente_x_app', gerarSenhaDoBanco())).toBe('atualizado')
+    expect((await q("SELECT rolpassword FROM pg_authid WHERE rolname = 'cliente_x_app'"))[0].rolpassword).not.toBe(rolpassword)
     expect(await transferirDono(q, 'cliente_x_app')).toBe(0)
   })
 
   it('comoDonoDoBanco: com papel → objetos nascem dele (SET LOCAL, só na transação); sem papel → usuário atual', async () => {
     const client = { query: (sql, p) => db.query(sql, p) }
     await comoDonoDoBanco(client, 'cliente_y', (cq) => cq('CREATE TABLE sem_papel (id INT)'))
-    await criarOuAtualizarPapel(q, 'cliente_y_app', verificadorScram('x'.repeat(43)))
+    await criarOuAtualizarPapel(q, 'cliente_y_app', 'x'.repeat(43))
     await transferirDono(q, 'cliente_y_app') // sem ser dono do banco o papel nem cria em public (PG 15+)
     await comoDonoDoBanco(client, 'cliente_y', (cq) => cq('CREATE TABLE com_papel (id INT)'))
     expect(await q("SELECT tablename, tableowner FROM pg_tables WHERE tablename IN ('sem_papel', 'com_papel') ORDER BY 1"))
@@ -135,6 +152,15 @@ describe('credencial do pool (api/_conexao.js)', () => {
     const cifrada = cifrarSenha('p', aadDoAmbiente('amb_outro', 'cliente_outro'), e)
     await expect(configDoPool('cliente_x', { env: e, buscarCredencial: async () => ({ id: 'amb1', db_usuario: 'cliente_x_app', db_senha_cifrada: cifrada }) }))
       .rejects.toThrow(ErroCifra)
+  })
+
+  it('TLS verificado (caminho do CREATE ROLE): sslmode=verify-full na URL e rejectUnauthorized', () => {
+    const cfg = configTlsVerificado(urlDoDatabase('cliente_x', base))
+    expect(cfg.ssl).toEqual({ rejectUnauthorized: true })
+    const u = new URL(cfg.connectionString)
+    expect(u.searchParams.get('sslmode')).toBe('verify-full')
+    expect(u.pathname).toBe('/cliente_x')
+    expect(configTlsVerificado('postgresql://a:b@h/x').connectionString).toBe('postgresql://a:b@h/x?sslmode=verify-full')
   })
 
   it('urlDoDatabase usa o admin e recusa nome estranho', () => {

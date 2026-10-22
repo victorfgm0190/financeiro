@@ -14,10 +14,10 @@
 
 import process from 'node:process'
 import pg from 'pg'
-import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral } from '../api/_conexao.js'
+import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral, configTlsVerificado } from '../api/_conexao.js'
 import { cifrarSenha, aadDoAmbiente } from '../api/_cifraDb.js'
 import {
-  papelDoBanco, gerarSenhaDoBanco, verificadorScram, criarOuAtualizarPapel, transferirDono, fecharConexao,
+  papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao,
 } from '../api/_usuarioBanco.js'
 
 const [acao, database] = process.argv.slice(2)
@@ -30,8 +30,9 @@ const BANCOS = ['neondb', 'finup_central', 'cliente_teste1', 'postgres']
 const papel = papelDoBanco(database)
 
 const ssl = { rejectUnauthorized: false }
-async function comAdmin(db, fn) {
-  const c = new pg.Client({ connectionString: urlDoDatabase(db), ssl })
+async function comAdmin(db, fn, { tlsVerificado = false } = {}) {
+  // tlsVerificado: certificado conferido (o criar manda a senha em texto no CREATE/ALTER ROLE)
+  const c = new pg.Client(tlsVerificado ? configTlsVerificado(urlDoDatabase(db)) : { connectionString: urlDoDatabase(db), ssl })
   await c.connect()
   try { return await fn(async (sql, p = []) => (await c.query(sql, p)).rows, c) } finally { await c.end() }
 }
@@ -50,9 +51,9 @@ async function criar() {
   const senha = gerarSenhaDoBanco()
   const cifrada = cifrarSenha(senha, aadDoAmbiente(amb.id, database)) // sem FINUP_DB_KEY: para aqui
   const r = await comAdmin(database, (q, c) => transacao(c, async () => ({
-    situacao: await criarOuAtualizarPapel(q, papel, verificadorScram(senha)),
+    situacao: await criarOuAtualizarPapel(q, papel, senha),
     objetos: await transferirDono(q, papel),
-  })))
+  })), { tlsVerificado: true })
   await comCentral(q => q('UPDATE ambientes SET db_usuario = $2, db_senha_cifrada = $3, updated_at = now() WHERE id = $1', [amb.id, papel, cifrada]))
   console.log(`✔ ${papel} ${r.situacao} · dono de ${database} + ${r.objetos} objeto(s) transferido(s) · senha cifrada no central (ambiente ${amb.sigla})`)
 }

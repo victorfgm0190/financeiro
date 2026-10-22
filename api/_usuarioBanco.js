@@ -13,7 +13,10 @@ import crypto from 'node:crypto'
 // Nunca REASSIGN OWNED BY neondb_owner: ele também passaria os databases (neondb, finup_central)
 // para o papel do cliente. A troca de dono é objeto a objeto, só no schema public.
 //
-// A senha nunca aparece no SQL: o CREATE/ALTER ROLE recebe o verificador SCRAM-SHA-256 calculado aqui.
+// Senha: o Neon só aceita senha em texto no CREATE/ALTER ROLE (recusa o verificador SCRAM pronto) e
+// guarda o hash. Por isso esse comando só roda numa conexão com o certificado conferido
+// (_conexao.js: conexaoAdminVerificada / configTlsVerificado) e, se falhar, o erro que sobe tem só a
+// mensagem do Postgres (sem a senha) e o código — nunca o SQL.
 
 export const SUFIXO_PAPEL = '_app'
 const NOME_DATABASE = /^[a-z0-9_]{1,59}$/ // 59 + "_app" = 63 (limite de identificador do Postgres)
@@ -28,27 +31,34 @@ export function papelDoBanco(database) {
 
 export const gerarSenhaDoBanco = () => crypto.randomBytes(32).toString('base64url')
 
-// Verificador no formato do pg_authid (RFC 5802/7677), o mesmo que o Postgres gera com
-// password_encryption = scram-sha-256.
-export function verificadorScram(senha, { salt = crypto.randomBytes(16), iteracoes = 4096 } = {}) {
-  const salgada = crypto.pbkdf2Sync(String(senha).normalize('NFKC'), salt, iteracoes, 32, 'sha256')
-  const hmac = (k, txt) => crypto.createHmac('sha256', k).update(txt).digest()
-  const storedKey = crypto.createHash('sha256').update(hmac(salgada, 'Client Key')).digest()
-  const serverKey = hmac(salgada, 'Server Key')
-  return `SCRAM-SHA-256$${iteracoes}:${salt.toString('base64')}$${storedKey.toString('base64')}:${serverKey.toString('base64')}`
+// Literal SQL da senha (só o formato do gerarSenhaDoBanco: sem aspas nem barra). A mensagem de erro
+// não repete o valor.
+function literalSenha(senha) {
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(String(senha ?? ''))) throw new Error('senha do banco fora do formato esperado')
+  return `'${senha}'`
 }
 
-// Literal SQL de um verificador (só base64 e "$:"; a regex garante que não há aspas).
-function literalVerificador(v) {
-  if (!/^SCRAM-SHA-256\$\d+:[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(v)) throw new Error('verificador SCRAM inválido')
-  return `'${v}'`
+// Erro do CREATE/ALTER ROLE sem o SQL e sem a senha (mesmo que o driver ou o Neon a ecoem).
+export class ErroPapel extends Error {
+  constructor(papel, err, senha) {
+    const msg = String(err?.message ?? 'erro desconhecido').split(senha).join('***')
+    super(`papel ${papel} recusado pelo banco${err?.code ? ` [${err.code}]` : ''}: ${msg}`)
+    this.name = 'ErroPapel'
+    this.code = err?.code
+  }
 }
 
 // Cria o papel (ou troca a senha e reafirma os atributos, se já existe), aplica os limites e torna o
 // usuário atual (neondb_owner) membro dele. `q(sql, params)` = conexão como neondb_owner.
-export async function criarOuAtualizarPapel(q, papel, verificador) {
+export async function criarOuAtualizarPapel(q, papel, senha) {
   const [existe] = await q('SELECT 1 FROM pg_roles WHERE rolname = $1', [papel])
-  await q(`${existe ? 'ALTER' : 'CREATE'} ROLE "${papel}" ${existe ? 'WITH ' : ''}${ATRIBUTOS_DO_PAPEL} PASSWORD ${literalVerificador(verificador)}`)
+  const sql = `${existe ? 'ALTER' : 'CREATE'} ROLE "${papel}" ${existe ? 'WITH ' : ''}${ATRIBUTOS_DO_PAPEL} PASSWORD ${literalSenha(senha)}`
+  try {
+    await q(sql)
+  } catch (err) {
+    // sem `cause` de propósito: o erro original pode carregar o SQL (com a senha) e iria parar em log
+    throw new ErroPapel(papel, err, senha)
+  }
   for (const [k, v] of Object.entries(LIMITES_DO_PAPEL)) await q(`ALTER ROLE "${papel}" SET ${k} = '${v}'`)
   await q(`GRANT "${papel}" TO CURRENT_USER WITH INHERIT TRUE, SET TRUE`)
   return existe ? 'atualizado' : 'criado'

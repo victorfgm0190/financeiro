@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import { centralQuery, withCentralTransaction, _limparCacheAmbientes } from './_central.js'
-import { rodarNoAmbiente, poolAdminDoDatabase } from './_conexao.js'
+import { rodarNoAmbiente, poolAdminDoDatabase, conexaoAdminVerificada } from './_conexao.js'
 import { cifrarSenha, aadDoAmbiente } from './_cifraDb.js'
-import { papelDoBanco, gerarSenhaDoBanco, verificadorScram, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco } from './_usuarioBanco.js'
+import { papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco } from './_usuarioBanco.js'
 import { ErroHttp, hashSenha } from './_usuarios.js'
 import { buscarCliente, registrarHistorico, siglaOcupada } from './_plataforma.js'
 import { criarDatabase, ErroNeon } from './_neon.js'
@@ -150,13 +150,13 @@ const EXECUTAR = {
     const papel = papelDoBanco(amb.database_name)
     const senha = gerarSenhaDoBanco()
     const cifrada = cifrarSenha(senha, aadDoAmbiente(amb.id, amb.database_name)) // sem FINUP_DB_KEY → erro antes de mexer no banco
-    const client = await poolAdminDoDatabase(amb.database_name).connect()
+    const client = await conexaoAdminVerificada(amb.database_name) // a senha vai em texto no CREATE ROLE
     let situacao
     try {
       const aq = async (sql, params = []) => (await client.query(sql, params)).rows
       await client.query('BEGIN')
       try {
-        situacao = await criarOuAtualizarPapel(aq, papel, verificadorScram(senha))
+        situacao = await criarOuAtualizarPapel(aq, papel, senha)
         await transferirDono(aq, papel)
         await fecharConexao(aq, papel)
         await client.query('COMMIT')
