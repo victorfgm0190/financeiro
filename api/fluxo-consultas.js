@@ -13,7 +13,7 @@ import { comAmbiente } from './_ambiente.js'
 // Neon nunca é acessado direto do browser, sempre por este endpoint.
 
 const MODOS = new Set(['conta', 'grupo', 'principais'])
-const HORIZONTES = new Set([15, 30, 45, 60])
+const HORIZONTES = new Set([15, 30, 45, 60, 75, 90, 105, 120])
 
 export const DDL_FLUXO_CONSULTAS = `CREATE TABLE IF NOT EXISTS fluxo_consultas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,7 +61,7 @@ export function normalizarConsultaBody(body) {
   const horizonte = Number(body?.horizonte_padrao ?? 30)
   if (!nome) return { erro: 'nome é obrigatório' }
   if (!MODOS.has(modo)) return { erro: "modo deve ser 'conta', 'grupo' ou 'principais'" }
-  if (!HORIZONTES.has(horizonte)) return { erro: 'horizonte_padrao deve ser 15, 30, 45 ou 60' }
+  if (!HORIZONTES.has(horizonte)) return { erro: 'horizonte_padrao deve ser 15, 30, 45, 60, 75, 90, 105 ou 120' }
   const b = (v, def) => (v == null ? def : !!v)
   return {
     dados: [

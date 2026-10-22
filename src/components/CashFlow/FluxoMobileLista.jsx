@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, CalendarClock, RotateCcw, CheckCircle2, Pencil, Trash2, CircleCheck, CircleDashed } from 'lucide-react'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { agruparPorDia } from '../../lib/fluxoMobile'
+import { estadoMarcacao } from '../../lib/fluxoConsultas'
 import { STATUS_CONFIRMACAO } from '../../lib/fluxoStatus'
 import TipoDocumentoBadge from '../shared/TipoDocumentoBadge'
 import BottomSheet from '../shared/BottomSheet'
@@ -38,7 +39,7 @@ function iconeStatus(status) {
 export default function FluxoMobileLista({
   rowsView, atraso, excluidas, atrasoAtivas, atrasoTotal, base, saldoInicial, minimoKey, saldoDoDia, oculto, horizonte,
   qtdContas, corSaldo, subtitulo, statusCelula, docBadge, tipoBadge, docDaLinha, statusDaLinha, marcadores,
-  toggleLinha, toggleAtraso, onMudarData, onDesfazerData, onEfetivar, onEditarProvisorio, onExcluirProvisorio,
+  toggleLinha, toggleAtraso, marcarVarias, onMudarData, onDesfazerData, onEfetivar, onEditarProvisorio, onExcluirProvisorio,
 }) {
   const [aberta, setAberta] = useState(null)
   const [atrasoAberto, setAtrasoAberto] = useState(false)
@@ -46,6 +47,22 @@ export default function FluxoMobileLista({
   const grupos = agruparPorDia(rowsView)
   // Valores respeitam o "olho" do mobile (oculto → máscara).
   const vf = (n, f = fmtSinal) => (oculto ? MASCARA : f(n))
+  // Checkbox de vários eventos (todos os visíveis, ou os de um dia): marcado só com todos no
+  // cálculo; indeterminado com parte deles.
+  const caixaVarias = (linhas, rotulo, tamanho = 'w-4 h-4') => {
+    const m = estadoMarcacao(linhas, excluidas)
+    return (
+      <input
+        type="checkbox"
+        className={`accent-primary ${tamanho}`}
+        checked={m.todas}
+        ref={el => { if (el) el.indeterminate = m.parcial }}
+        onChange={() => marcarVarias(linhas, !m.todas)}
+        aria-label={rotulo}
+      />
+    )
+  }
+  const marcacao = estadoMarcacao(rowsView, excluidas)
 
   const detalhe = (r, ativa, emAtraso) => {
     const ehMinimo = r._key === minimoKey
@@ -185,10 +202,22 @@ export default function FluxoMobileLista({
         </div>
       )}
 
+      {/* Marcar todos (só os eventos visíveis no prazo e filtros atuais) */}
+      {rowsView.length > 0 && (
+        <label className="flex items-center gap-3 min-h-[44px] px-4 border-b border-borda text-sm text-texto-2 cursor-pointer">
+          {caixaVarias(rowsView, 'Marcar todos os eventos')}
+          <span className="flex-1">Marcar todos</span>
+          <span className="text-xs text-texto-3">{marcacao.ativas}/{marcacao.total} no cálculo</span>
+        </label>
+      )}
+
       {/* Eventos por dia */}
       {grupos.map(g => (
         <section key={g.date}>
-          <h3 className="sticky top-0 z-[1] px-4 py-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-texto-2 bg-surface/95 border-b border-borda">
+          <h3 className="sticky top-0 z-[1] pl-1 pr-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-texto-2 bg-surface/95 border-b border-borda">
+            <label className="w-9 h-9 shrink-0 flex items-center justify-center cursor-pointer" title="Marcar / desmarcar os eventos deste dia">
+              {caixaVarias(g.rows, `Marcar os eventos de ${fmtDate(g.date)}`, 'w-3.5 h-3.5')}
+            </label>
             <span className="shrink-0">{fmtDate(g.date)}</span>
             <span aria-hidden="true" className="flex-1 min-w-2 border-b border-dotted border-borda-forte" />
             {saldoDoDia?.has(g.date) && (

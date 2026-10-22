@@ -192,7 +192,7 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
 
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-xs text-texto-2">Horizonte padrão</span>
-          <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
+          <div className="flex flex-wrap gap-1 bg-surface-2/60 rounded-lg p-1">
             {HORIZONTES.map(h => (
               <button key={h} type="button" onClick={() => set('horizonte_padrao', h)}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium ${form.horizonte_padrao === h ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'}`}>

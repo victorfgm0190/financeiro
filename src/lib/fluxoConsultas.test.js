@@ -3,7 +3,7 @@ import {
   CONSULTA_VIRTUAL, normalizarConsulta, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
   erroNome, nomeDeCopia, projetadoNoFim, contasDaConsulta,
   validarConsulta, somarDias, diasEntre, ultimoDiaDeSaldo, situacaoSaldo, linhasFuturas,
-  tipoEvento, contaDaLinha, minimoProjetado, serieDiaria, totalEmAtraso,
+  tipoEvento, contaDaLinha, minimoProjetado, serieDiaria, totalEmAtraso, estadoMarcacao, marcarLinhas, HORIZONTES,
 } from './fluxoConsultas'
 import { computeFluxoCaixa } from './fluxoCaixa'
 import { montarLinhasSimuladas } from './fluxoCaixaDatas'
@@ -21,7 +21,7 @@ const consulta = (extra) => normalizarConsulta({ id: 'c', nome: 'X', modo: 'cont
 
 describe('normalização e escolha da consulta', () => {
   it('normaliza jsonb em string, defaults e horizonte inválido', () => {
-    const c = normalizarConsulta({ id: '1', nome: 'A', modo: 'grupo', group_ids: '["g1"]', horizonte_padrao: 90, incluir_envelopes: null })
+    const c = normalizarConsulta({ id: '1', nome: 'A', modo: 'grupo', group_ids: '["g1"]', horizonte_padrao: 100, incluir_envelopes: null })
     expect(c).toMatchObject({ group_ids: ['g1'], account_ids: [], perfil_ids: [], horizonte_padrao: 30, incluir_envelopes: true, ocultar_reserva: false, padrao: false })
   })
 
@@ -92,6 +92,27 @@ describe('validarConsulta', () => {
     expect(validarConsulta({ nome: 'G', modo: 'grupo', group_ids: [], horizonte_padrao: 30 })).toMatch(/grupo/)
     expect(validarConsulta({ nome: 'P', modo: 'principais', horizonte_padrao: 20 })).toMatch(/Horizonte/)
     expect(validarConsulta({ nome: 'Só Itaú', modo: 'conta', account_ids: ['itau'], horizonte_padrao: 45 })).toBeNull()
+  })
+  it('prazos de 15 a 120 dias, de 15 em 15; os novos valem como horizonte padrão', () => {
+    expect(HORIZONTES).toEqual([15, 30, 45, 60, 75, 90, 105, 120])
+    for (const h of [75, 90, 105, 120]) {
+      expect(validarConsulta({ nome: 'P', modo: 'principais', horizonte_padrao: h })).toBeNull()
+      expect(consulta({ horizonte_padrao: h }).horizonte_padrao).toBe(h)
+    }
+  })
+})
+
+describe('marcar / desmarcar todos', () => {
+  const linhas = [{ _key: 'a' }, { _key: 'b' }, { _key: 'c' }]
+  it('estado: todas, nenhuma, parcial (indeterminado) e lista vazia', () => {
+    expect(estadoMarcacao(linhas, new Set())).toMatchObject({ ativas: 3, total: 3, todas: true, parcial: false })
+    expect(estadoMarcacao(linhas, new Set(['a', 'b', 'c']))).toMatchObject({ ativas: 0, nenhuma: true, todas: false, parcial: false })
+    expect(estadoMarcacao(linhas, new Set(['b']))).toMatchObject({ ativas: 2, parcial: true, todas: false })
+    expect(estadoMarcacao([], new Set())).toMatchObject({ total: 0, todas: false, nenhuma: true, parcial: false })
+  })
+  it('mexe só nas linhas passadas: as de fora do prazo/filtro ficam como estavam', () => {
+    expect([...marcarLinhas(new Set(['x', 'b']), linhas, false)].sort()).toEqual(['a', 'b', 'c', 'x'])
+    expect([...marcarLinhas(new Set(['x', 'b']), linhas, true)]).toEqual(['x'])
   })
 })
 

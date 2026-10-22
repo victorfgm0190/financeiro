@@ -2,7 +2,8 @@
 // (por conta / por grupo / contas principais) + opções do cálculo + horizonte padrão.
 // Lógica pura — o cálculo do fluxo em si é o computeFluxoCaixa (mesmo do relatório e do Painel).
 
-export const HORIZONTES = [15, 30, 45, 60]
+// Prazos em dias (botões da tela e "Horizonte padrão" da consulta). A API valida com a mesma lista.
+export const HORIZONTES = [15, 30, 45, 60, 75, 90, 105, 120]
 
 export const MODOS = [
   { id: 'conta', label: 'Por Conta' },
@@ -251,6 +252,25 @@ export function serieDiaria(rowsView, base, hoje, fim) {
     out.push({ date: d, label: `${d.slice(8, 10)}/${d.slice(5, 7)}`, balance: bal })
   }
   return out
+}
+
+// "Marcar todos" dos eventos: quantas das `linhas` (visíveis) estão no cálculo.
+// → { ativas, total, todas, nenhuma, parcial } (parcial = estado indeterminado do checkbox).
+export function estadoMarcacao(linhas, excluidas) {
+  const total = (linhas || []).length
+  let ativas = 0
+  for (const r of linhas || []) if (!excluidas.has(r._key)) ativas++
+  return { ativas, total, todas: total > 0 && ativas === total, nenhuma: ativas === 0, parcial: ativas > 0 && ativas < total }
+}
+
+// Marca (tira de `excluidas`) ou desmarca (põe) todas as `linhas`, mexendo SÓ nelas: linhas fora
+// do prazo/filtro mantêm o estado que tinham. Altera o Set recebido.
+export function marcarLinhas(excluidas, linhas, marcar) {
+  for (const r of linhas || []) {
+    if (marcar) excluidas.delete(r._key)
+    else excluidas.add(r._key)
+  }
+  return excluidas
 }
 
 // Agendamentos em atraso (data < hoje, não registrados): soma das ATIVAS (não desmarcadas).

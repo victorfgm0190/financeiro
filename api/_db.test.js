@@ -173,6 +173,7 @@ describe('fluxo_consultas (PGlite)', () => {
     const padroes = (await db.query('SELECT nome FROM fluxo_consultas WHERE padrao')).rows.map(r => r.nome)
     expect(padroes).toEqual(['Bancos'])
     await expect(db.query(`INSERT INTO fluxo_consultas (nome, modo) VALUES ('x', 'outro')`)).rejects.toThrow()
-    expect(normalizarConsultaBody({ nome: 'x', modo: 'conta', horizonte_padrao: 90 }).erro).toMatch(/horizonte/)
+    expect(normalizarConsultaBody({ nome: 'x', modo: 'conta', horizonte_padrao: 100 }).erro).toMatch(/horizonte/)
+    expect(normalizarConsultaBody({ nome: 'x', modo: 'conta', horizonte_padrao: 120 }).dados[10]).toBe(120)
   })
 })

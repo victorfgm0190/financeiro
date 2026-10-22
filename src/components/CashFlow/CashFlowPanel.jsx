@@ -12,7 +12,7 @@ import {
   HORIZONTES, rotuloModo, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
   erroNome, nomeDeCopia, projetadoNoFim, ID_CONSULTA_VIRTUAL, contasDaConsulta, somarDias,
   ultimoDiaDeSaldo, situacaoSaldo, linhasFuturas, tipoEvento, contaDaLinha, minimoProjetado,
-  serieDiaria, totalEmAtraso,
+  serieDiaria, totalEmAtraso, estadoMarcacao, marcarLinhas,
 } from '../../lib/fluxoConsultas'
 import { hojeStr } from '../../lib/saldos'
 import { useFluxoConsultas } from '../../hooks/useFluxoConsultas'
@@ -334,6 +334,10 @@ export default function CashFlowPanel({ setActivePage }) {
 
   // ── Ações ──────────────────────────────────────────────────────────────────
   const toggleLinha = (key) => alterarExcluidas(s => (s.has(key) ? s.delete(key) : s.add(key)))
+  // "Marcar todos" (e, no celular, o de cada dia): só as linhas passadas — as VISÍVEIS no prazo e
+  // filtros atuais. Mesma seleção em memória das linhas avulsas; o card Simulação recalcula junto.
+  const marcarVarias = (linhas, marcar) => alterarExcluidas(s => marcarLinhas(s, linhas, marcar))
+  const marcacao = estadoMarcacao(rowsView, excluidas)
   const toggleAtraso = () => alterarExcluidas(s => {
     if (atrasoAtivas > 0) atraso.forEach(r => s.add(r._key))
     else atraso.forEach(r => s.delete(r._key))
@@ -550,12 +554,13 @@ export default function CashFlowPanel({ setActivePage }) {
           <span className="text-texto-3"> → </span>
           <span className="font-semibold text-texto-1">{fmtDate(fim)}</span>
         </p>
-        <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
+        <div className="flex flex-wrap gap-1 bg-surface-2/60 rounded-lg p-1" role="group" aria-label="Prazo">
           {HORIZONTES.map(h => (
             <button
               key={h}
               type="button"
               onClick={() => setHorizonteSel({ consultaId: consulta.id, h })}
+              aria-pressed={horizonte === h}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${horizonte === h ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'}`}
             >
               {h} dias
@@ -709,6 +714,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 tipoBadge={(r) => { const t = tipoEvento(r); return <span className={`text-[10px] px-1.5 py-0.5 rounded ${BADGE[t]}`}>{t}</span> }}
                 toggleLinha={toggleLinha}
                 toggleAtraso={toggleAtraso}
+                marcarVarias={marcarVarias}
                 onMudarData={podeEditarF ? setMudarData : null}
                 onDesfazerData={podeEditarF ? desfazerData : null}
                 onEfetivar={podeEfetivar ? setEfetivar : null}
@@ -722,6 +728,18 @@ export default function CashFlowPanel({ setActivePage }) {
               <Calendar size={14} className="text-texto-2" />
               <h2 className="text-sm font-semibold text-texto-2">Eventos projetados</h2>
               <span className="text-xs text-texto-3">{rowsView.length} evento{rowsView.length !== 1 ? 's' : ''}</span>
+              {rowsView.length > 0 && (
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Só os eventos visíveis no prazo e filtros atuais">
+                  <input
+                    type="checkbox"
+                    className="accent-primary w-3.5 h-3.5"
+                    checked={marcacao.todas}
+                    ref={el => { if (el) el.indeterminate = marcacao.parcial }}
+                    onChange={() => marcarVarias(rowsView, !marcacao.todas)}
+                  />
+                  Marcar todos{marcacao.parcial && <span className="text-texto-3">({marcacao.ativas}/{marcacao.total})</span>}
+                </label>
+              )}
               <div className="flex items-center gap-4 flex-wrap ml-auto">
                 <label className="flex items-center gap-1.5 cursor-pointer text-xs text-texto-2" title="Override temporário da consulta">
                   <input type="checkbox" className="accent-primary w-3.5 h-3.5" checked={incluirEnvelopes} onChange={e => setOvr('incluir_envelopes', e.target.checked)} />
