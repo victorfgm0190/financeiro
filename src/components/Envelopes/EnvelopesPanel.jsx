@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Package, Plus, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Package, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { fmt, fmtSinal } from '../shared/utils'
-import { gastoEnvelopes, currentCompetencia } from '../../lib/envelopes'
+import { gastoEnvelopes, currentCompetencia, resumoEnvelope, totaisEnvelopes } from '../../lib/envelopes'
 import { dueDateInMonth } from '../../lib/fatura'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
+import { TotaisEnvelopes, EnvelopeLinha, MenuEnvelope, EnvelopeDetalhe } from './EnvelopeResumo'
 
 // ── Period logic ──────────────────────────────────────────────────────────────
 // period runs from (dueDay+1) of one month to (dueDay) of the next
@@ -142,134 +142,6 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
   )
 }
 
-// ── EnvelopeCard ──────────────────────────────────────────────────────────────
-function EnvelopeCard({ envelope, spent, onClick }) {
-  const pct      = envelope.limitAmount > 0 ? (spent / envelope.limitAmount) * 100 : 0
-  const remaining = envelope.limitAmount - spent
-  const barWidth = Math.min(pct, 100)
-  const barColor = pct <= 80 ? 'bg-primary' : pct <= 100 ? 'bg-aviso' : 'bg-perigo' // status (decisão 11)
-  const nCats = envelope.categoryIds?.length || 0
-
-  return (
-    <button className="text-left w-full" onClick={onClick}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-texto-1 truncate">{envelope.name}</p>
-          <p className="text-xs mt-0.5 text-texto-3">{nCats} categoria{nCats !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="text-right shrink-0">
-          <p className="text-xs text-texto-3">Limite</p>
-          <p className="text-sm font-bold text-texto-2">{fmt(envelope.limitAmount)}</p>
-        </div>
-      </div>
-
-      <div className="space-y-1.5 mb-3">
-        <div className="h-2.5 bg-surface-2 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${barWidth}%` }} />
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-texto-2">Gasto: <span className="text-texto-1 font-medium">{fmt(spent)}</span></span>
-          <span className="text-texto-2">
-            Saldo:{' '}
-            <span className={`font-medium ${remaining >= 0 ? 'text-receita' : 'text-despesa'}`}>
-              {remaining >= 0 ? fmt(remaining) : `−${fmtSinal(-remaining)}`}
-            </span>
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between text-xs text-texto-3">
-        <span>{pct.toFixed(0)}% utilizado</span>
-        <span className="text-texto-3 group-hover:text-texto-3 transition-colors">Ver lançamentos ›</span>
-      </div>
-    </button>
-  )
-}
-
-// ── Detail Modal ──────────────────────────────────────────────────────────────
-function DetailModal({ data, compLabel, categories, accounts }) {
-  const { env, txs, spent } = data
-  const remaining = env.limitAmount - spent
-  const account   = accounts.find(a => a.id === env.accountId)
-
-  const sortedTxs = [...txs].sort((a, b) => b.date.localeCompare(a.date))
-
-  return (
-    <div className="space-y-4">
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card py-3 text-center">
-          <p className="text-xs text-texto-3 uppercase tracking-wide mb-1">Limite</p>
-          <p className="text-base font-bold text-texto-1">{fmt(env.limitAmount)}</p>
-        </div>
-        <div className="card py-3 text-center">
-          <p className="text-xs text-texto-3 uppercase tracking-wide mb-1">Gasto</p>
-          <p className="text-base font-bold text-despesa">{fmt(spent)}</p>
-        </div>
-        <div className="card py-3 text-center">
-          <p className="text-xs text-texto-3 uppercase tracking-wide mb-1">Restante</p>
-          <p className={`text-base font-bold ${remaining >= 0 ? 'text-receita' : 'text-despesa'}`}>
-            {fmt(Math.abs(remaining))}
-          </p>
-        </div>
-      </div>
-
-      {/* Meta */}
-      <div className="text-xs text-texto-3 flex flex-wrap gap-x-4 gap-y-1">
-        <span>Competência: <span className="text-texto-2">{compLabel}</span></span>
-        {account && <span>Conta: {account.apelido || account.name}</span>}
-      </div>
-
-      {/* Transactions */}
-      {sortedTxs.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-texto-3 text-sm">Nenhum lançamento neste período</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-borda">
-                <th className="text-left py-2 px-1 text-xs text-texto-2 font-medium w-24">Data</th>
-                <th className="text-left py-2 px-1 text-xs text-texto-2 font-medium">Descrição</th>
-                <th className="text-left py-2 px-1 text-xs text-texto-2 font-medium hidden sm:table-cell">Categoria</th>
-                <th className="text-right py-2 px-1 text-xs text-texto-2 font-medium w-28">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedTxs.map(tx => {
-                const cat = categories.find(c => c.id === tx.categoryId)
-                const d = tx.date
-                return (
-                  <tr key={tx.id} className="border-b border-borda/40 hover:bg-surface-hover/20">
-                    <td className="py-2.5 px-1 text-xs text-texto-2 whitespace-nowrap">
-                      {d.slice(8)}/{d.slice(5,7)}/{d.slice(0,4)}
-                    </td>
-                    <td className="py-2.5 px-1 text-xs text-texto-2 max-w-xs truncate">{tx.description}</td>
-                    <td className="py-2.5 px-1 text-xs text-texto-2 hidden sm:table-cell">
-                      {cat ? `${cat.icon} ${cat.name}` : '—'}
-                    </td>
-                    <td className="py-2.5 px-1 text-xs font-semibold text-despesa text-right whitespace-nowrap">
-                      {fmt(tx.amount)}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-borda-forte">
-                <td colSpan={2} className="py-2.5 px-1 text-xs text-texto-2 font-semibold">Total</td>
-                <td className="hidden sm:table-cell" />
-                <td className="py-2.5 px-1 text-xs font-bold text-despesa text-right">{fmt(spent)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
   const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode } = useApp()
@@ -325,24 +197,23 @@ export default function EnvelopesPanel() {
     setShowForm(true)
   }
 
-  const detail = envelopeData.find(d => d.env.id === detailId)
-
-  // summary KPIs
-  const totalLimit   = envelopes.reduce((s, e) => s + e.limitAmount, 0)
-  const totalSpent   = envelopeData.reduce((s, d) => s + d.spent, 0)
-  const totalRemain  = totalLimit - totalSpent
+  // Linhas de exibição (gasto de gastoEnvelopes; parcelado/à vista só reparte esse gasto).
+  // A grade mantém a ordem de cadastro; os totais somam todos os envelopes.
+  const resumos = useMemo(() => envelopeData.map(resumoEnvelope), [envelopeData])
+  const totais = totaisEnvelopes(resumos)
+  const detail = resumos.find(r => r.env.id === detailId)
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-lg font-bold text-texto-1">Envelopes</h1>
           <p className="text-xs text-texto-3 mt-0.5">Controle de gastos por categoria com limite mensal</p>
         </div>
         {podeIncluir && (
-          <button className="btn-primary flex items-center gap-1.5 text-sm" onClick={openNew}>
-            <Plus size={14} /> Novo Envelope
+          <button className="btn-primary flex items-center gap-1.5 text-sm whitespace-nowrap shrink-0" onClick={openNew} aria-label="Novo envelope">
+            <Plus size={14} /> Novo<span className="hidden sm:inline"> Envelope</span>
           </button>
         )}
       </div>
@@ -364,25 +235,8 @@ export default function EnvelopesPanel() {
         </div>
       )}
 
-      {/* Summary KPIs (only when there are envelopes) */}
-      {envelopes.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="card">
-            <p className="text-xs text-texto-2 uppercase tracking-wide">Total Limite</p>
-            <p className="text-xl font-bold text-texto-1 mt-1">{fmt(totalLimit)}</p>
-          </div>
-          <div className="card">
-            <p className="text-xs text-texto-2 uppercase tracking-wide">Total Gasto</p>
-            <p className="text-xl font-bold text-despesa mt-1">{fmt(totalSpent)}</p>
-          </div>
-          <div className="card">
-            <p className="text-xs text-texto-2 uppercase tracking-wide">Total Saldo</p>
-            <p className={`text-xl font-bold mt-1 ${totalRemain >= 0 ? 'text-receita' : 'text-despesa'}`}>
-              {totalRemain >= 0 ? fmt(totalRemain) : `−${fmtSinal(-totalRemain)}`}
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Totais (faixa única; cabe em 390px) */}
+      {envelopes.length > 0 && <TotaisEnvelopes totais={totais} />}
 
       {/* Empty state */}
       {envelopes.length === 0 && (
@@ -398,39 +252,19 @@ export default function EnvelopesPanel() {
 
       {/* Cards grid */}
       {envelopes.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {envelopeData.map(({ env, spent }) => (
-            <div key={env.id} className="card group hover:bg-surface-hover/80 transition-colors">
-              {/* action buttons — linha própria no topo, acima do nome e do Limite */}
-              <div className="flex justify-end gap-1.5 mb-1.5">
-                {podeEditar && (
-                <button
-                  className="btn-amber w-7 h-7 p-0 justify-center"
-                  onClick={e => { e.stopPropagation(); openEdit(env) }}
-                  title="Editar envelope"
-                  aria-label="Editar"
-                >
-                  <Edit2 size={13} />
-                </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+          {resumos.map(r => (
+            <div key={r.env.id} className="card hover:bg-surface-hover/40 transition-colors">
+              <EnvelopeLinha
+                r={r}
+                onAbrir={() => setDetailId(r.env.id)}
+                menu={(
+                  <MenuEnvelope
+                    nome={r.env.name}
+                    onEditar={podeEditar ? () => openEdit(r.env) : null}
+                    onExcluir={podeExcluir ? () => { if (window.confirm(`Excluir envelope "${r.env.name}"?`)) deleteEnvelope(r.env.id) } : null}
+                  />
                 )}
-                {podeExcluir && (
-                <button
-                  className="btn-amber w-7 h-7 p-0 justify-center hover:text-perigo hover:border-perigo/50 hover:bg-perigo-bg"
-                  onClick={e => {
-                    e.stopPropagation()
-                    if (window.confirm(`Excluir envelope "${env.name}"?`)) deleteEnvelope(env.id)
-                  }}
-                  title="Excluir envelope"
-                  aria-label="Excluir"
-                >
-                  <Trash2 size={13} />
-                </button>
-                )}
-              </div>
-              <EnvelopeCard
-                envelope={env}
-                spent={spent}
-                onClick={() => setDetailId(env.id)}
               />
             </div>
           ))}
@@ -461,12 +295,7 @@ export default function EnvelopesPanel() {
           title={`${detail.env.name} — ${compLabel}`}
           size="lg"
         >
-          <DetailModal
-            data={detail}
-            compLabel={compLabel}
-            categories={categories}
-            accounts={accounts}
-          />
+          <EnvelopeDetalhe r={detail} compLabel={compLabel} />
         </Modal>
       )}
     </div>

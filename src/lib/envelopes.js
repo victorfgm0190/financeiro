@@ -32,3 +32,47 @@ export function gastoEnvelopes(envelopes, transactions, compKey, startDay) {
     return { env, txs, spent }
   })
 }
+
+// ── Exibição (card do Painel / Início / tela Envelopes) ──────────────────────
+// Só reorganiza o resultado de gastoEnvelopes — nenhum valor novo de gasto.
+
+// Parcela de compra parcelada: campos gravados na importação de fatura e no lançamento manual
+// (installment_num / installment_total). A descrição ("4/6") NÃO entra no critério.
+export const ehParcela = (tx) => Number(tx?.installmentNum) >= 1 && Number(tx?.installmentTotal) > 1
+
+const r2 = (n) => Math.round(n * 100) / 100
+
+// { env, txs, spent } → números da linha do envelope. parcelado + aVista === gasto.
+export function resumoEnvelope({ env, txs, spent }) {
+  const limite = Number(env.limitAmount) || 0
+  const gasto = r2(spent)
+  const parcelado = r2((txs || []).filter(ehParcela).reduce((s, t) => s + t.amount, 0))
+  const disponivel = r2(limite - gasto)
+  return {
+    env, txs, limite, gasto, parcelado, aVista: r2(gasto - parcelado), disponivel,
+    pct: limite > 0 ? (gasto / limite) * 100 : 0,
+    estourado: disponivel < 0,
+  }
+}
+
+// Linhas ordenadas pelo % usado (maior primeiro; empate → nome).
+export function resumosPorUso(dados) {
+  return (dados || []).map(resumoEnvelope)
+    .sort((a, b) => b.pct - a.pct || String(a.env.name).localeCompare(String(b.env.name), 'pt-BR'))
+}
+
+// Totais do topo: limite, já gasto, ainda posso gastar (negativo = estourou).
+export function totaisEnvelopes(resumos) {
+  const limite = r2((resumos || []).reduce((s, r) => s + r.limite, 0))
+  const gasto = r2((resumos || []).reduce((s, r) => s + r.gasto, 0))
+  const parcelado = r2((resumos || []).reduce((s, r) => s + r.parcelado, 0))
+  return { limite, gasto, parcelado, aVista: r2(gasto - parcelado), disponivel: r2(limite - gasto) }
+}
+
+// Larguras (%) dos dois tons da barra. Até o limite, a barra é o limite; estourado, a barra
+// inteira é o gasto (dividida entre parcelado e à vista).
+export function barraEnvelope({ limite, parcelado, aVista, gasto }) {
+  const escala = Math.max(limite, gasto)
+  if (escala <= 0) return { parcelado: 0, aVista: 0 }
+  return { parcelado: (parcelado / escala) * 100, aVista: (aVista / escala) * 100 }
+}

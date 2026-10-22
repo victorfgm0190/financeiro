@@ -19,6 +19,7 @@ import { occEfetiva } from '../../lib/fluxoCaixa'
 import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
+import { CardEnvelopesMes } from '../Envelopes/EnvelopeResumo'
 import { PizzaDespesas, RankingDespesas, Segmentado } from './DespesasCategoria'
 import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
 import { periodoDoFiltro, PERIOD_OPTS, MODO_OPTS } from '../../lib/despesasPorCategoria'
@@ -533,6 +534,9 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           </div>
         )}
       </div>
+
+      {/* Envelopes do mês (competência atual, perfil ativo) — some sem envelopes cadastrados */}
+      <CardEnvelopesMes onVerEnvelopes={setActivePage ? () => setActivePage('envelopes') : null} />
 
       {/* Budget progress bar */}
       {income > 0 && (

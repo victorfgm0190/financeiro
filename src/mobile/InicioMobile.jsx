@@ -10,7 +10,7 @@ import { getSessao } from '../lib/api'
 import { hojeStr } from '../lib/saldos'
 import { occEfetiva } from '../lib/fluxoCaixa'
 import { criarClassificadores, totaisDoPeriodo, periodoStr } from '../lib/receitasDespesas'
-import { gastoEnvelopes, currentCompetencia } from '../lib/envelopes'
+import { EnvelopesInicio } from '../components/Envelopes/EnvelopeResumo'
 import { resolverCards, prefDosCards } from './navegacao'
 import { gravarPreferencias } from '../lib/preferenciasUi'
 import DespesasMobile from './DespesasMobile'
@@ -217,32 +217,6 @@ function CardReservas({ v }) {
   )
 }
 
-// Envelopes: 3 mini-cards (os mais consumidos na competência atual), vermelho se estourado.
-function CardEnvelopes({ v }) {
-  const { envelopes, profileTransactions, settings } = useApp()
-  const startDay = settings?.financialMonthStartDay || 1
-  const comp = currentCompetencia(startDay)
-  const dados = gastoEnvelopes(envelopes, profileTransactions, comp.year * 12 + comp.month0, startDay)
-  const pctDe = (d) => (d.env.limitAmount > 0 ? d.spent / d.env.limitAmount : 0)
-  const top = [...dados].sort((a, b) => pctDe(b) - pctDe(a)).slice(0, 3)
-  if (top.length === 0) return <p className="text-xs text-texto-3">Nenhum envelope criado.</p>
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {top.map(d => {
-        const estourado = d.spent > d.env.limitAmount
-        const restante = d.env.limitAmount - d.spent
-        return (
-          <div key={d.env.id} className={`rounded-xl p-2.5 border ${estourado ? 'bg-perigo-bg border-perigo/30' : 'bg-surface-2/50 border-borda-forte/50'}`}>
-            <p className="text-[11px] text-texto-2 truncate">{d.env.name}</p>
-            <p className={`text-sm font-semibold mt-0.5 ${estourado ? 'text-perigo' : 'text-texto-1'}`}>{v(Math.abs(restante))}</p>
-            <p className={`text-[10px] ${estourado ? 'text-perigo' : 'text-texto-3'}`}>{estourado ? 'estourado' : 'restante'}</p>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 // Próximos 7 dias: os 3 agendamentos pendentes mais próximos (próxima ocorrência de cada um,
 // como em Agendamentos; vencidos aparecem primeiro, marcados como atrasados).
 function CardProximos({ v }) {
@@ -282,7 +256,7 @@ function CardProximos({ v }) {
 
 // Corpo de cada card do Início por id de módulo. Módulo com card: true sem corpo aqui vira um card
 // simples com "Ver tudo".
-const CORPOS = { reservas: CardReservas, envelopes: CardEnvelopes, agenda: CardProximos, despesas: DespesasMobile }
+const CORPOS = { reservas: CardReservas, envelopes: EnvelopesInicio, agenda: CardProximos, despesas: DespesasMobile }
 
 // Liga/desliga e ordem dos cards. Salva em settings.mobileHomeCards (Neon, configuracoes). Só é
 // montado aberto, então sempre começa do que está salvo.

@@ -31,7 +31,7 @@ export const mobileModules = [
   { id: 'mais',          label: 'Mais',            icon: LayoutGrid,     place: 'tab', component: MaisMobile },
 
   { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, cardTitle: 'Saldo em reservas', page: 'reservas', saldo: true },
-  { id: 'envelopes',     label: 'Envelopes',       icon: Mail,           place: 'more', group: 'Dinheiro guardado', card: true, page: 'envelopes', saldo: true },
+  { id: 'envelopes',     label: 'Envelopes',       icon: Mail,           place: 'more', group: 'Dinheiro guardado', card: true, cardTitle: 'Envelopes do mês', page: 'envelopes', saldo: true },
   { id: 'contas',        label: 'Contas',          icon: Wallet,         place: 'more', group: 'Contas e cartões', page: 'accounts', saldo: true },
   { id: 'cartao',        label: 'Cartão',          icon: CreditCard,     place: 'more', group: 'Contas e cartões', page: 'credit', saldo: true },
   { id: 'lancamentos',   label: 'Lançamentos',     icon: List,           place: 'more', group: 'Contas e cartões', page: 'transactions', saldo: true },

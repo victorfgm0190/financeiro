@@ -58,6 +58,14 @@
   /* Gráficos */
   --color-chart-eixo: #9AA3B5;     /* ticks e rótulos de eixo */
   --color-chart-grade: #303B55;    /* grade (CartesianGrid) — 1,39:1 sobre surface */
+
+  /* Barra dos envelopes em dois tons: parcelado (cheio) + à vista (claro), por faixa de uso */
+  --color-barra-ok: #0F6E56;
+  --color-barra-ok-claro: #3CC29B;
+  --color-barra-alerta: #B7791F;
+  --color-barra-alerta-claro: #FCD34D;
+  --color-barra-estouro: #A32D2D;
+  --color-barra-estouro-claro: #FF8E8E;
 }
 
 [data-theme="dark"] {
@@ -98,6 +106,11 @@
 
   --color-chart-eixo: #5B6474;
   --color-chart-grade: #E2E8F0;
+
+  --color-barra-ok-claro: #8FD1BC;
+  --color-barra-alerta: #A16207;
+  --color-barra-alerta-claro: #F3CF7A;
+  --color-barra-estouro-claro: #EFA3A3;
 }
 
 /* Faixa da safe-area superior no tema claro (iPhone PWA).
