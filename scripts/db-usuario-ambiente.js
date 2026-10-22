@@ -3,12 +3,16 @@
 // senha: só nomes, contadores e o resultado das verificações.
 //
 //   node --env-file=.env.local scripts/db-usuario-ambiente.js criar <database>
-//       papel <database>_app (cria ou troca a senha), limites de sessão, dono do banco e das tabelas,
-//       senha cifrada no central (FINUP_DB_KEY). Ainda NÃO revoga o CONNECT de PUBLIC.
+//       papel <database>_app (cria ou troca a senha), limites de sessão, dono das tabelas e CREATE no
+//       schema public (o banco fica com o neondb_owner), senha cifrada no central (FINUP_DB_KEY).
+//       Ainda NÃO revoga o CONNECT de PUBLIC.
+//   ... ajustar <database>     só dono/permissões (transferirDono), sem trocar a senha nem mexer no central.
 //   ... fechar <database>      REVOKE CONNECT FROM PUBLIC; CONNECT só para o papel e o neondb_owner
 //                              (serve também para neondb/finup_central antes de terem papel).
 //   ... verificar <database>   atributos, donos, ACL dos bancos e conexões reais como o papel:
 //                              no próprio banco (tem de funcionar) e nos outros (tem de ser negada).
+//                              Os testes do que o papel NÃO pode fazer não deixam nada para trás
+//                              (testarLimites: BEGIN/ROLLBACK).
 //   ... rollback <database>    desfaz tudo do papel daquele banco (supabase/rollback/r7-usuario-por-ambiente.sql).
 //   ... reabrir <database>     GRANT CONNECT TO PUBLIC (desfaz o "fechar").
 
@@ -17,11 +21,11 @@ import pg from 'pg'
 import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral, configTlsVerificado } from '../api/_conexao.js'
 import { cifrarSenha, aadDoAmbiente } from '../api/_cifraDb.js'
 import {
-  papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao,
+  papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, testarLimites,
 } from '../api/_usuarioBanco.js'
 
 const [acao, database] = process.argv.slice(2)
-const ACOES = ['criar', 'fechar', 'verificar', 'rollback', 'reabrir']
+const ACOES = ['criar', 'ajustar', 'fechar', 'verificar', 'rollback', 'reabrir']
 if (!ACOES.includes(acao) || !/^[a-z0-9_]{1,59}$/.test(database || '')) {
   console.error(`Uso: node --env-file=.env.local scripts/db-usuario-ambiente.js <${ACOES.join('|')}> <database>`)
   process.exit(1)
@@ -55,7 +59,16 @@ async function criar() {
     objetos: await transferirDono(q, papel),
   })), { tlsVerificado: true })
   await comCentral(q => q('UPDATE ambientes SET db_usuario = $2, db_senha_cifrada = $3, updated_at = now() WHERE id = $1', [amb.id, papel, cifrada]))
-  console.log(`✔ ${papel} ${r.situacao} · dono de ${database} + ${r.objetos} objeto(s) transferido(s) · senha cifrada no central (ambiente ${amb.sigla})`)
+  console.log(`✔ ${papel} ${r.situacao} · ${r.objetos} objeto(s) transferido(s), CREATE no schema public, banco com o neondb_owner · senha cifrada no central (ambiente ${amb.sigla})`)
+}
+
+async function ajustar() {
+  const r = await comAdmin(database, async (q, c) => {
+    const [existe] = await q('SELECT 1 FROM pg_roles WHERE rolname = $1', [papel])
+    if (!existe) throw new Error(`${papel} não existe (use criar)`)
+    return transacao(c, () => transferirDono(q, papel))
+  })
+  console.log(`✔ ${papel}: ${r} objeto(s) transferido(s), CREATE no schema public, ${database} com o neondb_owner, sem CREATE no banco`)
 }
 
 async function fechar() {
@@ -110,6 +123,12 @@ async function verificar() {
     console.log('  membros dele:', (await q(`SELECT u.rolname, m.inherit_option, m.set_option FROM pg_auth_members m
       JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE g.rolname = $1`, [papel])))
     console.log('  dono do banco:', (await q('SELECT pg_get_userbyid(datdba) AS dono FROM pg_database WHERE datname = current_database()'))[0].dono)
+    console.log('  schema public:', (await q(`SELECT pg_get_userbyid(nspowner) AS dono, nspacl::text AS acl,
+      has_schema_privilege($1, 'public', 'USAGE') AS usage, has_schema_privilege($1, 'public', 'CREATE') AS "create"
+      FROM pg_namespace WHERE nspname = 'public'`, [papel]))[0])
+    console.log('  no banco (has_database_privilege):', (await q(`SELECT has_database_privilege($1, current_database(), 'CREATE') AS "create",
+      has_database_privilege($1, current_database(), 'TEMPORARY') AS temporary`, [papel]))[0])
+    console.log('  extensões:', (await q('SELECT extname, pg_get_userbyid(extowner) AS dono FROM pg_extension ORDER BY 1')).map(e => `${e.extname} (${e.dono})`))
     console.log('  donos das tabelas public:', await q("SELECT tableowner, count(*)::int AS n FROM pg_tables WHERE schemaname = 'public' GROUP BY 1"))
     console.log('  CONNECT por banco (has_database_privilege):', Object.fromEntries((await q(
       `SELECT datname, has_database_privilege($1, datname, 'CONNECT') AS c FROM pg_database WHERE NOT datistemplate ORDER BY 1`, [papel])).map(x => [x.datname, x.c])))
@@ -128,14 +147,8 @@ async function verificar() {
   const c = new pg.Client({ ...opcoes, ssl })
   await c.connect()
   try {
-    for (const [rot, sql] of [
-      ['CREATE ROLE', 'CREATE ROLE r7_teste_nao_deve_existir'],
-      ['CREATE DATABASE', 'CREATE DATABASE r7_teste_nao_deve_existir'],
-      ['CREATE EXTENSION dblink', 'CREATE EXTENSION dblink'],
-      ['SET ROLE neondb_owner', 'SET ROLE neondb_owner'],
-      ['ALTER ROLE ... BYPASSRLS', `ALTER ROLE "${papel}" BYPASSRLS`],
-    ]) {
-      try { await c.query(sql); console.log(`  ✖ ${rot}: PERMITIDO (não devia)`) } catch (err) { console.log(`  ✔ ${rot}: negado [${err.code}]`) }
+    for (const t of await testarLimites(c, papel)) {
+      console.log(t.permitido ? `  ✖ ${t.rotulo}: PERMITIDO (não devia; desfeito)` : `  ✔ ${t.rotulo}: negado [${t.codigo}]`)
     }
   } finally {
     await c.end()
@@ -143,7 +156,7 @@ async function verificar() {
 }
 
 try {
-  await { criar, fechar, verificar, rollback, reabrir }[acao]()
+  await { criar, ajustar, fechar, verificar, rollback, reabrir }[acao]()
 } catch (err) {
   console.error('✖', err.message)
   process.exitCode = 1

@@ -1,9 +1,12 @@
 import crypto from 'node:crypto'
 
 // USUÁRIO POSTGRES PRÓPRIO DE CADA BANCO (R7, docs/grafity-2026-10.md §5.5). Cada database tem um
-// usuário "<database>_app": dono só do próprio banco e das suas tabelas, sem CREATEROLE, CREATEDB,
-// REPLICATION, BYPASSRLS e sem herdar neon_superuser. É ele que o /api usa nas requisições
-// (api/_conexao.js); o neondb_owner fica para provisionamento, exclusão e scripts.
+// usuário "<database>_app": dono das tabelas do próprio banco (com USAGE + CREATE no schema public, que o
+// load.js precisa para os CREATE TABLE/INDEX IF NOT EXISTS), sem CREATEROLE, CREATEDB, REPLICATION,
+// BYPASSRLS e sem herdar neon_superuser. O DATABASE fica com o neondb_owner e o papel não tem CREATE
+// nele: sem isso não instala extensão (no Neon o dono do banco instala dblink) nem cria schema.
+// É ele que o /api usa nas requisições (api/_conexao.js); o neondb_owner fica para provisionamento,
+// exclusão e scripts.
 //
 // Tudo roda como neondb_owner (quem cria o papel ganha ADMIN sobre ele). O neondb_owner vira membro
 // do papel (INHERIT + SET), só nesse sentido: o papel não ganha nada do neondb_owner. DDL feito pelo
@@ -64,10 +67,15 @@ export async function criarOuAtualizarPapel(q, papel, senha) {
   return existe ? 'atualizado' : 'criado'
 }
 
-// O papel passa a ser dono do database conectado e de tudo no schema public (tabelas, sequences,
-// views, funções, tipos). Devolve quantos objetos mudaram de dono.
+// O papel passa a ser dono de tudo no schema public (tabelas, sequences, views, funções, tipos) e ganha
+// USAGE + CREATE no schema. O database conectado fica (ou volta a ser) do usuário atual (neondb_owner) e o
+// papel perde qualquer CREATE/TEMPORARY explícito nele. Devolve quantos objetos mudaram de dono.
 export async function transferirDono(q, papel) {
-  await q(`DO $$ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO %I', current_database(), '${papel}'); END $$`)
+  await q(`DO $$ BEGIN
+    EXECUTE format('ALTER DATABASE %I OWNER TO CURRENT_USER', current_database());
+    EXECUTE format('REVOKE CREATE, TEMPORARY ON DATABASE %I FROM %I', current_database(), '${papel}');
+  END $$`)
+  await q(`GRANT USAGE, CREATE ON SCHEMA public TO "${papel}"`)
   const objetos = await q(`
     SELECT CASE c.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW'
                           WHEN 'f' THEN 'FOREIGN TABLE' ELSE 'TABLE' END AS tipo, 'public.' || quote_ident(c.relname) AS alvo
@@ -102,7 +110,37 @@ export async function fecharConexao(q, papel = null) {
   END $$`)
 }
 
-// Roda `fn(q, client)` numa transação como dono do banco (SET LOCAL ROLE <papel>) quando o papel
+// O que o papel NÃO pode fazer (scripts/db-usuario-ambiente.js verificar). Cada tentativa roda dentro de
+// BEGIN/ROLLBACK: mesmo se for PERMITIDA, nada fica no banco. CREATE DATABASE não roda em transação:
+// vai fora e, se passar, é apagado na hora. `client` = conexão COMO o papel.
+export const LIMITES_A_TESTAR = [
+  { rotulo: 'CREATE ROLE', sql: 'CREATE ROLE r7_teste_nao_deve_existir' },
+  { rotulo: 'CREATE DATABASE', sql: 'CREATE DATABASE r7_teste_nao_deve_existir', foraDeTransacao: true, desfazer: 'DROP DATABASE IF EXISTS r7_teste_nao_deve_existir' },
+  { rotulo: 'CREATE EXTENSION dblink', sql: 'CREATE EXTENSION dblink' },
+  { rotulo: 'CREATE SCHEMA', sql: 'CREATE SCHEMA r7_teste_nao_deve_existir' },
+  { rotulo: 'SET ROLE neondb_owner', sql: 'SET ROLE neondb_owner' },
+  { rotulo: 'ALTER ROLE ... BYPASSRLS', sql: (papel) => `ALTER ROLE "${papel}" BYPASSRLS` },
+]
+export async function testarLimites(client, papel, limites = LIMITES_A_TESTAR) {
+  const out = []
+  for (const l of limites) {
+    const sql = typeof l.sql === 'function' ? l.sql(papel) : l.sql
+    let permitido = false
+    let codigo = null
+    if (l.foraDeTransacao) {
+      try { await client.query(sql); permitido = true } catch (err) { codigo = err.code ?? null }
+      if (permitido && l.desfazer) await client.query(l.desfazer)
+    } else {
+      await client.query('BEGIN')
+      try { await client.query(sql); permitido = true } catch (err) { codigo = err.code ?? null }
+      await client.query('ROLLBACK')
+    }
+    out.push({ rotulo: l.rotulo, permitido, codigo })
+  }
+  return out
+}
+
+// Roda `fn(q, client)` numa transação como dono das tabelas (SET LOCAL ROLE <papel>) quando o papel
 // existe e o usuário atual pode assumi-lo; senão, como o usuário atual (banco ainda sem papel próprio).
 export async function comoDonoDoBanco(client, database, fn) {
   const q = async (sql, params = []) => (await client.query(sql, params)).rows

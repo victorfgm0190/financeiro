@@ -241,14 +241,17 @@ describe('provisionamento do cliente (Aprovar)', () => {
     expect(neon.chamadas.some(c => c.startsWith('DELETE'))).toBe(false)
   }, 120_000)
 
-  it('usuário próprio (R7): papel restrito, dono do banco e de TODAS as tabelas do provisionamento, senha só cifrada', async () => {
+  it('usuário próprio (R7): papel restrito, dono de TODAS as tabelas do provisionamento (banco do admin), senha só cifrada', async () => {
     const q = qde('cliente_mm')
     const [papel] = await q(`SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolinherit, rolcanlogin, rolconfig
       FROM pg_roles WHERE rolname = 'cliente_mm_app'`)
     expect(papel).toMatchObject({ rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false, rolinherit: false, rolcanlogin: true })
     expect(papel.rolconfig.sort()).toEqual(['idle_in_transaction_session_timeout=60s', 'statement_timeout=25s'])
     expect(await q("SELECT g.rolname FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = 'cliente_mm_app'")).toEqual([])
-    expect((await q('SELECT pg_get_userbyid(datdba) AS dono FROM pg_database WHERE datname = current_database()'))[0].dono).toBe('cliente_mm_app')
+    // o banco fica com o admin (postgres no PGlite = neondb_owner no Neon) e o papel não tem CREATE nele
+    expect((await q('SELECT pg_get_userbyid(datdba) AS dono FROM pg_database WHERE datname = current_database()'))[0].dono).toBe('postgres')
+    expect((await q("SELECT has_database_privilege('cliente_mm_app', current_database(), 'CREATE') AS db, has_schema_privilege('cliente_mm_app', 'public', 'CREATE') AS sch"))[0])
+      .toEqual({ db: false, sch: true })
     // estrutura, migrações, kit e admin rodaram com SET LOCAL ROLE: tudo nasce com dono cliente_mm_app
     const donos = await q("SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public'")
     expect(donos).toEqual([{ tableowner: 'cliente_mm_app' }])
@@ -337,7 +340,7 @@ describe('provisionamento do cliente (Aprovar)', () => {
     expect((await chamar(pingHandler, { method: 'GET', auth: login.body.token })).statusCode).toBe(401)
     expect((await chamar(pingHandler, { method: 'GET', auth: login.body.token, host: MM })).statusCode).toBe(200)
     expect((await chamar(pingHandler, { method: 'GET', auth: await tokenAdminPlataforma(), host: MM })).statusCode).toBe(401)
-  })
+  }, 30_000)
 
   it('/api/load no cliente: só o kit, rodapé do cliente, dia 1; nenhum seed do vm; Dindin vazio e bloqueado', async () => {
     const auth = (await chamar(authHandler, { url: '/api/auth', host: MM, body: { username: 'admin', password: 'senha-da-marina-1' } })).body.token
@@ -592,7 +595,9 @@ describe('excluir cliente', () => {
   it('usuário próprio (R7): o banco volta ao admin ANTES do DROP e o papel <database>_app é removido', async () => {
     const id = await novo('kk')
     await provisionar(id)
-    expect(await donoDoBanco('cliente_kk')).toBe('cliente_kk_app')
+    expect(await donoDoBanco('cliente_kk')).toBe('postgres')
+    // banco do desenho antigo (dono = papel, como o cliente_teste1 ficou em 21/10): a exclusão o devolve
+    await bancos.cliente_kk.exec("DO $$ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO cliente_kk_app', current_database()); END $$")
     await bancos.central.exec('CREATE ROLE cliente_kk_app')
     await status(id, 'cancelar')
 
@@ -613,6 +618,7 @@ describe('excluir cliente', () => {
   it('usuário próprio (R7): se o dono não volta ao admin, a exclusão PARA (sem DROP no Neon, sem apagar o papel)', async () => {
     const id = await novo('jj')
     await provisionar(id)
+    await bancos.cliente_jj.exec("DO $$ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO cliente_jj_app', current_database()); END $$") // desenho antigo
     await bancos.central.exec('CREATE ROLE cliente_jj_app')
     await status(id, 'cancelar')
     // o pool admin do cliente_jj recusa o ALTER DATABASE (ex.: permissão negada)

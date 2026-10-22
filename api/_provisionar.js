@@ -143,7 +143,8 @@ const EXECUTAR = {
     const { criado } = await criarDatabase(amb.database_name, neon)
     return `${amb.database_name} ${criado ? 'criado' : 'já existia'}`
   },
-  // b2) Usuário Postgres próprio do banco (R7): papel <database>_app, dono do banco, CONNECT só para
+  // b2) Usuário Postgres próprio do banco (R7): papel <database>_app, dono das tabelas (o banco fica com o
+  // neondb_owner, sem CREATE para o papel), CONNECT só para
   // ele e o neondb_owner, senha cifrada no central. Repetir = senha nova (o ambiente ainda não está no ar).
   async usuario(q, c) {
     const amb = await ambienteDoCliente(q, c)

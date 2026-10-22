@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { cifrarSenha, decifrarSenha, aadDoAmbiente, ErroCifra } from './_cifraDb.js'
 import {
   papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, comoDonoDoBanco, ErroPapel,
+  testarLimites, LIMITES_A_TESTAR,
 } from './_usuarioBanco.js'
 import { configDoPool, urlDoDatabase, configTlsVerificado } from './_conexao.js'
 
@@ -98,7 +99,11 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
     expect(r.rolconfig.sort()).toEqual(['idle_in_transaction_session_timeout=60s', 'statement_timeout=25s'])
     expect(await q("SELECT relname, pg_get_userbyid(relowner) AS dono FROM pg_class WHERE relname IN ('antes', 'seq_solta', 'v_antes') ORDER BY 1"))
       .toEqual([{ relname: 'antes', dono: 'cliente_x_app' }, { relname: 'seq_solta', dono: 'cliente_x_app' }, { relname: 'v_antes', dono: 'cliente_x_app' }])
-    expect((await q('SELECT pg_get_userbyid(datdba) AS d FROM pg_database WHERE datname = current_database()'))[0].d).toBe('cliente_x_app')
+    // o banco fica com o usuário atual (neondb_owner em produção); o papel: CREATE só no schema public
+    expect((await q('SELECT pg_get_userbyid(datdba) AS d FROM pg_database WHERE datname = current_database()'))[0].d).toBe('postgres')
+    expect((await q(`SELECT has_database_privilege('cliente_x_app', current_database(), 'CREATE') AS db,
+      has_schema_privilege('cliente_x_app', 'public', 'USAGE') AS u, has_schema_privilege('cliente_x_app', 'public', 'CREATE') AS c`))[0])
+      .toEqual({ db: false, u: true, c: true })
     // o usuário atual (neondb_owner em produção) é membro do papel com INHERIT e SET — não o contrário
     expect(await q("SELECT m.inherit_option, m.set_option FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid WHERE g.rolname = 'cliente_x_app'"))
       .toEqual([{ inherit_option: true, set_option: true }])
@@ -111,13 +116,81 @@ describe('papel restrito num Postgres de verdade (PGlite)', () => {
     const client = { query: (sql, p) => db.query(sql, p) }
     await comoDonoDoBanco(client, 'cliente_y', (cq) => cq('CREATE TABLE sem_papel (id INT)'))
     await criarOuAtualizarPapel(q, 'cliente_y_app', 'x'.repeat(43))
-    await transferirDono(q, 'cliente_y_app') // sem ser dono do banco o papel nem cria em public (PG 15+)
+    await transferirDono(q, 'cliente_y_app') // sem o GRANT CREATE no schema o papel nem cria em public (PG 15+)
     await comoDonoDoBanco(client, 'cliente_y', (cq) => cq('CREATE TABLE com_papel (id INT)'))
     expect(await q("SELECT tablename, tableowner FROM pg_tables WHERE tablename IN ('sem_papel', 'com_papel') ORDER BY 1"))
       .toEqual([{ tablename: 'com_papel', tableowner: 'cliente_y_app' }, { tablename: 'sem_papel', tableowner: 'cliente_y_app' }])
     expect((await q('SELECT current_user AS u'))[0].u).toBe('postgres') // SET LOCAL não vaza da transação
     await expect(comoDonoDoBanco(client, 'cliente_y', (cq) => cq('CREATE TABLE com_erro (id INT); SELECT 1/0'))).rejects.toThrow()
     expect(await q("SELECT 1 FROM pg_tables WHERE tablename = 'com_erro'")).toEqual([])
+  })
+})
+
+describe('desenho: banco do admin, tabelas do papel (o que o load.js roda)', () => {
+  it('banco de desenho antigo (dono = papel) volta ao admin; papel roda o DDL do load.js e não cria schema', async () => {
+    const db = new PGlite()
+    const q = async (sql, params = []) => (await db.query(sql, params)).rows
+    await db.exec('CREATE TABLE lancamentos (id TEXT PRIMARY KEY); CREATE TABLE atalhos (id SERIAL PRIMARY KEY)')
+    await criarOuAtualizarPapel(q, 'cliente_z_app', gerarSenhaDoBanco())
+    await q("DO $$ BEGIN EXECUTE format('ALTER DATABASE %I OWNER TO cliente_z_app', current_database()); END $$") // desenho antigo
+    await transferirDono(q, 'cliente_z_app')
+    expect((await q('SELECT pg_get_userbyid(datdba) AS d FROM pg_database WHERE datname = current_database()'))[0].d).toBe('postgres')
+    expect((await q("SELECT has_database_privilege('cliente_z_app', current_database(), 'CREATE') AS c"))[0].c).toBe(false)
+
+    const comoPapel = async (sql) => { await db.exec(`SET ROLE cliente_z_app; ${sql}; RESET ROLE`) }
+    // o mesmo tipo de DDL do load.js / _bem.js / atalhos.js
+    await comoPapel('ALTER TABLE lancamentos ADD COLUMN IF NOT EXISTS serie_id TEXT')
+    await comoPapel('CREATE INDEX IF NOT EXISTS idx_lancamentos_serie_id ON lancamentos (serie_id) WHERE serie_id IS NOT NULL')
+    await comoPapel('CREATE TABLE IF NOT EXISTS atalhos (id SERIAL PRIMARY KEY)')
+    await comoPapel('CREATE TABLE IF NOT EXISTS favorecido_alias (id SERIAL PRIMARY KEY, nome TEXT)')
+    await comoPapel("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_x') THEN ALTER TABLE lancamentos ADD CONSTRAINT ck_x CHECK (id <> ''); END IF; END $$")
+    await comoPapel('ALTER TABLE lancamentos ALTER COLUMN serie_id TYPE TEXT USING serie_id::text')
+    expect((await q("SELECT tableowner FROM pg_tables WHERE tablename = 'favorecido_alias'"))[0].tableowner).toBe('cliente_z_app')
+    await db.exec('RESET ROLE')
+    await expect(comoPapel('CREATE SCHEMA r7_x')).rejects.toThrow(/permission denied for database/)
+    await db.exec('RESET ROLE')
+  }, 30_000)
+})
+
+describe('testarLimites (verificar): nada fica para trás, nem quando a operação é permitida', () => {
+  it('como superusuário (tudo permitido) → relata PERMITIDO e desfaz; como o papel → negado', async () => {
+    const db = new PGlite()
+    const client = { query: (sql, p) => db.query(sql, p) }
+    await db.exec('CREATE ROLE cliente_w_app NOSUPERUSER NOINHERIT')
+    const limites = [
+      { rotulo: 'CREATE ROLE', sql: 'CREATE ROLE r7_teste_nao_deve_existir' },
+      { rotulo: 'CREATE SCHEMA', sql: 'CREATE SCHEMA r7_teste_nao_deve_existir' },
+      { rotulo: 'CREATE TABLE', sql: 'CREATE TABLE r7_teste_nao_deve_existir (id INT)' },
+      { rotulo: 'ALTER ROLE', sql: (papel) => `ALTER ROLE "${papel}" BYPASSRLS` },
+    ]
+    const sobras = async () => (await db.query(`SELECT
+      (SELECT count(*)::int FROM pg_roles WHERE rolname = 'r7_teste_nao_deve_existir') AS papel,
+      (SELECT count(*)::int FROM pg_namespace WHERE nspname = 'r7_teste_nao_deve_existir') AS schema,
+      (SELECT count(*)::int FROM pg_tables WHERE tablename = 'r7_teste_nao_deve_existir') AS tabela,
+      (SELECT rolbypassrls FROM pg_roles WHERE rolname = 'cliente_w_app') AS bypass`)).rows[0]
+
+    const comoSuper = await testarLimites(client, 'cliente_w_app', limites)
+    expect(comoSuper.map(t => t.permitido)).toEqual([true, true, true, true])
+    expect(await sobras()).toEqual({ papel: 0, schema: 0, tabela: 0, bypass: false })
+
+    await db.exec('SET ROLE cliente_w_app')
+    const comoPapel = await testarLimites(client, 'cliente_w_app', limites)
+    await db.exec('RESET ROLE')
+    expect(comoPapel.map(t => [t.permitido, t.codigo])).toEqual([[false, '42501'], [false, '42501'], [false, '42501'], [false, '42501']])
+    expect(await sobras()).toEqual({ papel: 0, schema: 0, tabela: 0, bypass: false })
+  }, 30_000)
+
+  it('fora de transação (CREATE DATABASE): se passar, roda o desfazer', async () => {
+    const feitas = []
+    const client = { query: async (sql) => { feitas.push(sql); return { rows: [] } } }
+    const [t] = await testarLimites(client, 'x_app', [{ rotulo: 'CREATE DATABASE', sql: 'CREATE DATABASE r7', foraDeTransacao: true, desfazer: 'DROP DATABASE IF EXISTS r7' }])
+    expect(t).toEqual({ rotulo: 'CREATE DATABASE', permitido: true, codigo: null })
+    expect(feitas).toEqual(['CREATE DATABASE r7', 'DROP DATABASE IF EXISTS r7'])
+  })
+
+  it('a lista padrão cobre CREATE ROLE/DATABASE/EXTENSION/SCHEMA, SET ROLE e BYPASSRLS; só CREATE DATABASE fora de transação', () => {
+    expect(LIMITES_A_TESTAR.map(l => l.rotulo)).toEqual(['CREATE ROLE', 'CREATE DATABASE', 'CREATE EXTENSION dblink', 'CREATE SCHEMA', 'SET ROLE neondb_owner', 'ALTER ROLE ... BYPASSRLS'])
+    expect(LIMITES_A_TESTAR.filter(l => l.foraDeTransacao).map(l => l.rotulo)).toEqual(['CREATE DATABASE'])
   })
 })
 

@@ -11,10 +11,10 @@ UPDATE ambientes SET db_usuario = NULL, db_senha_cifrada = NULL, updated_at = no
 
 -- 1) Conectado no banco X:
 BEGIN;
-ALTER DATABASE X OWNER TO neondb_owner;
-REASSIGN OWNED BY X_app TO neondb_owner;   -- seguro AQUI: X_app só possui o próprio banco
+ALTER DATABASE X OWNER TO neondb_owner;   -- já é dele no desenho atual; vale para bancos do desenho antigo
+REASSIGN OWNED BY X_app TO neondb_owner;   -- seguro AQUI: X_app só possui as tabelas do próprio banco
 GRANT CONNECT ON DATABASE X TO PUBLIC;
-DROP OWNED BY X_app;                       -- privilégios restantes (inclusive CONNECT)
+DROP OWNED BY X_app;                       -- privilégios restantes (CONNECT, USAGE/CREATE no schema public)
 DROP ROLE X_app;
 COMMIT;
 

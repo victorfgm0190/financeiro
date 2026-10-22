@@ -50,7 +50,8 @@ export async function situacaoExclusaoDoCliente(q, c) {
 }
 
 // Usuário próprio do banco (R7, api/_usuarioBanco.js): antes do DROP o database volta para o
-// neondb_owner (o Neon exclui como sempre excluiu); depois, o papel <database>_app é removido.
+// neondb_owner (no desenho atual já é dele; bancos do desenho antigo eram do papel) e o Neon exclui
+// como sempre excluiu; depois, o papel <database>_app é removido.
 // Banco que já não existe (nova tentativa, 3D000) → segue. Qualquer outra falha PARA a exclusão:
 // sem o dono devolvido não se pede o DROP ao Neon.
 async function devolverDonoAoAdmin(database) {
