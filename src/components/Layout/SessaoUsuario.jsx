@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { UserCircle2, KeyRound, ShieldAlert, LogOut, Smartphone, CalendarDays } from 'lucide-react'
 import { getSessao } from '../../lib/api'
 import { useSair } from '../Offline/useSair'
+import AvisoSairModal from '../Offline/AvisoSairModal'
 import TrocarSenhaModal from '../Settings/TrocarSenhaModal'
 import AgendaCelularPanel from '../Settings/AgendaCelularPanel'
 import Modal from '../shared/Modal'
@@ -16,7 +17,7 @@ export default function SessaoUsuario({ comSair = false }) {
   const [trocar, setTrocar] = useState(false)
   const [agenda, setAgenda] = useState(false)
   const [toast, setToast] = useState(null)
-  const { sair, saindo } = useSair()
+  const { sair, saindo, aviso } = useSair()
   if (!sessao) return null
   const emergencia = sessao.origem === 'env'
 
@@ -59,6 +60,8 @@ export default function SessaoUsuario({ comSair = false }) {
           modal ficava POR BAIXO do conteúdo da página (ex.: cabeçalho preso do calendário). */}
       {createPortal(
         <>
+          {/* "Sair" com alterações ainda não enviadas (useSair). */}
+          {comSair && <AvisoSairModal {...aviso} />}
           {/* Agenda no celular: janela (vale para qualquer nível — Configurações › Geral pode estar fechada). */}
           <Modal open={agenda} onClose={() => setAgenda(false)} title="Agenda no celular">
             {agenda && <AgendaCelularPanel emJanela />}
