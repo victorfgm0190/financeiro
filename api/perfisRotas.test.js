@@ -13,12 +13,15 @@ import { _limparCacheSessoes } from './_sessao.js'
 // conferida pelo comAmbiente. Usuário "Lumen" = operador restrito ao perfil prf_l (conta cora);
 // o perfil prf_v (conta itau) é de outra pessoa.
 
-const rota = async (arq) => (await import(`./${arq}.js`)).default
 const H = {
-  bulk: await rota('transactions-bulk-update'), agendamentos: await rota('agendamentos'),
-  rateios: await rota('lancamento-rateios'), srf: await rota('sync-srf'),
-  historico: await rota('transaction-history'), fatura: await rota('fatura-conferencia'),
-  transfs: await rota('transferencias-executadas'), rft: await rota('reserve-function-transactions'),
+  bulk: (await import('./transactions-bulk-update.js')).default,
+  agendamentos: (await import('./agendamentos.js')).default,
+  rateios: (await import('./lancamento-rateios.js')).default,
+  srf: (await import('./sync-srf.js')).default,
+  historico: (await import('./transaction-history.js')).default,
+  fatura: (await import('./fatura-conferencia.js')).default,
+  transfs: (await import('./transferencias-executadas.js')).default,
+  rft: (await import('./reserve-function-transactions.js')).default,
 }
 
 const SECRET = 'segredo-de-teste'

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -12,9 +13,26 @@ const commitCurto = (() => {
 })()
 
 export default defineConfig({
-  // Vitest: o 1º `new PGlite()` de cada arquivo (Postgres em WASM) leva vários segundos quando os
-  // arquivos rodam em paralelo — o padrão de 10s estourava no beforeEach de forma intermitente.
-  test: { hookTimeout: 30_000 },
+  // Vitest em dois projetos. Os testes de api/ sobem um Postgres em WASM (PGlite) — vários por arquivo,
+  // às vezes um por teste — e, disputando a CPU com a suíte inteira em paralelo, estouravam timeouts
+  // de forma intermitente (passavam na 2ª rodada). Eles rodam DEPOIS do resto (groupOrder) e com
+  // poucos workers; os timeouts maiores só valem para eles. Sozinho, o teste mais lento leva ~12 s.
+  test: {
+    hookTimeout: 30_000,
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit', exclude: [...configDefaults.exclude, 'api/**'], sequence: { groupOrder: 0 } },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'api', include: ['api/**/*.test.js'], sequence: { groupOrder: 1 },
+          maxWorkers: 4, testTimeout: 30_000, hookTimeout: 60_000,
+        },
+      },
+    ],
+  },
   define: { 'import.meta.env.VITE_APP_COMMIT': JSON.stringify(commitCurto) },
   plugins: [
     react(),
