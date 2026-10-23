@@ -25,6 +25,7 @@ const { modeloBoasVindas } = await import('./_emailBoasVindas.js')
 
 const MIGRACAO_USUARIOS = readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-14_usuarios.sql', import.meta.url)), 'utf-8')
   + readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-17_niveis_acesso.sql', import.meta.url)), 'utf-8')
+  + readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-22_token_versao.sql', import.meta.url)), 'utf-8')
 const SECRET = 'segredo-de-teste'
 const q = async (sql, params = []) => (await estado.db.query(sql, params)).rows
 
@@ -61,6 +62,8 @@ beforeEach(async () => {
   process.env.PLATAFORMA_ADMIN = 'vmoreira'
   estado.db = new PGlite()
   await estado.db.exec(MIGRACAO_USUARIOS)
+  // Donos dos tokens dos testes: a sessão é conferida no banco do ambiente (api/_sessao.js).
+  await estado.db.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash) VALUES ('id-vmoreira', 'vmoreira', 'V', 'v@teste.local', 'x'), ('id-gislaine', 'gislaine', 'G', 'g@teste.local', 'x'), ('id-outro', 'outro', 'O', 'o@teste.local', 'x')")
   await prepararCentralNoMesmoBanco(() => estado.db)
   _resetSchemaPronto()
 })

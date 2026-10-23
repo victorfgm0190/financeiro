@@ -15,6 +15,7 @@ import { gerarTokenSenha } from './_senhaTokens.js'
 import { ipDoReq } from './_plataforma.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 import { aposEditarUsuario } from './_agendaFeed.js'
+import { SQL_NOVA_VERSAO } from './_sessao.js'
 
 // Cadastro de USUÁRIOS da organização do token. Só admin, sempre filtrando por req.user.orgId:
 //   GET                     → lista (nunca devolve senha_hash)
@@ -161,6 +162,11 @@ export async function editarUsuario(q, orgId, body = {}, quem = null) {
   }
   if (body.novaSenha != null) set('senha_hash', await hashSenha(validarSenha(body.novaSenha)))
   if (body.desbloquear || body.novaSenha != null) sets.push('tentativas_falhas = 0', 'bloqueado_ate = NULL')
+  // Desativado, acesso alterado (nível/permissões/perfis) ou senha trocada: os tokens já emitidos
+  // deixam de valer (api/_sessao.js).
+  const mudouAcesso = ('ativo' in body && (body.ativo === true) !== !!alvo.ativo) || nivel !== alvo.nivel
+    || 'permissoes' in body || 'perfis_permitidos' in body || body.novaSenha != null
+  if (mudouAcesso) sets.push(SQL_NOVA_VERSAO)
 
   const perdeAdmin = alvo.nivel === 'admin' && alvo.ativo && (nivel !== 'admin' || ('ativo' in body && body.ativo !== true))
   if (perdeAdmin && (await outrosAdminsAtivos(q, orgId, alvo.id)) === 0) {
@@ -177,7 +183,8 @@ export async function editarUsuario(q, orgId, body = {}, quem = null) {
   return buscarDaOrg(q, orgId, alvo.id)
 }
 
-// Troca a própria senha. Devolve um token novo (sem trocarSenha) — o app troca o salvo e segue.
+// Troca a própria senha. Devolve um token novo (sem trocarSenha, com a versão nova) — o app troca o
+// salvo e segue; as outras sessões do usuário caem.
 // `ambiente`: o da requisição — o token novo continua preso a ele.
 export async function trocarMinhaSenha(q, user, body = {}, { secret = process.env.JWT_SECRET, ambiente = null } = {}) {
   if (user.origem !== 'db') throw new ErroHttp(403, 'Disponível só para usuários do cadastro')
@@ -186,11 +193,12 @@ export async function trocarMinhaSenha(q, user, body = {}, { secret = process.en
   if (!u || !(await conferirSenha(body.senhaAtual, u.senha_hash))) throw new ErroHttp(400, 'Senha atual incorreta')
   if (await conferirSenha(novaSenha, u.senha_hash)) throw new ErroHttp(400, 'A nova senha precisa ser diferente da atual')
   await q(
-    'UPDATE usuarios SET senha_hash = $2, trocar_senha = false, tentativas_falhas = 0, bloqueado_ate = NULL, updated_at = now() WHERE id = $1',
+    `UPDATE usuarios SET senha_hash = $2, trocar_senha = false, tentativas_falhas = 0, bloqueado_ate = NULL,
+            ${SQL_NOVA_VERSAO}, updated_at = now() WHERE id = $1`,
     [user.id, await hashSenha(novaSenha)],
   )
   const [atual] = await q(
-    `SELECT u.id, u.username, u.nome, u.nivel, u.permissoes, u.perfis_permitidos, u.trocar_senha, m.organizacao_id, m.papel
+    `SELECT u.id, u.username, u.nome, u.nivel, u.permissoes, u.perfis_permitidos, u.trocar_senha, u.token_versao, m.organizacao_id, m.papel
        FROM usuarios u LEFT JOIN LATERAL (
          SELECT organizacao_id, papel FROM membros WHERE usuario_id = u.id ORDER BY created_at, id LIMIT 1
        ) m ON true WHERE u.id = $1`, [user.id])

@@ -2,6 +2,8 @@ import process from 'node:process'
 import { verifyToken } from './_auth.js'
 import { buscarAmbientePorSigla, ambienteAtivo } from './_central.js'
 import { rodarNoAmbiente } from './_conexao.js'
+import { query } from './_db.js'
+import { sessaoValida } from './_sessao.js'
 import { ambienteDoHost, AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 
 // AMBIENTE DA REQUISIÇÃO. Toda rota protegida exporta `export default comAmbiente(handler)`:
@@ -10,7 +12,9 @@ import { ambienteDoHost, AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
 //      AMBIENTE_PADRAO) só vale token do ambiente principal; em <sigla>.finup.app.br só token
 //      daquela sigla. Diferente → 401;
 //   3) ambiente existe no central e está 'ativo' (suspenso/cancelado/provisionando → 403);
-//   4) o handler roda dentro do contexto do ambiente (query() & cia. usam o banco dele).
+//   4) a sessão não foi revogada: usuário ativo e token_versao do token = a do banco (api/_sessao.js),
+//      senão 401 e o app volta ao login;
+//   5) o handler roda dentro do contexto do ambiente (query() & cia. usam o banco dele).
 // O api/_db.test.js (teste "todas as rotas") falha se uma rota nova esquecer o wrapper.
 
 export const ERRO_AMBIENTE_INDISPONIVEL = 'Ambiente indisponível'
@@ -49,7 +53,17 @@ export function comAmbiente(handler) {
     if (!ambienteAtivo(amb)) return res.status(403).json({ error: ERRO_AMBIENTE_INDISPONIVEL })
 
     req.ambiente = amb
-    return rodarNoAmbiente(amb, () => handler(req, res))
+    return rodarNoAmbiente(amb, async () => {
+      let valida
+      try {
+        valida = await sessaoValida(query, payload, { ambienteId: amb.id })
+      } catch (err) {
+        console.error('[ambiente] falha ao conferir a sessão:', err.message)
+        return res.status(500).json({ error: 'Falha ao conferir a sessão' })
+      }
+      if (!valida) return res.status(401).json({ error: 'Unauthorized', codigo: 'sessao_encerrada' })
+      return handler(req, res)
+    })
   }
   envolvido.comAmbiente = true
   return envolvido

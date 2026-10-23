@@ -35,14 +35,21 @@ beforeAll(async () => {
   banco = new PGlite()
   await banco.exec(ESTRUTURA + '\n' + MIGRACOES)
   await banco.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u_alvo', 'alvo', 'Alvo', 'alvo@teste.local', 'hash-original', 'consulta')")
+  // Dono do token dos testes (a sessão é conferida no banco do ambiente: api/_sessao.js).
+  await banco.exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'admin', 'Admin', 'admin@teste.local', 'x', 'admin')")
 }, 180_000)
 
 let envOriginal
 beforeEach(() => {
   envOriginal = { ...process.env }
   process.env.JWT_SECRET = SECRET
-  // Getter contado: cada consulta ao banco do ambiente passa por aqui.
-  usarBancos({ central, banco_vm: () => { consultasNoBanco++; return banco } })
+  // Banco contado: cada consulta ao banco do ambiente passa por aqui — menos a conferência da sessão
+  // (usuarios por id, api/_sessao.js), que não toca na tabela do pedido.
+  const sessao = (sql) => /FROM usuarios WHERE id = \$1/.test(sql)
+  usarBancos({ central, banco_vm: {
+    query: (sql, p) => { if (!sessao(sql)) consultasNoBanco++; return banco.query(sql, p) },
+    exec: (sql) => { consultasNoBanco++; return banco.exec(sql) },
+  } })
   _limparCacheColunasOpcionais()
   _limparCacheColunasDaTabela()
   consultasNoBanco = 0

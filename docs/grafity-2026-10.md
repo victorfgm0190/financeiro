@@ -231,11 +231,11 @@ Sem CORS (só mesma origem). `vercel.json` não define CSP/HSTS/`X-Frame-Options
 |---|---|---|---|
 | **B1** | **P0 — CORRIGIDO 19/10** | `/api/sync` `type:'section'` aceita qualquer `table` do cliente; o nome é concatenado sem aspas em `INSERT INTO ${table}` / `DELETE FROM ${table}` / `SELECT … FROM ${tabela}`. Tabela fora de `MODULO_DA_TABELA` passa para quem tem `configuracoes:editar` (`_permissoesApi.js:104-108`). Resultado: um admin de cliente pode gravar em `usuarios`/`membros`/`senha_tokens` e **injetar SQL**. A trava de exclusão em massa também se desliga com nome inválido (`_syncTrava.js:53`) | `api/sync.js:47-68`, `api/_db.js:40,232`, `api/_permissoesApi.js:69,104-108` |
 | **B2** | P1 | GET/HEAD/OPTIONS não checam módulo (`regraDaRota` devolve `null`). Um usuário "personalizado" sem `ver` lê tudo via `/api/load` e demais GETs | `src/lib/permissoes.js:161` |
-| **B3** | P1 | Gravações sem corte por perfil permitido: `transactions-bulk-update` (`WHERE id = ANY($1)`), `lancamento-rateios`, `agendamentos` PUT, `sync-srf` (sem dono do `scheduleId` e sem trava de exclusão em massa) | `api/transactions-bulk-update.js:9-25`, `api/sync-srf.js` |
-| B4 | P1 | Leituras sem corte por perfil: `fatura-conferencia`, `transaction-history`, `transferencias-executadas`, `reserve-function-transactions`; em `load`, categorias/grupos/regras/orçamento/envelopes vêm inteiros | `api/load.js:487-500` |
-| B5 | P1 | JWT de 12 h sem revogação: nível, permissões e perfis ficam no token; desativar ou rebaixar usuário só vale quando ele expira | `api/auth.js:41,142-151`; `_auth.js:48-61` |
+| **B3** | **P1 — CORRIGIDO 22/10** | Gravações sem corte por perfil permitido: `transactions-bulk-update` (`WHERE id = ANY($1)`), `lancamento-rateios`, `agendamentos` PUT, `sync-srf` (sem dono do `scheduleId` e sem trava de exclusão em massa) | `api/transactions-bulk-update.js:9-25`, `api/sync-srf.js` |
+| B4 | **P1 — CORRIGIDO 22/10 (as 4 rotas; `load` fica na Parte B do B2)** | Leituras sem corte por perfil: `fatura-conferencia`, `transaction-history`, `transferencias-executadas`, `reserve-function-transactions`; em `load`, categorias/grupos/regras/orçamento/envelopes vêm inteiros | `api/load.js:487-500` |
+| B5 | **P1 — CORRIGIDO 22/10** | JWT de 12 h sem revogação: nível, permissões e perfis ficam no token; desativar ou rebaixar usuário só vale quando ele expira | `api/auth.js:41,142-151`; `_auth.js:48-61` |
 | R1 | P1 | Login fixo por variável de ambiente (admin mesmo com conta bloqueada) | `api/auth.js:64-137` |
-| R2 | P1 | TLS sem verificação de certificado (`rejectUnauthorized: false`) | `api/_conexao.js:48` |
+| R2 | **P1 — CORRIGIDO 22/10** | TLS sem verificação de certificado (`rejectUnauthorized: false`) | `api/_conexao.js:48` |
 | R3 | P2 | 500 devolve `err.message` cru (vaza nome de tabela/coluna e SQL) | `sync.js:123`, `ping.js:11`, `load.js:516` … |
 | R4 | P2 | Rotas de manutenção em produção (`backfill-ger-rastreabilidade`, `bem/migrate` — GET aberto a qualquer usuário logado) | `api/backfill-ger-rastreabilidade.js:30-47`, `api/bem/migrate.js:95-119` |
 | R5 | P2 | Sem limite de taxa em `sigla-disponivel`, `senha` validar/definir e `agenda` | — |
@@ -301,13 +301,13 @@ o central com papel próprio; `neondb_owner` reservado ao provisionamento (`_pro
 ### P1
 3. **B2** — `regraDaRota` passa a exigir `ver` do módulo nos GETs (com `load` cortando as seções
    que o usuário não vê).
-4. **B3/B4** — aplicar `perfis_permitidos` em `transactions-bulk-update`, `lancamento-rateios`,
+4. ~~**B3/B4**~~ **Feito em 22/10** (`exigirLinhasPermitidas`/`recortarLancamentos` em `api/_permissoesApi.js`; trava de exclusão em massa no `sync-srf`) — aplicar `perfis_permitidos` em `transactions-bulk-update`, `lancamento-rateios`,
    `agendamentos`, `sync-srf` e nas leituras listadas; trava de exclusão em massa no `sync-srf`.
-5. **B5** — conferir no banco, a cada requisição (com cache curto), se o usuário está ativo e qual o
+5. ~~**B5**~~ **Feito em 22/10** (`usuarios.token_versao` + `api/_sessao.js` no `comAmbiente`, cache de 30 s) — conferir no banco, a cada requisição (com cache curto), se o usuário está ativo e qual o
    nível dele; ou reduzir a validade do token e renovar.
 6. **R1** — desligar `ALLOW_ENV_ADMIN` em produção ou remover o login fixo antes do primeiro cliente
    pagante.
-7. **R2** — `ssl: { rejectUnauthorized: true }` (o Neon tem certificado válido).
+7. ~~**R2**~~ **Feito em 22/10** (`TLS_VERIFICADO` no pool e nos 6 scripts ativos) — `ssl: { rejectUnauthorized: true }` (o Neon tem certificado válido).
 8. **Timeout de fetch** num wrapper único (`db.js` + os 7 `chamar()`), 25 s; `/api/load` talvez 45 s.
 9. **X-Request-ID** gerado no wrapper e logado no servidor junto com `x-vercel-id`.
 10. **Erro por status** centralizado: 401 (sessão), 403 (permissão), 409 (conflito), 429 (aguarde),

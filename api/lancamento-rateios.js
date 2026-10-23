@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirDonoDoRateio } from './_permissoesApi.js'
 
 async function ensureTable() {
   await query(`CREATE TABLE IF NOT EXISTS lancamento_rateios (
@@ -22,6 +23,7 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       const { lancamento_id } = req.query || {}
       if (!lancamento_id) return res.json([])
+      await exigirDonoDoRateio(query, req.user, lancamento_id)
       const rows = await query('SELECT * FROM lancamento_rateios WHERE lancamento_id = $1 ORDER BY created_at', [lancamento_id])
       return res.json(rows)
     }
@@ -30,6 +32,8 @@ async function handler(req, res) {
       const body = await parseBody(req)
       const { action, lancamentoId } = body
       if (!lancamentoId) return res.status(400).json({ error: 'lancamentoId obrigatório' })
+      // Perfis permitidos: rateio de lançamento/agendamento de conta fora deles → 403.
+      await exigirDonoDoRateio(query, req.user, lancamentoId)
 
       // Remove todos os rateios do lançamento.
       if (action === 'delete') {
@@ -51,6 +55,7 @@ async function handler(req, res) {
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/lancamento-rateios]', err.message)
     return res.status(500).json({ error: err.message })
   }

@@ -31,7 +31,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
-import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral, configTlsVerificado } from '../api/_conexao.js'
+import { urlDoDatabase, configDoPool, fecharPoolDoDatabase, nomeDatabaseCentral, configTlsVerificado, TLS_VERIFICADO } from '../api/_conexao.js'
 import { cifrarSenha, aadDoAmbiente } from '../api/_cifraDb.js'
 import {
   papelDoBanco, gerarSenhaDoBanco, criarOuAtualizarPapel, transferirDono, fecharConexao, testarLimites,
@@ -73,15 +73,15 @@ const BANCOS = ['neondb', 'finup_central', 'cliente_teste1', 'postgres']
 const papel = papelDoBanco(database)
 const ehCentral = database === nomeDatabaseCentral()
 
-const ssl = { rejectUnauthorized: false }
-async function comAdmin(db, fn, { tlsVerificado = false } = {}) {
-  // tlsVerificado: certificado conferido (o criar manda a senha em texto no CREATE/ALTER ROLE)
-  const c = new pg.Client(tlsVerificado ? configTlsVerificado(urlDoDatabase(db)) : { connectionString: urlDoDatabase(db), ssl })
+const ssl = TLS_VERIFICADO
+// Toda conexão com o certificado do servidor conferido (o criar manda a senha em texto no CREATE/ALTER ROLE).
+async function comAdmin(db, fn) {
+  const c = new pg.Client(configTlsVerificado(urlDoDatabase(db)))
   await c.connect()
   try { return await fn(async (sql, p = []) => (await c.query(sql, p)).rows, c) } finally { await c.end() }
 }
 const comCentral = (fn) => {
-  const c = new pg.Client({ connectionString: process.env.CENTRAL_DATABASE_URL, ssl })
+  const c = new pg.Client(configTlsVerificado(process.env.CENTRAL_DATABASE_URL))
   return c.connect().then(() => fn(async (sql, p = []) => (await c.query(sql, p)).rows)).finally(() => c.end())
 }
 async function transacao(c, fn) {
@@ -96,7 +96,7 @@ async function criarCentral() {
   const r = await comAdmin(database, (q, c) => transacao(c, async () => ({
     situacao: await criarOuAtualizarPapel(q, papel, senha),
     objetos: await transferirDono(q, papel),
-  })), { tlsVerificado: true })
+  })))
   writeFileSync(ARQUIVO_ENV, definirLinhaEnv(lerEnvLocal(), NOME_ENV_CENTRAL_APP, urlDoPapel(urlDoDatabase(database), papel, senha)))
   console.log(`✔ ${papel} ${r.situacao} · ${r.objetos} objeto(s) transferido(s), CREATE no schema public, banco com o neondb_owner`)
   console.log(`  URL gravada no .env.local como ${NOME_ENV_CENTRAL_APP} (não exibida). Para colar na Vercel: node scripts/db-usuario-ambiente.js copiar central`)
@@ -112,7 +112,7 @@ async function criar() {
   const r = await comAdmin(database, (q, c) => transacao(c, async () => ({
     situacao: await criarOuAtualizarPapel(q, papel, senha),
     objetos: await transferirDono(q, papel),
-  })), { tlsVerificado: true })
+  })))
   await comCentral(q => q('UPDATE ambientes SET db_usuario = $2, db_senha_cifrada = $3, updated_at = now() WHERE id = $1', [amb.id, papel, cifrada]))
   console.log(`✔ ${papel} ${r.situacao} · ${r.objetos} objeto(s) transferido(s), CREATE no schema public, banco com o neondb_owner · senha cifrada no central (ambiente ${amb.sigla})`)
 }

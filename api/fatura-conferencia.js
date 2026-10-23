@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirContaPermitida } from './_permissoesApi.js'
 
 // Conferência pós-importação de uma fatura de cartão: soma o que REALMENTE está gravado no
 // Neon para (cartão, fatura) e devolve despesas, estornos, total e quantidades. O frontend
@@ -19,6 +20,8 @@ async function handler(req, res) {
     if (!accountId || !/^\d{4}-\d{2}$/.test(String(faturaMonthYear || ''))) {
       return res.status(400).json({ error: 'accountId e faturaMonthYear (YYYY-MM) são obrigatórios.' })
     }
+    // Perfis permitidos: cartão de conta fora deles → 403.
+    await exigirContaPermitida(query, req.user, accountId)
     const [y, m] = String(faturaMonthYear).split('-')
     const faturaRef = `${m}/${y}`
 
@@ -52,6 +55,7 @@ async function handler(req, res) {
       qtd: despesas.qtd + estornos.qtd,
     })
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/fatura-conferencia]', err.message)
     res.status(500).json({ error: err.message })
   }

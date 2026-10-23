@@ -11,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { DDL_PLATAFORMA } from '../api/_plataforma.js'
 import { comoDonoDoBanco } from '../api/_usuarioBanco.js'
+import { configTlsVerificado } from '../api/_conexao.js'
 
 const dryRun = process.argv.includes('--dry-run')
 if (!process.env.CENTRAL_DATABASE_URL) {
@@ -22,7 +23,7 @@ const dir = fileURLToPath(new URL('../supabase/central/', import.meta.url))
 const arquivos = readdirSync(dir).filter(f => f.endsWith('.sql')).sort()
 const passos = [...arquivos.map(f => [f, readFileSync(dir + f, 'utf-8')]), ['DDL_PLATAFORMA (api/_plataforma.js)', DDL_PLATAFORMA]]
 
-const client = new pg.Client({ connectionString: process.env.CENTRAL_DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const client = new pg.Client(configTlsVerificado(process.env.CENTRAL_DATABASE_URL))
 await client.connect()
 try {
   const [{ db }] = (await client.query('SELECT current_database() AS db')).rows

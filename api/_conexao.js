@@ -86,8 +86,13 @@ export function nomeDatabaseCentral(env = process.env) {
   return decodeURIComponent(new URL(env.CENTRAL_DATABASE_URL).pathname.replace(/^\//, ''))
 }
 
+// TLS com o certificado do servidor CONFERIDO (o do Neon é de autoridade pública). Nas conexões por
+// host/usuário/senha (papel próprio do banco) é esta opção que vale; nas por connection string, o
+// sslmode=require da URL já é tratado como verify-full pelo pg 8.
+export const TLS_VERIFICADO = Object.freeze({ rejectUnauthorized: true })
+
 function novoPool(opcoes, rotulo) {
-  const pool = new Pool({ ...opcoes, ssl: { rejectUnauthorized: false }, max: 3 })
+  const pool = new Pool({ ...opcoes, ssl: TLS_VERIFICADO, max: 3 })
   // Conexão OCIOSA encerrada pelo servidor (o Neon suspende o compute e derruba as conexões:
   // "terminating connection due to administrator command"). Sem este ouvinte o 'error' do pool
   // derruba o processo; com ele, o pool descarta a conexão e abre outra na próxima consulta.
@@ -135,14 +140,13 @@ export function poolDoDatabase(nome) {
   return p
 }
 
-// Conexão do neondb_owner COM o certificado do servidor conferido, para o CREATE/ALTER ROLE (a senha
-// vai em texto: o Neon não aceita verificador SCRAM). Só esse caminho; as outras conexões continuam
-// como estão (item P1 separado). sslmode=verify-full na URL porque o pg dá prioridade ao sslmode da
-// connection string sobre a opção ssl.
+// Opções do pg para uma connection string com o certificado do servidor conferido (CREATE/ALTER ROLE,
+// cuja senha vai em texto, e os scripts de manutenção). sslmode=verify-full na URL porque o pg dá
+// prioridade ao sslmode da connection string sobre a opção ssl.
 export function configTlsVerificado(url) {
   const u = new URL(url)
   u.searchParams.set('sslmode', 'verify-full')
-  return { connectionString: u.toString(), ssl: { rejectUnauthorized: true } }
+  return { connectionString: u.toString(), ssl: TLS_VERIFICADO }
 }
 async function criarConexaoAdminVerificada(nome) {
   const c = new pg.Client(configTlsVerificado(urlDoDatabase(nome)))

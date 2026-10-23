@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { recortarLancamentos } from './_permissoesApi.js'
 
 // Histórico do fornecedor: últimas ocorrências de um lançamento cuja descrição CORRESPONDA
 // (busca por similaridade — mesma ideia do front: normaliza e checa correspondência parcial).
@@ -42,6 +43,7 @@ async function handler(req, res) {
 
     const rows = await query(
       `SELECT l.id, l.date, l.amount, l.description, l.type,
+              l.account_id, l.to_account_id, l.reserva_funcao_id,
               c.name  AS categoria_nome,
               g.name  AS grupo_nome,
               rf.name AS reserva_funcao_nome
@@ -56,7 +58,11 @@ async function handler(req, res) {
     )
 
     // Refina pela similaridade (≥0,70) e mantém os mais recentes.
-    const matched = rows.filter(r => similarity(desc, r.description) >= 0.7).slice(0, lim)
+    // Perfis permitidos: só lançamentos das contas deles (as colunas de conta saem da resposta).
+    const visiveis = await recortarLancamentos(query, req.user, rows)
+    const matched = visiveis.filter(r => similarity(desc, r.description) >= 0.7).slice(0, lim)
+      .map(({ id, date, amount, description, type, categoria_nome, grupo_nome, reserva_funcao_nome }) =>
+        ({ id, date, amount, description, type, categoria_nome, grupo_nome, reserva_funcao_nome }))
     res.json({ transactions: matched })
   } catch (err) {
     console.error('[api/transaction-history]', err.message)

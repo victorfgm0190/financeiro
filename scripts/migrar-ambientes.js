@@ -19,7 +19,7 @@ import process from 'node:process'
 import pg from 'pg'
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { urlDoDatabase } from '../api/_conexao.js'
+import { urlDoDatabase, configTlsVerificado } from '../api/_conexao.js'
 import { comoDonoDoBanco } from '../api/_usuarioBanco.js'
 
 const args = process.argv.slice(2)
@@ -34,7 +34,7 @@ const dir = fileURLToPath(new URL('../supabase/migrations/', import.meta.url))
 const MIGRACOES = readdirSync(dir).filter(f => f.endsWith('.sql')).sort()
 
 const conectar = async (url) => {
-  const c = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
+  const c = new pg.Client(configTlsVerificado(url))
   await c.connect()
   return c
 }

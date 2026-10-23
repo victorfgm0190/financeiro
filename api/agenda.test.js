@@ -6,11 +6,13 @@ import jwt from 'jsonwebtoken'
 import { SQL_CENTRAL, URL_CENTRAL_TESTE, poolPGlite } from './_testes/pglite.js'
 import { _definirFabricaDePool } from './_conexao.js'
 import { _limparCacheAmbientes } from './_central.js'
+import { _limparCacheSessoes } from './_sessao.js'
 import { gerarIcs } from '../src/lib/agendaIcs.js'
 
 // AGENDA NO CELULAR — rota pública /api/agenda e rota do dono /api/agenda-feed, com o central num
-// PGlite. A fábrica de pool só conhece o CENTRAL e anota cada database aberto: qualquer tentativa
-// de abrir o banco de um ambiente (banco_vm, banco_a…) falha e aparece em `abertos`.
+// PGlite. A fábrica de pool anota cada database aberto. O banco de um ambiente (banco_vm, banco_a…)
+// só existe para a conferência da sessão do comAmbiente (api/_sessao.js: usuario ativo e
+// token_versao): a rota do dono não lê nada dele, e a rota pública nem chega a abri-lo.
 
 const { default: agendaHandler } = await import('./agenda.js')
 const { default: feedHandler } = await import('./agenda-feed.js')
@@ -19,10 +21,14 @@ const { cifrarToken, decifrarToken, chaveAgenda, aposEditarUsuario, hashTokenAge
 const SECRET = 'segredo-de-teste'
 const CHAVE = crypto.randomBytes(32).toString('base64')
 let central
+let usuariosDoAmbiente // banco de ambiente mínimo: só a tabela usuarios (sessão)
 let abertos = []
 const q = async (sql, params = []) => (await central.query(sql, params)).rows
 
 beforeAll(async () => {
+  usuariosDoAmbiente = new PGlite()
+  await usuariosDoAmbiente.exec(`CREATE TABLE usuarios (id TEXT PRIMARY KEY, ativo BOOLEAN NOT NULL DEFAULT true, token_versao INTEGER NOT NULL DEFAULT 0);
+    INSERT INTO usuarios (id) VALUES ('u-ana'), ('u-bia');`)
   central = new PGlite()
   await central.exec(SQL_CENTRAL)
   await central.exec(`
@@ -41,9 +47,9 @@ beforeEach(async () => {
   abertos = []
   _definirFabricaDePool((nome) => {
     abertos.push(nome)
-    if (nome !== 'central') throw new Error(`teste: a rota tentou abrir o banco do ambiente "${nome}"`)
-    return poolPGlite(central)
+    return poolPGlite(nome === 'central' ? central : usuariosDoAmbiente)
   })
+  _limparCacheSessoes()
   await q('DELETE FROM agenda_cache')
   await q('DELETE FROM agenda_feeds')
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -157,11 +163,15 @@ describe('/api/agenda-feed (dono logado)', () => {
     ])
   })
 
-  it('não abre o banco do ambiente', async () => {
+  it('do banco do ambiente, só a conferência da sessão (usuarios); o feed fica todo no central', async () => {
+    const consultas = []
+    const contar = (db) => ({ query: async (sql, p) => { consultas.push(sql); return db.query(sql, p) } })
+    _definirFabricaDePool((nome) => (nome === 'central' ? poolPGlite(central) : contar(usuariosDoAmbiente)))
     await criar()
     await publicar({ despesa: ICS() })
     await chamar(feedHandler, { url: '/api/agenda-feed', auth: token() })
-    expect([...new Set(abertos)]).toEqual(['central'])
+    expect(consultas.length).toBeGreaterThan(0)
+    expect(consultas.every(sql => /FROM usuarios WHERE id = \$1/.test(sql))).toBe(true)
   })
 })
 

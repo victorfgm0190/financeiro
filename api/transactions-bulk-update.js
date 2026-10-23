@@ -1,7 +1,8 @@
-import { parseBody, withTransaction } from './_db.js'
+import { query, parseBody, withTransaction } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { ensureHistoricoSchema, inserirHistorico } from './_historico.js'
 import { comAmbiente } from './_ambiente.js'
+import { exigirLinhasPermitidas } from './_permissoesApi.js'
 
 // Atualização em lote de lançamentos: altera date e/ou category_id de vários
 // registros (id = ANY) numa única transação, junto com o histórico de alterações
@@ -45,6 +46,8 @@ async function handler(req, res) {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids vazio' })
     }
+    // Perfis permitidos: lançamento de conta fora deles → 403, nada é alterado.
+    await exigirLinhasPermitidas(query, req.user, 'lancamentos', ids)
     const loteId = loteBody ? String(loteBody) : `lote_${Date.now()}_${Math.random().toString(36).slice(2)}`
     await ensureHistoricoSchema()
     const r = await withTransaction(q => aplicarBulkLancamentos(q, {
@@ -53,6 +56,7 @@ async function handler(req, res) {
     }))
     res.json({ ok: true, ...r, lote_id: loteId })
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message })
     console.error('[api/transactions-bulk-update]', err.message)
     res.status(500).json({ error: err.message })
   }

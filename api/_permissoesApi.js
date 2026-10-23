@@ -114,3 +114,46 @@ export async function autorizarSync(q, user, body) {
   }
   return body
 }
+
+// ─── Rotas fora do /api/sync (GRAFITY B3/B4) ─────────────────────────────────────────────────────
+// Mesmo recorte por perfis permitidos das gravações/leituras do sync, para as rotas que recebem ids.
+// Usuário com "todos" os perfis passa sem consulta extra.
+
+const TABELAS_POR_ID = new Set(['lancamentos', 'agendamentos'])
+
+// Gravação por ids: algum id EXISTENTE é de conta fora dos perfis permitidos → 403 (nada é gravado).
+// Id que não existe não protege nada de ninguém (linha ainda não sincronizada) e passa.
+export async function exigirLinhasPermitidas(q, user, tabela, ids) {
+  if (!TABELAS_POR_ID.has(tabela)) throw new Error(`exigirLinhasPermitidas: tabela inválida (${tabela})`)
+  const lista = [...new Set((ids || []).filter(v => v != null).map(String))]
+  if (!lista.length) return
+  const ctx = await contextoPerfis(q, user)
+  if (!ctx) return
+  const rows = await q(`SELECT id, account_id, to_account_id, reserva_funcao_id FROM ${tabela} WHERE id = ANY($1)`, [lista])
+  if (rows.some(r => !linhaPermitida(tabela, r, ctx.contas, ctx.funcoes, ctx.perfis))) {
+    throw new ErroHttp(403, 'Sem permissão para registros de um perfil não permitido')
+  }
+}
+
+// Rateio: o lancamento_id do rateio é um lançamento OU um agendamento (rateio do agendamento).
+export async function exigirDonoDoRateio(q, user, id) {
+  await exigirLinhasPermitidas(q, user, 'lancamentos', [id])
+  await exigirLinhasPermitidas(q, user, 'agendamentos', [id])
+}
+
+// Leitura de lançamentos (rows com account_id/to_account_id/reserva_funcao_id): só os dos perfis.
+export async function recortarLancamentos(q, user, rows) {
+  return recortarLeitura('lancamentos', rows, await contextoPerfis(q, user))
+}
+
+// Leitura por conta (ex.: conferência de fatura do cartão): conta fora dos perfis → 403.
+export async function exigirContaPermitida(q, user, accountId) {
+  const ctx = await contextoPerfis(q, user)
+  if (ctx && !ctx.contas.has(accountId)) throw new ErroHttp(403, 'Sem permissão para esta conta')
+}
+
+// Leitura por função de reserva: função de conta fora dos perfis → false.
+export async function funcaoPermitida(q, user, funcaoId) {
+  const ctx = await contextoPerfis(q, user)
+  return !ctx || ctx.funcoes.has(funcaoId)
+}

@@ -1203,18 +1203,21 @@ let confirmadorExclusaoEmMassa = (dados) =>
   window.confirm(textoConfirmacaoExclusao(dados))
 export function definirConfirmadorExclusaoEmMassa(fn) { confirmadorExclusaoEmMassa = fn }
 
-export async function postSync(body) {
+// POST com a trava de exclusão em massa (o /api/sync e o /api/sync-srf respondem igual).
+async function postComConfirmacao(rota, body) {
   try {
-    return await apiPost('/api/sync', body)
+    return await apiPost(rota, body)
   } catch (err) {
     if (err.status !== 409 || err.codigo !== 'exclusao_em_massa' || body.confirmarExclusaoEmMassa) throw err
     if (!(await confirmadorExclusaoEmMassa(err.dados || {}))) {
       err.exclusaoRecusada = true
       throw err
     }
-    return apiPost('/api/sync', { ...body, confirmarExclusaoEmMassa: true })
+    return apiPost(rota, { ...body, confirmarExclusaoEmMassa: true })
   }
 }
+
+export const postSync = (body) => postComConfirmacao('/api/sync', body)
 
 // Tabela inteira (restauração de backup, seed). O dia a dia vai pela fila (src/lib/filaOffline.js),
 // que envia só os itens alterados. `confirmarExclusaoEmMassa`: pedido explícito do usuário
@@ -1250,7 +1253,7 @@ export async function syncSection(table, prevItems, currItems, toRow, { confirma
 // um schedule_id (DELETE + INSERT). As rows são mapeadas p/ snake_case (mesmo mapper do sync).
 export async function syncSrf(scheduleId, rows) {
   try {
-    return await apiPost('/api/sync-srf', {
+    return await postComConfirmacao('/api/sync-srf', {
       scheduleId,
       rows: (rows || []).map(scheduleReservaFuncaoToRow),
     })

@@ -1,8 +1,8 @@
 -- ============================================================
 -- ESTRUTURA BASE dos bancos de ambiente — GERADO, não editar à mão.
--- Gerado por scripts/gerar-estrutura-base.js em 2026-10-17T23:32:00.294Z a partir do
--- database "neondb" (commit 4ea63a6). Só estrutura: nenhum comando de dados, nenhuma linha copiada.
--- 43 tabelas · 41 índices · 2 sequences. Fora: plataforma_*, _migracoes.
+-- Gerado por scripts/gerar-estrutura-base.js em 2026-10-23T00:31:02.388Z a partir do
+-- database "neondb" (commit 00fca6d). Só estrutura: nenhum comando de dados, nenhuma linha copiada.
+-- 52 tabelas · 52 índices · 2 sequences. Fora: plataforma_*, _migracoes.
 -- Aplicada uma vez, numa transação, no banco novo do cliente; depois vêm as migrações.
 -- ============================================================
 
@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS agendamentos (
   tipo_documento_id text,
   categoria_cnpj_id text,
   categoria_cpf_id text,
+  sincronizar_agenda boolean DEFAULT true NOT NULL,
+  contrato_id text,
+  contrato_papel text,
+  valor_status text DEFAULT 'confirmado'::text,
+  composicao jsonb,
+  CONSTRAINT agendamentos_contrato_papel_check CHECK ((contrato_papel = ANY (ARRAY['aluguel'::text, 'condominio'::text, 'iptu'::text, 'seguro'::text, 'multa'::text]))),
+  CONSTRAINT agendamentos_valor_status_check CHECK ((valor_status = ANY (ARRAY['confirmado'::text, 'projetado'::text]))),
   CONSTRAINT agendamentos_pkey PRIMARY KEY (id)
 );
 
@@ -166,6 +173,8 @@ CREATE TABLE IF NOT EXISTS configuracoes (
   faturas_fechadas jsonb DEFAULT '{}'::jsonb,
   category_groups_ordem_manual boolean DEFAULT false,
   mobile_home_cards jsonb,
+  rodape_titulo text,
+  rodape_frase text,
   CONSTRAINT configuracoes_id_check CHECK ((id = 1)),
   CONSTRAINT configuracoes_pkey PRIMARY KEY (id)
 );
@@ -226,6 +235,120 @@ CREATE TABLE IF NOT EXISTS contas (
   patrimonio_use_method text DEFAULT 'valor_pago'::text,
   CONSTRAINT ck_conta_central_com_perfil CHECK (((NOT COALESCE(conta_corrente_principal, false)) OR (profile_id IS NOT NULL))),
   CONSTRAINT contas_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS contrato_creditos (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  contrato_id text NOT NULL,
+  origem_lancamento_id text,
+  origem_agendamento_id text,
+  itens jsonb DEFAULT '[]'::jsonb NOT NULL,
+  descricao text,
+  valor numeric(14,2) NOT NULL,
+  data_origem text,
+  status text DEFAULT 'aberto'::text NOT NULL,
+  compensado_em_lancamento_id text,
+  compensado_em_agendamento_id text,
+  data_compensacao text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT contrato_creditos_data_origem_check CHECK (((data_origem IS NULL) OR (data_origem ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text))),
+  CONSTRAINT contrato_creditos_status_check CHECK ((status = ANY (ARRAY['aberto'::text, 'compensado'::text]))),
+  CONSTRAINT contrato_creditos_valor_check CHECK ((valor >= (0)::numeric)),
+  CONSTRAINT contrato_creditos_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS contrato_eventos (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  contrato_id text NOT NULL,
+  tipo text NOT NULL,
+  data_evento text NOT NULL,
+  indice text,
+  percentual numeric(9,4),
+  valor_anterior numeric(14,2),
+  valor_novo numeric(14,2),
+  detalhes jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT contrato_eventos_data_evento_check CHECK ((data_evento ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text)),
+  CONSTRAINT contrato_eventos_tipo_check CHECK ((tipo = ANY (ARRAY['criacao'::text, 'reajuste'::text, 'confirmacao_valor'::text, 'aditivo'::text, 'renovacao'::text, 'rescisao'::text, 'suspensao'::text, 'vinculo'::text, 'desvinculo'::text, 'edicao_parcela'::text]))),
+  CONSTRAINT contrato_eventos_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS contrato_itens (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  contrato_id text NOT NULL,
+  descricao text NOT NULL,
+  grupo text DEFAULT 'outro'::text NOT NULL,
+  responsavel text DEFAULT 'inquilino'::text NOT NULL,
+  valor_previsto numeric(14,2),
+  categoria_id text,
+  ativo boolean DEFAULT true NOT NULL,
+  CONSTRAINT contrato_itens_grupo_check CHECK ((grupo = ANY (ARRAY['condominio'::text, 'iptu'::text, 'seguro'::text, 'outro'::text]))),
+  CONSTRAINT contrato_itens_responsavel_check CHECK ((responsavel = ANY (ARRAY['inquilino'::text, 'proprietario'::text]))),
+  CONSTRAINT contrato_itens_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS contrato_regras_itens (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  contrato_id text,
+  padrao text NOT NULL,
+  tipo_match text DEFAULT 'contem'::text NOT NULL,
+  responsavel text NOT NULL,
+  observacao text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT contrato_regras_itens_responsavel_check CHECK ((responsavel = ANY (ARRAY['inquilino'::text, 'proprietario'::text]))),
+  CONSTRAINT contrato_regras_itens_tipo_match_check CHECK ((tipo_match = ANY (ARRAY['comeca_com'::text, 'contem'::text]))),
+  CONSTRAINT contrato_regras_itens_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS contratos (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  perfil_id text,
+  tipo text NOT NULL,
+  modalidade text DEFAULT 'aluguel'::text NOT NULL,
+  numero text,
+  objeto text,
+  favorecido text,
+  favorecido_condominio text,
+  data_inicio text NOT NULL,
+  data_fim text,
+  renovacao_automatica boolean DEFAULT false NOT NULL,
+  aviso_previo_dias integer DEFAULT 30 NOT NULL,
+  valor_base numeric(14,2) DEFAULT 0 NOT NULL,
+  periodicidade text DEFAULT 'mensal'::text NOT NULL,
+  dia_vencimento integer,
+  dia_vencimento_condominio integer,
+  categoria_id text,
+  categoria_condominio_id text,
+  conta_id text,
+  centro_custo text,
+  tipo_documento_id text,
+  indice_reajuste text DEFAULT 'IPCA'::text NOT NULL,
+  percentual_fixo numeric(9,4),
+  mes_base_reajuste integer,
+  proximo_reajuste text,
+  bonificacao_valor numeric(14,2) DEFAULT 0 NOT NULL,
+  bonificacao_meses integer DEFAULT 0 NOT NULL,
+  tipo_imovel text,
+  tem_condominio boolean DEFAULT false NOT NULL,
+  valor_condominio_previsto numeric(14,2),
+  link_anexo text,
+  status text DEFAULT 'ativo'::text NOT NULL,
+  observacao text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT contratos_data_fim_check CHECK (((data_fim IS NULL) OR (data_fim ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text))),
+  CONSTRAINT contratos_data_inicio_check CHECK ((data_inicio ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text)),
+  CONSTRAINT contratos_dia_vencimento_check CHECK (((dia_vencimento >= 1) AND (dia_vencimento <= 31))),
+  CONSTRAINT contratos_dia_vencimento_condominio_check CHECK (((dia_vencimento_condominio >= 1) AND (dia_vencimento_condominio <= 31))),
+  CONSTRAINT contratos_indice_reajuste_check CHECK ((indice_reajuste = ANY (ARRAY['IPCA'::text, 'IGPM'::text, 'FIXO'::text, 'NENHUM'::text]))),
+  CONSTRAINT contratos_mes_base_reajuste_check CHECK (((mes_base_reajuste >= 1) AND (mes_base_reajuste <= 12))),
+  CONSTRAINT contratos_modalidade_check CHECK ((modalidade = ANY (ARRAY['aluguel'::text, 'servico'::text, 'outro'::text]))),
+  CONSTRAINT contratos_periodicidade_check CHECK ((periodicidade = ANY (ARRAY['mensal'::text, 'trimestral'::text, 'semestral'::text, 'anual'::text, 'unica'::text]))),
+  CONSTRAINT contratos_proximo_reajuste_check CHECK (((proximo_reajuste IS NULL) OR (proximo_reajuste ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'::text))),
+  CONSTRAINT contratos_status_check CHECK ((status = ANY (ARRAY['ativo'::text, 'encerrado'::text, 'rescindido'::text, 'suspenso'::text]))),
+  CONSTRAINT contratos_tipo_check CHECK ((tipo = ANY (ARRAY['pagar'::text, 'receber'::text]))),
+  CONSTRAINT contratos_tipo_imovel_check CHECK ((tipo_imovel = ANY (ARRAY['casa'::text, 'apartamento'::text, 'sala'::text, 'galpao'::text, 'outro'::text]))),
+  CONSTRAINT contratos_pkey PRIMARY KEY (id)
 );
 
 CREATE TABLE IF NOT EXISTS envelopes (
@@ -385,6 +508,53 @@ CREATE TABLE IF NOT EXISTS historico_alteracoes (
   CONSTRAINT historico_alteracoes_pkey PRIMARY KEY (id)
 );
 
+CREATE TABLE IF NOT EXISTS import_layouts (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  user_id text NOT NULL,
+  nome text NOT NULL,
+  banco text,
+  tipo text NOT NULL,
+  assinatura text NOT NULL,
+  mapeamento jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT import_layouts_tipo_check CHECK ((tipo = ANY (ARRAY['cartao'::text, 'conta'::text]))),
+  CONSTRAINT import_layouts_pkey PRIMARY KEY (id),
+  CONSTRAINT import_layouts_user_id_tipo_assinatura_key UNIQUE (user_id, tipo, assinatura)
+);
+
+CREATE TABLE IF NOT EXISTS importacao_depara (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  nome_origem text NOT NULL,
+  nome_exibicao text,
+  categoria_id text NOT NULL,
+  criado_em timestamp with time zone DEFAULT now() NOT NULL,
+  atualizado_em timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT importacao_depara_pkey PRIMARY KEY (id),
+  CONSTRAINT importacao_depara_nome_origem_key UNIQUE (nome_origem)
+);
+
+CREATE TABLE IF NOT EXISTS importacoes_lancamentos (
+  id text DEFAULT (gen_random_uuid())::text NOT NULL,
+  conta_id text NOT NULL,
+  formato text NOT NULL,
+  arquivo text,
+  qtd integer DEFAULT 0 NOT NULL,
+  total_entradas numeric(14,2) DEFAULT 0 NOT NULL,
+  total_saidas numeric(14,2) DEFAULT 0 NOT NULL,
+  status text DEFAULT 'em_andamento'::text NOT NULL,
+  ofx_banco text,
+  ofx_conta text,
+  criado_por text,
+  criado_em timestamp with time zone DEFAULT now() NOT NULL,
+  concluida_em timestamp with time zone,
+  desfeita_em timestamp with time zone,
+  desfeita_por text,
+  CONSTRAINT importacoes_lancamentos_formato_check CHECK ((formato = ANY (ARRAY['xlsx'::text, 'csv'::text, 'ofx'::text]))),
+  CONSTRAINT importacoes_lancamentos_status_check CHECK ((status = ANY (ARRAY['em_andamento'::text, 'concluida'::text, 'desfeita'::text]))),
+  CONSTRAINT importacoes_lancamentos_pkey PRIMARY KEY (id)
+);
+
 CREATE TABLE IF NOT EXISTS importacoes_pendentes (
   id text NOT NULL,
   origem text DEFAULT 'DINDIN'::text NOT NULL,
@@ -401,6 +571,17 @@ CREATE TABLE IF NOT EXISTS importacoes_pendentes (
   fonte text,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT importacoes_pendentes_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS indices_cache (
+  indice text NOT NULL,
+  competencia text NOT NULL,
+  valor_mensal numeric(9,4) NOT NULL,
+  acumulado_12m numeric(9,4),
+  atualizado_em timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT indices_cache_competencia_check CHECK ((competencia ~ '^[0-9]{4}-[0-9]{2}$'::text)),
+  CONSTRAINT indices_cache_indice_check CHECK ((indice = ANY (ARRAY['IPCA'::text, 'IGPM'::text]))),
+  CONSTRAINT indices_cache_pkey PRIMARY KEY (indice, competencia)
 );
 
 CREATE TABLE IF NOT EXISTS lancamento_rateios (
@@ -454,6 +635,11 @@ CREATE TABLE IF NOT EXISTS lancamentos (
   bem_id text,
   installment_occurrence integer,
   tipo_documento_id text,
+  importacao_id text,
+  fitid text,
+  data_ocorrencia text,
+  contrato_id text,
+  composicao jsonb,
   CONSTRAINT lancamentos_pkey PRIMARY KEY (id)
 );
 
@@ -726,6 +912,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   perfis_permitidos jsonb DEFAULT '"todos"'::jsonb,
   trocar_senha boolean DEFAULT false,
   criado_por text,
+  token_versao integer DEFAULT 0 NOT NULL,
   CONSTRAINT usuarios_nivel_check CHECK ((nivel = ANY (ARRAY['admin'::text, 'operador'::text, 'consulta'::text, 'personalizado'::text]))),
   CONSTRAINT usuarios_username_check CHECK ((username = lower(username))),
   CONSTRAINT usuarios_pkey PRIMARY KEY (id),
@@ -784,7 +971,33 @@ DO $$ BEGIN
     ALTER TABLE senha_tokens ADD CONSTRAINT senha_tokens_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES usuarios(id);
   END IF;
 END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contrato_itens_contrato_id_fkey' AND conrelid = 'contrato_itens'::regclass) THEN
+    ALTER TABLE contrato_itens ADD CONSTRAINT contrato_itens_contrato_id_fkey FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contrato_eventos_contrato_id_fkey' AND conrelid = 'contrato_eventos'::regclass) THEN
+    ALTER TABLE contrato_eventos ADD CONSTRAINT contrato_eventos_contrato_id_fkey FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contrato_regras_itens_contrato_id_fkey' AND conrelid = 'contrato_regras_itens'::regclass) THEN
+    ALTER TABLE contrato_regras_itens ADD CONSTRAINT contrato_regras_itens_contrato_id_fkey FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contrato_creditos_contrato_id_fkey' AND conrelid = 'contrato_creditos'::regclass) THEN
+    ALTER TABLE contrato_creditos ADD CONSTRAINT contrato_creditos_contrato_id_fkey FOREIGN KEY (contrato_id) REFERENCES contratos(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
+CREATE INDEX IF NOT EXISTS agendamentos_contrato_idx ON public.agendamentos USING btree (contrato_id) WHERE (contrato_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS contrato_creditos_status_idx ON public.contrato_creditos USING btree (contrato_id, status);
+CREATE INDEX IF NOT EXISTS contrato_eventos_contrato_idx ON public.contrato_eventos USING btree (contrato_id, data_evento);
+CREATE INDEX IF NOT EXISTS contrato_itens_contrato_idx ON public.contrato_itens USING btree (contrato_id);
+CREATE INDEX IF NOT EXISTS contrato_regras_contrato_idx ON public.contrato_regras_itens USING btree (contrato_id);
+CREATE INDEX IF NOT EXISTS contratos_perfil_status_idx ON public.contratos USING btree (perfil_id, status);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_amount ON public.agendamentos USING btree (amount);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_tipo_documento ON public.agendamentos USING btree (tipo_documento_id);
 CREATE INDEX IF NOT EXISTS idx_bem_mov_bem_id ON public.bem_movimentacoes USING btree (bem_id);
@@ -804,8 +1017,12 @@ CREATE INDEX IF NOT EXISTS idx_fluxo_provisorios_date ON public.fluxo_provisorio
 CREATE INDEX IF NOT EXISTS idx_historico_entidade ON public.historico_alteracoes USING btree (entidade, entidade_id);
 CREATE INDEX IF NOT EXISTS idx_historico_lote ON public.historico_alteracoes USING btree (lote_id);
 CREATE INDEX IF NOT EXISTS idx_historico_serie ON public.historico_alteracoes USING btree (serie_key);
+CREATE INDEX IF NOT EXISTS idx_importacoes_lancamentos_conta ON public.importacoes_lancamentos USING btree (conta_id, criado_em);
+CREATE INDEX IF NOT EXISTS idx_importacoes_lancamentos_ofx ON public.importacoes_lancamentos USING btree (ofx_banco, ofx_conta) WHERE (ofx_conta IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_amount ON public.lancamentos USING btree (amount);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_bem_id ON public.lancamentos USING btree (bem_id) WHERE (bem_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_fitid ON public.lancamentos USING btree (account_id, fitid) WHERE (fitid IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_lancamentos_importacao ON public.lancamentos USING btree (importacao_id) WHERE (importacao_id IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_serie_id ON public.lancamentos USING btree (serie_id) WHERE (serie_id IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_lancamentos_tipo_documento ON public.lancamentos USING btree (tipo_documento_id);
 CREATE INDEX IF NOT EXISTS idx_marcos_saldo_gerencial_conta ON public.marcos_saldo_gerencial USING btree (conta_id, data);
@@ -821,6 +1038,7 @@ CREATE INDEX IF NOT EXISTS idx_reserve_snapshots_function ON public.reserve_peri
 CREATE INDEX IF NOT EXISTS idx_senha_tokens_usuario ON public.senha_tokens USING btree (usuario_id) WHERE (usado_em IS NULL);
 CREATE INDEX IF NOT EXISTS idx_srf_schedule ON public.schedule_reserva_funcoes USING btree (schedule_id);
 CREATE INDEX IF NOT EXISTS idx_srf_source_lancamento ON public.schedule_reserva_funcoes USING btree (source_lancamento_id);
+CREATE INDEX IF NOT EXISTS lancamentos_contrato_idx ON public.lancamentos USING btree (contrato_id) WHERE (contrato_id IS NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_contas_central_por_perfil ON public.contas USING btree (profile_id) WHERE conta_corrente_principal;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_contas_favorita_por_perfil ON public.contas USING btree (COALESCE(profile_id, ''::text)) WHERE is_main;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_fin_inst_numero ON public.financing_installments USING btree (financing_id, numero_parcela);

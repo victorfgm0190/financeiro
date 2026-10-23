@@ -9,6 +9,7 @@
 import process from 'node:process'
 import pg from 'pg'
 import { DDL_PLATAFORMA } from '../api/_plataforma.js'
+import { configTlsVerificado } from '../api/_conexao.js'
 
 const dryRun = process.argv.includes('--dry-run')
 for (const v of ['NEON_DATABASE_URL', 'CENTRAL_DATABASE_URL']) {
@@ -22,7 +23,7 @@ for (const v of ['NEON_DATABASE_URL', 'CENTRAL_DATABASE_URL']) {
 const TABELAS = ['plataforma_clientes', 'plataforma_historico', 'plataforma_cadastro_envios']
 
 const conectar = async (url) => {
-  const c = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
+  const c = new pg.Client(configTlsVerificado(url))
   await c.connect()
   return c
 }

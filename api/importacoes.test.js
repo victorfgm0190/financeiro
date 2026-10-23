@@ -35,6 +35,8 @@ beforeAll(async () => {
   await bancos.banco_novo.exec(ESTRUTURA + '\n' + migracoes(() => true))
   bancos.banco_antigo = new PGlite()
   await bancos.banco_antigo.exec(ESTRUTURA + '\n' + migracoes(f => f !== MIGRACAO))
+  // Dono do token dos testes nos dois bancos (a sessão é conferida no banco do ambiente: api/_sessao.js).
+  for (const b of ['banco_novo', 'banco_antigo']) await bancos[b].exec("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('u1', 'u1', 'U1', 'u1@teste.local', 'x', 'admin')")
   for (const b of ['banco_novo', 'banco_antigo']) {
     await bancos[b].exec(`
       INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Corrente', 'checking', 0), ('c2', 'Poupança', 'savings', 0), ('cc', 'Cartão', 'credit', 0);

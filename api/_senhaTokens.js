@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { hashSenha } from './_usuarios.js'
+import { SQL_NOVA_VERSAO } from './_sessao.js'
 
 // LINKS DE SENHA (tabela senha_tokens do banco do AMBIENTE — supabase/migrations/2026-10-17_senha_tokens.sql).
 //   'redefinir' ("Esqueci minha senha", 1 h) e 'convite' (admin envia, 48 h).
@@ -49,7 +50,8 @@ export async function definirSenhaComToken(q, token, novaSenha, { agora = new Da
   )
   if (!t) return false
   await q(
-    `UPDATE usuarios SET senha_hash = $2, tentativas_falhas = 0, bloqueado_ate = NULL, trocar_senha = false, updated_at = now()
+    `UPDATE usuarios SET senha_hash = $2, tentativas_falhas = 0, bloqueado_ate = NULL, trocar_senha = false,
+            ${SQL_NOVA_VERSAO}, updated_at = now()
       WHERE id = $1`,
     [t.usuario_id, await hashSenha(novaSenha)],
   )

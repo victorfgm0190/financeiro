@@ -13,6 +13,7 @@ import pg from 'pg'
 import { execSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { configTlsVerificado } from '../api/_conexao.js'
 
 if (!process.env.NEON_DATABASE_URL) {
   console.error('✖ NEON_DATABASE_URL não definida. Rode com: node --env-file=.env.local scripts/gerar-estrutura-base.js')
@@ -21,7 +22,7 @@ if (!process.env.NEON_DATABASE_URL) {
 const FORA = (t) => t.startsWith('plataforma_') || t === '_migracoes'
 const ident = (s) => (/^[a-z_][a-z0-9_]*$/.test(s) && !['order', 'user', 'group'].includes(s) ? s : `"${s.replace(/"/g, '""')}"`)
 
-const c = new pg.Client({ connectionString: process.env.NEON_DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const c = new pg.Client(configTlsVerificado(process.env.NEON_DATABASE_URL))
 await c.connect()
 const q = async (sql, p = []) => (await c.query(sql, p)).rows
 try {

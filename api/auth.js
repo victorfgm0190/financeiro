@@ -43,7 +43,7 @@ export const JWT_EXPIRA = '12h'
 // Username nunca tem "@" e e-mail sempre tem: no máximo um usuário casa com o login.
 const SQL_USUARIO = `
   SELECT u.id, u.username, u.nome, u.senha_hash, u.ativo, u.tentativas_falhas, u.bloqueado_ate,
-         u.nivel, u.permissoes, u.perfis_permitidos, u.trocar_senha,
+         u.nivel, u.permissoes, u.perfis_permitidos, u.trocar_senha, u.token_versao,
          m.organizacao_id, m.papel
     FROM usuarios u
     LEFT JOIN LATERAL (
@@ -138,7 +138,8 @@ async function payloadLoginFixo(q, login, cadastro, agora) {
 
 // Payload do JWT de um usuário do cadastro: nível, permissões (só valem no personalizado) e perfis
 // permitidos viajam no token — a API autoriza sem ir ao banco. `papel` = nível, para tokens/código
-// antigos que ainda olham papel === 'admin'.
+// antigos que ainda olham papel === 'admin'. `tv` = token_versao do login: mudou no banco (usuário
+// desativado, acesso ou senha alterados) → o token deixa de valer (api/_sessao.js).
 export function payloadDoCadastro(u) {
   const nivel = u.nivel || nivelDoPapel(u.papel) || 'consulta'
   return {
@@ -146,7 +147,7 @@ export function payloadDoCadastro(u) {
     permissoes: nivel === 'personalizado' ? normalizarPermissoes(u.permissoes) : {},
     perfis: normalizarPerfis(u.perfis_permitidos),
     trocarSenha: !!u.trocar_senha,
-    username: u.username, nome: u.nome || u.username, origem: 'db',
+    username: u.username, nome: u.nome || u.username, origem: 'db', tv: Number(u.token_versao) || 0,
   }
 }
 

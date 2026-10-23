@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { prepararCentralNoMesmoBanco } from './_testes/pglite.js'
+import { _limparCacheSessoes } from './_sessao.js'
 
 // Login (cadastro + login fixo de emergência) e API de usuários num Postgres de verdade (PGlite, em
 // memória) criado pela PRÓPRIA migração. Os handlers rodam de verdade: só o _db.js aponta para o PGlite.
@@ -20,6 +21,7 @@ const { default: usuariosHandler } = await import('./usuarios.js')
 
 const MIGRACAO = readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-14_usuarios.sql', import.meta.url)), 'utf-8')
   + readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-17_niveis_acesso.sql', import.meta.url)), 'utf-8')
+  + readFileSync(fileURLToPath(new URL('../supabase/migrations/2026-10-22_token_versao.sql', import.meta.url)), 'utf-8')
   + '\nCREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());'
 const SECRET = 'segredo-de-teste'
 const q = async (sql, params = []) => (await estado.db.query(sql, params)).rows
@@ -86,7 +88,7 @@ describe('login por cadastro', () => {
     const id = await criarUsuario({ username: 'vmoreira' })
     await q('UPDATE usuarios SET tentativas_falhas = 3 WHERE id = $1', [id])
     const p = await autenticar(q, { username: ' VMoreira ', password: 'senha-certa-1' }, { env: {}, agora: AGORA })
-    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos', trocarSenha: false, username: 'vmoreira', nome: 'VMOREIRA', origem: 'db' })
+    expect(p).toEqual({ sub: id, org: 'org1', papel: 'admin', nivel: 'admin', permissoes: {}, perfis: 'todos', trocarSenha: false, username: 'vmoreira', nome: 'VMOREIRA', origem: 'db', tv: 0 })
     const [u] = await q('SELECT tentativas_falhas, ultimo_login FROM usuarios WHERE id = $1', [id])
     expect(u.tentativas_falhas).toBe(0)
     expect(new Date(u.ultimo_login).toISOString()).toBe(AGORA.toISOString())
@@ -247,6 +249,8 @@ describe('API /api/usuarios', () => {
   })
 
   it('não-admin recebe 403; sem token, 401', async () => {
+    // Dono do token (a sessão é conferida no banco do ambiente: api/_sessao.js).
+    await q("INSERT INTO usuarios (id, username, nome, email, senha_hash) VALUES ('x', 'x', 'X', 'x@teste.local', 'x')")
     for (const papel of ['usuario', 'leitura']) {
       const r = await chamar(usuariosHandler, { auth: token({ sub: 'x', org: 'org1', papel, username: 'x', origem: 'db' }) })
       expect(r.statusCode).toBe(403)
@@ -381,5 +385,73 @@ describe('níveis de acesso na API', () => {
     expect(r.body.usuario.permissoes).not.toHaveProperty('inventado')
     const tokenLogin = await autenticar(q, { username: 'pers', password: '12345678' }, { env: {}, agora: AGORA })
     expect(tokenLogin.permissoes.agendamentos.editar).toBe(true)
+  })
+})
+
+// GRAFITY B5: o token de 12 h deixa de valer quando o usuário é desativado, muda de acesso ou troca
+// de senha (usuarios.token_versao, conferido por comAmbiente em api/_sessao.js). Limpar o cache das
+// sessões = passar os 30 s do cache (ou cair noutra instância).
+describe('revogação de sessão (token_versao)', () => {
+  const tokenDoLogin = async (username, senha = 'senha-certa-1') =>
+    token(await autenticar(q, { username, password: senha }, { env: {}, agora: AGORA }))
+  const admin = (id) => token({ sub: id, org: 'org1', nivel: 'admin', papel: 'admin', username: 'vmoreira', origem: 'db' })
+  const listar = (auth) => chamar(usuariosHandler, { auth })
+  beforeEach(() => _limparCacheSessoes())
+
+  it('desativar o usuário: o token antigo dele é recusado (401) em até 30 s', async () => {
+    const idAdmin = await criarUsuario({ username: 'vmoreira' })
+    const idAlvo = await criarUsuario({ username: 'alvo', papel: 'leitura' })
+    const antigo = await tokenDoLogin('alvo')
+    expect((await listar(antigo)).statusCode).toBe(403) // sessão válida (só não é admin)
+    const r = await chamar(usuariosHandler, { method: 'PATCH', auth: admin(idAdmin), body: { id: idAlvo, ativo: false } })
+    expect(r.statusCode).toBe(200)
+    // Dentro dos 30 s a instância que acabou de conferir ainda aceita; depois, não.
+    expect((await listar(antigo)).statusCode).toBe(403)
+    _limparCacheSessoes()
+    expect((await listar(antigo)).statusCode).toBe(401)
+    const [u] = await q('SELECT token_versao FROM usuarios WHERE id = $1', [idAlvo])
+    expect(u.token_versao).toBe(1)
+  })
+
+  it('mudar o nível: token antigo 401; o novo login vale', async () => {
+    const idAdmin = await criarUsuario({ username: 'vmoreira' })
+    const idAlvo = await criarUsuario({ username: 'beto', papel: 'usuario' })
+    const antigo = await tokenDoLogin('beto')
+    await listar(antigo)
+    await chamar(usuariosHandler, { method: 'PATCH', auth: admin(idAdmin), body: { id: idAlvo, nivel: 'consulta' } })
+    _limparCacheSessoes()
+    expect((await listar(antigo)).statusCode).toBe(401)
+    const novo = await tokenDoLogin('beto')
+    expect(jwt.decode(novo)).toMatchObject({ nivel: 'consulta', tv: 1 })
+    expect((await listar(novo)).statusCode).toBe(403)
+  })
+
+  it('editar só o nome não derruba a sessão', async () => {
+    const idAdmin = await criarUsuario({ username: 'vmoreira' })
+    const idAlvo = await criarUsuario({ username: 'nina', papel: 'leitura' })
+    const antigo = await tokenDoLogin('nina')
+    await chamar(usuariosHandler, { method: 'PATCH', auth: admin(idAdmin), body: { id: idAlvo, nome: 'Nina Souza' } })
+    _limparCacheSessoes()
+    expect((await listar(antigo)).statusCode).toBe(403)
+  })
+
+  it('trocar a própria senha: o token devolvido vale (mesmo com cache velho); o antigo, não', async () => {
+    await criarUsuario({ username: 'gislaine', papel: 'leitura' })
+    const antigo = await tokenDoLogin('gislaine')
+    await listar(antigo) // cache com a versão 0
+    const r = await chamar(usuariosHandler, { method: 'POST', url: '/api/usuarios?acao=minha-senha', auth: antigo, body: { senhaAtual: 'senha-certa-1', novaSenha: 'nova-senha-9' } })
+    expect(jwt.decode(r.body.token).tv).toBe(1)
+    expect((await listar(r.body.token)).statusCode).toBe(403)
+    expect((await listar(antigo)).statusCode).toBe(401)
+  })
+
+  it('usuário excluído: 401; login fixo de emergência não é conferido', async () => {
+    const idAlvo = await criarUsuario({ username: 'zeca', papel: 'leitura' })
+    const antigo = await tokenDoLogin('zeca')
+    await q('DELETE FROM membros WHERE usuario_id = $1', [idAlvo])
+    await q('DELETE FROM usuarios WHERE id = $1', [idAlvo])
+    expect((await listar(antigo)).statusCode).toBe(401)
+    const env = token({ sub: 'env:emergencia', org: 'org1', papel: 'admin', nivel: 'admin', username: 'emergencia', origem: 'env' })
+    expect((await listar(env)).statusCode).toBe(200)
   })
 })

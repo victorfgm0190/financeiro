@@ -15,6 +15,7 @@ import pg from 'pg'
 import readline from 'node:readline'
 import bcrypt from 'bcryptjs'
 import { BCRYPT_CUSTO, SENHA_MIN } from '../api/_usuarios.js'
+import { configTlsVerificado } from '../api/_conexao.js'
 
 const ORG_NOME = 'Victor'
 const USERNAME = 'vmoreira'
@@ -66,7 +67,7 @@ function perguntarOculto(texto) {
   })
 }
 
-const pool = new pg.Pool({ connectionString: process.env.NEON_DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 1 })
+const pool = new pg.Pool({ ...configTlsVerificado(process.env.NEON_DATABASE_URL), max: 1 })
 
 async function main() {
   const host = (() => { try { return new URL(process.env.NEON_DATABASE_URL).host } catch { return '?' } })()

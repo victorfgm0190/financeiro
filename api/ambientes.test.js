@@ -22,7 +22,7 @@ const { default: searchHandler } = await import('./search.js')
 const { default: loadHandler } = await import('./load.js')
 
 const SECRET = 'segredo-de-teste'
-const MIGRACAO = ['2026-10-14_usuarios.sql', '2026-10-17_niveis_acesso.sql']
+const MIGRACAO = ['2026-10-14_usuarios.sql', '2026-10-17_niveis_acesso.sql', '2026-10-22_token_versao.sql']
   .map(f => readFileSync(fileURLToPath(new URL(`../supabase/migrations/${f}`, import.meta.url)), 'utf-8')).join('\n')
 const TABELAS_APP = `
   CREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());
@@ -75,6 +75,8 @@ beforeAll(async () => {
   await criarUsuario('banco_a', 'ana', 'senha-a-123')
   await criarUsuario('banco_b', 'bruno', 'senha-b-123')
   await criarUsuario('banco_c', 'carla', 'senha-c-123')
+  // Dono dos tokens montados à mão (sub 'x'): a sessão é conferida no banco do ambiente (api/_sessao.js).
+  for (const nome of ['banco_vm', 'banco_a', 'banco_b', 'banco_c']) await qde(nome)("INSERT INTO usuarios (id, username, nome, email, senha_hash, nivel) VALUES ('x', 'x', 'X', 'x@teste.local', 'x', 'admin')")
   await qde('banco_a')("INSERT INTO lancamentos (id, date, amount, description) VALUES ('la1', '2026-10-01', 50, 'Mercado A')")
   await qde('banco_b')("INSERT INTO lancamentos (id, date, amount, description) VALUES ('lb1', '2026-10-01', 50, 'Mercado B')")
 }, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s

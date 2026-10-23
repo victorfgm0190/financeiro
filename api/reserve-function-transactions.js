@@ -1,6 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { funcaoPermitida, recortarLancamentos } from './_permissoesApi.js'
 
 // Lançamentos vinculados a uma função de reserva (reserva_funcao_id) num período.
 // Recebe { functionId, startDate, endDate }. JOIN em contas para resolver os nomes das
@@ -12,6 +13,8 @@ async function handler(req, res) {
   try {
     const { functionId, startDate, endDate } = await parseBody(req)
     if (!functionId) return res.json({ transactions: [] })
+    // Perfis permitidos: função de reserva de conta fora deles → lista vazia.
+    if (!(await funcaoPermitida(query, req.user, functionId))) return res.json({ transactions: [] })
 
     const where = ['l.reserva_funcao_id = $1']
     const params = [functionId]
@@ -24,7 +27,7 @@ async function handler(req, res) {
     // Despesa (cartão) vinculada à função é só provisão → 'neutro' (nem entrada nem saída).
     const rows = await query(
       `SELECT l.id, l.date, l.description, l.amount, l.type,
-              l.account_id, l.to_account_id,
+              l.account_id, l.to_account_id, l.reserva_funcao_id,
               ca.name AS conta_nome,
               cb.name AS conta_destino_nome,
               CASE
@@ -41,7 +44,7 @@ async function handler(req, res) {
        ORDER BY l.date DESC NULLS LAST`,
       params,
     )
-    res.json({ transactions: rows })
+    res.json({ transactions: await recortarLancamentos(query, req.user, rows) })
   } catch (err) {
     console.error('[api/reserve-function-transactions]', err.message)
     res.status(500).json({ error: err.message })

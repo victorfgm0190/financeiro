@@ -1,6 +1,7 @@
 import { query } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { recortarLancamentos } from './_permissoesApi.js'
 
 // Lançamentos de transferência já gravados no Neon para uma lista de agendamentos num intervalo
 // de datas. Usado pelo modal "Transferências do início do mês": antes de mostrar e de novo antes
@@ -28,7 +29,7 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'ids, de e ate (YYYY-MM-DD) são obrigatórios.' })
     }
     const rows = await query(
-      `SELECT id, schedule_id, source_schedule_id, account_id, to_account_id, date, type,
+      `SELECT id, schedule_id, source_schedule_id, account_id, to_account_id, reserva_funcao_id, date, type,
               COALESCE(reserva_auto, false) AS reserva_auto
          FROM lancamentos
         WHERE type = 'transfer'
@@ -36,7 +37,8 @@ async function handler(req, res) {
           AND date >= $2 AND date <= $3`,
       [ids, de, ate],
     )
-    res.json({ lancamentos: rows })
+    // Perfis permitidos: só transferências das contas deles.
+    res.json({ lancamentos: await recortarLancamentos(query, req.user, rows) })
   } catch (err) {
     console.error('[api/transferencias-executadas]', err.message)
     res.status(500).json({ error: err.message })
