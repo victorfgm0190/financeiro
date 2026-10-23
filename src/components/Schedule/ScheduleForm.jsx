@@ -28,6 +28,7 @@ import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -116,10 +117,17 @@ function Toggle({ value, onChange }) {
   )
 }
 
-function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave, onClose }) {
+function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaNoMes = null, onSave, onClose }) {
   const [date, setDate] = useState(override?.date || originalDate)
   const [amount, setAmount] = useState(String(override?.amount ?? defaultAmount))
   const [skip, setSkip] = useState(isSkipped || false)
+  // Marcar "Pular" num mês que já tem baixa gravada com outra data (src/lib/conflitoPeriodo.js)
+  // pede confirmação antes; Cancelar é o padrão.
+  const [confirmandoPulo, setConfirmandoPulo] = useState(false)
+  const alternarPulo = (marcar) => {
+    if (marcar && baixaNoMes && !isSkipped) { setConfirmandoPulo(true); return }
+    setSkip(marcar)
+  }
   const fmtD = (d) => d.split('-').reverse().join('/')
   const stopEnter = (e) => { if (e.key === 'Enter') e.preventDefault() }
 
@@ -138,11 +146,21 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, onSave
           <input
             type="checkbox"
             checked={skip}
-            onChange={e => setSkip(e.target.checked)}
+            onChange={e => alternarPulo(e.target.checked)}
             className="w-4 h-4 rounded accent-primary cursor-pointer"
           />
           <span className="text-sm text-texto-2">Pular esta ocorrência</span>
         </label>
+
+        {confirmandoPulo && (
+          <div role="alert" className="mb-3.5 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2.5 text-xs space-y-2">
+            <p className="text-texto-1">⚠ {mensagemConflitoPulo(baixaNoMes)}</p>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary flex-1 text-xs py-1.5" onClick={() => setConfirmandoPulo(false)}>Cancelar</button>
+              <button type="button" className="btn-danger flex-1 text-xs py-1.5" onClick={() => { setSkip(true); setConfirmandoPulo(false) }}>Pular mesmo assim</button>
+            </div>
+          </div>
+        )}
 
         {!skip && (
           <div className="space-y-2.5">
@@ -1336,6 +1354,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           override={form.overrides[editingOcc]}
           isSkipped={form.skipped.includes(editingOcc)}
           defaultAmount={previewSchedule.amount}
+          baixaNoMes={baixaNoPeriodo(previewSchedule, editingOcc)}
           onSave={handleSaveOccurrence}
           onClose={() => setEditingOcc(null)}
         />

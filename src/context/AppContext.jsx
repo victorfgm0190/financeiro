@@ -2963,6 +2963,24 @@ export function AppProvider({ children }) {
     if (sch) reconciliarPorAgendamento([sch], [date])
   }, [update, reconciliarPorAgendamento])
 
+  // Inverso do skipScheduleOccurrence: tira `date` dos pulados e reancora next_occurrence na
+  // próxima pendente (a data volta a contar). Usado pelo "tirar o pulo" do Pagar, quando o
+  // vencimento do período do pagamento estava pulado (src/lib/conflitoPeriodo.js).
+  const desfazerPuloOcorrencia = useCallback((scheduleId, date) => {
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => {
+        if (s.id !== scheduleId || !(s.skipped || []).includes(date)) return s
+        const skipped = (s.skipped || []).filter(x => x !== date)
+        if ((s.frequency || 'once') === 'once') return { ...s, skipped }
+        const nextOccurrence = computeOccurrences({ ...s, skipped, nextOccurrence: null }, 1)[0] ?? null
+        return { ...s, skipped, nextOccurrence }
+      }),
+    }))
+    const sch = dataRef.current.schedules.find(x => x.id === scheduleId)
+    if (sch) reconciliarPorAgendamento([sch], [date])
+  }, [update, reconciliarPorAgendamento])
+
   // ── Budgets ─────────────────────────────────────────────────────────────────
   const addBudget = useCallback((budget) => {
     const id = 'bud_' + Date.now()
@@ -5715,7 +5733,7 @@ export function AppProvider({ children }) {
       mergeScheduleFromDb,
       deleteSchedule, toggleScheduleConfirmado, findLinkedResgate,
       efetivarProvisao, getProximaProvisaoOccurrence,
-      registerScheduleOccurrence, skipScheduleOccurrence,
+      registerScheduleOccurrence, skipScheduleOccurrence, desfazerPuloOcorrencia,
       addBudget, updateBudget, deleteBudget,
       addRule, updateRule, deleteRule,
       addGerencialRule, updateGerencialRule, deleteGerencialRule, moveGerencialRule, classifyGerencialByRules,

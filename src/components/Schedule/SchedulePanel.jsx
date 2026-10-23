@@ -52,6 +52,7 @@ import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO } from '../../lib
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import AgendaMobile from './AgendaMobile'
+import { baixaNoPeriodo, puloNoPeriodo, separarConflitosDePulo, mensagemConflitoPulo, mensagemPuloNoPagamento } from '../../lib/conflitoPeriodo'
 import AgendaCalendario from './AgendaCalendario'
 import { faturasSemAgendamento, lerVisaoAgenda, salvarVisaoAgenda } from '../../lib/agendaCalendario'
 
@@ -169,7 +170,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia, desfazerPuloOcorrencia } = useApp()
   // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
   const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
   const duplicado = duplicadoId ? transactions.find(t => t.id === duplicadoId) : null
@@ -348,10 +349,27 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
     : parseValorBR(trfAmount)
   const valorOk = usaDetalhe || (Number.isFinite(valorAba) && valorAba > 0)
 
-  const handleConfirm = () => {
+  // Vencimento do período do PAGAMENTO pulado (ex.: pulou 18/06 e paga em 17/06): a baixa iria
+  // para a próxima pendente (18/07) e o mês contaria duas vezes. Avisa e oferece tirar o pulo.
+  const [avisoPuloSel, setAvisoPulo] = useState(null) // { pulado, chave }
+  const dataDaAba = tab === 'pagamento' ? payDate : tab === 'recebimento' ? recDate : trfDate
+  // Trocar a aba ou a data depois do aviso invalida o aviso (vale para a data em que foi dado).
+  const avisoPulo = avisoPuloSel?.chave === `${tab}|${dataDaAba}` ? avisoPuloSel : null
+
+  // `escolha`: null = conferir o pulo; { tirarPulo: data } = baixa no vencimento pulado (tira o
+  // pulo antes); { manter: true } = baixa na próxima pendente mesmo assim.
+  const handleConfirm = (escolha = null) => {
     // Guarda além do botão desabilitado: parse falho nunca vira lançamento de R$ 0.
     if (!valorOk) return
-    const regDate = nextDate || today
+    if (!escolha) {
+      const pulado = nextDate ? puloNoPeriodo(scheduleProp, dataDaAba, nextDate) : null
+      if (pulado) { setAvisoPulo({ pulado, chave: `${tab}|${dataDaAba}` }); return }
+    }
+    let regDate = nextDate || today
+    if (escolha?.tirarPulo) {
+      desfazerPuloOcorrencia(scheduleProp.id, escolha.tirarPulo)
+      regDate = escolha.tirarPulo
+    }
     // Grupo numerado (≠ G, ≠ D) gera resgate para a Conta central do perfil da conta paga: sem
     // ela, bloqueia o pagamento inteiro antes de gravar.
     const grupoPag = tab === 'pagamento' && payGrupo ? gerencialGroups.find(g => g.id === payGrupo) : null
@@ -727,6 +745,21 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
           )}
         </div>
 
+        {avisoPulo && (
+          <div role="alert" className="mx-5 mb-1 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2.5 text-xs space-y-2 shrink-0">
+            <p className="text-texto-1">⚠ {mensagemPuloNoPagamento(avisoPulo.pulado, nextDate)}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn-primary text-xs py-1.5" onClick={() => handleConfirm({ tirarPulo: avisoPulo.pulado })}>
+                Tirar o pulo e dar baixa em {fmtDate(avisoPulo.pulado)}
+              </button>
+              <button type="button" className="btn-secondary text-xs py-1.5" onClick={() => handleConfirm({ manter: true })}>
+                Registrar em {fmtDate(nextDate)} mesmo assim
+              </button>
+              <button type="button" className="text-xs py-1.5 px-2 text-texto-2 hover:text-texto-1" onClick={() => setAvisoPulo(null)}>Voltar</button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-3 px-5 py-4 border-t border-borda shrink-0">
           <button className="btn-secondary flex-1" onClick={onClose} disabled={finLoading}>Cancelar</button>
           {parcelaFin ? (
@@ -739,7 +772,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               {finLoading ? 'Baixando...' : 'Confirmar Pagamento'}
             </button>
           ) : (
-            <button className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk} onClick={handleConfirm}>
+            <button className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40" disabled={!valorOk || !!avisoPulo} onClick={() => handleConfirm()}>
               <CheckCircle size={14} /> {duplicado ? 'Registrar mesmo assim' : `Confirmar ${TAB_LABELS[tab]}`}
             </button>
           )}
@@ -927,6 +960,8 @@ function ScheduleRow({
   const [showExcluir, setShowExcluir] = useState(false)
   const [showEfetivar, setShowEfetivar] = useState(false)
   const [showPularUnico, setShowPularUnico] = useState(false)
+  // Pular com baixa no mesmo período (src/lib/conflitoPeriodo.js): { baixa } enquanto o aviso está aberto.
+  const [conflitoPulo, setConflitoPulo] = useState(null)
   const [expanded, setExpanded] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
   const [showHistorico, setShowHistorico] = useState(false)
@@ -977,14 +1012,23 @@ function ScheduleRow({
     : FREQ_LABELS[schedule.frequency] || schedule.frequency
   // Valor EFETIVO da próxima ocorrência (respeita override individual); sem ocorrência → valor-pai.
   const effAmount = futura ? futura.amount : nextDate ? occEfetiva(schedule, nextDate).amount : schedule.amount
-  const handlePular = () => {
-    if (!nextDate) return
-    if (!isRecorrente) { if (deContrato) setShowExcluir(true); else setShowPularUnico(true); return }
+  const pularAgora = () => {
     const proximo = getNextOccurrences?.(schedule, 2)[1] || null
     skipScheduleOccurrence(schedule.id, nextDate)
     onToast?.(proximo
       ? `Agendamento pulado. Próximo vencimento: ${fmtDate(proximo)}`
       : 'Agendamento pulado.')
+  }
+  // O período deste vencimento já tem baixa gravada com outra data → avisa antes (Cancelar é o padrão).
+  const comAvisoDePulo = (pular) => {
+    const baixa = baixaNoPeriodo(schedule, nextDate)
+    if (baixa) setConflitoPulo({ baixa, pular })
+    else pular()
+  }
+  const handlePular = () => {
+    if (!nextDate) return
+    if (!isRecorrente) { if (deContrato) setShowExcluir(true); else setShowPularUnico(true); return }
+    comAvisoDePulo(pularAgora)
   }
 
   const displayDate = nextDate || (registered.length > 0 ? registered[registered.length - 1] : schedule.startDate)
@@ -1399,7 +1443,7 @@ function ScheduleRow({
           nextDate={nextDate}
           accounts={accounts}
           onClose={() => setShowEstornar(false)}
-          onConfirm={() => { skipScheduleOccurrence(schedule.id, nextDate); setShowEstornar(false) }}
+          onConfirm={() => { setShowEstornar(false); comAvisoDePulo(() => skipScheduleOccurrence(schedule.id, nextDate)) }}
         />
       )}
 
@@ -1415,6 +1459,16 @@ function ScheduleRow({
           onConfirm={() => { deleteSchedule(schedule.id); setShowExcluir(false) }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!conflitoPulo}
+        onClose={() => setConflitoPulo(null)}
+        onConfirm={() => conflitoPulo?.pular()}
+        title="Este mês já foi pago"
+        message={conflitoPulo ? mensagemConflitoPulo(conflitoPulo.baixa) : ''}
+        confirmLabel="Pular mesmo assim"
+        danger
+      />
 
       <ConfirmDialog
         open={showPularUnico}
@@ -1968,12 +2022,20 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
     }
   }
 
-  const handleBatchSkip = () => {
-    const count = selectedRows.length
-    selectedRows.forEach(({ schedule, nextDate }) => skipScheduleOccurrence(schedule.id, nextDate))
+  // Pular em lote: os que já têm baixa no período do vencimento ficam de fora, a menos que o
+  // usuário confirme "Pular todos mesmo assim" (src/lib/conflitoPeriodo.js).
+  const loteSkip = useMemo(
+    () => (showBatchSkip ? separarConflitosDePulo(selectedRows) : { livres: [], conflitos: [] }),
+    [showBatchSkip, selectedRows],
+  )
+  const handleBatchSkip = (incluirConflitos = false) => {
+    const alvo = incluirConflitos ? [...loteSkip.livres, ...loteSkip.conflitos] : loteSkip.livres
+    alvo.forEach(({ schedule, nextDate }) => skipScheduleOccurrence(schedule.id, nextDate))
+    const count = alvo.length
+    const fora = selectedRows.length - count
     cancelSelection()
     setShowBatchSkip(false)
-    showToastMsg(`${count} agendamento${count !== 1 ? 's' : ''} pulado${count !== 1 ? 's' : ''}`)
+    showToastMsg(`${count} agendamento${count !== 1 ? 's' : ''} pulado${count !== 1 ? 's' : ''}${fora ? ` · ${fora} mantido${fora !== 1 ? 's' : ''} (mês já pago)` : ''}`)
   }
 
   if (schedules.length === 0 && !calendario) {
@@ -2279,13 +2341,37 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
       )}
 
       {/* Batch skip confirmation */}
-      <ConfirmDialog
-        open={showBatchSkip}
-        onClose={() => setShowBatchSkip(false)}
-        onConfirm={handleBatchSkip}
-        title="Pular selecionados"
-        message={`Pular ${selectedRows.length} agendamento${selectedRows.length !== 1 ? 's' : ''}? Esta ação não pode ser desfeita.`}
-      />
+      {loteSkip.conflitos.length === 0 ? (
+        <ConfirmDialog
+          open={showBatchSkip}
+          onClose={() => setShowBatchSkip(false)}
+          onConfirm={() => handleBatchSkip()}
+          title="Pular selecionados"
+          message={`Pular ${selectedRows.length} agendamento${selectedRows.length !== 1 ? 's' : ''}? Esta ação não pode ser desfeita.`}
+        />
+      ) : (
+        <Modal open={showBatchSkip} onClose={() => setShowBatchSkip(false)} title="Pular selecionados" size="sm">
+          <p className="text-sm text-texto-2">
+            {loteSkip.conflitos.length === 1 ? 'Este agendamento já tem' : `Estes ${loteSkip.conflitos.length} agendamentos já têm`} pagamento
+            registrado no mês do vencimento. Pular vai contar o mês duas vezes, por isso {loteSkip.conflitos.length === 1 ? 'ele fica' : 'eles ficam'} de fora:
+          </p>
+          <ul className="mt-3 max-h-48 overflow-y-auto divide-y divide-borda rounded-lg border border-borda text-xs">
+            {loteSkip.conflitos.map(({ schedule, nextDate, baixa }) => (
+              <li key={schedule.id} className="px-3 py-2 flex items-center justify-between gap-3">
+                <span className="text-texto-1 truncate">{schedule.description}</span>
+                <span className="text-texto-3 whitespace-nowrap">venc. {fmtDate(nextDate)} · pago em {fmtDate(baixa)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-5 flex flex-wrap gap-2 justify-end">
+            <button className="btn-secondary" onClick={() => setShowBatchSkip(false)}>Cancelar</button>
+            <button className="btn-secondary text-perigo" onClick={() => handleBatchSkip(true)}>Pular todos mesmo assim</button>
+            <button className="btn-primary" disabled={loteSkip.livres.length === 0} onClick={() => handleBatchSkip()}>
+              Pular só os demais ({loteSkip.livres.length})
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {/* Toast */}
       {toast && <Toast message={toast} />}
