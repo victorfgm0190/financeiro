@@ -17,7 +17,7 @@ import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
 import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -1249,7 +1249,7 @@ function ConferenciaFaturaCard({ conferencia, onReconferir, onClose }) {
 function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const {
     categories, classificationRules, gerencialGroups,
-    addTransaction, updateTransaction, deleteTransaction, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, ensureGerencialState, classifyGerencialByRules,
+    addTransaction, updateTransaction, deleteTransaction, setReconciled, addRule, classifyByRules, learnClassification, recalcularAgendamentosFatura, reconciliarGerencial, ensureGerencialState, classifyGerencialByRules,
     findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, baixarCobrancaRecorrente,
     schedules,
     cardImports, addCardImport, updateCardImport, revertCardImport,
@@ -2330,6 +2330,8 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         serieAlvo.has(row._id) ? { ...row, _serieId: serieAlvo.get(row._id) } : row,
         { accountId: selectedAccount, defaultGrupoD, saveDate },
       )
+      // Veio no arquivo do banco = já conferido contra o cartão. Parcelas futuras (abaixo) não.
+      tx.reconciled = true
       if (sched) {
         // O favorecido da linha é, por padrão, a própria descrição do extrato — nesse caso vale o
         // do agendamento. Categoria idem quando a linha veio sem.
@@ -2422,6 +2424,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // que o updateTransaction dispara por lançamento.
     if (serieBackfill.size > 0) atualizarCamposLancamentos(new Map([...serieBackfill].map(([id, serieId]) => [id, { serieId }])))
 
+    // Já gravados que bateram com o arquivo ("já existe" e colisões) → conciliados, pelo mesmo
+    // caminho do ✓ da tela do cartão (persistido no sync).
+    const conferidosNoBanco = idsNoBancoConferidos(resolvedRows)
+    if (conferidosNoBanco.length > 0) setReconciled(conferidosNoBanco, true)
+
     // Baixas de agendamento (regras A e B): mesmo caminho do "Pagar" (markScheduleRegistered),
     // mais o registered_meta. Tipos diferentes de "pago" não criam lançamento — apontam um.
     // Sempre pelo valor do cartão: previsto × realizado no registro da ocorrência, igual à baixa
@@ -2498,7 +2505,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     gerencialTxIds.forEach(id => ensureGerencialState(id))
 
     // Resumo final: X inseridos · Y que já estavam no banco (já existe / colisão pulada) · Z atualizados.
-    const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length }
+    const resumo = { novos: toImport.length, existiam: contarJaExistiam(resolvedRows), atualizados: collisionsToApply.length, conciliados: toImport.length + conferidosNoBanco.length }
     const pending = []
     toImport.forEach(row => {
       // Já tratada pela baixa automática (aplicada ou recusada na prévia) — não pergunta de novo.
@@ -2538,9 +2545,11 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Nada novo e nada a atualizar: não grava nada — só fecha o fluxo com o resumo e confere a
   // fatura no banco (a mesma conferência da importação).
   const concluirSemImportar = () => {
+    const conferidosNoBanco = idsNoBancoConferidos(resolvedRows)
+    if (conferidosNoBanco.length > 0) setReconciled(conferidosNoBanco, true)
     iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
     setBaixasResult(0)
-    setResult({ novos: 0, existiam: contarJaExistiam(resolvedRows), atualizados: 0 })
+    setResult({ novos: 0, existiam: contarJaExistiam(resolvedRows), atualizados: 0, conciliados: conferidosNoBanco.length })
     setRows([])
     setCollisionSkip(new Set())
   }

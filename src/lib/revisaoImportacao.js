@@ -308,13 +308,23 @@ export function camposAlteradosColisao(patch, tx, row = null) {
   return out
 }
 
-// Texto do resumo final da importação de fatura. `r` = { novos, existiam, atualizados } ou, na
-// reedição, { salvos }.
+// Texto do resumo final da importação de fatura. `r` = { novos, existiam, atualizados, conciliados? }
+// ou, na reedição, { salvos }.
 export function textoResumoImportacao(r) {
   const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
   if (r.salvos != null) return `${pl(r.salvos, 'lançamento salvo', 'lançamentos salvos')}.`
-  if (r.novos === 0 && r.atualizados === 0) return 'Nenhum lançamento novo — a fatura já estava no banco.'
-  return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}`
+  const conc = r.conciliados > 0 ? ` · ${pl(r.conciliados, 'lançamento marcado como conciliado', 'lançamentos marcados como conciliados')}` : ''
+  if (r.novos === 0 && r.atualizados === 0) return `Nenhum lançamento novo — a fatura já estava no banco.${conc}`
+  return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}${conc}`
+}
+
+// Lançamentos JÁ gravados que bateram com uma linha do arquivo: "já existe" e colisões ("No banco ↻",
+// atualizadas ou não). Foram conferidos contra o cartão, então a confirmação os marca como
+// conciliados. Possível duplicata não entra — o usuário não confirmou que é o mesmo.
+export function idsNoBancoConferidos(rows) {
+  return [...new Set((rows || [])
+    .filter(r => !r._generated && (r._isDuplicate || r._collisionTx) && r._dbTx?.id)
+    .map(r => r._dbTx.id))]
 }
 
 // Linhas que a confirmação INSERE: selecionadas, sem "já existe" e sem colisão (que vira UPDATE).

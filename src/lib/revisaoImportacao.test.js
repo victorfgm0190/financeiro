@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao,
+  resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos,
   aguardandoLancamentoDoBanco, avaliarConferencia,
 } from './revisaoImportacao'
 
@@ -203,6 +203,33 @@ describe('textoResumoImportacao', () => {
   it('números reais com plural', () => {
     expect(textoResumoImportacao({ novos: 1, existiam: 3, atualizados: 2 })).toBe('1 novo importado · 3 já existiam · 2 atualizados')
     expect(textoResumoImportacao({ salvos: 1 })).toBe('1 lançamento salvo.')
+  })
+  it('acrescenta os conciliados quando há', () => {
+    expect(textoResumoImportacao({ novos: 2, existiam: 1, atualizados: 0, conciliados: 3 }))
+      .toBe('2 novos importados · 1 já existia · 0 atualizados · 3 lançamentos marcados como conciliados')
+    expect(textoResumoImportacao({ novos: 0, existiam: 1, atualizados: 0, conciliados: 1 }))
+      .toBe('Nenhum lançamento novo — a fatura já estava no banco. · 1 lançamento marcado como conciliado')
+  })
+})
+
+describe('idsNoBancoConferidos', () => {
+  it('já existe e colisão entram; possível duplicata e linha nova não', () => {
+    const rows = [
+      { _id: 'a', _isDuplicate: true, _dbTx: { id: 't1' } },
+      { _id: 'b', _collisionTx: { id: 't2' }, _dbTx: { id: 't2' } },
+      { _id: 'c', _dupLevel: 'possivel', _dupTx: { id: 't3' } },
+      { _id: 'd', selected: true },
+    ]
+    expect(idsNoBancoConferidos(rows)).toEqual(['t1', 't2'])
+  })
+  it('passa pelo casamento real: só o lançamento que bateu com o arquivo', () => {
+    const banco = [
+      tx({ id: 'pad', description: 'Padaria', amount: 20, faturaMonthYear: '2026-11' }),
+      tx({ id: 'solo', description: 'Só no sistema', amount: 99, faturaMonthYear: '2026-11' }),
+    ]
+    const linhas = resolverLinhasRevisao([linha({ _id: 'r1', description: 'Padaria', amount: 20, faturaMonthYear: '2026-11' })],
+      { accountId: CARTAO, transactions: banco, closingDay: 13 })
+    expect(idsNoBancoConferidos(linhas)).toEqual(['pad'])
   })
 })
 
