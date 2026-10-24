@@ -312,8 +312,8 @@ export function camposAlteradosColisao(patch, tx, row = null) {
 // ou, na reedição, { salvos }.
 export function textoResumoImportacao(r) {
   const pl = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
-  if (r.salvos != null) return `${pl(r.salvos, 'lançamento salvo', 'lançamentos salvos')}.`
   const conc = r.conciliados > 0 ? ` · ${pl(r.conciliados, 'lançamento marcado como conciliado', 'lançamentos marcados como conciliados')}` : ''
+  if (r.salvos != null) return `${pl(r.salvos, 'lançamento salvo', 'lançamentos salvos')}${conc || '.'}`
   if (r.novos === 0 && r.atualizados === 0) return `Nenhum lançamento novo — a fatura já estava no banco.${conc}`
   return `${pl(r.novos, 'novo importado', 'novos importados')} · ${pl(r.existiam, 'já existia', 'já existiam')} · ${pl(r.atualizados, 'atualizado', 'atualizados')}${conc}`
 }
@@ -325,6 +325,18 @@ export function idsNoBancoConferidos(rows) {
   return [...new Set((rows || [])
     .filter(r => !r._generated && (r._isDuplicate || r._collisionTx) && r._dbTx?.id)
     .map(r => r._dbTx.id))]
+}
+
+// Reedição de uma importação: as linhas são os próprios lançamentos gravados por ela. Vieram do
+// arquivo os que têm data do cartão ou estão na fatura da importação; as parcelas futuras que ela
+// projetou (sem data do cartão, em outra fatura) não. Linha desmarcada não entra.
+export function idsReedicaoConferidos(rows, transactions, mesAno) {
+  const byId = new Map((transactions || []).map(t => [t.id, t]))
+  return (rows || [])
+    .filter(r => r.selected && !r._generated)
+    .map(r => byId.get(r._id))
+    .filter(t => t && (t.dateCartao || (mesAno && t.faturaMonthYear === mesAno)))
+    .map(t => t.id)
 }
 
 // Linhas que a confirmação INSERE: selecionadas, sem "já existe" e sem colisão (que vira UPDATE).

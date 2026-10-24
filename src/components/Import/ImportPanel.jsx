@@ -16,8 +16,8 @@ import { deOfx, paraLinhaCartao, paraLinhaConta, lerCsv, aplicarModelo, acharMod
 import { decodificarOfx } from '../../lib/importacaoPadrao/ofx'
 import { listarModelosImportacao, salvarModeloImportacao, migrarMapeamentosAntigos } from '../../lib/importLayoutsApi'
 import { isItauCSV, parseItauCSV, parseItauXLS, faturaMYLabel, computeFileTotals, cabecalhoDivergente } from '../../lib/parsers/itauFatura'
-import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao } from '../../lib/conciliacaoMatch'
-import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
+import { descSimilarity, stripParcelaSuffix, normalizeDescForMatch, crossMatchConciliacao, idsConciliacaoConferidos } from '../../lib/conciliacaoMatch'
+import { keyOfExistingTx, indexarParcelasDoCartao, resolverLinhasRevisao, linhasAImportar, projetarTotalFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos, numeroParcelaDoTx, totalParcelasDoTx, fmtFatura, aguardandoLancamentoDoBanco, avaliarConferencia } from '../../lib/revisaoImportacao'
 import CsvColumnMapperModal from './CsvColumnMapperModal'
 import { addMonthToFatura, faturaToDate, clampDateToFatura, isDuplicateInstallment, findExistingParcela, installmentSystemDate, newSerieId, assignInstallmentOccurrences, inferirSerieParcela, findParcelaDaSerie, findParcelaEquivalente, membrosDaSerie, serieIdDominante } from '../../lib/parcelas'
 import { planejarBaixas, baixaKey, faturaDoLancamento, TIPO_BAIXA, BAIXA_TOLERANCIA_VALOR, metaBaixaComValor } from '../../lib/scheduleBaixa'
@@ -2248,10 +2248,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       // que o motor ignora (faturaCicloNoPassado). Os editados já passam por ensureGerencialState
       // via updateTransaction; este laço cobre também as parcelas futuras recém-criadas.
       gerencialTxIds.forEach(id => ensureGerencialState(id))
+      // Os lançamentos que vieram do arquivo desta importação → conciliados (parcelas futuras que ela
+      // projetou ficam de fora).
+      const conferidos = idsReedicaoConferidos(toImport, transactions, editingImport.mesAno)
+      if (conferidos.length > 0) setReconciled(conferidos, true)
       iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
       setEditingImport(null)
       setBaixasResult(0)
-      setResult({ salvos: toImport.length })
+      setResult({ salvos: toImport.length, conciliados: conferidos.length })
       setRows([])
       return
     }
@@ -3025,6 +3029,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       serieId: item._serieId || null,
       faturaMonthYear: faturaMonthYear || null,
       faturaRef: faturaRefFromMY(faturaMonthYear),
+      // Linha do arquivo do banco = já conferida contra o cartão.
+      reconciled: true,
       _fromImport: true,
     })
     return txId
@@ -3048,6 +3054,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
     const txIds = []
     importar.forEach(i => { const id = importConcItem(i); if (id) txIds.push(id) })
     excluir.forEach(i => deleteTransaction(i.id))
+    // Do sistema e bateram com o arquivo → conciliados, pelo mesmo caminho do ✓ do cartão.
+    const conferidos = idsConciliacaoConferidos(concMatched, concSoItau, new Set(excluir.map(i => i.id)))
+    if (conferidos.length > 0) setReconciled(conferidos, true)
+    const conciliados = conferidos.length + txIds.length
 
     // Feature "Fatura encerrada": empurra cada parcela ausente elegível (Só no sistema, não-última,
     // não marcada p/ excluir) para o mês seguinte. Só date e a fatura (ref + month_year) avançam;
@@ -3177,7 +3187,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
     }
 
     const totalFinal = concTotais.sistema
-    setConcToast(`Fatura conciliada. Total: ${fmt(totalFinal)}`)
+    setConcToast(`Fatura conciliada. Total: ${fmt(totalFinal)}${conciliados > 0 ? ` · ${conciliados} ${conciliados === 1 ? 'lançamento marcado como conciliado' : 'lançamentos marcados como conciliados'}` : ''}`)
     // Conferência: a conciliação também precisa terminar com o banco batendo com o arquivo.
     iniciarConferencia(selectedAccount, faturaMonthYear, concArquivoTotais, totalDeclarado)
     exitConciliacao()
@@ -4471,6 +4481,8 @@ Conciliar mesmo assim com o mês selecionado?`)) return
       />
 
       {corrigirToast && <Toast message={corrigirToast} onClose={() => setCorrigirToast(null)} />}
+      {/* A confirmação da conciliação sai do modo conciliação — o aviso dela aparece aqui. */}
+      {concToast && <Toast message={concToast} onClose={() => setConcToast(null)} />}
 
       {/* ITEM 6 — propagar classificação p/ linhas do mesmo fornecedor (some em 5s) */}
       {applyAllToast && (

@@ -74,8 +74,19 @@ export function crossMatchConciliacao(soItau, soSistema) {
     used.add(best.id)
     const level = bestRank === 3 ? 'certeza' : bestRank === 2 ? 'provavel' : 'possivel'
     it._crossLevel = level; best._crossLevel = level
+    it._crossSysId = best.id
     if (level !== 'possivel') { it.acao = 'ignorar'; best.acao = 'manter' }
   }
   return { soItau: itauOut, soSistema: sysOut }
+}
+
+// Lançamentos do sistema que bateram com uma linha do arquivo na conciliação: os casados direto
+// ({ csv, sys }) e os do casamento cruzado cuja linha do arquivo ficou em "ignorar" (= é o mesmo).
+// "Possível" deixa as duas em importar/manter — sem confirmação, não entra. Os marcados para
+// excluir também não.
+export function idsConciliacaoConferidos(matched, soItau, excluirIds = new Set()) {
+  const ids = new Set((matched || []).map(m => m.sys?.id).filter(Boolean))
+  for (const i of soItau || []) if (i.acao === 'ignorar' && i._crossSysId) ids.add(i._crossSysId)
+  return [...ids].filter(id => !excluirIds.has(id))
 }
 

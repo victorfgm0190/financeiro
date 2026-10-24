@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { crossMatchConciliacao, descSimilarity, normalizeDescForMatch, stripParcelaSuffix } from './conciliacaoMatch'
+import { crossMatchConciliacao, idsConciliacaoConferidos, descSimilarity, normalizeDescForMatch, stripParcelaSuffix } from './conciliacaoMatch'
 
 // A compra e o estorno dela, como chegam numa fatura do Itaú: mesma descrição, mesmo valor,
 // tipos opostos. É a assinatura de um estorno — e era exatamente o que fazia o casamento por
@@ -51,6 +51,25 @@ describe('crossMatchConciliacao', () => {
     const { soItau } = crossMatchConciliacao(doisIguais, [{ id: 'tx_u', type: 'expense', amount: 50, description: 'Uber', acao: 'manter' }])
     expect(soItau[0].acao).toBe('ignorar')
     expect(soItau[1].acao).toBe('importar')
+  })
+})
+
+describe('idsConciliacaoConferidos', () => {
+  const sys = (id, description, amount) => ({ id, type: 'expense', amount, description, acao: 'manter' })
+  it('casados direto + cruzado confirmado entram; possível, importar e excluir não', () => {
+    const matched = [{ csv: { _id: 'c0' }, sys: { id: 'm1' } }]
+    const { soItau } = crossMatchConciliacao(
+      [
+        { _id: 'c1', type: 'expense', amount: 50, description: 'Uber', acao: 'importar' },
+        { _id: 'c2', type: 'expense', amount: 80, description: 'Padaria Central', acao: 'importar' },
+      ],
+      [sys('x1', 'Uber', 50), sys('x2', 'Mercado Bom', 80), sys('so', 'Só no sistema', 12)],
+    )
+    expect(idsConciliacaoConferidos(matched, soItau)).toEqual(['m1', 'x1'])
+    // O usuário trocou o cruzado para "importar": deixou de ser o mesmo.
+    const trocado = soItau.map(i => i._id === 'c1' ? { ...i, acao: 'importar' } : i)
+    expect(idsConciliacaoConferidos(matched, trocado)).toEqual(['m1'])
+    expect(idsConciliacaoConferidos(matched, soItau, new Set(['x1']))).toEqual(['m1'])
   })
 })
 

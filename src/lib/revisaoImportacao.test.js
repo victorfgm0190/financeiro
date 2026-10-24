@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos,
+  resolverLinhasRevisao, projetarTotalFatura, compararNaFatura, patchColisao, camposAlteradosColisao, textoResumoImportacao, idsNoBancoConferidos, idsReedicaoConferidos,
   aguardandoLancamentoDoBanco, avaliarConferencia,
 } from './revisaoImportacao'
 
@@ -209,6 +209,22 @@ describe('textoResumoImportacao', () => {
       .toBe('2 novos importados · 1 já existia · 0 atualizados · 3 lançamentos marcados como conciliados')
     expect(textoResumoImportacao({ novos: 0, existiam: 1, atualizados: 0, conciliados: 1 }))
       .toBe('Nenhum lançamento novo — a fatura já estava no banco. · 1 lançamento marcado como conciliado')
+  })
+})
+
+describe('idsReedicaoConferidos', () => {
+  it('só os do arquivo da importação: com data do cartão ou na fatura dela; futuras e desmarcadas não', () => {
+    const banco = [
+      tx({ id: 'a', dateCartao: '2026-10-02', faturaMonthYear: '2026-11' }),
+      tx({ id: 'b', faturaMonthYear: '2026-11' }),
+      tx({ id: 'fut', faturaMonthYear: '2026-12', installmentNum: 2, installmentTotal: 3 }),
+      tx({ id: 'des', dateCartao: '2026-10-05', faturaMonthYear: '2026-11' }),
+    ]
+    const rows = ['a', 'b', 'fut'].map(id => ({ _id: id, selected: true })).concat({ _id: 'des', selected: false })
+    expect(idsReedicaoConferidos(rows, banco, '2026-11')).toEqual(['a', 'b'])
+  })
+  it('resumo da reedição com conciliados', () => {
+    expect(textoResumoImportacao({ salvos: 3, conciliados: 2 })).toBe('3 lançamentos salvos · 2 lançamentos marcados como conciliados')
   })
 })
 
