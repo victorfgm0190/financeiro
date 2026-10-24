@@ -54,6 +54,39 @@ describe('crossMatchConciliacao', () => {
   })
 })
 
+describe('normalização de comparação (pontuação e plural)', () => {
+  it('"Shopee Guardanapos 09/10" (sistema) casa com "Shopee *Guardanapo 9/10" (arquivo)', () => {
+    expect(normalizeDescForMatch('Shopee Guardanapos 09/10')).toBe(normalizeDescForMatch('Shopee *Guardanapo 9/10'))
+    expect(descSimilarity(stripParcelaSuffix('Shopee Guardanapos 09/10'), stripParcelaSuffix('Shopee *Guardanapo 9/10'))).toBe(1)
+    const { soItau } = crossMatchConciliacao(
+      [{ _id: 'c0', type: 'expense', amount: 54.93, description: 'Shopee *Guardanapo 9/10', acao: 'importar' }],
+      [{ id: 's', type: 'expense', amount: 54.93, description: 'Shopee Guardanapos 09/10', acao: 'manter' }],
+    )
+    expect(soItau[0]._crossLevel).toBe('certeza')
+    expect(soItau[0]._crossSysId).toBe('s')
+  })
+
+  it('compra × estorno "Aramis" continua sem casar', () => {
+    const { soItau } = crossMatchConciliacao([{ ...estornoDaCompra, _id: 'c0', acao: 'importar' }], [{ ...compra, acao: 'manter' }])
+    expect(soItau[0]._crossLevel).toBeUndefined()
+    expect(soItau[0].acao).toBe('importar')
+  })
+
+  it('compras diferentes de mesmo valor e data ("Uber" × "Ifood") continuam sem casar', () => {
+    expect(descSimilarity('Uber', 'Ifood')).toBe(0)
+    const { soItau } = crossMatchConciliacao(
+      [{ _id: 'c0', type: 'expense', amount: 32.5, date: '2026-10-05', description: 'Uber *Trip', acao: 'importar' }],
+      [{ id: 's', type: 'expense', amount: 32.5, date: '2026-10-05', description: 'Ifood *Restaurante', acao: 'manter' }],
+    )
+    expect(soItau[0]._crossLevel).toBeUndefined()
+  })
+
+  it('S final só sai em palavras de 4+ letras e só na comparação', () => {
+    expect(descSimilarity('Lojas Americanas', 'Loja Americana')).toBe(1)
+    expect(normalizeDescForMatch('GAS')).toBe('GAS')
+  })
+})
+
 describe('idsConciliacaoConferidos', () => {
   const sys = (id, description, amount) => ({ id, type: 'expense', amount, description, acao: 'manter' })
   it('casados direto + cruzado confirmado entram; possível, importar e excluir não', () => {

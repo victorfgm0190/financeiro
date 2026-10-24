@@ -21,6 +21,16 @@ describe('compararNaFatura', () => {
     expect(compararNaFatura(linha({ type: 'income', description: 'Aramis', amount: 149.95, _dateCartao: '2026-09-10' }), compra)).toBeNull()
   })
 
+  it('pontuação e plural não separam a mesma compra (Shopee Guardanapos 09/10 × Shopee *Guardanapo 9/10)', () => {
+    const banco = tx({ id: 't', description: 'Shopee Guardanapos 09/10', amount: 54.93, installmentNum: 9, installmentTotal: 10, dateCartao: '2026-03-08' })
+    expect(compararNaFatura(linha({ description: 'Shopee *Guardanapo 9/10', amount: 54.93, _installment: { num: 9, total: 10 }, _dateCartao: '2026-03-08' }), banco)).toBe('existe')
+  })
+
+  it('compras diferentes de mesmo valor e data ("Uber" × "Ifood") não casam', () => {
+    const banco = tx({ id: 't', description: 'Ifood *Restaurante', amount: 32.5, dateCartao: '2026-10-05' })
+    expect(compararNaFatura(linha({ description: 'Uber *Trip', amount: 32.5, _dateCartao: '2026-10-05' }), banco)).toBeNull()
+  })
+
   it('mesma base e parcela → existe; parcela diferente → possível', () => {
     const banco = tx({ id: 't', description: 'Aramis 4/4', amount: 149.95, installmentNum: 4, installmentTotal: 4 })
     expect(compararNaFatura(linha({ description: 'Aramis 4/4', amount: 149.95, _installment: { num: 4, total: 4 } }), banco)).toBe('existe')

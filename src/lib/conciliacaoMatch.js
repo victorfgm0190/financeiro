@@ -8,13 +8,24 @@
 
 // ── Conciliação inteligente (Melhoria 1) ──────────────────────────────────────
 // Normaliza texto (maiúsculas, sem acentos) e mede similaridade: 1 = idêntico, 0.9 = um
-// contém o outro, senão Jaccard de palavras (% de palavras em comum). Mesmo critério do
-// backend (/api/transaction-history) para a busca por fornecedor.
+// contém o outro, senão Jaccard de palavras (% de palavras em comum). normText é o mesmo
+// critério do backend (/api/transaction-history) e também chave de alias de favorecido — não
+// mexer; o afrouxamento de comparação fica em normDescComparacao.
 export function normText(s) {
   return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim().replace(/\s+/g, ' ')
 }
+// Só para COMPARAR descrições: a pontuação de fatura vira espaço ("Shopee *Guardanapo") e o
+// plural simples sai ("GUARDANAPOS" → "GUARDANAPO", palavras de 4+ letras). Valor, data e tipo
+// continuam com quem chama.
+const PONTUACAO_FATURA_RE = /[*\-.,/_()#]/g
+export function normDescComparacao(s) {
+  return normText(String(s || '').replace(PONTUACAO_FATURA_RE, ' '))
+    .split(' ').filter(Boolean)
+    .map(w => (w.length >= 4 && w.endsWith('S') ? w.slice(0, -1) : w))
+    .join(' ')
+}
 export function descSimilarity(a, b) {
-  const x = normText(a), y = normText(b)
+  const x = normDescComparacao(a), y = normDescComparacao(b)
   if (!x || !y) return 0
   if (x === y) return 1
   if (x.includes(y) || y.includes(x)) return 0.9
@@ -40,11 +51,11 @@ export function stripParcelaSuffix(s) {
     .replace(/\s*\d{1,2}\/\d{1,2}\s*$/, '')
     .replace(PARC_SUFIXO_RE, '')
 }
-// Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela e aplica a
-// normalização de texto existente (sem acento, maiúsculas, espaços colapsados). Assim o lançamento
-// do sistema (parcela colada "01/03") casa com o do Itaú ("1/3").
+// Normalização de descrição PARA O MATCHING da conciliação: remove o sufixo de parcela (ANTES de
+// a pontuação virar espaço — o "/" do N/Total é o que o identifica) e aplica normDescComparacao.
+// Assim o lançamento do sistema (parcela colada "01/03") casa com o do Itaú ("1/3").
 export function normalizeDescForMatch(desc) {
-  return normText(stripParcelaSuffix(desc))
+  return normDescComparacao(stripParcelaSuffix(desc))
 }
 
 // Cruzamento da reconciliação: casa cada item "Só no Itaú" com um "Só no sistema" (mesmo tipo
