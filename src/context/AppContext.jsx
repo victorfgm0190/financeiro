@@ -22,7 +22,7 @@ import { agendamentoDaEfetivacao } from '../lib/herancaCampos'
 import { comCamposDaOcorrencia, ESCOPO, agendamentoDoMotor } from '../lib/camposSerie'
 import { linhasHistorico, novoLoteId } from '../lib/historico'
 import { casaAgendamento } from '../lib/agendamentoManda'
-import { categoriasEntrePerfis } from '../lib/transferenciaPerfis'
+import { categoriasEntrePerfis, transferenciaNaVisaoDoPerfil } from '../lib/transferenciaPerfis'
 import { nomeDoBanco, backendIndexedDb, criarArmazenamento, migrarDoLocalStorage, apagarCacheAntigo, apagarDadosLocalStorage } from '../lib/armazenamentoLocal'
 import { mudancasEntre, mesclarNaFila, removerEnviadas, aplicarFilaSobreDados, enviarFila, entradaRateios, ehErroDeRede } from '../lib/filaOffline'
 import { computeFaturaRef, computeScheduleDate, gerencialKey, nextMonthScheduleDate, prevMonthScheduleDate } from '../lib/fatura'
@@ -1330,28 +1330,17 @@ export function AppProvider({ children }) {
 
   // Transações normalizadas para relatórios/KPIs:
   //  1) Transferência ENTRE PERFIS (perfil ativo dono de um lado) vira receita/despesa
-  //     sintética na categoria da visão do perfil (categoria_cnpj_id / categoria_cpf_id).
+  //     sintética na categoria da visão do perfil (categoria_cnpj_id / categoria_cpf_id), com o
+  //     nome do perfil do outro lado como favorecido (lib/transferenciaPerfis).
   //  2) Lançamento COM RATEIO é explodido em uma transação por rateio (cada categoria com
   //     seu valor); o valor não atribuído fica na categoria original do lançamento.
   const profileReportTransactions = useMemo(() => {
     if (!activeProfile && rateiosByLancamento.size === 0) return profileTransactions
     const accById = new Map(data.accounts.map(a => [a.id, a]))
-    const interProfile = (tx) => {
-      if (!activeProfile || tx.type !== 'transfer') return tx
-      const fromP = accById.get(tx.accountId)?.profileId || null
-      const toP = accById.get(tx.toAccountId)?.profileId || null
-      if (!fromP || !toP || fromP === toP) return tx
-      const fromIsActive = fromP === activeProfile.id
-      const toIsActive = toP === activeProfile.id
-      if (fromIsActive === toIsActive) return tx
-      const categoryId = (activeProfile.type === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || ''
-      return fromIsActive
-        ? { ...tx, type: 'expense', categoryId }
-        : { ...tx, type: 'income', categoryId, accountId: tx.toAccountId }
-    }
+    const profileById = new Map((data.profiles || []).map(p => [p.id, p]))
     const out = []
     for (const tx0 of profileTransactions) {
-      const tx = interProfile(tx0)
+      const tx = transferenciaNaVisaoDoPerfil(tx0, activeProfile, accById, profileById)
       const rateios = rateiosByLancamento.get(tx0.id)
       if (rateios && rateios.length > 0 && (tx.type === 'income' || tx.type === 'expense')) {
         let assigned = 0
@@ -1367,7 +1356,7 @@ export function AppProvider({ children }) {
       }
     }
     return out
-  }, [profileTransactions, activeProfile, data.accounts, rateiosByLancamento])
+  }, [profileTransactions, activeProfile, data.accounts, data.profiles, rateiosByLancamento])
 
   // ── Registrar automático na inicialização ───────────────────────────────────
   // Só depois de um load que deu certo (dbStatus 'connected'): sobre o cache, o resultado era

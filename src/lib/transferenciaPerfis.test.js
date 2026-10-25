@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from './transferenciaPerfis'
+import { isTransferenciaEntrePerfis, categoriasEntrePerfis, transferenciaNaVisaoDoPerfil } from './transferenciaPerfis'
 import { diffCampos, precisaEscolherEscopo, planoAgendamento, occCampos, comCamposDaOcorrencia, ESCOPO } from './camposSerie'
 
 const pj = { id: 'a1', profileId: 'p_pj' }
@@ -60,5 +60,42 @@ describe('categorias por perfil como campos da PARCELA', () => {
     const { schedule } = planoAgendamento(sch, { occDate: '2026-11-10', mudancas, escopo: ESCOPO.PROXIMAS, pendentes })
     expect(schedule.categoriaCnpjId).toBe('c9')
     expect(occCampos(schedule, '2027-01-10').categoriaCnpjId).toBe('c9')
+  })
+})
+
+describe('transferenciaNaVisaoDoPerfil — favorecido = perfil do outro lado', () => {
+  const victor = { id: 'p_v', name: 'VICTOR', type: 'pf' }
+  const lumen = { id: 'p_l', name: 'Lumen Tech', type: 'pj' }
+  const profileById = new Map([victor, lumen].map(p => [p.id, p]))
+  const accById = new Map([
+    ['cc_v', { id: 'cc_v', profileId: 'p_v' }],
+    ['cc_v2', { id: 'cc_v2', profileId: 'p_v' }],
+    ['cc_l', { id: 'cc_l', profileId: 'p_l' }],
+  ])
+  const base = { id: 't1', type: 'transfer', amount: 100, categoriaCnpjId: 'cat_pj', categoriaCpfId: 'cat_pf' }
+  const vParaL = { ...base, accountId: 'cc_v', toAccountId: 'cc_l', payee: 'Texto antigo' }
+  const lParaV = { ...base, accountId: 'cc_l', toAccountId: 'cc_v', payee: '' }
+  const ver = (tx, perfil) => transferenciaNaVisaoDoPerfil(tx, perfil, accById, profileById)
+
+  it('Lumen Tech, entrou (veio do Victor) → receita, favorecido VICTOR', () => {
+    expect(ver(vParaL, lumen)).toMatchObject({ type: 'income', payee: 'VICTOR', categoryId: 'cat_pj', accountId: 'cc_l', amount: 100 })
+  })
+  it('Lumen Tech, saiu (foi para o Victor) → despesa, favorecido VICTOR', () => {
+    expect(ver(lParaV, lumen)).toMatchObject({ type: 'expense', payee: 'VICTOR', categoryId: 'cat_pj', accountId: 'cc_l' })
+  })
+  it('Victor, entrou (veio da Lumen) → receita, favorecido Lumen Tech', () => {
+    expect(ver(lParaV, victor)).toMatchObject({ type: 'income', payee: 'Lumen Tech', categoryId: 'cat_pf', accountId: 'cc_v' })
+  })
+  it('Victor, saiu (foi para a Lumen) → despesa, favorecido Lumen Tech (mesmo com payee preenchido)', () => {
+    expect(ver(vParaL, victor)).toMatchObject({ type: 'expense', payee: 'Lumen Tech', categoryId: 'cat_pf', accountId: 'cc_v' })
+  })
+  it('Tudo (sem perfil ativo) e mesmo perfil: continua transferência, sem tocar no lançamento', () => {
+    expect(ver(vParaL, null)).toBe(vParaL)
+    const interna = { ...base, accountId: 'cc_v', toAccountId: 'cc_v2', payee: '' }
+    expect(ver(interna, victor)).toBe(interna)
+  })
+  it('não altera o lançamento original', () => {
+    ver(vParaL, victor)
+    expect(vParaL).toMatchObject({ type: 'transfer', payee: 'Texto antigo', accountId: 'cc_v' })
   })
 })

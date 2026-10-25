@@ -18,3 +18,24 @@ export function categoriasEntrePerfis(fromAcc, toAcc, { categoriaCnpjId, categor
     categoriaCpfId: ok ? (categoriaCpfId || null) : null,
   }
 }
+
+// Transferência entre perfis na visão do perfil ativo (relatórios/KPIs): o lado do perfil ativo
+// vira despesa (saiu) ou receita (entrou), na categoria da visão (CNPJ/CPF), e o favorecido passa a
+// ser o nome do perfil do OUTRO lado — sempre, mesmo com payee preenchido. Só leitura: devolve uma
+// cópia, o lançamento original não muda. Sem perfil ativo ("Tudo"), perfis iguais ou conta sem
+// perfil → devolve o próprio tx (continua transferência).
+export function transferenciaNaVisaoDoPerfil(tx, activeProfile, accById, profileById) {
+  if (!activeProfile || tx.type !== 'transfer') return tx
+  const fromP = accById.get(tx.accountId)?.profileId || null
+  const toP = accById.get(tx.toAccountId)?.profileId || null
+  if (!fromP || !toP || fromP === toP) return tx
+  const fromIsActive = fromP === activeProfile.id
+  const toIsActive = toP === activeProfile.id
+  if (fromIsActive === toIsActive) return tx
+  const categoryId = (activeProfile.type === 'pj' ? tx.categoriaCnpjId : tx.categoriaCpfId) || ''
+  const outro = profileById.get(fromIsActive ? toP : fromP)
+  const payee = outro?.name || tx.payee
+  return fromIsActive
+    ? { ...tx, type: 'expense', categoryId, payee }
+    : { ...tx, type: 'income', categoryId, payee, accountId: tx.toAccountId }
+}
