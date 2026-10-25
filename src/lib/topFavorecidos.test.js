@@ -19,6 +19,25 @@ describe('topFavorecidos', () => {
     expect(grupos[0].pct).toBeCloseTo((200 / 395) * 100)
   })
 
+  it('grafia exibida: a mais usada; no empate, a com mais maiúsculas', () => {
+    const empate = agruparPorFavorecido([
+      { payee: 'posto shell', amount: 1 },
+      { payee: 'Posto Shell', amount: 1 },
+      { payee: 'POSTO SHELL', amount: 1 },
+    ])
+    expect(empate.grupos[0].nome).toBe('POSTO SHELL')
+    expect(agruparPorFavorecido([
+      { payee: 'posto shell', amount: 1 },
+      { payee: 'Posto Shell', amount: 1 },
+    ]).grupos[0].nome).toBe('Posto Shell')
+    const semEmpate = agruparPorFavorecido([
+      { payee: 'posto shell', amount: 1 },
+      { payee: 'posto shell', amount: 1 },
+      { payee: 'POSTO SHELL', amount: 1 },
+    ])
+    expect(semEmpate.grupos[0].nome).toBe('posto shell')
+  })
+
   it('lista vazia', () => {
     expect(agruparPorFavorecido([])).toEqual({ grupos: [], semFavorecido: { total: 0, qtd: 0, txs: [] }, total: 0 })
   })

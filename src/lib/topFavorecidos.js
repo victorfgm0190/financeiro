@@ -6,8 +6,11 @@ import { nomeFavorecido } from './favorecidos'
 // Chave de agrupamento: trim + sem diferenciar maiúsculas ("MAYARA" = "Mayara ").
 export const chaveFavorecido = (payee) => nomeFavorecido(payee).toLocaleLowerCase('pt-BR')
 
+// Quantidade de letras maiúsculas — desempate da grafia exibida ("POSTO SHELL" > "Posto Shell").
+const maiusculas = (s) => [...s].filter(c => c !== c.toLocaleLowerCase('pt-BR')).length
+
 // txs → { grupos: [{ chave, nome, total, qtd, pct, txs }] (maior → menor), semFavorecido: { total, qtd, txs }, total }.
-// `nome` é a grafia mais usada do grupo; `pct` é sobre o total da lista (o do card).
+// `nome` é a grafia mais usada do grupo (empate → a com mais maiúsculas); `pct` é sobre o total da lista (o do card).
 export function agruparPorFavorecido(txs) {
   const porChave = new Map()
   const semFavorecido = { total: 0, qtd: 0, txs: [] }
@@ -33,7 +36,8 @@ export function agruparPorFavorecido(txs) {
   const grupos = [...porChave.values()]
     .map(({ grafias, ...g }) => ({
       ...g,
-      nome: [...grafias.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))[0][0],
+      nome: [...grafias.entries()]
+        .sort((a, b) => b[1] - a[1] || maiusculas(b[0]) - maiusculas(a[0]) || a[0].localeCompare(b[0], 'pt-BR'))[0][0],
       pct: total !== 0 ? (g.total / total) * 100 : 0,
     }))
     .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'))
