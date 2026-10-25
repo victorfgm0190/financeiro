@@ -20,6 +20,7 @@ import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
 import { CardEnvelopesMes } from '../Envelopes/EnvelopeResumo'
+import TopFavorecidos from './TopFavorecidos'
 import { PizzaDespesas, RankingDespesas, Segmentado } from './DespesasCategoria'
 import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
 import { periodoDoFiltro, PERIOD_OPTS, MODO_OPTS } from '../../lib/despesasPorCategoria'
@@ -90,6 +91,9 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
 
   // Current period (lançamentos investAuto são invisíveis nos relatórios/totais)
   const { periodTxs, income, expense } = totaisDoPeriodo(transactions, periodStr, { isIncomeTx, isExpenseTx })
+  // Lançamentos exatos dos KPIs Receitas/Despesas do Mês (drill-down e Top 5 Favorecidos).
+  const incomeTxs = periodTxs.filter(isIncomeTx)
+  const expenseTxs = periodTxs.filter(isExpenseTx)
   // Reservas do período (funções sem categoria): líquido = utilizadas (resgate _r) − feitas (depósito).
   const reservasFeitas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'expense' && !isResgateReservaSombra(t))
   const reservasUtilizadas = periodTxs.filter(t => isReservaGerSombra(t) && t.type === 'income' && isResgateReservaSombra(t))
@@ -342,6 +346,9 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </div>
       )}
 
+      {/* Top 5 Favorecidos — mesmos lançamentos dos KPIs Receitas/Despesas do Mês */}
+      <TopFavorecidos receitas={incomeTxs} despesas={expenseTxs} onAbrirLancamentos={setTxModal} />
+
       {/* Saldo Principal hero */}
       <button
         onClick={onShowPosicao}
@@ -408,7 +415,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             title: 'Receitas do Mês',
             total: income,
             color: 'text-receita',
-            txs: periodTxs.filter(isIncomeTx),
+            txs: incomeTxs,
           })}
         />
         <KpiCard
@@ -425,7 +432,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             title: 'Despesas do Mês',
             total: expense,
             color: 'text-despesa',
-            txs: periodTxs.filter(isExpenseTx),
+            txs: expenseTxs,
           })}
         />
         <KpiCard
@@ -459,7 +466,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
             total: balance,
             color: balance >= 0 ? 'text-receita' : 'text-despesa',
             // Saldo = receitas (+) − despesas (−) do período.
-            txs: [...periodTxs.filter(isIncomeTx), ...periodTxs.filter(isExpenseTx)],
+            txs: [...incomeTxs, ...expenseTxs],
             mixed: true,
           })}
         />
