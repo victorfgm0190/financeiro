@@ -346,9 +346,6 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
         </div>
       )}
 
-      {/* Top 5 Favorecidos — mesmos lançamentos dos KPIs Receitas/Despesas do Mês */}
-      <TopFavorecidos receitas={incomeTxs} despesas={expenseTxs} onAbrirLancamentos={setTxModal} />
-
       {/* Saldo Principal hero */}
       <button
         onClick={onShowPosicao}
@@ -674,6 +671,9 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
           <RankingDespesas periodo={pieRange} modo={modoDespesas} todas={rankingTodas} onAlternarTodas={() => setRankingTodas(t => !t)} />
         </div>
       </div>
+
+      {/* Top 5 Favorecidos — mesmos lançamentos dos KPIs Receitas/Despesas do Mês */}
+      <TopFavorecidos receitas={incomeTxs} despesas={expenseTxs} onAbrirLancamentos={setTxModal} />
 
       {/* Receitas/Despesas do mês drill-down modal */}
       {txModal && (
