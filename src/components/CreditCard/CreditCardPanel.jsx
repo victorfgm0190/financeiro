@@ -30,6 +30,7 @@ import TransactionForm from '../Transactions/TransactionForm'
 import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
+import InputMoeda from '../shared/InputMoeda'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
@@ -1552,7 +1553,7 @@ export default function CreditCardPanel() {
           </div>
           <div>
             <label className="label">Valor do Pagamento</label>
-            <input className="input" type="number" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+            <InputMoeda negativo value={payAmount} onChange={e => setPayAmount(e.target.value)} />
           </div>
           <div>
             <label className="label">Data do Pagamento</label>

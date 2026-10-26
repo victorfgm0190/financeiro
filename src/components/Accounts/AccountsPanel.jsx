@@ -22,6 +22,7 @@ import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
 import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
 import TransactionForm from '../Transactions/TransactionForm'
 import { useAtalho } from '../../context/atalhosHooks'
+import InputMoeda from '../shared/InputMoeda'
 
 const ACCOUNT_ICONS = {
   checking: Landmark,
@@ -91,10 +92,8 @@ function UpdateValueModal({ account, onClose }) {
       )}
       <div>
         <label className="label">Novo Valor (R$) *</label>
-        <input
-          className="input"
-          type="number"
-          step="0.01"
+        <InputMoeda
+          negativo
           value={newValue}
           onChange={e => setNewValue(e.target.value)}
           placeholder="0,00"

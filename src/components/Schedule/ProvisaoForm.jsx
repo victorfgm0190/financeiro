@@ -6,6 +6,7 @@ import SearchableSelect from '../shared/SearchableSelect'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { contaCentralDoPerfil, msgSemContaCentral } from '../../lib/contaCentral'
+import InputMoeda from '../shared/InputMoeda'
 
 // Mesmas frequências do ScheduleForm.
 const FREQUENCIES = [
@@ -186,14 +187,10 @@ export default function ProvisaoForm({ initial, onClose }) {
         {/* Valor estimado */}
         <div>
           <label className="label">Valor estimado (R$) *</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0.01"
             value={form.amount}
             onChange={e => set('amount', e.target.value)}
-            placeholder="0,00"
             required
           />
         </div>

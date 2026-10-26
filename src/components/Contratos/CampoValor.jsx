@@ -1,19 +1,18 @@
-import { digitandoValorBR, valorBRFormatado } from '../../lib/valorBR'
+import InputMoeda from '../shared/InputMoeda'
+import { parseValorBR, formatarMoedaBR } from '../../lib/valorBR'
 
-// Campo de valor em R$ do módulo de Contratos: aceita só números no padrão BR, no máximo 2 casas,
-// e formata ao sair ("3900" → "3.900,00"). O texto de exemplo fica mais apagado que um valor.
+// Campo de valor em R$ do módulo de Contratos: o InputMoeda do app, mas o módulo guarda TEXTO no padrão
+// BR ("3.900,00") e o valida com parseValorBR (src/lib/contratos/validacao.js) — então entra e sai
+// texto. O texto de exemplo fica mais apagado que um valor.
 export default function CampoValor({ value, onChange, placeholder, className = 'input', ...rest }) {
+  const n = parseValorBR(value)
   return (
-    <input
+    <InputMoeda
       {...rest}
-      type="text"
-      inputMode="decimal"
-      autoComplete="off"
       className={`${className} placeholder:text-texto-3 placeholder:opacity-60`}
-      value={value ?? ''}
+      value={Number.isFinite(n) ? n : ''}
       placeholder={placeholder}
-      onChange={e => onChange(digitandoValorBR(e.target.value))}
-      onBlur={e => { const f = valorBRFormatado(e.target.value); if (f) onChange(f) }}
+      onChange={e => onChange(e.target.value === '' ? '' : formatarMoedaBR(e.target.value))}
     />
   )
 }

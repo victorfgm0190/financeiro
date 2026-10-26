@@ -5,6 +5,7 @@ import DateInput from '../shared/DateInput'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import { registrarEntrada, getBem } from '../../lib/bemApi'
 import { fmtData, hojeIso, round2, montarAjustesEntrada } from './bemUtils'
+import InputMoeda from '../shared/InputMoeda'
 
 function Calculo({ label, children, cor }) {
   return (
@@ -277,8 +278,8 @@ export default function RegistrarEntradaModal({
                 )}
                 <div>
                   <label className="label">Por quanto vai vender? (R$)</label>
-                  <input
-                    className="input" type="number" step="0.01" min="0.01"
+                  <InputMoeda
+                    min="0.01"
                     value={valorVenda} onChange={e => setValorVenda(e.target.value)}
                   />
                 </div>

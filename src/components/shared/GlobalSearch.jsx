@@ -10,6 +10,7 @@ import { getEffectiveStatus, STATUS } from '../../lib/statusEfetivo'
 import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica } from '../../lib/buscaGlobal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
+import InputMoeda from './InputMoeda'
 
 const todayStr = () => {
   const d = new Date()
@@ -232,9 +233,8 @@ export default function GlobalSearch({ open, onClose }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">Valor</label>
-              <input
+              <InputMoeda
                 className="input"
-                inputMode="decimal"
                 placeholder="Ex: 1500 ou 1.234,56"
                 value={value}
                 onChange={e => setValue(e.target.value)}

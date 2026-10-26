@@ -7,6 +7,7 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import CategorySelect from '../shared/CategorySelect'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despesaReal'
+import InputMoeda from '../shared/InputMoeda'
 
 export default function BudgetPanel() {
   const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
@@ -172,7 +173,7 @@ export default function BudgetPanel() {
           </div>
           <div>
             <label className="label">Valor Orçado (R$) *</label>
-            <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0,00" required />
+            <InputMoeda min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required />
           </div>
           <div className="flex gap-3 pt-1">
             <button type="button" className="btn-secondary flex-1" onClick={() => { setShowForm(false); setEditBudget(null) }}>Cancelar</button>

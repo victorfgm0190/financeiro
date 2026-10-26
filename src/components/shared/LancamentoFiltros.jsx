@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { EMPTY_LANC_FILTROS, hasLancFiltros } from './utils'
 import { useApp } from '../../context/AppContext'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import InputMoeda from './InputMoeda'
 
 // Barra de filtros em tempo real para listas de lançamentos.
 // `fields` controla quais inputs aparecem (default: os 5 originais). Os filtros
@@ -76,18 +77,14 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
 
       {show.includes('valor') && (
         <>
-          <input
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0"
             value={filtros.valorDe || ''}
             onChange={e => set('valorDe', e.target.value)}
             placeholder="De R$"
             className={`w-24 ${inputCls}`}
           />
-          <input
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0"
             value={filtros.valorAte || ''}
             onChange={e => set('valorAte', e.target.value)}

@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
+import InputMoeda from '../shared/InputMoeda'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -339,10 +340,8 @@ export default function AccountForm({ initial, onClose }) {
       {!isCredit && !isPatrimonial && !initial && (
         <div>
           <label className="label">Saldo Inicial (R$)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
+            negativo
             value={form.balance}
             onChange={e => set('balance', e.target.value)}
             placeholder="0,00"
@@ -354,10 +353,8 @@ export default function AccountForm({ initial, onClose }) {
         <div className="space-y-2">
           <div>
             <label className="label">Saldo Inicial (R$)</label>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
+            <InputMoeda
+              negativo
               value={form.initialBalance}
               onChange={e => set('initialBalance', e.target.value)}
               placeholder="0,00"
@@ -390,10 +387,8 @@ export default function AccountForm({ initial, onClose }) {
         <>
           <div>
             <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : 'Saldo Devedor (R$)'}</label>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
+            <InputMoeda
+              negativo
               value={form.balance}
               onChange={e => set('balance', e.target.value)}
               placeholder="0,00"
@@ -402,10 +397,8 @@ export default function AccountForm({ initial, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Valor de Aquisição (R$)</label>
-              <input
-                className="input"
-                type="number"
-                step="0.01"
+              <InputMoeda
+                negativo
                 value={form.acquisitionValue}
                 onChange={e => set('acquisitionValue', e.target.value)}
                 placeholder="0,00"
@@ -427,10 +420,8 @@ export default function AccountForm({ initial, onClose }) {
         <>
           <div>
             <label className="label">Limite do Cartão (R$)</label>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
+            <InputMoeda
+              negativo
               value={form.creditLimit}
               onChange={e => set('creditLimit', e.target.value)}
               placeholder="0,00"

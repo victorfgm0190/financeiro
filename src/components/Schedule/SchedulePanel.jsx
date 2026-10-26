@@ -55,6 +55,7 @@ import AgendaMobile from './AgendaMobile'
 import { baixaNoPeriodo, puloNoPeriodo, separarConflitosDePulo, mensagemConflitoPulo, mensagemPuloNoPagamento } from '../../lib/conflitoPeriodo'
 import AgendaCalendario from './AgendaCalendario'
 import { faturasSemAgendamento, lerVisaoAgenda, salvarVisaoAgenda } from '../../lib/agendaCalendario'
+import InputMoeda from '../shared/InputMoeda'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -509,8 +510,8 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Quanto você vai pagar? (R$)</label>
-                <input
-                  className="input" type="number" step="0.01" min="0.01"
+                <InputMoeda
+                  min="0.01"
                   max={parcelaFin.total}
                   value={finValor}
                   onChange={e => setFinValor(e.target.value)}
@@ -586,7 +587,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className={`input ${valorOk ? '' : '!border-perigo'}`} type="text" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               <div>
@@ -625,7 +626,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Valor</label>
-                <input className={`input ${valorOk ? '' : '!border-perigo'}`} type="text" inputMode="decimal" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
+                <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
               <div>
@@ -677,11 +678,10 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Valor{hasDetalhe ? ' (soma das funções)' : ''}</label>
-                <input
+                <InputMoeda
                   className={`input ${valorOk ? '' : '!border-perigo'}`}
-                  type="text"
-                  inputMode="decimal"
-                  value={hasDetalhe ? valorParaInput(detalheTotal) : trfAmount}
+                  placeholder=""
+                  value={hasDetalhe ? detalheTotal : trfAmount}
                   onChange={e => setTrfAmount(e.target.value)}
                   disabled={hasDetalhe}
                   readOnly={hasDetalhe}
@@ -1551,8 +1551,8 @@ function EfetivarProvisaoModal({ schedule, accounts, onClose, onConfirm }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Valor real (R$) *</label>
-              <input
-                type="number" step="0.01" min="0.01" className="input"
+              <InputMoeda
+                min="0.01"
                 value={amount} onChange={e => setAmount(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
               />
@@ -1771,16 +1771,11 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
                     ) : (
                       <div className="relative shrink-0 w-28">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-texto-3 pointer-events-none">R$</span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
+                        <InputMoeda
                           className={`input !py-1 !pl-7 !pr-2 text-xs text-right font-bold ${valueColor} ${ruim ? '!border-perigo' : ''}`}
+                          placeholder=""
                           value={it?.valor ?? ''}
                           onChange={e => setItem(schedule.id, { valor: e.target.value })}
-                          onBlur={() => {
-                            const v = parseValorBR(it?.valor)
-                            if (Number.isFinite(v) && v > 0) setItem(schedule.id, { valor: valorParaInput(v) })
-                          }}
                           onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
                           aria-label={`Valor de ${schedule.description}`}
                         />
@@ -3067,8 +3062,8 @@ export default function SchedulePanel() {
               <div className="flex-1 min-w-0">
                 <label className="label text-xs">Valor</label>
                 <div className="flex gap-1.5">
-                  <input type="number" step="0.01" className="input py-1.5 text-xs flex-1 min-w-0" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." aria-label="Valor mínimo" />
-                  <input type="number" step="0.01" className="input py-1.5 text-xs flex-1 min-w-0" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." aria-label="Valor máximo" />
+                  <InputMoeda className="input py-1.5 text-xs flex-1 min-w-0" value={fltMin} onChange={e => setFltMin(e.target.value)} placeholder="Mín." aria-label="Valor mínimo" />
+                  <InputMoeda className="input py-1.5 text-xs flex-1 min-w-0" value={fltMax} onChange={e => setFltMax(e.target.value)} placeholder="Máx." aria-label="Valor máximo" />
                 </div>
               </div>
               <div className="mb-0.5 shrink-0">

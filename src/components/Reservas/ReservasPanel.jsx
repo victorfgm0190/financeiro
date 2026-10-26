@@ -16,6 +16,7 @@ import { itemSaidaFluxo, itemAbreComposicao, parteDaFuncao, parteDaFuncaoNaOcorr
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
+import InputMoeda from '../shared/InputMoeda'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -246,12 +247,12 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
       </div>
       <div>
         <label className="label">Saldo Inicial (R$)</label>
-        <input className="input" type="number" step="0.01" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
+        <InputMoeda negativo className="input" value={form.saldoInicial} onChange={e => set('saldoInicial', e.target.value)} placeholder="0,00 (aceita negativo)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Despesa Anual (R$)</label>
-          <input className="input" type="number" step="0.01" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
+          <InputMoeda negativo className="input" value={form.despesaAnual} onChange={e => set('despesaAnual', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
             ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.despesaAnual)}
                 <button type="button" onClick={() => set('despesaAnual', suggestions.despesaAnual)} className="text-primary-fg hover:underline ml-1.5 font-medium">Usar valor calculado</button>
@@ -261,7 +262,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
         </div>
         <div>
           <label className="label">Depósito Mensal (R$)</label>
-          <input className="input" type="number" step="0.01" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
+          <InputMoeda negativo className="input" value={form.depositoMensal} onChange={e => set('depositoMensal', e.target.value)} placeholder="0,00" />
           {suggestions && (suggestions.enough
             ? <p className="text-xs text-texto-3 mt-1">Calculado dos lançamentos: {fmt(suggestions.depositoMensal)} / mês
                 <button type="button" onClick={() => set('depositoMensal', suggestions.depositoMensal)} className="text-primary-fg hover:underline ml-1.5 font-medium">Usar valor calculado</button>
@@ -643,10 +644,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                   <span className="text-xs text-texto-3 shrink-0">Saldo real da conta:</span>
                   {/* input + diferença ficam juntos: em telas estreitas quebram como bloco abaixo do label */}
                   <div className="flex items-center gap-2 flex-1 min-w-[8rem]">
-                    <input
+                    <InputMoeda negativo
                       className="input flex-1 min-w-0 text-xs py-1 text-right"
-                      type="number"
-                      step="0.01"
                       value={saldoReal ?? ''}
                       onChange={e => onSetAccountBalance(accountId, e.target.value)}
                     />
@@ -763,10 +762,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     </span>
                     <div className="flex items-center gap-2 ml-auto">
                       <label className="text-xs text-texto-3 shrink-0">Saldo Real:</label>
-                      <input
+                      <InputMoeda negativo
                         className="input w-32 text-xs py-1 text-right"
-                        type="number"
-                        step="0.01"
                         value={saldoReal ?? ''}
                         onChange={e => onSetAccountBalance(accountId, e.target.value)}
                       />
@@ -1251,7 +1248,7 @@ function SaldoInicialCell({ f, todayStr, activePeriod, onAddPeriod, align = 'lef
           </div>
           <div>
             <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor</label>
-            <input type="number" step="0.01" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00 (aceita negativo)" className="input w-full text-xs py-1 text-right" />
+            <InputMoeda negativo value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00 (aceita negativo)" className="input w-full text-xs py-1 text-right" />
           </div>
           <div className="flex gap-2 pt-0.5">
             <button type="button" onClick={() => setOpen(false)} className="btn-secondary flex-1 text-xs py-1" disabled={saving}>Cancelar</button>
@@ -1344,7 +1341,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {editing
-                        ? <input type="number" step="0.01" value={editValor} onChange={e => setEditValor(e.target.value)} className="input w-24 text-xs py-1 text-right" />
+                        ? <InputMoeda negativo value={editValor} onChange={e => setEditValor(e.target.value)} className="input w-24 text-xs py-1 text-right" />
                         : <span className={`text-xs font-semibold ${valorColor(Number(a.valor))}`}>{fmtSigned(Number(a.valor) || 0)}</span>
                       }
                     </td>
@@ -1401,7 +1398,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
             </div>
             <div>
               <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">💰 Valor (±)</label>
-              <input type="number" step="0.01" value={newValor} onChange={e => setNewValor(e.target.value)} placeholder="0,00" className="input w-full text-xs py-1 text-right" />
+              <InputMoeda negativo value={newValor} onChange={e => setNewValor(e.target.value)} placeholder="0,00" className="input w-full text-xs py-1 text-right" />
             </div>
             <div>
               <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📝 Observação</label>

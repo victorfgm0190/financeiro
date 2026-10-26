@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { CheckCircle, AlertCircle, TrendingDown, ArrowRight } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
+import InputMoeda from '../shared/InputMoeda'
 
 export default function DebtPaymentModal({ account, group, amount, date, sourceAccountId, onClose }) {
   const { payables, categories, payDebtInstallment } = useApp()
@@ -93,10 +94,7 @@ export default function DebtPaymentModal({ account, group, amount, date, sourceA
 
         <div>
           <label className="label">Principal (amortização)</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0"
             max={amount}
             value={principal}

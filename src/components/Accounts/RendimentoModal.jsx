@@ -5,6 +5,7 @@ import { ORIGIN } from '../../lib/origins'
 import { fmt, today } from '../shared/utils'
 import Modal from '../shared/Modal'
 import DateInput from '../shared/DateInput'
+import InputMoeda from '../shared/InputMoeda'
 
 // Saldo de referência de UMA conta: o SALDO FUTURO REAL — quanto a conta terá depois que todos
 // os lançamentos já efetivados com data > hoje entrarem. São os mesmos dois números que o card
@@ -93,10 +94,8 @@ export default function RendimentoModal({ account, onClose }) {
 
         <div>
           <label className="label">Novo saldo (R$) *</label>
-          <input
-            type="number"
-            step="0.01"
-            className="input"
+          <InputMoeda
+            negativo
             value={novoSaldo}
             onChange={e => setNovoSaldo(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm() } }}

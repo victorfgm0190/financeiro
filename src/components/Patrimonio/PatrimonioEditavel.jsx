@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Pencil, Lock, Loader2, Wallet } from 'lucide-react'
 import { fmt } from '../shared/utils'
+import InputMoeda from '../shared/InputMoeda'
 
 // Card "Valores do Bem" da aba Informações: os dois números do bem e qual deles entra no
 // Patrimônio.
@@ -130,15 +131,15 @@ export default function PatrimonioEditavel({ bem, temMovimentacoes, onSalvar, on
         <div className="space-y-3">
           <div>
             <label className="label">Valor de Contrato / Nota Fiscal (R$)</label>
-            <input
-              className="input" type="number" step="0.01" min="0" placeholder="Deixe vazio se não souber"
+            <InputMoeda
+              className="input" min="0" placeholder="Deixe vazio se não souber"
               value={nf} onChange={e => setNf(e.target.value)}
             />
           </div>
           <div>
             <label className="label">Valor Pago / IR (R$)</label>
-            <input
-              className="input" type="number" step="0.01" min="0" placeholder="Deixe vazio para usar o saldo"
+            <InputMoeda
+              className="input" min="0" placeholder="Deixe vazio para usar o saldo"
               value={pago} onChange={e => setPago(e.target.value)}
             />
             <p className="text-[11px] text-texto-3 mt-1">

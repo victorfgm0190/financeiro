@@ -4,7 +4,7 @@ import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { parseValorBR } from '../../lib/valorBR'
+import InputMoeda from '../shared/InputMoeda'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
@@ -187,10 +187,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   })
 
   const [step, setStep] = useState('form')
-  // Modo rápido (mobile): "Mais opções" troca para o formulário completo; o texto do valor fica
-  // separado de form.amount para aceitar vírgula (parseValorBR).
+  // Modo rápido (mobile): "Mais opções" troca para o formulário completo.
   const [maisOpcoes, setMaisOpcoes] = useState(false)
-  const [valorRapido, setValorRapido] = useState('')
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.type })
@@ -1254,18 +1252,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           <label htmlFor="valor-rapido" className="text-xs text-texto-3">Valor</label>
           <div className={`flex items-baseline justify-center gap-1 ${saida ? 'text-despesa' : 'text-receita'}`}>
             <span className="text-xl font-semibold">R$</span>
-            <input
+            <InputMoeda
               id="valor-rapido"
-              inputMode="decimal"
-              autoComplete="off"
               autoFocus
-              value={valorRapido}
-              onChange={e => {
-                const v = e.target.value
-                setValorRapido(v)
-                const n = parseValorBR(v)
-                set('amount', Number.isFinite(n) && n > 0 ? String(n) : '')
-              }}
+              value={form.amount}
+              onChange={e => set('amount', Number(e.target.value) > 0 ? e.target.value : '')}
               placeholder="0,00"
               className="w-44 bg-transparent text-center text-4xl font-bold outline-none placeholder:text-texto-3"
               required
@@ -1409,7 +1400,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ) : (
           <div>
             <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}</label>
-            <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
+            <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
         )}
       </div>
@@ -1418,7 +1409,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <>
           <div>
             <label className="label">Valor (R$) *</label>
-            <input className="input" type="number" step="0.01" min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} placeholder="0,00" required />
+            <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
           {transferToAcc?.type === 'credit' && (
             <div>

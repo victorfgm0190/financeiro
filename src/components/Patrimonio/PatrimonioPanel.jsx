@@ -14,6 +14,7 @@ import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
 import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
 import ComposicaoPatrimonioModal from './ComposicaoPatrimonioModal'
 import { useThemeColors } from '../../hooks/useTheme'
+import InputMoeda from '../shared/InputMoeda'
 
 function UpdateValueModal({ account, onClose }) {
   const { updateAccountValue, pode } = useApp()
@@ -39,10 +40,8 @@ function UpdateValueModal({ account, onClose }) {
       )}
       <div>
         <label className="label">Novo Valor (R$) *</label>
-        <input
-          className="input"
-          type="number"
-          step="0.01"
+        <InputMoeda
+          negativo
           value={newValue}
           onChange={e => setNewValue(e.target.value)}
           placeholder="0,00"

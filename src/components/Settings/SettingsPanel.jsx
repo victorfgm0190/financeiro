@@ -28,6 +28,7 @@ import { categoriaDisponivelParaPerfil } from '../../lib/categoriasPerfil'
 import { compararNoGrupo } from '../../lib/ordemCategorias'
 import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 import { CORES_PERFIL } from '../../lib/chartPalette'
+import InputMoeda from '../shared/InputMoeda'
 
 const PROFILE_COLORS = CORES_PERFIL
 
@@ -1181,19 +1182,15 @@ export default function SettingsPanel() {
               <option value="yes">Parcelado</option>
               <option value="no">À Vista</option>
             </select>
-            <input
+            <InputMoeda
               className="input text-sm"
-              type="number"
-              step="0.01"
               min="0"
               placeholder="Valor mín (R$)"
               value={newGRule.minAmount}
               onChange={e => setNewGRule(f => ({ ...f, minAmount: e.target.value }))}
             />
-            <input
+            <InputMoeda
               className="input text-sm"
-              type="number"
-              step="0.01"
               min="0"
               placeholder="Valor máx (R$)"
               value={newGRule.maxAmount}
@@ -1804,9 +1801,8 @@ export default function SettingsPanel() {
                     </div>
                     <div>
                       <label className="label">Saldo esperado (R$)</label>
-                      <input
-                        type="number"
-                        step="0.01"
+                      <InputMoeda
+                        negativo
                         className="input text-sm"
                         value={ajusteExpected}
                         onChange={e => { setAjusteExpected(e.target.value); setAjusteResult(null); setAjusteDone(false) }}

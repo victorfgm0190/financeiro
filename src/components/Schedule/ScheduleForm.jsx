@@ -29,6 +29,7 @@ import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
+import InputMoeda from '../shared/InputMoeda'
 
 const FREQUENCIES = [
   { value: 'once', label: 'Única' },
@@ -175,11 +176,8 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaN
             </div>
             <div>
               <label className="label">Valor (R$)</label>
-              <input
-                type="number"
-                step="0.01"
+              <InputMoeda
                 min="0"
-                className="input"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 onKeyDown={stopEnter}
@@ -847,14 +845,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Valor */}
         <div>
           <LabelTip tip={TIPS.amount} required>Valor (R$)</LabelTip>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0.01"
             value={form.amount}
             onChange={e => set('amount', e.target.value)}
-            placeholder="0,00"
             required
             readOnly={ehFinanciamento}
           />

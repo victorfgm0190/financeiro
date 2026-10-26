@@ -7,6 +7,7 @@ import AccountOptions from '../shared/AccountOptions'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
+import InputMoeda from '../shared/InputMoeda'
 
 function fmtBR(iso) {
   if (!iso) return ''
@@ -134,10 +135,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Valor total</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
+            negativo
             value={form.totalAmount}
             onChange={e => handleTotalChange(e.target.value)}
           />
@@ -178,10 +177,8 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
         </div>
         <div>
           <label className="label">Vlr. parcela</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
+            negativo
             value={form.installmentAmount}
             onChange={e => set('installmentAmount', Number(e.target.value) || 0)}
           />

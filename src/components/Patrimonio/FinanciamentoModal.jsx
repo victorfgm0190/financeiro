@@ -6,6 +6,7 @@ import { criarFinanciamento } from '../../lib/bemApi'
 import {
   hojeIso, round2, contasFavorecidasElegiveis, sugestoesFavorecido,
 } from './bemUtils'
+import InputMoeda from '../shared/InputMoeda'
 
 export default function FinanciamentoModal({
   bem, contasCorrentes, contaCentralId = '', avisoContaCentral = null, contas = [], favorecidos = [], onCancel, onSuccess, onErro,
@@ -97,8 +98,8 @@ export default function FinanciamentoModal({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Valor a Financiar (R$) *</label>
-          <input
-            className="input" type="number" step="0.01" min="0.01" required autoFocus
+          <InputMoeda
+            min="0.01" required autoFocus
             value={form.valor_principal}
             onChange={e => set('valor_principal', e.target.value)}
           />
@@ -113,8 +114,8 @@ export default function FinanciamentoModal({
         </div>
         <div>
           <label className="label">Valor da Parcela (R$) *</label>
-          <input
-            className="input" type="number" step="0.01" min="0.01" required
+          <InputMoeda
+            min="0.01" required
             value={form.valor_parcela}
             onChange={e => set('valor_parcela', e.target.value)}
             placeholder="0,00"

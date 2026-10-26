@@ -10,6 +10,7 @@ import { ordenarCategorias } from '../../lib/ordemCategorias'
 import Modal from '../shared/Modal'
 import AccountOptions from '../shared/AccountOptions'
 import { TotaisEnvelopes, EnvelopeLinha, MenuEnvelope, EnvelopeDetalhe } from './EnvelopeResumo'
+import InputMoeda from '../shared/InputMoeda'
 
 // ── Period logic ──────────────────────────────────────────────────────────────
 // period runs from (dueDay+1) of one month to (dueDay) of the next
@@ -80,8 +81,8 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Limite Mensal (R$)</label>
-          <input
-            className="input" type="number" min="0" step="0.01"
+          <InputMoeda
+            min="0"
             placeholder="0,00" value={limitAmount}
             onChange={e => setLimitAmount(e.target.value)}
           />

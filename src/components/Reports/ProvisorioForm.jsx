@@ -7,6 +7,7 @@ import SearchableSelect from '../shared/SearchableSelect'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import InputMoeda from '../shared/InputMoeda'
 
 // Formulário do lançamento PROVISÓRIO do Fluxo de Caixa por Conta: uma entrada/saída de
 // simulação gravada em fluxo_provisorios (tabela à parte — não é agendamento nem lançamento).
@@ -93,10 +94,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
         </div>
         <div>
           <label className="label">Valor (R$) *</label>
-          <input
-            className="input"
-            type="number"
-            step="0.01"
+          <InputMoeda
             min="0.01"
             value={form.amount}
             onChange={e => set('amount', e.target.value)}

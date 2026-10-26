@@ -72,8 +72,12 @@ describe('CampoValor', () => {
   it('2 casas ao digitar e milhar ao sair', () => {
     render(<Campo />)
     const input = screen.getByPlaceholderText('Ex.: 200,00')
+    fireEvent.focus(input)
     fireEvent.change(input, { target: { value: '100,000' } })
     expect(input.value).toBe('100,00')
+    fireEvent.blur(input)
+    expect(input.value).toBe('100,00')
+    fireEvent.focus(input)
     fireEvent.change(input, { target: { value: '3900' } })
     fireEvent.blur(input)
     expect(input.value).toBe('3.900,00')

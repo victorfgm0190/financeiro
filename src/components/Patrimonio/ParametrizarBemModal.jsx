@@ -4,6 +4,7 @@ import { criarBem } from '../../lib/bemApi'
 import { useApp } from '../../context/AppContext'
 import { filtrarCategoriasPorPerfil } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import InputMoeda from '../shared/InputMoeda'
 
 // Liga uma conta patrimonial (type='asset') já existente ao módulo de bem: grava o valor da
 // nota fiscal e as 4 categorias. POST /api/bem/criar aceita conta_id e converte no lugar.
@@ -93,8 +94,8 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
 
       <div>
         <label className="label">Valor da Nota Fiscal (R$) *</label>
-        <input
-          className="input" type="number" step="0.01" min="0.01" required autoFocus
+        <InputMoeda
+          min="0.01" required autoFocus
           value={form.valor_nota_fiscal}
           onChange={e => set('valor_nota_fiscal', e.target.value)}
         />

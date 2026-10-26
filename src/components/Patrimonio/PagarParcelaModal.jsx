@@ -5,6 +5,7 @@ import DataPagamentoField from '../shared/DataPagamentoField'
 import { dataPadraoPagamento } from '../../lib/dataPagamento'
 import { pagarParcela } from '../../lib/bemApi'
 import { fmtData, calcularRateio, round2 } from './bemUtils'
+import InputMoeda from '../shared/InputMoeda'
 
 export default function PagarParcelaModal({
   bem, financiamento, parcela, contasCorrentes, contaCentralId = '', avisoContaCentral = null, onCancel, onSuccess, onErro,
@@ -78,8 +79,8 @@ export default function PagarParcelaModal({
 
       <div>
         <label className="label">Quanto você vai pagar? (R$) *</label>
-        <input
-          className="input" type="number" step="0.01" min="0.01" required autoFocus
+        <InputMoeda
+          min="0.01" required autoFocus
           value={valorPago}
           onChange={e => setValorPago(e.target.value)}
         />

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Plus, Trash2, X } from 'lucide-react'
 import { fmt } from './utils'
 import CategorySelect from './CategorySelect'
+import InputMoeda from './InputMoeda'
 
 let _k = 0
 const mkRow = (r = {}) => ({
@@ -61,8 +62,8 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                   searchable
                 />
               </div>
-              <input
-                type="number" step="0.01" min="0"
+              <InputMoeda
+                min="0"
                 value={r.valor}
                 onChange={e => setRow(r._k, { valor: e.target.value })}
                 placeholder="Valor"
