@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { addMonths, addWeeks, addDays, addYears, format } from 'date-fns'
 import {
-  loadFromDb, seedDefaults, pingDb,
+  loadFromDb, seedDefaults, pingDb, fetchUltimaAlteracao,
   accountToRow, txToRow, scheduleToRow,
   saveRateios, deleteRateios,
   bulkUpdateTransactionsApi,
@@ -36,6 +36,7 @@ import { computeFluxoCaixa, occEfetiva, escalarRateios } from '../lib/fluxoCaixa
 import { calcularSaldoPrincipalBreakdown } from '../lib/saldoPrincipal'
 import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveisDuplicados } from '../lib/autoRegistro'
 import { tentarReconectar } from '../lib/syncSeguro'
+import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
@@ -773,7 +774,19 @@ export function AppProvider({ children }) {
   const [erroArmazenamento, setErroArmazenamento] = useState(null)
   const [armazenamentoPersistente, setArmazenamentoPersistente] = useState(null)
   const autoRegisterDoneRef = useRef(false)
-  const recalcSaldosDoneRef = useRef(false)
+  // Carga do banco já recalculada (cargaSeq): a recarga sem sair do app soma 1 e o recálculo de
+  // saldos roda de novo sobre os dados recebidos.
+  const recalcSaldosDoneRef = useRef(-1)
+  const [cargaSeq, setCargaSeq] = useState(0)
+  // Recarga do banco sem sair do app (voltar à aba, puxar para atualizar, botão 🔄): assinatura do
+  // banco na última carga (api/last-change.js), quando foi, e a recarga adiada por modal/edição/fila.
+  const assinaturaRef = useRef(null)
+  const recarregandoRef = useRef(false)
+  const recargaAdiadaRef = useRef(null)
+  const [recargaAdiada, setRecargaAdiada] = useState(false)
+  const [recarregando, setRecarregando] = useState(false)
+  const [ultimaCarga, setUltimaCarga] = useState(null)
+  const [avisoRecarga, setAvisoRecarga] = useState(null)
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
   // (definido mais abaixo); usamos ref p/ contornar a ordem de declaração.
   const recalcFaturaRef = useRef(null)
@@ -1001,19 +1014,21 @@ export function AppProvider({ children }) {
   // ── Resultado de um /api/load que deu certo ─────────────────────────────────
   // Na abertura e na reconexão de quem abriu sem conseguir carregar: os dados do banco passam a
   // valer e a FILA do aparelho é reaplicada por cima (o que ainda não chegou ao banco).
+  const normalizarCarga = (d) => ({
+    ...d,
+    accountGroups: d.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
+    profiles: d.profiles ?? [],
+    cardImports: d.cardImports ?? [],
+    reserveFunctions: d.reserveFunctions ?? [],
+    rateios: d.rateios ?? [],
+    scheduleReservaFuncoes: d.scheduleReservaFuncoes ?? [],
+    favorecidoAliases: d.favorecidoAliases ?? [],
+  })
+
   const aplicarCargaDoBanco = async (result) => {
     if (result.status === 'connected') {
       // Supabase tem dados do usuário — é a fonte autoritativa
-      const merged = {
-        ...result.data,
-        accountGroups: result.data.accountGroups ?? DEFAULT_ACCOUNT_GROUPS,
-        profiles: result.data.profiles ?? [],
-        cardImports: result.data.cardImports ?? [],
-        reserveFunctions: result.data.reserveFunctions ?? [],
-        rateios: result.data.rateios ?? [],
-        scheduleReservaFuncoes: result.data.scheduleReservaFuncoes ?? [],
-        favorecidoAliases: result.data.favorecidoAliases ?? [],
-      }
+      const merged = normalizarCarga(result.data)
       setTiposDocumento(ordenarTipos(result.tiposDocumento || []))
 
       // Migração: funções de reserva do localStorage → Neon.
@@ -1044,6 +1059,8 @@ export function AppProvider({ children }) {
       const doBanco = aplicarFilaSobreDados({ ...merged, reserveFunctions: result.data.reserveFunctions ?? [] }, pendentes)
       const dados = aplicarFilaSobreDados(merged, pendentes)
       carregouDoBancoRef.current = true
+      assinaturaRef.current = result.assinatura ?? null
+      setUltimaCarga(Date.now())
       setDbStatus('connected')
       setData(() => {
         prevDataRef.current = doBanco
@@ -1055,6 +1072,8 @@ export function AppProvider({ children }) {
       // SÓ no ambiente principal: o defaultData traz o plano de contas do Victor, e banco de
       // cliente nasce com o kit básico no servidor (api/_kitBasico.js) — nada sai do navegador.
       carregouDoBancoRef.current = true
+      assinaturaRef.current = result.assinatura ?? null
+      setUltimaCarga(Date.now())
       setDbStatus('connected')
       if (noAmbientePrincipal()) {
         try { await seedDefaults(defaultData) } catch {}
@@ -1182,19 +1201,127 @@ export function AppProvider({ children }) {
     }
   }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Conectado: envia o pendente ao voltar a ficar visível (no iPhone não há envio em segundo plano)
-  // e entra em modo Local assim que o navegador avisa que a internet caiu.
+  // ── Recarga do banco sem sair do app ────────────────────────────────────────
+  // Mesmo caminho da abertura: primeiro envia a fila, depois loadFromDb + aplicarCargaDoBanco (que
+  // reaplica o que ainda estiver na fila). Os saldos saem do recálculo do frontend (cargaSeq).
+  // `forcar` (puxar para atualizar / botão 🔄): recarrega sem olhar a assinatura. Sem `forcar` (voltar
+  // ao app): só busca os dados se a assinatura do banco mudou desde a última carga.
+  // Modal aberto, campo em edição ou alteração ainda não enviada → adia (efeito abaixo retoma).
+  // → 'atualizado' | 'sem-mudanca' | 'adiado' | 'ignorado' | 'erro'
+  const adiarRecarga = (forcar) => {
+    recargaAdiadaRef.current = { forcar: forcar || !!recargaAdiadaRef.current?.forcar }
+    setRecargaAdiada(true)
+  }
+  const liberar = () => ({ pendentes: filaRef.current.size, enviando: enviandoRef.current })
+
+  // Listas que vivem fora de `data` e só eram lidas na abertura.
+  const recarregarListasAuxiliares = () => {
+    fetchDatasProvisorias().then(setDatasProvisorias).catch(() => {})
+    fetchHistoricoResumo()
+      .then(itens => setHistoricoChaves(new Set(itens.map(i => `${i.entidade}:${i.entidade_id}`))))
+      .catch(() => {})
+    Promise.all([fetchReservePeriods(), fetchReserveAdjustments(), fetchReserveSnapshots()])
+      .then(([p, a, s]) => {
+        setReservePeriods(p?.periods || [])
+        setReserveAdjustments(a?.adjustments || [])
+        setReserveSnapshots(s?.snapshots || [])
+      })
+      .catch(() => {})
+  }
+
+  const recarregarDoBanco = async ({ forcar = false } = {}) => {
+    if (recarregandoRef.current) return 'ignorado'
+    if (!carregouDoBancoRef.current || dbStatusRef.current !== 'connected') return 'ignorado'
+    recarregandoRef.current = true
+    if (forcar) setRecarregando(true)
+    try {
+      // 1. Envia a fila (espera um envio em andamento terminar).
+      const fim = Date.now() + 15000
+      while (enviandoRef.current && Date.now() < fim) await new Promise(ok => setTimeout(ok, 100))
+      await enviarPendentes()
+      if (!podeRecarregar(liberar())) { adiarRecarga(forcar); return 'adiado' }
+
+      // 2. Voltar ao app: só a assinatura (sem registros). Igual à da última carga → nada a fazer.
+      if (!forcar) {
+        const atual = await fetchUltimaAlteracao()
+        if (!atual || atual === assinaturaRef.current) {
+          recargaAdiadaRef.current = null
+          setRecargaAdiada(false)
+          if (atual) setUltimaCarga(Date.now())
+          return 'sem-mudanca'
+        }
+      }
+
+      // 3. Busca. Durante a espera o usuário pode ter aberto um modal ou editado: adia de novo.
+      const result = await loadFromDb(defaultData)
+      if (result.status !== 'connected') {
+        console.warn('[recarga] banco não respondeu:', result.status, result.error || '')
+        if (forcar) setAvisoRecarga({ texto: 'Não foi possível atualizar agora', erro: true })
+        return 'erro'
+      }
+      if (!podeRecarregar(liberar())) { adiarRecarga(forcar); return 'adiado' }
+      recargaAdiadaRef.current = null
+      setRecargaAdiada(false)
+
+      // Registros que chegaram diferentes do que está na tela (forma gravada, por tabela).
+      const novidades = mudancasEntre(dataRef.current, { ...dataRef.current, ...normalizarCarga(result.data) }).length
+      if (novidades > 0) {
+        await aplicarCargaDoBanco(result)
+        setCargaSeq(n => n + 1)
+      } else {
+        // Só a assinatura mudou (gravação deste próprio aparelho): nada a trocar na tela.
+        assinaturaRef.current = result.assinatura ?? null
+        setUltimaCarga(Date.now())
+      }
+      if (forcar || novidades > 0) recarregarListasAuxiliares()
+      const texto = textoNovidades(novidades) || (forcar ? 'Tudo em dia' : null)
+      if (texto) setAvisoRecarga({ texto })
+      return novidades > 0 ? 'atualizado' : 'sem-mudanca'
+    } catch (err) {
+      console.error('[recarga]', err?.message || err)
+      return 'erro'
+    } finally {
+      recarregandoRef.current = false
+      setRecarregando(false)
+    }
+  }
+  const recarregarRef = useRef(recarregarDoBanco)
+  useEffect(() => { recarregarRef.current = recarregarDoBanco })
+  // Puxar para atualizar / botão 🔄.
+  const recarregarDados = useCallback(() => recarregarRef.current({ forcar: true }), [])
+  const fecharAvisoRecarga = useCallback(() => setAvisoRecarga(null), [])
+
+  // Recarga adiada: confere a cada 2 s (sem rede) se o modal fechou / a fila esvaziou, e retoma.
+  useEffect(() => {
+    if (!recargaAdiada || dbStatus !== 'connected') return
+    const t = setInterval(() => {
+      if (recarregandoRef.current || !podeRecarregar(liberar())) return
+      recarregarRef.current({ forcar: !!recargaAdiadaRef.current?.forcar })
+    }, 2000)
+    return () => clearInterval(t)
+  }, [recargaAdiada, dbStatus])
+
+  // Conectado: ao voltar a ficar visível/focado, envia o pendente (no iPhone não há envio em segundo
+  // plano) e confere se o banco mudou — recarregarDoBanco faz as duas coisas, nessa ordem. focus e
+  // visibilitychange chegam juntos: um disparo a cada 2 s. Entra em modo Local assim que o navegador
+  // avisa que a internet caiu.
   useEffect(() => {
     if (dbStatus !== 'connected') return
-    const aoVoltar = () => { if (document.visibilityState !== 'hidden') enviarPendentes() }
+    const janela = criarJanela(2000)
+    const aoVoltar = () => {
+      if (document.visibilityState === 'hidden' || !janela()) return
+      recarregarRef.current()
+    }
     const caiu = () => setDbStatus('local')
     document.addEventListener('visibilitychange', aoVoltar)
+    window.addEventListener('focus', aoVoltar)
     window.addEventListener('offline', caiu)
     return () => {
       document.removeEventListener('visibilitychange', aoVoltar)
+      window.removeEventListener('focus', aoVoltar)
       window.removeEventListener('offline', caiu)
     }
-  }, [dbStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dbStatus])
 
   // "Sair e apagar dados deste aparelho": apaga o estado e a fila deste ambiente/usuário no
   // aparelho (e os dados dele no localStorage).
@@ -1512,8 +1639,8 @@ export function AppProvider({ children }) {
   // ponto de desfazer do usuário. Quando nada muda, devolve o MESMO objeto: o React descarta o
   // re-render e o sync debounced não marca `contas` como suja à toa.
   useEffect(() => {
-    if (!initialized || dbStatus !== 'connected' || recalcSaldosDoneRef.current) return
-    recalcSaldosDoneRef.current = true
+    if (!initialized || dbStatus !== 'connected' || recalcSaldosDoneRef.current === cargaSeq) return
+    recalcSaldosDoneRef.current = cargaSeq
     const timer = setTimeout(() => {
       try {
         console.log('🔄 Sincronizando saldos...')
@@ -1539,7 +1666,7 @@ export function AppProvider({ children }) {
       }
     }, 0)
     return () => clearTimeout(timer)
-  }, [initialized, dbStatus])
+  }, [initialized, dbStatus, cargaSeq])
 
   // ── Settings ────────────────────────────────────────────────────────────────
   const updateSettings = useCallback((settings) => {
@@ -5750,6 +5877,8 @@ export function AppProvider({ children }) {
       syncError,
       syncing,
       dismissSyncError: () => setSyncError(null),
+      // Recarga do banco sem sair do app: puxar para atualizar / botão 🔄, "Atualizado há X min".
+      recarregarDados, recarregando, ultimaCarga, avisoRecarga, fecharAvisoRecarga,
       // Modo sem internet: fila de pendências, envio manual e dados do aparelho.
       filaPendentes,
       enviarPendentes,

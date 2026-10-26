@@ -980,11 +980,13 @@ export async function loadFromDb(defaultData) {
     // semeia no ambiente principal). Banco com o kit básico e ainda sem contas (cliente novo) é um
     // banco normal: abre vazio, sem semear nada.
     if (!d.cfg && (!d.cats || d.cats.length === 0)) {
-      return { status: 'empty', data: null }
+      return { status: 'empty', data: null, assinatura: d.assinatura ?? null }
     }
 
     return {
       status: 'connected',
+      // Assinatura do banco no momento da carga (api/last-change.js): referência da checagem ao voltar.
+      assinatura: d.assinatura ?? null,
       data: {
         settings: d.cfg
           ? {
@@ -1184,6 +1186,17 @@ export async function confirmImportPendentes(ids) {
 }
 
 // ─── Ping ─────────────────────────────────────────────────────────────────────
+
+// Assinatura atual do banco (hash de MAX(updated_at) + COUNT(*) por tabela, sem registros).
+// null quando o banco não tem a migração ou a chamada falha — quem chama não recarrega por ela.
+export async function fetchUltimaAlteracao() {
+  try {
+    const r = await apiGet('/api/last-change')
+    return r?.assinatura ?? null
+  } catch {
+    return null
+  }
+}
 
 export async function pingDb() {
   try {

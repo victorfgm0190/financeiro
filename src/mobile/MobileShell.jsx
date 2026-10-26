@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Plus, ChevronLeft, Search } from 'lucide-react'
+import { Plus, ChevronLeft, Search, RefreshCw } from 'lucide-react'
 import { useFab } from '../context/FabContext'
 import { useScrollRestoration, ScrollScopeContext, saveScrollNow } from '../hooks/useScrollRestoration'
 import { abas, acoes } from './navegacao'
@@ -9,6 +9,9 @@ import { useSaldosProntos } from '../hooks/useSaldosProntos'
 import { TelaCarregando, AvisoDesatualizado } from './Carregando'
 import IndicadorSync from '../components/Offline/IndicadorSync'
 import FaixaOffline from '../components/Offline/FaixaOffline'
+import AtualizadoHa from '../components/Offline/AtualizadoHa'
+import { useApp } from '../context/AppContext'
+import { usePuxarParaAtualizar, LIMIAR_PUXAR } from '../hooks/usePuxarParaAtualizar'
 
 
 // Layout mobile: conteúdo com scroll + barra inferior [aba aba (+) aba aba]. Tudo vem de
@@ -24,6 +27,9 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   const [scrollScope, setScrollScope] = useState(null)
   const scrollKey = scrollScope ?? `m:${ativo}`
   useScrollRestoration(contentRef, scrollKey)
+  // Puxar para atualizar (no topo, sem modal aberto): envia a fila e recarrega do banco.
+  const { recarregarDados, dbStatus } = useApp()
+  const { puxado, atualizando } = usePuxarParaAtualizar(contentRef, dbStatus === 'connected' ? recarregarDados : null)
   const scrollCtx = useMemo(() => ({
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(contentRef, scrollKey),
@@ -91,9 +97,28 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
 
       <main
         ref={contentRef}
-        className="flex-1 overflow-y-auto px-4 pt-4"
+        className="flex-1 overflow-y-auto overscroll-y-contain px-4 pt-4"
         style={{ paddingBottom: 'calc(104px + env(safe-area-inset-bottom))' }}
       >
+        <div
+          aria-live="polite"
+          className={`flex flex-col items-center justify-end gap-1 overflow-hidden text-[11px] text-texto-3 ${puxado ? '' : 'transition-[height] duration-200'}`}
+          style={{ height: puxado }}
+        >
+          {puxado > 0 && (
+            <>
+              <RefreshCw
+                size={18}
+                className={atualizando ? 'animate-spin text-primary-fg' : puxado >= LIMIAR_PUXAR ? 'text-primary-fg' : ''}
+                style={atualizando ? undefined : { transform: `rotate(${puxado * 4}deg)` }}
+              />
+              <span className="mb-2">
+                {atualizando ? 'Atualizando…' : puxado >= LIMIAR_PUXAR ? 'Solte para atualizar' : <AtualizadoHa />}
+              </span>
+            </>
+          )}
+        </div>
+        {!puxado && <AtualizadoHa className="block text-center text-[10px] leading-none text-texto-3 -mt-1 mb-3" />}
         <ScrollScopeContext.Provider value={scrollCtx}>
           <FaixaOffline />
           <IndicadorSync faixa />

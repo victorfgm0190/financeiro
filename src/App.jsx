@@ -113,7 +113,7 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, usuario, podeVer } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, usuario, podeVer } = useApp()
   // Agenda no celular: gera e publica o .ics do usuário quando os dados mudam (hooks/useAgendaFeed).
   useAgendaFeed()
 
@@ -228,6 +228,9 @@ function AppContent() {
       )}
       {genericToast && (
         <Toast message={genericToast} onClose={() => setGenericToast(null)} />
+      )}
+      {avisoRecarga && (
+        <Toast message={avisoRecarga.texto} variant={avisoRecarga.erro ? 'error' : 'success'} duration={3500} onClose={fecharAvisoRecarga} />
       )}
       {syncError && (
         <Toast message={syncError} variant="error" duration={8000} onClose={dismissSyncError} />

@@ -6,6 +6,7 @@ import { ensureHistoricoSchema } from './_historico.js'
 import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { lerAssinatura } from './last-change.js'
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -460,6 +461,11 @@ async function handler(req, res) {
     // Histórico de alterações (tabela própria; só os endpoints de edição do usuário gravam nela).
     await ensureHistoricoSchema()
 
+    // Assinatura ANTES dos SELECTs (e depois dos UPDATEs de manutenção acima): o app compara com o
+    // /api/last-change ao voltar para a aba. Mudança entre os dois só causa uma recarga a mais.
+    // null (banco sem a migração updated_at): o app recarrega por botão/puxar, não ao voltar.
+    const assinatura = await lerAssinatura().catch(() => null)
+
     const [accs, txs, scheds, cats, buds, rules, gers, pays, faves, cfgRows, envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos] =
       await Promise.all([
         query('SELECT * FROM contas'),
@@ -506,6 +512,7 @@ async function handler(req, res) {
       // app receber um carimbo anterior à última gravação, a resposta veio de cache e não do
       // banco — que é indistinguível de "o banco não salvou" olhando só para a tela.
       served_at: new Date().toISOString(),
+      assinatura,
       accs, txs, scheds, cats, buds, rules, gers, pays, faves,
       cfg: cfgRows[0] || null,
       envs, groups, perfis, imports, grules, rfns, rateios, srfs, aliases, tipos,

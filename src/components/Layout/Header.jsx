@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext'
 import { createPortal } from 'react-dom'
 import { useSair } from '../Offline/useSair'
 import AvisoSairModal from '../Offline/AvisoSairModal'
+import BotaoRecarregar from '../Offline/BotaoRecarregar'
 import { cabecalhoDaPagina } from './cabecalhoPagina'
 
 const PAGE_TITLES = {
@@ -158,6 +159,8 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
             )}
           </div>
         )}
+
+        <BotaoRecarregar />
 
         <div className="text-right hidden md:block">
           <p className="text-xs text-texto-2">{format(today, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
