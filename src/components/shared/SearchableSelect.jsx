@@ -10,17 +10,30 @@ function sortGroups(groupNames) {
   return [...groupNames].sort(compararGruposPadrao)
 }
 
+// Tela de toque (celular/tablet): sem foco automático na busca e o menu acompanha o campo em vez
+// de fechar quando a página rola (ver o efeito de eventos abaixo).
+const ehToque = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+
+// Busca sem acento e sem maiúsculas ("credito" acha "Crédito").
+const normalizar = (t) => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
 // Posição do dropdown portado (position:fixed = coords de viewport). Mantém o menu COLADO ao
 // campo: abre logo abaixo; se não houver espaço embaixo (campo na parte de baixo do modal/tela),
 // abre ACIMA; e faz clamp horizontal + de altura ao viewport — assim o menu nunca cai "no
-// centro-baixo, longe do campo".
+// centro-baixo, longe do campo". A área útil é a do visualViewport: com o teclado do celular
+// aberto, só o que fica acima dele conta.
 function computeMenuStyle(rect) {
   const vw = window.innerWidth
-  const vh = window.innerHeight
+  const layoutH = document.documentElement.clientHeight || window.innerHeight
+  const vv = window.visualViewport
+  const visTop = vv ? vv.offsetTop : 0
+  const visBottom = vv ? Math.min(layoutH, vv.offsetTop + vv.height) : layoutH
   const width = Math.max(rect.width, 220)
   const left = Math.round(Math.min(Math.max(8, rect.left), Math.max(8, vw - width - 8)))
-  const spaceBelow = vh - rect.bottom
-  const spaceAbove = rect.top
+  const spaceBelow = visBottom - rect.bottom
+  // Campo escondido atrás do teclado: o menu se apoia na borda de cima do teclado.
+  const anchorTop = Math.min(rect.top, visBottom - 8)
+  const spaceAbove = anchorTop - visTop
   // Abre para cima só quando faltar espaço embaixo E houver mais espaço em cima.
   const openAbove = spaceBelow < 220 && spaceAbove > spaceBelow
   const maxHeight = Math.max(140, Math.min(256, (openAbove ? spaceAbove : spaceBelow) - 12))
@@ -31,7 +44,7 @@ function computeMenuStyle(rect) {
     zIndex: 9999,
     maxHeight,
     ...(openAbove
-      ? { bottom: Math.round(vh - rect.top + 4) }
+      ? { bottom: Math.round(layoutH - anchorTop + 4) }
       : { top: Math.round(rect.bottom + 4) }),
   }
 }
@@ -73,9 +86,9 @@ export default function SearchableSelect({
 
   const filtered = useMemo(() => {
     if (!search.trim()) return options
-    const q = search.toLowerCase()
+    const q = normalizar(search.trim())
     // Busca casa pelo rótulo do item OU pelo nome do grupo.
-    return options.filter(o => o.label.toLowerCase().includes(q) || (o.group || '').toLowerCase().includes(q))
+    return options.filter(o => normalizar(o.label).includes(q) || normalizar(o.group).includes(q))
   }, [options, search])
 
   // Build flat items list for keyboard nav + grouped structure for rendering
@@ -188,8 +201,9 @@ export default function SearchableSelect({
 
   // Ao abrir, foca o campo de busca para digitar/filtrar sem clique extra.
   // rAF garante que o painel já está no DOM (o ref já está atribuído).
+  // No toque, não: o teclado virtual subiria cobrindo a lista; o usuário toca em "Buscar" se quiser.
   useEffect(() => {
-    if (!open) return
+    if (!open || ehToque()) return
     const raf = requestAnimationFrame(() => searchRef.current?.focus())
     return () => cancelAnimationFrame(raf)
   }, [open])
@@ -202,12 +216,28 @@ export default function SearchableSelect({
       if (panelRef.current?.contains(e.target)) return
       closeDropdown()
     }
-    const onScroll = (e) => { if (listRef.current?.contains(e.target)) return; closeDropdown() }
-    document.addEventListener('mousedown', onClick)
+    const reposicionar = () => { if (triggerRef.current) setRect(triggerRef.current.getBoundingClientRect()) }
+    // Desktop: rolar a página/modal fecha o menu. Toque: focar a busca abre o teclado e o navegador
+    // ROLA a página para mostrar o campo — fechar aqui derrubava a lista antes de digitar. Lá o
+    // menu só se reposiciona; tocar fora continua fechando (pointerdown acima).
+    const onScroll = (e) => {
+      if (listRef.current?.contains(e.target)) return
+      if (ehToque()) reposicionar()
+      else closeDropdown()
+    }
+    const vv = window.visualViewport
+    // pointerdown (e não mousedown): no toque dispara na hora, sem esperar o clique sintético.
+    document.addEventListener('pointerdown', onClick)
     window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', reposicionar)
+    vv?.addEventListener('resize', reposicionar)
+    vv?.addEventListener('scroll', reposicionar)
     return () => {
-      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('pointerdown', onClick)
       window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', reposicionar)
+      vv?.removeEventListener('resize', reposicionar)
+      vv?.removeEventListener('scroll', reposicionar)
     }
   }, [open])
 
@@ -272,16 +302,23 @@ export default function SearchableSelect({
               <Search size={12} className="text-texto-3 shrink-0" />
               <input
                 ref={searchRef}
-                className="flex-1 bg-transparent text-sm text-texto-1 outline-none placeholder-texto-3"
+                // 16px no celular: abaixo disso o iPhone dá zoom ao focar (e rola a tela).
+                className="flex-1 min-w-0 bg-transparent text-base md:text-sm text-texto-1 outline-none placeholder-texto-3"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setActive(-1) }}
                 onKeyDown={handleKeyDown}
                 placeholder="Buscar..."
+                type="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
             </div>
           </div>
 
-          <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0">
+          <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             {allItems.length === 0 && (
               <p className="text-xs text-texto-3 px-3 py-3 text-center">Nenhum resultado</p>
             )}
