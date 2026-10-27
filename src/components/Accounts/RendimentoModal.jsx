@@ -128,7 +128,7 @@ export default function RendimentoModal({ account, onClose }) {
 
         <div>
           <label className="label">Data</label>
-          <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} />
+          <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} hoje />
         </div>
 
         <div className="flex gap-3 pt-1">

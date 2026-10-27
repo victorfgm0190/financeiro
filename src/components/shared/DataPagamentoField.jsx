@@ -12,7 +12,7 @@ export default function DataPagamentoField({ value, onChange, vencimento, classN
   const hoje = hojeSP()
   const emit = (iso) => onChange?.({ target: { value: iso } })
   const botao = `shrink-0 rounded-md border font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-    compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2.5 py-1.5 sm:py-1 text-xs'}`
+    compact ? 'px-1.5 py-0.5 text-[11px]' : 'min-h-[44px] md:min-h-0 px-3 md:px-2.5 md:py-1 text-xs'}`
   const neutro = 'border-borda-campo bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
   return (
     <div className={`flex flex-wrap items-center ${compact ? 'gap-1 justify-end' : 'gap-1.5'}`}>

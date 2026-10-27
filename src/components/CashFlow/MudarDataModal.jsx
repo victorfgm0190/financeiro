@@ -52,7 +52,7 @@ export default function MudarDataModal({ linha, schedule, primeiraPendente, onSi
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-texto-3 line-through">{fmtDate(dataReal)}</span>
           <span className="text-texto-3">→</span>
-          <DateInput className="input w-auto" value={nova} onChange={e => setNova(e.target.value)} />
+          <DateInput className="input w-auto" value={nova} onChange={e => setNova(e.target.value)} hoje />
         </div>
 
         <div className="space-y-2">

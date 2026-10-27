@@ -90,7 +90,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Data *</label>
-          <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
+          <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje />
         </div>
         <div>
           <label className="label">Valor (R$) *</label>

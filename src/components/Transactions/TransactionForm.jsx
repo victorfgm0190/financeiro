@@ -1564,7 +1564,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div>
         <label className="label">Data *</label>
-        <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required />
+        <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje />
       </div>
 
       {isCredit && form.type === 'expense' && (

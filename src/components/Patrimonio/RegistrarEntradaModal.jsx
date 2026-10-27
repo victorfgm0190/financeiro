@@ -158,7 +158,7 @@ export default function RegistrarEntradaModal({
 
       <div>
         <label className="label">Data da Entrada *</label>
-        <DateInput className="input" required value={data} onChange={e => setData(e.target.value)} />
+        <DateInput className="input" required value={data} onChange={e => setData(e.target.value)} hoje />
       </div>
 
       <div>

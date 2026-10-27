@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar } from 'lucide-react'
+import { hojeSP } from '../../lib/dataPagamento'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 // Valor interno do app é sempre ISO (yyyy-mm-dd), igual ao <input type="date">.
@@ -39,18 +40,24 @@ function digitsToIso(digits) {
   return `${yyyy}-${mm}-${dd}`
 }
 
+// Tela de toque (celular/tablet): o toque no campo abre o calendário nativo em vez do teclado.
+const ehToque = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+
 // onChange é chamado no mesmo formato dos call sites antigos (<input type="date">):
 //   onChange={e => setX(e.target.value)}   // e.target.value é ISO (ou '')
+// `hoje`: botão "Hoje" ao lado do campo (data de hoje em São Paulo — hojeSP, nunca toISOString).
 export default function DateInput({
   value,
   onChange,
   className = 'input',
   required = false,
   disabled = false,
+  hoje: botaoHoje = false,
   ...rest
 }) {
   const [text, setText] = useState(() => isoToDisplay(value))
   const nativeRef = useRef(null)
+  const [toque] = useState(ehToque)
 
   // Sincroniza a exibição quando o valor externo muda (edição, reset de form, etc.)
   // sem atropelar o que o usuário está digitando.
@@ -76,7 +83,35 @@ export default function DateInput({
     try { el.showPicker() } catch { el.focus() }
   }
 
-  return (
+  const campo = toque ? (
+    // Toque: o <input type="date"> nativo, transparente, cobre o campo inteiro — o toque cai nele e
+    // o celular abre o próprio calendário (sem teclado). Por baixo, o texto dd/mm/aaaa só exibe.
+    <div className="relative">
+      <input
+        type="text"
+        readOnly
+        tabIndex={-1}
+        aria-hidden="true"
+        placeholder="dd/mm/aaaa"
+        className={`${className} pr-9`}
+        value={isoToDisplay(value)}
+        disabled={disabled}
+      />
+      <Calendar size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-texto-3 pointer-events-none" />
+      <input
+        type="date"
+        aria-label="Data"
+        value={value || ''}
+        onChange={(e) => emit(e.target.value)}
+        required={required}
+        disabled={disabled}
+        {...rest}
+        // 16px: abaixo disso o iPhone dá zoom ao focar.
+        style={{ fontSize: 16 }}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+      />
+    </div>
+  ) : (
     <div className="relative">
       <input
         type="text"
@@ -111,6 +146,28 @@ export default function DateInput({
         onChange={(e) => emit(e.target.value)}
         className="absolute right-0 top-0 h-full w-9 opacity-0 pointer-events-none"
       />
+    </div>
+  )
+
+  if (!botaoHoje) return campo
+  const dataHoje = hojeSP()
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex-1 min-w-0">{campo}</div>
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => emit(dataHoje)}
+        disabled={disabled}
+        aria-pressed={value === dataHoje}
+        title={`Usar a data de hoje (${isoToDisplay(dataHoje)})`}
+        className={`shrink-0 min-h-[44px] md:min-h-0 px-3 md:px-2.5 md:py-1 rounded-md border text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          value === dataHoje
+            ? 'border-primary text-primary-fg bg-surface-2'
+            : 'border-borda-campo bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'}`}
+      >
+        Hoje
+      </button>
     </div>
   )
 }

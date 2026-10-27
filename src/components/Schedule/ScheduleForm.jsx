@@ -172,6 +172,7 @@ function OccEditModal({ originalDate, override, isSkipped, defaultAmount, baixaN
                 value={date}
                 onChange={e => setDate(e.target.value)}
                 onKeyDown={stopEnter}
+                hoje
               />
             </div>
             <div>
@@ -1104,6 +1105,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             value={form.startDate}
             onChange={e => set('startDate', e.target.value)}
             required
+            hoje
           />
         </div>
         )}

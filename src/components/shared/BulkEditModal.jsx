@@ -176,7 +176,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
             <p className="text-xs text-texto-3">Preencha apenas o que deseja alterar. Campos vazios são ignorados.</p>
             <div>
               <label className="label">Data</label>
-              <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} />
+              <DateInput className="input" value={date} onChange={e => setDate(e.target.value)} hoje />
             </div>
             <div>
               <label className="label">Categoria</label>
