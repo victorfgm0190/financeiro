@@ -2,7 +2,7 @@ import { BannerPerfisSemContaCentral } from '../components/shared/ContaCentralAv
 import { useMemo, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { Eye, EyeOff, ChevronRight, ChevronUp, ChevronDown, SlidersHorizontal, Search } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../components/shared/utils'
 import BottomSheet from '../components/shared/BottomSheet'
@@ -34,7 +34,7 @@ const maiusculaInicial = (t) => t.charAt(0).toUpperCase() + t.slice(1)
 
 // Tela Início do mobile. Valores do card verde = os do Painel (saldosPrincipais do App e a mesma
 // classificação de receitas/despesas do mês) — nada é recalculado por uma regra nova.
-export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
+export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpenSearch }) {
   const { settings, updateSettings } = useApp()
   const [ocultar, setOcultar] = useState(lerOcultar)
   const [personalizar, setPersonalizar] = useState(false)
@@ -77,7 +77,13 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais }) {
         </button>
       </header>
 
-      <PerfilChips />
+      {/* Início não tem cabeçalho: a lupa da Busca Global fica ao lado dos chips de perfil. */}
+      <div className="flex items-center gap-1 -mr-2">
+        <PerfilChips className="flex-1 min-w-0 -ml-4 pl-4" />
+        <button type="button" onClick={onOpenSearch} aria-label="Buscar" className="w-11 h-11 shrink-0 flex items-center justify-center text-texto-2">
+          <Search size={20} />
+        </button>
+      </div>
 
       <ResumoCard saldosPrincipais={saldosPrincipais} v={v} ocultar={ocultar} carregando={carregando} onAbrir={() => setComoChegamos(true)} />
 

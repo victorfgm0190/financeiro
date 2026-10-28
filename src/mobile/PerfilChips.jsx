@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext'
 // Chips de perfil do mobile (perfis na ordem de Configurações | Tudo por último): o MESMO estado do desktop (activeProfileId do
 // AppContext) e os mesmos ícones/estilos dos chips do Header. Só troca o perfil — os números das
 // telas já vêm filtrados por ele (profileAccounts, profileSchedules, getSaldoPrincipalBreakdown…).
-export default function PerfilChips() {
+export default function PerfilChips({ className = '-mx-4 px-4' }) {
   const { profiles, activeProfileId, setActiveProfileId } = useApp()
   if (!profiles?.length) return null
 
@@ -12,7 +12,7 @@ export default function PerfilChips() {
   const inativo = 'bg-surface-2/60 border-borda-forte text-texto-2'
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none -mx-4 px-4" role="group" aria-label="Perfil">
+    <div className={`flex items-center gap-1.5 overflow-x-auto scrollbar-none ${className}`} role="group" aria-label="Perfil">
       {profiles.map(p => {
         const ativo = activeProfileId === p.id
         const Icon = p.type === 'pf' ? User : Building2

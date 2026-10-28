@@ -55,7 +55,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
   const conteudo = saldos === 'carregando' && modulo.saldo
     ? <TelaCarregando />
     : Tela
-      ? <Tela modules={modules} irPara={ir} saldosPrincipais={saldosPrincipais} onToast={onToast} />
+      ? <Tela modules={modules} irPara={ir} saldosPrincipais={saldosPrincipais} onToast={onToast} onOpenSearch={onOpenSearch} />
       : panels[modulo.page]
 
   const meio = Math.ceil(tabs.length / 2)

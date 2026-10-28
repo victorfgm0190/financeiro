@@ -230,8 +230,9 @@ export default function GlobalSearch({ open, onClose }) {
     <>
       <Modal open={open} onClose={() => { reset(); onClose() }} title="Busca Global" size="lg">
         <form onSubmit={runSearch} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          {/* Celular: Valor e Descrição em linha cheia; as duas datas lado a lado. md+ como antes (2×2). */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="max-md:col-span-2">
               <label className="label">Valor</label>
               <InputMoeda
                 className="input"
@@ -241,11 +242,12 @@ export default function GlobalSearch({ open, onClose }) {
                 autoFocus
               />
             </div>
-            <div>
+            <div className="max-md:col-span-2">
               <label className="label">Descrição / Favorecido</label>
               <input
                 className="input"
                 placeholder="Buscar no texto..."
+                enterKeyHint="search"
                 value={text}
                 onChange={e => setText(e.target.value)}
               />
@@ -260,14 +262,14 @@ export default function GlobalSearch({ open, onClose }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-3 flex-wrap max-md:flex-col max-md:items-stretch">
             <div className="flex gap-1 bg-surface-2/60 rounded-lg p-1">
               {STATUS_OPTIONS.map(o => (
                 <button
                   key={o.id}
                   type="button"
                   onClick={() => setStatus(o.id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors max-md:flex-1 max-md:min-h-[40px] ${
                     status === o.id ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'
                   }`}
                 >
@@ -275,7 +277,7 @@ export default function GlobalSearch({ open, onClose }) {
                 </button>
               ))}
             </div>
-            <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
+            <button type="submit" className="btn-primary flex items-center gap-2 max-md:justify-center max-md:min-h-[44px]" disabled={loading}>
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
               Buscar
             </button>
@@ -297,7 +299,8 @@ export default function GlobalSearch({ open, onClose }) {
                   {results.length === 50 && (
                     <p className="text-[11px] text-texto-3 mb-2">Mostrando os 50 resultados mais recentes.</p>
                   )}
-                  <div className="space-y-4 max-h-[55vh] overflow-y-auto overscroll-contain">
+                  {/* Celular: rola junto com o modal em tela cheia (sem rolagem aninhada). */}
+                  <div className="space-y-4 md:max-h-[55vh] md:overflow-y-auto md:overscroll-contain">
                     {txResults.length > 0 && (
                       <div>
                         <p className="text-xs font-semibold text-texto-2 mb-1.5 sticky top-0 bg-surface py-1 z-10">
