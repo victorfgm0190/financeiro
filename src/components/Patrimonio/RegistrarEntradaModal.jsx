@@ -229,7 +229,7 @@ export default function RegistrarEntradaModal({
           value={favorecido}
           onChange={setFavorecido}
           suggestions={favorecidos}
-          placeholder="Ex: Shopping Car Londrina"
+          placeholder="Digite o nome do favorecido"
         />
         <p className="text-xs text-texto-3 mt-1">
           Preenche as transferências selecionadas que estão SEM favorecido. As que já têm um

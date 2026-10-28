@@ -178,7 +178,7 @@ export default function ProvisaoForm({ initial, onClose }) {
           className="input"
           value={form.description}
           onChange={e => set('description', e.target.value)}
-          placeholder="Ex: IPVA, Manutenção do carro..."
+          placeholder="Digite a descrição da provisão"
           required
         />
       </div>

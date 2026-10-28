@@ -263,7 +263,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             <CategorySelect categories={categories} value={f.categoria_id} onChange={e => set('categoria_id', e.target.value)} type={tipoCat} perfilId={f.perfil_id || null} searchable />
           </Campo>
           <Campo label="Valor do aluguel (contratual)">
-            <CampoValor value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="Digite o valor do aluguel" />
+            <CampoValor value={f.valor_base} onChange={v => set('valor_base', v)} placeholder="0,00" />
           </Campo>
           <Campo label="Periodicidade">
             <select className="input" value={f.periodicidade} onChange={e => set('periodicidade', e.target.value)}>
@@ -288,7 +288,7 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
           </Campo>
           <div />
           <Campo label="Bonificação por mês (desconto)">
-            <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="Ex.: 200,00 (deixe vazio se não houver)" />
+            <CampoValor value={f.bonificacao_valor} onChange={v => set('bonificacao_valor', v)} placeholder="0,00 (opcional)" />
           </Campo>
           <Campo label="Bonificação nos primeiros (meses)">
             <input autoComplete="off" type="number" min="0" className="input" value={f.bonificacao_meses} onChange={e => set('bonificacao_meses', e.target.value)} />
@@ -359,10 +359,10 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
             {f.tem_condominio && (
               <>
                 <Campo label="Favorecido do condomínio" className="sm:col-span-2">
-                  <FavorecidoAutocomplete value={f.favorecido_condominio} onChange={v => set('favorecido_condominio', v)} suggestions={payees || []} placeholder="Condomínio / administradora" />
+                  <FavorecidoAutocomplete value={f.favorecido_condominio} onChange={v => set('favorecido_condominio', v)} suggestions={payees || []} placeholder="Digite o nome do favorecido" />
                 </Campo>
                 <Campo label="Valor previsto">
-                  <CampoValor value={f.valor_condominio_previsto} onChange={v => set('valor_condominio_previsto', v)} placeholder="Digite o valor previsto" />
+                  <CampoValor value={f.valor_condominio_previsto} onChange={v => set('valor_condominio_previsto', v)} placeholder="0,00" />
                 </Campo>
                 <Campo label="Dia de vencimento do condomínio">
                   <input autoComplete="off" type="number" min="1" max="31" className="input" value={f.dia_vencimento_condominio} onChange={e => set('dia_vencimento_condominio', e.target.value)} placeholder={f.dia_vencimento || ''} />
@@ -386,14 +386,14 @@ export default function ContratoWizard({ contrato = null, onClose, onSalvo }) {
               const setI = (k, v) => setItens(p => p.map((x, j) => (j === i ? { ...x, [k]: v } : x)))
               return (
                 <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_110px_120px_110px_32px] gap-2 items-end p-2 rounded-lg bg-surface-2/60">
-                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Descrição" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
+                  <input autoComplete="off" className="input py-1.5 text-sm col-span-2 sm:col-span-1" placeholder="Digite a descrição do item" value={it.descricao} onChange={e => setI('descricao', e.target.value)} />
                   <select className="input py-1.5 text-sm" value={it.grupo} onChange={e => setI('grupo', e.target.value)}>
                     {Object.entries(GRUPOS_ITEM).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                   <select className="input py-1.5 text-sm" value={it.responsavel} onChange={e => setI('responsavel', e.target.value)}>
                     <option value="inquilino">Inquilino</option><option value="proprietario">Proprietário</option>
                   </select>
-                  <CampoValor className="input py-1.5 text-sm" placeholder="Valor" value={it.valor_previsto} onChange={v => setI('valor_previsto', v)} />
+                  <CampoValor className="input py-1.5 text-sm" placeholder="0,00" value={it.valor_previsto} onChange={v => setI('valor_previsto', v)} />
                   <button type="button" className="p-1.5 text-texto-3 hover:text-perigo" title="Remover" onClick={() => setItens(p => p.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
                 </div>
               )

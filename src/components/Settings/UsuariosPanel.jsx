@@ -104,7 +104,7 @@ function UsuarioModal({ inicial, perfis, onSalvar, onFechar }) {
           <div>
             <label className="label" htmlFor="u-username">Usuário *</label>
             <input id="u-username" disabled={!novo} autoComplete="off" autoCapitalize="none" spellCheck={false} className="input disabled:opacity-60"
-              value={f.username} maxLength={40} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="ex.: gislaine" />
+              value={f.username} maxLength={40} onChange={e => set('username', e.target.value.toLowerCase())} placeholder="Digite o nome de usuário" />
             {!novo && <p className="text-[11px] text-texto-3 mt-1">O usuário de acesso não muda.</p>}
           </div>
           <div className="sm:col-span-2">

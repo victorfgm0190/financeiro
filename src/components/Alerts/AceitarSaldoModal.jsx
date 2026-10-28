@@ -72,7 +72,7 @@ export default function AceitarSaldoModal({ pendencia, onClose, onConcluido }) {
           <label className="block">
             <span className="text-xs text-texto-2">Motivo (obrigatório)</span>
             <textarea className="input w-full mt-1 text-sm" rows={3} value={motivo}
-              onChange={e => setMotivo(e.target.value)} placeholder="Ex.: histórico antigo já conferido com o extrato" />
+              onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo" />
           </label>
           {erro && <p className="text-sm text-perigo">{erro}</p>}
           <div className="flex justify-end gap-2">

@@ -128,7 +128,7 @@ export default function FinanciamentoModal({
             value={form.banco}
             onChange={e => set('banco', e.target.value)}
             onBlur={() => setTocouFavorecido(true)}
-            placeholder="Ex: Safra"
+            placeholder="Digite o nome do favorecido"
           />
           <datalist id="bancos-financiamento">
             {sugestoes.map(b => <option key={b} value={b} />)}

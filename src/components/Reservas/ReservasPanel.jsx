@@ -237,7 +237,7 @@ function FunctionForm({ initial, accounts, categories = [], transactions = [], s
     }) }} className="space-y-4">
       <div>
         <label className="label">Nome da Função *</label>
-        <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Ex: IPVA, Seguro Residencial..." />
+        <input className="input" value={form.name} onChange={e => set('name', e.target.value)} required placeholder="Digite o nome da função" />
       </div>
       <div>
         <label className="label">Conta Vinculada</label>
@@ -1348,7 +1348,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
                     </td>
                     <td className="px-3 py-2 text-xs text-texto-2">
                       {editing
-                        ? <input type="text" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Observação" className="input w-full text-xs py-1" />
+                        ? <input type="text" value={editObs} onChange={e => setEditObs(e.target.value)} placeholder="Digite uma observação (opcional)" className="input w-full text-xs py-1" />
                         : <span className="truncate" title={a.observacao || ''}>{a.observacao || <span className="text-texto-3">—</span>}</span>
                       }
                     </td>
@@ -1403,7 +1403,7 @@ function AjusteHistoricoModal({ fn, adjustments, activePeriod, todayStr, onAdd, 
             </div>
             <div>
               <label className="text-[11px] text-texto-2 flex items-center gap-1 mb-1">📝 Observação</label>
-              <input type="text" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Opcional" className="input w-full text-xs py-1" />
+              <input type="text" value={newObs} onChange={e => setNewObs(e.target.value)} placeholder="Digite uma observação (opcional)" className="input w-full text-xs py-1" />
             </div>
           </div>
           <div className="flex justify-end">

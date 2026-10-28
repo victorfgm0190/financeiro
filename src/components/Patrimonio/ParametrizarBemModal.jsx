@@ -107,7 +107,7 @@ export default function ParametrizarBemModal({ conta, categorias, onCancel, onSu
           className="input" type="text"
           value={form.descricao}
           onChange={e => set('descricao', e.target.value)}
-          placeholder="Ex: Veículo adquirido em agosto/2026"
+          placeholder="Digite a descrição do bem"
         />
       </div>
 

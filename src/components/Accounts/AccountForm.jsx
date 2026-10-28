@@ -282,7 +282,7 @@ export default function AccountForm({ initial, onClose }) {
             className="input"
             value={form.name}
             onChange={e => set('name', e.target.value)}
-            placeholder="Ex: Nubank, Itaú..."
+            placeholder="Digite o nome da conta"
             required
           />
         </div>
@@ -295,7 +295,7 @@ export default function AccountForm({ initial, onClose }) {
             className="input"
             value={form.apelido}
             onChange={e => set('apelido', e.target.value.slice(0, 8))}
-            placeholder="Ex: NUgi"
+            placeholder="Apelido"
             maxLength={8}
           />
           <p className="text-xs text-texto-3 mt-0.5 text-right">{form.apelido.length}/8</p>
@@ -309,7 +309,7 @@ export default function AccountForm({ initial, onClose }) {
             className="input"
             value={form.bank}
             onChange={e => set('bank', e.target.value)}
-            placeholder="Nome do banco"
+            placeholder="Digite o nome do banco"
           />
         </div>
         <div>

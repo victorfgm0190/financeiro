@@ -1266,7 +1266,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
         <div>
           <label className="label">Descrição</label>
-          <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Ex.: Mercado" />
+          <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
         </div>
 
         <div>
@@ -1649,7 +1649,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div>
         <label className="label">Descrição</label>
-        <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Descrição do lançamento" />
+        <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
       </div>
 
       {showFaturaRef && (
@@ -1659,7 +1659,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             className="input"
             value={form.faturaRef}
             onChange={e => set('faturaRef', e.target.value)}
-            placeholder="MM/AAAA (ex: 06/2026)"
+            placeholder="MM/AAAA"
           />
         </div>
       )}
@@ -1675,7 +1675,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   value={instInput}
                   onChange={e => setInstInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmInstEdit() } }}
-                  placeholder="N/M (ex: 2/3)"
+                  placeholder="Parcela/Total"
                   className="input py-1 text-sm w-28"
                 />
                 <button type="button" onClick={confirmInstEdit} title="Confirmar" className="p-1 text-primary-fg hover:bg-primary/15 rounded">
@@ -1738,7 +1738,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div>
         <label className="label">Observações</label>
-        <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observações adicionais..." />
+        <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
 
       {form.type === 'expense' && reservaAccounts.length > 0 && !reservaFuncaoMode && (

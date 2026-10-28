@@ -108,7 +108,7 @@ function UpdateValueModal({ account, onClose }) {
           type="text"
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="Ex: Avaliação de mercado, atualização FIPE..."
+          placeholder="Digite uma observação (opcional)"
         />
       </div>
       <div className="flex gap-3 pt-1">
@@ -225,7 +225,7 @@ function GroupManager({ groups }) {
           className="input flex-1 text-sm"
           value={newName}
           onChange={e => setNewName(e.target.value)}
-          placeholder="Nome do novo grupo..."
+          placeholder="Digite o nome do grupo"
           onKeyDown={e => e.key === 'Enter' && handleAdd()}
         />
         <button className="btn-primary px-3" onClick={handleAdd}>

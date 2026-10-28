@@ -95,7 +95,7 @@ export default function ComposicaoBoletoModal({ contrato, tx, composicaoInicial 
             {itens.map((it, i) => (
               <div key={i} className={`grid grid-cols-[1fr_110px] sm:grid-cols-[1fr_120px_170px_28px] gap-2 items-start p-2 rounded-lg ${it.responsavel ? 'bg-surface-2/60' : 'bg-surface-2/60 outline outline-1 outline-aviso'}`}>
                 <div className="min-w-0">
-                  <input className="input py-1.5 text-sm" value={linhas[i].desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição" />
+                  <input className="input py-1.5 text-sm" value={linhas[i].desc} onChange={e => setLinha(i, { desc: e.target.value })} placeholder="Descrição do item" />
                   <p className="text-[11px] mt-0.5 text-texto-3 truncate">
                     {it.regra ? `regra: ${it.regra}` : it.responsavel ? 'marcado à mão' : <span className="text-aviso">⚠ Sem regra — de quem é?</span>}
                   </p>

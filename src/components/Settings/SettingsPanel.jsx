@@ -852,7 +852,7 @@ export default function SettingsPanel() {
               </div>
               <div>
                 <label className="label">Nome / Razão Social *</label>
-                <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Nome completo..." required />
+                <input className="input" value={profileForm.name} onChange={e => setProfileField('name', e.target.value)} placeholder="Digite o nome ou razão social" required />
               </div>
             </div>
 
@@ -939,7 +939,7 @@ export default function SettingsPanel() {
         <form onSubmit={handleAddGroup} className="flex gap-2 mb-4">
           <input
             className="input flex-1"
-            placeholder="Novo grupo de categorias..."
+            placeholder="Grupo de categorias"
             value={newGroupName}
             onChange={e => setNewGroupName(e.target.value)}
           />
@@ -1038,11 +1038,11 @@ export default function SettingsPanel() {
 
         {/* Criar categoria — Grupo obrigatório (escolher existente ou digitar novo) */}
         <form onSubmit={handleAddCategory} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-          <input className="input col-span-2 sm:col-span-1" placeholder="Nome" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
+          <input className="input col-span-2 sm:col-span-1" placeholder="Digite o nome da categoria" value={newCategory.name} onChange={e => setNewCategory(f => ({ ...f, name: e.target.value }))} />
           <input
             className="input"
             list="category-groups-list"
-            placeholder="Grupo *"
+            placeholder="Nome do grupo"
             required
             value={newCategory.group}
             onChange={e => setNewCategory(f => ({ ...f, group: e.target.value }))}
@@ -1095,7 +1095,7 @@ export default function SettingsPanel() {
           })}
         </div>
         <form onSubmit={handleAddRule} className="grid grid-cols-3 gap-2">
-          <input className="input" placeholder="Contém texto..." value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
+          <input className="input" placeholder="Contém" value={newRule.contains} onChange={e => setNewRule(f => ({ ...f, contains: e.target.value }))} />
           <CategorySelect
             categories={categories}
             value={newRule.categoryId}
@@ -1169,7 +1169,7 @@ export default function SettingsPanel() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <input
               className="input text-sm"
-              placeholder="Palavra-chave *"
+              placeholder="Digite a palavra-chave"
               value={newGRule.contains}
               onChange={e => setNewGRule(f => ({ ...f, contains: e.target.value }))}
               required
@@ -1233,7 +1233,7 @@ export default function SettingsPanel() {
           ))}
         </div>
         <div className="flex gap-2">
-          <input className="input" placeholder="Novo centro de custo..." value={newCC} onChange={e => setNewCC(e.target.value)} />
+          <input className="input" placeholder="Centro de custo" value={newCC} onChange={e => setNewCC(e.target.value)} />
           <button
             className="btn-secondary flex items-center gap-1"
             onClick={() => { if (newCC.trim()) { addCostCenter(newCC.trim()); setNewCC('') } }}
@@ -1411,7 +1411,7 @@ export default function SettingsPanel() {
             className="input flex-1 text-sm"
             value={agNewName}
             onChange={e => setAgNewName(e.target.value)}
-            placeholder="Nome do novo grupo..."
+            placeholder="Nome"
             onKeyDown={e => {
               if (e.key === 'Enter' && agNewName.trim()) {
                 addAccountGroup({ name: agNewName.trim(), type: agNewType })
@@ -1475,7 +1475,7 @@ export default function SettingsPanel() {
                   className="input"
                   value={groupForm.name}
                   onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="Ex: Contas Anuais"
+                  placeholder="Nome do grupo"
                   required
                 />
               </div>
@@ -1485,7 +1485,7 @@ export default function SettingsPanel() {
                   className="input"
                   value={groupForm.alias}
                   onChange={e => setGroupForm(f => ({ ...f, alias: e.target.value.slice(0, 4) }))}
-                  placeholder="Ex: CA"
+                  placeholder="Apelido"
                   maxLength={4}
                   required
                 />
@@ -1807,7 +1807,7 @@ export default function SettingsPanel() {
                         className="input text-sm"
                         value={ajusteExpected}
                         onChange={e => { setAjusteExpected(e.target.value); setAjusteResult(null); setAjusteDone(false) }}
-                        placeholder="Ex: -1234,56"
+                        placeholder="0,00"
                       />
                     </div>
                   </div>

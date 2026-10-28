@@ -30,7 +30,7 @@ export default function DeParaImportacaoPanel() {
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
       {podeEditar && (
         <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); agir(async () => { await salvarDepara(novo.origem, novo.categoria); setNovo({ origem: '', categoria: '' }) }) }}>
-          <input className="input !py-1.5 max-w-xs" placeholder="Texto no arquivo (ex.: Mercado)" value={novo.origem} onChange={e => setNovo(n => ({ ...n, origem: e.target.value }))} />
+          <input className="input !py-1.5 max-w-xs" placeholder="Digite o texto como vem no arquivo" value={novo.origem} onChange={e => setNovo(n => ({ ...n, origem: e.target.value }))} />
           <select className="input !py-1.5 max-w-xs" value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}>
             <option value="">Categoria…</option>
             {rotulos.map(r => <option key={r.id} value={r.id}>{r.rotulo}</option>)}

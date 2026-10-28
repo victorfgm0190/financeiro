@@ -2,24 +2,53 @@ import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { contextoPerfis, recortarLeitura } from './_permissoesApi.js'
 import { comAmbiente } from './_ambiente.js'
+import { faixaValorCentavos, modoValor } from '../src/lib/buscaGlobal.js'
 
 // Busca Global combinada: lançamentos (lancamentos) + agendamentos (agendamentos).
-// Filtros: value (tolerância ±0,01), text (descrição/favorecido ILIKE), from/to (período),
-// profileId (filtra pelas contas do perfil ativo). O status (pago/não pago) e o status de
-// recorrência dos agendamentos são refinados no frontend, que tem a lógica de ocorrências.
+// Filtros: value + valueMode ('exato' = mesmo valor; 'aproximado' = mesma parte inteira), em
+// centavos e pelo valor absoluto; description e payee (ILIKE, combinados com E); text (legado:
+// descrição OU favorecido); from/to (período); profileId (filtra pelas contas do perfil ativo).
+// O status (pago/não pago) e o status de recorrência dos agendamentos são refinados no frontend,
+// que tem a lógica de ocorrências.
 const LIMIT = 50
-const TOL = 0.01
+
+// WHERE parametrizado de cada tabela. Nada vindo do corpo é concatenado no SQL: só entra em params.
+export function filtrosBusca({ value, valueMode, text, description, payee, from, to, accIds }) {
+  const faixa = faixaValorCentavos(value, modoValor(valueMode))
+  const likes = [
+    [(text || '').trim(), (i) => `(description ILIKE $${i} OR payee ILIKE $${i})`],
+    [(description || '').trim(), (i) => `description ILIKE $${i}`],
+    [(payee || '').trim(), (i) => `payee ILIKE $${i}`],
+  ].filter(([t]) => t)
+
+  const montar = (tabela) => {
+    const where = []
+    const params = []
+    const p = (v) => { params.push(v); return params.length }
+    if (faixa) where.push(`ROUND(ABS(amount)::numeric * 100) BETWEEN $${p(faixa[0])} AND $${p(faixa[1])}`)
+    for (const [t, sql] of likes) where.push(sql(p(`%${t}%`)))
+    if (tabela === 'tx') {
+      if (from) where.push(`date >= $${p(from)}`)
+      if (to) where.push(`date <= $${p(to)}`)
+      // Sombras automáticas de reserva/investimento (reserva_auto, sem conta) não são itens da
+      // busca — a transferência de origem as representa (e ganha o selo no front).
+      where.push(`reserva_auto IS NOT TRUE`)
+      if (accIds) { const i = p(accIds); where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}))`) }
+    } else {
+      // Período: começou até a data final; a recorrência é resolvida no front.
+      if (to) where.push(`start_date <= $${p(to)}`)
+      if (accIds) where.push(`(account_id IS NULL OR account_id = ANY($${p(accIds)}))`)
+    }
+    return { where: where.length ? 'WHERE ' + where.join(' AND ') : '', params }
+  }
+  return { tx: montar('tx'), sc: montar('sc') }
+}
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
   if (req.method !== 'POST') return res.status(405).end()
   try {
-    const { value, text, from, to, profileId } = await parseBody(req)
-
-    const hasValue = value !== undefined && value !== null && value !== '' && !Number.isNaN(Number(value))
-    const v = hasValue ? Math.abs(Number(value)) : null
-    const txt = (text || '').trim()
-    const like = txt ? `%${txt}%` : null
+    const { value, valueMode, text, description, payee, from, to, profileId } = await parseBody(req)
 
     // Perfil ativo: ids das contas que pertencem a ele.
     let accIds = null
@@ -29,39 +58,9 @@ async function handler(req, res) {
       if (accIds.length === 0) accIds = ['__none__'] // garante conjunto vazio
     }
 
-    // ── Lançamentos ──
-    {
-      const where = []
-      const params = []
-      let i = 1
-      if (hasValue) { where.push(`ABS(ABS(amount) - $${i}) <= ${TOL}`); params.push(v); i++ }
-      if (like) { where.push(`(description ILIKE $${i} OR payee ILIKE $${i})`); params.push(like); i++ }
-      if (from) { where.push(`date >= $${i}`); params.push(from); i++ }
-      if (to) { where.push(`date <= $${i}`); params.push(to); i++ }
-      // Sombras automáticas de reserva/investimento (reserva_auto, sem conta) não são itens da
-      // busca — a transferência de origem as representa (e ganha o selo no front).
-      where.push(`reserva_auto IS NOT TRUE`)
-      if (accIds) { where.push(`(account_id = ANY($${i}) OR to_account_id = ANY($${i}))`); params.push(accIds); i++ }
-      var txRows = await query(
-        `SELECT * FROM lancamentos ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY date DESC NULLS LAST LIMIT ${LIMIT}`,
-        params,
-      )
-    }
-
-    // ── Agendamentos ── (período: começou até a data final; recorrência é resolvida no front)
-    {
-      const where = []
-      const params = []
-      let i = 1
-      if (hasValue) { where.push(`ABS(ABS(amount) - $${i}) <= ${TOL}`); params.push(v); i++ }
-      if (like) { where.push(`(description ILIKE $${i} OR payee ILIKE $${i})`); params.push(like); i++ }
-      if (to) { where.push(`start_date <= $${i}`); params.push(to); i++ }
-      if (accIds) { where.push(`(account_id IS NULL OR account_id = ANY($${i}))`); params.push(accIds); i++ }
-      var scRows = await query(
-        `SELECT * FROM agendamentos ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY start_date DESC NULLS LAST LIMIT ${LIMIT}`,
-        params,
-      )
-    }
+    const f = filtrosBusca({ value, valueMode, text, description, payee, from, to, accIds })
+    const txRows = await query(`SELECT * FROM lancamentos ${f.tx.where} ORDER BY date DESC NULLS LAST LIMIT ${LIMIT}`, f.tx.params)
+    const scRows = await query(`SELECT * FROM agendamentos ${f.sc.where} ORDER BY start_date DESC NULLS LAST LIMIT ${LIMIT}`, f.sc.params)
 
     // Perfis permitidos do usuário: só o que pertence às contas desses perfis.
     const ctx = await contextoPerfis(query, req.user)

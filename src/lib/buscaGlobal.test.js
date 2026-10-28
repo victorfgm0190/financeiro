@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { itensVisiveisBusca, selosReservaPorPai } from './buscaGlobal'
+import { itensVisiveisBusca, selosReservaPorPai, faixaValorCentavos, valorNaFaixa } from './buscaGlobal'
 
 // Caso real (25/09/2026, 212,50): despesa MONJARO no Itaú + transferência Pharma → Itaú + par de
 // sombras "Resgate Reserva: Pharma" + 2 agendamentos com próxima ocorrência (25/10 e 25/11).
@@ -44,5 +44,17 @@ describe('selosReservaPorPai', () => {
     const m = selosReservaPorPai([dep, legado])
     expect(m.get('tx_trf_dep')).toEqual(['Depósito em reserva'])
     expect(m.size).toBe(1)
+  })
+})
+
+describe('faixaValorCentavos / valorNaFaixa', () => {
+  it('Exato e Aproximado, pelo valor absoluto e em centavos', () => {
+    expect(faixaValorCentavos(200, 'exato')).toEqual([20000, 20000])
+    expect(faixaValorCentavos(200.5, 'aproximado')).toEqual([20000, 20099])
+    expect(faixaValorCentavos(-86.98, 'outro')).toEqual([8698, 8698])
+    expect(faixaValorCentavos('', 'exato')).toBeNull()
+    const ap = faixaValorCentavos(200, 'aproximado')
+    expect([200, -200.99, 199.99, 201].map(v => valorNaFaixa(v, ap))).toEqual([true, true, false, false])
+    expect(valorNaFaixa(0.1 + 0.2, faixaValorCentavos(0.3, 'exato'))).toBe(true)
   })
 })

@@ -900,7 +900,7 @@ function BatchFillModal({ categories, sortedGrupos, reserveFuncsForGroup, onAppl
               className="input"
               value={contains}
               onChange={e => setContains(e.target.value)}
-              placeholder="ex: uber"
+              placeholder="Digite parte da descrição"
               autoFocus
               onKeyDown={e => { if (e.key === 'Enter' && contains.trim()) onApply(contains, categoryId, grupoGerencial, showFuncs ? reservaFuncaoId : '', apenasDespesas) }}
             />

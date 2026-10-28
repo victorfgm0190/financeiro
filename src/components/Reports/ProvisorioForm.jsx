@@ -82,7 +82,7 @@ export default function ProvisorioForm({ initial, contaPadrao, contas, onSalvar,
           className="input"
           value={form.description}
           onChange={e => set('description', e.target.value)}
-          placeholder="Ex: Venda do carro, bônus previsto..."
+          placeholder="Digite a descrição do lançamento"
           required
         />
       </div>

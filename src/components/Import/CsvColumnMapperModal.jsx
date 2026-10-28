@@ -125,7 +125,7 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
           )}
           <div className="sm:col-span-3">
             <label className="label">Ignorar linhas que contenham (separe por vírgula)</label>
-            <input className="input" value={(m.ignorar || []).join(', ')} onChange={e => set('ignorar', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} placeholder="pagamento efetuado, saldo, subtotal" />
+            <input className="input" value={(m.ignorar || []).join(', ')} onChange={e => set('ignorar', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} placeholder="Digite os textos, separados por vírgula" />
           </div>
         </div>
 
@@ -149,7 +149,7 @@ export default function CsvColumnMapperModal({ tabela, tipo = 'cartao', modeloIn
           </div>
           <div>
             <label className="label">Banco (opcional)</label>
-            <input className="input" value={banco} onChange={e => setBanco(e.target.value)} placeholder="Ex.: Bradesco" />
+            <input className="input" value={banco} onChange={e => setBanco(e.target.value)} placeholder="Digite o nome do banco (opcional)" />
           </div>
         </div>
         {erro && <p className="text-xs text-perigo">{erro}</p>}

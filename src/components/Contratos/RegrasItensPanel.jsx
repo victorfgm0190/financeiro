@@ -18,7 +18,7 @@ function FormRegra({ inicial, onSalvar, onCancelar }) {
   }
   return (
     <div className="grid grid-cols-2 sm:grid-cols-[1fr_130px_150px_auto] gap-2 items-center p-2 rounded-lg bg-surface-2/60">
-      <input className="input py-1.5 text-sm col-span-2 sm:col-span-1" autoFocus value={f.padrao} placeholder="Texto do item (ex.: fundo de reserva)"
+      <input className="input py-1.5 text-sm col-span-2 sm:col-span-1" autoFocus value={f.padrao} placeholder="Digite o texto do item"
         onChange={e => { setErro(''); setF(p => ({ ...p, padrao: e.target.value })) }} />
       <select className="input py-1.5 text-sm" value={f.tipo_match} onChange={e => setF(p => ({ ...p, tipo_match: e.target.value }))}>
         {Object.entries(TIPOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

@@ -45,7 +45,7 @@ afterEach(() => { cleanup(); criarContrato.mockClear() })
 describe('ContratoWizard — categorias', () => {
   it('aluguel e condomínio: limpar, abrir a lista e clicar grava o id escolhido', async () => {
     render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
-    fireEvent.change(screen.getByPlaceholderText('Nome do favorecido'), { target: { value: 'Imob Silva' } })
+    fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Imob Silva' } })
     fireEvent.change(campo('Fim da vigência').querySelector('input'), { target: { value: '2028-06-30' } })
     avancar()
 
@@ -70,7 +70,7 @@ describe('ContratoWizard — categorias', () => {
 
   it('sugere "Moradia" nas duas categorias', () => {
     render(<ContratoWizard onClose={() => {}} onSalvo={() => {}} />)
-    fireEvent.change(screen.getByPlaceholderText('Nome do favorecido'), { target: { value: 'Imob Silva' } })
+    fireEvent.change(screen.getByPlaceholderText('Digite o nome do favorecido'), { target: { value: 'Imob Silva' } })
     fireEvent.click(screen.getByLabelText(/Sem data de fim/))
     avancar()
     expect(gatilho('Categoria do aluguel').textContent).toContain('Moradia')

@@ -75,7 +75,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
     <div className="space-y-4">
       <div>
         <label className="label">Nome do Envelope</label>
-        <input className="input" placeholder="ex: Mercado" value={name} onChange={e => setName(e.target.value)} />
+        <input className="input" placeholder="Digite o nome do envelope" value={name} onChange={e => setName(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

@@ -56,7 +56,7 @@ function UpdateValueModal({ account, onClose }) {
           type="text"
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="Ex: Avaliação de mercado, tabela FIPE..."
+          placeholder="Digite uma observação (opcional)"
         />
       </div>
       <div className="flex gap-3 pt-1">

@@ -584,7 +584,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Favorecido</label>
-                <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Favorecido" />
+                <FavorecidoAutocomplete value={payPayee} onChange={setPayPayee} suggestions={sortedPayees} placeholder="Digite o nome do favorecido" />
               </div>
               <div>
                 <label className="label">Valor</label>
@@ -608,7 +608,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Anotações</label>
-                <input className="input" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="Opcional" />
+                <input className="input" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
           )}
@@ -623,7 +623,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Pagador</label>
-                <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Pagador" />
+                <FavorecidoAutocomplete value={recPayee} onChange={setRecPayee} suggestions={sortedPayees} placeholder="Digite o nome do pagador" />
               </div>
               <div>
                 <label className="label">Valor</label>
@@ -640,7 +640,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Anotações</label>
-                <input className="input" value={recNotes} onChange={e => setRecNotes(e.target.value)} placeholder="Opcional" />
+                <input className="input" value={recNotes} onChange={e => setRecNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
           )}
@@ -706,7 +706,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               </div>
               <div>
                 <label className="label">Anotações</label>
-                <input className="input" value={trfNotes} onChange={e => setTrfNotes(e.target.value)} placeholder="Opcional" />
+                <input className="input" value={trfNotes} onChange={e => setTrfNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
               </div>
             </>
           )}
@@ -2221,7 +2221,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
                   value={motivoMassa}
                   maxLength={200}
                   onChange={e => setMotivoMassa(e.target.value)}
-                  placeholder="Motivo (opcional)"
+                  placeholder="Digite o motivo (opcional)"
                   title="Motivo da alteração (opcional) — vai para o histórico"
                 />
               )}

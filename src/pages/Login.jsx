@@ -36,7 +36,7 @@ function CampoAmbiente({ doEndereco, valor, onChange, autoFocus }) {
           autoCorrect="off"
           spellCheck={false}
           maxLength={20}
-          placeholder="Ex.: VM"
+          placeholder="Digite a sigla do ambiente"
           value={valor.toUpperCase()}
           onChange={e => onChange(e.target.value.replace(/[^a-z0-9]/gi, '').toLowerCase())}
           className={`${CLASSE_CAMPO} uppercase`}

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function FavorecidoAutocomplete({ value, onChange, suggestions, placeholder = 'Nome do favorecido' }) {
+export default function FavorecidoAutocomplete({ value, onChange, suggestions, placeholder = 'Digite o nome do favorecido' }) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [rect, setRect] = useState(null)

@@ -108,7 +108,7 @@ export default function ConsultaModal({ initial, consultas, accounts, accountGro
             onChange={e => set('nome', e.target.value)}
             onBlur={() => setNomeTocado(true)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar() } }}
-            placeholder="Ex.: Só Itaú, Pessoal, Lumen"
+            placeholder="Digite o nome da consulta"
             maxLength={NOME_MAX}
             autoComplete="off"
             name="fluxo-consulta-nome"

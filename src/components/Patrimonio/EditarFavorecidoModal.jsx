@@ -113,7 +113,7 @@ export default function EditarFavorecidoModal({
               className="input" list="favorecidos-financiamento" autoFocus
               value={texto}
               onChange={e => { setTexto(e.target.value); setTextoManual(true) }}
-              placeholder="Ex: Safra"
+              placeholder="Digite o nome do favorecido"
             />
             <datalist id="favorecidos-financiamento">
               {sugestoes.map(f => <option key={f} value={f} />)}
@@ -150,7 +150,7 @@ export default function EditarFavorecidoModal({
             <label className="label">Nome do banco *</label>
             <input
               className="input" type="text" autoFocus value={nomeNovo}
-              onChange={e => setNomeNovo(e.target.value)} placeholder="Ex: BANCO SAFRA"
+              onChange={e => setNomeNovo(e.target.value)} placeholder="Digite o nome do banco"
             />
             <p className="text-xs text-texto-3 mt-1">
               Se já existir uma conta com este nome, ela é reaproveitada em vez de duplicada.

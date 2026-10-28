@@ -825,7 +825,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
             className="input"
             value={form.description}
             onChange={e => set('description', e.target.value)}
-            placeholder="Ex: Aluguel, Salário..."
+            placeholder="Digite a descrição do agendamento"
             required
             readOnly={ehFinanciamento}
           />

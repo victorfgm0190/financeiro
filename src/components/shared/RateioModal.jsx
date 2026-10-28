@@ -66,14 +66,14 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                 min="0"
                 value={r.valor}
                 onChange={e => setRow(r._k, { valor: e.target.value })}
-                placeholder="Valor"
+                placeholder="0,00"
                 className="input w-28 text-xs"
               />
               <input
                 type="text"
                 value={r.descricao}
                 onChange={e => setRow(r._k, { descricao: e.target.value })}
-                placeholder="Descrição (opcional)"
+                placeholder="Descrição"
                 className="input flex-1 min-w-[90px] text-xs"
               />
               <button type="button" onClick={() => removeRow(r._k)} title="Remover" className="p-2 text-texto-3 hover:text-perigo shrink-0">

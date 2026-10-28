@@ -54,7 +54,7 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
         <p className="text-[11px] text-texto-3">Ocorrências já registradas/efetivadas nunca mudam.</p>
         <div>
           <label className="label">Motivo da alteração (opcional)</label>
-          <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: Mudança do dia de vencimento" />
+          <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
         </div>
         <div className="flex gap-2 justify-end flex-wrap">
           <button type="button" className="btn-secondary" onClick={onCancel}>Voltar</button>
@@ -87,7 +87,7 @@ export default function EscopoSerieDialog({ mudancas, nProximas, nPendentesSerie
       <p className="text-[11px] text-texto-3">Parcelas já pagas/efetivadas e lançamentos já gerados nunca mudam.</p>
       <div>
         <label className="label">Motivo da alteração (opcional)</label>
-        <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: Renegociação Banco X" />
+        <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
       </div>
       <div className="flex gap-2 justify-end">
         <button type="button" className="btn-secondary" onClick={onCancel}>Voltar</button>

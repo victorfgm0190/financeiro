@@ -196,7 +196,7 @@ export default function BulkEditModal({ txs, onClose, onApplied }) {
             </div>
             <div>
               <label className="label">Motivo da alteração (opcional)</label>
-              <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: Reclassificação do mês" />
+              <input className="input" value={motivo} maxLength={200} onChange={e => setMotivo(e.target.value)} placeholder="Digite o motivo (opcional)" />
               <p className="text-[11px] text-texto-3 mt-1">Fica no histórico de alterações de cada lançamento.</p>
             </div>
           </div>

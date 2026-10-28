@@ -31,3 +31,24 @@ export function selosReservaPorPai(transactions) {
 export function itensVisiveisBusca({ txs = [], schedules = [], ...opts }) {
   return filtrarPorStatus({ ...opts, txs: txs.filter(t => !ehSombraAutomatica(t)), schedules })
 }
+
+// Valor da busca: Exato = mesmo valor; Aproximado = mesma parte inteira (200,00 → 200,00 a 200,99).
+// Sempre pelo valor absoluto (despesa e receita) e em centavos inteiros (sem erro de ponto flutuante).
+// Usado pelo /api/search (SQL) e pelo filtro local do GlobalSearch — a mesma regra nos dois.
+export const MODOS_VALOR = ['exato', 'aproximado']
+export const modoValor = (m) => (MODOS_VALOR.includes(m) ? m : 'exato')
+
+// → [min, max] em centavos, ou null sem valor.
+export function faixaValorCentavos(valor, modo) {
+  if (valor === null || valor === undefined || valor === '' || !Number.isFinite(Number(valor))) return null
+  const c = Math.round(Math.abs(Number(valor)) * 100)
+  if (modoValor(modo) === 'exato') return [c, c]
+  const base = Math.floor(c / 100) * 100
+  return [base, base + 99]
+}
+
+export const valorNaFaixa = (amount, faixa) => {
+  if (!faixa) return true
+  const c = Math.round(Math.abs(Number(amount)) * 100)
+  return c >= faixa[0] && c <= faixa[1]
+}

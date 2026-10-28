@@ -147,7 +147,7 @@ export default function DebtPlanModal({ account, group, amount, date, onClose })
             value={form.payee}
             onChange={v => set('payee', v)}
             suggestions={sortedPayees}
-            placeholder={isEmprestimo ? 'Quem você emprestou...' : 'Nome do credor...'}
+            placeholder={isEmprestimo ? 'Digite o nome de quem recebeu' : 'Digite o nome do credor'}
           />
         </div>
       </div>

@@ -26,7 +26,7 @@ function TipoForm({ inicial, onSalvar, onCancelar, salvando }) {
     <form onSubmit={salvar} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_130px] gap-2 items-end p-3 rounded-lg bg-surface-2/60 border border-borda-forte">
       <div className="col-span-2 sm:col-span-1">
         <label className="label text-xs">Nome</label>
-        <input autoFocus className="input py-1.5 text-sm" value={f.nome} maxLength={60} onChange={e => set('nome', e.target.value)} placeholder="Ex.: Boleto" />
+        <input autoFocus className="input py-1.5 text-sm" value={f.nome} maxLength={60} onChange={e => set('nome', e.target.value)} placeholder="Nome do tipo de documento" />
       </div>
       <div>
         <label className="label text-xs">Sigla (até {SIGLA_MAX})</label>

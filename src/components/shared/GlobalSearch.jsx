@@ -7,10 +7,11 @@ import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { getEffectiveStatus, STATUS } from '../../lib/statusEfetivo'
-import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica } from '../../lib/buscaGlobal'
+import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica, faixaValorCentavos, valorNaFaixa } from '../../lib/buscaGlobal'
 import TransactionForm from '../Transactions/TransactionForm'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import InputMoeda from './InputMoeda'
+import FavorecidoAutocomplete from './FavorecidoAutocomplete'
 
 const todayStr = () => {
   const d = new Date()
@@ -32,14 +33,21 @@ const STATUS_OPTIONS = [
   { id: 'naopago', label: 'Pendente' },
 ]
 
+const MODO_OPTIONS = [
+  { id: 'exato', label: 'Exato' },
+  { id: 'aproximado', label: 'Aproximado' },
+]
+
 export default function GlobalSearch({ open, onClose }) {
   const {
     accounts: allAccounts, profileTransactions: transactions, profileSchedules: schedules,
-    categories, gerencialGroups = [], getNextOccurrences, activeProfileId,
+    categories, gerencialGroups = [], getNextOccurrences, activeProfileId, payees = [],
   } = useApp()
 
   const [value, setValue] = useState('')
-  const [text, setText] = useState('')
+  const [valueMode, setValueMode] = useState('exato')
+  const [description, setDescription] = useState('')
+  const [payee, setPayee] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [status, setStatus] = useState('todos')
@@ -58,14 +66,20 @@ export default function GlobalSearch({ open, onClose }) {
   const txById = useMemo(() => new Map(transactions.map(t => [t.id, t])), [transactions])
   const selosPorPai = useMemo(() => selosReservaPorPai(transactions), [transactions])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
+  // Sugestões do Favorecido: as mesmas do formulário de lançamento (mais usados primeiro).
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1
+    return [...new Set(payees)].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
   const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : null }
 
   // Filtro client-side (fallback quando o endpoint /api/search não responde).
   const clientFilter = () => {
-    const v = parseValor(value)
-    const q = text.trim().toLowerCase()
-    const matchValue = (amt) => v == null || Math.abs(Math.abs(Number(amt)) - v) <= 0.01
-    const matchText = (d, p) => !q || `${d || ''} ${p || ''}`.toLowerCase().includes(q)
+    const faixa = faixaValorCentavos(parseValor(value), valueMode)
+    const qd = description.trim().toLowerCase(), qp = payee.trim().toLowerCase()
+    const matchValue = (amt) => valorNaFaixa(amt, faixa)
+    const matchText = (d, p) => (!qd || (d || '').toLowerCase().includes(qd)) && (!qp || (p || '').toLowerCase().includes(qp))
     const txItems = transactions.filter(t =>
       !ehSombraAutomatica(t) && matchValue(t.amount) && matchText(t.description, t.payee) &&
       (!from || (t.date && t.date >= from)) && (!to || (t.date && t.date <= to))
@@ -80,8 +94,8 @@ export default function GlobalSearch({ open, onClose }) {
   const runSearch = async (e) => {
     e?.preventDefault()
     const v = parseValor(value)
-    if (v == null && !text.trim()) {
-      setError('Informe um valor ou um texto (descrição/favorecido) para buscar.')
+    if (v == null && !description.trim() && !payee.trim()) {
+      setError('Informe um valor, uma descrição ou um favorecido para buscar.')
       setFound(null)
       return
     }
@@ -90,7 +104,7 @@ export default function GlobalSearch({ open, onClose }) {
     let txItems, scItems
     try {
       const { transactions: txRows, schedules: scRows } = await searchEntries({
-        value: v, text: text.trim(), from: from || null, to: to || null, profileId: activeProfileId || null,
+        value: v, valueMode, description: description.trim(), payee: payee.trim(), from: from || null, to: to || null, profileId: activeProfileId || null,
       })
       // Usa os objetos vivos em memória (para edição consistente); o endpoint define o conjunto.
       const txIds = new Set((txRows || []).map(r => r.id))
@@ -214,8 +228,18 @@ export default function GlobalSearch({ open, onClose }) {
     </button>
   )
 
+  // Dica do Exato/Aproximado com o valor digitado (sem valor: texto genérico; seletor apagado).
+  const valorDigitado = parseValor(value)
+  const semValor = valorDigitado == null
+  const dicaValor = (() => {
+    if (valueMode === 'exato') return semValor ? 'Encontra exatamente o valor digitado' : 'Encontra exatamente este valor'
+    if (semValor) return 'Encontra valores com a mesma parte inteira'
+    const [min, max] = faixaValorCentavos(valorDigitado, 'aproximado')
+    return `Encontra de ${fmt(min / 100)} a ${fmt(max / 100)}`
+  })()
+
   const reset = () => {
-    setValue(''); setText(''); setFrom(''); setTo(''); setStatus('todos'); setFound(null); setError('')
+    setValue(''); setValueMode('exato'); setDescription(''); setPayee(''); setFrom(''); setTo(''); setStatus('todos'); setFound(null); setError('')
   }
 
   // Objetos vivos em memória (edições refletem na hora) + filtro de status atual.
@@ -230,26 +254,53 @@ export default function GlobalSearch({ open, onClose }) {
     <>
       <Modal open={open} onClose={() => { reset(); onClose() }} title="Busca Global" size="lg">
         <form onSubmit={runSearch} className="space-y-3">
-          {/* Celular: Valor e Descrição em linha cheia; as duas datas lado a lado. md+ como antes (2×2). */}
+          {/* md+: Valor (+ Exato/Aproximado) | Favorecido; Descrição em largura total; datas lado a
+              lado. Celular: uma coluna na mesma ordem, só as datas lado a lado. */}
           <div className="grid grid-cols-2 gap-3">
             <div className="max-md:col-span-2">
               <label className="label">Valor</label>
               <InputMoeda
                 className="input"
-                placeholder="Ex: 1500 ou 1.234,56"
+                placeholder="0,00"
                 value={value}
                 onChange={e => setValue(e.target.value)}
                 autoFocus
               />
+              <div className={`flex gap-1 bg-surface-2/60 rounded-lg p-1 mt-2 ${semValor ? 'opacity-50' : ''}`} role="group" aria-label="Modo do valor">
+                {MODO_OPTIONS.map(o => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    disabled={semValor}
+                    aria-pressed={valueMode === o.id}
+                    onClick={() => setValueMode(o.id)}
+                    className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors max-md:min-h-[40px] disabled:cursor-not-allowed ${
+                      valueMode === o.id ? 'bg-primary text-white' : 'text-texto-2 hover:text-texto-1'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-texto-3 mt-1">{dicaValor}</p>
             </div>
             <div className="max-md:col-span-2">
-              <label className="label">Descrição / Favorecido</label>
+              <label className="label">Favorecido</label>
+              <FavorecidoAutocomplete
+                value={payee}
+                onChange={setPayee}
+                suggestions={sortedPayees}
+                placeholder="Digite parte do nome do favorecido"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="label">Descrição</label>
               <input
                 className="input"
-                placeholder="Buscar no texto..."
+                placeholder="Digite parte da descrição"
                 enterKeyHint="search"
-                value={text}
-                onChange={e => setText(e.target.value)}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
               />
             </div>
             <div>
