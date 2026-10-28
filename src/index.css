@@ -253,4 +253,35 @@
   .header-safe-top { padding-top: calc(0.625rem + env(safe-area-inset-top)); }   /* 0.625rem = py-2.5 original */
   .nav-safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .main-safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); } /* 5rem = pb-20 original */
+  /* Cabeçalho do Modal em tela cheia no celular: abaixo da status bar. No md+ o modal é centrado
+     e volta ao py-4 de sempre. */
+  .modal-safe-top { padding-top: calc(1rem + env(safe-area-inset-top)); }
+  @media (min-width: 768px) { .modal-safe-top { padding-top: 1rem; } }
+  /* Barra de ações presa ao pé do formulário no celular (ScheduleForm): acima do home indicator.
+     O sticky para no padding do container que rola (p-5 do Modal) — a sombra sólida na cor da
+     superfície cobre essa faixa, senão o conteúdo aparece passando por baixo da barra. */
+  @media (max-width: 639.98px) {
+    .acoes-safe-bottom {
+      padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+      box-shadow: 0 1.25rem 0 0 var(--color-surface);
+    }
+  }
+}
+
+/* Celular (= MOBILE_MEDIA_QUERY de src/lib/breakpoints.js): campo digitável com fonte < 16px faz o
+   iPhone dar zoom ao focar — a tela fica ampliada e o conteúdo "vaza" para a direita. Fora de
+   camada de propósito: vence o text-xs/text-sm das classes (.input, utilitários) só aqui. */
+@media (max-width: 767.98px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+/* Valor do agendamento em destaque no celular (1 coluna). */
+@media (max-width: 639.98px) {
+  input.valor-destaque {
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
 }

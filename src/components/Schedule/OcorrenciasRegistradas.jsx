@@ -64,7 +64,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
   const clicavel = (l) => l.status === ST.PAGA || l.status === ST.AVULSO
 
   return (
-    <div className="col-span-2">
+    <div className="sm:col-span-2">
       <button type="button" onClick={alternar} className="btn-secondary w-full flex items-center justify-center gap-2 text-sm">
         📋 Ver ocorrências registradas ({contagem})
         {aberto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

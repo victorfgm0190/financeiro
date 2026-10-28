@@ -88,14 +88,17 @@ export default function Modal({ open, onClose, title, children, size = 'md' }) {
         style={{ transform: 'translateZ(0)' }}
         className={`relative z-10 flex flex-col bg-surface border-b border-borda md:border md:rounded-2xl w-full h-full md:h-auto md:max-h-[90vh] ${MAX_WIDTHS[size] || MAX_WIDTHS.md} shadow-2xl`}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-borda shrink-0">
-          <h2 className="text-base font-semibold text-texto-1">{title}</h2>
+        {/* Celular (tela cheia): o cabeçalho desce abaixo da status bar do iPhone (modal-safe-top) e,
+            no tema claro, pinta a faixa escura sob ela (faixa-safe-top) — ver index.css. No md+ e
+            fora do iOS standalone as duas são no-op. */}
+        <div className="faixa-safe-top modal-safe-top flex items-center justify-between gap-2 px-5 pb-4 border-b border-borda shrink-0">
+          <h2 className="min-w-0 text-base font-semibold text-texto-1">{title}</h2>
           {/* Fora da ordem do Tab (Esc fecha): o Tab começa no primeiro campo. */}
           <button onClick={fechar} tabIndex={-1} aria-label="Fechar" className="text-texto-3 hover:text-texto-2 transition-colors p-1 rounded-lg hover:bg-surface-hover">
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto max-md:overflow-x-hidden p-5">
           <CamadaContext.Provider value={camadaId}>
             <GuardaFechamentoContext.Provider value={registrarGuarda}>{children}</GuardaFechamentoContext.Provider>
           </CamadaContext.Provider>

@@ -764,9 +764,12 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
+      {/* Celular (< sm): 1 coluna. Os blocos com max-sm:-order-1 (até o Valor) sobem juntos, na
+          ordem do código — assim o Valor vem logo após a Descrição e antes da Conta. No desktop
+          a ordem e as 2 colunas são as de sempre. */}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {initial?.id && (
-          <div className="col-span-2 flex items-center justify-end -mb-2">
+          <div className="max-sm:-order-1 sm:col-span-2 flex items-center justify-end -mb-2">
             <button type="button" onClick={() => setVerHistorico(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
               <History size={13} /> Histórico
               {temHistorico('agendamento', initial.id) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
@@ -774,7 +777,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           </div>
         )}
         {avisoMotor && (
-          <div className="col-span-2 flex items-start gap-2 text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2">
+          <div className="max-sm:-order-1 sm:col-span-2 flex items-start gap-2 text-xs text-aviso bg-aviso/10 border border-aviso/30 rounded-lg px-3 py-2">
             <AlertTriangle size={13} className="mt-0.5 shrink-0" />
             Este agendamento é recalculado pelo motor da fatura; alterações manuais podem ser sobrescritas
           </div>
@@ -793,7 +796,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         )}
 
         {/* Movimentação */}
-        <div className="col-span-2">
+        <div className="max-sm:-order-1 sm:col-span-2">
           <LabelTip tip={TIPS.transactionType}>Movimentação</LabelTip>
           <div className="flex rounded-lg overflow-hidden border border-borda-forte">
             {['expense', 'income', 'transfer'].map(t => (
@@ -801,7 +804,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                 type="button"
                 key={t}
                 onClick={() => setContas({ transactionType: t })}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 min-w-0 px-1 py-2.5 sm:py-2 text-[13px] sm:text-sm font-medium truncate transition-colors ${
                   form.transactionType === t
                     ? t === 'income' ? 'bg-receita text-page'
                     : t === 'transfer' ? 'bg-transferencia text-page'
@@ -816,7 +819,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         </div>
 
         {/* Descrição */}
-        <div className="col-span-2">
+        <div className="max-sm:-order-1 sm:col-span-2">
           <LabelTip tip={TIPS.description} required>Descrição</LabelTip>
           <input
             className="input"
@@ -844,9 +847,10 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         </div>
 
         {/* Valor */}
-        <div>
+        <div className="max-sm:-order-1">
           <LabelTip tip={TIPS.amount} required>Valor (R$)</LabelTip>
           <InputMoeda
+            className="input valor-destaque"
             min="0.01"
             value={form.amount}
             onChange={e => set('amount', e.target.value)}
@@ -895,7 +899,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Conta Destino (apenas para transferências) */}
         {form.transactionType === 'transfer' && (
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <LabelTip tip="Conta que receberá a transferência" required>Conta Destino</LabelTip>
             <SearchableSelect
               options={destAccountOpts}
@@ -911,7 +915,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Transferência entre perfis (CPF↔CNPJ): categoria em cada visão. Mesmo bloco do Novo Lançamento. */}
         {entrePerfis(form) && (
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <TransferenciaPerfisCategorias
               fromAccount={schFromAcc}
               toAccount={schToAcc}
@@ -925,7 +929,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Reserva category — quando transferência envolve conta reserva */}
         {form.transactionType === 'transfer' && (schIsDepositToReserva || schIsWithdrawFromReserva) && (
-          <div className="col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2">
+          <div className="sm:col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg space-y-2">
             <p className="text-xs font-medium text-reserva">
               📂 {schIsDepositToReserva ? 'Despesa a classificar' : 'Categoria do resgate'}
             </p>
@@ -979,7 +983,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Detalhamento por função de reserva (somente leitura) — resgate com múltiplas funções */}
         {form.transactionType === 'transfer' && hasReservaDetalhe && (
-          <div className="col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg">
+          <div className="sm:col-span-2 p-3 bg-reserva-bg border border-reserva/30 rounded-lg">
             <p className="text-xs font-medium text-reserva mb-1.5">Detalhamento por função de reserva</p>
             <ul className="space-y-0.5">
               {reservaDetalhe.map((det, i) => (
@@ -1134,7 +1138,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {form.frequency !== 'once' && (() => {
           const occDisabled = !form.frequency
           return (
-            <div className={form.occurrenceType === 'installment' && !occDisabled ? '' : 'col-span-2'}>
+            <div className={form.occurrenceType === 'installment' && !occDisabled ? '' : 'sm:col-span-2'}>
               <LabelTip tip={TIPS.occurrence}>Ocorrência</LabelTip>
               <div className={`flex rounded-lg overflow-hidden border border-borda-forte ${occDisabled ? 'opacity-40' : ''}`}>
                 {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
@@ -1151,6 +1155,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
                   </button>
                 ))}
               </div>
+              {occDisabled && <p className="sm:hidden text-[11px] text-texto-3 mt-1">Escolha a frequência primeiro</p>}
             </div>
           )
         })()}
@@ -1170,43 +1175,43 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         )}
 
         {/* Automações */}
-        <div className="col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
+        <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-3">
           <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider">Automações</p>
 
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-texto-2 inline-flex items-center">
+          {/* Texto à esquerda (quebra se precisar) e toggle sempre à direita. No celular o
+              "N dias antes" desce para uma linha própria (order-last + basis-full). */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <span className="flex-1 min-w-0 text-sm text-texto-2 inline-flex items-center">
               Lembrar com Antecedência<Tooltip text={TIPS.remindDaysBefore} />
             </span>
-            <div className="flex items-center gap-2">
-              {form.remindDaysBefore > 0 && (
-                <>
-                  <input
-                    type="number"
-                    min="1"
-                    max="30"
-                    value={form.remindDaysBefore}
-                    onChange={e => set('remindDaysBefore', Math.max(1, Number(e.target.value)))}
-                    className="w-14 input text-center text-xs py-1"
-                  />
-                  <span className="text-xs text-texto-3 whitespace-nowrap">dias antes</span>
-                </>
-              )}
-              <Toggle
-                value={form.remindDaysBefore > 0}
-                onChange={v => set('remindDaysBefore', v ? 3 : 0)}
-              />
-            </div>
+            {form.remindDaysBefore > 0 && (
+              <div className="flex items-center gap-2 max-sm:order-last max-sm:basis-full">
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={form.remindDaysBefore}
+                  onChange={e => set('remindDaysBefore', Math.max(1, Number(e.target.value)))}
+                  className="w-14 input text-center text-xs py-1"
+                />
+                <span className="text-xs text-texto-3 whitespace-nowrap">dias antes</span>
+              </div>
+            )}
+            <Toggle
+              value={form.remindDaysBefore > 0}
+              onChange={v => set('remindDaysBefore', v ? 3 : 0)}
+            />
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-texto-2 inline-flex items-center">
+            <span className="min-w-0 text-sm text-texto-2 inline-flex items-center">
               Registrar Automático<Tooltip text={TIPS.autoRegister} />
             </span>
             <Toggle value={form.autoRegister} onChange={v => set('autoRegister', v)} />
           </div>
 
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-texto-2 inline-flex items-center">
+            <span className="min-w-0 text-sm text-texto-2 inline-flex items-center">
               Sincronizar com a agenda do celular<Tooltip text={TIPS.sincronizarAgenda} />
             </span>
             <Toggle value={form.sincronizarAgenda} onChange={v => set('sincronizarAgenda', v)} />
@@ -1215,7 +1220,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Classificação Gerencial */}
         {form.transactionType === 'expense' && (
-          <div className="col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
+          <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
             <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider flex items-center">
               Classificação Gerencial <Tooltip text={TIPS.gerencial} />
             </p>
@@ -1277,7 +1282,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Prévia interativa */}
         {preview.length > 0 && (
-          <div className="col-span-2">
+          <div className="sm:col-span-2">
             <label className="label">
               Prévia das próximas ocorrências
               <span className="ml-1.5 text-texto-3 text-[10px] normal-case font-normal">— clique para editar</span>
@@ -1336,7 +1341,9 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Histórico das ocorrências já consumidas (pagas, puladas, baixadas) — só leitura. */}
         {initial?.id && <OcorrenciasRegistradas schedule={atual} transactions={transactions} accounts={accounts} />}
 
-        <div className="col-span-2 flex gap-3 pt-1">
+        {/* Celular: barra de ações presa ao pé da área que rola (Salvar sempre à mão), acima da
+            safe area do iPhone. O fundo cobre o conteúdo que passa por baixo. */}
+        <div className="sm:col-span-2 flex gap-3 pt-1 max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:bg-surface max-sm:border-t max-sm:border-borda max-sm:pt-3 acoes-safe-bottom">
           <button type="button" className="btn-secondary flex-1" onClick={() => { if (podeDescartar()) onClose() }}>Cancelar</button>
           {podeGravarForm
             ? <button type="submit" className="btn-primary flex-1">{initial?.id ? 'Salvar' : 'Criar Agendamento'}</button>

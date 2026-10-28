@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronDown, Search, X } from 'lucide-react'
 import { compararGruposPadrao } from '../../lib/ordemCategorias'
 import { moverFoco } from '../../lib/foco'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 // Ordem padrão de grupos (GROUP_ORDER/alfabética). Listas de CATEGORIA já chegam ordenadas pela
 // ordem salva (ordenarCategorias) e passam `preserveGroupOrder`; este é só o fallback.
@@ -49,6 +50,35 @@ function computeMenuStyle(rect) {
   }
 }
 
+// Celular: o menu vira uma folha presa ao pé da tela (largura total, até ~70% da altura). Com o
+// teclado aberto, sobe junto com a área visível (visualViewport) para a lista não ficar atrás dele.
+function computeSheetStyle() {
+  const layoutH = document.documentElement.clientHeight || window.innerHeight
+  const vv = window.visualViewport
+  const visBottom = vv ? Math.min(layoutH, vv.offsetTop + vv.height) : layoutH
+  const visH = vv ? vv.height : layoutH
+  const teclado = Math.max(0, Math.round(layoutH - visBottom))
+  return {
+    marginBottom: teclado,
+    maxHeight: Math.round(Math.min(layoutH * 0.7, visH - 24)),
+    paddingBottom: teclado ? 0 : 'env(safe-area-inset-bottom)',
+  }
+}
+
+// Celular: fundo escurecido (tocar fora fecha) + folha com alça. No desktop não acrescenta nada.
+function Moldura({ folha, onFechar, children }) {
+  if (!folha) return children
+  return (
+    <>
+      <button type="button" tabIndex={-1} aria-label="Fechar" className="absolute inset-0 bg-overlay" onClick={onFechar} />
+      <div style={computeSheetStyle()} className="relative w-full flex flex-col bg-surface border-t border-borda rounded-t-2xl shadow-2xl">
+        <div className="flex justify-center pt-2 shrink-0"><span className="w-10 h-1 rounded-full bg-surface-hover" /></div>
+        {children}
+      </div>
+    </>
+  )
+}
+
 // options: [{ id, label, group? }]
 // onChange: (id: string) => void   (id='' means cleared)
 //
@@ -77,6 +107,8 @@ export default function SearchableSelect({
   const [search, setSearch] = useState('')
   const [active, setActive] = useState(-1)
   const [rect, setRect] = useState(null)
+  // Celular: bottom sheet em vez do menu colado ao campo.
+  const folha = useIsMobile()
   const triggerRef = useRef(null)
   const panelRef = useRef(null)
   const searchRef = useRef(null)
@@ -248,7 +280,7 @@ export default function SearchableSelect({
     }
   }, [ativo])
 
-  const tamItem = compacto ? 'py-1.5 text-xs' : 'py-2 text-sm'
+  const tamItem = folha ? 'py-3 text-sm' : compacto ? 'py-1.5 text-xs' : 'py-2 text-sm'
 
   const itemClass = (id) => {
     const idx = getIdx(id)
@@ -294,102 +326,105 @@ export default function SearchableSelect({
           // linha do extrato, fechando o modal ou disparando handlers do pai. Barrar a
           // propagação aqui resolve de uma vez para TODOS os SearchableSelect do sistema.
           onClick={(e) => e.stopPropagation()}
-          style={computeMenuStyle(rect)}
-          className="bg-surface border border-borda-forte rounded-lg shadow-2xl flex flex-col max-h-64"
+          {...(folha
+            ? { role: 'dialog', 'aria-modal': 'true', 'aria-label': placeholder, className: 'fixed inset-0 z-[9999] flex flex-col justify-end' }
+            : { style: computeMenuStyle(rect), className: 'bg-surface border border-borda-forte rounded-lg shadow-2xl flex flex-col max-h-64' })}
         >
-          <div className="px-2 py-2 border-b border-borda shrink-0">
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-2 rounded-lg">
-              <Search size={12} className="text-texto-3 shrink-0" />
-              <input
-                ref={searchRef}
-                // 16px no celular: abaixo disso o iPhone dá zoom ao focar (e rola a tela).
-                className="flex-1 min-w-0 bg-transparent text-base md:text-sm text-texto-1 outline-none placeholder-texto-3"
-                value={search}
-                onChange={e => { setSearch(e.target.value); setActive(-1) }}
-                onKeyDown={handleKeyDown}
-                placeholder="Buscar..."
-                type="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-              />
+          <Moldura folha={folha} onFechar={() => closeDropdown(true)}>
+            <div className="px-2 py-2 border-b border-borda shrink-0">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-2 rounded-lg">
+                <Search size={12} className="text-texto-3 shrink-0" />
+                <input
+                  ref={searchRef}
+                  // 16px no celular: abaixo disso o iPhone dá zoom ao focar (e rola a tela).
+                  className="flex-1 min-w-0 bg-transparent text-base md:text-sm text-texto-1 outline-none placeholder-texto-3"
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setActive(-1) }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Buscar..."
+                  type="search"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+              </div>
             </div>
-          </div>
 
-          <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {allItems.length === 0 && (
-              <p className="text-xs text-texto-3 px-3 py-3 text-center">Nenhum resultado</p>
-            )}
+            <div ref={listRef} className="overflow-y-auto overscroll-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {allItems.length === 0 && (
+                <p className="text-xs text-texto-3 px-3 py-3 text-center">Nenhum resultado</p>
+              )}
 
-            {!required && (
-              <button
-                type="button"
-                data-item
-                onClick={() => handleSelect('')}
-                tabIndex={-1}
-                className={`w-full text-left px-3 ${tamItem} transition-colors ${itemClass('')}`}
-              >
-                {placeholder}
-              </button>
-            )}
+              {!required && (
+                <button
+                  type="button"
+                  data-item
+                  onClick={() => handleSelect('')}
+                  tabIndex={-1}
+                  className={`w-full text-left px-3 ${tamItem} transition-colors ${itemClass('')}`}
+                >
+                  {placeholder}
+                </button>
+              )}
 
-            {blocks.map(({ key: secKey, label: secLabel, ungrouped, groupedMap, sortedGroupNames }) => {
-              const ungroupedBlock = ungrouped.length > 0 && (
-                <div key="__ungrouped">
-                  {ungroupedLabel && sortedGroupNames.length > 0 && (
+              {blocks.map(({ key: secKey, label: secLabel, ungrouped, groupedMap, sortedGroupNames }) => {
+                const ungroupedBlock = ungrouped.length > 0 && (
+                  <div key="__ungrouped">
+                    {ungroupedLabel && sortedGroupNames.length > 0 && (
+                      <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-texto-3 bg-surface sticky top-0">
+                        {ungroupedLabel}
+                      </p>
+                    )}
+                    {ungrouped.map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        data-item
+                        onClick={() => handleSelect(opt.id)}
+                        tabIndex={-1}
+                        className={`w-full text-left px-3 ${tamItem} truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+                const groupedBlock = sortedGroupNames.map(groupName => (
+                  <div key={groupName}>
                     <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-texto-3 bg-surface sticky top-0">
-                      {ungroupedLabel}
+                      {groupName}
                     </p>
-                  )}
-                  {ungrouped.map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      data-item
-                      onClick={() => handleSelect(opt.id)}
-                      tabIndex={-1}
-                      className={`w-full text-left px-3 ${tamItem} truncate transition-colors ${ungroupedLabel && sortedGroupNames.length > 0 ? 'pl-5 ' : ''}${itemClass(opt.id)}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )
-              const groupedBlock = sortedGroupNames.map(groupName => (
-                <div key={groupName}>
-                  <p className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-texto-3 bg-surface sticky top-0">
-                    {groupName}
-                  </p>
-                  {groupedMap[groupName].map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      data-item
-                      onClick={() => handleSelect(opt.id)}
-                      tabIndex={-1}
-                      className={`w-full text-left px-3 ${tamItem} pl-5 truncate transition-colors ${itemClass(opt.id)}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              ))
-              return (
-                <div key={secKey ?? '__all'}>
-                  {secLabel && (
-                    <p className="px-3 pt-2.5 pb-1 mt-1 border-t border-borda-forte text-[11px] font-bold tracking-wider text-texto-2 bg-surface-2/60">
-                      {secLabel}
-                    </p>
-                  )}
-                  {ungroupedLast
-                    ? <>{groupedBlock}{ungroupedBlock}</>
-                    : <>{ungroupedBlock}{groupedBlock}</>}
-                </div>
-              )
-            })}
-          </div>
+                    {groupedMap[groupName].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        data-item
+                        onClick={() => handleSelect(opt.id)}
+                        tabIndex={-1}
+                        className={`w-full text-left px-3 ${tamItem} pl-5 truncate transition-colors ${itemClass(opt.id)}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                ))
+                return (
+                  <div key={secKey ?? '__all'}>
+                    {secLabel && (
+                      <p className="px-3 pt-2.5 pb-1 mt-1 border-t border-borda-forte text-[11px] font-bold tracking-wider text-texto-2 bg-surface-2/60">
+                        {secLabel}
+                      </p>
+                    )}
+                    {ungroupedLast
+                      ? <>{groupedBlock}{ungroupedBlock}</>
+                      : <>{ungroupedBlock}{groupedBlock}</>}
+                  </div>
+                )
+              })}
+            </div>
+          </Moldura>
         </div>,
         document.body
       )}
