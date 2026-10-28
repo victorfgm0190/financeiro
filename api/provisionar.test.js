@@ -20,7 +20,9 @@ const { default: pingHandler } = await import('./ping.js')
 const { default: syncHandler } = await import('./sync.js')
 const { default: mappingHandler } = await import('./account-mapping.js')
 const { PASSOS } = await import('./_provisionar.js')
-const { KIT_CATEGORIAS, KIT_GRUPOS_CONTA, KIT_GRUPOS_GERENCIAIS, KIT_TIPOS_DOCUMENTO, KIT_CENTROS_DE_CUSTO, KIT_REGRAS_ITENS, rodapeDoCliente } = await import('./_kitBasico.js')
+const { KIT_GRUPOS_CONTA, KIT_GRUPOS_GERENCIAIS, KIT_TIPOS_DOCUMENTO, KIT_CENTROS_PF, KIT_CENTROS_PJ, KIT_REGRAS_ITENS, rodapeDoCliente, kitDoCliente, KIT_PERFIL_ID } = await import('./_kitBasico.js')
+// Nomes das categorias de cada kit (+ a do sistema), em ordem alfabética.
+const nomesDoKit = (tipo_pessoa) => [...kitDoCliente({ tipo_pessoa }).categorias.map(c => c[1]), 'Reservas Gerais'].sort()
 const { ESTRUTURA_BASE, MIGRACOES } = await import('./_sqlEmbutido.js')
 
 const SECRET = 'segredo-de-teste'
@@ -66,7 +68,7 @@ beforeAll(async () => {
     INSERT INTO account_mapping (grupo, nome_finup, nome_dindin) VALUES ('Itau Cofrinhos', 'Pharma', '5. 05 PHARMA LOG');
     INSERT INTO contas (id, name, type, balance) VALUES ('c1', 'Consórcio HS', 'investment', 0);`)
   // Bancos de cliente: só "existem" depois que a API do Neon (simulada) os cria.
-  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh', 'cliente_ll']) bancos[nome] = new PGlite()
+  for (const nome of ['cliente_mm', 'cliente_zz', 'cliente_ww', 'cliente_kk', 'cliente_jj', 'cliente_hh', 'cliente_ll', 'cliente_pj']) bancos[nome] = new PGlite()
 }, 180_000) // vários PGlite + migrações: com a suíte inteira em paralelo passa de 60 s
 
 // ─── API do Neon + Resend simulados ─────────────────────────────────────────────────────────────
@@ -117,7 +119,7 @@ beforeEach(() => {
     central: bancos.central, banco_vm: bancos.banco_vm,
     cliente_mm: doNeon('cliente_mm'), cliente_zz: doNeon('cliente_zz'), cliente_ww: doNeon('cliente_ww'),
     cliente_kk: doNeon('cliente_kk'), cliente_jj: doNeon('cliente_jj'), cliente_hh: doNeon('cliente_hh'),
-    cliente_ll: doNeon('cliente_ll'),
+    cliente_ll: doNeon('cliente_ll'), cliente_pj: doNeon('cliente_pj'),
   })
   vi.stubGlobal('fetch', vi.fn(fetchFalso))
   vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -283,13 +285,15 @@ describe('provisionamento do cliente (Aprovar)', () => {
 
   it('kit básico exato e NENHUM dado do vm no cliente', async () => {
     const q = qde('cliente_mm')
-    expect((await q('SELECT name FROM categorias ORDER BY name')).map(r => r.name)).toEqual(KIT_CATEGORIAS.map(c => c[1]).sort())
+    expect((await q('SELECT name FROM categorias ORDER BY name')).map(r => r.name)).toEqual(nomesDoKit('PF'))
     expect((await q('SELECT name FROM grupos_conta ORDER BY "order"')).map(r => r.name)).toEqual(KIT_GRUPOS_CONTA.map(g => g[1]))
     expect((await q('SELECT name, fixed FROM reservas_funcoes ORDER BY id')).map(r => r.name)).toEqual(KIT_GRUPOS_GERENCIAIS.map(g => g[2]))
     expect((await q('SELECT nome FROM tipos_documento ORDER BY ordem')).map(r => r.nome)).toEqual(KIT_TIPOS_DOCUMENTO)
     expect((await q('SELECT padrao FROM contrato_regras_itens WHERE contrato_id IS NULL ORDER BY padrao')).map(r => r.padrao)).toEqual(KIT_REGRAS_ITENS.map(r => r[0]).sort())
     const [cfg] = await q('SELECT financial_month_start_day, cost_centers, rodape_titulo, rodape_frase FROM configuracoes')
-    expect(cfg).toEqual({ financial_month_start_day: 1, cost_centers: KIT_CENTROS_DE_CUSTO, rodape_titulo: 'Marina Mendes', rodape_frase: null })
+    expect(cfg).toEqual({ financial_month_start_day: 1, cost_centers: KIT_CENTROS_PF, rodape_titulo: 'Marina Mendes', rodape_frase: null })
+    // primeiro perfil automático (PF, sem documento no cadastro manual)
+    expect(await q('SELECT id, name, type, document, is_default FROM perfis')).toEqual([{ id: KIT_PERFIL_ID, name: 'Marina Mendes', type: 'pf', document: null, is_default: true }])
     expect(await q('SELECT * FROM account_mapping')).toEqual([])
     expect(await q('SELECT * FROM contas')).toEqual([])
     expect(await q('SELECT * FROM lancamentos')).toEqual([])
@@ -346,7 +350,7 @@ describe('provisionamento do cliente (Aprovar)', () => {
     const auth = (await chamar(authHandler, { url: '/api/auth', host: MM, body: { username: 'admin', password: 'senha-da-marina-1' } })).body.token
     const r = await chamar(loadHandler, { method: 'GET', url: '/api/load', host: MM, auth })
     expect(r.statusCode).toBe(200)
-    expect(r.body.cats.map(c => c.name).sort()).toEqual(KIT_CATEGORIAS.map(c => c[1]).sort())
+    expect(r.body.cats.map(c => c.name).sort()).toEqual(nomesDoKit('PF'))
     expect(r.body.cfg).toMatchObject({ financial_month_start_day: 1, rodape_titulo: 'Marina Mendes' })
     expect(r.body.accs).toEqual([])
     expect((await chamar(mappingHandler, { method: 'GET', url: '/api/account-mapping', host: MM, auth })).body).toEqual([])
@@ -441,6 +445,80 @@ describe('usuário próprio (R7): senha em texto só por TLS verificado e nunca 
     expect((await qde('cliente_ll')("SELECT 1 FROM pg_roles WHERE rolname = 'cliente_ll_app'"))).toEqual([])
     expect((await qde('central')("SELECT db_usuario FROM ambientes WHERE sigla = 'll'"))[0].db_usuario).toBeNull()
   }, 120_000)
+})
+
+describe('kit PF × PJ', () => {
+  const SQL_GRUPOS = `SELECT category_group AS grupo, type, string_agg(name, ' | ' ORDER BY sort_order) AS cats
+    FROM categorias WHERE category_group IS NOT NULL GROUP BY 1, 2`
+  // Grupos na ordem salva em configuracoes.category_groups (a que as telas usam).
+  const gruposNaOrdem = async (q) => {
+    const [{ category_groups: ordem }] = await q('SELECT category_groups FROM configuracoes')
+    const gs = await q(SQL_GRUPOS)
+    expect(gs.map(g => g.grupo).sort()).toEqual([...ordem].sort())
+    return ordem.map(n => gs.find(g => g.grupo === n))
+  }
+
+  it('cliente PJ do formulário: kit PJ (grupos, ordem, centros), perfil com CNPJ, cat_res_ger; nada mais muda', async () => {
+    const fotos = { vm: await foto('banco_vm'), mm: await foto('cliente_mm') }
+    const novo = await clientes({ url: '/api/clientes', body: {
+      nome: 'Paulo Jota', email: 'paulo@pj.com', sigla: 'pj', tipo_pessoa: 'PJ', empresa: 'Jota Serviços Ltda', documento: '11.222.333/0001-81',
+    } })
+    expect(novo.statusCode).toBe(200)
+    const id = novo.body.cliente.id
+    for (let i = 0; i < 10; i++) {
+      const r = await clientes({ url: '/api/clientes?acao=aprovar', body: { id } })
+      expect(r.statusCode).toBe(200)
+      if (r.body.concluido) break
+    }
+    const q = qde('cliente_pj')
+    expect((await q('SELECT name FROM categorias ORDER BY name')).map(r => r.name)).toEqual(nomesDoKit('PJ'))
+    const grupos = await gruposNaOrdem(q)
+    expect(grupos.map(g => g.grupo)).toEqual(['Receitas operacionais', 'Outras receitas', 'Custos', 'Pessoal', 'Impostos', 'Despesas operacionais', 'Financeiro', 'Outros'])
+    expect(grupos.find(g => g.grupo === 'Pessoal')).toEqual({ grupo: 'Pessoal', type: 'expense', cats: 'Folha de pagamento | Pró-labore | Encargos trabalhistas | Benefícios' })
+    expect(await q("SELECT id, type FROM categorias WHERE name = 'Pró-labore'")).toEqual([{ id: 'cat_kit_pro_labore_pj', type: 'expense' }])
+    const [cfg] = await q('SELECT cost_centers, category_groups, category_groups_ordem_manual, rodape_titulo FROM configuracoes')
+    expect(cfg).toEqual({ cost_centers: KIT_CENTROS_PJ, category_groups: grupos.map(g => g.grupo), category_groups_ordem_manual: true, rodape_titulo: 'Jota Serviços Ltda' })
+    expect(await q('SELECT id, name, type, document, is_default, ordem FROM perfis'))
+      .toEqual([{ id: KIT_PERFIL_ID, name: 'Jota Serviços Ltda', type: 'pj', document: '11222333000181', is_default: true, ordem: 0 }])
+    expect(await q("SELECT name, type, category_group FROM categorias WHERE id = 'cat_res_ger'")).toEqual([{ name: 'Reservas Gerais', type: 'expense', category_group: null }])
+    // comuns aos dois kits, iguais aos de hoje
+    expect((await q('SELECT name FROM grupos_conta ORDER BY "order"')).map(r => r.name)).toEqual(KIT_GRUPOS_CONTA.map(g => g[1]))
+    expect((await q('SELECT nome FROM tipos_documento ORDER BY ordem')).map(r => r.nome)).toEqual(KIT_TIPOS_DOCUMENTO)
+    expect((await q('SELECT name FROM reservas_funcoes ORDER BY id')).map(r => r.name)).toEqual(KIT_GRUPOS_GERENCIAIS.map(g => g[2]))
+    // ambientes que já existiam: nem uma linha mudou
+    expect(await foto('banco_vm')).toEqual(fotos.vm)
+    expect(await foto('cliente_mm')).toEqual(fotos.mm)
+  }, 120_000)
+
+  it('cliente PF (mm): grupos e ordem do kit PF, cat_res_ger, cores sem repetir no grupo', async () => {
+    const q = qde('cliente_mm')
+    const grupos = await gruposNaOrdem(q)
+    expect(grupos.map(g => g.grupo)).toEqual(['Essenciais', 'Estilo de vida', 'Financeiro', 'Outros', 'Receitas'])
+    expect(grupos[0].cats).toBe('Moradia | Contas da casa | Mercado | Alimentação | Transporte | Saúde | Educação')
+    expect(await q("SELECT id, type FROM categorias WHERE name = 'Pró-labore'")).toEqual([{ id: 'cat_kit_pro_labore', type: 'income' }])
+    expect((await q("SELECT count(*)::int AS n FROM categorias WHERE id = 'cat_res_ger'"))[0].n).toBe(1)
+    const [cfg] = await q('SELECT category_groups, category_groups_ordem_manual FROM configuracoes')
+    expect(cfg).toEqual({ category_groups: grupos.map(g => g.grupo), category_groups_ordem_manual: true })
+  })
+
+  it('listas: ids únicos, cor única por grupo, mesmo id/cor/ícone do kit antigo nas que já existiam', () => {
+    for (const tipo of ['PF', 'PJ']) {
+      const k = kitDoCliente({ tipo_pessoa: tipo })
+      expect(new Set(k.categorias.map(c => c[0])).size).toBe(k.categorias.length)
+      for (const g of k.grupos) {
+        const cores = k.categorias.filter(c => c[5] === g).map(c => c[3])
+        expect(new Set(cores).size).toBe(cores.length)
+      }
+    }
+    const pf = new Map(kitDoCliente({ tipo_pessoa: 'PF' }).categorias.map(c => [c[0], c]))
+    for (const [id, nome, tipo, cor, icone] of [
+      ['cat_kit_alimentacao', 'Alimentação', 'expense', '#f97316', '🍽️'], ['cat_kit_moradia', 'Moradia', 'expense', '#8b5cf6', '🏠'],
+      ['cat_kit_impostos', 'Impostos e taxas', 'expense', '#eab308', '🧾'], ['cat_kit_salario', 'Salário', 'income', '#22c55e', '💰'],
+      ['cat_kit_outras_receitas', 'Outras receitas', 'income', '#14b8a6', '➕'],
+    ]) expect(pf.get(id).slice(0, 5)).toEqual([id, nome, tipo, cor, icone])
+    // sem tipo_pessoa → PF
+    expect(kitDoCliente({}).tipo).toBe('PF')
+  })
 })
 
 describe('rodapé do kit', () => {

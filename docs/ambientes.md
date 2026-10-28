@@ -105,7 +105,7 @@ continua do passo pendente e nunca duplica.
    `neondb_owner`) e espera a operação terminar (`api/_neon.js`). Já existe → segue.
 3. **estrutura** — `supabase/estrutura_base.sql` + todas as migrações, numa transação, registradas em
    `_migracoes`; `ambientes.schema_versao` atualizada.
-4. **kit** — `api/_kitBasico.js` (lista única do que um cliente novo ganha).
+4. **kit** — `api/_kitBasico.js` (lista única do que um cliente novo ganha): categorias do kit PF ou PJ pelo `tipo_pessoa` do cliente, e o primeiro perfil com os dados do cadastro.
 5. **admin** — organização + usuário `admin` (nome e e-mail do cliente, nível admin, senha aleatória
    inutilizável).
 6. **convite** — token `convite` (48 h, `api/_senhaTokens.js`) e e-mail de boas-vindas com o botão
@@ -265,7 +265,7 @@ continua do passo pendente e nunca duplica.
    `neondb_owner`) e espera a operação terminar (`api/_neon.js`). Já existe → segue.
 3. **estrutura** — `supabase/estrutura_base.sql` + todas as migrações, numa transação, registradas em
    `_migracoes`; `ambientes.schema_versao` atualizada.
-4. **kit** — `api/_kitBasico.js` (lista única do que um cliente novo ganha).
+4. **kit** — `api/_kitBasico.js` (lista única do que um cliente novo ganha): categorias do kit PF ou PJ pelo `tipo_pessoa` do cliente, e o primeiro perfil com os dados do cadastro.
 5. **admin** — organização + usuário `admin` (nome e e-mail do cliente, nível admin, senha aleatória
    inutilizável).
 6. **convite** — token `convite` (48 h, `api/_senhaTokens.js`) e e-mail de boas-vindas com o botão
