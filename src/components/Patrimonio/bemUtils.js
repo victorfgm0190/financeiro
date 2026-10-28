@@ -1,3 +1,4 @@
+import { hojeSP } from '../../lib/hoje'
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
 // Datas do backend chegam como 'YYYY-MM-DD'. new Date(iso) interpretaria como UTC e voltaria
@@ -9,7 +10,7 @@ export function fmtData(iso) {
   return `${d}/${MESES[Number(m) - 1] || '?'}/${y}`
 }
 
-export const hojeIso = () => new Date().toISOString().slice(0, 10)
+export const hojeIso = () => hojeSP()
 
 // Reexportados de src/lib/financiamento.js, onde passaram a morar para a tela de Contas a Pagar
 // poder usar o MESMO rateio sem importar de components/Patrimonio/. Os chamadores daqui seguem

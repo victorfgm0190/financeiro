@@ -1,4 +1,5 @@
 import { isInvestAutoOrigin } from '../../lib/origins'
+import { hojeSP } from '../../lib/hoje'
 
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
@@ -27,8 +28,9 @@ export function fmtDate(dateStr) {
   return `${d}/${m}/${y}`
 }
 
+// Hoje em São Paulo (YYYY-MM-DD) — ver lib/hoje.js; toISOString daria o dia seguinte à noite.
 export function today() {
-  return new Date().toISOString().split('T')[0]
+  return hojeSP()
 }
 
 // ─── Filtros de lançamentos (barra de filtros em tempo real) ────────────────

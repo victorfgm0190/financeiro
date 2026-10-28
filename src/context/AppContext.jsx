@@ -54,6 +54,7 @@ import {
   ORIGIN, isAutomacaoOrigin, isInvestAutoOrigin, isPatrimonioOrigin,
   isGerencialAutoOrigin, isParcelaGeradaOrigin, isReservaShadowOrigin,
 } from '../lib/origins'
+import { hojeSP, isoLocal } from '../lib/hoje'
 
 const rb = v => Math.round(v * 100) / 100
 const INSTALL_RE = /(?<!\d)\d{1,2}\/\d{1,2}(?!\d)/
@@ -3919,7 +3920,7 @@ export function AppProvider({ children }) {
       const startDay = d.settings.financialMonthStartDay || 1
       const billEndDate = new Date(billEnd + 'T00:00:00')
       const dueDate = new Date(billEndDate.getFullYear(), billEndDate.getMonth() + 1, startDay)
-      const dueDateStr = dueDate.toISOString().split('T')[0]
+      const dueDateStr = isoLocal(dueDate)
 
       const groups = {}
       for (const tx of gerencialTxs) {
@@ -5302,7 +5303,7 @@ export function AppProvider({ children }) {
       }
 
       const desc = `Ajuste Gerencial - ${lanc.description || ''} - Fatura ${faturaRef}`.trim()
-      const hoje = new Date().toISOString().slice(0, 10)
+      const hoje = hojeSP()
       const stamp = new Date().toISOString()
       const novos = criarLegs.map(leg => ({
         id: ajgId(leg.from, leg.to),

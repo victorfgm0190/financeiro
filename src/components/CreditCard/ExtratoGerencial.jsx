@@ -4,6 +4,7 @@ import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 import DateInput from '../shared/DateInput'
 import ReconcileBadge from '../shared/ReconcileBadge'
+import { isoLocal } from '../../lib/hoje'
 
 function GerBadge({ grupoId, gerencialGroups }) {
   const grupo = gerencialGroups.find(g => g.id === grupoId)
@@ -37,7 +38,7 @@ export default function ExtratoGerencial({ initialCardId }) {
 
   const now = new Date()
   const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+  const lastOfMonth = isoLocal(new Date(now.getFullYear(), now.getMonth() + 1, 0))
 
   const [from, setFrom] = useState(firstOfMonth)
   const [to, setTo] = useState(lastOfMonth)

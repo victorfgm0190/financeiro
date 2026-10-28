@@ -29,6 +29,7 @@ import { compararNoGrupo } from '../../lib/ordemCategorias'
 import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 import { CORES_PERFIL } from '../../lib/chartPalette'
 import InputMoeda from '../shared/InputMoeda'
+import { hojeSP } from '../../lib/hoje'
 
 const PROFILE_COLORS = CORES_PERFIL
 
@@ -182,7 +183,7 @@ export default function SettingsPanel() {
   const [agNewType, setAgNewType] = useState('financeiro')
 
   // Balance adjustment by group state
-  const today = new Date().toISOString().slice(0, 10)
+  const today = hojeSP()
   const rbLocal = v => Math.round(v * 100) / 100
   const [ajusteGrupoId, setAjusteGrupoId] = useState('')
   const [ajusteData, setAjusteData] = useState(today)

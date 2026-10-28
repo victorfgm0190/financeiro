@@ -5,6 +5,7 @@ import {
   isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
 } from '../components/shared/utils'
 import { isInvestAutoOrigin } from './origins'
+import { isoLocal } from './hoje'
 
 // reserveFunctions + contas do perfil → predicados de classificação.
 export function criarClassificadores(reserveFunctions, accounts) {
@@ -47,5 +48,5 @@ export function totaisDoPeriodo(transactions, { start, end }, { isIncomeTx, isEx
 
 // Período financeiro (getFinancialPeriod) → { start, end } em 'YYYY-MM-DD', como o Painel usa.
 export function periodoStr(period) {
-  return { start: period.start.toISOString().split('T')[0], end: period.end.toISOString().split('T')[0] }
+  return { start: isoLocal(period.start), end: isoLocal(period.end) }
 }

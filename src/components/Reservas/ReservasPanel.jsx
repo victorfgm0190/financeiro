@@ -17,6 +17,7 @@ import { occEfetiva } from '../../lib/fluxoCaixa'
 import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
+import { isoLocal } from '../../lib/hoje'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -2018,8 +2019,8 @@ export default function ReservasPanel() {
   const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0)) * 100) / 100
 
   const period = getFinancialPeriod()
-  const periodStart = period.start.toISOString().split('T')[0]
-  const periodEnd = period.end.toISOString().split('T')[0]
+  const periodStart = isoLocal(period.start)
+  const periodEnd = isoLocal(period.end)
   // Mês de referência do ajuste LEGADO = mês-CALENDÁRIO atual (YYYY-MM) — usado só no fallback
   // do ajuste_override JSONB para funções sem registros em reserve_adjustments.
   const _now = new Date()

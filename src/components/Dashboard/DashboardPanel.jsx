@@ -24,6 +24,7 @@ import TopFavorecidos from './TopFavorecidos'
 import { PizzaDespesas, RankingDespesas, Segmentado } from './DespesasCategoria'
 import { useModoDespesas } from '../../hooks/useDespesasPorCategoria'
 import { periodoDoFiltro, PERIOD_OPTS, MODO_OPTS } from '../../lib/despesasPorCategoria'
+import { isoLocal } from '../../lib/hoje'
 
 // Placeholder shimmer dos valores enquanto a API ainda não respondeu (dbStatus === 'connecting').
 // Evita o flicker de pintar o cache do localStorage e depois sobrescrever com os dados frescos.
@@ -107,8 +108,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const catLabel = (id) => { const c = catById.get(id); return c ? `${c.icon ? c.icon + ' ' : ''}${c.name}` : 'Sem categoria' }
 
   // Previous period (same duration, shifted back)
-  const prevStart = subMonths(period.start, 1).toISOString().split('T')[0]
-  const prevEnd = subMonths(period.end, 1).toISOString().split('T')[0]
+  const prevStart = isoLocal(subMonths(period.start, 1))
+  const prevEnd = isoLocal(subMonths(period.end, 1))
   const prevTxs = transactions.filter(tx => tx.date >= prevStart && tx.date <= prevEnd && !isInvestAutoOrigin(tx))
   const prevIncome = prevTxs.filter(isIncomeTx).reduce((s, t) => s + t.amount, 0)
   const prevExpense = prevTxs.filter(isExpenseTx).reduce((s, t) => s + t.amount, 0)
@@ -164,8 +165,8 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   const last6Months = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => {
       const d = subMonths(new Date(), 5 - i)
-      const start = startOfMonth(d).toISOString().split('T')[0]
-      const end = endOfMonth(d).toISOString().split('T')[0]
+      const start = isoLocal(startOfMonth(d))
+      const end = isoLocal(endOfMonth(d))
       const label = format(d, "MMM'/'yy", { locale: ptBR })
       const inc = transactions.filter(tx => isIncomeTx(tx) && !isInvestAutoOrigin(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)
       const exp = transactions.filter(tx => isExpenseTx(tx) && tx.date >= start && tx.date <= end).reduce((s, t) => s + t.amount, 0)

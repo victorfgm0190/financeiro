@@ -3,12 +3,13 @@ import { ChevronDown, ChevronRight, ArrowDownCircle, ArrowUpCircle } from 'lucid
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { hojeSP } from '../../lib/hoje'
 
 export default function PosicaoFinanceiraModal() {
   const { accounts, schedules, getOccurrencesProjecao: getNextOccurrences } = useApp()
   const [expanded, setExpanded] = useState({})
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = hojeSP()
   const mainAccounts = accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit')
 
   const rows = useMemo(() => {

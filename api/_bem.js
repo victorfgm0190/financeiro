@@ -1,6 +1,7 @@
 import { withTransaction } from './_db.js'
 import { bancoAtual } from './_conexao.js'
 import { inserirHistorico } from './_historico.js'
+import { hojeSP } from '../src/lib/hoje.js'
 
 // Helpers compartilhados pelos endpoints de Bem Imobilizado / Financiamento.
 //
@@ -34,7 +35,7 @@ export const isPositiveNumber = (v) => Number.isFinite(Number(v)) && Number(v) >
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 export const isIsoDate = (v) => typeof v === 'string' && ISO_DATE.test(v.slice(0, 10))
 
-export const hoje = () => new Date().toISOString().slice(0, 10)
+export const hoje = () => hojeSP()
 
 // Soma meses a uma data ISO clampando no último dia do mês de destino: 31/01 + 1 mês → 28/02,
 // nunca 03/03. Aritmética em string para não depender do fuso do runtime da Vercel.

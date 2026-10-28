@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { loadAccountMappings } from '../lib/db'
+import { hojeSP } from '../lib/hoje'
 
 const TS_KEY = 'finup_last_backup_ts'
 const INTERVAL_24H = 24 * 60 * 60 * 1000
@@ -7,7 +8,7 @@ const INTERVAL_24H = 24 * 60 * 60 * 1000
 // Gera e baixa o JSON de backup. `accountMapping` (tabela account_mapping do Neon,
 // que vive fora do estado `data`) é incluído sob a chave `_accountMapping` quando fornecido.
 export function triggerBackupDownload(data, accountMapping = null) {
-  const date = new Date().toISOString().split('T')[0]
+  const date = hojeSP()
   const payload = JSON.stringify(
     {
       ...data,

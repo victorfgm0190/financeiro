@@ -56,6 +56,7 @@ import { baixaNoPeriodo, puloNoPeriodo, separarConflitosDePulo, mensagemConflito
 import AgendaCalendario from './AgendaCalendario'
 import { faturasSemAgendamento, lerVisaoAgenda, salvarVisaoAgenda } from '../../lib/agendaCalendario'
 import InputMoeda from '../shared/InputMoeda'
+import { hojeSP } from '../../lib/hoje'
 
 const FREQ_LABELS = {
   once: 'Única',
@@ -109,9 +110,9 @@ function PayableCard({ payable, gerencialGroups, accounts, onMarkPaid, onDelete 
   const podeEditar = pode('agendamentos', 'editar')
   const podeExcluir = pode('agendamentos', 'excluir')
   const card = accounts.find(a => a.id === payable.cartaoId)
-  const today = new Date().toISOString().split('T')[0]
+  const today = hojeSP()
   const isOverdue = payable.status === 'pending' && payable.dueDate < today
-  const isDueSoon = payable.status === 'pending' && !isOverdue && payable.dueDate <= new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0]
+  const isDueSoon = payable.status === 'pending' && !isOverdue && payable.dueDate <= hojeSP(Date.now() + 5 * 86400000)
   return (
     <div className="card">
       <div className="flex items-start justify-between gap-3">

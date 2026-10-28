@@ -5,6 +5,7 @@ import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
+import { isoLocal } from '../../lib/hoje'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -24,8 +25,8 @@ function getRange(startDay, months) {
     : new Date(now.getFullYear(), now.getMonth() - 1, startDay)
   const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + months, startDay - 1)
   return {
-    start: startDate.toISOString().split('T')[0],
-    end: endDate.toISOString().split('T')[0],
+    start: isoLocal(startDate),
+    end: isoLocal(endDate),
   }
 }
 

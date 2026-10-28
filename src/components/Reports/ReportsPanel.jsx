@@ -17,6 +17,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { corSerie, estiloTooltip } from '../../lib/chartPalette'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, MODO_VALOR_PADRAO, CATEGORIA_CREDITO_PROPRIETARIO } from '../../lib/contratos/despesaReal'
+import { isoLocal } from '../../lib/hoje'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -51,8 +52,8 @@ export default function ReportsPanel() {
     const months = []
     for (let i = 5; i >= 0; i--) {
       const d = subMonths(new Date(), i)
-      const start = startOfMonth(d).toISOString().split('T')[0]
-      const end = endOfMonth(d).toISOString().split('T')[0]
+      const start = isoLocal(startOfMonth(d))
+      const end = isoLocal(endOfMonth(d))
       const label = format(d, 'MMM/yy', { locale: ptBR })
       const income = transactions
         .filter(tx => countsAsReportIncome(tx, reservaDespesaFuncSet, reservaSet) && tx.date >= start && tx.date <= end)

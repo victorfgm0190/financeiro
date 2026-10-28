@@ -25,6 +25,7 @@ import { faturaToDate } from '../parcelas.js'
 import { faturaEstaFechada } from '../faturasFechadas.js'
 import { distanciaCompetencia, LIMITE_MESES_COMPETENCIA } from '../competenciaFatura.js'
 import { contaCentralDoPerfil } from '../contaCentral.js'
+import { hojeSP } from '../hoje.js'
 
 // ─── Utilitários ────────────────────────────────────────────────────────────
 
@@ -33,7 +34,8 @@ export const rb = (v) => Math.round((Number(v) || 0) * 100) / 100
 const difere = (a, b) => Math.abs(rb(a) - rb(b)) > 0.005
 
 // "Hoje" no fuso do usuário: a função da Vercel roda em UTC e, entre 21h e 0h, o dia UTC já virou.
-export const hojeSP = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+// Mora em lib/hoje.js; reexportado aqui para os chamadores de sempre.
+export { hojeSP }
 
 export function addMesesYM(ym, n) {
   const [y, m] = ym.split('-').map(Number)

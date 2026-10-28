@@ -7,6 +7,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
+import { hojeSP, isoLocal } from '../../lib/hoje'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -29,8 +30,8 @@ function getRange(startDay, months) {
   }
   const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + months, startDay - 1)
   return {
-    start: startDate.toISOString().split('T')[0],
-    end: endDate.toISOString().split('T')[0],
+    start: isoLocal(startDate),
+    end: isoLocal(endDate),
   }
 }
 
@@ -334,7 +335,7 @@ async function exportExcel(report, showTx, from, to) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `demonstrativo_${new Date().toISOString().slice(0, 10)}.xlsx`
+  a.download = `demonstrativo_${hojeSP()}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }

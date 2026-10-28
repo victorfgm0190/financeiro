@@ -25,6 +25,7 @@ import { useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
+import { hojeSP } from '../../lib/hoje'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -531,7 +532,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
 
   const [year, month] = selectedMonth.split('-').map(Number)
   const from = `${selectedMonth}-01`
-  const to = new Date(year, month, 0).toISOString().split('T')[0]
+  const to = `${selectedMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`
   const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`
 
   const prevMonth = () => {
@@ -586,7 +587,7 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     onEdit({ ...rest, date: newDate || tx.date, origin: ORIGIN.DUPLICADO })
   }
 
-  const todayStr = now.toISOString().split('T')[0]
+  const todayStr = hojeSP()
   const isAplicacao = !!account.contaAplicacao
   // Conta gerencial = subconta "Ger. …" (marcada com grupoGerencial pelo motor). Só nelas
   // exibimos os totalizadores por fatura (as transferências tx_gerA_* carregam fatura_ref).

@@ -8,6 +8,7 @@ import CategorySelect from '../shared/CategorySelect'
 import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despesaReal'
 import InputMoeda from '../shared/InputMoeda'
+import { isoLocal } from '../../lib/hoje'
 
 export default function BudgetPanel() {
   const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
@@ -23,8 +24,8 @@ export default function BudgetPanel() {
   const period = getFinancialPeriod()
 
   const periodStr = {
-    start: period.start.toISOString().split('T')[0],
-    end: period.end.toISOString().split('T')[0],
+    start: isoLocal(period.start),
+    end: isoLocal(period.end),
   }
 
   const categorySpent = useMemo(() => {
