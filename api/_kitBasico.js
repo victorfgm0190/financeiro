@@ -56,6 +56,9 @@ export const KIT_PF = [
   ]],
   ['Receitas', 'income', [
     ['cat_kit_salario', 'Salário', '#22c55e', '💰'],
+    ['cat_kit_decimo_terceiro', 'Décimo terceiro', '#84cc16', '🎄'],
+    ['cat_kit_ferias', 'Férias', '#f59e0b', '🏖️'],
+    ['cat_kit_vale_refeicao', 'Vale-refeição', '#f97316', '🍴'],
     ['cat_kit_pro_labore', 'Pró-labore', '#10b981', '💼'],
     ['cat_kit_rendimentos', 'Rendimentos', '#6366f1', '📈'],
     ['cat_kit_alugueis_recebidos', 'Aluguéis recebidos', '#8b5cf6', '🏘️'],
