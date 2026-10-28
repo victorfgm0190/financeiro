@@ -17,6 +17,7 @@ import Toast from './components/shared/Toast'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
 import Modal from './components/shared/Modal'
+import Assistente from './components/Assistente/Assistente'
 import SaldoPrincipalBreakdownModal from './components/Dashboard/SaldoPrincipalBreakdownModal'
 import DashboardPanel from './components/Dashboard/DashboardPanel'
 import AccountsPanel from './components/Accounts/AccountsPanel'
@@ -77,6 +78,7 @@ function AppContent() {
   }, [])
   const [showPosicao, setShowPosicao] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showAssistente, setShowAssistente] = useState(false)
   const [backupToast, setBackupToast] = useState(false)
   const [genericToast, setGenericToast] = useState(null)
 
@@ -113,7 +115,8 @@ function AppContent() {
     setScope: setScrollScope,
     saveNow: () => saveScrollNow(mainRef, scrollScope ?? activePage),
   }), [scrollScope, activePage])
-  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, usuario, podeVer } = useApp()
+  const { accounts, schedules, getNextOccurrences, getFinancialPeriod, getSaldoPrincipal, data, syncError, dismissSyncError, avisoRecarga, fecharAvisoRecarga, usuario, podeVer, pode } = useApp()
+  const podeAssistente = pode('lancamentos', 'incluir')
   // Agenda no celular: gera e publica o .ics do usuário quando os dados mudam (hooks/useAgendaFeed).
   useAgendaFeed()
 
@@ -239,6 +242,9 @@ function AppContent() {
       <ContratoFichaHost />
       <ContratoEfetivacaoHost />
       <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} />
+      <Modal open={showAssistente} onClose={() => setShowAssistente(false)} title="✨ Assistente" size="lg">
+        {showAssistente && <Assistente onClose={() => setShowAssistente(false)} onToast={setGenericToast} />}
+      </Modal>
       <AtalhosAjudaModal />
       <ModoAltAtalhos />
     </>
@@ -267,7 +273,8 @@ function AppContent() {
     <div className="flex h-screen overflow-hidden bg-page">
       <Sidebar active={paginaVisivel} setActive={navigate} plataforma={plataforma} alertCount={alertCount + integridadePendentes} saldoPrincipal={saldoPrincipal} saldosPrincipais={saldosPrincipais} onShowPosicao={() => setShowPosicao(true)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header page={paginaVisivel} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)} />
+        <Header page={paginaVisivel} financialPeriod={financialPeriod} onOpenSearch={() => setShowSearch(true)}
+          onOpenAssistente={podeAssistente ? () => setShowAssistente(true) : null} />
         <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6 main-safe-bottom md:pb-6">
           <ScrollScopeContext.Provider value={scrollCtx}>
             <FaixaOffline />

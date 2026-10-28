@@ -1,4 +1,5 @@
 import { BannerPerfisSemContaCentral } from '../components/shared/ContaCentralAvisos'
+import AvisoPreLancamentos from '../components/Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import { format, addDays, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -34,7 +35,7 @@ const maiusculaInicial = (t) => t.charAt(0).toUpperCase() + t.slice(1)
 
 // Tela Início do mobile. Valores do card verde = os do Painel (saldosPrincipais do App e a mesma
 // classificação de receitas/despesas do mês) — nada é recalculado por uma regra nova.
-export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpenSearch }) {
+export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpenSearch, onToast }) {
   const { settings, updateSettings } = useApp()
   const [ocultar, setOcultar] = useState(lerOcultar)
   const [personalizar, setPersonalizar] = useState(false)
@@ -61,6 +62,7 @@ export default function InicioMobile({ modules, irPara, saldosPrincipais, onOpen
   return (
     <div className="space-y-4">
       <BannerPerfisSemContaCentral />
+      <AvisoPreLancamentos onToast={onToast} />
       <header className="flex items-start justify-between gap-3 pt-1">
         <div>
           <p className="text-xs text-texto-3">{mes}</p>

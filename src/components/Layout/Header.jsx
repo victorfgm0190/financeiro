@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { User, Building2, Search, ChevronDown, LogOut } from 'lucide-react'
+import { User, Building2, Search, ChevronDown, LogOut, Sparkles } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { createPortal } from 'react-dom'
 import { useSair } from '../Offline/useSair'
@@ -29,7 +29,7 @@ const PAGE_TITLES = {
   clientes: 'Clientes Finup',
 }
 
-export default function Header({ page, financialPeriod, onOpenSearch }) {
+export default function Header({ page, financialPeriod, onOpenSearch, onOpenAssistente }) {
   const today = new Date()
   const { profiles: perfisDoApp, activeProfileId, setActiveProfileId } = useApp()
   const { perfis: comPerfis, periodo: comPeriodo } = cabecalhoDaPagina(page)
@@ -94,6 +94,17 @@ export default function Header({ page, financialPeriod, onOpenSearch }) {
 
       {/* Right: busca global + seletor de perfil (mobile) + data (desktop) */}
       <div className="flex items-center gap-3 shrink-0">
+        {/* Assistente IA — no desktop (no mobile ele fica no "+" da barra inferior). */}
+        {onOpenAssistente && (
+          <button
+            onClick={onOpenAssistente}
+            title="Assistente: lance ou consulte por texto, voz ou foto"
+            aria-label="Assistente"
+            className="hidden md:inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors"
+          >
+            <Sparkles size={16} className="text-primary-fg" /> Assistente
+          </button>
+        )}
         <button
           onClick={onOpenSearch}
           title="Busca global (lançamentos e agendamentos)"

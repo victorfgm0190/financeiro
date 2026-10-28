@@ -9,6 +9,7 @@ import { downloadFullBackup, getLastBackupTs } from '../../hooks/useAutoBackup'
 import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import DeParaImportacaoPanel from './DeParaImportacaoPanel'
+import ApelidosIaPanel from './ApelidosIaPanel'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
 import AtalhosPanel from './AtalhosPanel'
@@ -1920,6 +1921,7 @@ export default function SettingsPanel() {
       {secao === 'favorecidos' && <FavorecidosPanel />}
       {secao === 'tipos-documento' && <TiposDocumentoPanel />}
       {secao === 'depara-importacao' && <DeParaImportacaoPanel />}
+      {secao === 'apelidos-ia' && <ApelidosIaPanel />}
       {secao === 'atalhos' && <AtalhosPanel />}
       {secao === 'agenda-celular' && <AgendaCelularPanel />}
       {secao === 'usuarios' && ehAdmin && <UsuariosPanel />}

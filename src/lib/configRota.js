@@ -22,6 +22,7 @@ export const CONFIG_ABAS = [
       { id: 'favorecidos', label: 'Favorecidos', novo: true },
       { id: 'tipos-documento', label: 'Tipos de documento', novo: true },
       { id: 'depara-importacao', label: 'De-para de importação', novo: true },
+      { id: 'apelidos-ia', label: 'Apelidos da IA', novo: true },
       { id: 'atalhos', label: 'Atalhos', novo: true },
     ],
   },

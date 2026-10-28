@@ -1,4 +1,5 @@
 import { BannerPerfisSemContaCentral } from '../shared/ContaCentralAvisos'
+import AvisoPreLancamentos from '../Assistente/AvisoPreLancamentos'
 import { useMemo, useState } from 'react'
 import {
   TrendingUp, TrendingDown, Wallet, PiggyBank,
@@ -333,6 +334,7 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
   return (
     <div className="space-y-4">
       <BannerPerfisSemContaCentral />
+      <AvisoPreLancamentos />
       {/* Credit card alert banner */}
       {creditAlerts.length > 0 && (
         <div className="bg-aviso/10 border border-aviso/30 rounded-xl p-4 flex items-start gap-3">

@@ -3,6 +3,7 @@
 import { useApp } from '../context/AppContext'
 import TransactionForm from '../components/Transactions/TransactionForm'
 import ScheduleForm from '../components/Schedule/ScheduleForm'
+import Assistente from '../components/Assistente/Assistente'
 
 // Lançamento: modo rápido do TransactionForm (mesmo handleSubmit/addTransaction do completo).
 export function LancamentoAcao({ onClose, onToast }) {
@@ -29,4 +30,9 @@ export function ReservaAcao({ onClose, onToast }) {
       onToast={onToast}
     />
   )
+}
+
+// Assistente IA: texto/voz/foto → prévia nos mesmos formulários acima (nada é gravado sem confirmar).
+export function AssistenteAcao({ onClose, onToast }) {
+  return <Assistente onClose={onClose} onToast={onToast} />
 }

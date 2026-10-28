@@ -105,7 +105,7 @@ export function podeVerPagina(usuario, pagina) {
 const MOBILE = {
   inicio: ['painel', 'ver'], despesas: ['painel', 'ver'], mais: ['painel', 'ver'],
   lancamento: ['lancamentos', 'incluir'], transferencia: ['lancamentos', 'incluir'],
-  agendamento: ['agendamentos', 'incluir'], reserva_mov: ['lancamentos', 'incluir'],
+  agendamento: ['agendamentos', 'incluir'], reserva_mov: ['lancamentos', 'incluir'], assistente: ['lancamentos', 'incluir'],
 }
 export function podeVerModuloMobile(usuario, m) {
   if (MOBILE[m.id]) return pode(usuario, MOBILE[m.id][0], MOBILE[m.id][1])
@@ -161,6 +161,10 @@ const ROTAS = [
   [/^tipos-documento$/, (m) => PORMETODO('cadastros')[m]],
   [/^(contratos|contrato-itens|contrato-eventos|contrato-regras|contrato-creditos)$/, (m) => PORMETODO('contratos')[m]],
   [/^indices$/, () => null],
+  // Assistente IA: interpretar e guardar pré-lançamento = quem inclui lançamentos. Apelidos: aprender
+  // (POST, ao confirmar a prévia) também; editar/excluir na tela de Cadastros = cadastros.
+  [/^(assistente|ia-pre-lancamentos)$/, () => M('lancamentos', 'incluir')],
+  [/^ia-apelidos$/, (m) => (m === 'POST' ? M('lancamentos', 'incluir') : PORMETODO('cadastros')[m])],
   [/^integridade$/, () => M('alertas', 'editar')],
   [/^historico$/, () => M('*', 'editar')],
   [/^(bem\/migrate|backfill-ger-rastreabilidade)$/, () => M('configuracoes', 'editar')],

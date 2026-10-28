@@ -1108,3 +1108,37 @@ CREATE TABLE IF NOT EXISTS import_layouts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, tipo, assinatura)
 );
+
+-- ============================================================
+-- ASSISTENTE IA (etapa 1) — conferido com information_schema.columns em neondb, cliente_cv e
+-- cliente_teste1 (28/10/2026; dono = <banco>_app). DDL viva em api/_ia.js; clientes novos recebem
+-- supabase/migrations/2026-10-28_ia_assistente.sql. Favorecido/centro de custo: ref_id = nome.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ia_pre_lancamentos (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tipo TEXT NOT NULL CHECK (tipo IN ('lancamento', 'agendamento')),
+  payload JSONB NOT NULL,
+  texto_original TEXT,
+  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'efetivado', 'descartado')),
+  lancamento_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS ia_apelidos (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tipo TEXT NOT NULL CHECK (tipo IN ('categoria', 'conta', 'favorecido', 'descricao_fatura')),
+  termo TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  usos INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tipo, termo)
+);
+CREATE TABLE IF NOT EXISTS ia_uso (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  ambiente TEXT,
+  ferramenta TEXT,
+  tokens_entrada INTEGER NOT NULL DEFAULT 0,
+  tokens_saida INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

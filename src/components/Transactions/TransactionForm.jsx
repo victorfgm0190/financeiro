@@ -115,7 +115,9 @@ function buildCatOpts(categories, type) {
 
 // `rapido` (só o "+" do mobile): mostra só tipo, valor, descrição, conta e categoria; "Mais opções"
 // abre o formulário completo com o mesmo estado. Salvar é o mesmo handleSubmit nos dois modos.
-export default function TransactionForm({ initial, onClose, onToast, rapido = false }) {
+// Prévia do Assistente IA: `destaques` (chaves do form) marcam campos a conferir; `onSalvo(form, txId)`
+// avisa que o lançamento NOVO foi gravado (antes do onClose) — a gravação continua a mesma.
+export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -187,6 +189,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   })
 
   const [step, setStep] = useState('form')
+  const confira = (campo) => (destaques?.includes(campo)
+    ? <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>
+    : null)
   // Modo rápido (mobile): "Mais opções" troca para o formulário completo.
   const [maisOpcoes, setMaisOpcoes] = useState(false)
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
@@ -741,11 +746,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       if (toGroup?.behavior === 'divida' || toGroup?.behavior === 'emprestimo') {
         const ctx = { account: toAcc, group: toGroup, amount: Number(form.amount), date: form.date, sourceAccountId: form.accountId }
         if (toAcc.debtPlan) {
+          onSalvo?.(form, null)
           setDebtCtx(ctx)
           setStep('debt-payment')
           return
         } else {
-          addTransaction(txData)
+          onSalvo?.(form, addTransaction(txData))
           setDebtCtx(ctx)
           setStep('debt-plan')
           return
@@ -759,6 +765,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     if (repeatSchId) txData.scheduleId = repeatSchId
 
     const txId = addTransaction(txData)
+    onSalvo?.(form, txId)
 
     // Rateio: salva os rateios para o lançamento recém-criado.
     if (form.type !== 'transfer' && rateioRows.length > 0 && txId) saveRateiosFor(txId, rateioRows)
@@ -1373,7 +1380,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *</label>
+          <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}</label>
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
@@ -1386,7 +1393,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </div>
         {form.type === 'transfer' ? (
           <div>
-            <label className="label">Conta Destino *</label>
+            <label className="label">Conta Destino *{confira('toAccountId')}</label>
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
@@ -1399,7 +1406,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </div>
         ) : (
           <div>
-            <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}</label>
+            <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}</label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
         )}
@@ -1408,7 +1415,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       {form.type === 'transfer' && (
         <>
           <div>
-            <label className="label">Valor (R$) *</label>
+            <label className="label">Valor (R$) *{confira('amount')}</label>
             <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
           </div>
           {transferToAcc?.type === 'credit' && (
@@ -1563,7 +1570,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       />
 
       <div>
-        <label className="label">Data *</label>
+        <label className="label">Data *{confira('date')}</label>
         <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje />
       </div>
 
@@ -1581,7 +1588,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       {form.type !== 'transfer' && (
         <>
           <div>
-            <label className="label">Categoria</label>
+            <label className="label">Categoria{confira('categoryId')}</label>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
@@ -1610,7 +1617,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
           <div>
             <div className="flex items-center justify-between gap-2">
-              <label className="label">Favorecido</label>
+              <label className="label">Favorecido{confira('payee')}</label>
               {initial?.id && (initial.payee || '').trim() && (
                 <button type="button" onClick={() => setRenomearFav(true)}
                   className="text-[11px] text-texto-2 hover:text-texto-1 min-h-[32px] px-1"
@@ -1638,7 +1645,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           )}
 
           <div>
-            <label className="label">Centro de Custo</label>
+            <label className="label">Centro de Custo{confira('costCenter')}</label>
             <select className="input" value={form.costCenter} onChange={e => set('costCenter', e.target.value)}>
               <option value="">Sem centro de custo</option>
               {costCenters.map(cc => <option key={cc} value={cc}>{cc}</option>)}
@@ -1648,7 +1655,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       <div>
-        <label className="label">Descrição</label>
+        <label className="label">Descrição{confira('description')}</label>
         <input className="input" value={form.description} onChange={e => onDescriptionChange(e.target.value)} placeholder="Digite a descrição do lançamento" />
       </div>
 

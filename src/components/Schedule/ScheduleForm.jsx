@@ -96,11 +96,13 @@ function Tooltip({ text }) {
   )
 }
 
-function LabelTip({ children, tip, required }) {
+// `confira`: campo sugerido pelo Assistente IA com confiança baixa (ou vazio) — destaque na prévia.
+function LabelTip({ children, tip, required, confira = false }) {
   return (
     <label className="label">
       <span className="inline-flex items-center">
         {children}{required && ' *'}<Tooltip text={tip} />
+        {confira && <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}
       </span>
     </label>
   )
@@ -215,7 +217,8 @@ function buildCatOpts(categories, type) {
 }
 
 
-export default function ScheduleForm({ initial, onClose, onAviso }) {
+// Prévia do Assistente IA: `destaques` (chaves do form) e `onSalvo(form, id)` ao criar — mesma gravação.
+export default function ScheduleForm({ initial, onClose, onAviso, destaques = null, onSalvo = null }) {
   const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato } = useApp()
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
@@ -719,6 +722,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
       }
     } else {
       schedId = addSchedule(data)
+      onSalvo?.(form, schedId)
     }
     // Rateio do agendamento (apenas receita/despesa).
     if (form.transactionType !== 'transfer' && schedId) {
@@ -820,7 +824,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Descrição */}
         <div className="max-sm:-order-1 sm:col-span-2">
-          <LabelTip tip={TIPS.description} required>Descrição</LabelTip>
+          <LabelTip tip={TIPS.description} required confira={!!destaques?.includes('description')}>Descrição</LabelTip>
           <input
             className="input"
             value={form.description}
@@ -834,7 +838,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Conta */}
         <div>
-          <LabelTip tip={TIPS.account} required>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
+          <LabelTip tip={TIPS.account} required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
           <SearchableSelect
             options={accountOpts}
             value={form.accountId}
@@ -848,7 +852,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
 
         {/* Valor */}
         <div className="max-sm:-order-1">
-          <LabelTip tip={TIPS.amount} required>Valor (R$)</LabelTip>
+          <LabelTip tip={TIPS.amount} required confira={!!destaques?.includes('amount')}>Valor (R$)</LabelTip>
           <InputMoeda
             className="input valor-destaque"
             min="0.01"
@@ -900,7 +904,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Conta Destino (apenas para transferências) */}
         {form.transactionType === 'transfer' && (
           <div className="sm:col-span-2">
-            <LabelTip tip="Conta que receberá a transferência" required>Conta Destino</LabelTip>
+            <LabelTip tip="Conta que receberá a transferência" required confira={!!destaques?.includes('toAccountId')}>Conta Destino</LabelTip>
             <SearchableSelect
               options={destAccountOpts}
               value={form.toAccountId}
@@ -1001,7 +1005,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Categoria */}
         {form.transactionType !== 'transfer' && (
           <div>
-            <LabelTip tip={TIPS.category}>Categoria</LabelTip>
+            <LabelTip tip={TIPS.category} confira={!!destaques?.includes('categoryId')}>Categoria</LabelTip>
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
@@ -1032,7 +1036,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
         {/* Favorecido — também na parcela de financiamento (transferência), onde é campo da série */}
         {(form.transactionType !== 'transfer' || ehFinanciamento) && (
           <div>
-            <LabelTip tip={TIPS.payee}>Favorecido</LabelTip>
+            <LabelTip tip={TIPS.payee} confira={!!destaques?.includes('payee')}>Favorecido</LabelTip>
             <FavorecidoAutocomplete
               value={form.payee}
               onChange={v => set('payee', v)}
@@ -1103,7 +1107,7 @@ export default function ScheduleForm({ initial, onClose, onAviso }) {
           </>
         ) : (
         <div>
-          <LabelTip tip={TIPS.startDate} required>Data de Início</LabelTip>
+          <LabelTip tip={TIPS.startDate} required confira={!!destaques?.includes('startDate')}>Data de Início</LabelTip>
           <DateInput
             className="input"
             value={form.startDate}
