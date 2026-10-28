@@ -3,9 +3,9 @@
 // telas usam esta mesma função para mostrar os mesmos números.
 import {
   isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
-} from '../components/shared/utils'
-import { isInvestAutoOrigin } from './origins'
-import { isoLocal } from './hoje'
+} from '../components/shared/utils.js'
+import { isInvestAutoOrigin } from './origins.js'
+import { isoLocal } from './hoje.js'
 
 // reserveFunctions + contas do perfil → predicados de classificação.
 export function criarClassificadores(reserveFunctions, accounts) {

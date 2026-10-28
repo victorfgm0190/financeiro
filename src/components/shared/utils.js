@@ -1,5 +1,5 @@
-import { isInvestAutoOrigin } from '../../lib/origins'
-import { hojeSP } from '../../lib/hoje'
+import { isInvestAutoOrigin } from '../../lib/origins.js'
+import { hojeSP } from '../../lib/hoje.js'
 
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)

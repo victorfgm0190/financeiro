@@ -47,6 +47,8 @@ export const excluirClienteApi = (id, confirmacao) => chamar('/api/clientes?acao
 export const reenviarConviteCliente = (id) => chamar('/api/clientes?acao=reenviar-convite', { method: 'POST', body: { id } })
 export const mudarStatusCliente = (id, acao, motivo) =>
   chamar('/api/clientes?acao=status', { method: 'POST', body: { id, acao, motivo } }).then(r => r.cliente)
+// Análise do Cliente (agregada; sem mes → mês financeiro atual do cliente). Cada chamada fica no histórico.
+export const analiseCliente = (sigla, mes) => chamar(`/api/admin/analise-cliente?${qs({ cliente: sigla, mes })}`)
 export const checarSiglaAdmin = (sigla, nome, id) => chamar(`/api/clientes?${qs({ acao: 'sigla', sigla, nome, id })}`)
 
 export const checarSiglaPublica = (sigla, nome) => chamar(`/api/sigla-disponivel?${qs({ sigla, nome })}`, { autenticado: false })

@@ -271,6 +271,12 @@ export default function Login() {
             Entrar em modo dev (sem banco)
           </button>
         )}
+
+        <p className="mt-6 text-center text-[11px] text-texto-3">
+          <a href="/termos" className="hover:text-texto-2 underline underline-offset-2">Termos de uso</a>
+          <span aria-hidden="true"> · </span>
+          <a href="/privacidade" className="hover:text-texto-2 underline underline-offset-2">Política de privacidade</a>
+        </p>
       </div>
     </div>
   )

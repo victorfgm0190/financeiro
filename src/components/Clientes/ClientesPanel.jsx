@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink, Unlock, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Pencil, Mail, Loader2, Circle, AlertTriangle, ExternalLink, Unlock, Trash2, BarChart3 } from 'lucide-react'
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
+import AnaliseCliente from './AnaliseCliente'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
   andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi,
@@ -53,6 +54,7 @@ const ROTULO_EVENTO = {
   prov_ativar: 'Provisionamento · ambiente ativo', prov_falhou: 'Falha no provisionamento',
   convite_reenviado: 'Convite reenviado', senha_liberada: 'Limite de senha liberado',
   excl_database: 'Exclusão · banco de dados', excl_falhou: 'Falha na exclusão',
+  analise_acesso: 'Análise do Cliente acessada',
 }
 
 function StatusBadge({ status }) {
@@ -294,7 +296,7 @@ function ExcluirClienteModal({ cliente, ambiente, onFechar, onExcluido }) {
   )
 }
 
-function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido }) {
+function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido, onAnalise }) {
   const [dados, setDados] = useState(null)
   const [editando, setEditando] = useState(false)
   const [erro, setErro] = useState('')
@@ -377,6 +379,11 @@ function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido }) {
             <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={() => onProvisionar(id)}>
               <MessageCircle size={14} /> Mensagem de boas-vindas
             </button>
+            {c.sigla && (
+              <button className="btn-secondary inline-flex items-center gap-1.5" disabled={ocupado} onClick={() => onAnalise(c)}>
+                <BarChart3 size={14} /> Análise do Cliente
+              </button>
+            )}
           </>
         )}
       </div>
@@ -511,6 +518,9 @@ export default function ClientesPanel({ onMudou = () => {} }) {
   const [aberto, setAberto] = useState(null)
   const [novo, setNovo] = useState(false)
   const [provisionando, setProvisionando] = useState(null) // id do cliente
+  // Análise do Cliente aberta: { sigla, nome } (só cliente ativo, com ambiente).
+  const [analise, setAnalise] = useState(null)
+  const abrirAnalise = useCallback((c) => setAnalise({ sigla: c.sigla, nome: c.empresa || c.nome }), [])
   const [erro, setErro] = useState('')
   const [toast, setToast] = useState(null)
   const fecharToast = useCallback(() => setToast(null), [])
@@ -561,11 +571,12 @@ export default function ClientesPanel({ onMudou = () => {} }) {
               <th className="font-medium px-4 py-2.5">Sigla</th>
               <th className="font-medium px-4 py-2.5">Status</th>
               <th className="font-medium px-4 py-2.5 hidden md:table-cell">Pedido em</th>
+              <th className="w-12"><span className="sr-only">Análise</span></th>
             </tr>
           </thead>
           <tbody>
-            {clientes == null && <tr><td colSpan={5} className="px-4 py-6 text-center text-texto-3">Carregando…</td></tr>}
-            {clientes && !lista.length && <tr><td colSpan={5} className="px-4 py-6 text-center text-texto-3">Nenhum cliente neste filtro.</td></tr>}
+            {clientes == null && <tr><td colSpan={6} className="px-4 py-6 text-center text-texto-3">Carregando…</td></tr>}
+            {clientes && !lista.length && <tr><td colSpan={6} className="px-4 py-6 text-center text-texto-3">Nenhum cliente neste filtro.</td></tr>}
             {lista.map(c => (
               <tr key={c.id} onClick={() => setAberto(c.id)} className="border-b border-borda/60 last:border-0 hover:bg-surface-hover cursor-pointer">
                 <td className="px-4 py-2.5">
@@ -579,6 +590,15 @@ export default function ClientesPanel({ onMudou = () => {} }) {
                 <td className="px-4 py-2.5 font-mono text-texto-2">{c.sigla || '—'}</td>
                 <td className="px-4 py-2.5"><StatusBadge status={c.status} /></td>
                 <td className="px-4 py-2.5 hidden md:table-cell text-texto-3 text-xs">{dataHora(c.created_at)}</td>
+                <td className="pr-2 py-1 text-right">
+                  {c.status === 'ativo' && c.sigla && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); abrirAnalise(c) }}
+                      aria-label={`Análise do Cliente ${c.sigla}`} title="Análise do Cliente"
+                      className="w-11 h-11 inline-flex items-center justify-center rounded-lg text-texto-2 hover:text-primary-fg hover:bg-surface-hover">
+                      <BarChart3 size={18} />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -586,7 +606,7 @@ export default function ClientesPanel({ onMudou = () => {} }) {
       </div>
 
       <Modal open={!!aberto} onClose={() => setAberto(null)} title="Cliente" size="lg">
-        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onProvisionar={setProvisionando} onToast={setToast} onExcluido={() => { setAberto(null); mudou() }} />}
+        {aberto && <DetalheCliente key={detalheVersao} id={aberto} onMudou={mudou} onProvisionar={setProvisionando} onToast={setToast} onExcluido={() => { setAberto(null); mudou() }} onAnalise={(c) => { setAberto(null); abrirAnalise(c) }} />}
       </Modal>
       <Modal open={novo} onClose={() => setNovo(false)} title="Novo cliente" size="lg">
         {novo && <ClienteForm onCancelar={() => setNovo(false)} onSalvo={(c) => { setNovo(false); setToast({ message: 'Cliente cadastrado' }); mudou(); setAberto(c.id) }} />}
@@ -594,6 +614,9 @@ export default function ClientesPanel({ onMudou = () => {} }) {
       {provisionando && (
         <ProvisionamentoModal id={provisionando} onFechar={() => { setProvisionando(null); setDetalheVersao(v => v + 1) }} onMudou={mudou} />
       )}
+      <Modal open={!!analise} onClose={() => setAnalise(null)} title="Análise do Cliente" size="xl">
+        {analise && <AnaliseCliente sigla={analise.sigla} nome={analise.nome} />}
+      </Modal>
       {toast && <Toast message={toast.message} variant={toast.variant} onClose={fecharToast} />}
     </div>
   )
