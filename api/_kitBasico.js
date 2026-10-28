@@ -13,14 +13,28 @@ import { sqlSeedTiposDocumento, SEED_TIPOS_DOCUMENTO } from './_tiposDocumento.j
 // ids FIXOS (iguais em todo ambiente novo); os que já existiam no kit antigo mantêm id, cor e ícone.
 // Formato: [grupo, tipo, [[id, nome, cor, ícone], ...]] — cores não se repetem dentro do grupo.
 export const KIT_PF = [
+  ['Despesas da casa', 'expense', [
+    ['cat_kit_aluguel', 'Aluguel', '#8b5cf6', '🏠'],
+    ['cat_kit_condominio', 'Condomínio', '#6366f1', '🏢'],
+    ['cat_kit_gas', 'Gás', '#f97316', '🔥'],
+    ['cat_kit_energia', 'Energia', '#eab308', '⚡'],
+    ['cat_kit_agua', 'Água', '#0ea5e9', '💧'],
+    ['cat_kit_internet_telefone', 'Internet e telefone', '#06b6d4', '📡'],
+    ['cat_kit_manutencao_casa', 'Manutenção', '#64748b', '🔧'],
+    ['cat_kit_obras', 'Obras', '#a16207', '🧱'],
+    ['cat_kit_servicos', 'Serviços', '#ec4899', '🧹'],
+  ]],
   ['Essenciais', 'expense', [
-    ['cat_kit_moradia', 'Moradia', '#8b5cf6', '🏠'],
-    ['cat_kit_contas_casa', 'Contas da casa', '#0ea5e9', '💡'],
     ['cat_kit_mercado', 'Mercado', '#f59e0b', '🛒'],
     ['cat_kit_alimentacao', 'Alimentação', '#f97316', '🍽️'],
     ['cat_kit_transporte', 'Transporte', '#3b82f6', '🚗'],
     ['cat_kit_saude', 'Saúde', '#ef4444', '❤️'],
     ['cat_kit_educacao', 'Educação', '#84cc16', '📚'],
+  ]],
+  ['Carro', 'expense', [
+    ['cat_kit_combustivel', 'Combustível', '#dc2626', '⛽'],
+    ['cat_kit_manutencao_veicular', 'Manutenção veicular', '#64748b', '🛠️'],
+    ['cat_kit_ipva_licenciamento', 'IPVA e licenciamento', '#eab308', '📄'],
   ]],
   ['Estilo de vida', 'expense', [
     ['cat_kit_lazer', 'Lazer', '#06b6d4', '🎬'],

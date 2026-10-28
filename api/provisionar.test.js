@@ -493,8 +493,12 @@ describe('kit PF × PJ', () => {
   it('cliente PF (mm): grupos e ordem do kit PF, cat_res_ger, cores sem repetir no grupo', async () => {
     const q = qde('cliente_mm')
     const grupos = await gruposNaOrdem(q)
-    expect(grupos.map(g => g.grupo)).toEqual(['Essenciais', 'Estilo de vida', 'Financeiro', 'Outros', 'Receitas'])
-    expect(grupos[0].cats).toBe('Moradia | Contas da casa | Mercado | Alimentação | Transporte | Saúde | Educação')
+    expect(grupos.map(g => g.grupo)).toEqual(['Despesas da casa', 'Essenciais', 'Carro', 'Estilo de vida', 'Financeiro', 'Outros', 'Receitas'])
+    expect(grupos[0].cats).toBe('Aluguel | Condomínio | Gás | Energia | Água | Internet e telefone | Manutenção | Obras | Serviços')
+    expect(grupos[1].cats).toBe('Mercado | Alimentação | Transporte | Saúde | Educação')
+    expect(grupos[2].cats).toBe('Combustível | Manutenção veicular | IPVA e licenciamento')
+    expect(await q("SELECT id FROM categorias WHERE name = 'Manutenção'")).toEqual([{ id: 'cat_kit_manutencao_casa' }])
+    expect(await q("SELECT count(*)::int AS n FROM categorias WHERE id IN ('cat_kit_moradia', 'cat_kit_contas_casa')")).toEqual([{ n: 0 }])
     expect(await q("SELECT id, type FROM categorias WHERE name = 'Pró-labore'")).toEqual([{ id: 'cat_kit_pro_labore', type: 'income' }])
     expect((await q("SELECT count(*)::int AS n FROM categorias WHERE id = 'cat_res_ger'"))[0].n).toBe(1)
     const [cfg] = await q('SELECT category_groups, category_groups_ordem_manual FROM configuracoes')
@@ -512,7 +516,7 @@ describe('kit PF × PJ', () => {
     }
     const pf = new Map(kitDoCliente({ tipo_pessoa: 'PF' }).categorias.map(c => [c[0], c]))
     for (const [id, nome, tipo, cor, icone] of [
-      ['cat_kit_alimentacao', 'Alimentação', 'expense', '#f97316', '🍽️'], ['cat_kit_moradia', 'Moradia', 'expense', '#8b5cf6', '🏠'],
+      ['cat_kit_alimentacao', 'Alimentação', 'expense', '#f97316', '🍽️'], ['cat_kit_transporte', 'Transporte', 'expense', '#3b82f6', '🚗'],
       ['cat_kit_impostos', 'Impostos e taxas', 'expense', '#eab308', '🧾'], ['cat_kit_salario', 'Salário', 'income', '#22c55e', '💰'],
       ['cat_kit_outras_receitas', 'Outras receitas', 'income', '#14b8a6', '➕'],
     ]) expect(pf.get(id).slice(0, 5)).toEqual([id, nome, tipo, cor, icone])
