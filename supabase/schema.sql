@@ -1116,7 +1116,7 @@ CREATE TABLE IF NOT EXISTS import_layouts (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ia_pre_lancamentos (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  tipo TEXT NOT NULL CHECK (tipo IN ('lancamento', 'agendamento')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('lancamento', 'agendamento', 'baixa')), -- 'baixa': migração 2026-10-29
   payload JSONB NOT NULL,
   texto_original TEXT,
   status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'efetivado', 'descartado')),

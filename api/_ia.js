@@ -17,7 +17,7 @@ export async function ensureIaSchema() {
   if (schemaPronto.jaRodou()) return
   await query(`CREATE TABLE IF NOT EXISTS ia_pre_lancamentos (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tipo TEXT NOT NULL CHECK (tipo IN ('lancamento', 'agendamento')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('lancamento', 'agendamento', 'baixa')),
     payload JSONB NOT NULL,
     texto_original TEXT,
     status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'efetivado', 'descartado')),
@@ -151,6 +151,7 @@ O usuário descreve em português (texto, voz transcrita ou foto de comprovante/
 Responda SEMPRE chamando exatamente UMA ferramenta, sem texto fora dela:
 - registrar_lancamento: despesa, receita ou transferência que já aconteceu ("gastei", "paguei", "recebi", "lance").
 - criar_agendamento: algo a pagar/receber no futuro ou recorrente. "Contas a pagar" e "contas a receber" = agendamento.
+- baixar_agendamento: dar baixa (pagar/receber) num agendamento que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel", "recebi a parcela do X"). Informe o favorecido/descrição citados e o valor: exato em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). Quem paga ao usuário = receita; o usuário pagando = despesa.
 - consultar_saldo: o usuário quer saber o saldo de uma conta. Você NÃO sabe saldos: só indique a conta.
 - perguntar: falta algo essencial (ex.: o valor) ou há ambiguidade real (ex.: duas contas Itaú). Dê de 2 a 6 opções curtas; quando forem contas/categorias, use os nomes do cadastro.
 
@@ -164,7 +165,8 @@ Regras:
 7. Em "termos", copie o trecho EXATO do pedido que levou a cada escolha (ex.: categoria: "combustível").
 8. Descrição: curta e clara (ex.: "Combustível", "Conta de luz"), sem o valor.
 9. Valor sempre positivo, em reais (ponto como separador decimal no JSON).
-10. Não dê conselho financeiro nem de investimento e não responda assuntos fora de lançamentos/saldos. Se pedirem, use perguntar explicando que você só registra lançamentos, agendamentos e consulta saldos.`
+10. Você NUNCA exclui, apaga ou estorna nada, e não há ferramenta para isso. Se pedirem exclusão, use perguntar dizendo que você não exclui e que o item pode ser aberto na tela (Lançamentos ou Agendamentos) para o usuário decidir; opcoes vazio.
+11. Não dê conselho financeiro nem de investimento e não responda assuntos fora de lançamentos/saldos. Se pedirem, use perguntar explicando que você só registra lançamentos, agendamentos e consulta saldos.`
 
 const NUM_CONF = { type: 'number', minimum: 0, maximum: 1 }
 const CAMPOS_BASE = {
@@ -212,6 +214,24 @@ export const FERRAMENTAS = [
     },
   },
   {
+    name: 'baixar_agendamento',
+    description: 'Dar baixa (registrar o pagamento/recebimento) num agendamento pendente que já existe. O app procura o agendamento e abre a prévia; não grava nada.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        favorecido: { type: ['string', 'null'], description: 'Nome citado, como o usuário disse' },
+        descricao: { type: ['string', 'null'], description: 'Descrição citada do agendamento (ex.: "aluguel")' },
+        valor_informado: { type: ['number', 'null'], description: 'Valor exato pago/recebido' },
+        valor_min: { type: ['number', 'null'] },
+        valor_max: { type: ['number', 'null'] },
+        tipo: { type: ['string', 'null'], enum: ['despesa', 'receita', null] },
+        data_pagamento: { type: ['string', 'null'], description: 'YYYY-MM-DD; padrão hoje' },
+        conta_id: { type: ['string', 'null'], description: 'Conta onde entrou/saiu o dinheiro, se citada' },
+      },
+      required: ['favorecido', 'tipo'],
+    },
+  },
+  {
     name: 'consultar_saldo',
     description: 'O usuário quer ver o saldo de uma conta. O app calcula o saldo; você só indica a conta.',
     input_schema: { type: 'object', properties: { conta_id: { type: ['string', 'null'] } }, required: ['conta_id'] },
@@ -248,6 +268,19 @@ export function validarParametros(ferramenta, input, ctx, hoje = hojeSaoPaulo())
   }
   if (ferramenta === 'consultar_saldo') {
     return { conta_id: ctx.idx.contas.has(p.conta_id) ? p.conta_id : null }
+  }
+  if (ferramenta === 'baixar_agendamento') {
+    const num = (v) => (Number(v) > 0 ? Math.round(Number(v) * 100) / 100 : null)
+    let min = num(p.valor_min)
+    let max = num(p.valor_max)
+    if (min && max && min > max) [min, max] = [max, min]
+    return {
+      favorecido: txt(p.favorecido, 80), descricao: txt(p.descricao, 80),
+      valor_informado: num(p.valor_informado), valor_min: min, valor_max: max,
+      tipo: ['despesa', 'receita'].includes(p.tipo) ? p.tipo : null,
+      data_pagamento: DATA.test(String(p.data_pagamento || '')) ? p.data_pagamento : hoje,
+      conta_id: ctx.idx.contas.has(p.conta_id) ? p.conta_id : null,
+    }
   }
 
   const termos = {

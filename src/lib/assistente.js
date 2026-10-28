@@ -84,8 +84,57 @@ export function apelidosAprendidos(sugestao = {}, salvo = {}) {
 }
 
 // Tipo do pré-lançamento (ia_pre_lancamentos.tipo) pela ferramenta.
-export const tipoPreLancamento = (ferramenta) => (ferramenta === 'criar_agendamento' ? 'agendamento' : 'lancamento')
-export const ferramentaDoPre = (pre) => pre?.payload?.ferramenta || (pre?.tipo === 'agendamento' ? 'criar_agendamento' : 'registrar_lancamento')
+const TIPO_DO_PRE = { criar_agendamento: 'agendamento', baixar_agendamento: 'baixa' }
+const FERRAMENTA_DO_TIPO = { agendamento: 'criar_agendamento', baixa: 'baixar_agendamento' }
+export const tipoPreLancamento = (ferramenta) => TIPO_DO_PRE[ferramenta] || 'lancamento'
+export const ferramentaDoPre = (pre) => pre?.payload?.ferramenta || FERRAMENTA_DO_TIPO[pre?.tipo] || 'registrar_lancamento'
+
+// ─── Baixa de agendamento (etapa 1.1) ────────────────────────────────────────────────────────────
+
+// Candidatos do backend que continuam valendo no estado do app: o agendamento existe e a ocorrência
+// ainda é a PRÓXIMA pendente (o que o botão Pagar baixaria). Algo baixado depois da consulta sai.
+export function candidatosValidos(candidatos, schedules, getNextOccurrences) {
+  const porId = new Map((schedules || []).map(s => [s.id, s]))
+  return (candidatos || []).filter(c => {
+    const s = porId.get(c.schedule_id)
+    return !!s && getNextOccurrences(s, 1)[0] === c.ocorrencia
+  })
+}
+
+// Valor efetivo da baixa: o informado; numa faixa ("uns 200, 220"), o previsto se cair nela, senão
+// o meio da faixa; sem valor citado, o previsto da ocorrência.
+export function valorDaBaixa(criterio = {}, candidato = {}) {
+  if (criterio.valor_informado > 0) return criterio.valor_informado
+  const min = criterio.valor_min
+  const max = criterio.valor_max || min
+  if (min > 0) {
+    if (candidato.valor >= min && candidato.valor <= max) return candidato.valor
+    return Math.round(((min + max) / 2) * 100) / 100
+  }
+  return candidato.valor || null
+}
+
+// Nenhum agendamento encontrado → sugestão de lançamento avulso com o que foi dito.
+export function sugestaoLancamentoDaBaixa(criterio = {}) {
+  const valor = criterio.valor_informado || (criterio.valor_min && criterio.valor_max
+    ? Math.round(((criterio.valor_min + criterio.valor_max) / 2) * 100) / 100
+    : criterio.valor_min || null)
+  return {
+    tipo: criterio.tipo || 'despesa', valor, data: criterio.data_pagamento, conta_id: criterio.conta_id || null,
+    conta_destino_id: null, categoria_id: null, centro_custo_id: null, favorecido_id: null,
+    favorecido_novo: criterio.favorecido || null, descricao: criterio.descricao || criterio.favorecido || null,
+    confianca: { valor: criterio.valor_informado ? 0.9 : 0.4, data: 0.8, conta: criterio.conta_id ? 0.7 : 0, categoria: 0, favorecido: 0.5, descricao: 0.5 },
+    termos: { favorecido: criterio.favorecido || null },
+  }
+}
+
+// Payload do pré-lançamento de baixa: o critério, o agendamento escolhido e, no topo, os campos que a
+// lista do Início mostra (descrição, valor, data, conta).
+export const payloadDaBaixa = (criterio, candidato) => ({
+  ferramenta: 'baixar_agendamento', criterio, candidato,
+  descricao: candidato.descricao, valor: valorDaBaixa(criterio, candidato),
+  data: criterio.data_pagamento || candidato.data, conta_id: criterio.conta_id || candidato.conta_id || null,
+})
 
 // Redimensiona a foto para no máximo `lado` px (maior lado) em JPEG, baixando a qualidade até caber
 // em `maxBytes`. → { base64, mimeType } (base64 sem o prefixo data:).

@@ -7,6 +7,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { listarPreLancamentos, concluirPreLancamento, EVENTO_PRE_LANCAMENTOS } from '../../lib/assistenteApi'
 import { ferramentaDoPre } from '../../lib/assistente'
 import PreviaAssistente from './PreviaAssistente'
+import PreviaBaixa from './PreviaBaixa'
 
 // Início (mobile e Painel do desktop): "X pré-lançamentos para revisar" → lista com Efetivar (abre a
 // prévia; salvar baixa o pré-lançamento) e Descartar. Pré-lançamento não entra em saldo nenhum.
@@ -51,13 +52,15 @@ export default function AvisoPreLancamentos({ onToast }) {
           <ul className="divide-y divide-borda rounded-lg border border-borda">
             {itens.map(i => {
               const p = i.payload || {}
-              const agend = ferramentaDoPre(i) === 'criar_agendamento'
+              const ferramenta = ferramentaDoPre(i)
+              const agend = ferramenta === 'criar_agendamento'
+              const rotulo = ferramenta === 'baixar_agendamento' ? 'Baixa' : agend ? 'Agendamento' : 'Lançamento'
               return (
                 <li key={i.id} className="flex items-center gap-2 px-3 py-2">
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm text-texto-1">{p.descricao || i.texto_original || 'Sem descrição'}</p>
-                    <p className="text-[11px] text-texto-3">
-                      {agend ? 'Agendamento' : 'Lançamento'} · {p.valor > 0 ? fmt(p.valor) : 'sem valor'} · {fmtDate(agend ? (p.vencimento || p.data) : p.data)} · {nomeConta(p.conta_id)}
+                    <p className="text-sm text-texto-1 break-words">{p.descricao || i.texto_original || 'Sem descrição'}</p>
+                    <p className="text-[11px] text-texto-3 break-words">
+                      {rotulo} · {p.valor > 0 ? fmt(p.valor) : 'sem valor'} · {fmtDate(agend ? (p.vencimento || p.data) : p.data)} · {nomeConta(p.conta_id)}
                     </p>
                   </div>
                   <button type="button" className="btn-primary text-xs px-3 min-h-[36px]" onClick={() => setEfetivando(i)}>Efetivar</button>
@@ -72,8 +75,19 @@ export default function AvisoPreLancamentos({ onToast }) {
         </div>
       </Modal>
 
-      <Modal open={!!efetivando} onClose={() => setEfetivando(null)} title="Efetivar pré-lançamento" size="lg">
-        {efetivando && (
+      {/* Baixa: o próprio modal Registrar Agendamento (já é uma camada sobre a tela). */}
+      {efetivando && ferramentaDoPre(efetivando) === 'baixar_agendamento' && (
+        <PreviaBaixa
+          criterio={efetivando.payload?.criterio || {}}
+          candidato={efetivando.payload?.candidato || {}}
+          textoOriginal={efetivando.texto_original || ''}
+          preId={efetivando.id}
+          onClose={() => setEfetivando(null)}
+          onToast={avisar}
+        />
+      )}
+      <Modal open={!!efetivando && ferramentaDoPre(efetivando) !== 'baixar_agendamento'} onClose={() => setEfetivando(null)} title="Efetivar pré-lançamento" size="lg">
+        {efetivando && ferramentaDoPre(efetivando) !== 'baixar_agendamento' && (
           <PreviaAssistente
             ferramenta={ferramentaDoPre(efetivando)}
             sugestao={efetivando.payload || {}}

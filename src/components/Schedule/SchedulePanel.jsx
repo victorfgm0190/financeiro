@@ -168,7 +168,10 @@ function SectionHeader({ label, count, variant = 'default', cols = 8 }) {
   )
 }
 
-function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose }) {
+// Exportado para a prévia de BAIXA do Assistente IA (mesmo fluxo, sem caminho paralelo). Opcionais:
+// `inicial` { amount, date, accountId } pré-preenche os campos; `aviso` aparece no topo;
+// `onSalvo()` avisa que a baixa foi gravada (antes do onClose).
+export function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose, inicial = null, aviso = null, onSalvo = null }) {
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
@@ -227,13 +230,15 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   // ocorrências" (overrides[nextDate]) manda; sem ele, o valor base. Antes os campos nasciam em
   // schedule.amount e ignoravam a edição por ocorrência que a lista já exibia.
   const occ = nextDate ? occEfetiva(schedule, nextDate) : { date: today, amount: schedule.amount }
-  const occAmount = valorParaInput(occ.amount)
-  const occDate = occ.date || today
+  const occAmount = inicial?.amount > 0 ? valorParaInput(inicial.amount) : valorParaInput(occ.amount)
+  const occDate = inicial?.date || occ.date || today
+  const occDataVenc = occ.date || today
   // Vencimento dos atalhos "Hoje"/"Vencimento" do campo Data: a data efetiva da ocorrência
   // (sem ocorrência pendente não há vencimento — o campo nasce em hoje, como antes).
-  const occVenc = nextDate ? occDate : null
+  const occVenc = nextDate ? occDataVenc : null
 
-  const [payAccountId, setPayAccountId] = useState(schedule.accountId || '')
+  const concluir = () => { onSalvo?.(); onClose() }
+  const [payAccountId, setPayAccountId] = useState(inicial?.accountId || schedule.accountId || '')
   const [payPayee, setPayPayee] = useState(schedule.payee || '')
   const [payAmount, setPayAmount] = useState(occAmount)
   const [payDate, setPayDate] = useState(occDate)
@@ -241,7 +246,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
   const [payGrupo, setPayGrupo] = useState(schedule.grupoGerencial || '')
   const [payNotes, setPayNotes] = useState(schedule.notes || '')
 
-  const [recAccountId, setRecAccountId] = useState(schedule.accountId || '')
+  const [recAccountId, setRecAccountId] = useState(inicial?.accountId || schedule.accountId || '')
   const [recPayee, setRecPayee] = useState(schedule.payee || '')
   const [recAmount, setRecAmount] = useState(occAmount)
   const [recDate, setRecDate] = useState(occDate)
@@ -269,12 +274,12 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
     }
   }
 
-  const [finAccountId, setFinAccountId] = useState(schedule.accountId || '')
+  const [finAccountId, setFinAccountId] = useState(inicial?.accountId || schedule.accountId || '')
   // Quanto vai ser pago AGORA. Nasce na parcela cheia (o caso normal) e é editável para o
   // pagamento parcial, que o backend já suporta — antes o modal mandava sempre o total e não
   // havia como registrar um aporte menor por esta tela.
   const [finValor, setFinValor] = useState(() => (parcelaFin ? String(parcelaFin.total) : ''))
-  const [finDate, setFinDate] = useState(nextDate || today)
+  const [finDate, setFinDate] = useState(inicial?.date || nextDate || today)
   const [finLoading, setFinLoading] = useState(false)
   const [finErro, setFinErro] = useState(null)
 
@@ -336,7 +341,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
       }
       // Meta aponta o 1º lançamento criado pelo endpoint (principal; o de juros vai junto no estado).
       markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(r.lancamentos_criados?.[0]?.id))
-      onClose()
+      concluir()
     } catch (err) {
       setFinErro(err.message)
     } finally {
@@ -451,7 +456,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
       })
       markScheduleRegistered(schedule.id, regDate, metaBaixaGerada(txId))
     }
-    onClose()
+    concluir()
   }
 
   const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: 'Transferência' }
@@ -474,6 +479,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
             <X size={16} />
           </button>
         </div>
+        {aviso && <div className="px-5 pt-3 shrink-0">{aviso}</div>}
 
         {!parcelaFin && (
           <div className="flex border-b border-borda shrink-0">
@@ -724,7 +730,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
                 <button
                   type="button"
                   className="btn-secondary text-xs py-1 px-2 shrink-0"
-                  onClick={() => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(duplicado.id)); onClose() }}
+                  onClick={() => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(duplicado.id)); concluir() }}
                 >
                   Vincular a este lançamento
                 </button>
@@ -741,7 +747,7 @@ function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gere
               transactions={transactions}
               schedules={todosAgendamentos}
               accounts={accounts}
-              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, nextDate || today); onClose() }}
+              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, nextDate || today); concluir() }}
             />
           )}
         </div>
