@@ -93,6 +93,8 @@ export function agendamentoDaEfetivacao(prov, { id, valor, date, occurrenceDate 
     reservaFuncaoId: null,
     isProvisao: false,
     provisaoEfetivada: false,
+    // "Considerar no Fluxo de Caixa principal?" da provisão (conta não FC marcada Sim/Não).
+    considerarFluxoPrincipal: typeof prov.considerarFluxoPrincipal === 'boolean' ? prov.considerarFluxoPrincipal : null,
   }
 }
 

@@ -10,6 +10,7 @@ import { computeFaturaRef } from '../../lib/fatura'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import SearchableSelect from '../shared/SearchableSelect'
 import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import PerguntaFluxoPrincipal from '../shared/PerguntaFluxoPrincipal'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
 import { isTransferenciaEntrePerfis, categoriasEntrePerfis } from '../../lib/transferenciaPerfis'
@@ -362,7 +363,6 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   // Pergunta do fluxo principal (só despesa/receita em conta não FC, ou transferência FC ↔ não FC;
   // nunca cartão). Vale para a série: o realizado segue a regra da conta.
   const perguntaFluxo = perguntaFluxoPrincipal(form, accounts)
-  const considerarFluxo = form.considerarFluxoPrincipal ?? perguntaFluxo?.padrao ?? false
 
   // Função de reserva para DESPESA em cartão de crédito com grupo gerencial NUMERADO (2..N —
   // CA, Phlo, Impr etc.; não G, não reserva(1), não D). Pré-define de qual bucket sairá o
@@ -951,27 +951,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         )}
 
         {/* Fluxo de Caixa principal (só quando a conta não decide sozinha) */}
-        {perguntaFluxo && (
-          <div className="sm:col-span-2 flex items-start justify-between gap-3 rounded-lg bg-surface-2/40 px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-sm text-texto-2">Considerar no Fluxo de Caixa principal?</p>
-              {perguntaFluxo.dica && <p className="text-[11px] text-texto-3 mt-0.5">{perguntaFluxo.dica}</p>}
-            </div>
-            <div className="flex shrink-0 rounded-lg border border-borda-campo overflow-hidden text-xs" role="group" aria-label="Considerar no Fluxo de Caixa principal">
-              {[[true, 'Sim'], [false, 'Não']].map(([v, rotulo]) => (
-                <button
-                  key={rotulo}
-                  type="button"
-                  aria-pressed={considerarFluxo === v}
-                  onClick={() => set('considerarFluxoPrincipal', v)}
-                  className={`px-3 py-1.5 transition-colors ${considerarFluxo === v ? 'bg-primary text-white' : 'text-texto-2 hover:bg-surface-hover'}`}
-                >
-                  {rotulo}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <PerguntaFluxoPrincipal
+          pergunta={perguntaFluxo}
+          valor={form.considerarFluxoPrincipal}
+          onChange={v => set('considerarFluxoPrincipal', v)}
+          className="sm:col-span-2"
+        />
 
         {/* Reserva category — quando transferência envolve conta reserva */}
         {form.transactionType === 'transfer' && (schIsDepositToReserva || schIsWithdrawFromReserva) && (

@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Info } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { today } from '../shared/utils'
+import { today, buildAccountSelectOptions } from '../shared/utils'
 import SearchableSelect from '../shared/SearchableSelect'
 import { filtrarCategoriasPorPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { contaCentralDoPerfil, msgSemContaCentral } from '../../lib/contaCentral'
 import InputMoeda from '../shared/InputMoeda'
+import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
+import PerguntaFluxoPrincipal from '../shared/PerguntaFluxoPrincipal'
+import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 // Mesmas frequências do ScheduleForm.
 const FREQUENCIES = [
@@ -28,14 +32,16 @@ const FREQ_OPTIONS = FREQUENCIES.map(f => ({ id: f.value, label: f.label }))
 // ou recorrente (Contínua/Parcelada). Opcionalmente vinculada a uma Função de Reserva.
 // Com `initial`, abre em modo edição (todos os campos editáveis).
 export default function ProvisaoForm({ initial, onClose }) {
-  const { accounts, profiles, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder, pode } = useApp()
+  const { accounts, accountGroups, profiles, categories, reserveFunctions, addSchedule, updateSchedule, getNextOccurrences, activeProfileId, categoryGroupOrder, payees, transactions, addPayee, pode } = useApp()
+  const isMobile = useIsMobile()
   // Nível de acesso: lançar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
-  // A provisão é uma despesa futura debitada da Conta central DO PERFIL DA PROVISÃO — aparece no
-  // Fluxo de Caixa Principal como despesa. Perfil: na edição, o da conta já gravada; na criação, o
-  // da conta da função de reserva escolhida; sem função, o select "Perfil" (obrigatório, nunca o
-  // filtro da tela). Sem Conta central nesse perfil, o Salvar fica bloqueado com o aviso.
+  // A provisão é uma despesa futura debitada da "Conta (de onde o dinheiro sai)". Padrão: a Conta
+  // central DO PERFIL DA PROVISÃO. Perfil: o da conta escolhida (na edição, a gravada); senão o da
+  // conta da função de reserva; sem as duas, o select "Perfil" (obrigatório, nunca o filtro da
+  // tela). Sem conta escolhida nem Conta central no perfil, o Salvar fica bloqueado com o aviso.
+  // Conta não FC → "Considerar no Fluxo de Caixa principal?" (lib/fluxoPrincipal).
   const [perfilEscolhido, setPerfilEscolhido] = useState('')
   const [erroCentral, setErroCentral] = useState(null)
 
@@ -66,6 +72,10 @@ export default function ProvisaoForm({ initial, onClose }) {
     installments: initial?.installments ?? 0,
     comReserva: !!initial?.reservaFuncaoId,
     reservaFuncaoId: initial?.reservaFuncaoId || '',
+    // '' = Conta central do perfil (padrão).
+    accountId: initial?.accountId || '',
+    considerarFluxoPrincipal: typeof initial?.considerarFluxoPrincipal === 'boolean' ? initial.considerarFluxoPrincipal : null,
+    payee: initial?.payee || '',
   })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isRecorrente = form.frequency && form.frequency !== 'once'
@@ -73,15 +83,34 @@ export default function ProvisaoForm({ initial, onClose }) {
   const contaDaFuncao = form.comReserva && form.reservaFuncaoId
     ? accounts.find(a => a.id === (reserveFunctions || []).find(f => f.id === form.reservaFuncaoId)?.accountId) || null
     : null
-  const perfilDaProvisao = initial?.accountId
-    ? accounts.find(a => a.id === initial.accountId)?.profileId || null
+  const contaEscolhida = form.accountId ? accounts.find(a => a.id === form.accountId) || null : null
+  const perfilDaProvisao = contaEscolhida
+    ? contaEscolhida.profileId || null
     : contaDaFuncao ? contaDaFuncao.profileId || null : (perfilEscolhido || null)
-  const mostraSelectPerfil = !initial?.accountId && !contaDaFuncao
+  const mostraSelectPerfil = !contaEscolhida && !contaDaFuncao
   const contaPrincipal = contaCentralDoPerfil(accounts, perfilDaProvisao)
+  // Conta efetiva: a escolhida, senão a Conta central do perfil.
+  const contaProvisao = contaEscolhida || contaPrincipal
+  // Contas oferecidas: todas menos cartão, gerencial e desativadas (a já gravada sempre aparece).
+  const contaGravadaId = initial?.accountId || null
+  const contaOpts = useMemo(() => {
+    const ok = accounts.filter(a => a.id === contaGravadaId
+      || (a.active !== false && a.type !== 'credit' && a.type !== 'gerencial' && !a.isGerencial))
+    const opts = buildAccountSelectOptions(ok, accountGroups, { isMobile })
+    const gravada = contaGravadaId && !opts.some(o => o.id === contaGravadaId) ? accounts.find(a => a.id === contaGravadaId) : null
+    return gravada ? [{ id: gravada.id, label: gravada.name, group: null }, ...opts] : opts
+  }, [accounts, accountGroups, isMobile, contaGravadaId])
+  const formFluxo = { transactionType: 'expense', accountId: contaProvisao?.id || '', considerarFluxoPrincipal: form.considerarFluxoPrincipal }
+  const perguntaFluxo = perguntaFluxoPrincipal(formFluxo, accounts)
+  const sortedPayees = useMemo(() => {
+    const counts = {}
+    for (const tx of transactions) if (tx.payee) counts[tx.payee] = (counts[tx.payee] || 0) + 1
+    return [...new Set([...payees])].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [transactions, payees])
 
   // Categorias por perfil: o da conta principal (onde a provisão cai), senão o chip do topo; a
   // categoria já gravada continua na lista.
-  const perfilCategorias = perfilParaCategorias(accounts, contaPrincipal?.id || initial?.accountId, activeProfileId)
+  const perfilCategorias = perfilParaCategorias(accounts, contaProvisao?.id || initial?.accountId, activeProfileId)
   const expenseCatOpts = useMemo(() =>
     ordenarCategorias(filtrarCategoriasPorPerfil(categories, perfilCategorias, [initial?.categoryId]), categoryGroupOrder)
       .filter(c => c.type === 'expense' || c.type === 'both')
@@ -108,21 +137,24 @@ export default function ProvisaoForm({ initial, onClose }) {
     if (!form.description || !form.amount || !form.startDate || !form.frequency) return
     if (isRecorrente && form.occurrenceType === 'installment' && Number(form.installments) < 1) return
     if (form.comReserva && !form.reservaFuncaoId) return
-    if (!initial?.accountId && !contaPrincipal) {
+    if (!contaProvisao) {
       setErroCentral(msgSemContaCentral(profiles, perfilDaProvisao, contaDaFuncao))
       return
     }
+    if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
 
     const payload = {
       description: form.description,
       transactionType: 'expense',
-      // Em edição mantém a conta original; na criação usa a Conta central do perfil da provisão.
-      accountId: initial?.accountId || contaPrincipal?.id || '',
-      accountType: initial?.accountType ?? (contaPrincipal?.type || null),
+      // A conta do formulário (padrão: Conta central do perfil). Vale para as ocorrências pendentes:
+      // as já efetivadas viraram lançamento/agendamento próprios.
+      accountId: contaProvisao.id,
+      accountType: contaProvisao.type || null,
+      considerarFluxoPrincipal: considerarFluxoParaGravar(formFluxo, accounts),
       toAccountId: '',
       amount: Number(form.amount),
       categoryId: form.categoryId || '',
-      payee: initial?.payee || '',
+      payee: form.payee || '',
       costCenter: initial?.costCenter || '',
       frequency: form.frequency,
       startDate: form.startDate,
@@ -151,8 +183,8 @@ export default function ProvisaoForm({ initial, onClose }) {
         <Info size={14} className="text-texto-2 shrink-0 mt-0.5" />
         <p className="text-xs text-texto-2 leading-snug">
           Uma provisão é uma despesa futura estimada. Pode ser Única ou recorrente
-          (Contínua/Parcelada). Aparece no Fluxo de Caixa Principal e pode ser efetivada depois,
-          ocorrência a ocorrência, com o valor e a data reais.
+          (Contínua/Parcelada). Entra no Fluxo de Caixa Principal pela conta (conta FC, ou conta
+          marcada Sim) e pode ser efetivada depois, ocorrência a ocorrência, com o valor e a data reais.
         </p>
       </div>
 
@@ -164,10 +196,10 @@ export default function ProvisaoForm({ initial, onClose }) {
             <option value="">Selecione o perfil...</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{String(p.name || '').trim()}</option>)}
           </select>
-          <p className="text-xs text-texto-3 mt-1">A provisão sai da Conta central deste perfil.</p>
+          <p className="text-xs text-texto-3 mt-1">Sem conta escolhida, a provisão sai da Conta central deste perfil.</p>
         </div>
       )}
-      {(erroCentral || (perfilDaProvisao && !contaPrincipal && !initial?.accountId)) && (
+      {(erroCentral || (perfilDaProvisao && !contaProvisao)) && (
         <p className="text-xs text-aviso">{erroCentral || msgSemContaCentral(profiles, perfilDaProvisao, contaDaFuncao)}</p>
       )}
 
@@ -279,6 +311,30 @@ export default function ProvisaoForm({ initial, onClose }) {
           )}
         </div>
       )}
+
+      {/* Conta (de onde o dinheiro sai) — padrão: Conta central do perfil */}
+      <div>
+        <label className="label">Conta (de onde o dinheiro sai) *</label>
+        <SearchableSelect
+          options={contaOpts}
+          value={contaProvisao?.id || ''}
+          onChange={id => setForm(f => ({ ...f, accountId: id || '', considerarFluxoPrincipal: null }))}
+          placeholder="Conta central do perfil"
+          preserveGroupOrder
+          ungroupedLast
+        />
+      </div>
+      <PerguntaFluxoPrincipal
+        pergunta={perguntaFluxo}
+        valor={form.considerarFluxoPrincipal}
+        onChange={v => set('considerarFluxoPrincipal', v)}
+      />
+
+      {/* Favorecido */}
+      <div>
+        <label className="label">Favorecido</label>
+        <FavorecidoAutocomplete value={form.payee} onChange={v => set('payee', v)} suggestions={sortedPayees} />
+      </div>
 
       {/* Categoria (opcional) */}
       <div>

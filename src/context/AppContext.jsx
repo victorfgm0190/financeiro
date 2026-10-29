@@ -2773,13 +2773,15 @@ export function AppProvider({ children }) {
   // da conta da reserva → conta principal com o valor/data confirmados e o mesmo reservaFuncaoId:
   // é o resgate REAL que substitui a projeção provisória no Fluxo Futuro da reserva.
   const efetivarProvisao = useCallback((id, { amount, date, occurrenceDate }) => {
-    // Resgate da reserva → Conta central do PERFIL DA RESERVA; sem ela, bloqueia antes de gravar.
+    // Resgate da reserva → CONTA DA PROVISÃO (de onde a despesa sai). Provisão sem conta (legado) →
+    // Conta central do PERFIL DA RESERVA; sem ela, bloqueia antes de gravar.
     {
       const d0 = dataRef.current
       const prov0 = d0.schedules.find(s => s.id === id)
       const func0 = prov0?.reservaFuncaoId ? (d0.reserveFunctions || []).find(f => f.id === prov0.reservaFuncaoId) : null
       const reserva0 = func0?.accountId ? d0.accounts.find(a => a.id === func0.accountId) : null
-      if (reserva0) {
+      const contaProv0 = prov0?.accountId ? d0.accounts.find(a => a.id === prov0.accountId) : null
+      if (reserva0 && !contaProv0) {
         const { erro } = contaCentralPara(d0.accounts, d0.profiles, reserva0)
         if (erro) { setAvisoOperacao(erro); return false }
       }
@@ -2829,7 +2831,8 @@ export function AppProvider({ children }) {
       if (prov.reservaFuncaoId) {
         const func = (d.reserveFunctions || []).find(f => f.id === prov.reservaFuncaoId)
         const contaReserva = func?.accountId ? d.accounts.find(a => a.id === func.accountId) : null
-        const contaPrincipal = contaCentralDoPerfil(d.accounts, contaReserva?.profileId)
+        const contaPrincipal = (prov.accountId && d.accounts.find(a => a.id === prov.accountId))
+          || contaCentralDoPerfil(d.accounts, contaReserva?.profileId)
         if (contaReserva && contaPrincipal) {
           schedules = [...schedules, {
             id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2),
@@ -2857,6 +2860,8 @@ export function AppProvider({ children }) {
             reservaFuncaoId: prov.reservaFuncaoId,
             isProvisao: false,
             provisaoEfetivada: false,
+            // Mesma marca da despesa: conta não FC marcada Sim → o resgate também entra (líquido 0).
+            considerarFluxoPrincipal: typeof prov.considerarFluxoPrincipal === 'boolean' ? prov.considerarFluxoPrincipal : null,
           }]
         }
       }

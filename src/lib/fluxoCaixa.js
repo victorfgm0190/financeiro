@@ -183,13 +183,19 @@ export function computeFluxoCaixa({
       const reservaAccId = provFunc?.accountId || null
       if (reservaAccId) {
         const principalId = s.accountId
-        if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)) return
+        // Na visão principal, as duas pernas seguem a marca da provisão (fluxoPrincipal.js): conta
+        // não FC marcada Sim → resgate (+) e despesa (−) entram juntos, líquido 0 como numa conta FC.
+        const resgate = { ...s, transactionType: 'transfer', accountId: reservaAccId, toAccountId: principalId }
+        if (!accountIds.has(principalId) && !accountIds.has(reservaAccId)
+          && !(fluxoPrincipal && (agendamentoNoFluxoPrincipal(s, fluxoPrincipal) || agendamentoNoFluxoPrincipal(resgate, fluxoPrincipal)))) return
         getNextOccurrences(s, 400).forEach(origDate => {
           const { date, amount } = occEfetiva(s, origDate)
           if (date > end) return
           const antes = date < start
           if (!oculto(reservaAccId, principalId)) {
-            const m1 = classify('transfer', reservaAccId, principalId, amount)
+            const m1 = fluxoPrincipal
+              ? movimentoDoValor(valorNoFluxoPrincipal(resgate, amount, fluxoPrincipal))
+              : classify('transfer', reservaAccId, principalId, amount)
             if (m1) {
               if (antes) agendamentosAntes = round2(agendamentosAntes + m1.entrada - m1.saida)
               else out.push({
@@ -202,7 +208,9 @@ export function computeFluxoCaixa({
             }
           }
           if (!oculto(principalId, null)) {
-            const m2 = classify('expense', principalId, null, amount)
+            const m2 = fluxoPrincipal
+              ? movimentoDoValor(valorNoFluxoPrincipal(s, amount, fluxoPrincipal))
+              : classify('expense', principalId, null, amount)
             if (m2) {
               if (antes) agendamentosAntes = round2(agendamentosAntes + m2.entrada - m2.saida)
               else out.push({

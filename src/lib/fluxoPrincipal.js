@@ -7,6 +7,10 @@
 //   true  → despesa/receita em conta NÃO FC entra no fluxo (ex.: diarista paga pelo NUGI);
 //   false → transferência entre conta FC e conta não FC NÃO entra (ex.: Pix Itaú → NUGI que só
 //           abastece a conta onde o pagamento final já está agendado).
+// Provisão com função de reserva numa conta não FC marcada Sim: o RESGATE (reserva → conta da
+// provisão, as duas fora do pool) leva a MESMA marca da despesa e entra (+), para o líquido no fluxo
+// continuar 0 — como quando a provisão sai de uma conta FC. Essa marca em transferência não FC →
+// não FC é gravada só pelo sistema (efetivação da provisão); o formulário não pergunta.
 // A marca só vale onde a pergunta aparece no formulário (perguntaFluxoPrincipal); em qualquer outro
 // caso (conta FC, cartão, FC → FC…) um valor gravado é ignorado e vale a regra de hoje. Só
 // agendamentos: o lançamento realizado (e o saldo atual das contas) segue a regra da conta.
@@ -30,7 +34,8 @@ export function escopoFluxoPrincipal(accounts, poolIds, profileId = null) {
 // O agendamento tem alguma chance de entrar no fluxo principal deste escopo?
 export function agendamentoNoFluxoPrincipal(s, { poolIds, escopoIds }) {
   if (poolIds.has(s.accountId) || poolIds.has(s.toAccountId)) return true
-  return s.considerarFluxoPrincipal === true && s.transactionType !== 'transfer' && escopoIds.has(s.accountId)
+  if (s.considerarFluxoPrincipal !== true) return false
+  return s.transactionType === 'transfer' ? escopoIds.has(s.toAccountId) : escopoIds.has(s.accountId)
 }
 
 // Valor COM SINAL visto pelo fluxo principal (+ entra, − sai, 0 fora) de uma ocorrência de valor
@@ -42,6 +47,8 @@ export function valorNoFluxoPrincipal(s, valor, { poolIds, escopoIds, cartaoIds 
   if (s.transactionType === 'transfer') {
     const outra = de ? s.toAccountId : s.accountId
     if (de !== para && marca === false && !cartaoIds.has(outra)) return 0
+    // Resgate de reserva para a conta não FC de uma provisão marcada Sim (ver topo).
+    if (!de && !para && marca === true && escopoIds.has(s.toAccountId)) return valor
     return (para ? valor : 0) - (de ? valor : 0)
   }
   const entra = de || (marca === true && escopoIds.has(s.accountId))
@@ -89,9 +96,15 @@ export function perguntaFluxoPrincipal({ transactionType, accountId, toAccountId
 
 // O que gravar: a escolha só vale onde a pergunta aparece (senão null = regra de hoje).
 export function considerarFluxoParaGravar(form, accounts) {
-  const p = perguntaFluxoPrincipal(form, accounts)
-  if (!p) return null
-  return typeof form.considerarFluxoPrincipal === 'boolean' ? form.considerarFluxoPrincipal : null
+  const marca = typeof form.considerarFluxoPrincipal === 'boolean' ? form.considerarFluxoPrincipal : null
+  if (perguntaFluxoPrincipal(form, accounts)) return marca
+  // Resgate de provisão (não FC → não FC): a marca veio da efetivação; editar não a apaga.
+  if (form.transactionType === 'transfer' && marca !== null) {
+    const conta = (id) => (accounts || []).find(a => a.id === id) || null
+    const de = conta(form.accountId), para = conta(form.toAccountId)
+    if (de && para && de.type !== 'credit' && para.type !== 'credit' && !ehContaFC(de) && !ehContaFC(para)) return marca
+  }
+  return null
 }
 
 // Selo da lista de agendamentos: só quando o campo está preenchido.
