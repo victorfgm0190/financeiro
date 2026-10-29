@@ -32,7 +32,9 @@ export function initialDaSugestao(ferramenta, p = {}) {
       installments: parcelado ? Number(p.parcelas) : 0,
     }
   }
-  return { ...comum, type: TIPO_MOV[p.tipo] || 'expense', date: p.data || undefined }
+  // Compra parcelada: valor = TOTAL; o formulário (Parcelado + N) divide pelas parcelas.
+  const parcelas = p.tipo === 'despesa' && Number(p.parcelas) > 1 ? Number(p.parcelas) : null
+  return { ...comum, type: TIPO_MOV[p.tipo] || 'expense', date: p.data || undefined, ...(parcelas ? { installments: parcelas } : {}) }
 }
 
 // Campos a conferir (chaves do formulário). Essenciais vazios sempre; opcionais (favorecido,

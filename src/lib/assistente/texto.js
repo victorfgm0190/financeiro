@@ -23,3 +23,19 @@ export function contemPalavra(textoNormalizado, termos) {
   const t = ` ${textoNormalizado} `
   return termos.some(p => t.includes(` ${p}`))
 }
+
+// Compra parcelada citada no texto (SMS/push de cartão): "em 3x", "3 parcelas", "parcelado em 3",
+// "parcelada em 3x". Devolve N (2..48) ou null. À vista ("em 1x") → null.
+export function parcelasDoTexto(texto) {
+  const t = normalizarTermo(texto)
+  const m = t.match(/\bem\s+(\d{1,2})\s*x\b/) || t.match(/\b(\d{1,2})\s*parcelas?\b/) || t.match(/\bparcelad[oa]\s+em\s+(\d{1,2})\s*x?\b/)
+  const n = m ? Number(m[1]) : null
+  return n && n > 1 && n <= 48 ? n : null
+}
+
+// Descrição genérica que não diz ONDE foi a compra ("Compra", "Compra em 3x", "Compra aprovada",
+// "Compra parcelada", "Compra no cartão") → a prévia usa o estabelecimento (favorecido).
+export function descricaoGenericaDeCompra(descricao) {
+  const t = normalizarTermo(descricao)
+  return !t || /^compra( (aprovada|parcelada|no cartao|no credito|em \d{1,2} ?x|de r\$ ?[\d.,]+))*$/.test(t)
+}

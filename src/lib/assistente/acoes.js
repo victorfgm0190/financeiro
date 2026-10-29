@@ -19,7 +19,9 @@
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
 import { contaParaGravar, escolherConta } from './contas.js'
-import { normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra } from './texto.js'
+import {
+  normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelasDoTexto, descricaoGenericaDeCompra,
+} from './texto.js'
 
 export const NIVEIS = ['consulta', 'criacao', 'edicao', 'critica']
 export const NUCLEO = ['perguntar', 'abrir_tela', 'registrar_lancamento', 'criar_agendamento', 'consultar_saldo', 'buscar_lancamentos']
@@ -133,6 +135,21 @@ function validarLancamento(p, ctx, hoje) {
   }
 }
 
+// Lançamento já acontecido. Compra parcelada (SMS/push do cartão): o texto do pedido manda —
+// "em 3x" liga o parcelado mesmo que o modelo não tenha preenchido; o valor é o TOTAL (o
+// formulário divide pelas parcelas). Descrição genérica ("Compra em 3x") → o estabelecimento.
+function validarRegistro(p, ctx, hoje) {
+  const out = validarLancamento(p, ctx, hoje)
+  if (out.tipo === 'despesa') {
+    const doModelo = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 48 ? p.parcelas : null
+    const n = parcelasDoTexto(ctx.textoPedido) || doModelo
+    if (n) out.parcelas = n
+  }
+  const estabelecimento = out.favorecido_id || out.favorecido_novo
+  if (estabelecimento && descricaoGenericaDeCompra(out.descricao)) out.descricao = estabelecimento
+  return out
+}
+
 // ─── As ações ────────────────────────────────────────────────────────────────────────────────────
 export const ACOES = [
   // ── Núcleo (sempre carregado) ──
@@ -178,9 +195,16 @@ export const ACOES = [
     id: 'registrar_lancamento', nivel: 'criacao', dominio: 'nucleo', permissao: ['lancamentos', 'incluir'],
     ferramenta: {
       description: 'Prepara um lançamento (despesa, receita ou transferência) que JÁ aconteceu ("gastei", "paguei", "recebi", "lance") para o usuário revisar. Não grava nada.',
-      input_schema: { type: 'object', properties: CAMPOS_LANCAMENTO, required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'] },
+      input_schema: {
+        type: 'object',
+        properties: {
+          ...CAMPOS_LANCAMENTO,
+          parcelas: { type: ['integer', 'null'], description: 'Compra parcelada no cartão ("em 3x", "3 parcelas"): número de parcelas; o valor é o TOTAL da compra. À vista = null' },
+        },
+        required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
+      },
     },
-    validar: (p, ctx, hoje) => validarLancamento(p, ctx, hoje),
+    validar: (p, ctx, hoje) => validarRegistro(p, ctx, hoje),
   },
   {
     id: 'criar_agendamento', nivel: 'criacao', dominio: 'nucleo', permissao: ['agendamentos', 'incluir'],

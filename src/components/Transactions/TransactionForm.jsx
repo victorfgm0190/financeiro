@@ -23,6 +23,8 @@ import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
+import { faturaAbertaDoCartao, avisoFaturaFechada, rotuloFatura } from '../../lib/faturaAberta'
+import { faturaEstaFechada } from '../../lib/faturasFechadas'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoRegistros, irmasLancamento, parcelaCartaoPendente,
   serieKeyDe, mensagemAplicada,
@@ -194,7 +196,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     useReserva: !!initialReservaContaId,
     reservaAccountId: initialReservaContaId,
     reservaExpenseCategoryId: '',
-    installments: 1,
+    // Lançamento novo pode vir parcelado (prévia do Assistente: SMS "em 3x"); valor = TOTAL.
+    installments: !initial?.id && Number(initial?.installments) > 1 ? Number(initial.installments) : 1,
   })
 
   const [step, setStep] = useState('form')
@@ -290,6 +293,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
+  // Fatura do lançamento NOVO no cartão com "Fatura de referência" em branco: a calculada pelo
+  // fechamento; se FECHADA, a próxima aberta (gravada explícita no salvar). Parcelado: parcela 1
+  // nela, as próximas nas seguintes (criarParcelasGerencial, pela fatura da base).
+  const faturaAuto = (!initial?.id && isCredit && form.type === 'expense')
+    ? faturaAbertaDoCartao({ cardId: form.accountId, date: form.date, closingDay: selectedAccount?.closingDay, faturasFechadas: settings?.faturasFechadas })
+    : null
+  const faturaEscolhidaFechada = isCredit && !!form.faturaMonthYear && faturaEstaFechada(settings?.faturasFechadas, form.accountId, form.faturaMonthYear)
   // Controle gerencial do ambiente (Configurações): desligado, o bloco some, item novo não ganha
   // grupo e a edição mantém o gravado; item com grupo gerencial trava valor, data e conta/cartão.
   const gerencialLigado = controleGerencialAtivo(settings)
@@ -567,6 +577,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       grupoGerencial: showGerencial ? form.grupoGerencial : (gerencialLigado ? null : grupoComChaveDesligada(initial)),
       faturaMonthYear:
         (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear
+        : (faturaAuto?.fechadas.length) ? faturaAuto.efetiva
         : (form.type === 'transfer' && transferToAcc?.type === 'credit' && form.faturaMonthYear) ? form.faturaMonthYear
         : null,
       // Fatura de Referência (MM/AAAA) — editável só em transferências gerenciais; nos demais casos
@@ -1977,14 +1988,22 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             onChange={e => set('faturaMonthYear', e.target.value)}
             disabled={!!trava}
           >
-            <option value="">(automático)</option>
+            <option value="">{faturaAuto ? `(automático) Fatura ${rotuloFatura(faturaAuto.efetiva)}` : '(automático)'}</option>
             {faturaRefOptions.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>
+                {o.label}{faturaEstaFechada(settings?.faturasFechadas, form.accountId, o.value) ? ' (fechada)' : ''}
+              </option>
             ))}
           </select>
+          {!form.faturaMonthYear && avisoFaturaFechada(faturaAuto) && (
+            <p className="text-xs text-aviso mt-1.5">{avisoFaturaFechada(faturaAuto)}</p>
+          )}
+          {faturaEscolhidaFechada && (
+            <p className="text-xs text-aviso mt-1.5">A fatura {rotuloFatura(form.faturaMonthYear)} está fechada.</p>
+          )}
           <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
             Opcional — em branco, a fatura é calculada automaticamente pelo dia de
-            fechamento do cartão.
+            fechamento do cartão (fatura fechada → a próxima aberta).
           </p>
         </div>
       )}
