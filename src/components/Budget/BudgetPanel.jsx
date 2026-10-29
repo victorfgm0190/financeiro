@@ -9,9 +9,10 @@ import SeletorModoValor from '../Contratos/SeletorModoValor'
 import { lancamentosNoModo, MODO_VALOR_PADRAO } from '../../lib/contratos/despesaReal'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
+import { criarRegraDemonstrativo, filtrarPerfilDemonstrativo, despesaPorCategoria } from '../../lib/regraDemonstrativo'
 
 export default function BudgetPanel() {
-  const { budgets, categories, profileTransactions: transactions, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
+  const { budgets, categories, profileReportTransactions: transactions, profileAccounts, reserveFunctions, activeProfile, addBudget, updateBudget, deleteBudget, getFinancialPeriod, pode } = useApp()
   const podeIncluir = pode('orcamento', 'incluir')
   const podeEditar = pode('orcamento', 'editar')
   const podeExcluir = pode('orcamento', 'excluir')
@@ -28,15 +29,18 @@ export default function BudgetPanel() {
     end: isoLocal(period.end),
   }
 
+  // Gasto por categoria = a MESMA regra do Demonstrativo Financeiro (lib/regraDemonstrativo): o
+  // espelho do depósito conta na categoria da função, a perna de despesa do resgate não conta, a
+  // receita de compensação do resgate abate a categoria (pode ficar negativa) e funções que não
+  // são "exibir como despesa" ficam fora.
+  const regra = useMemo(() => criarRegraDemonstrativo(reserveFunctions, profileAccounts), [reserveFunctions, profileAccounts])
   const categorySpent = useMemo(() => {
-    const spent = {}
-    lancamentosNoModo(transactions, modoValor)
-      .filter(tx => tx.type === 'expense' && tx.date >= periodStr.start && tx.date <= periodStr.end)
-      .forEach(tx => {
-        if (tx.categoryId) spent[tx.categoryId] = (spent[tx.categoryId] || 0) + tx.amount
-      })
-    return spent
-  }, [transactions, periodStr, modoValor])
+    const ids = activeProfile ? new Set(profileAccounts.map(a => a.id)) : null
+    const txs = filtrarPerfilDemonstrativo(lancamentosNoModo(transactions, modoValor), reserveFunctions, ids)
+    return despesaPorCategoria(txs, periodStr, regra)
+  // periodStr é recriado a cada render a partir do período (estável): depende das datas.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, periodStr.start, periodStr.end, modoValor, regra, reserveFunctions, activeProfile, profileAccounts])
 
   const totalBudgeted = budgets.reduce((s, b) => s + b.amount, 0)
   const totalSpent = budgets.reduce((s, b) => s + (categorySpent[b.categoryId] || 0), 0)
@@ -106,7 +110,7 @@ export default function BudgetPanel() {
           {budgets.map(budget => {
             const cat = categories.find(c => c.id === budget.categoryId)
             const spent = categorySpent[budget.categoryId] || 0
-            const pct = budget.amount > 0 ? Math.min(100, (spent / budget.amount) * 100) : 0
+            const pct = budget.amount > 0 ? Math.max(0, Math.min(100, (spent / budget.amount) * 100)) : 0
             const overBudget = spent > budget.amount
             const nearLimit = pct >= 80 && !overBudget
 

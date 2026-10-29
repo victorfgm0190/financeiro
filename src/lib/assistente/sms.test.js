@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parcelasDoTexto, descricaoGenericaDeCompra } from './texto'
+import { parcelasDoTexto, parcelamentoDoTexto, descricaoGenericaDeCompra } from './texto'
 import { classificarContas } from './contas'
 import { validarAcao } from './acoes'
 import { initialDaSugestao } from '../assistente'
@@ -39,7 +39,7 @@ const montar = (textoPedido) => {
   const contas = classificarContas(ROWS, 'PV')
   return {
     contas, textoPedido, apelidos: [], perfilAtivo: 'PV', temImagem: false,
-    idx: { contas: new Map(contas.map(c => [c.id, c])), categorias: new Map([['cat_far', { tipo: 'expense' }]]), favorecidos: new Map(), centros: new Map() },
+    idx: { contas: new Map(contas.map(c => [c.id, c])), categorias: new Map([['cat_far', { tipo: 'expense' }], ['cat_comb', { tipo: 'expense' }], ['cat_calc', { tipo: 'expense' }]]), favorecidos: new Map(), centros: new Map() },
   }
 }
 // Resposta típica do modelo antes da regra nova: sem parcelas e descrição "Compra em 3x".
@@ -67,5 +67,45 @@ describe('registrar_lancamento a partir do SMS', () => {
     const r = validarAcao('registrar_lancamento', doModelo, montar(SMS.itau), '2026-10-29')
     expect(initialDaSugestao('registrar_lancamento', r)).toMatchObject({ amount: '446.99', installments: 3, description: 'RAIA1476', payee: 'RAIA1476', accountId: 'itaupers' })
     expect(initialDaSugestao('registrar_lancamento', { ...r, parcelas: null }).installments).toBeUndefined()
+  })
+})
+
+describe('parcelado por frase livre (voz/texto)', () => {
+  it('reconhece o número de parcelas (2 a 12 por extenso)', () => {
+    for (const t of ['comprei em 4 vezes', 'paguei 4 vezes', 'foi 4x', 'parcelei em 4', 'parcelado em 4 vezes', 'dividi em 4', 'em quatro vezes', 'parcelei em doze vezes'])
+      expect(parcelasDoTexto(t), t).toBe(t.includes('doze') ? 12 : 4)
+    for (const t of ['gastei 300 em 2 restaurantes', 'paguei 2 contas de luz', 'compra em 1x no mercado']) expect(parcelasDoTexto(t), t).toBeNull()
+  })
+  it('valor TOTAL × valor DA PARCELA', () => {
+    expect(parcelamentoDoTexto('R$ 350 em 4 vezes')).toEqual({ n: 4, valorParcela: null, claro: true })
+    expect(parcelamentoDoTexto('parcelei 350 em 4x')).toEqual({ n: 4, valorParcela: null, claro: true })
+    expect(parcelamentoDoTexto('4 vezes de 350')).toEqual({ n: 4, valorParcela: 350, claro: true })
+    expect(parcelamentoDoTexto('4 parcelas de R$ 350')).toEqual({ n: 4, valorParcela: 350, claro: true })
+    expect(parcelamentoDoTexto('4x de 350')).toEqual({ n: 4, valorParcela: 350, claro: true })
+    expect(parcelamentoDoTexto('4 parcelas de 1.400,00').valorParcela).toBe(1400)
+    // Na dúvida ("4x" solto): TOTAL, mas a conferir.
+    expect(parcelamentoDoTexto('350 4x no posto')).toEqual({ n: 4, valorParcela: null, claro: false })
+  })
+  it('"parcelei R$350 no posto de gasolina em 4 vezes" → total 350, 4x, Combustível', () => {
+    const texto = 'parcelei R$350 no posto de gasolina em 4 vezes'
+    const r = validarAcao('registrar_lancamento', { ...doModelo, valor: 350, categoria_id: 'cat_comb', favorecido_novo: null, descricao: 'Combustível' }, montar(texto), '2026-10-29')
+    expect(r).toMatchObject({ valor: 350, parcelas: 4, categoria_id: 'cat_comb', descricao: 'Combustível' })
+    expect(r.aviso_parcelas).toBeUndefined()
+  })
+  it('"comprei um tênis 4x de 150 na Centauro" → total 600, com o aviso', () => {
+    const texto = 'comprei um tênis 4x de 150 na Centauro'
+    const r = validarAcao('registrar_lancamento', { ...doModelo, valor: 150, categoria_id: 'cat_calc', favorecido_novo: 'Centauro', descricao: 'Tênis' }, montar(texto), '2026-10-29')
+    expect(r).toMatchObject({ valor: 600, parcelas: 4, valor_parcela: 150, aviso_parcelas: '4 × R$ 150,00 = R$ 600,00', favorecido_novo: 'Centauro', descricao: 'Tênis' })
+    expect(initialDaSugestao('registrar_lancamento', r)).toMatchObject({ amount: '600', installments: 4 })
+  })
+  it('"4 vezes de 350" → 4 × R$ 350,00 = R$ 1.400,00', () => {
+    const r = validarAcao('registrar_lancamento', { ...doModelo, valor: 350 }, montar('comprei uma cadeira 4 vezes de 350'), '2026-10-29')
+    expect(r).toMatchObject({ valor: 1400, aviso_parcelas: '4 × R$ 350,00 = R$ 1.400,00' })
+  })
+  it('na dúvida: TOTAL e o valor marcado para conferir', () => {
+    const r = validarAcao('registrar_lancamento', { ...doModelo, valor: 350 }, montar('350 4x no posto'), '2026-10-29')
+    expect(r.valor).toBe(350)
+    expect(r.parcelas).toBe(4)
+    expect(r.confianca.valor).toBeLessThan(0.5)
   })
 })

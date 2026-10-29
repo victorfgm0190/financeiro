@@ -8,7 +8,7 @@ import InputMoeda from '../shared/InputMoeda'
 import { computeFaturaRef } from '../../lib/fatura'
 import { ORIGIN } from '../../lib/origins'
 import { detectInstallment } from '../../lib/installments'
-import { buildSeries, clampDateToFatura, newSerieId } from '../../lib/parcelas'
+import { buildSeries, clampDateToFatura, newSerieId, valoresDasParcelas } from '../../lib/parcelas'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import ScheduleMatchModal from '../shared/ScheduleMatchModal'
@@ -555,9 +555,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     }
 
     const isParcelado = !initial?.id && isCredit && form.type === 'expense' && form.installments > 1
-    const installmentAmount = isParcelado
-      ? Math.round(Number(form.amount) / form.installments * 100) / 100
-      : Number(form.amount)
+    // Parcelado: o valor do campo é o TOTAL; a última parcela leva a diferença de centavos.
+    const valores = isParcelado ? valoresDasParcelas(form.amount, form.installments) : null
+    const installmentAmount = isParcelado ? valores.parcela : Number(form.amount)
 
     // Item 4: tags de parcela na criação. "Parcelado" marcado → base é a parcela 1 de N.
     // Item 2 confirmado → usa o N/Total detectado na descrição. Caso contrário, sem tag.
@@ -853,6 +853,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ...camposHerdadosParcelaFilha({ ...txData, payee: form.payee, costCenter: form.costCenter, notes: form.notes }),
         baseFaturaMonthYear: txData.faturaMonthYear || null,
         serieId,
+        amountUltima: valores.ultima,
       })
       if (rateioRows.length > 0 && parcelaIds?.length) {
         for (const pid of parcelaIds) saveRateiosFor(pid, rateioRows)
@@ -1971,7 +1972,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               />
               {form.amount && (
                 <span className="text-xs text-texto-3">
-                  {fmt(Math.round(Number(form.amount) / form.installments * 100) / 100)} por parcela
+                  {(() => {
+                    const v = valoresDasParcelas(form.amount, form.installments)
+                    return `${fmt(v.parcela)} por parcela${v.ultima !== v.parcela ? ` (última ${fmt(v.ultima)})` : ''}`
+                  })()}
                 </span>
               )}
             </div>

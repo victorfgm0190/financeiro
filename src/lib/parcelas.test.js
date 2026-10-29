@@ -178,3 +178,15 @@ describe('inferirSerieParcela / findParcelaDaSerie — "Yelumseg Parc7"', () => 
     expect(findParcelaDaSerie(serie[0], 7, 205.61, [...serie, y7], new Set(['y7']))).toBeNull()
   })
 })
+
+describe('valoresDasParcelas: a última parcela leva a diferença de centavos', () => {
+  it('446,99 em 3x → 149,00 + 149,00 + 148,99', async () => {
+    const { valoresDasParcelas } = await import('./parcelas')
+    expect(valoresDasParcelas(446.99, 3)).toEqual({ parcela: 149, ultima: 148.99 })
+  })
+  it('100,00 em 3x → 33,33 + 33,33 + 33,34; divisão exata não muda', async () => {
+    const { valoresDasParcelas } = await import('./parcelas')
+    expect(valoresDasParcelas(100, 3)).toEqual({ parcela: 33.33, ultima: 33.34 })
+    expect(valoresDasParcelas(1400, 4)).toEqual({ parcela: 350, ultima: 350 })
+  })
+})

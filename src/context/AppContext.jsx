@@ -4992,6 +4992,7 @@ export function AppProvider({ children }) {
     notes = null,               // observações herdadas da parcela base
     tipoDocumentoId = null,     // tipo de documento herdado da parcela base
     serieId = null,             // elo da série (gerado na base) — propagado às filhas
+    amountUltima = null,        // valor da ÚLTIMA parcela (leva a diferença de centavos); null = amount
   }) => {
     if (!installments || installments <= 1) return []
     if (startFromInstallment > installments) return []
@@ -5046,15 +5047,16 @@ export function AppProvider({ children }) {
       const futureDate = installmentSystemDate(
         futureFatura, i, `${futureFatura}-${String(Math.min(origDay, maxDay)).padStart(2, '0')}`, financialStartDay
       )
+      const valor = (i === installments && amountUltima != null) ? amountUltima : amount
       // Pula se a parcela já existe (mesma installment_key).
       const key = installmentKey({
         accountId, description: baseDesc, installmentNum: i, installmentTotal: installments,
-        amount, faturaMonthYear: futureFatura, date: futureDate,
+        amount: valor, faturaMonthYear: futureFatura, date: futureDate,
       })
       if (key && existingKeys.has(key)) continue
       if (key) existingKeys.add(key)
       const id = addTransaction({
-        type: 'expense', accountId, accountType: 'credit', amount, date: futureDate,
+        type: 'expense', accountId, accountType: 'credit', amount: valor, date: futureDate,
         description: baseDesc,
         categoryId: categoryId || null, payee: payee || null,
         costCenter: costCenter || null, notes: notes || null,

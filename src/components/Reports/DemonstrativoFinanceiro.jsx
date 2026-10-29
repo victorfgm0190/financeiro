@@ -3,6 +3,7 @@ import { Download, RefreshCw, ChevronDown, ChevronRight, FileSpreadsheet, ArrowL
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, aplicacaoAccountIds, countsAsReportExpense, countsAsReportIncome, accountsForView, reservaDespesaFuncIds, groupedAccountOptions, isResgateReservaSombra } from '../shared/utils'
 import { isPatrimonioOrigin } from '../../lib/origins'
+import { filtrarPerfilDemonstrativo, regraDosConjuntos } from '../../lib/regraDemonstrativo'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/categoriasPerfil'
@@ -86,16 +87,8 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // sem conta) não há vínculo que prove o perfil → descarta, evitando que sombras de outro perfil
   // (ex.: funções do CPF) vazem para o Demonstrativo. Não altera o bypass do filtro de CONTAS das
   // sombras (preservado em `inRange`). "Todos" (sem perfil) mantém o comportamento atual.
-  const funcAccById = new Map((reserveFunctions || []).map(f => [f.id, f.accountId]))
-  const txs = (activeProfile && profileAccountIds)
-    ? transactions.filter(tx => {
-        if (tx.reservaAuto === true) {
-          const fAcc = funcAccById.get(tx.reservaFuncaoId)
-          return fAcc != null && profileAccountIds.has(fAcc)
-        }
-        return profileAccountIds.has(tx.accountId) || profileAccountIds.has(tx.toAccountId)
-      })
-    : transactions
+  // (lib/regraDemonstrativo — a mesma regra do Orçamento.)
+  const txs = filtrarPerfilDemonstrativo(transactions, reserveFunctions, activeProfile ? profileAccountIds : null)
 
   const inRange = txs.filter(tx =>
     (countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaAccSet) || countsAsReportIncome(tx, reservaDespesaFuncSet, reservaAccSet)) &&
@@ -151,21 +144,13 @@ function buildReport(transactions, categories, from, to, accountIds, categoryIds
   // exibir_como_despesa = TRUE permanecem na categoria de despesa (comportamento atual).
   // Sombras legadas com reservaFuncaoId = null são reconhecidas pelo category_id da função
   // (reservaDespesaCategorySet), evitando que depósitos de funções "despesa" caiam em Reservas.
-  const reservaDespesaCategorySet = new Set(
-    (reserveFunctions || [])
-      .filter(f => f.exibirComoDespesa)
-      .map(f => f.categoryId)
-      .filter(Boolean)
-  )
-  const isReservaGerSombra = (tx) =>
-    tx.reservaAuto === true &&
-    !reservaDespesaFuncSet.has(tx.reservaFuncaoId) &&
-    !(tx.reservaFuncaoId == null && reservaDespesaCategorySet.has(tx.categoryId))
+  // Regra única com o Orçamento (lib/regraDemonstrativo).
+  const { isReservaGerSombra, ehDespesa, ehCompensacao } = regraDosConjuntos({ reserveFunctions, aplicSet, reservaSet: reservaAccSet, reservaDespesaFuncSet })
 
-  const expenseTxs = inRange.filter(t => !isReservaGerSombra(t) && countsAsReportExpense(t, aplicSet, reservaDespesaFuncSet, reservaAccSet))
+  const expenseTxs = inRange.filter(ehDespesa)
   // Receitas de compensação do resgate de reserva → vão para a seção de DESPESAS abatendo a
   // categoria; saem da seção de RECEITAS para não duplicar.
-  const compensTxs = inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && isResgateReservaSombra(t))
+  const compensTxs = inRange.filter(ehCompensacao)
   const incomeTxs = inRange.filter(t => !isReservaGerSombra(t) && t.type === 'income' && !isResgateReservaSombra(t))
   const totalExpense = expenseTxs.reduce((s, t) => s + t.amount, 0) - compensTxs.reduce((s, t) => s + t.amount, 0)
 

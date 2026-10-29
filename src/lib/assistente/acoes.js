@@ -20,7 +20,7 @@
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
 import { contaParaGravar, escolherConta } from './contas.js'
 import {
-  normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelasDoTexto, descricaoGenericaDeCompra,
+  normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
 } from './texto.js'
 
 export const NIVEIS = ['consulta', 'criacao', 'edicao', 'critica']
@@ -135,15 +135,31 @@ function validarLancamento(p, ctx, hoje) {
   }
 }
 
-// Lançamento já acontecido. Compra parcelada (SMS/push do cartão): o texto do pedido manda —
-// "em 3x" liga o parcelado mesmo que o modelo não tenha preenchido; o valor é o TOTAL (o
-// formulário divide pelas parcelas). Descrição genérica ("Compra em 3x") → o estabelecimento.
+const brl = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+// Lançamento já acontecido. Compra parcelada (SMS/push do cartão, voz, frase livre): o texto do
+// pedido manda — "em 3x", "parcelei em 4", "em quatro vezes" ligam o parcelado mesmo que o modelo
+// não tenha preenchido. O valor é o TOTAL (o formulário divide pelas parcelas), exceto quando o
+// texto dá o valor DA PARCELA ("4x de 150", "4 parcelas de R$ 350") → total = N × parcela, com o
+// aviso "4 × R$ 350,00 = R$ 1.400,00". "4x" solto (sem "em"/"de") → TOTAL, valor a conferir.
+// Descrição genérica ("Compra em 3x") → o estabelecimento.
 function validarRegistro(p, ctx, hoje) {
   const out = validarLancamento(p, ctx, hoje)
   if (out.tipo === 'despesa') {
     const doModelo = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 48 ? p.parcelas : null
-    const n = parcelasDoTexto(ctx.textoPedido) || doModelo
-    if (n) out.parcelas = n
+    const lido = parcelamentoDoTexto(ctx.textoPedido)
+    const n = lido?.n || doModelo
+    if (n) {
+      out.parcelas = n
+      if (lido?.valorParcela) {
+        const total = Math.round(lido.valorParcela * n * 100) / 100
+        out.valor = total
+        out.valor_parcela = lido.valorParcela
+        out.aviso_parcelas = `${n} × ${brl(lido.valorParcela)} = ${brl(total)}`
+      } else if (lido && !lido.claro) {
+        out.confianca.valor = Math.min(out.confianca.valor, 0.4)
+      }
+    }
   }
   const estabelecimento = out.favorecido_id || out.favorecido_novo
   if (estabelecimento && descricaoGenericaDeCompra(out.descricao)) out.descricao = estabelecimento

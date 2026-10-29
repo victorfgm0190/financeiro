@@ -332,3 +332,12 @@ export function serieIdDominante(membros) {
   for (const [id, c] of cont) if (c > n) { melhor = id; n = c }
   return melhor
 }
+
+// Compra parcelada a partir do TOTAL: parcelas 1..N-1 = total/N arredondado; a ÚLTIMA leva a
+// diferença de centavos (446,99 em 3x → 149,00 + 149,00 + 148,99). Formulário e Assistente.
+export function valoresDasParcelas(total, n) {
+  const t = Math.round(Number(total) * 100)
+  const parcela = Math.round(t / n) / 100
+  const ultima = n > 1 ? (t - Math.round(parcela * 100) * (n - 1)) / 100 : parcela
+  return { parcela, ultima }
+}
