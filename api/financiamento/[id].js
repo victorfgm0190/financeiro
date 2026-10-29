@@ -24,12 +24,13 @@ async function handler(req, res) {
     const id = getRouteId(req)
     if (!id) return fail(res, 400, 'id é obrigatório')
 
-    const [fin] = await query(`SELECT * FROM financing WHERE id = $1`, [id])
+    // Aceita também o id da CONTA DE DÍVIDA (card "Dívidas e Passivos" › consulta do financiamento).
+    const [fin] = await query(`SELECT * FROM financing WHERE id = $1 OR conta_divida_id = $1 LIMIT 1`, [id])
     if (!fin) return fail(res, 404, `financiamento ${id} não encontrado`)
 
     const [bem] = await query(`SELECT id, name FROM contas WHERE id = $1`, [fin.bem_id])
     const rows = await query(
-      `${SELECT_PARCELAS} WHERE financing_id = $1 ORDER BY numero_parcela`, [id],
+      `${SELECT_PARCELAS} WHERE financing_id = $1 ORDER BY numero_parcela`, [fin.id],
     )
     const parcelas = rows.map(serializarParcela)
 

@@ -22,6 +22,7 @@ const ANTES_DAS_MIGRACOES = 'CREATE TABLE IF NOT EXISTS configuracoes (id INTEGE
   + 'CREATE TABLE IF NOT EXISTS contas (id TEXT PRIMARY KEY, type TEXT, is_gerencial BOOLEAN DEFAULT false);\n'
   + 'CREATE TABLE IF NOT EXISTS agendamentos (id TEXT PRIMARY KEY, tipo TEXT, account_id TEXT, grupo_gerencial TEXT);\n'
   + 'CREATE TABLE IF NOT EXISTS reservas_funcoes (id TEXT PRIMARY KEY, number JSONB);\n'
+  + 'CREATE TABLE IF NOT EXISTS financing_installments (id TEXT PRIMARY KEY);\n'
 const TABELAS_APP = `
   CREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());
   INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Org'), ('org2', 'Outra');

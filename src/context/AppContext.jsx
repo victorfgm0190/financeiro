@@ -38,7 +38,7 @@ import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveis
 import { tentarReconectar } from '../lib/syncSeguro'
 import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
-import { saldosDaConta, recalcularSaldosDeContas } from '../lib/saldos'
+import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
@@ -3741,7 +3741,9 @@ export function AppProvider({ children }) {
   const recalcularSaldo = useCallback((accountId, overrideInitialBalance) => {
     update(d => {
       const account = d.accounts.find(a => a.id === accountId)
-      if (!account) return d
+      // Cartão, bem e financiamento: o balance não vem de lançamentos (TIPOS_SEM_RECALCULO) — mesma
+      // regra do recalcularSaldosDeContas; recalcular aqui sobrescreveria o saldo dos endpoints.
+      if (!account || !contaRecalculavel(account)) return d
       const initBal = overrideInitialBalance != null ? rb(overrideInitialBalance) : rb(account.initialBalance ?? 0)
       const { balance, projected } = saldosDaConta(accountId, initBal, d.transactions)
       return {

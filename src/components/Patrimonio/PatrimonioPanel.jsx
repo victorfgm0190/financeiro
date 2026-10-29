@@ -13,6 +13,8 @@ import { valorPatrimonial } from '../../lib/patrimonio'
 import { usePatrimonioTotals } from '../../hooks/usePatrimonioTotals'
 import { ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY, ABRIR_BEM_KEY, deixarHandoff, lerHandoff } from '../../lib/abrirTela'
 import ComposicaoPatrimonioModal from './ComposicaoPatrimonioModal'
+import ConsultaFinanciamentoModal from './ConsultaFinanciamentoModal'
+import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { useThemeColors } from '../../hooks/useTheme'
 import InputMoeda from '../shared/InputMoeda'
 
@@ -105,6 +107,10 @@ export default function PatrimonioPanel({ setActivePage }) {
     const v = lerHandoff(ABRIR_BEM_KEY)
     return v ? accounts.find(a => a.id === v.accountId) || null : null
   })
+
+  // Conta de dívida de financiamento clicada → consulta; "Abrir a parcela" abre o bem na parcela.
+  const [consultaFin, setConsultaFin] = useState(null)
+  const [parcelaInicial, setParcelaInicial] = useState(null)
 
   // Categorias, totais e itens de cada total — fonte única (cards, Resumo, gráfico e composição).
   const { categorized, totals } = usePatrimonioTotals()
@@ -361,8 +367,13 @@ export default function PatrimonioPanel({ setActivePage }) {
           <div className="space-y-2">
             {[...categorized.dividas, ...categorized.emprestimos].map(a => {
               const group = accountGroups.find(g => g.id === a.accountGroupId)
+              // Financiamento: o saldo é o devedor do PRINCIPAL (a conta de dívida amortiza só o
+              // principal); clicar abre a consulta. Outras dívidas seguem como sempre.
+              const fin = ehContaDeFinanciamento(a)
+              const Tag = fin ? 'button' : 'div'
               return (
-                <div key={a.id} className="card border border-despesa/20">
+                <Tag key={a.id} {...(fin ? { type: 'button', onClick: () => setConsultaFin(a) } : {})}
+                  className={`card border border-despesa/20 w-full text-left ${fin ? 'hover:bg-surface-hover/40 transition-colors' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-texto-1 text-sm">{a.name}</p>
@@ -376,7 +387,7 @@ export default function PatrimonioPanel({ setActivePage }) {
                     </div>
                     <div className="text-right shrink-0 ml-3">
                       <p className="text-lg font-bold text-despesa">{fmtSinal(a.balance || 0)}</p>
-                      <p className="text-xs text-texto-3">Saldo devedor</p>
+                      <p className="text-xs text-texto-3">{fin ? 'Saldo devedor (principal)' : 'Saldo devedor'}</p>
                     </div>
                   </div>
                   {a.acquisitionValue > 0 && (
@@ -392,11 +403,25 @@ export default function PatrimonioPanel({ setActivePage }) {
                       </p>
                     </div>
                   )}
-                </div>
+                </Tag>
               )
             })}
           </div>
         </div>
+      )}
+
+      {consultaFin && (
+        <ConsultaFinanciamentoModal
+          conta={consultaFin}
+          onClose={() => setConsultaFin(null)}
+          onAbrirParcela={(bemId, numero) => {
+            const bem = accounts.find(x => x.id === bemId)
+            if (!bem) return
+            setConsultaFin(null)
+            setParcelaInicial(numero)
+            setDetalheBem(bem)
+          }}
+        />
       )}
 
       {/* Resumo financeiro */}
@@ -463,7 +488,7 @@ export default function PatrimonioPanel({ setActivePage }) {
       )}
 
       {detalheBem && (
-        <BemDetail conta={detalheBem} onClose={() => setDetalheBem(null)} />
+        <BemDetail conta={detalheBem} parcelaInicial={parcelaInicial} onClose={() => { setDetalheBem(null); setParcelaInicial(null) }} />
       )}
     </div>
   )

@@ -4,7 +4,8 @@ import { fmt } from '../shared/utils'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { dataPadraoPagamento } from '../../lib/dataPagamento'
 import { pagarParcela } from '../../lib/bemApi'
-import { fmtData, calcularRateio, round2 } from './bemUtils'
+import { fmtData, round2 } from './bemUtils'
+import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import InputMoeda from '../shared/InputMoeda'
 
 export default function PagarParcelaModal({
@@ -20,6 +21,10 @@ export default function PagarParcelaModal({
       || '',
   )
   const [loading, setLoading] = useState(false)
+  // Pagou menos que o total mas cobriu o principal: "Quitar com desconto (pagamento antecipado)?".
+  // Marcado por padrão quando a data é anterior ao vencimento; desmarcado = parcial, como antes.
+  const [quitarEscolha, setQuitarEscolha] = useState(null) // null = segue o padrão pela data
+  const quitar = quitarEscolha ?? quitarPorPadrao(dataPagamento, parcela.data_vencimento)
 
   // Preview local do mesmo rateio do backend, recalculado sobre o ACUMULADO da parcela —
   // é assim que o servidor decide principal/juros quando já houve pagamento parcial.
@@ -27,14 +32,16 @@ export default function PagarParcelaModal({
     const valor = Number(valorPago)
     if (!(valor > 0)) return null
     const acumulado = round2((parcela.total_pago || 0) + valor)
-    const r = calcularRateio(acumulado, parcela.principal_provisioned, parcela.juros_provisioned)
+    const oferecerQuitar = podeQuitarComDesconto(acumulado, parcela.principal_provisioned, parcela.juros_provisioned)
+    const r = rateioComQuitacao(acumulado, parcela.principal_provisioned, parcela.juros_provisioned, { quitar: oferecerQuitar && quitar })
     return {
       ...r,
+      oferecerQuitar,
       principalNeste: round2(r.principalPago - (parcela.principal_pago || 0)),
       jurosNeste: round2(r.jurosPago - (parcela.juros_pago || 0)),
       totalAcumulado: acumulado,
     }
-  }, [valorPago, parcela])
+  }, [valorPago, parcela, quitar])
 
   const podeEnviar = rateio && dataPagamento && !loading
 
@@ -47,6 +54,7 @@ export default function PagarParcelaModal({
         valor_pago: Number(valorPago),
         data_pagamento: dataPagamento,
         conta_origem_id: contaOrigemId || null,
+        quitar_com_desconto: !!(rateio.oferecerQuitar && quitar),
       })
       onSuccess(resposta)
     } catch (err) {
@@ -101,12 +109,28 @@ export default function PagarParcelaModal({
         </div>
       </div>
 
+      {rateio?.oferecerQuitar && (
+        <label className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 accent-primary" checked={quitar} onChange={e => setQuitarEscolha(e.target.checked)} />
+          <span>
+            Quitar com desconto (pagamento antecipado)
+            <span className="block text-xs text-texto-3">
+              O principal está pago inteiro; a diferença dos juros fica como desconto e a parcela fica paga.
+              Desmarcado, o pagamento é parcial e o restante continua em aberto.
+            </span>
+          </span>
+        </label>
+      )}
+
       {rateio && (
         <div className="p-3 bg-surface-2/60 rounded-lg text-xs space-y-1 border border-borda">
           <p className="text-texto-2 font-medium mb-1.5">Rateio (principal primeiro)</p>
           <div className="flex justify-between"><span className="text-texto-3">Principal neste pagamento</span><span className="text-texto-1">{fmt(rateio.principalNeste)}</span></div>
           <div className="flex justify-between"><span className="text-texto-3">Juros neste pagamento</span><span className="text-texto-1">{fmt(rateio.jurosNeste)}</span></div>
-          <div className="flex justify-between"><span className="text-texto-3">Juros em falta</span><span className={rateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>{fmt(rateio.desvioJuros)}</span></div>
+          {rateio.desconto > 0
+            ? <div className="flex justify-between"><span className="text-texto-3">Desconto por antecipação</span><span className="text-receita">{fmt(rateio.desconto)}</span></div>
+            : <div className="flex justify-between"><span className="text-texto-3">Juros em falta</span><span className={rateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>{fmt(rateio.desvioJuros)}</span></div>}
+          <div className="flex justify-between"><span className="text-texto-3">Situação</span><span className={rateio.status === 'paid' ? 'text-primary-fg font-medium' : 'text-aviso font-medium'}>{rateio.status === 'paid' ? 'Quitada' : 'Parcial'}</span></div>
           <div className="flex justify-between pt-1 border-t border-borda-forte/60 mt-1">
             <span className="text-texto-3">Total pago na parcela</span>
             <span className="text-texto-1 font-medium">{fmt(rateio.totalAcumulado)}</span>

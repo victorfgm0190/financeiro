@@ -28,7 +28,9 @@ const ABAS = [
 
 const POR_PAGINA = 20
 
-export default function BemDetail({ conta, onClose }) {
+// `parcelaInicial` (nº): abre direto na aba Parcelas, na página dessa parcela (consulta do
+// financiamento › "Abrir a parcela").
+export default function BemDetail({ conta, onClose, parcelaInicial = null }) {
   const {
     accounts, profiles, categories, profileTransactions, payees,
     addAccount, updateAccount, updateTransaction, addPayee, updateSchedulesPayee, mergeRateios,
@@ -41,13 +43,13 @@ export default function BemDetail({ conta, onClose }) {
 
   const [bem, setBem] = useState(null)
   const [financiamento, setFinanciamento] = useState(null)
-  const [abaAtiva, setAbaAtiva] = useState('informacoes')
+  const [abaAtiva, setAbaAtiva] = useState(parcelaInicial ? 'parcelas' : 'informacoes')
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [toast, setToast] = useState(null)
 
   const [parcelas, setParcelas] = useState([])
-  const [paginaParcelas, setPaginaParcelas] = useState(1)
+  const [paginaParcelas, setPaginaParcelas] = useState(() => (parcelaInicial ? Math.ceil(parcelaInicial / POR_PAGINA) : 1))
   const [metaParcelas, setMetaParcelas] = useState({ totalPages: 1, total: 0 })
   const [loadingParcelas, setLoadingParcelas] = useState(false)
 

@@ -137,6 +137,28 @@ async function reconcileInstallmentKeys(client, rows) {
 // a flag de A para B no mesmo lote falhava se B viesse antes de A ("salvei e sumiu"). Antes do
 // upsert, desliga a flag em TODAS as linhas recebidas que a têm ligada no banco; o upsert religa
 // só as que chegam ligadas. Mesma transação: se o upsert falhar, o ROLLBACK desfaz isto também.
+// Conta de DÍVIDA de financiamento (liability 'acc_divida_…'): balance e initial_balance são do
+// backend (/api/financiamento/*: saldo devedor do principal). O sync grava os outros campos da
+// conta normalmente, mas esses dois sempre ficam com o valor do banco — uma sessão com estado
+// antigo (ou a fila offline) não consegue gravar o saldo velho de volta. Conta ainda inexistente
+// no banco segue como veio (quem cria é o próprio endpoint).
+export const ehContaDividaFinanciamento = (r) => !!r && String(r.id || '').startsWith('acc_divida') && (r.type == null || r.type === 'liability')
+export async function saldoDoBancoNasDividas(client, rows) {
+  const ids = rows.filter(r => ehContaDividaFinanciamento(r) && ('balance' in r || 'initial_balance' in r)).map(r => r.id)
+  if (!ids.length) return rows
+  const { rows: atuais } = await client.query(
+    `SELECT id, balance, initial_balance FROM contas WHERE id = ANY($1) AND type = 'liability'`, [ids])
+  const doBanco = new Map(atuais.map(a => [a.id, a]))
+  return rows.map(r => {
+    const a = doBanco.get(r.id)
+    if (!a) return r
+    const out = { ...r }
+    if ('balance' in out) out.balance = a.balance
+    if ('initial_balance' in out) out.initial_balance = a.initial_balance
+    return out
+  })
+}
+
 export const FLAGS_UNICAS_CONTAS = ['conta_corrente_principal', 'is_main']
 export async function desligarFlagsUnicasAntes(client, rows) {
   for (const col of FLAGS_UNICAS_CONTAS) {
@@ -224,7 +246,10 @@ export async function upsertRowsNoClient(client, table, rows, conflictCol = 'id'
     })
   }
   await conferirColunas(client, table, rows)
-  if (table === 'contas') await desligarFlagsUnicasAntes(client, rows)
+  if (table === 'contas') {
+    await desligarFlagsUnicasAntes(client, rows)
+    rows = await saldoDoBancoNasDividas(client, rows)
+  }
   // Lotes: [rows, colunas preservadas se NULL]. Só lancamentos tem a proteção de parcela.
   let lotes = [[rows, []]]
   if (table === 'lancamentos') {

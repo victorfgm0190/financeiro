@@ -5,6 +5,7 @@ import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
+import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { lerFinais, finaisDoCartao, chaveSubconta, subcontaDoCartao, ehSubcontaGerencialApp } from '../../lib/cartaoFinais'
 
 const TYPES = [
@@ -123,6 +124,9 @@ export default function AccountForm({ initial, onClose }) {
     cartaoFinais: finaisDoCartao(initial).join(', '),
   })
   const [finaisErro, setFinaisErro] = useState('')
+  // Conta de dívida de financiamento: o saldo devedor (principal) é calculado pelo financiamento
+  // (/api/financiamento/*) — só leitura aqui, e o salvar mantém o valor que já estava.
+  const saldoDoFinanciamento = !!initial && ehContaDeFinanciamento(initial)
   // Subconta gerencial: o motor a encontra pelo NOME ("Ger. <apelido do cartão>") — nome travado.
   const nomeTravado = !!initial && ehSubcontaGerencialApp(initial)
   // Cartão com subconta "Ger. <apelido>": trocar o apelido (ou o nome, sem apelido) quebra o
@@ -220,7 +224,7 @@ export default function AccountForm({ initial, onClose }) {
       // Flag de conta gerencial: verdadeira quando o tipo é "gerencial" (identificador explícito).
       isGerencial: form.type === 'gerencial',
       bank: form.bank,
-      balance: isCredit
+      balance: isCredit || saldoDoFinanciamento
         ? (initial?.balance || 0)
         : (initial && !isPatrimonial)
           ? (initial.balance ?? 0)
@@ -409,13 +413,20 @@ export default function AccountForm({ initial, onClose }) {
       {isPatrimonial && (
         <>
           <div>
-            <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : 'Saldo Devedor (R$)'}</label>
-            <InputMoeda
-              negativo
-              value={form.balance}
-              onChange={e => set('balance', e.target.value)}
-              placeholder="0,00"
-            />
+            <label className="label">{form.type === 'asset' ? 'Valor Atual (R$)' : saldoDoFinanciamento ? 'Saldo devedor (principal)' : 'Saldo Devedor (R$)'}</label>
+            {saldoDoFinanciamento ? (
+              <>
+                <div className="input bg-surface-hover/50 text-texto-2 cursor-not-allowed select-none">{fmt(initial.balance ?? 0)}</div>
+                <p className="text-xs text-texto-3 mt-0.5">Calculado pelo financiamento</p>
+              </>
+            ) : (
+              <InputMoeda
+                negativo
+                value={form.balance}
+                onChange={e => set('balance', e.target.value)}
+                placeholder="0,00"
+              />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -711,7 +711,7 @@ export const SELECT_PARCELAS = `
   SELECT id, financing_id, numero_parcela,
          principal_provisioned, juros_provisioned, total_provisioned,
          principal_pago, juros_pago, total_pago, desvio_juros, status, schedule_id,
-         saldo_restante,
+         saldo_restante, desconto_antecipacao,
          to_char(data_vencimento::date, 'YYYY-MM-DD') AS data_vencimento,
          to_char(data_pagamento::date,  'YYYY-MM-DD') AS data_pagamento
     FROM financing_installments`
@@ -727,6 +727,8 @@ export function serializarParcela(p) {
     juros_pago: num(p.juros_pago),
     total_pago: num(p.total_pago),
     desvio_juros: num(p.desvio_juros),
+    // Pagamento antecipado quitado com juros menores (migração 2026-10-29_financiamento_desconto).
+    desconto_antecipacao: num(p.desconto_antecipacao),
     // Coluna materializada, mas o fallback derivado cobre a parcela criada antes dela existir
     // (o backfill do DDL só roda quando ensureBemSchema é chamado).
     saldo_restante: p.saldo_restante == null

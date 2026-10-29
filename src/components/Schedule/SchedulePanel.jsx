@@ -9,7 +9,7 @@ import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
-import { calcularRateio } from '../../lib/financiamento'
+import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DataPagamentoField from '../shared/DataPagamentoField'
@@ -296,10 +296,15 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // quanto já foi pago. Numa parcela com aporte parcial anterior o preview fica otimista, mas o
   // valor gravado não — o servidor recalcula sobre o acumulado real da parcela.
   const finValorNum = Number(finValor)
+  // Pagou menos que a parcela mas cobriu o principal: "Quitar com desconto (pagamento antecipado)?"
+  // — marcado por padrão quando a data é anterior ao vencimento (mesma regra do Patrimônio).
+  const [finQuitarEscolha, setFinQuitarEscolha] = useState(null)
+  const finQuitar = finQuitarEscolha ?? quitarPorPadrao(finDate, nextDate)
   const finRateio = useMemo(() => {
     if (!parcelaFin || !(finValorNum > 0)) return null
-    return calcularRateio(finValorNum, parcelaFin.principal, parcelaFin.juros)
-  }, [finValorNum, parcelaFin])
+    const oferecerQuitar = podeQuitarComDesconto(finValorNum, parcelaFin.principal, parcelaFin.juros)
+    return { ...rateioComQuitacao(finValorNum, parcelaFin.principal, parcelaFin.juros, { quitar: oferecerQuitar && finQuitar }), oferecerQuitar }
+  }, [finValorNum, parcelaFin, finQuitar])
 
   // Pagar mais que a parcela infla o saldo do bem (o backend soma `valor_pago` cheio nele) sem
   // ter onde alocar a diferença — o rateio já teria dado principal e juros por quitados.
@@ -321,6 +326,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         data_pagamento: finDate,
         conta_origem_id: finAccountId,
         debitar_origem: true,
+        quitar_com_desconto: !!(finRateio?.oferecerQuitar && finQuitar),
       })
       for (const l of r.lancamentos_criados || []) {
         addTransaction({
@@ -532,6 +538,15 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 )}
               </div>
 
+              {finRateio?.oferecerQuitar && !finExcede && (
+                <label className="flex items-start gap-2 rounded-lg border border-borda-forte bg-surface-2/40 px-3 py-2.5 text-sm text-texto-1 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 accent-primary" checked={finQuitar} onChange={e => setFinQuitarEscolha(e.target.checked)} />
+                  <span>
+                    Quitar com desconto (pagamento antecipado)
+                    <span className="block text-xs text-texto-3">Desmarcado, o pagamento é parcial e o restante continua em aberto.</span>
+                  </span>
+                </label>
+              )}
               {finRateio && !finExcede && (
                 <div className="rounded-lg border border-borda bg-surface-2/40 px-3 py-2.5 text-xs space-y-0.5">
                   <p className="text-texto-2 mb-1.5">Rateio deste pagamento (principal primeiro)</p>
@@ -543,12 +558,19 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                     <span className="text-texto-3">Juros neste pagamento</span>
                     <span className="text-texto-1">{fmt(finRateio.jurosPago)}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-texto-3">Juros em falta</span>
-                    <span className={finRateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>
-                      {fmt(finRateio.desvioJuros)}
-                    </span>
-                  </div>
+                  {finRateio.desconto > 0 ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-texto-3">Desconto por antecipação</span>
+                      <span className="text-receita">{fmt(finRateio.desconto)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-texto-3">Juros em falta</span>
+                      <span className={finRateio.desvioJuros > 0 ? 'text-aviso' : 'text-texto-1'}>
+                        {fmt(finRateio.desvioJuros)}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between border-t border-borda-forte mt-1.5 pt-1.5">
                     <span className="text-texto-2 font-semibold">Total pago na parcela</span>
                     <span className="text-texto-1 font-bold">{fmt(finValorNum)}</span>

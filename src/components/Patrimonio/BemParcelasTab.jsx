@@ -70,7 +70,14 @@ function ParcelaCard({ parcela, numParcelas, onPagar }) {
               {fmt(parcela.principal_pago)} / {fmt(parcela.juros_pago)}
             </span>
           </div>
-          {parcela.desvio_juros > 0 && (
+          {/* Quitada com juros menores (pagamento antecipado): desconto informativo, não dívida. */}
+          {parcela.desconto_antecipacao > 0 && (
+            <div className="flex justify-between">
+              <span className="text-texto-3">Desconto por antecipação</span>
+              <span className="text-receita">{fmt(parcela.desconto_antecipacao)}</span>
+            </div>
+          )}
+          {parcela.status !== 'paid' && parcela.desvio_juros > 0 && (
             <div className="flex justify-between">
               <span className="text-texto-3">Juros em falta</span>
               <span className="text-aviso">{fmt(parcela.desvio_juros)}</span>

@@ -2,14 +2,21 @@ import { query, parseBody, withTransaction } from '../../../_db.js'
 import { requireAuth } from '../../../_auth.js'
 import {
   getRouteId, num, round2, hoje, isIsoDate, fail,
-  calcularRateio, criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
+  criarLancamentoCategorizado, registrarMovimentacao, explicarErro,
   ensureBemSchema,
 } from '../../../_bem.js'
+import { rateioComQuitacao } from '../../../../src/lib/financiamento.js'
 import { comAmbiente } from '../../../_ambiente.js'
 
 // POST /api/financiamento/parcela/[id]/pagar — baixa (total ou parcial) de uma parcela.
 //
 // O rateio quita o PRINCIPAL primeiro; os juros ficam com a sobra e o que faltar vira desvio.
+// `quitar_com_desconto: true` (pagamento antecipado, banco cobrou juros menores): com o principal
+// integral, a parcela fica PAGA e a diferença dos juros vira `desconto_antecipacao` (informativo,
+// sem lançamento — o que saiu da conta já está certo). Ver rateioComQuitacao (src/lib/financiamento).
+//
+// Conta de DÍVIDA = saldo devedor do PRINCIPAL: amortiza só o principal deste pagamento. Os juros
+// são despesa (lançamento), não abatem dívida — e o desconto não mexe em saldo nenhum.
 // Em pagamentos parciais sucessivos o rateio é recalculado sobre o ACUMULADO da parcela — a
 // fórmula é stateless, então aplicá-la só sobre a parcela do dia daria principal/juros errados
 // no segundo aporte. Os lançamentos e os saldos usam apenas o DELTA deste pagamento.
@@ -98,16 +105,19 @@ async function handler(req, res) {
     const totalAntes = num(parcela.total_pago)
 
     const pagoAcumulado = round2(totalAntes + valorPago)
-    const rateio = calcularRateio(pagoAcumulado, principalPrev, jurosPrev)
+    const rateio = rateioComQuitacao(pagoAcumulado, principalPrev, jurosPrev, { quitar: body.quitar_com_desconto === true })
+    if (body.quitar_com_desconto === true && rateio.status !== 'paid') {
+      return fail(res, 400, 'Para quitar com desconto, o pagamento precisa cobrir o principal inteiro da parcela.')
+    }
 
     const deltaPrincipal = round2(rateio.principalPago - principalAntes)
     const deltaJuros = round2(rateio.jurosPago - jurosAntes)
     const totalNovo = round2(rateio.principalPago + rateio.jurosPago)
     const totalPrevisto = round2(num(parcela.total_provisioned))
-    const statusNovo = totalNovo >= totalPrevisto ? 'paid' : 'partial'
-    // Quanto ainda falta: zero na quitação, o que sobra do total no pagamento parcial. Nunca
-    // negativo — um pagamento a maior quita a parcela, não gera saldo credor aqui.
-    const saldoRestanteNovo = round2(Math.max(0, totalPrevisto - totalNovo))
+    const statusNovo = rateio.status
+    // Quanto ainda falta: zero na quitação (inclusive com desconto), o que sobra do total no
+    // pagamento parcial. Nunca negativo — pagamento a maior quita, não gera saldo credor.
+    const saldoRestanteNovo = rateio.saldoRestante
 
     const resultado = await withTransaction(async (q) => {
       const descricaoBase = `Parcela ${parcela.numero_parcela}/${num(fin.num_parcelas)} - ${bem.name}`
@@ -154,16 +164,17 @@ async function handler(req, res) {
       await q(`UPDATE contas SET balance = $2 WHERE id = $1`, [bem.id, saldoBemNovo])
 
       const saldoDividaAnterior = num(divida.balance)
-      const saldoDividaNovo = round2(saldoDividaAnterior + valorPago)
+      const saldoDividaNovo = round2(saldoDividaAnterior + deltaPrincipal)
       await q(`UPDATE contas SET balance = $2 WHERE id = $1`, [divida.id, saldoDividaNovo])
 
       await q(
         `UPDATE financing_installments SET
            principal_pago = $2, juros_pago = $3, total_pago = $4,
-           desvio_juros = $5, data_pagamento = $6, status = $7, saldo_restante = $8
+           desvio_juros = $5, data_pagamento = $6, status = $7, saldo_restante = $8,
+           desconto_antecipacao = $9
          WHERE id = $1`,
         [parcelaId, rateio.principalPago, rateio.jurosPago, totalNovo,
-          rateio.desvioJuros, dataPagamento, statusNovo, saldoRestanteNovo],
+          rateio.desvioJuros, dataPagamento, statusNovo, saldoRestanteNovo, rateio.desconto],
       )
 
       // Agendamento da parcela: marca a ocorrência como registrada quando a parcela fecha, para
@@ -232,6 +243,7 @@ async function handler(req, res) {
         total_pago: totalNovo,
         saldo_restante: saldoRestanteNovo,
         desvio_juros: rateio.desvioJuros,
+        desconto_antecipacao: rateio.desconto,
         data_vencimento: parcela.venc_iso,
         data_pagamento: dataPagamento,
       },
@@ -246,6 +258,7 @@ async function handler(req, res) {
         juros_pagos: rateio.jurosPago,
         juros_neste_pagamento: deltaJuros,
         juros_em_falta: rateio.desvioJuros,
+        desconto_antecipacao: rateio.desconto,
       },
       // `account_id`/`data`/`componente` vão junto para a tela de Contas a Pagar poder espelhar
       // estes lançamentos no estado do app com o MESMO id (o upsert do sync então casa na linha

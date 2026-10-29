@@ -128,16 +128,15 @@ async function handler(req, res) {
     const contaDividaId = genId('acc_divida')
 
     const criado = await withTransaction(async (q) => {
-      // Saldo = −valor_TOTAL (principal + juros), não −principal: quem amortiza é
-      // POST /parcela/[id]/pagar, com `saldo + valor_pago` — o valor cheio da parcela. Começar
-      // no principal faria a dívida terminar POSITIVA em juros_totais depois da última parcela.
-      // Os dois números só fecham em zero juntos.
+      // Saldo = −valor_PRINCIPAL: a conta de dívida mostra o SALDO DEVEDOR DO PRINCIPAL. Quem
+      // amortiza é POST /parcela/[id]/pagar, somando só o principal pago (os juros são despesa e
+      // não abatem dívida). Os dois fecham em zero na última parcela.
       const [contaDivida] = await q(
         `INSERT INTO contas (id, name, type, balance, initial_balance, descricao)
          VALUES ($1, $2, $3, $4, $4, $5)
          RETURNING id, name, type, balance`,
         [contaDividaId, `Contas a Pagar - Fin. ${bem.name}`, ACCOUNT_TYPE_DIVIDA,
-          round2(-provisao.valorTotal), `Financiamento ${bancoTexto || ''} — ${bem.name}`.trim()],
+          round2(-valorPrincipal), `Financiamento ${bancoTexto || ''} — ${bem.name}`.trim()],
       )
 
       await q(
