@@ -24,35 +24,31 @@ export default function Assistente({ onClose, onToast }) {
   // entrada | carregando | pergunta | previa | baixa | saldo
   const [fase, setFase] = useState({ tipo: 'entrada' })
   const [texto, setTexto] = useState('')
+  // Trecho do ditado ainda provisório: já está DENTRO de `texto` (contador e Enviar usam `texto`);
+  // aqui só para pintar o fim do campo de cinza enquanto grava.
   const [provisorio, setProvisorio] = useState('')
   const [imagem, setImagem] = useState(null) // { base64, mimeType, preview }
   const [erro, setErro] = useState('')
   const [outraResposta, setOutraResposta] = useState('')
   const arquivoRef = useRef(null)
   const baseFala = useRef('')
-  const falaFinal = useRef('')
 
+  // Ditado → o MESMO estado do campo: texto digitado antes + final + provisório (o Safari às vezes
+  // nem finaliza o trecho — ele fica no texto do mesmo jeito).
   const mic = useMicrofone({
     onTexto: (final, prov) => {
-      falaFinal.current = final
-      setTexto(juntar(baseFala.current, final).slice(0, MAX_TEXTO))
+      setTexto(juntar(baseFala.current, final, prov).slice(0, MAX_TEXTO))
       setProvisorio(prov)
     },
     onErro: setErro,
   })
-  // Parou com trecho ainda provisório (o Safari às vezes não finaliza): ele entra no texto.
-  useEffect(() => {
-    if (mic.ouvindo || !provisorio) return
-    setTexto(juntar(baseFala.current, falaFinal.current, provisorio).slice(0, MAX_TEXTO))
-    setProvisorio('')
-  }, [mic.ouvindo, provisorio])
+  const provisorioVisivel = mic.ouvindo ? provisorio : ''
 
   useEffect(() => () => { if (imagem?.preview) URL.revokeObjectURL(imagem.preview) }, [imagem])
 
   const alternarMicrofone = () => {
     if (mic.ouvindo) { mic.parar(); return }
     baseFala.current = texto
-    falaFinal.current = ''
     setProvisorio('')
     setErro('')
     mic.iniciar()
@@ -60,7 +56,7 @@ export default function Assistente({ onClose, onToast }) {
 
   const enviar = async (extra = {}) => {
     if (mic.ouvindo) mic.parar()
-    const pedido = juntar(texto, provisorio)
+    const pedido = texto.trim()
     if (!pedido && !imagem) { setErro('Escreva, fale ou envie uma foto.'); return }
     setErro('')
     setFase({ tipo: 'carregando' })
@@ -159,9 +155,13 @@ export default function Assistente({ onClose, onToast }) {
             {mic.ouvindo ? (
               // Gravando: o campo mostra a transcrição ao vivo — final normal, provisória em cinza.
               <div className="input min-h-[96px] pr-10 whitespace-pre-wrap break-words" aria-live="polite">
-                {texto && <span className="text-texto-1">{texto} </span>}
-                {provisorio && <span className="text-texto-3">{provisorio}</span>}
-                {!texto && !provisorio && <span className="text-texto-3">Pode falar…</span>}
+                {(() => {
+                  // `texto` já inclui o provisório no fim: a parte final sai em cinza.
+                  const corte = provisorioVisivel && texto.endsWith(provisorioVisivel) ? texto.length - provisorioVisivel.length : texto.length
+                  return texto
+                    ? <><span className="text-texto-1">{texto.slice(0, corte)}</span><span className="text-texto-3">{texto.slice(corte)}</span></>
+                    : <span className="text-texto-3">Pode falar…</span>
+                })()}
               </div>
             ) : (
               <textarea
@@ -217,7 +217,7 @@ export default function Assistente({ onClose, onToast }) {
               <input ref={arquivoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={escolherFoto} />
             </>
           )}
-          <button type="button" onClick={() => enviar()} disabled={carregando || (!texto.trim() && !provisorio && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">
+          <button type="button" onClick={() => enviar()} disabled={carregando || (!texto.trim() && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">
             {carregando ? <><Loader2 size={16} className="animate-spin" /> Entendendo…</> : <><Sparkles size={16} /> Enviar</>}
           </button>
         </div>
@@ -238,7 +238,7 @@ function EscolherBaixa({ criterio, candidatos, onEscolher, onLancamento, onNovo 
     <div className="space-y-3 min-w-0">
       {candidatos.length ? (
         <>
-          <p className="text-sm text-texto-1 whitespace-pre-wrap break-words">Achei {candidatos.length} agendamentos pendentes para {quem}. Qual recebe a baixa?</p>
+          <p className="text-sm text-texto-1 whitespace-pre-wrap break-words">Achei {candidatos.length} agendamentos pendentes para {quem}{criterio.valor_informado || criterio.valor_min ? ' (o de valor mais próximo primeiro)' : ''}. Qual recebe a baixa?</p>
           <ul className="divide-y divide-borda rounded-lg border border-borda">
             {candidatos.map(c => {
               const s = porId.get(c.schedule_id)
@@ -248,7 +248,11 @@ function EscolherBaixa({ criterio, candidatos, onEscolher, onLancamento, onNovo 
                   <button type="button" onClick={() => onEscolher(c)} className="w-full flex items-center gap-2 px-3 py-2 min-h-[52px] text-left">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-texto-1 break-words">{c.descricao}{parcela ? ` · ${parcela}` : ''}</p>
-                      <p className="text-[11px] text-texto-3 break-words">{c.favorecido || 'Sem favorecido'} · vence {fmtDate(c.data)} · {fmt(c.valor)}</p>
+                      <p className="text-[11px] text-texto-3 break-words">{c.favorecido || 'Sem favorecido'}</p>
+                      <p className="text-[11px] break-words">
+                        <span className={c.tipo === 'receita' ? 'text-receita' : 'text-despesa'}>{c.tipo === 'receita' ? 'Receita' : 'Despesa'} {fmt(c.valor)}</span>
+                        <span className={c.atrasado ? 'text-aviso' : 'text-texto-3'}> · {c.atrasado ? 'venceu' : 'vence'} {fmtDate(c.data)}</span>
+                      </p>
                     </div>
                     <ChevronRight size={16} className="shrink-0 text-texto-3" />
                   </button>
@@ -259,7 +263,7 @@ function EscolherBaixa({ criterio, candidatos, onEscolher, onLancamento, onNovo 
         </>
       ) : (
         <p className="text-sm text-texto-1 whitespace-pre-wrap break-words">
-          Não achei agendamento pendente para {quem} com esse valor (vencimento entre 30 dias atrás e 15 dias à frente). Quer registrar como um lançamento avulso?
+          Não achei agendamento pendente com “{quem}” no favorecido ou na descrição (vencimento entre 30 dias atrás e 15 dias à frente{criterio.valor_exato ? `, valor ${fmt(criterio.valor_informado)}` : ''}). Quer registrar como um lançamento avulso?
         </p>
       )}
       <div className="flex flex-wrap gap-2">

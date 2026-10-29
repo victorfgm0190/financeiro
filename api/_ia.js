@@ -151,7 +151,7 @@ O usuário descreve em português (texto, voz transcrita ou foto de comprovante/
 Responda SEMPRE chamando exatamente UMA ferramenta, sem texto fora dela:
 - registrar_lancamento: despesa, receita ou transferência que já aconteceu ("gastei", "paguei", "recebi", "lance").
 - criar_agendamento: algo a pagar/receber no futuro ou recorrente. "Contas a pagar" e "contas a receber" = agendamento.
-- baixar_agendamento: dar baixa (pagar/receber) num agendamento que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel", "recebi a parcela do X"). Informe o favorecido/descrição citados e o valor: exato em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). Quem paga ao usuário = receita; o usuário pagando = despesa.
+- baixar_agendamento: dar baixa (pagar/receber) num agendamento que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel", "recebi a parcela do X"). Informe o nome citado (favorecido ou descrição, só o nome: "Carlos") e o valor: um valor em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). valor_exato = true SÓ quando o valor foi dito exato ("de 250"); com "uns", "próximo de", "mais ou menos", "algo assim" → false. Tipo só se o pedido deixar claro: "me pagou/recebi" = receita; "paguei" = despesa; senão null.
 - consultar_saldo: o usuário quer saber o saldo de uma conta. Você NÃO sabe saldos: só indique a conta.
 - perguntar: falta algo essencial (ex.: o valor) ou há ambiguidade real (ex.: duas contas Itaú). Dê de 2 a 6 opções curtas; quando forem contas/categorias, use os nomes do cadastro.
 
@@ -221,7 +221,8 @@ export const FERRAMENTAS = [
       properties: {
         favorecido: { type: ['string', 'null'], description: 'Nome citado, como o usuário disse' },
         descricao: { type: ['string', 'null'], description: 'Descrição citada do agendamento (ex.: "aluguel")' },
-        valor_informado: { type: ['number', 'null'], description: 'Valor exato pago/recebido' },
+        valor_informado: { type: ['number', 'null'], description: 'Valor pago/recebido citado' },
+        valor_exato: { type: 'boolean', description: 'true só se o valor foi dito exato (sem "uns", "próximo de", "mais ou menos")' },
         valor_min: { type: ['number', 'null'] },
         valor_max: { type: ['number', 'null'] },
         tipo: { type: ['string', 'null'], enum: ['despesa', 'receita', null] },
@@ -277,6 +278,7 @@ export function validarParametros(ferramenta, input, ctx, hoje = hojeSaoPaulo())
     return {
       favorecido: txt(p.favorecido, 80), descricao: txt(p.descricao, 80),
       valor_informado: num(p.valor_informado), valor_min: min, valor_max: max,
+      valor_exato: p.valor_exato === true && !!num(p.valor_informado) && !(min && max && min !== max),
       tipo: ['despesa', 'receita'].includes(p.tipo) ? p.tipo : null,
       data_pagamento: DATA.test(String(p.data_pagamento || '')) ? p.data_pagamento : hoje,
       conta_id: ctx.idx.contas.has(p.conta_id) ? p.conta_id : null,

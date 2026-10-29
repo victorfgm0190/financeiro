@@ -4,24 +4,36 @@ import { computeOccurrences } from '../src/lib/occurrences.js'
 import { occEfetiva } from '../src/lib/fluxoCaixa.js'
 import { normalizarTermo, hojeSaoPaulo } from './_ia.js'
 
-// ASSISTENTE IA (etapa 1.1) — exclusão recusada e candidatos de BAIXA de agendamento.
+// ASSISTENTE IA — exclusão recusada e candidatos de BAIXA de agendamento.
 
 // O assistente NUNCA exclui. Pedido de exclusão é respondido sem chamar o modelo (não depende do
 // prompt e não gasta tokens). O prompt também recusa, para os pedidos que escaparem daqui.
-const PEDIDO_EXCLUSAO = /\b(exclu\w*|apag\w*|delet\w*|remov\w*|estorn\w*)\b/
+// ESTORNO não é exclusão (cria o lançamento inverso): não entra aqui — vira abrir_tela (🔴).
+const PEDIDO_EXCLUSAO = /\b(exclu\w*|apag\w*|delet\w*|remov\w*)\b/
 export const ehPedidoDeExclusao = (texto) => PEDIDO_EXCLUSAO.test(normalizarTermo(texto))
 export const RESPOSTA_EXCLUSAO = {
   pergunta: 'Eu não excluo lançamentos nem agendamentos. Para excluir, abra o item na tela de Lançamentos ou de Agendamentos (ou pela busca 🔍) e decida por lá.',
   opcoes: [],
 }
 
+// Valor dito de forma aproximada ("uns 200", "próximo de 200", "mais ou menos", "algo assim")
+// nunca filtra: só ordena. O backend confere o texto além do que o modelo marcou em valor_exato.
+const VALOR_APROXIMADO = /\b(uns|umas|cerca|perto|proximo|aproximad\w*|mais ou menos|algo assim|por volta|em torno|na faixa|tipo)\b/
+export const valorDitoAproximado = (texto) => VALOR_APROXIMADO.test(normalizarTermo(texto))
+
 // Agendamentos PENDENTES com a mesma lógica da tela de Agendamentos: a próxima ocorrência não
 // registrada/pulada (computeOccurrences — o Pagar age sempre nela) com data e valor efetivos
-// (occEfetiva: override da ocorrência). Recorte pelos perfis permitidos. Filtros: favorecido
-// parecido (sem acento/maiúsculas, contém/semelhante), valor com folga de 10% e vencimento entre
-// −30 e +15 dias de hoje. Até 5, do mais para o menos próximo.
-export const FOLGA_VALOR = 0.10
+// (occEfetiva: override da ocorrência), vencimento entre −30 (atrasados inclusive) e +15 dias.
+// Recorte pelos perfis permitidos.
+//   • NOME filtra: cada palavra do termo (sem acento/maiúsculas) contida no favorecido OU na
+//     descrição ("Carlos" casa "HORARIOS SR CARLOS" e "CARLOS FERREIRA ANDRADE - LUCAS SOUZA").
+//   • VALOR só filtra quando exato (valor_exato, faixa de ±R$ 0,05·1% de arredondamento); aproximado
+//     ou faixa ("uns 200, 220") só ORDENA, pela distância.
+//   • TIPO só prioriza (receita de "me pagou/recebi", despesa de "paguei"); sem tipo, os dois.
+// Ordem: tipo pedido primeiro, depois valor mais próximo, depois vencimento mais perto de hoje.
 export const JANELA_DIAS = { antes: -30, depois: 15 }
+export const MAX_CANDIDATOS = 5
+const TOLERANCIA_EXATO = 0.01 // 1%: "de 250" casa 250,00 e 249,90
 
 const dataStr = (v) => (!v ? null : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10))
 const diasEntre = (a, b) => Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 86_400_000)
@@ -35,29 +47,18 @@ export const agendamentoDaLinha = (r) => ({
   overrides: r.overrides || {}, nextOccurrence: dataStr(r.next_occurrence),
 })
 
-// Semelhança 0..1: um contém o outro = 1; senão o maior entre Dice de bigramas e palavra (≥ 3
-// letras) em comum (0,8).
-export function semelhanca(a, b) {
-  const x = normalizarTermo(a)
-  const y = normalizarTermo(b)
-  if (!x || !y) return 0
-  if (x.includes(y) || y.includes(x)) return 1
-  const bigramas = (t) => Array.from({ length: Math.max(0, t.length - 1) }, (_, i) => t.slice(i, i + 2))
-  const bx = bigramas(x)
-  const resto = bigramas(y)
-  const total = bx.length + resto.length
-  let comum = 0
-  for (const g of bx) {
-    const i = resto.indexOf(g)
-    if (i >= 0) { comum++; resto.splice(i, 1) }
-  }
-  const palavrasY = new Set(y.split(' '))
-  const palavra = x.split(' ').some(w => w.length >= 3 && palavrasY.has(w)) ? 0.8 : 0
-  return Math.max(total ? (2 * comum) / total : 0, palavra)
+// Palavras do termo (≥ 2 letras, sem "de/do/da/sr…") todas contidas no texto do agendamento.
+const IGNORAR = new Set(['de', 'do', 'da', 'dos', 'das', 'o', 'a', 'sr', 'sra', 'dr', 'dra', 'e'])
+export function casaNome(termo, ...textos) {
+  const palavras = normalizarTermo(termo).split(' ').filter(w => w.length >= 2 && !IGNORAR.has(w))
+  if (!palavras.length) return false
+  const alvo = textos.map(normalizarTermo).join(' ')
+  return palavras.every(w => alvo.includes(w))
 }
 
 export function filtrarCandidatos(agendamentos, criterio, hoje) {
-  const tipoMov = criterio.tipo === 'receita' ? 'income' : criterio.tipo === 'despesa' ? 'expense' : null
+  const tipoPedido = criterio.tipo === 'receita' ? 'income' : criterio.tipo === 'despesa' ? 'expense' : null
+  const exato = criterio.valor_exato && criterio.valor_informado > 0 ? criterio.valor_informado : null
   const min = criterio.valor_min || criterio.valor_informado || null
   const max = criterio.valor_max || criterio.valor_informado || min
   const alvo = min && max ? (min + max) / 2 : null
@@ -65,24 +66,23 @@ export function filtrarCandidatos(agendamentos, criterio, hoje) {
   const out = []
   for (const s of agendamentos) {
     if (s.transactionType !== 'expense' && s.transactionType !== 'income') continue
-    if (tipoMov && s.transactionType !== tipoMov) continue
+    if (termo && !casaNome(termo, s.payee, s.description)) continue
     const base = computeOccurrences(s, 1)[0]
     if (!base) continue
     const e = occEfetiva(s, base)
     const dias = diasEntre(hoje, e.date)
     if (dias < JANELA_DIAS.antes || dias > JANELA_DIAS.depois) continue
-    if (min && (e.amount < min * (1 - FOLGA_VALOR) || e.amount > max * (1 + FOLGA_VALOR))) continue
-    const sim = termo ? Math.max(semelhanca(termo, s.payee), semelhanca(termo, s.description) * 0.9) : 1
-    if (termo && sim < 0.5) continue
-    const distValor = alvo ? Math.abs(e.amount - alvo) / alvo : 0
+    if (exato && Math.abs(e.amount - exato) > Math.max(0.05, exato * TOLERANCIA_EXATO)) continue
     out.push({
       schedule_id: s.id, ocorrencia: base, data: e.date, valor: Math.round(e.amount * 100) / 100,
       descricao: s.description, favorecido: s.payee, conta_id: s.accountId || null,
       tipo: s.transactionType === 'income' ? 'receita' : 'despesa',
-      score: sim * 2 - distValor - Math.abs(dias) / 60,
+      atrasado: dias < 0,
+      ordem: [tipoPedido && s.transactionType !== tipoPedido ? 1 : 0, alvo ? Math.abs(e.amount - alvo) : 0, Math.abs(dias)],
     })
   }
-  return out.sort((a, b) => b.score - a.score).slice(0, 5).map(c => { delete c.score; return c })
+  const cmp = (a, b) => a.ordem[0] - b.ordem[0] || a.ordem[1] - b.ordem[1] || a.ordem[2] - b.ordem[2]
+  return out.sort(cmp).slice(0, MAX_CANDIDATOS).map(c => { delete c.ordem; return c })
 }
 
 export async function buscarCandidatosBaixa(user, criterio, hoje = hojeSaoPaulo(), q = query) {

@@ -6,7 +6,7 @@ import { comAmbiente } from './_ambiente.js'
 import {
   ensureIaSchema, montarContexto, textoCadastros, INSTRUCOES, FERRAMENTAS, validarParametros, registrarUso, hojeSaoPaulo,
 } from './_ia.js'
-import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, buscarCandidatosBaixa } from './_iaBaixa.js'
+import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 
 // ASSISTENTE IA (etapa 1/1.1). POST { texto?, imagemBase64?, mimeType?, respostaPergunta?, pergunta? }
 //   → { ferramenta, parametros, candidatos? } — registrar_lancamento | criar_agendamento |
@@ -86,6 +86,8 @@ async function handler(req, res) {
     }
     const parametros = validarParametros(ferramenta, bloco.input, ctx, hoje)
     if (ferramenta === 'baixar_agendamento') {
+      // "uns/próximo de/mais ou menos" no texto: o valor nunca filtra, mesmo que o modelo diga exato.
+      if (valorDitoAproximado(`${texto} ${resposta}`)) parametros.valor_exato = false
       return res.json({ ferramenta, parametros, candidatos: await buscarCandidatosBaixa(req.user, parametros, hoje) })
     }
     return res.json({ ferramenta, parametros })
