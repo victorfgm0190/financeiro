@@ -39,6 +39,7 @@ import { tentarReconectar } from '../lib/syncSeguro'
 import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { espelhoNoPerfil } from '../lib/espelhoReserva'
+import { faturaParaCriacao, faturaParaEdicao } from '../lib/faturaAberta'
 import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -1728,6 +1729,10 @@ export function AppProvider({ children }) {
       { ...txClean, id, amount: Number(txClean.amount), origin: txClean.origin || ORIGIN.MANUAL, createdAt: new Date().toISOString() },
       dataRef.current.gerencialGroups, dataRef.current.reserveFunctions,
     )
+    // Despesa de cartão NUNCA fica sem fatura gravada (agendamento, duplicar, formulário…): a
+    // calculada pelo fechamento do cartão; fechada → a próxima aberta (lib/faturaAberta).
+    const faturaNova = faturaParaCriacao(newTx, dataRef.current.accounts, dataRef.current.settings?.faturasFechadas)
+    if (faturaNova) newTx.faturaMonthYear = faturaNova
     update(d => {
       let accounts = [...d.accounts]
 
@@ -2182,10 +2187,14 @@ export function AppProvider({ children }) {
     update(d => applyEnsureGerencial(d, lancId))
   }, [update, applyEnsureGerencial])
 
-  const updateTransaction = useCallback((id, changes) => {
+  const updateTransaction = useCallback((id, changes0) => {
     // TAREFA 2: se uma despesa de cartão muda de valor ou de fatura, recalcula a(s)
     // conta(s) a pagar afetada(s). Lê o tx antigo do dataRef (síncrono) antes do update.
     const old = dataRef.current.transactions.find(t => t.id === id)
+    // Despesa de cartão sem fatura gravada: grava a fatura em que ela ESTAVA (pela data antiga,
+    // no mesmo cartão) — editar a data não a muda de fatura sozinho; mudar é escolha explícita.
+    const faturaEstava = old ? faturaParaEdicao(old, changes0, dataRef.current.accounts) : null
+    const changes = faturaEstava ? { ...changes0, faturaMonthYear: faturaEstava } : changes0
     let recalcArgs = null
     if (old && old.type === 'expense' && old.accountType === 'credit') {
       const updated = { ...old, ...changes }

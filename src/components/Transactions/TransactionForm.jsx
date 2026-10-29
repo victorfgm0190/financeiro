@@ -23,7 +23,7 @@ import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
-import { faturaAbertaDoCartao, avisoFaturaFechada, rotuloFatura } from '../../lib/faturaAberta'
+import { faturaAbertaDoCartao, avisoFaturaFechada, rotuloFatura, faturaPelaData, faturaInicialDaEdicao } from '../../lib/faturaAberta'
 import { faturaEstaFechada } from '../../lib/faturasFechadas'
 import {
   ESCOPO, diffCampos, precisaEscolherEscopo, planoRegistros, irmasLancamento, parcelaCartaoPendente,
@@ -182,7 +182,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     costCenter: initial?.costCenter || '',
     notes: initial?.notes || '',
     grupoGerencial: initial?.grupoGerencial || defaultGrupoId,
-    faturaMonthYear: initial?.faturaMonthYear || '',
+    // Edição de despesa de cartão: o seletor mostra a fatura gravada; lançamento antigo sem ela →
+    // a fatura em que ele está hoje (pela data). "(automático)" fica como opção de recalcular.
+    faturaMonthYear: initial?.faturaMonthYear || faturaInicialDaEdicao(initial, accounts) || '',
     faturaRef: initial?.faturaRef || '',
     reservaFuncaoId: initial?.reservaFuncaoId || (initialReservaContaId ? (initialResgate?.reservaFuncaoId || '') : ''),
     categoriaCnpjId: initial?.categoriaCnpjId || '',
@@ -293,13 +295,19 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
-  // Fatura do lançamento NOVO no cartão com "Fatura de referência" em branco: a calculada pelo
-  // fechamento; se FECHADA, a próxima aberta (gravada explícita no salvar). Parcelado: parcela 1
-  // nela, as próximas nas seguintes (criarParcelasGerencial, pela fatura da base).
-  const faturaAuto = (!initial?.id && isCredit && form.type === 'expense')
+  // "(automático)": a fatura calculada pela data e pelo fechamento; se FECHADA, a próxima aberta.
+  // O salvar SEMPRE grava a fatura efetiva (nunca vazia). Parcelado: parcela 1 nela, as próximas
+  // nas seguintes (criarParcelasGerencial, pela fatura da base).
+  const faturaAuto = (isCredit && form.type === 'expense')
     ? faturaAbertaDoCartao({ cardId: form.accountId, date: form.date, closingDay: selectedAccount?.closingDay, faturasFechadas: settings?.faturasFechadas })
     : null
   const faturaEscolhidaFechada = isCredit && !!form.faturaMonthYear && faturaEstaFechada(settings?.faturasFechadas, form.accountId, form.faturaMonthYear)
+  // Edição com a data mudada: a fatura NÃO muda sozinha; avisa se a nova data levaria a outra.
+  const faturaPelaNovaData = (initial?.id && isCredit && form.type === 'expense' && form.faturaMonthYear && form.date !== initial.date)
+    ? faturaPelaData(form.date, selectedAccount?.closingDay) : null
+  const avisoNovaData = faturaPelaNovaData && faturaPelaNovaData !== form.faturaMonthYear
+    ? `Pela nova data seria a fatura ${rotuloFatura(faturaPelaNovaData)}; o lançamento continua na ${rotuloFatura(form.faturaMonthYear)}${faturaEscolhidaFechada ? ' (fechada)' : ''}. Para mudar, escolha a fatura.`
+    : null
   // Controle gerencial do ambiente (Configurações): desligado, o bloco some, item novo não ganha
   // grupo e a edição mantém o gravado; item com grupo gerencial trava valor, data e conta/cartão.
   const gerencialLigado = controleGerencialAtivo(settings)
@@ -576,8 +584,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : (gerencialLigado ? null : grupoComChaveDesligada(initial)),
       faturaMonthYear:
-        (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear
-        : (faturaAuto?.fechadas.length) ? faturaAuto.efetiva
+        (isCredit && form.type === 'expense') ? (form.faturaMonthYear || faturaAuto?.efetiva || null)
         : (form.type === 'transfer' && transferToAcc?.type === 'credit' && form.faturaMonthYear) ? form.faturaMonthYear
         : null,
       // Fatura de Referência (MM/AAAA) — editável só em transferências gerenciais; nos demais casos
@@ -2002,11 +2009,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           {!form.faturaMonthYear && avisoFaturaFechada(faturaAuto) && (
             <p className="text-xs text-aviso mt-1.5">{avisoFaturaFechada(faturaAuto)}</p>
           )}
-          {faturaEscolhidaFechada && (
+          {avisoNovaData && <p className="text-xs text-aviso mt-1.5">{avisoNovaData}</p>}
+          {faturaEscolhidaFechada && !avisoNovaData && (
             <p className="text-xs text-aviso mt-1.5">A fatura {rotuloFatura(form.faturaMonthYear)} está fechada.</p>
           )}
           <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
-            Opcional — em branco, a fatura é calculada automaticamente pelo dia de
+            A fatura escolhida é gravada no lançamento. &quot;(automático)&quot; calcula pela data e pelo
             fechamento do cartão (fatura fechada → a próxima aberta).
           </p>
         </div>

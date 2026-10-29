@@ -39,3 +39,32 @@ export function avisoFaturaFechada(f) {
   const quais = f.fechadas.map(rotuloFatura).join(', ')
   return `Fatura ${quais} ${f.fechadas.length > 1 ? 'fechadas' : 'fechada'} → lançado na ${rotuloFatura(f.efetiva)}`
 }
+
+// Fatura inicial do seletor na EDIÇÃO de uma despesa de cartão antiga sem fatura gravada: a em
+// que ela está hoje (pela data, sem pular fechadas — não muda de fatura ao salvar). null = não se
+// aplica (novo, outro tipo, não cartão ou já tem fatura).
+export function faturaInicialDaEdicao(initial, accounts) {
+  if (!initial?.id || initial.type !== 'expense' || initial.faturaMonthYear) return null
+  const card = (accounts || []).find(a => a.id === initial.accountId)
+  return card?.type === 'credit' ? faturaPelaData(initial.date, card.closingDay) : null
+}
+
+// Gravação (addTransaction): despesa de cartão sem fatura → a efetiva (fechada → próxima aberta).
+// Devolve a fatura a gravar, ou null quando não se aplica (já tem, não é despesa de cartão).
+export function faturaParaCriacao(tx, accounts, faturasFechadas) {
+  if (tx?.type !== 'expense' || tx.faturaMonthYear) return null
+  const card = (accounts || []).find(a => a.id === tx.accountId)
+  if (card?.type !== 'credit') return null
+  return faturaAbertaDoCartao({ cardId: card.id, date: tx.date, closingDay: card.closingDay, faturasFechadas })?.efetiva || null
+}
+
+// Gravação (updateTransaction): a despesa de cartão editada ficaria sem fatura → a em que ela
+// ESTAVA (data antiga, mesmo cartão); mudou de cartão/tipo → pela data nova. null = não se aplica.
+export function faturaParaEdicao(old, changes, accounts) {
+  const merged = { ...old, ...changes }
+  if (merged.type !== 'expense' || merged.faturaMonthYear) return null
+  const card = (accounts || []).find(a => a.id === merged.accountId)
+  if (card?.type !== 'credit') return null
+  const base = old.accountId === merged.accountId && old.type === 'expense' ? old.date : merged.date
+  return faturaPelaData(base, card.closingDay)
+}
