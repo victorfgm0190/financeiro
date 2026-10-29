@@ -1,3 +1,15 @@
+// Dia de fechamento PADRÃO quando o cartão não tem o dia (cartões antigos; os novos exigem o dia).
+// Fonte única: motor da fatura, Cartão de Crédito, Lista de Lançamentos, relatórios.
+export const FECHAMENTO_PADRAO = 14
+
+// Fatura 'YYYY-MM' de um gasto no cartão pela data (dia <= fechamento → mês corrente; senão o
+// seguinte). '' sem data/cartão.
+export function faturaDoCartao(date, card) {
+  if (!date || !card) return ''
+  const [mm, yyyy] = computeFaturaRef(new Date(`${String(date).slice(0, 10)}T00:00:00`), card.closingDay || FECHAMENTO_PADRAO).split('/')
+  return `${yyyy}-${mm}`
+}
+
 /**
  * Determina a faturaRef (MM/YYYY do mês de fechamento) de um gasto no cartão.
  *

@@ -7,6 +7,8 @@ import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
 import { ehContaDeFinanciamento } from '../../lib/financiamento'
 import { lerFinais, finaisDoCartao, chaveSubconta, subcontaDoCartao, ehSubcontaGerencialApp } from '../../lib/cartaoFinais'
+import { erroDiasCartao, cartaoSemDias } from '../../lib/cartaoDias'
+import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -96,8 +98,9 @@ export default function AccountForm({ initial, onClose }) {
     balance: initial?.balance ?? '',
     bank: initial?.bank || '',
     creditLimit: initial?.creditLimit ?? '',
-    closingDay: initial?.closingDay ?? 1,
-    dueDay: initial?.dueDay ?? 10,
+    // Cartão: dias OBRIGATÓRIOS, sem valor padrão silencioso (lib/cartaoDias).
+    closingDay: initial?.closingDay ?? '',
+    dueDay: initial?.dueDay ?? '',
     paymentAccountId: initial?.paymentAccountId || null,
     isMain: initial?.isMain || false,
     fluxoCaixaPrincipal: initial?.fluxoCaixaPrincipal || false,
@@ -124,6 +127,7 @@ export default function AccountForm({ initial, onClose }) {
     cartaoFinais: finaisDoCartao(initial).join(', '),
   })
   const [finaisErro, setFinaisErro] = useState('')
+  const [diasErro, setDiasErro] = useState('')
   // Conta de dívida de financiamento: o saldo devedor (principal) é calculado pelo financiamento
   // (/api/financiamento/*) — só leitura aqui, e o salvar mantém o valor que já estava.
   const saldoDoFinanciamento = !!initial && ehContaDeFinanciamento(initial)
@@ -179,6 +183,10 @@ export default function AccountForm({ initial, onClose }) {
     e?.preventDefault?.()
     if (!form.name.trim() || !podeSalvar) return
 
+    if (isCredit) {
+      const erroDias = erroDiasCartao(form)
+      if (erroDias) { setDiasErro(erroDias); return }
+    }
     const finais = lerFinais(form.cartaoFinais)
     if (isCredit && finais.invalidos.length) {
       setFinaisErro(`Use 4 dígitos por final (inválido: ${finais.invalidos.join(', ')}).`)
@@ -235,8 +243,8 @@ export default function AccountForm({ initial, onClose }) {
       creditLimit: Number(form.creditLimit),
       // Só cartões têm conta pagadora; nos demais tipos o campo é sempre limpo.
       paymentAccountId: isCredit ? (form.paymentAccountId || null) : null,
-      closingDay: Number(form.closingDay),
-      dueDay: Number(form.dueDay),
+      closingDay: isCredit ? Number(form.closingDay) : (initial?.closingDay ?? null),
+      dueDay: isCredit ? Number(form.dueDay) : (initial?.dueDay ?? null),
       isMain: form.isMain,
       fluxoCaixaPrincipal: isPatrimonial ? false : form.fluxoCaixaPrincipal,
       contaCorrentePrincipal: centralFinal,
@@ -461,30 +469,39 @@ export default function AccountForm({ initial, onClose }) {
               placeholder="0,00"
             />
           </div>
+          {initial && cartaoSemDias(initial) && (
+            <p className="text-xs text-aviso">
+              Este cartão está sem dia de fechamento ou de vencimento. Enquanto isso, a fatura é calculada
+              com o dia {FECHAMENTO_PADRAO}. Preencha os dois para salvar.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Dia de Fechamento</label>
+              <label className="label">Dia de Fechamento *</label>
               <input
                 className="input"
                 type="number"
                 min="1"
                 max="31"
+                required
                 value={form.closingDay}
-                onChange={e => set('closingDay', e.target.value)}
+                onChange={e => { set('closingDay', e.target.value); setDiasErro('') }}
               />
             </div>
             <div>
-              <label className="label">Dia de Vencimento</label>
+              <label className="label">Dia de Vencimento *</label>
               <input
                 className="input"
                 type="number"
                 min="1"
                 max="31"
+                required
                 value={form.dueDay}
-                onChange={e => set('dueDay', e.target.value)}
+                onChange={e => { set('dueDay', e.target.value); setDiasErro('') }}
               />
             </div>
           </div>
+          {diasErro && <p className="text-xs text-perigo">{diasErro}</p>}
           <div>
             <label className="label">Finais do cartão</label>
             <input

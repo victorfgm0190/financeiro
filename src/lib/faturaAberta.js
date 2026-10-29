@@ -1,13 +1,13 @@
 // Fatura de um lançamento NOVO no cartão: a calculada pela data e pelo dia de fechamento
 // (computeFaturaRef) e, se ela estiver FECHADA (settings.faturasFechadas), a próxima aberta.
 // Usado pelo formulário de lançamento (e pela prévia do Assistente, que é o mesmo formulário).
-import { computeFaturaRef } from './fatura.js'
+import { computeFaturaRef, FECHAMENTO_PADRAO } from './fatura.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 
 // 'YYYY-MM-DD' + dia de fechamento → fatura 'YYYY-MM'.
-export function faturaPelaData(date, closingDay = 14) {
+export function faturaPelaData(date, closingDay = FECHAMENTO_PADRAO) {
   if (!date) return null
-  const [mm, yyyy] = computeFaturaRef(new Date(`${date}T00:00:00`), closingDay || 14).split('/')
+  const [mm, yyyy] = computeFaturaRef(new Date(`${date}T00:00:00`), closingDay || FECHAMENTO_PADRAO).split('/')
   return `${yyyy}-${mm}`
 }
 

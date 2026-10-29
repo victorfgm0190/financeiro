@@ -3,6 +3,7 @@ import { Download, FileBarChart } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
+import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 
 // Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
@@ -90,7 +91,7 @@ export default function RelatorioFatura({ initialCardId }) {
   const [selectedBillKey, setSelectedBillKey] = useState('')
 
   const card = accounts.find(a => a.id === selectedCardId)
-  const closingDay = card?.closingDay || 1
+  const closingDay = card?.closingDay || FECHAMENTO_PADRAO
 
   const grp1 = gerencialGroups.find(g => g.number === 1)
   const grpD = gerencialGroups.find(g => g.number === 'D')

@@ -1,5 +1,6 @@
 import { isInvestAutoOrigin } from '../../lib/origins.js'
 import { hojeSP } from '../../lib/hoje.js'
+import { faturaDoCartao } from '../../lib/fatura.js'
 
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
@@ -211,14 +212,7 @@ export function buildAccountSelectOptions(accounts, accountGroups, { excludeId =
 // Convenção da fatura (igual a getBillKey do CreditCard/TransactionsPanel): dia do
 // lançamento <= closingDay → fatura do mês corrente; senão, fatura do mês seguinte.
 export function creditBillKey(date, card) {
-  if (!date || !card) return ''
-  const closingDay = card.closingDay || 1
-  const d = new Date(date + 'T00:00:00')
-  const day = d.getDate()
-  let month0, year
-  if (day <= closingDay) { month0 = d.getMonth(); year = d.getFullYear() }
-  else { const n = new Date(d.getFullYear(), d.getMonth() + 1, 1); month0 = n.getMonth(); year = n.getFullYear() }
-  return `${year}-${String(month0 + 1).padStart(2, '0')}`
+  return faturaDoCartao(date, card)
 }
 
 function billKeyOfTx(tx, card) {

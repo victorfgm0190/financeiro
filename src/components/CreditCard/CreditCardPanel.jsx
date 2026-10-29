@@ -17,7 +17,7 @@ import { useScrollSaver } from '../../hooks/useScrollRestoration'
 import Modal from '../shared/Modal'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { dataPadraoPagamento, hojeSP } from '../../lib/dataPagamento'
-import { dueDateInMonth } from '../../lib/fatura'
+import { dueDateInMonth, faturaDoCartao } from '../../lib/fatura'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
@@ -38,22 +38,8 @@ import InputMoeda from '../shared/InputMoeda'
 
 // Mesma convenção de computeFaturaRef: dia <= closingDay → fatura do mês corrente;
 // dia > closingDay → fatura do mês seguinte (a fatura do mês M fecha no dia F de M).
-function getBillKey(date, card) {
-  if (!date || !card) return ''
-  const closingDay = card.closingDay || 1
-  const d = new Date(date + 'T00:00:00')
-  const day = d.getDate()
-  let month0, year
-  if (day <= closingDay) {
-    month0 = d.getMonth()
-    year = d.getFullYear()
-  } else {
-    const n = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-    month0 = n.getMonth()
-    year = n.getFullYear()
-  }
-  return `${year}-${String(month0 + 1).padStart(2, '0')}`
-}
+// Fonte única (lib/fatura): mesmo fechamento padrão do resto do app.
+const getBillKey = (date, card) => faturaDoCartao(date, card)
 
 // Fatura de um lançamento: usa o faturaMonthYear explícito (importação/gerencial)
 // quando presente; senão deriva da data pelo dia de fechamento.

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useRegisterFab } from '../../context/FabContext'
+import { faturaDoCartao } from '../../lib/fatura'
 import { fmt, fmtSinal, fmtDate, groupedAccountOptions, accountPriority, EMPTY_LANC_FILTROS, hasLancFiltros, matchLancFiltros, accountsForView, computeReconciledTotals } from '../shared/utils'
 import { ORIGIN } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -28,22 +29,8 @@ import { criarSeloParcela } from '../../lib/numeroParcela'
 
 // Mesma convenção de computeFaturaRef: dia <= closingDay → fatura do mês corrente;
 // dia > closingDay → fatura do mês seguinte (a fatura do mês M fecha no dia F de M).
-function getBillKey(date, card) {
-  if (!date || !card) return ''
-  const closingDay = card.closingDay || 1
-  const d = new Date(date + 'T00:00:00')
-  const day = d.getDate()
-  let month0, year
-  if (day <= closingDay) {
-    month0 = d.getMonth()
-    year = d.getFullYear()
-  } else {
-    const n = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-    month0 = n.getMonth()
-    year = n.getFullYear()
-  }
-  return `${year}-${String(month0 + 1).padStart(2, '0')}`
-}
+// Fonte única (lib/fatura): mesmo fechamento padrão do resto do app.
+const getBillKey = (date, card) => faturaDoCartao(date, card)
 
 // Usa o faturaMonthYear explícito (importação/gerencial) quando presente.
 function txBillKey(tx, card) {

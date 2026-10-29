@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
+import { faturaDoCartao } from '../../lib/fatura'
 import DateInput from '../shared/DateInput'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import { isoLocal } from '../../lib/hoje'
@@ -18,14 +19,8 @@ function GerBadge({ grupoId, gerencialGroups }) {
 
 // dia <= closingDay → fatura do mês corrente; dia > closingDay → mês seguinte.
 function getBillLabel(date, card) {
-  if (!date || !card) return ''
-  const closingDay = card.closingDay || 1
-  const d = new Date(date + 'T00:00:00')
-  const day = d.getDate()
-  const ref = day <= closingDay
-    ? new Date(d.getFullYear(), d.getMonth(), 1)
-    : new Date(d.getFullYear(), d.getMonth() + 1, 1)
-  return `${String(ref.getMonth() + 1).padStart(2, '0')}/${ref.getFullYear()}`
+  const ym = faturaDoCartao(date, card)
+  return ym ? `${ym.slice(5, 7)}/${ym.slice(0, 4)}` : ''
 }
 
 export default function ExtratoGerencial({ initialCardId }) {
