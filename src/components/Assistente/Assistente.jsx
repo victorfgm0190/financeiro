@@ -8,7 +8,7 @@ import { comprimirImagem, candidatosValidos, sugestaoLancamentoDaBaixa } from '.
 import { interpretar } from '../../lib/assistenteApi'
 import PreviaAssistente from './PreviaAssistente'
 import PreviaBaixa from './PreviaBaixa'
-import { useMicrofone, BARRAS } from './useMicrofone'
+import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 
 // ASSISTENTE IA (etapas 1 e 1.1): texto, voz (Web Speech API, pt-BR) ou foto → /api/assistente, que
 // só devolve a ferramenta e os parâmetros. Lançamento/agendamento → prévia nos formulários
@@ -222,6 +222,7 @@ export default function Assistente({ onClose, onToast }) {
           </button>
         </div>
       )}
+      {!mic.suportado && fase.tipo !== 'pergunta' && <p className="text-[11px] text-aviso whitespace-pre-wrap break-words">{mensagemSemSuporte()}</p>}
       {mic.ouvindo && <p className="text-[11px] text-texto-3">Ouvindo… toque no botão vermelho para parar (para sozinho após uns segundos de silêncio).</p>}
       <p className="text-[10px] text-texto-3">O assistente só sugere: nada é salvo sem a sua confirmação na prévia. Ele não exclui nada.</p>
     </div>
