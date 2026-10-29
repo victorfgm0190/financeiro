@@ -18,6 +18,7 @@
 //
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
+import { contaParaGravar, escolherConta } from './contas.js'
 import { normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra } from './texto.js'
 
 export const NIVEIS = ['consulta', 'criacao', 'edicao', 'critica']
@@ -96,10 +97,14 @@ function validarLancamento(p, ctx, hoje) {
   const valor = valorPositivo(p.valor) ?? zera('valor')
   const data = DATA_ISO.test(String(p.data || '')) ? p.data : hoje
 
-  let contaId = porApelido(ctx, 'conta', termos.conta) || p.conta_id
-  if (!ctx.idx.contas.has(contaId)) contaId = zera('conta')
-  let destinoId = tipo === 'transferencia' ? p.conta_destino_id : null
-  if (destinoId && (!ctx.idx.contas.has(destinoId) || destinoId === contaId)) destinoId = zera('conta_destino')
+  // Contas (lib/assistente/contas.js): gerencial nunca; fora das sugeríveis, só se o pedido citou.
+  const origem = escolherConta(ctx, porApelido(ctx, 'conta', termos.conta) || p.conta_id, confianca.conta)
+  confianca.conta = origem.confianca
+  const contaId = origem.id
+  const destino = tipo === 'transferencia' ? contaParaGravar(ctx, p.conta_destino_id, { destino: true }) : { id: null }
+  let destinoId = destino.id
+  if (p.conta_destino_id && (!destinoId || destinoId === contaId)) destinoId = zera('conta_destino')
+  const contaGerencial = origem.gerencial || !!destino.gerencial
 
   let categoriaId = tipo === 'transferencia' ? null : (porApelido(ctx, 'categoria', termos.categoria) || p.categoria_id)
   const cat = categoriaId ? ctx.idx.categorias.get(categoriaId) : null
@@ -122,6 +127,7 @@ function validarLancamento(p, ctx, hoje) {
     tipo, valor, data, conta_id: contaId || null, conta_destino_id: destinoId || null, categoria_id: categoriaId || null,
     centro_custo_id: centro, favorecido_id: favorecido, favorecido_novo: favorecidoNovo,
     descricao: txt(p.descricao, 120), confianca, termos,
+    ...(contaGerencial ? { conta_gerencial: true } : {}),
   }
 }
 
@@ -262,7 +268,8 @@ export const ACOES = [
         valor_exato: p.valor_exato === true && !!valorPositivo(p.valor_informado) && !(min && max && min !== max),
         tipo: doEnum(['despesa', 'receita'], p.tipo, null),
         data_pagamento: DATA_ISO.test(String(p.data_pagamento || '')) ? p.data_pagamento : hoje,
-        conta_id: contaValida(ctx, p.conta_id),
+        // Conta da baixa: mesma regra do lançamento (gerencial nunca; fora das sugeríveis, só citada).
+        ...((g) => ({ conta_id: g.id, ...(g.gerencial ? { conta_gerencial: true } : {}) }))(contaParaGravar(ctx, p.conta_id)),
       }
     },
   },

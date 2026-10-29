@@ -15,6 +15,14 @@ fases; atualize o **Status** ao implementar.
   (validações e efeitos — inclusive chamadas às funções protegidas — ficam onde já estão).
 - **Consultas: o app calcula** com as mesmas funções das telas; a IA só escolhe os filtros.
 - Funções protegidas (CLAUDE.md) nunca são alteradas; chamar é permitido.
+- **Contas** (`src/lib/assistente/contas.js`): a IA escolhe sozinha só as **sugeríveis** — cartões
+  ativos de finalidade "Uso comum" e a Conta favorita ★ do perfil ativo (o app envia `perfilAtivo`).
+  As demais (reservas, patrimônio, investimento, financiamento, outras correntes, inativas) só se o
+  pedido as citou (nome, apelido ou `ia_apelidos`); senão o campo volta vazio e a prévia pergunta.
+  **Subcontas gerenciais** (tipo `gerencial`, `is_gerencial` ou nome "Ger. …", o critério da
+  Integridade) nunca são gravadas pela IA — nem como origem/destino de transferência; o backend
+  responde `abrir_tela` com a explicação e o botão "Abrir a conta". Consultar o saldo delas pode.
+  Destino de transferência: qualquer conta ativa citada, exceto gerencial (reserva pode).
 - **Duplicidade na criação**: prévia de `registrar_lancamento`, efetivação de pré-lançamento e o
   `TransactionForm` manual procuram lançamentos (conciliados ou não) e pré-lançamentos pendentes
   parecidos — `parecidosNaCriacao` (`src/lib/casamentoFatura.js`, mesmos critérios do "Já lançado":

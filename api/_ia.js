@@ -3,6 +3,7 @@ import { registroPorBanco } from './_conexao.js'
 import { contextoPerfis } from './_permissoesApi.js'
 import { normalizarTermo } from '../src/lib/assistente/texto.js'
 import { ACOES, validarAcao } from '../src/lib/assistente/acoes.js'
+import { classificarContas } from '../src/lib/assistente/contas.js'
 
 // ASSISTENTE IA (etapa 1): o que o /api/assistente, o /api/ia-pre-lancamentos e o /api/ia-apelidos
 // compartilham — DDL viva das tabelas ia_*, contexto de cadastros que vai para o modelo, validação
@@ -68,15 +69,21 @@ const categoriaDosPerfis = (perfilIds, perfis) =>
   !perfis || !Array.isArray(perfilIds) || perfilIds.length === 0 || perfilIds.some(p => perfis.includes(p))
 
 // Cadastros do ambiente, já recortados pelos perfis permitidos do usuário.
+// Contas: todas as visíveis (inclusive inativas), cada uma com `papel` (lib/assistente/contas.js):
+// gerencial (nunca grava) | sugerivel (cartões "Uso comum" + favorita do perfil ativo) | citar.
+// `perfilAtivo`: o perfil selecionado no app (só vale se for um dos perfis do usuário).
 // → { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx }
-export async function montarContexto(user, q = query) {
+export async function montarContexto(user, q = query, { perfilAtivo = null } = {}) {
   const ctxPerfis = await contextoPerfis(q, user)
   const perfis = ctxPerfis?.perfis || null
 
   const contasRows = await q(
-    `SELECT id, name, apelido, type, bank, profile_id FROM contas
-      WHERE COALESCE(active, true) = true ORDER BY "order" NULLS LAST, name`)
-  const contas = contasRows.filter(c => !ctxPerfis || ctxPerfis.contas.has(c.id))
+    `SELECT id, name, apelido, type, bank, profile_id, COALESCE(active, true) AS active, is_main,
+            is_gerencial, vinculo_tipo, is_reserva, is_investimento, conta_aplicacao
+       FROM contas ORDER BY "order" NULLS LAST, name`)
+  const visiveis = contasRows.filter(c => !ctxPerfis || ctxPerfis.contas.has(c.id))
+  const perfilValido = perfilAtivo && visiveis.some(c => c.profile_id === perfilAtivo) && (!perfis || perfis.includes(perfilAtivo))
+  const contas = classificarContas(visiveis, perfilValido ? perfilAtivo : null)
 
   const catRows = await q('SELECT id, name, type, category_group, perfil_ids FROM categorias ORDER BY category_group NULLS LAST, name')
   const categorias = catRows
@@ -108,11 +115,11 @@ export async function montarContexto(user, q = query) {
       GROUP BY ${col} ORDER BY n DESC LIMIT 60`, [desde]))
   const maisUsados = {
     categorias: (await top('category_id')).filter(r => idx.categorias.has(r.ref)).slice(0, 30).map(r => r.ref),
-    contas: (await top('account_id')).filter(r => idx.contas.has(r.ref)).slice(0, 30).map(r => r.ref),
+    contas: (await top('account_id')).filter(r => idx.contas.get(r.ref)?.papel === 'sugerivel').slice(0, 30).map(r => r.ref),
     favorecidos: (await top('payee')).map(r => idx.favorecidos.get(normalizarTermo(r.ref))).filter(Boolean).slice(0, 30),
   }
 
-  return { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx }
+  return { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx, perfilAtivo: perfilValido ? perfilAtivo : null }
 }
 
 // ref_id de um apelido ainda válido? Devolve o valor canônico (nome exato do favorecido) ou null.
@@ -123,13 +130,16 @@ function refValido(tipo, ref, idx) {
   return null // descricao_fatura: etapa 2 (Importar Fatura)
 }
 
-const TIPO_CONTA = { checking: 'conta corrente', savings: 'poupança', credit: 'cartão de crédito', investment: 'investimento', cash: 'dinheiro', asset: 'bem', liability: 'dívida' }
+const TIPO_CONTA = { checking: 'conta corrente', savings: 'poupança', credit: 'cartão de crédito', investment: 'investimento', cash: 'dinheiro', asset: 'bem', liability: 'dívida', gerencial: 'gerencial' }
+const USO_CONTA = { sugerivel: 'PODE SUGERIR', citar: 'só se citada', gerencial: 'GERENCIAL — nunca em lançamento/agendamento/transferência' }
 
 // Bloco de cadastros (texto estável → prompt caching). Sem data nem nada que mude a cada pedido.
 export function textoCadastros(ctx) {
   const linhas = []
-  linhas.push('## CONTAS (id | nome | apelido | tipo | banco)')
-  for (const c of ctx.contas) linhas.push(`${c.id} | ${c.name} | ${c.apelido || '-'} | ${TIPO_CONTA[c.type] || c.type} | ${c.bank || '-'}`)
+  linhas.push('## CONTAS (id | nome | apelido | tipo | banco | uso)')
+  for (const c of ctx.contas) {
+    linhas.push(`${c.id} | ${c.name} | ${c.apelido || '-'} | ${TIPO_CONTA[c.type] || c.type} | ${c.bank || '-'} | ${USO_CONTA[c.papel]}${c.active === false ? ' (inativa)' : ''}`)
+  }
   linhas.push('', '## CATEGORIAS (id | caminho | tipo: expense=despesa, income=receita, both=ambos)')
   for (const c of ctx.categorias) linhas.push(`${c.id} | ${c.caminho} | ${c.tipo}`)
   linhas.push('', '## FAVORECIDOS (o id é o próprio nome)')
@@ -165,7 +175,8 @@ Regras:
 10. CONSULTAS (saldo, saldo principal, fatura, vencimentos, gastos, busca): você NÃO sabe valores — só escolha os filtros; o app calcula e mostra.
 11. Você NUNCA exclui nem apaga nada, e não há ferramenta para isso. Se pedirem exclusão, use perguntar dizendo que você não exclui e que o item pode ser aberto na tela para o usuário decidir; opcoes vazio.
 12. Operações críticas (estornar, pagar/fechar/abrir/revisar fatura, importar, virada de saldo, ajustes de reserva, gerenciais, baixa em lote, edição em massa, integridade, contratos, patrimônio, configurações) e EDITAR itens existentes: você não executa — use abrir_tela com o destino certo e o filtro citado.
-13. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.`
+13. CONTAS (coluna "uso"): conta citada pelo nome/apelido → essa conta. Compra no cartão ("no cartão", "crédito", "final 1234", nome do cartão) → o cartão certo; se não der para saber qual, conta_id null. Sem conta nem cartão citados → conta_id null (o app usa a favorita). "só se citada": use apenas se o pedido citou essa conta (nome ou apelido); senão conta_id null. "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido. Consultar saldo de qualquer conta é permitido.
+14. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.`
 
 // Todas as ferramentas do registro (o pedido usa só as do contexto: acoesDoPedido).
 export const FERRAMENTAS = ACOES.filter(a => a.ferramenta).map(a => ({ name: a.id, ...a.ferramenta }))

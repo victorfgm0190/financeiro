@@ -3,6 +3,7 @@ import { Sparkles, Trash2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import TransactionForm from '../Transactions/TransactionForm'
 import AvisoParecidos from '../Transactions/AvisoParecidos'
+import EscolherConta from './EscolherConta'
 import { parecidosNaCriacao } from '../../lib/casamentoFatura'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import {
@@ -22,10 +23,12 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 //     (o que estava sendo efetivado sai da lista); "É outro" libera o salvar. O formulário repete
 //     a checagem ao salvar (valores editados), ignorando o que já foi aceito aqui.
 export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
-  const { transactions, accounts } = useApp()
+  const { transactions, accounts, activeProfileId } = useApp()
   const agendamento = ferramenta === 'criar_agendamento'
   const destaques = camposParaConferir(ferramenta, sugestao)
-  const initial = initialDaSugestao(ferramenta, sugestao)
+  // Sem conta na sugestão → "Em qual conta?" (EscolherConta) antes do formulário.
+  const [contaEscolhida, setContaEscolhida] = useState(null)
+  const initial = { ...initialDaSugestao(ferramenta, sugestao), ...(contaEscolhida ? { accountId: contaEscolhida } : {}) }
   const { marcar } = usePreLancamentoAoFechar({
     tipo: tipoPreLancamento(ferramenta), payload: { ...sugestao, ferramenta }, textoOriginal, preId, onToast,
   })
@@ -47,7 +50,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
     })
   // initial é recriado a cada render a partir da sugestão (estável): depende dela.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agendamento, sugestao, transactions, accounts, pres, preId])
+  }, [agendamento, sugestao, contaEscolhida, transactions, accounts, pres, preId])
 
   // "É o mesmo": nada é criado; o pré-lançamento que estava sendo efetivado é baixado contra o
   // existente (ou descartado, se o parecido é outro pré-lançamento).
@@ -98,7 +101,9 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
           <Trash2 size={13} /> Descartar
         </button>
       </div>
-      {agendamento
+      {!initial.accountId
+        ? <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaEscolhida} />
+        : agendamento
         ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
         : <TransactionForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo} />}

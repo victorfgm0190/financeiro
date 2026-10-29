@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sparkles, Mic, Square, Camera, X, Loader2 } from 'lucide-react'
+import { useApp } from '../../context/AppContext'
 import { comprimirImagem } from '../../lib/assistente'
 import { interpretar } from '../../lib/assistenteApi'
 import { EXECUTORES } from './executores'
@@ -18,6 +19,8 @@ const juntar = (...partes) => partes.map(p => (p || '').trim()).filter(Boolean).
 export default function Assistente({ onClose, onToast }) {
   // entrada | carregando | resultado { ferramenta, parametros, extra }
   const [fase, setFase] = useState({ tipo: 'entrada' })
+  // Perfil ativo: a Conta favorita dele é a conta que a IA pode sugerir sozinha (além dos cartões).
+  const { activeProfileId } = useApp()
   const [texto, setTexto] = useState('')
   // Trecho do ditado ainda provisório: já está DENTRO de `texto` (contador e Enviar usam `texto`);
   // aqui só para pintar o fim do campo de cinza enquanto grava.
@@ -58,6 +61,7 @@ export default function Assistente({ onClose, onToast }) {
       const r = await interpretar({
         texto: pedido || undefined,
         imagemBase64: imagem?.base64, mimeType: imagem?.mimeType,
+        perfilAtivo: activeProfileId || undefined,
         ...extra,
       })
       const { ferramenta, parametros, ...resto } = r

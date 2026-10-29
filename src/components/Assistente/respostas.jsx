@@ -9,7 +9,7 @@ import { ocorrenciasPendentes } from '../../lib/agendaCalendario'
 import { periodoDoFiltro } from '../../lib/despesasPorCategoria'
 import { useDespesasPorCategoria, useModoDespesas } from '../../hooks/useDespesasPorCategoria'
 import { searchEntries } from '../../lib/db'
-import { navegarPara, ABRIR_FATURA_KEY } from '../../lib/abrirTela'
+import { navegarPara, ABRIR_FATURA_KEY, ABRIR_EXTRATO_KEY } from '../../lib/abrirTela'
 import { configHash } from '../../lib/configRota'
 import { candidatosValidos, sugestaoLancamentoDaBaixa } from '../../lib/assistente'
 import { DESTINOS } from '../../lib/assistente/acoes'
@@ -346,7 +346,10 @@ export function BuscaResposta({ parametros, onClose, onNovo }) {
 export function AbrirTelaResposta({ parametros, onClose, onNovo }) {
   const d = DESTINOS[parametros.destino] || DESTINOS.tela_lancamentos
   const estorno = parametros.destino === 'estornar'
+  // Conta gerencial: só a classificação gerencial movimenta — abre o extrato dela.
+  const gerencial = parametros.motivo === 'conta_gerencial'
   const abrir = () => {
+    if (gerencial && parametros.conta_id) return navegarPara('accounts', { handoff: { key: ABRIR_EXTRATO_KEY, valor: { accountId: parametros.conta_id } } })
     if (d.config) return navegarPara('settings', { hash: configHash(d.config[0], d.config[1]) })
     if (d.page === 'credit' && parametros.cartao_id) {
       return navegarPara('credit', { handoff: { key: ABRIR_FATURA_KEY, valor: { cardId: parametros.cartao_id, faturaMesAno: parametros.mes } } })
@@ -356,7 +359,9 @@ export function AbrirTelaResposta({ parametros, onClose, onNovo }) {
   return (
     <Caixa>
       <Titulo>
-        {estorno
+        {gerencial
+          ? (parametros.mensagem || 'Conta gerencial: é movimentada automaticamente pela classificação gerencial. O assistente não lança nela.')
+          : estorno
           ? 'Eu não estorno lançamentos. Abra a tela de Lançamentos, encontre o lançamento e use o estorno por lá — você confere tudo antes.'
           : d.critica
             ? `Isso eu não faço por aqui: é uma operação que você confere e confirma na tela ${d.rotulo}.`
@@ -366,7 +371,7 @@ export function AbrirTelaResposta({ parametros, onClose, onNovo }) {
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-secondary flex-1" onClick={onNovo}>Novo pedido</button>
         <button type="button" className="btn-primary flex-1 inline-flex items-center justify-center gap-1.5" onClick={() => { abrir(); onClose() }}>
-          <ExternalLink size={14} /> Abrir {d.rotulo}
+          <ExternalLink size={14} /> {gerencial && parametros.conta_id ? 'Abrir a conta' : `Abrir ${d.rotulo}`}
         </button>
       </div>
     </Caixa>

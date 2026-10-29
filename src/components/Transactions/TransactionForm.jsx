@@ -167,7 +167,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   const [form, setForm] = useState({
     type: initial?.type || 'expense',
-    accountId: initial?.accountId || accounts[0]?.id || '',
+    // Prévia do Assistente sem conta (a IA não pôde escolher) → vazio: o usuário escolhe.
+    accountId: initial?.accountId || (destaques?.includes('accountId') ? '' : accounts[0]?.id) || '',
     toAccountId: initial?.toAccountId || '',
     amount: initial?.amount ?? '',
     date: initial?.date || today(),

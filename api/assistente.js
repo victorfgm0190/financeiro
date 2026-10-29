@@ -8,6 +8,7 @@ import { acoesDoPedido, definicaoFerramenta } from '../src/lib/assistente/acoes.
 import {
   ensureIaSchema, montarContexto, textoCadastros, INSTRUCOES, validarParametros, registrarUso, hojeSaoPaulo,
 } from './_ia.js'
+import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente/contas.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 
 // ASSISTENTE IA. POST { texto?, imagemBase64?, mimeType?, respostaPergunta?, pergunta? }
@@ -19,6 +20,12 @@ import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandida
 // NÃO grava lançamento nem agendamento: o app abre a prévia e salva pelo fluxo manual do AppContext.
 // Consultas: o app calcula (saldo, fatura, vencimentos, gastos, busca) — a IA só escolhe os filtros.
 // Grava só o consumo em ia_uso, no banco do ambiente. A chave fica só no servidor.
+// CONTAS (src/lib/assistente/contas.js): gerencial nunca é gravada pela IA — escolhida pelo modelo
+// ou citada no pedido de uma ação que grava → abrir_tela na conta, com a explicação. Outras fora
+// das sugeríveis só valem se o pedido as citou (o validador zera; a prévia pergunta).
+
+// Ações que gravam (prévia → formulário): a conta gerencial nunca pode chegar nelas.
+const GRAVAM = new Set(['registrar_lancamento', 'criar_agendamento', 'baixar_agendamento'])
 
 const MODELO = 'claude-haiku-5-5'
 const MAX_TEXTO = 1000
@@ -50,6 +57,7 @@ async function handler(req, res) {
     const pergunta = typeof body?.pergunta === 'string' ? body.pergunta.trim().slice(0, 300) : ''
     const imagem = typeof body?.imagemBase64 === 'string' ? body.imagemBase64.replace(/^data:[^,]*,/, '') : ''
     const mime = String(body?.mimeType || 'image/jpeg').toLowerCase()
+    const perfilAtivo = typeof body?.perfilAtivo === 'string' ? body.perfilAtivo.slice(0, 80) : null
 
     if (texto.length > MAX_TEXTO) return res.status(400).json({ error: `Texto muito longo (máximo ${MAX_TEXTO} caracteres).` })
     if (!texto && !imagem) return res.status(400).json({ error: 'Escreva, fale ou envie uma foto.' })
@@ -65,7 +73,9 @@ async function handler(req, res) {
     }
 
     await ensureIaSchema()
-    const ctx = await montarContexto(req.user)
+    const ctx = await montarContexto(req.user, undefined, { perfilAtivo })
+    ctx.textoPedido = textoPedido
+    ctx.temImagem = !!imagem
     const hoje = hojeSaoPaulo()
     const podeFn = (modulo, acao) => pode(req.user, modulo, acao)
     const acoes = acoesDoPedido(textoPedido, podeFn)
@@ -104,6 +114,22 @@ async function handler(req, res) {
       return res.json({ ferramenta: 'perguntar', parametros: validarParametros('perguntar', { pergunta: t, opcoes: [] }, ctx, hoje) })
     }
     const parametros = validarParametros(ferramenta, bloco.input, ctx, hoje)
+    if (GRAVAM.has(ferramenta)) {
+      const escolhida = [bloco.input?.conta_id, bloco.input?.conta_destino_id]
+        .map(id => ctx.idx.contas.get(id)).find(c => c?.papel === 'gerencial')
+      const citada = escolhida ? null : gerencialCitada(ctx, `${texto} ${resposta}`)
+      if (parametros?.conta_gerencial || citada) {
+        const conta = escolhida || (citada?.id ? citada : null)
+        return res.json({
+          ferramenta: 'abrir_tela',
+          parametros: {
+            destino: 'tela_contas', filtro: null, cartao_id: null, mes: null,
+            motivo: 'conta_gerencial', conta_id: conta?.id || null, mensagem: MENSAGEM_CONTA_GERENCIAL(conta?.apelido || conta?.name || null),
+          },
+        })
+      }
+      delete parametros.conta_gerencial
+    }
     const resolver = RESOLVEDORES[acoes.find(a => a.id === ferramenta)?.resolver]
     const extra = resolver ? await resolver({ req, parametros, hoje, textoPedido }) : {}
     return res.json({ ferramenta, parametros, ...extra })
