@@ -27,6 +27,7 @@ import GerencialTotalizer from '../shared/GerencialTotalizer'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from '../Transactions/TransactionForm'
+import AccountForm from '../Accounts/AccountForm'
 import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
@@ -293,6 +294,9 @@ export default function CreditCardPanel() {
   const podeIncluir = pode('cartao', 'incluir')
   const podeEditar = pode('cartao', 'editar')
   const podeExcluir = pode('cartao', 'excluir')
+  // "Editar cartão": o MESMO AccountForm da tela Contas (updateAccount) — permissão de Contas.
+  const podeEditarCartao = pode('contas', 'editar')
+  const [editarCartao, setEditarCartao] = useState(false)
   const isMobile = useIsMobile()
   const [toast, setToast] = useState(null)
   const [reconciling, setReconciling] = useState(false)
@@ -833,6 +837,12 @@ export default function CreditCardPanel() {
               <option key={c.id} value={c.id}>{c.apelido || c.name}</option>
             ))}
           </select>
+          {podeEditarCartao && selectedCard && (
+            <button type="button" onClick={() => setEditarCartao(true)} title="Editar cartão" aria-label="Editar cartão"
+              className="p-2 rounded-lg border border-borda-campo bg-surface-2 text-texto-2 hover:text-texto-1 hover:bg-surface-hover transition-colors shrink-0 min-h-[38px]">
+              <Edit2 size={14} />
+            </button>
+          )}
         </div>
 
         {/* Navegador de fatura */}
@@ -1522,6 +1532,10 @@ export default function CreditCardPanel() {
           initial={{ type: 'expense', accountId: selectedCard?.id, date: today(), faturaMonthYear: billKey }}
           onClose={() => setShowNewTx(false)}
         />
+      </Modal>
+
+      <Modal open={editarCartao && !!selectedCard} onClose={() => setEditarCartao(false)} title="Editar Conta">
+        {editarCartao && selectedCard && <AccountForm initial={selectedCard} onClose={() => setEditarCartao(false)} />}
       </Modal>
 
       <Modal open={!!editTx} onClose={() => setEditTx(null)} title={editTx?.id ? 'Editar Lançamento' : 'Duplicar Lançamento'} size="lg">
