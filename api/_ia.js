@@ -92,7 +92,7 @@ export async function montarContexto(user, q = query, { perfilAtivo = null } = {
 
   const favorecidos = (await q('SELECT name FROM favorecidos ORDER BY name LIMIT 2000')).map(r => r.name).filter(Boolean)
 
-  const [cfg] = await q('SELECT cost_centers FROM configuracoes WHERE id = 1')
+  const [cfg] = await q('SELECT cost_centers, controle_gerencial FROM configuracoes WHERE id = 1')
   const centros = Array.isArray(cfg?.cost_centers) ? cfg.cost_centers.filter(x => typeof x === 'string' && x.trim()) : []
 
   const idx = {
@@ -119,7 +119,9 @@ export async function montarContexto(user, q = query, { perfilAtivo = null } = {
     favorecidos: (await top('payee')).map(r => idx.favorecidos.get(normalizarTermo(r.ref))).filter(Boolean).slice(0, 30),
   }
 
-  return { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx, perfilAtivo: perfilValido ? perfilAtivo : null }
+  // Controle gerencial do ambiente (null = ligado, como no app): desligado, o prompt não fala dele.
+  const gerencialLigado = cfg?.controle_gerencial !== false
+  return { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx, perfilAtivo: perfilValido ? perfilAtivo : null, gerencialLigado }
 }
 
 // ref_id de um apelido ainda válido? Devolve o valor canônico (nome exato do favorecido) ou null.
@@ -138,6 +140,8 @@ export function textoCadastros(ctx) {
   const linhas = []
   linhas.push('## CONTAS (id | nome | apelido | tipo | banco | uso | finais do cartão)')
   for (const c of ctx.contas) {
+    // Desligado: subcontas gerenciais nem aparecem (o backend continua recusando se citadas).
+    if (ctx.gerencialLigado === false && c.papel === 'gerencial') continue
     const finais = Array.isArray(c.cartao_finais) && c.cartao_finais.length ? c.cartao_finais.join(', ') : '-'
     linhas.push(`${c.id} | ${c.name} | ${c.apelido || '-'} | ${TIPO_CONTA[c.type] || c.type} | ${c.bank || '-'} | ${USO_CONTA[c.papel]}${c.active === false ? ' (inativa)' : ''} | ${finais}`)
   }
@@ -178,6 +182,11 @@ Regras:
 12. Operações críticas (estornar, pagar/fechar/abrir/revisar fatura, importar, virada de saldo, ajustes de reserva, gerenciais, baixa em lote, edição em massa, integridade, contratos, patrimônio, configurações) e EDITAR itens existentes: você não executa — use abrir_tela com o destino certo e o filtro citado.
 13. CONTAS (coluna "uso"): conta citada pelo nome/apelido → essa conta. Compra no cartão ("no cartão", "crédito", "final 1234", nome do cartão) → o cartão certo; se não der para saber qual, conta_id null. Sem conta nem cartão citados → conta_id null (o app usa a favorita). "só se citada": use apenas se o pedido citou essa conta (nome ou apelido); senão conta_id null. "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido. Consultar saldo de qualquer conta é permitido.
 14. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.`
+
+// Instruções conforme o controle gerencial do ambiente: desligado, nenhuma menção a gerencial
+// (duas variantes estáveis → o cache de prompt continua valendo por variante).
+const SEM_GERENCIAL = INSTRUCOES.replace(', gerenciais,', ',').replace(' "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido.', '')
+export const instrucoes = (gerencialLigado = true) => (gerencialLigado ? INSTRUCOES : SEM_GERENCIAL)
 
 // Todas as ferramentas do registro (o pedido usa só as do contexto: acoesDoPedido).
 export const FERRAMENTAS = ACOES.filter(a => a.ferramenta).map(a => ({ name: a.id, ...a.ferramenta }))

@@ -167,7 +167,8 @@ export const ACOES = [
       },
     },
     validar: (p, ctx) => ({
-      destino: DESTINOS[p.destino] ? p.destino : 'tela_lancamentos',
+      // Controle gerencial desligado (ctx.gerencialLigado === false): sem destino 'gerenciais'.
+      destino: DESTINOS[p.destino] && !(p.destino === 'gerenciais' && ctx.gerencialLigado === false) ? p.destino : 'tela_lancamentos',
       filtro: txt(p.filtro, 80),
       cartao_id: cartaoValido(ctx, p.cartao_id),
       mes: MES_ISO.test(String(p.mes || '')) ? p.mes : null,
@@ -385,13 +386,17 @@ export function acoesDoPedido(texto, podeFn) {
 }
 
 // Definição da ferramenta para a API. abrir_tela recebe o enum dos destinos que o usuário pode abrir.
-export function definicaoFerramenta(acao, podeFn) {
+// `gerencial: false` (controle gerencial desligado no ambiente): nem o destino nem a menção a
+// "gerenciais" aparecem.
+export function definicaoFerramenta(acao, podeFn, { gerencial = true } = {}) {
   if (acao.id !== 'abrir_tela') return { name: acao.id, ...acao.ferramenta }
-  const destinos = Object.entries(DESTINOS).filter(([, d]) => !podeFn || podeFn(d.permissao[0], d.permissao[1])).map(([id]) => id)
+  const destinos = Object.entries(DESTINOS)
+    .filter(([id, d]) => (!podeFn || podeFn(d.permissao[0], d.permissao[1])) && (gerencial || id !== 'gerenciais'))
+    .map(([id]) => id)
   const schema = acao.ferramenta.input_schema
   return {
     name: acao.id,
-    description: acao.ferramenta.description,
+    description: gerencial ? acao.ferramenta.description : acao.ferramenta.description.replace(', gerenciais', ''),
     input_schema: { ...schema, properties: { ...schema.properties, destino: { ...schema.properties.destino, enum: destinos } } },
   }
 }

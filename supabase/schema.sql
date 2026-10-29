@@ -15,6 +15,8 @@ ALTER TABLE configuracoes DISABLE ROW LEVEL SECURITY;
 INSERT INTO configuracoes (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS recurring_match_exceptions JSONB DEFAULT '[]';
 ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS category_groups JSONB DEFAULT '[]';
+-- Controle gerencial opcional do ambiente (src/lib/controleGerencial.js); NULL = ligado.
+ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS controle_gerencial BOOLEAN;
 ALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS faturas_fechadas JSONB DEFAULT '{}';
 
 -- Categorias de transações

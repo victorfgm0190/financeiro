@@ -11,6 +11,7 @@ import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { calcularRateio } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
@@ -175,7 +176,8 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia, desfazerPuloOcorrencia } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia, desfazerPuloOcorrencia, settings } = useApp()
+  const gerencialLigado = controleGerencialAtivo(settings)
   // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
   const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
   const duplicado = duplicadoId ? transactions.find(t => t.id === duplicadoId) : null
@@ -390,7 +392,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
       const txId = addTransaction({
         type: 'expense', accountId: payAccountId, payee: payPayee,
         amount, date: payDate, categoryId: payCategoryId,
-        grupoGerencial: payGrupo || undefined,
+        grupoGerencial: (gerencialLigado ? payGrupo : null) || undefined,
         description: schedule.description, notes: payNotes,
         // Tipo de documento e centro de custo não estão no modal → herdam do agendamento.
         ...camposHerdadosNoPagamento(schedule),
@@ -605,6 +607,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <label className="label">Categoria</label>
                 <CategorySelect categories={categories} perfilId={accounts.find(a => a.id === payAccountId)?.profileId || undefined} type="expense" value={payCategoryId} onChange={e => setPayCategoryId(e.target.value)} />
               </div>
+              {gerencialLigado && (
               <div>
                 <label className="label">Classificação Gerencial</label>
                 <select className="input" value={payGrupo} onChange={e => setPayGrupo(e.target.value)}>
@@ -612,6 +615,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                   {gerencialGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
+              )}
               <div>
                 <label className="label">Anotações</label>
                 <input className="input" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="Digite observações adicionais (opcional)" />
@@ -2461,7 +2465,8 @@ export default function SchedulePanel() {
   } = useApp()
   // Nível de acesso: criar agendamento/provisão = incluir; Executar Gerenciais cria lançamentos.
   const podeIncluirAgend = pode('agendamentos', 'incluir')
-  const podeExecutarGer = pode('lancamentos', 'incluir')
+  // Controle gerencial desligado: Executar Gerenciais some (nada gerencial é gerado).
+  const podeExecutarGer = controleGerencialAtivo(settings) && (pode('lancamentos', 'incluir'))
 
   // Aviso do ScheduleForm — a sincronização de favorecido de uma parcela de financiamento mexe
   // no financiamento inteiro, e isso precisa ficar visível para quem editou só uma parcela.

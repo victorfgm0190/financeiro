@@ -182,10 +182,11 @@ export function perfilDoCliente(c) {
 export async function aplicarKitBasico(q, cliente) {
   const kit = kitDoCliente(cliente)
   // Grupos de categoria na ordem do kit (ordem manual ligada: senão as telas usariam a alfabética).
+  // Cliente novo começa com o controle gerencial DESLIGADO (lib/controleGerencial.js).
   await q(
     `INSERT INTO configuracoes (id, financial_month_start_day, financial_month_mode, currency, cost_centers, rodape_titulo,
-       category_groups, category_groups_ordem_manual)
-     VALUES (1, $1, 'custom', 'BRL', $2::jsonb, $3, $4::jsonb, true) ON CONFLICT (id) DO NOTHING`,
+       category_groups, category_groups_ordem_manual, controle_gerencial)
+     VALUES (1, $1, 'custom', 'BRL', $2::jsonb, $3, $4::jsonb, true, false) ON CONFLICT (id) DO NOTHING`,
     [KIT_DIA_INICIO_MES, JSON.stringify(kit.centrosDeCusto), rodapeDoCliente(cliente), JSON.stringify(kit.grupos)],
   )
   for (const [id, nome, tipo, cor, icone, grupo, ordem] of kit.categorias) {

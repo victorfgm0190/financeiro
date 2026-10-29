@@ -29,6 +29,7 @@ import { posicaoDaFatura } from '../../lib/cicloFatura'
 import CategorySelect from '../shared/CategorySelect'
 import RateioModal from '../shared/RateioModal'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import ImportPreviewModal from './ImportPreviewModal'
 import AccountOptions from '../shared/AccountOptions'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -727,8 +728,9 @@ function faturaMyOf(faturaMonthYear, dateStr, closingDay) {
 
 // Objeto de transação de uma linha importada (à vista / parcela corrente). saveDate = data de
 // sistema já calculada (computeSaveDate). Mesmo shape que o addTransaction inline usava.
-function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
+function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate, gerencialLigado = true }) {
   const isExpense = (row.type || 'expense') === 'expense'
+  if (!gerencialLigado) row = { ...row, grupoGerencial: defaultGrupoD, _reservaFuncaoId: null }
   return {
     origin: ORIGIN.IMPORTACAO_FATURA,
     type: row.type || 'expense', accountId, accountType: 'credit',
@@ -754,7 +756,8 @@ function buildTransactionFromRow(row, { accountId, defaultGrupoD, saveDate }) {
 
 // Objeto de transação de uma parcela FUTURA ausente (projeção; date_cartao null). fp.date já é a
 // data de sistema correta (parcela >1 → mês anterior à fatura).
-function buildInstallmentFromRow(fp, { accountId, defaultGrupoD }) {
+function buildInstallmentFromRow(fp, { accountId, defaultGrupoD, gerencialLigado = true }) {
+  if (!gerencialLigado) fp = { ...fp, grupoGerencial: defaultGrupoD, _reservaFuncaoId: null }
   return {
     origin: ORIGIN.IMPORTACAO_FATURA,
     type: 'expense', accountId, accountType: 'credit',
@@ -1268,6 +1271,9 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Dia de início do mês financeiro — define a data de sistema das parcelas 2..N
   // (provisão no dia financialMonthStartDay do mês anterior à fatura da parcela).
   const financialStartDay = settings?.financialMonthStartDay || 1
+  // Controle gerencial do ambiente desligado: nada é gravado com grupo gerencial (vai como D, sem
+  // função de reserva) e a coluna Ger./totais por grupo somem.
+  const gerencialLigado = controleGerencialAtivo(settings)
 
   // Funções de reserva vinculadas à conta-origem (resgate) de um grupo gerencial numerado.
   // Vazio para Grupo G (number===1), D, ou grupos sem conta-origem definida.
@@ -2268,7 +2274,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         const fpDate = fp.date
         addFaturaAfetada(fp.faturaMonthYear, fpDate)
         if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
-        const fId = addTransaction(buildInstallmentFromRow(fp, { accountId: selectedAccount, defaultGrupoD }))
+        const fId = addTransaction(buildInstallmentFromRow(fp, { accountId: selectedAccount, defaultGrupoD, gerencialLigado }))
         if (fId) novosTxIds.push(fId)
         if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
         const parentRow = resolvedRows.find(r => r._id === fp.parentId)
@@ -2386,7 +2392,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
         ? schedules.find(s => s.id === baixa.escolhido.scheduleId) : null
       let tx = buildTransactionFromRow(
         serieAlvo.has(row._id) ? { ...row, _serieId: serieAlvo.get(row._id) } : row,
-        { accountId: selectedAccount, defaultGrupoD, saveDate },
+        { accountId: selectedAccount, defaultGrupoD, saveDate, gerencialLigado },
       )
       // Veio no arquivo do banco = já conferido contra o cartão. Parcelas futuras (abaixo) não.
       tx.reconciled = true
@@ -2437,7 +2443,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       addFaturaAfetada(fp.faturaMonthYear, fpDate)
       if (fp.payee && !payees.includes(fp.payee)) addPayee(fp.payee)
       const fpSerie = serieAlvo.has(fp.parentId) ? { ...fp, _serieId: serieAlvo.get(fp.parentId) } : fp
-      const fId = addTransaction(buildInstallmentFromRow(fpSerie, { accountId: selectedAccount, defaultGrupoD }))
+      const fId = addTransaction(buildInstallmentFromRow(fpSerie, { accountId: selectedAccount, defaultGrupoD, gerencialLigado }))
       if (fId) { txIds.push(fId); futTxId.set(fp._id, fId) }
       if (fId && fp.grupoGerencial && fp.grupoGerencial !== defaultGrupoD) gerencialTxIds.push(fId)
       // PARTE 2: parcela futura herda o mesmo rateio da parcela principal (parent).
@@ -3100,7 +3106,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
   }
 
   const confirmarConciliacao = () => {
+    // Controle gerencial desligado: os itens entram como D, sem função de reserva.
     const importar = concSoItau.filter(i => i.acao === 'importar')
+      .map(i => (gerencialLigado ? i : { ...i, grupoGerencial: defaultGrupoD, _reservaFuncaoId: null }))
     // Proteção: parcela prevista que o banco ainda não lançou (fatura aberta) nunca é apagada.
     const excluir = concSoSistema.filter(i => i.acao === 'excluir' && !aguardandoLancamentoDoBanco(i, { aberta: faturaAbertaArquivo }))
 
@@ -3398,7 +3406,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Data</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Ger.</th>
+                    <th className={`text-left px-3 py-2.5 text-xs text-texto-2 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
                     <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
                     <th className="text-center px-3 py-2.5 text-xs text-texto-2 font-medium">Ação</th>
                   </tr>
@@ -3450,7 +3458,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                           searchable
                         />
                       </td>
-                      <td className="px-3 py-2 hidden md:table-cell">
+                      <td className={`px-3 py-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>
                         <select
                           className="bg-surface-2 border border-borda-campo text-texto-1 rounded px-2 py-1 text-xs focus:outline-none w-24"
                           value={item.grupoGerencial}
@@ -4063,7 +4071,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           </div>
 
           <div className="card p-0 overflow-hidden">
-            <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />
+            {gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -4078,7 +4086,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Fatura</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Descrição</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Categoria</th>
-                    <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium hidden md:table-cell">Ger.</th>
+                    <th className={`text-left px-3 py-2.5 text-xs text-texto-2 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
                     <th className="text-right px-3 py-2.5 text-xs text-texto-2 font-medium">Valor</th>
                     <th className="text-left px-3 py-2.5 text-xs text-texto-2 font-medium">Status</th>
                   </tr>
@@ -4198,7 +4206,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 hidden md:table-cell">
+                      <td className={`px-3 py-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>
                         {/* Duplicata "certeza": badge com o grupo gerencial REAL do lançamento salvo —
                             o mesmo que aparece no extrato —, somente leitura (a linha nunca é gravada). */}
                         {row._dbTx && !row._collisionTx ? (
@@ -4432,7 +4440,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                       <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Fatura</th>
                       <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Descrição</th>
                       <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Categoria</th>
-                      <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium hidden md:table-cell">Ger.</th>
+                      <th className={`text-left px-3 py-2.5 text-xs text-texto-3 font-medium ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>Ger.</th>
                       <th className="text-right px-3 py-2.5 text-xs text-texto-3 font-medium">Valor</th>
                       <th className="text-left px-3 py-2.5 text-xs text-texto-3 font-medium">Status</th>
                     </tr>
@@ -4452,7 +4460,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                             </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-texto-2">{cat ? `${cat.icon} ${cat.name}` : <span className="text-texto-3">—</span>}</td>
-                          <td className="px-3 py-2 text-xs text-texto-2 hidden md:table-cell">{ger ? `${ger.number} · ${ger.name}` : <span className="text-texto-3">—</span>}</td>
+                          <td className={`px-3 py-2 text-xs text-texto-2 ${gerencialLigado ? 'hidden md:table-cell' : 'hidden'}`}>{ger ? `${ger.number} · ${ger.name}` : <span className="text-texto-3">—</span>}</td>
                           <td className="px-3 py-2 text-right text-xs font-semibold text-texto-2 whitespace-nowrap">{fmt(fp.amount)}</td>
                           <td className="px-3 py-2">
                             {fp._exists
@@ -4601,7 +4609,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           setShowImportPreview(false)
         }}
         resolvedRows={resolvedRows}
-        gerencialGroups={gerencialGroups}
+        gerencialGroups={gerencialLigado ? gerencialGroups : gerencialGroups.filter(g => g.number === 'D')}
         schedules={schedules}
         accounts={accounts}
         transactions={transactions}

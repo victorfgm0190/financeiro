@@ -24,6 +24,7 @@ import TxMobileItem from '../shared/TxMobileItem'
 import ReconcileBadge from '../shared/ReconcileBadge'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import GerencialTotalizer from '../shared/GerencialTotalizer'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import TransactionForm from '../Transactions/TransactionForm'
@@ -287,7 +288,7 @@ export default function CreditCardPanel() {
     categories, gerencialGroups, scheduleReservaFuncoes,
     addTransaction, deleteTransaction, updateTransaction, setReconciled, recalcularAgendamentosFatura, registrarEdicao,
     reconciliarGerencial, revisarMovimentosFatura, getOccurrencesProjecao: getNextOccurrences,
-    isFaturaFechada, fecharFatura, abrirFatura, creditUsage, pode,
+    isFaturaFechada, fecharFatura, abrirFatura, creditUsage, pode, settings,
   } = useApp()
   // Nível de acesso (Cartão de Crédito): novo lançamento/pagar fatura = incluir; fechar/abrir,
   // atualizar, revisar, reconciliar e seleção = editar; excluir = excluir. Sem permissão o botão some.
@@ -620,7 +621,10 @@ export default function CreditCardPanel() {
     () => [...billTxs, ...billEstornos].sort((a, b) => b.date.localeCompare(a.date)),
     [billTxs, billEstornos]
   )
-  const hasGer = billLancamentos.some(tx => tx.grupoGerencial)
+  // Controle gerencial desligado: sem coluna Ger., totais por grupo e Extrato gerencial (o grupo
+  // gravado nos lançamentos antigos continua no banco; só não aparece).
+  const gerencialLigado = controleGerencialAtivo(settings)
+  const hasGer = gerencialLigado && billLancamentos.some(tx => tx.grupoGerencial)
 
   // ── Pagamentos da fatura selecionada ─────────────────────────────────────
   // Lançamentos credit_payment do cartão atual cuja fatura_ref OU mês da data caem na
@@ -867,7 +871,7 @@ export default function CreditCardPanel() {
         {/* Links auxiliares */}
         <div className="flex items-center gap-3 shrink-0 ml-auto">
           {/* Extrato Gerencial: só no computador (grupos gerenciais fora do mobile). */}
-          {!isMobile && (
+          {!isMobile && gerencialLigado && (
             <button
               onClick={() => { saveScroll(); setShowExtrato(true) }}
               className="btn-amber"
@@ -1074,7 +1078,7 @@ export default function CreditCardPanel() {
           </div>
         ) : (
           <>
-            <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} previstos={agendamentosPrevistos} showReconciled />
+            {gerencialLigado && <GerencialTotalizer txs={totalizerTxs} gerencialGroups={gerencialGroups} previstos={agendamentosPrevistos} showReconciled />}
 
             {/* Mobile: cards estilo app bancário */}
             <div className="md:hidden">

@@ -18,9 +18,10 @@ const { ERRO_LINK } = await import('./_senhaTokens.js')
 const SECRET = 'segredo-de-teste'
 // Tabelas do app que as migrações alteram (o banco real vem de supabase/estrutura_base.sql).
 const ANTES_DAS_MIGRACOES = 'CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY);\n'
-  + 'CREATE TABLE IF NOT EXISTS lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, origin TEXT);\n'
+  + 'CREATE TABLE IF NOT EXISTS lancamentos (id TEXT PRIMARY KEY, account_id TEXT, to_account_id TEXT, origin TEXT, grupo_gerencial TEXT);\n'
   + 'CREATE TABLE IF NOT EXISTS contas (id TEXT PRIMARY KEY, type TEXT, is_gerencial BOOLEAN DEFAULT false);\n'
-  + 'CREATE TABLE IF NOT EXISTS agendamentos (id TEXT PRIMARY KEY, tipo TEXT, account_id TEXT);\n'
+  + 'CREATE TABLE IF NOT EXISTS agendamentos (id TEXT PRIMARY KEY, tipo TEXT, account_id TEXT, grupo_gerencial TEXT);\n'
+  + 'CREATE TABLE IF NOT EXISTS reservas_funcoes (id TEXT PRIMARY KEY, number JSONB);\n'
 const TABELAS_APP = `
   CREATE TABLE IF NOT EXISTS perfis (id TEXT PRIMARY KEY, name TEXT, ordem INTEGER, created_at TIMESTAMPTZ DEFAULT now());
   INSERT INTO organizacoes (id, nome) VALUES ('org1', 'Org'), ('org2', 'Outra');

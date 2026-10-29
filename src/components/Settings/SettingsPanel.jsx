@@ -10,6 +10,7 @@ import { restoreFullBackup } from '../../lib/db'
 import DindinImportPanel from './DindinImportPanel'
 import DeParaImportacaoPanel from './DeParaImportacaoPanel'
 import ApelidosIaPanel from './ApelidosIaPanel'
+import ControleGerencialChave from './ControleGerencialChave'
 import FavorecidosPanel from './FavorecidosPanel'
 import TiposDocumentoPanel from './TiposDocumentoPanel'
 import AtalhosPanel from './AtalhosPanel'
@@ -1448,6 +1449,7 @@ export default function SettingsPanel() {
       {/* Controle Gerencial de Cartão */}
       {secao === 'controle-gerencial' && (
       <div className="card">
+        <ControleGerencialChave podeEditar={pode('configuracoes', 'editar') && pode('contas', 'editar')} />
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-semibold text-texto-2">Controle Gerencial de Cartão</h2>

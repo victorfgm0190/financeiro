@@ -3,6 +3,7 @@ import { Download, FileBarChart } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 
 // Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
 // G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
@@ -72,7 +73,9 @@ function getBillPeriod(dateStr, closingDay) {
 }
 
 export default function RelatorioFatura({ initialCardId }) {
-  const { accounts, transactions, categories, gerencialGroups, reserveFunctions } = useApp()
+  const { accounts, transactions, categories, gerencialGroups, reserveFunctions, settings } = useApp()
+  // Controle gerencial desligado: sem totais por grupo nem coluna Ger. (o grupo gravado fica no banco).
+  const gerencialLigado = controleGerencialAtivo(settings)
   useScrollScope('credit:relatorio')
 
   // Lookup id → nome da função de reserva (reserve_functions já está no contexto).
@@ -313,7 +316,7 @@ export default function RelatorioFatura({ initialCardId }) {
             <p className="text-xs text-texto-2 uppercase tracking-wide mb-1">Total Fatura</p>
             <p className="text-xl font-bold text-despesa">{fmt(totals.total)}</p>
           </div>
-          {grp1 && totals[grp1.id] > 0 && (
+          {gerencialLigado && grp1 && totals[grp1.id] > 0 && (
             <div className="card border-reserva/25">
               <p className="text-xs text-reserva uppercase tracking-wide mb-1">{grp1.alias} · {grp1.name}</p>
               <p className="text-xl font-bold text-reserva">{fmt(totals[grp1.id])}</p>
@@ -322,7 +325,7 @@ export default function RelatorioFatura({ initialCardId }) {
               )}
             </div>
           )}
-          {customGroups.filter(g => totals[g.id] > 0).map(g => (
+          {gerencialLigado && customGroups.filter(g => totals[g.id] > 0).map(g => (
             <div key={g.id} className="card border-despesa/25">
               <p className="text-xs text-despesa uppercase tracking-wide mb-1">{g.alias} · {g.name}</p>
               <p className="text-xl font-bold text-despesa">{fmt(totals[g.id])}</p>
@@ -331,7 +334,7 @@ export default function RelatorioFatura({ initialCardId }) {
               )}
             </div>
           ))}
-          {grpD && totals[grpD.id] > 0 && (
+          {gerencialLigado && grpD && totals[grpD.id] > 0 && (
             <div className="card">
               <p className="text-xs text-texto-2 uppercase tracking-wide mb-1">D · Despesas</p>
               <p className="text-xl font-bold text-texto-2">{fmt(totals[grpD.id])}</p>
@@ -364,7 +367,7 @@ export default function RelatorioFatura({ initialCardId }) {
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap hidden md:table-cell">Fatura</th>
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden md:table-cell">Categoria</th>
                 <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium hidden lg:table-cell">Favorecido</th>
-                <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Ger.</th>
+                {gerencialLigado && <th className="text-left px-3 py-3 text-xs text-texto-2 font-medium">Ger.</th>}
                 <th className="text-right px-3 py-3 text-xs text-texto-2 font-medium whitespace-nowrap">Valor</th>
               </tr>
             </thead>
@@ -374,7 +377,9 @@ export default function RelatorioFatura({ initialCardId }) {
                 const gid = tx.grupoGerencial
                 const isGrp1 = gid === grp1?.id
                 const isGrpD = !gid || gid === grpD?.id
-                const rowCls = isGrp1
+                const rowCls = !gerencialLigado
+                  ? 'border-b border-borda/50 hover:bg-surface-hover/30 transition-colors'
+                  : isGrp1
                   ? 'border-b border-borda/50 bg-reserva/5 hover:bg-reserva/10 transition-colors'
                   : !isGrpD
                   ? 'border-b border-borda/50 bg-despesa/5 hover:bg-despesa/10 transition-colors'
@@ -407,9 +412,11 @@ export default function RelatorioFatura({ initialCardId }) {
                     <td className="px-3 py-2.5 align-top hidden lg:table-cell text-xs text-texto-2">
                       {tx.payee || <span className="text-texto-3">—</span>}
                     </td>
+                    {gerencialLigado && (
                     <td className="px-3 py-2.5 align-top">
                       <GerBadge grupoId={gid || grpD?.id} gerencialGroups={gerencialGroups} />
                     </td>
+                    )}
                     <td className="px-3 py-2.5 text-right font-semibold text-despesa whitespace-nowrap align-top">{fmt(tx.amount)}</td>
                   </tr>
                 )
@@ -417,7 +424,7 @@ export default function RelatorioFatura({ initialCardId }) {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-borda-forte bg-surface-2/60">
-                <td className="px-3 py-3 text-xs text-texto-2 font-bold" colSpan={7}>Total · {billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</td>
+                <td className="px-3 py-3 text-xs text-texto-2 font-bold" colSpan={gerencialLigado ? 7 : 6}>Total · {billTxs.length} lançamento{billTxs.length !== 1 ? 's' : ''}</td>
                 <td className="px-3 py-3 text-right font-bold text-despesa whitespace-nowrap">{fmt(totals.total)}</td>
               </tr>
             </tfoot>

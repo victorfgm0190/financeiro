@@ -1003,6 +1003,8 @@ export async function loadFromDb(defaultData) {
               estornoCartaoCategoryId: d.cfg.estorno_cartao_category_id ?? null,
               faturasFechadas: d.cfg.faturas_fechadas ?? {},
               mobileHomeCards: d.cfg.mobile_home_cards ?? null,
+              // Controle gerencial do ambiente (lib/controleGerencial.js); null = ligado.
+              controleGerencial: d.cfg.controle_gerencial ?? null,
               // Rodapé da barra lateral do ambiente (vazio no 'vm' = texto de sempre). Só leitura:
               // o syncSettings não grava estas colunas.
               rodapeTitulo: d.cfg.rodape_titulo ?? null,
@@ -1372,6 +1374,7 @@ export const settingsToRow = (settings, costCenters) => ({
   estorno_cartao_category_id: settings.estornoCartaoCategoryId ?? null,
   faturas_fechadas: settings.faturasFechadas ?? {},
   mobile_home_cards: settings.mobileHomeCards ?? null,
+  controle_gerencial: typeof settings.controleGerencial === 'boolean' ? settings.controleGerencial : null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1388,6 +1391,7 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   estorno_cartao_category_id: 'estornoCartaoCategoryId',
   faturas_fechadas: 'faturasFechadas',
   mobile_home_cards: 'mobileHomeCards',
+  controle_gerencial: 'controleGerencial',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

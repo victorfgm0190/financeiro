@@ -41,6 +41,7 @@ import { competenciasImplausiveis, mensagemCompetenciaImplausivel } from '../../
 import { parecidosNaCriacao } from '../../lib/casamentoFatura'
 import { listarPreLancamentos } from '../../lib/assistenteApi'
 import AvisoParecidos from './AvisoParecidos'
+import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { contaCentralDoPerfil, contaCentralPara } from '../../lib/contaCentral'
 
 const TYPE_OPTIONS = [
@@ -289,7 +290,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
   const isCredit = selectedAccount?.type === 'credit'
-  const showGerencial = isCredit && form.type === 'expense'
+  // Controle gerencial do ambiente (Configurações): desligado, o bloco some, item novo não ganha
+  // grupo e a edição mantém o gravado; item com grupo gerencial trava valor, data e conta/cartão.
+  const gerencialLigado = controleGerencialAtivo(settings)
+  const showGerencial = isCredit && form.type === 'expense' && gerencialLigado
+  const trava = travaGerencial(initial, { ativo: gerencialLigado, gerencialGroups })
 
   // Seleção de categoria: além de gravar a categoria, aplica o grupo gerencial PADRÃO da categoria
   // quando o gerencial é aplicável (showGerencial) e o grupo atual está vazio ou no padrão D
@@ -559,7 +564,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       ...formFields,
       amount: installmentAmount,
       accountType: selectedAccount?.type,
-      grupoGerencial: showGerencial ? form.grupoGerencial : null,
+      grupoGerencial: showGerencial ? form.grupoGerencial : (gerencialLigado ? null : grupoComChaveDesligada(initial)),
       faturaMonthYear:
         (isCredit && form.type === 'expense' && form.faturaMonthYear) ? form.faturaMonthYear
         : (form.type === 'transfer' && transferToAcc?.type === 'credit' && form.faturaMonthYear) ? form.faturaMonthYear
@@ -588,6 +593,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       // toggle na edição remove o vínculo.
       reservaContaId: (form.type === 'expense' && form.useReserva && !reservaFuncaoMode) ? (form.reservaAccountId || null) : null,
       ...(form.type === 'transfer' && form.reservaExpenseCategoryId ? { reservaExpenseCategoryId: form.reservaExpenseCategoryId } : {}),
+    }
+
+    // Trava do controle gerencial desligado: valor, data e conta/cartão ficam os gravados.
+    if (trava) {
+      Object.assign(txData, {
+        amount: initial.amount, date: initial.date, dateCartao: initial.dateCartao || null,
+        accountId: initial.accountId, faturaMonthYear: initial.faturaMonthYear ?? null,
+      })
     }
 
     // Categoria só é mantida em transferências quando o destino é conta de aplicação
@@ -1448,15 +1461,17 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label">Conta {form.type === 'transfer' ? 'Origem' : ''} *{confira('accountId')}</label>
-          <SearchableSelect
-            options={accountOpts}
-            value={form.accountId}
-            onChange={id => setForm(f => ({ ...f, accountId: id, ...(f.type === 'transfer' ? { reservaFuncaoId: '' } : {}) }))}
-            placeholder="Selecione a conta..."
-            preserveGroupOrder
-            ungroupedLast
-            required
-          />
+          {trava
+            ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
+            : <SearchableSelect
+                options={accountOpts}
+                value={form.accountId}
+                onChange={id => setForm(f => ({ ...f, accountId: id, ...(f.type === 'transfer' ? { reservaFuncaoId: '' } : {}) }))}
+                placeholder="Selecione a conta..."
+                preserveGroupOrder
+                ungroupedLast
+                required
+              />}
         </div>
         {form.type === 'transfer' ? (
           <div>
@@ -1474,10 +1489,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ) : (
           <div>
             <label className="label">{isCredit && form.type === 'expense' && form.installments > 1 ? 'Total (R$) *' : 'Valor (R$) *'}{confira('amount')}</label>
-            <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required />
+            <InputMoeda min="0.01" value={form.amount} onChange={e => set('amount', e.target.value)} required disabled={!!trava} />
           </div>
         )}
       </div>
+      {trava && (
+        <p role="note" className="rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1">{trava}</p>
+      )}
 
       {form.type === 'transfer' && (
         <>
@@ -1638,13 +1656,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       <div>
         <label className="label">Data *{confira('date')}</label>
-        <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje />
+        <DateInput className="input" value={form.date} onChange={e => set('date', e.target.value)} required hoje disabled={!!trava} />
       </div>
 
       {isCredit && form.type === 'expense' && (
         <div>
           <label className="label">Data Banco</label>
-          <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} />
+          <DateInput className="input" value={form.dateCartao} onChange={e => set('dateCartao', e.target.value)} disabled={!!trava} />
           <p className="text-xs text-texto-3 mt-1.5 leading-relaxed">
             Data original do extrato do cartão. Em branco para lançamentos manuais — preencha
             só para corrigir quando o banco enviou a data errada.
@@ -1954,9 +1972,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <div>
           <label className="label">Fatura de referência</label>
           <select
-            className="input"
+            className="input disabled:opacity-60"
             value={form.faturaMonthYear}
             onChange={e => set('faturaMonthYear', e.target.value)}
+            disabled={!!trava}
           >
             <option value="">(automático)</option>
             {faturaRefOptions.map(o => (

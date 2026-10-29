@@ -6,7 +6,7 @@ import { comAmbiente } from './_ambiente.js'
 import { pode } from '../src/lib/permissoes.js'
 import { acoesDoPedido, definicaoFerramenta } from '../src/lib/assistente/acoes.js'
 import {
-  ensureIaSchema, montarContexto, textoCadastros, INSTRUCOES, validarParametros, registrarUso, hojeSaoPaulo,
+  ensureIaSchema, montarContexto, textoCadastros, instrucoes, validarParametros, registrarUso, hojeSaoPaulo,
 } from './_ia.js'
 import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente/contas.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
@@ -92,11 +92,11 @@ async function handler(req, res) {
       model: MODELO,
       max_tokens: 1536,
       output_config: { effort: 'low' },
-      tools: acoes.map(a => definicaoFerramenta(a, podeFn)),
+      tools: acoes.map(a => definicaoFerramenta(a, podeFn, { gerencial: ctx.gerencialLigado })),
       tool_choice: { type: 'auto' },
       // Bloco estável (instruções + cadastros) com cache; a data e o pedido vão na mensagem.
       system: [
-        { type: 'text', text: INSTRUCOES },
+        { type: 'text', text: instrucoes(ctx.gerencialLigado) },
         { type: 'text', text: `# CADASTROS DO USUÁRIO\n${textoCadastros(ctx)}`, cache_control: { type: 'ephemeral' } },
       ],
       messages: [{ role: 'user', content }],

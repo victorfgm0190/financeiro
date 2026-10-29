@@ -61,6 +61,10 @@ export const MIGRACOES = [
   "sql": "-- FINAIS DO CARTÃO: lista dos 4 últimos dígitos (titular e adicionais) de um cartão de crédito,\n-- editável em Editar Conta. O Assistente IA usa para resolver \"final 4541\" no cartão certo.\nALTER TABLE contas ADD COLUMN IF NOT EXISTS cartao_finais JSONB NOT NULL DEFAULT '[]'::jsonb;\n"
  },
  {
+  "nome": "2026-10-29_controle_gerencial.sql",
+  "sql": "-- CONTROLE GERENCIAL OPCIONAL (chave do ambiente, Configurações › Cadastros › Controle gerencial).\n-- Ambiente existente: LIGADO se o gerencial está em uso (lançamento/agendamento com grupo\n-- gerencial G/numerado, ou subconta gerencial); senão DESLIGADO. Cliente novo: o kit básico\n-- (api/_kitBasico.js) cria a linha de configuracoes já com controle_gerencial = false — a migração\n-- roda antes do kit e NÃO cria a linha (o kit usa ON CONFLICT DO NOTHING).\n-- Só preenche quando ainda está vazio (rodar de novo não desfaz a escolha do usuário).\nALTER TABLE configuracoes ADD COLUMN IF NOT EXISTS controle_gerencial BOOLEAN;\nUPDATE configuracoes SET controle_gerencial = (\n     EXISTS (SELECT 1 FROM lancamentos l JOIN reservas_funcoes g ON g.id = l.grupo_gerencial\n              WHERE g.number IS DISTINCT FROM '\"D\"'::jsonb)\n  OR EXISTS (SELECT 1 FROM agendamentos a JOIN reservas_funcoes g ON g.id = a.grupo_gerencial\n              WHERE g.number IS DISTINCT FROM '\"D\"'::jsonb)\n  OR EXISTS (SELECT 1 FROM contas WHERE type = 'gerencial' OR is_gerencial)\n) WHERE id = 1 AND controle_gerencial IS NULL;\n"
+ },
+ {
   "nome": "2026-10-29_ia_pre_baixa.sql",
   "sql": "-- ASSISTENTE IA (etapa 1.1): pré-lançamento também pode ser uma BAIXA de agendamento (prévia do\n-- Registrar Agendamento fechada sem confirmar). Só o CHECK do tipo muda; nenhum dado é alterado.\nALTER TABLE ia_pre_lancamentos DROP CONSTRAINT IF EXISTS ia_pre_lancamentos_tipo_check;\nALTER TABLE ia_pre_lancamentos ADD CONSTRAINT ia_pre_lancamentos_tipo_check\n  CHECK (tipo IN ('lancamento', 'agendamento', 'baixa'));\n"
  },

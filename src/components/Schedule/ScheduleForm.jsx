@@ -26,6 +26,7 @@ import {
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
 import DateInput from '../shared/DateInput'
+import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
@@ -219,7 +220,11 @@ function buildCatOpts(categories, type) {
 
 // Prévia do Assistente IA: `destaques` (chaves do form) e `onSalvo(form, id)` ao criar — mesma gravação.
 export default function ScheduleForm({ initial, onClose, onAviso, destaques = null, onSalvo = null }) {
-  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato } = useApp()
+  const { accounts, accountGroups, categories, payees, transactions, gerencialGroups, reserveFunctions, scheduleReservaFuncoes, addSchedule, updateSchedule, salvarFavorecidoDoAgendamento, addPayee, getNextOccurrences, rateiosByLancamento, saveRateiosFor, deleteRateiosFor, activeProfileId, categoryGroupOrder, schedules, registrarEdicao, temHistorico, pode, contratoPorId, registrarEventoContrato, settings } = useApp()
+  // Controle gerencial do ambiente: desligado, o bloco some, agendamento novo não ganha grupo e a
+  // edição mantém o gravado; com grupo gerencial, valor, data e conta ficam travados.
+  const gerencialLigado = controleGerencialAtivo(settings)
+  const trava = travaGerencial(initial, { ativo: gerencialLigado, gerencialGroups })
   // Nível de acesso: criar = incluir; salvar edição = editar (sem permissão: só leitura).
   const podeGravarForm = pode('agendamentos', initial?.id ? 'editar' : 'incluir')
 
@@ -687,6 +692,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       amount: Number(form.amount),
       accountType: selectedAccount?.type,
       installments: Number(form.installments),
+      ...(gerencialLigado ? {} : { grupoGerencial: grupoComChaveDesligada(initial) }),
       remindDaysBefore: Number(form.remindDaysBefore) || 0,
     }
     // Criar vs editar se decide pelo `id`, NÃO pela presença de `initial`: o DuplicateButton
@@ -839,15 +845,18 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         {/* Conta */}
         <div>
           <LabelTip tip={TIPS.account} required confira={!!destaques?.includes('accountId')}>{form.transactionType === 'transfer' ? 'Conta Origem' : 'Conta'}</LabelTip>
-          <SearchableSelect
-            options={accountOpts}
-            value={form.accountId}
-            onChange={id => setContas({ accountId: id, reservaFuncaoId: '' })}
-            placeholder="Selecione a conta..."
-            preserveGroupOrder
-            ungroupedLast
-            required
-          />
+          {trava
+            ? <div className="input opacity-60 cursor-not-allowed" title={trava}>{selectedAccount?.apelido || selectedAccount?.name || '—'}</div>
+            : <SearchableSelect
+                options={accountOpts}
+                value={form.accountId}
+                onChange={id => setContas({ accountId: id, reservaFuncaoId: '' })}
+                placeholder="Selecione a conta..."
+                preserveGroupOrder
+                ungroupedLast
+                required
+              />}
+          {trava && <p role="note" className="mt-1 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1">{trava}</p>}
         </div>
 
         {/* Valor */}
@@ -860,6 +869,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             onChange={e => set('amount', e.target.value)}
             required
             readOnly={ehFinanciamento}
+            disabled={!!trava}
           />
           {ehFinanciamento && <p className="text-[11px] text-texto-3 mt-1">O pagamento usa principal + juros da parcela; o valor não é editável aqui.</p>}
           {hasNextDiff && !occInicial && (
@@ -1114,6 +1124,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             onChange={e => set('startDate', e.target.value)}
             required
             hoje
+            disabled={!!trava}
           />
         </div>
         )}
@@ -1126,6 +1137,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               className="input"
               value={form.nextOccurrence || ''}
               onChange={e => { set('nextOccurrence', e.target.value); setAncoraTocada(true) }}
+              disabled={!!trava}
             />
             <p className="text-[11px] text-texto-3 mt-1">
               Data da próxima ocorrência. Ao alterar, o sistema pergunta se vale só para esta ou também para as próximas.
@@ -1222,8 +1234,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           </div>
         </div>
 
-        {/* Classificação Gerencial */}
-        {form.transactionType === 'expense' && (
+        {/* Classificação Gerencial (some com o controle gerencial desligado) */}
+        {form.transactionType === 'expense' && gerencialLigado && (
           <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
             <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider flex items-center">
               Classificação Gerencial <Tooltip text={TIPS.gerencial} />
