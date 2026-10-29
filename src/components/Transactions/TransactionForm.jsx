@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
 import { useApp, isResgatePago } from '../../context/AppContext'
@@ -38,6 +38,9 @@ import DateInput from '../shared/DateInput'
 import { useAtalho, useTituloAtalho } from '../../context/atalhosHooks'
 import ShortcutHint from '../shared/ShortcutHint'
 import { competenciasImplausiveis, mensagemCompetenciaImplausivel } from '../../lib/competenciaFatura'
+import { parecidosNaCriacao } from '../../lib/casamentoFatura'
+import { listarPreLancamentos } from '../../lib/assistenteApi'
+import AvisoParecidos from './AvisoParecidos'
 import { contaCentralDoPerfil, contaCentralPara } from '../../lib/contaCentral'
 
 const TYPE_OPTIONS = [
@@ -117,7 +120,11 @@ function buildCatOpts(categories, type) {
 // abre o formulário completo com o mesmo estado. Salvar é o mesmo handleSubmit nos dois modos.
 // Prévia do Assistente IA: `destaques` (chaves do form) marcam campos a conferir; `onSalvo(form, txId)`
 // avisa que o lançamento NOVO foi gravado (antes do onClose) — a gravação continua a mesma.
-export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null }) {
+// Duplicidade na criação (AvisoParecidos): `preLancamentos` (sem ele, busca os pendentes),
+// `parecidosAceitos` (ids já confirmados como "É outro" — ex.: no aviso do topo da prévia),
+// `onMesmo(tx)` avisa que o usuário disse "É o mesmo" / abriu o existente (nada foi gravado).
+export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null,
+  preLancamentos = null, parecidosAceitos = null, onMesmo = null }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -189,6 +196,18 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   })
 
   const [step, setStep] = useState('form')
+  // Duplicidade na criação: lançamentos/pré-lançamentos parecidos → passo 'parecidos' ao salvar.
+  const [preBuscados, setPreBuscados] = useState([])
+  const [parecidos, setParecidos] = useState(null)
+  const [existenteAberto, setExistenteAberto] = useState(null)
+  const aceitos = useRef(new Set())
+  const checarParecidos = !initial?.id && pode('lancamentos', 'incluir')
+  useEffect(() => {
+    if (!checarParecidos || preLancamentos) return
+    let vivo = true
+    listarPreLancamentos().then(l => { if (vivo) setPreBuscados(l) }).catch(() => { /* sem internet: só os lançamentos */ })
+    return () => { vivo = false }
+  }, [checarParecidos, preLancamentos])
   const confira = (campo) => (destaques?.includes(campo)
     ? <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>
     : null)
@@ -471,6 +490,27 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       if (det) {
         setInstallmentPrompt(det)
         setStep('installment-detect')
+        return
+      }
+    }
+
+    // Duplicidade: já existe lançamento (ou pré-lançamento) parecido? Aviso não bloqueante —
+    // "É outro" (aceitos) volta aqui e segue; "É o mesmo" fecha sem gravar.
+    if (checarParecidos) {
+      const parc = isCredit && form.type === 'expense' && form.installments > 1
+      const inst = installmentDecision && !installmentDecision.skip ? installmentDecision : null
+      const lista = parecidosNaCriacao({
+        type: form.type, accountId: form.accountId, date: form.date, dateCartao: form.dateCartao || null,
+        amount: parc ? Math.round(Number(form.amount) / form.installments * 100) / 100 : Number(form.amount),
+        installmentNum: parc ? 1 : (inst?.num ?? null), installmentTotal: parc ? form.installments : (inst?.total ?? null),
+        faturaMonthYear: isCredit ? (form.faturaMonthYear || null) : null,
+      }, {
+        transactions, preLancamentos: preLancamentos || preBuscados,
+        closingDay: selectedAccount?.closingDay || 14, ignorarIds: [...aceitos.current, ...(parecidosAceitos || [])],
+      })
+      if (lista.length) {
+        setParecidos({ lista, installmentDecision })
+        setStep('parecidos')
         return
       }
     }
@@ -1092,6 +1132,32 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     )
   }
 
+
+  if (step === 'abrir-existente' && existenteAberto) {
+    return <TransactionForm initial={existenteAberto} onClose={onClose} onToast={onToast} />
+  }
+
+  if (step === 'parecidos' && parecidos) {
+    const mesmo = (tx) => { onMesmo?.(tx) }
+    return (
+      <div className="space-y-3 py-2">
+        <AvisoParecidos
+          parecidos={parecidos.lista}
+          accounts={accounts}
+          onMesmo={() => { mesmo(parecidos.lista[0]); onClose() }}
+          onAbrir={(tx) => { mesmo(tx); setExistenteAberto(tx); setStep('abrir-existente') }}
+          onOutro={() => {
+            parecidos.lista.forEach(t => aceitos.current.add(t._pre ? t.preId : t.id))
+            setStep('form')
+            handleSubmit(null, parecidos.installmentDecision)
+          }}
+        />
+        <button type="button" className="text-xs text-texto-3 hover:text-texto-1" onClick={() => setStep('form')}>
+          ← Voltar ao formulário
+        </button>
+      </div>
+    )
+  }
 
   if (step === 'installment-detect' && installmentPrompt) {
     const { num, total } = installmentPrompt

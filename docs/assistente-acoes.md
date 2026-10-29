@@ -15,6 +15,12 @@ fases; atualize o **Status** ao implementar.
   (validações e efeitos — inclusive chamadas às funções protegidas — ficam onde já estão).
 - **Consultas: o app calcula** com as mesmas funções das telas; a IA só escolhe os filtros.
 - Funções protegidas (CLAUDE.md) nunca são alteradas; chamar é permitido.
+- **Duplicidade na criação**: prévia de `registrar_lancamento`, efetivação de pré-lançamento e o
+  `TransactionForm` manual procuram lançamentos (conciliados ou não) e pré-lançamentos pendentes
+  parecidos — `parecidosNaCriacao` (`src/lib/casamentoFatura.js`, mesmos critérios do "Já lançado":
+  mesma conta, valor ±R$ 0,01, data ±3 dias, parcela por parcela). Aviso `AvisoParecidos`:
+  "É o mesmo — não salvar" (nada gravado, nem pré-lançamento; "Abrir o existente") ou
+  "É outro — salvar mesmo assim" (toque explícito).
 
 ## Níveis
 

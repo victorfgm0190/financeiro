@@ -107,6 +107,40 @@ export function contarJaLancados(resultado) {
   return c
 }
 
+// ─── Criação: lançamento NOVO parecido com um que já existe ─────────────────────────────────────
+// Prévia do Assistente, efetivação de pré-lançamento e formulário manual. Mesmos critérios do
+// "Já lançado": mesma conta/cartão (account_id — conta as parcelas com card_id NULL), mesmo tipo,
+// valor ±R$ 0,01, data ±3 dias (compra ou lançamento, a mais próxima), parcela por parcela —
+// mas contra QUALQUER lançamento (conciliado ou não) e os pré-lançamentos pendentes. A fatura só
+// entra na parcela N > 1 (sem data comparável); conta corrente não tem fatura.
+// novo: { type, accountId, amount (da parcela), date, dateCartao?, installmentNum?, installmentTotal?,
+// faturaMonthYear? }. → candidatos (lançamentos e pré 'pre:<id>'), do mais próximo ao mais longe.
+export const MAX_PARECIDOS = 5
+export function parecidosNaCriacao(novo, { transactions = [], preLancamentos = [], closingDay = 14, ignorarIds = [] } = {}) {
+  if (!novo?.accountId || (novo.type !== 'expense' && novo.type !== 'income') || !(Number(novo.amount) > 0) || !novo.date) return []
+  const ignorar = new Set(ignorarIds)
+  const datas = (x) => [x.date, x.dateCartao].filter(Boolean).map(d => String(d).slice(0, 10))
+  const distancia = (t) => Math.min(...datas(novo).flatMap(a => datas(t).map(b => diasEntre(a, b))))
+  const pn = parcelaDoTx(novo)
+  const casa = (t) => {
+    if (tipoDe(t) !== novo.type) return false
+    if (Math.abs(centavos(t.amount) - centavos(novo.amount)) > TOL_VALOR_JA_LANCADO * 100) return false
+    const pt = parcelaDoTx(t)
+    if (pn || pt) {
+      if (!pn || !pt || pn.num !== pt.num || pn.total !== pt.total) return false
+      if (pn.num > 1) return !novo.faturaMonthYear || faturaDoLancamento(t, closingDay) === novo.faturaMonthYear
+    }
+    return distancia(t) <= JANELA_DIAS_JA_LANCADO
+  }
+  const existentes = transactions.filter(t => t.accountId === novo.accountId && (t.type === 'expense' || t.type === 'income') && !t.isEspelho)
+  const pres = preLancamentos.filter(p => p.status === 'pendente').map(p => candidatoDoPre(p, closingDay))
+    .filter(t => t && t.accountId === novo.accountId)
+  return [...existentes, ...pres]
+    .filter(t => !ignorar.has(t.id) && !(t._pre && ignorar.has(t.preId)) && casa(t))
+    .sort((a, b) => distancia(a) - distancia(b))
+    .slice(0, MAX_PARECIDOS)
+}
+
 // ─── Ativação na tela (ImportPanel) ─────────────────────────────────────────────────────────────
 
 // Termo do apelido 'descricao_fatura': a descrição do banco sem números (terminal, códigos, datas,

@@ -153,3 +153,51 @@ describe('integração — escolher e pré-lançamento', () => {
     expect(out[0]).toMatchObject({ _preId: 'p1', categoryId: 'cat_laz', payee: 'iFood', _jaLancado: { origem: 'pre' } })
   })
 })
+
+// ─── Criação (Assistente / pré-lançamento / formulário manual): checagem de duplicidade ─────────
+import { parecidosNaCriacao } from './casamentoFatura'
+
+describe('parecidosNaCriacao — caso real Skina da Carne', () => {
+  // Já existia no Itaupers (card_id NULL, só account_id) — não conciliado.
+  const SKINA = { id: 'skina', accountId: CARD, accountType: 'credit', type: 'expense', amount: 350.08, date: '2026-10-25', description: 'Compra Skina da Carne', reconciled: false, faturaMonthYear: '2026-11', cardId: null }
+  // O que o Assistente montou do SMS "…SKINA DA CARNE LTDA valor RS 350,08 em 25/10…".
+  const SMS = { type: 'expense', accountId: CARD, amount: 350.08, date: '2026-10-25', description: 'Compra açougue' }
+  const opts = { transactions: [SKINA, ETAPA_A], closingDay: 13 }
+
+  it('o SMS acha o lançamento existente (descrição diferente não importa)', () => {
+    expect(parecidosNaCriacao(SMS, opts)).toEqual([SKINA])
+  })
+  it('conciliado também conta', () => {
+    expect(parecidosNaCriacao(SMS, { ...opts, transactions: [{ ...SKINA, reconciled: true }] }).map(t => t.id)).toEqual(['skina'])
+  })
+  it('valor ±R$ 0,01 e data ±3 dias; outra conta, outro tipo ou transferência não', () => {
+    expect(parecidosNaCriacao({ ...SMS, amount: 350.09 }, opts)).toHaveLength(1)
+    expect(parecidosNaCriacao({ ...SMS, amount: 350.10 }, opts)).toEqual([])
+    expect(parecidosNaCriacao({ ...SMS, date: '2026-10-28' }, opts)).toHaveLength(1)
+    expect(parecidosNaCriacao({ ...SMS, date: '2026-10-29' }, opts)).toEqual([])
+    expect(parecidosNaCriacao({ ...SMS, accountId: 'acc_azul' }, opts)).toEqual([])
+    expect(parecidosNaCriacao({ ...SMS, type: 'income' }, opts)).toEqual([])
+    expect(parecidosNaCriacao({ ...SMS, type: 'transfer' }, opts)).toEqual([])
+  })
+  it('data da compra (dateCartao) também vale', () => {
+    const lancadoNoDiaFinanceiro = { ...SKINA, date: '2026-11-01', dateCartao: '2026-10-25' }
+    expect(parecidosNaCriacao(SMS, { ...opts, transactions: [lancadoNoDiaFinanceiro] })).toHaveLength(1)
+  })
+  it('vários parecidos: lista todos, do mais próximo ao mais longe', () => {
+    const outro = { ...SKINA, id: 'skina2', date: '2026-10-27' }
+    expect(parecidosNaCriacao(SMS, { ...opts, transactions: [outro, SKINA] }).map(t => t.id)).toEqual(['skina', 'skina2'])
+  })
+  it('pré-lançamento pendente conta; o que está sendo efetivado é ignorado', () => {
+    const pre = { id: 'p1', status: 'pendente', payload: { tipo: 'despesa', valor: 350.08, data: '2026-10-25', conta_id: CARD, descricao: 'Açougue' } }
+    expect(parecidosNaCriacao(SMS, { transactions: [], preLancamentos: [pre], closingDay: 13 }).map(t => t.id)).toEqual(['pre:p1'])
+    expect(parecidosNaCriacao(SMS, { transactions: [], preLancamentos: [pre], closingDay: 13, ignorarIds: ['p1'] })).toEqual([])
+    expect(parecidosNaCriacao(SMS, { ...opts, ignorarIds: ['skina'] })).toEqual([])
+  })
+  it('parcelado compara parcela por parcela', () => {
+    const p1 = { ...SKINA, id: 'p1de3', amount: 100, installmentNum: 1, installmentTotal: 3, description: 'TV 1/3' }
+    const avista = { ...SKINA, id: 'avista', amount: 100 }
+    const novo = { ...SMS, amount: 100, installmentNum: 1, installmentTotal: 3 }
+    expect(parecidosNaCriacao(novo, { transactions: [p1, avista], closingDay: 13 }).map(t => t.id)).toEqual(['p1de3'])
+    expect(parecidosNaCriacao({ ...novo, installmentTotal: 4 }, { transactions: [p1], closingDay: 13 })).toEqual([])
+  })
+})
