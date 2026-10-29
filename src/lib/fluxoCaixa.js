@@ -11,8 +11,12 @@
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
 import { occCampos } from './camposSerie.js'
 import { dueDateInMonth } from './fatura.js'
+import { agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
 
 const round2 = n => Math.round(n * 100) / 100
+
+// Valor com sinal (+ entra, − sai) → { entrada, saida }; 0 → fora do fluxo (null).
+const movimentoDoValor = (v) => (v > 0 ? { entrada: v, saida: 0 } : v < 0 ? { entrada: 0, saida: -v } : null)
 
 // Ciclos de um envelope (dueDay D: período de D+1 de um mês até D do mês seguinte) que se
 // SOBREPÕEM ao intervalo [start, end] — sobreposição quando ciclo.from <= end E ciclo.to >= start.
@@ -102,6 +106,10 @@ export function computeFluxoCaixa({
   hidePatrimonio = false,
   reservaSet = new Set(),
   patrimonioSet = new Set(),
+  // Visão das contas PRINCIPAIS (FC): escopoFluxoPrincipal(...) com poolIds = accountIds. Com ele,
+  // os agendamentos seguem o "Considerar no Fluxo de Caixa principal?" (fluxoPrincipal.js); sem
+  // ele (consulta de contas/grupos avulsos), a regra de sempre pelas contas do conjunto.
+  fluxoPrincipal = null,
 }) {
   const empty = {
     rows: [], saldoAnterior: currentBalance,
@@ -215,17 +223,21 @@ export function computeFluxoCaixa({
       // de uma ocorrência só (camposSerie.occCampos). Sem override de conta, o filtro por conta
       // continua saindo cedo, como antes.
       const contaPorOcorrencia = Object.values(s.overrides || {}).some(o => o && typeof o === 'object' && o.accountId)
-      if (!contaPorOcorrencia && !accountIds.has(s.accountId) && !accountIds.has(s.toAccountId)) return
+      const alcanca = (accountId) => accountIds.has(accountId) || accountIds.has(s.toAccountId)
+        || (!!fluxoPrincipal && agendamentoNoFluxoPrincipal({ ...s, accountId }, fluxoPrincipal))
+      if (!contaPorOcorrencia && !alcanca(s.accountId)) return
       if (!contaPorOcorrencia && oculto(s.accountId, s.toAccountId)) return
       getNextOccurrences(s, 400).forEach(origDate => {
         const oc = occCampos(s, origDate)
         if (contaPorOcorrencia) {
-          if (!accountIds.has(oc.accountId) && !accountIds.has(s.toAccountId)) return
+          if (!alcanca(oc.accountId)) return
           if (oculto(oc.accountId, s.toAccountId)) return
         }
         const { date, amount } = occEfetiva(s, origDate)
         if (date > end) return
-        const m = classify(s.transactionType, oc.accountId, s.toAccountId, amount)
+        const m = fluxoPrincipal
+          ? movimentoDoValor(valorNoFluxoPrincipal({ ...s, accountId: oc.accountId }, amount, fluxoPrincipal))
+          : classify(s.transactionType, oc.accountId, s.toAccountId, amount)
         if (!m) return
         if (date < start) { agendamentosAntes = round2(agendamentosAntes + m.entrada - m.saida); return }
         out.push({

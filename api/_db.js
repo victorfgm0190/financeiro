@@ -180,7 +180,7 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
 export const COLUNAS_OPCIONAIS = {
   lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao'],
-  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao'],
+  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal'],
 }
 const cacheColunasOpcionais = new Map()
 export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()

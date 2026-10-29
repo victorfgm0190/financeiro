@@ -7,6 +7,7 @@ import {
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
+import { escopoFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import { montarLinhasSimuladas, patchAplicarData, aplicarDatasNosAgendamentos, anotarLinhasProvisorias } from '../../lib/fluxoCaixaDatas'
 import {
   HORIZONTES, rotuloModo, consultasDoPerfil, resolverConsultaAtiva, listaComVirtual, idPadrao,
@@ -239,6 +240,12 @@ export default function CashFlowPanel({ setActivePage }) {
   const fim = useMemo(() => somarDias(hoje, horizonte), [hoje, horizonte])
   const contas = useMemo(() => contasDaConsulta(consulta, accounts), [consulta, accounts])
   const accountIds = useMemo(() => new Set(contas.map(a => a.id)), [contas])
+  // Consulta "Contas Principais": agendamentos seguem o "Considerar no Fluxo de Caixa principal?".
+  const modoConsulta = consulta?.modo
+  const fluxoPrincipal = useMemo(
+    () => (modoConsulta === 'principais' ? escopoFluxoPrincipal(accounts, accountIds) : null),
+    [modoConsulta, accounts, accountIds],
+  )
   const saldoInicial = useMemo(() => round2(contas.reduce((s, a) => s + (a.balance || 0), 0)), [contas])
   const accById = useMemo(() => new Map(accounts.map(a => [a.id, a])), [accounts])
   const accName = (id) => { const a = accById.get(id); return a ? (a.apelido || a.name) : '—' }
@@ -264,7 +271,7 @@ export default function CashFlowPanel({ setActivePage }) {
     const comum = {
       accountIds, currentBalance: saldoInicial, reserveFunctions, getNextOccurrences,
       includeSchedules: true, hideReserva: ocultarReserva, hidePatrimonio: consulta.ocultar_patrimonio,
-      reservaSet, patrimonioSet,
+      reservaSet, patrimonioSet, fluxoPrincipal,
     }
     const agds = consulta.incluir_agendamentos ? schedulesFluxo : []
     // includeSchedules fica sempre true (ele também liga os envelopes); "sem agendamentos" é a
@@ -285,7 +292,7 @@ export default function CashFlowPanel({ setActivePage }) {
       atraso: anotarLinhasProvisorias(a, dpPorChave, scheduleById, occEfetiva),
     }
   }, [accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
-    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA])
+    schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA, fluxoPrincipal])
 
   const { atrasoTotal, atrasoAtivas, base } = useMemo(() => {
     const { total, ativas } = totalEmAtraso(atraso, excluidas)

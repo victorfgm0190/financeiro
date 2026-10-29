@@ -30,6 +30,7 @@ import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
 import { baixaNoPeriodo, mensagemConflitoPulo } from '../../lib/conflitoPeriodo'
+import { perguntaFluxoPrincipal, considerarFluxoParaGravar } from '../../lib/fluxoPrincipal'
 import InputMoeda from '../shared/InputMoeda'
 
 const FREQUENCIES = [
@@ -327,6 +328,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     remindDaysBefore: initial?.remindDaysBefore ?? 3,
     autoRegister: initial?.autoRegister ?? true,
     sincronizarAgenda: initial?.sincronizarAgenda !== false,
+    // "Considerar no Fluxo de Caixa principal?" — null = padrão da regra de hoje (pela conta FC).
+    considerarFluxoPrincipal: typeof initial?.considerarFluxoPrincipal === 'boolean' ? initial.considerarFluxoPrincipal : null,
     grupoGerencial: (occInicial ? occInicial.grupoGerencial : initial?.grupoGerencial) || null,
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
@@ -356,6 +359,10 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     : { categoriaCnpjId: null, categoriaCpfId: null }
 
   const selectedAccount = accounts.find(a => a.id === form.accountId)
+  // Pergunta do fluxo principal (só despesa/receita em conta não FC, ou transferência FC ↔ não FC;
+  // nunca cartão). Vale para a série: o realizado segue a regra da conta.
+  const perguntaFluxo = perguntaFluxoPrincipal(form, accounts)
+  const considerarFluxo = form.considerarFluxoPrincipal ?? perguntaFluxo?.padrao ?? false
 
   // Função de reserva para DESPESA em cartão de crédito com grupo gerencial NUMERADO (2..N —
   // CA, Phlo, Impr etc.; não G, não reserva(1), não D). Pré-define de qual bucket sairá o
@@ -686,6 +693,8 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
       ...categoriasPerfisDe(form),
+      // Só vale onde a pergunta aparece; noutro caso (conta FC, cartão…) volta a null.
+      considerarFluxoPrincipal: considerarFluxoParaGravar(form, accounts),
       // A âncora só muda se o campo foi editado. Ele EXIBE a data efetiva (com a exceção), e
       // salvar isso de volta re-ancoraria a série a cada save de qualquer outro campo.
       nextOccurrence: ancoraTocada ? form.nextOccurrence : ancoraSalva,
@@ -938,6 +947,29 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
               onChangeCnpj={id => set('categoriaCnpjId', id || '')}
               onChangeCpf={id => set('categoriaCpfId', id || '')}
             />
+          </div>
+        )}
+
+        {/* Fluxo de Caixa principal (só quando a conta não decide sozinha) */}
+        {perguntaFluxo && (
+          <div className="sm:col-span-2 flex items-start justify-between gap-3 rounded-lg bg-surface-2/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm text-texto-2">Considerar no Fluxo de Caixa principal?</p>
+              {perguntaFluxo.dica && <p className="text-[11px] text-texto-3 mt-0.5">{perguntaFluxo.dica}</p>}
+            </div>
+            <div className="flex shrink-0 rounded-lg border border-borda-campo overflow-hidden text-xs" role="group" aria-label="Considerar no Fluxo de Caixa principal">
+              {[[true, 'Sim'], [false, 'Não']].map(([v, rotulo]) => (
+                <button
+                  key={rotulo}
+                  type="button"
+                  aria-pressed={considerarFluxo === v}
+                  onClick={() => set('considerarFluxoPrincipal', v)}
+                  className={`px-3 py-1.5 transition-colors ${considerarFluxo === v ? 'bg-primary text-white' : 'text-texto-2 hover:bg-surface-hover'}`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

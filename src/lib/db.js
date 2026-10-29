@@ -680,6 +680,8 @@ export const scheduleToRow = (s) => ({
   contrato_papel: s.contratoPapel || null,
   valor_status: s.valorStatus || 'confirmado',
   composicao: s.composicao || null,
+  // "Considerar no Fluxo de Caixa principal?" (lib/fluxoPrincipal): null = pela conta FC.
+  considerar_fluxo_principal: typeof s.considerarFluxoPrincipal === 'boolean' ? s.considerarFluxoPrincipal : null,
 })
 
 export const rowToSchedule = (r) => ({
@@ -726,6 +728,7 @@ export const rowToSchedule = (r) => ({
   contratoPapel: r.contrato_papel || null,
   valorStatus: r.valor_status || 'confirmado',
   composicao: r.composicao || null,
+  considerarFluxoPrincipal: typeof r.considerar_fluxo_principal === 'boolean' ? r.considerar_fluxo_principal : null,
   // Parcela de financiamento: desdobramento principal/juros e o elo com financing_installments.
   // Deliberadamente FORA de scheduleToRow (mesma regra do bemId em rowToTransaction): quem
   // escreve estas colunas é api/financiamento/*, e incluí-las no mapper de escrita faria cada

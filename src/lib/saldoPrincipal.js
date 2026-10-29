@@ -4,6 +4,7 @@
 // O wrapper do AppContext só repassa os dados; a regra mora toda aqui. Ver docs/saldo-principal.md.
 import { occEfetiva } from './fluxoCaixa.js'
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
+import { escopoFluxoPrincipal, agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
 
 const rb = v => Math.round(v * 100) / 100
 
@@ -32,6 +33,9 @@ export function calcularSaldoPrincipalBreakdown({
   // aditivo (transferência entre pools se anula), então Tudo = Σ perfis quando toda conta FC tem perfil.
   const pool = accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit' && (!profileId || a.profileId === profileId))
   const poolIds = new Set(pool.map(a => a.id))
+  // Alcance do "Considerar no Fluxo de Caixa principal?" do agendamento (considerarFluxoPrincipal),
+  // no mesmo perfil do pool. Ver src/lib/fluxoPrincipal.js (29/10/2026, pedido explícito).
+  const fluxo = escopoFluxoPrincipal(accounts, poolIds, profileId)
 
   // Contas Ger. (subcontas do grupo G) — para separar transferências gerenciais.
   const grupoG = gerencialGroups?.find(g => g.number === 1)
@@ -98,9 +102,7 @@ export function calcularSaldoPrincipalBreakdown({
     const items = []
     let total = 0
     for (const s of schedules) {
-      const fromAcc = poolIds.has(s.accountId)
-      const toAcc = poolIds.has(s.toAccountId)
-      if (!fromAcc && !toAcc) continue
+      if (!agendamentoNoFluxoPrincipal(s, fluxo)) continue
       // Pertence ao ciclo pela data EFETIVA (override de data da ocorrência), não pela data-base:
       // a ocorrência de 28/09 movida para 16/10 conta no ciclo que contém 16/10 (2026-10-16,
       // pedido explícito do usuário). Mesma regra do getAccountSaldos e do Fluxo de Caixa.
@@ -118,10 +120,7 @@ export function calcularSaldoPrincipalBreakdown({
       const doAgendamento = []
       let bruto = 0
       for (const { date: dt, amount: val } of occs) {
-        let v = 0
-        if (s.transactionType === 'income' && fromAcc) v = val
-        else if (s.transactionType === 'expense' && fromAcc) v = -val
-        else if (s.transactionType === 'transfer') v = (toAcc ? val : 0) - (fromAcc ? val : 0)
+        const v = valorNoFluxoPrincipal(s, val, fluxo)
         if (v === 0) continue
         bruto += v
         doAgendamento.push({ description: s.description || '(agendamento)', amount: rb(v), date: dt })

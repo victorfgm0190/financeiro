@@ -45,10 +45,24 @@ Final Ciclo, Projetado, Atual Cal. e Final Cal. fecham: Tudo = Victor + Lumen.
 | Saldo base | Σ `initialBalance` do pool + lançamentos até o fim do ciclo − transferências gerenciais |
 | Transf. gerenciais | Líquido das transferências com `grupoGerencial` ou com ponta em conta do grupo G / `Ger. …` |
 | Saldo Atual Ciclo | Saldo base + Transf. gerenciais |
-| Final Ciclo | Saldo Atual Ciclo + ocorrências não registradas de agendamentos com ponta no pool cuja data EFETIVA (override de data, `occEfetiva`) cai do início ao fim do ciclo; valor efetivo |
+| Final Ciclo | Saldo Atual Ciclo + ocorrências não registradas de agendamentos que entram no fluxo principal (ponta no pool, ou a marca "Considerar no Fluxo de Caixa principal?" — ver abaixo) cuja data EFETIVA (override de data, `occEfetiva`) cai do início ao fim do ciclo; valor efetivo |
 | Projetado | Final Ciclo − restante dos envelopes de contas do pool |
 | Atual Cal. | Saldo Atual Ciclo + lançamentos depois do ciclo até o fim do mês-calendário (só no modo custom) |
 | Final Cal. | Atual Cal. + agendamentos do início do ciclo até o fim do mês-calendário (só no modo custom) |
 
 Perfil sem conta FC: o pool fica vazio e todos os valores dão 0. O card e o modal mostram
 "Nenhuma conta de fluxo de caixa principal neste perfil" em vez de R$ 0,00 sem explicação.
+
+## "Considerar no Fluxo de Caixa principal?" (29/10/2026)
+
+Alteração autorizada pelo usuário na função protegida: só a porta de entrada dos agendamentos
+(`agendamentoNoFluxoPrincipal`) e o valor de cada ocorrência (`valorNoFluxoPrincipal`), ambos em
+`src/lib/fluxoPrincipal.js` — a mesma regra do Fluxo de Caixa (visão Contas Principais) e da
+Projeção do Painel. Campo `agendamentos.considerar_fluxo_principal`:
+
+- `null` (todos os agendamentos antigos): regra de antes, pela conta FC. Comparado com os dados do
+  neondb em 29/10 (Tudo, Victor, Lumen; dois ciclos): saída idêntica campo a campo.
+- `true` em despesa/receita de conta **não FC, não cartão, do perfil**: entra (saída/entrada).
+- `false` em transferência entre conta FC e conta não FC (não cartão): não entra.
+- Em qualquer outro caso a marca é ignorada. Lançamentos realizados e saldo atual não mudam.
+

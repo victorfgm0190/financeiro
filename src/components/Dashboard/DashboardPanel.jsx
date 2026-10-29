@@ -17,6 +17,7 @@ import { useThemeColors } from '../../hooks/useTheme'
 import { estiloTooltip } from '../../lib/chartPalette'
 import { computeFaturaRef } from '../../lib/fatura'
 import { occEfetiva } from '../../lib/fluxoCaixa'
+import { escopoFluxoPrincipal, pendentesNoFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import { hojeStr } from '../../lib/saldos'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import Modal from '../shared/Modal'
@@ -206,43 +207,19 @@ export default function DashboardPanel({ setActivePage, saldosPrincipais, onShow
       accounts.filter(a => a.fluxoCaixaPrincipal && a.type !== 'credit').map(a => a.id)
     )
     if (principalIds.size === 0) return null
+    // "Considerar no Fluxo de Caixa principal?" do agendamento (lib/fluxoPrincipal) — contas do perfil.
+    const fluxo = escopoFluxoPrincipal(accounts, principalIds)
 
     const todayStr = hojeStr()
     let pendingIncome = 0
     let pendingExpense = 0
     let pendingCount = 0
 
-    for (const schedule of schedules) {
-      const fromPrincipal = principalIds.has(schedule.accountId)
-      const toPrincipal = principalIds.has(schedule.toAccountId)
-      if (!fromPrincipal && !toPrincipal) continue
-
-      // Data e valor EFETIVOS da ocorrência (override): a janela do período usa a data em que
-      // ela realmente cai, não a data-base.
-      const nexts = getNextOccurrences(schedule, 35)
-        .map(base => occEfetiva(schedule, base))
-        .filter(ef => ef.date > todayStr && ef.date <= periodStr.end)
-      if (nexts.length === 0) continue
-
-      for (const ef of nexts) {
-        const occAmount = Number(ef.amount) || 0
-        if (schedule.transactionType === 'income' && fromPrincipal) {
-          pendingIncome += occAmount
-          pendingCount++
-        } else if (schedule.transactionType === 'expense' && fromPrincipal) {
-          pendingExpense += occAmount
-          pendingCount++
-        } else if (schedule.transactionType === 'transfer') {
-          if (fromPrincipal && !toPrincipal) {
-            pendingExpense += occAmount
-            pendingCount++
-          } else if (!fromPrincipal && toPrincipal) {
-            pendingIncome += occAmount
-            pendingCount++
-          }
-        }
-      }
-    }
+    // Data e valor EFETIVOS da ocorrência (override): a janela usa a data em que ela realmente cai.
+    const pend = pendentesNoFluxoPrincipal(schedules, fluxo, getNextOccurrences, { depoisDe: todayStr, ate: periodStr.end })
+    pendingIncome += pend.entradas
+    pendingExpense += pend.saidas
+    pendingCount += pend.n
 
     // Etapa A prevista do Grupo G — a mesma que getSaldoPrincipal soma no Projetado.
     for (const p of etapaAPrevistas || []) {

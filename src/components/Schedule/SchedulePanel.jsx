@@ -1,4 +1,5 @@
 import { contaCentralParaId } from '../../lib/contaCentral'
+import { seloFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
@@ -1199,6 +1200,11 @@ function ScheduleRow({
               </span>
             )}
             {schedule.contratoId && <SeloContrato schedule={schedule} />}
+            {seloFluxoPrincipal(schedule) && (
+              <span className="text-xs bg-surface-hover/60 text-texto-3 px-1 py-0.5 rounded whitespace-nowrap" title="Considerar no Fluxo de Caixa principal (escolha deste agendamento)">
+                {seloFluxoPrincipal(schedule)}
+              </span>
+            )}
             {canConfirm && nextDate && podeEditar && !futura && (
               <button
                 type="button"

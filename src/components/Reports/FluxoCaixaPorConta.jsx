@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
+import { escopoFluxoPrincipal } from '../../lib/fluxoPrincipal'
 import {
   montarLinhasSimuladas, opcoesAplicarData, patchAplicarData,
   aplicarDatasNosAgendamentos, anotarLinhasProvisorias,
@@ -202,6 +203,11 @@ export default function FluxoCaixaPorConta() {
   }, [visao, selectedAccountIds, groupId, accounts])
 
   const accountIds = useMemo(() => new Set(selectedAccounts.map(a => a.id)), [selectedAccounts])
+  // Visão "principais": agendamentos seguem o "Considerar no Fluxo de Caixa principal?".
+  const fluxoPrincipal = useMemo(
+    () => (visao === 'principais' ? escopoFluxoPrincipal(accounts, accountIds) : null),
+    [visao, accounts, accountIds],
+  )
   const currentBalance = useMemo(() => selectedAccounts.reduce((s, a) => s + (a.balance || 0), 0), [selectedAccounts])
 
   // Datas provisórias persistidas entram como exceção de data em CÓPIAS dos agendamentos, só
@@ -220,14 +226,14 @@ export default function FluxoCaixaPorConta() {
       transactions, schedules: schedulesRelatorio, envelopes, reserveFunctions, provisorios,
       etapaAPrevistas: projetarEtapaA(schedulesRelatorio),
       getNextOccurrences, includeSchedules,
-      hideReserva, hidePatrimonio, reservaSet, patrimonioSet,
+      hideReserva, hidePatrimonio, reservaSet, patrimonioSet, fluxoPrincipal,
     })
     return {
       rows: anotarLinhasProvisorias(r.rows, dpPorChave, scheduleById, occEfetiva),
       saldoAnteriorRealizado: r.saldoAnteriorRealizado,
       saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
     }
-  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios, projetarEtapaA])
+  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios, projetarEtapaA, fluxoPrincipal])
 
   // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
   // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move
