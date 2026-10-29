@@ -5,6 +5,7 @@ import { fmt } from '../shared/utils'
 import CategorySelect from '../shared/CategorySelect'
 import DateInput from '../shared/DateInput'
 import InputMoeda from '../shared/InputMoeda'
+import { lerFinais, finaisDoCartao, chaveSubconta, subcontaDoCartao, ehSubcontaGerencialApp } from '../../lib/cartaoFinais'
 
 const TYPES = [
   { value: 'checking', label: 'Conta Corrente' },
@@ -119,7 +120,15 @@ export default function AccountForm({ initial, onClose }) {
     investmentCategoryId: initial?.investmentCategoryId || null,
     rendimentoCategoriaId: initial?.rendimentoCategoriaId || null,
     rendimentoModo: initial?.rendimentoModo || 'conta',
+    cartaoFinais: finaisDoCartao(initial).join(', '),
   })
+  const [finaisErro, setFinaisErro] = useState('')
+  // Subconta gerencial: o motor a encontra pelo NOME ("Ger. <apelido do cartão>") — nome travado.
+  const nomeTravado = !!initial && ehSubcontaGerencialApp(initial)
+  // Cartão com subconta "Ger. <apelido>": trocar o apelido (ou o nome, sem apelido) quebra o
+  // vínculo — aviso e confirmação antes de salvar.
+  const subconta = initial ? subcontaDoCartao(accounts, initial) : null
+  const [confirmaVinculo, setConfirmaVinculo] = useState(false)
   const [vinculoError, setVinculoError] = useState(false)
   const [investError, setInvestError] = useState(false)
 
@@ -162,9 +171,20 @@ export default function AccountForm({ initial, onClose }) {
     set('contaCorrentePrincipal', ligar)
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = (e, vinculoConfirmado = false) => {
+    e?.preventDefault?.()
     if (!form.name.trim() || !podeSalvar) return
+
+    const finais = lerFinais(form.cartaoFinais)
+    if (isCredit && finais.invalidos.length) {
+      setFinaisErro(`Use 4 dígitos por final (inválido: ${finais.invalidos.join(', ')}).`)
+      return
+    }
+    if (subconta && !vinculoConfirmado
+      && chaveSubconta({ apelido: form.apelido.slice(0, 8), name: form.name }) !== chaveSubconta(initial)) {
+      setConfirmaVinculo(true)
+      return
+    }
 
     // Vínculo Patrimônio exige categoria.
     const vinculoAtivo = !isCredit && !isPatrimonial ? form.vinculoTipo : 'none'
@@ -194,7 +214,7 @@ export default function AccountForm({ initial, onClose }) {
 
     const rb = v => Math.round(v * 100) / 100
     const payload = {
-      name: form.name,
+      name: nomeTravado ? initial.name : form.name,
       apelido: form.apelido.slice(0, 8),
       type: form.type,
       // Flag de conta gerencial: verdadeira quando o tipo é "gerencial" (identificador explícito).
@@ -237,6 +257,7 @@ export default function AccountForm({ initial, onClose }) {
       // acompanhado dela, mas é preservado para não perder a escolha do usuário.
       rendimentoCategoriaId: form.rendimentoCategoriaId || null,
       rendimentoModo: form.rendimentoModo === 'grupo' ? 'grupo' : 'conta',
+      cartaoFinais: isCredit ? finais.finais : [],
     }
 
     if (initial) {
@@ -279,12 +300,14 @@ export default function AccountForm({ initial, onClose }) {
         <div className="col-span-2">
           <label className="label">Nome da Conta *</label>
           <input
-            className="input"
+            className="input disabled:opacity-60 disabled:cursor-not-allowed"
             value={form.name}
             onChange={e => set('name', e.target.value)}
             placeholder="Digite o nome da conta"
             required
+            disabled={nomeTravado}
           />
+          {nomeTravado && <p className="text-xs text-texto-3 mt-0.5">Nome usado pelo controle gerencial — não pode ser alterado.</p>}
         </div>
         <div>
           <label className="label flex items-center gap-1">
@@ -450,6 +473,19 @@ export default function AccountForm({ initial, onClose }) {
                 onChange={e => set('dueDay', e.target.value)}
               />
             </div>
+          </div>
+          <div>
+            <label className="label">Finais do cartão</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              value={form.cartaoFinais}
+              onChange={e => { set('cartaoFinais', e.target.value); setFinaisErro('') }}
+              placeholder="Ex.: 4541, 1234 (titular e adicionais)"
+            />
+            {finaisErro
+              ? <p className="text-xs text-perigo mt-0.5">{finaisErro}</p>
+              : <p className="text-xs text-texto-3 mt-0.5">Últimos 4 dígitos. O assistente usa para reconhecer "final 4541".</p>}
           </div>
           <div>
             <label className="label">Conta Pagadora</label>
@@ -741,7 +777,20 @@ export default function AccountForm({ initial, onClose }) {
         )}
       </div>
 
-      <div className="flex gap-3 pt-2">
+      <div className="flex flex-wrap gap-3 pt-2">
+        {podeSalvar && confirmaVinculo && (
+          <div role="alert" className="basis-full rounded-lg border border-aviso/50 bg-aviso/10 px-3 py-2 text-xs text-texto-1 space-y-2">
+            <p>
+              Este cartão tem a subconta gerencial <strong>“{subconta?.name}”</strong>, ligada a ele pelo apelido.
+              Com o apelido <strong>“{chaveSubconta({ apelido: form.apelido.slice(0, 8), name: form.name })}”</strong>, o controle gerencial
+              deixa de encontrar essa subconta e cria outra no próximo lançamento gerencial.
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary flex-1" onClick={() => setConfirmaVinculo(false)}>Voltar</button>
+              <button type="button" className="btn-primary flex-1" onClick={() => { setConfirmaVinculo(false); handleSubmit(null, true) }}>Salvar mesmo assim</button>
+            </div>
+          </div>
+        )}
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
         {podeSalvar && <button type="submit" className="btn-primary flex-1">{initial ? 'Salvar' : 'Criar Conta'}</button>}
       </div>

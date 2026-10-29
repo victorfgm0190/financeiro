@@ -19,8 +19,12 @@ fases; atualize o **Status** ao implementar.
   ativos de finalidade "Uso comum" e a Conta favorita ★ do perfil ativo (o app envia `perfilAtivo`).
   As demais (reservas, patrimônio, investimento, financiamento, outras correntes, inativas) só se o
   pedido as citou (nome, apelido ou `ia_apelidos`); senão o campo volta vazio e a prévia pergunta.
-  **Subcontas gerenciais** (tipo `gerencial`, `is_gerencial` ou nome "Ger. …", o critério da
-  Integridade) nunca são gravadas pela IA — nem como origem/destino de transferência; o backend
+  **Finais do cartão** (`contas.cartao_finais`, editável em Editar Conta): "final 4541" → o cartão
+  com esse final (confiança alta); vários → a prévia pergunta entre eles; nenhum → pergunta e oferece
+  "Salvar 4541 como final deste cartão".
+  **Subcontas gerenciais** — reconhecidas pela marcação (`type = 'gerencial'` / `is_gerencial`, que o
+  motor grava ao criar e a migração `2026-10-29_subcontas_gerenciais` marcou pelo vínculo); o nome
+  "Ger. …" é só reforço, então uma subconta renomeada continua bloqueada — nunca são gravadas pela IA — nem como origem/destino de transferência; o backend
   responde `abrir_tela` com a explicação e o botão "Abrir a conta". Consultar o saldo delas pode.
   Destino de transferência: qualquer conta ativa citada, exceto gerencial (reserva pode).
 - **Duplicidade na criação**: prévia de `registrar_lancamento`, efetivação de pré-lançamento e o

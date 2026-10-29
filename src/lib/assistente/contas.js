@@ -12,6 +12,7 @@
 //                 aprendido em ia_apelidos); senão o campo volta vazio e a prévia pergunta.
 // Reservas NÃO são gerenciais: transferir para uma reserva citada é permitido.
 import { normalizarTermo } from './texto.js'
+import { finalCitado, cartoesComFinal } from '../cartaoFinais.js'
 
 const limpo = (s) => normalizarTermo(s).replace(/[^a-z0-9]+/g, ' ').trim()
 
@@ -71,8 +72,11 @@ export function favoritaDoPerfil(ctx) {
 export const temSinalDeCartao = (texto) => /\b(cartao|cartoes|credito|final \d{4})\b/.test(limpo(texto))
 
 // ESCOLHA DA CONTA de origem (lançamento/agendamento) → { id, gerencial, confianca }:
-//   • citou a conta (nome, apelido, apelido aprendido — ex.: "final 4541" aprendido numa correção)
-//     → ela, confiança 1 (qualquer conta permitida, exceto gerencial);
+//   • "final 4541" no texto → o cartão com esse final (cartao_finais), confiança 1; vários →
+//     vazio + `opcoes` (a prévia pergunta entre eles); nenhum → vazio + `finalSemCartao` (a prévia
+//     pergunta e oferece salvar o final no cartão escolhido);
+//   • citou a conta (nome, apelido, apelido aprendido) → ela, confiança 1 (qualquer conta
+//     permitida, exceto gerencial);
 //   • compra no cartão (sinal no texto ou foto) e o modelo escolheu um cartão sugerível → ele;
 //   • senão → Conta favorita do perfil ativo com confiança baixa ("● confira"); sem perfil ativo
 //     (Tudo) ou sem favorita → vazio, e a prévia pergunta entre as sugeríveis.
@@ -80,6 +84,13 @@ export const CONFIANCA_FAVORITA = 0.4
 export function escolherConta(ctx, id, confiancaModelo = 0) {
   const r = contaParaGravar(ctx, id)
   if (r.gerencial) return { id: null, gerencial: true, confianca: 0 }
+  const final = finalCitado(ctx.textoPedido)
+  if (final) {
+    const cartoes = cartoesComFinal([...ctx.idx.contas.values()], final).filter(c => c.papel !== 'gerencial')
+    if (cartoes.length === 1) return { id: cartoes[0].id, gerencial: false, confianca: 1 }
+    if (cartoes.length > 1) return { id: null, gerencial: false, confianca: 0, opcoes: cartoes.map(c => c.id) }
+    return { id: null, gerencial: false, confianca: 0, finalSemCartao: final }
+  }
   const c = r.id ? ctx.idx.contas.get(r.id) : null
   if (c && contaCitada(c, ctx.textoPedido, ctx.apelidos)) return { id: c.id, gerencial: false, confianca: 1 }
   if (c && c.type === 'credit' && (ctx.temImagem || temSinalDeCartao(ctx.textoPedido))) return { id: c.id, gerencial: false, confianca: confiancaModelo }

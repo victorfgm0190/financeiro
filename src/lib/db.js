@@ -431,6 +431,7 @@ export const accountToRow = (a) => ({
   acquisition_value: a.acquisitionValue != null ? Number(a.acquisitionValue) : null,
   acquisition_date: a.acquisitionDate || null,
   value_history: a.valueHistory || [],
+  cartao_finais: Array.isArray(a.cartaoFinais) ? a.cartaoFinais : [],
   is_reserva: !!a.isReserva,
   reserva_type: a.reservaType || null,
   reserva_category_id: a.reservaCategoryId || null,
@@ -475,6 +476,7 @@ export const rowToAccount = (r) => ({
   acquisitionValue: r.acquisition_value != null ? Number(r.acquisition_value) : null,
   acquisitionDate: r.acquisition_date || null,
   valueHistory: r.value_history || [],
+  cartaoFinais: Array.isArray(r.cartao_finais) ? r.cartao_finais.map(String) : [],
   // Módulo de bem imobilizado (colunas criadas por ensureBemSchema em api/_bem.js). Somente
   // leitura: quem grava é POST /api/bem/criar, e lá valor_nota_fiscal é imutável (COALESCE).
   // De propósito FORA de accountToRow — upsertRows deriva as colunas das chaves da row e faz

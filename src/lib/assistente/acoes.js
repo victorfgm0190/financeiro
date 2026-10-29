@@ -128,6 +128,8 @@ function validarLancamento(p, ctx, hoje) {
     centro_custo_id: centro, favorecido_id: favorecido, favorecido_novo: favorecidoNovo,
     descricao: txt(p.descricao, 120), confianca, termos,
     ...(contaGerencial ? { conta_gerencial: true } : {}),
+    ...(origem.opcoes ? { contas_opcoes: origem.opcoes } : {}),
+    ...(origem.finalSemCartao ? { final_sem_cartao: origem.finalSemCartao } : {}),
   }
 }
 

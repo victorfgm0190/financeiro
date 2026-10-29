@@ -5,16 +5,21 @@ import { papelDaContaApp } from '../../lib/assistente/contas'
 // Prévia do Assistente sem conta (nenhuma citada e sem favorita no perfil ativo, ou perfil "Tudo",
 // ou cartão ambíguo): "Em qual conta?" com só as SUGERÍVEIS (cartões de uso comum + favoritas) e
 // "Outra conta…", que abre todas as contas ativas — nunca as subcontas gerenciais.
-export default function EscolherConta({ accounts, activeProfileId, onEscolher }) {
+// `opcoes` (ids): "final 4541" de mais de um cartão → pergunta só entre eles.
+// `finalSemCartao`: nenhum cartão tem esse final → avisa (a prévia oferece salvar depois).
+export default function EscolherConta({ accounts, activeProfileId, onEscolher, opcoes = null, finalSemCartao = null }) {
   const [outra, setOutra] = useState(false)
   const nome = (a) => a.apelido || a.name
-  const sugeriveis = accounts.filter(a => papelDaContaApp(a, activeProfileId) === 'sugerivel')
+  const sugeriveis = (opcoes?.length ? accounts.filter(a => opcoes.includes(a.id)) : accounts.filter(a => papelDaContaApp(a, activeProfileId) === 'sugerivel'))
     .sort((a, b) => (a.type === 'credit') - (b.type === 'credit'))
   const todas = accounts.filter(a => a.active !== false && papelDaContaApp(a) !== 'gerencial')
     .sort((a, b) => nome(a).localeCompare(nome(b), 'pt-BR'))
   return (
     <div className="rounded-lg border border-aviso/50 bg-aviso/10 px-3 py-2.5 space-y-2">
-      <p className="text-sm font-medium text-texto-1">Em qual conta?</p>
+      <p className="text-sm font-medium text-texto-1">
+        {opcoes?.length ? 'Mais de um cartão tem esse final. Qual foi?' : 'Em qual conta?'}
+      </p>
+      {finalSemCartao && <p className="text-xs text-texto-2">Nenhum cartão tem o final {finalSemCartao} cadastrado.</p>}
       <div className="flex flex-wrap gap-2">
         {sugeriveis.map(a => (
           <button key={a.id} type="button" onClick={() => onEscolher(a.id)}

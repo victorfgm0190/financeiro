@@ -5,6 +5,7 @@ import TransactionForm from '../Transactions/TransactionForm'
 import AvisoParecidos from '../Transactions/AvisoParecidos'
 import EscolherConta from './EscolherConta'
 import { parecidosNaCriacao } from '../../lib/casamentoFatura'
+import { finaisDoCartao } from '../../lib/cartaoFinais'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import {
   initialDaSugestao, camposParaConferir, apelidosAprendidos, ROTULO_CAMPO, tipoPreLancamento,
@@ -23,7 +24,7 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 //     (o que estava sendo efetivado sai da lista); "É outro" libera o salvar. O formulário repete
 //     a checagem ao salvar (valores editados), ignorando o que já foi aceito aqui.
 export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
-  const { transactions, accounts, activeProfileId } = useApp()
+  const { transactions, accounts, activeProfileId, updateAccount, pode } = useApp()
   const agendamento = ferramenta === 'criar_agendamento'
   const destaques = camposParaConferir(ferramenta, sugestao)
   // Sem conta na sugestão → "Em qual conta?" (EscolherConta) antes do formulário.
@@ -75,6 +76,15 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
     onClose()
   }
 
+  // "final 4541" sem cartão cadastrado e o usuário escolheu um cartão → oferece salvar o final nele.
+  const cartaoEscolhido = contaEscolhida ? accounts.find(a => a.id === contaEscolhida && a.type === 'credit') : null
+  const finalNovo = sugestao.final_sem_cartao && cartaoEscolhido && !finaisDoCartao(cartaoEscolhido).includes(sugestao.final_sem_cartao)
+    && pode('contas', 'editar') ? sugestao.final_sem_cartao : null
+  const salvarFinal = () => {
+    updateAccount(cartaoEscolhido.id, { cartaoFinais: [...finaisDoCartao(cartaoEscolhido), finalNovo] })
+    onToast?.(`Final ${finalNovo} salvo no cartão ${cartaoEscolhido.apelido || cartaoEscolhido.name}.`)
+  }
+
   if (existente) return <TransactionForm initial={existente} onClose={onClose} onToast={onToast} />
 
   return (
@@ -101,8 +111,17 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
           <Trash2 size={13} /> Descartar
         </button>
       </div>
+      {finalNovo && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-borda-forte bg-surface-2 px-3 py-2 text-xs text-texto-2">
+          <span className="flex-1 min-w-0">O final {finalNovo} não está cadastrado em {cartaoEscolhido.apelido || cartaoEscolhido.name}.</span>
+          <button type="button" className="btn-secondary text-xs min-h-[36px]" onClick={salvarFinal}>
+            Salvar {finalNovo} como final deste cartão
+          </button>
+        </div>
+      )}
       {!initial.accountId
-        ? <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaEscolhida} />
+        ? <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaEscolhida}
+            opcoes={sugestao.contas_opcoes || null} finalSemCartao={sugestao.final_sem_cartao || null} />
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
         : <TransactionForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}

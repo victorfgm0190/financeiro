@@ -4,7 +4,7 @@ import { validarAcao } from './acoes'
 
 // Contas no formato do banco (neondb, 29/10): perfis Victor (PV) e Lumen (PL).
 const ROWS = [
-  { id: 'itaupers', name: 'Cartao Itau Personalite', apelido: 'Itaupers', type: 'credit', vinculo_tipo: 'none', profile_id: 'PV', active: true },
+  { id: 'itaupers', name: 'Cartao Itau Personalite', apelido: 'Itaupers', type: 'credit', vinculo_tipo: 'none', profile_id: 'PV', active: true, cartao_finais: ['4541', '7777'] },
   { id: 'nubank', name: 'Nubank', apelido: 'NUBANK', type: 'credit', vinculo_tipo: 'none', profile_id: 'PV', active: true },
   { id: 'swile', name: 'SWILE VR GI', type: 'credit', vinculo_tipo: 'none', profile_id: 'PV', active: false },
   { id: 'itau', name: 'Itau Principal', apelido: 'Itau', type: 'checking', is_main: true, profile_id: 'PV', active: true },
@@ -17,6 +17,9 @@ const ROWS = [
   { id: 'ger_itaupers', name: 'Ger. Itaupers', apelido: 'GItauper', type: 'gerencial', is_gerencial: true, profile_id: 'PV', active: true },
   { id: 'ger_legado', name: 'Ger. NUGI', type: 'checking', profile_id: 'PV', active: true },
   { id: 'dinger', name: 'Dinheiro Ger', apelido: 'dinger', type: 'cash', profile_id: 'PV', active: true },
+  // Subconta gerencial RENOMEADA (sem "Ger."): continua bloqueada pela marcação.
+  { id: 'ger_renomeada', name: 'Reserva do cartão Azul', apelido: 'RESAZUL', type: 'gerencial', is_gerencial: true, profile_id: 'PV', active: true },
+  { id: 'ger_flag', name: 'Caixinha', type: 'checking', is_gerencial: true, profile_id: 'PV', active: true },
 ]
 
 const montar = (perfilAtivo, textoPedido = '', apelidos = [], temImagem = false) => {
@@ -46,6 +49,13 @@ describe('contas do Assistente — o que a IA pode sugerir', () => {
     expect(papel(ctx, 'ger_itaupers')).toBe('gerencial')
     expect(papel(ctx, 'ger_legado')).toBe('gerencial')
     expect(papel(ctx, 'dinger')).toBe('citar')
+  })
+  it('subconta gerencial RENOMEADA (sem "Ger.") continua bloqueada, mesmo citada pelo nome novo', () => {
+    const ctx = montar('PV', 'lança 30 na Reserva do cartão Azul')
+    expect(papel(ctx, 'ger_renomeada')).toBe('gerencial')
+    expect(papel(ctx, 'ger_flag')).toBe('gerencial')
+    expect(contaParaGravar(ctx, 'ger_renomeada')).toEqual({ id: null, gerencial: true })
+    expect(gerencialCitada(ctx, 'lança 30 na Reserva do cartão Azul')?.id).toBe('ger_renomeada')
   })
 })
 
@@ -118,13 +128,17 @@ describe('ESCOLHA DA CONTA (item 2)', () => {
   })
   it('compra no cartão (SMS "final 4541", "no cartão", foto) → o cartão escolhido', () => {
     const sms = 'Compra aprovada no seu PERSON BLACK PONTOS final 4541 - SKINA DA CARNE LTDA valor RS 350,08 em 25/10'
-    expect(escolherConta(montar('PV', sms), 'itaupers', 0.8)).toMatchObject({ id: 'itaupers', confianca: 0.8 })
+    expect(escolherConta(montar('PV', sms), 'nubank', 0.8)).toMatchObject({ id: 'itaupers', confianca: 1 })
     expect(escolherConta(montar('PV', 'gastei 30 no cartão'), 'nubank', 0.6)).toMatchObject({ id: 'nubank' })
     expect(escolherConta(montar('PV', '', [], true), 'itaupers', 0.7)).toMatchObject({ id: 'itaupers' })
   })
-  it('"final 4541" aprendido (apelido de conta) conta como citação', () => {
-    const ctx = montar('PV', 'compra final 4541 de 20 reais', [{ tipo: 'conta', termo: 'final 4541', ref_id: 'itaupers' }])
-    expect(escolherConta(ctx, 'itaupers', 0.3)).toMatchObject({ id: 'itaupers', confianca: 1 })
+  it('final sem cartão cadastrado → vazio + finalSemCartao (a prévia pergunta e oferece salvar)', () => {
+    expect(escolherConta(montar('PV', 'compra final 9999 de 20 reais'), 'nubank', 0.6)).toMatchObject({ id: null, finalSemCartao: '9999' })
+  })
+  it('final em mais de um cartão → vazio + opcoes só com eles', () => {
+    const ctx = montar('PV', 'compra final 7777')
+    ctx.idx.contas.set('nubank', { ...ctx.idx.contas.get('nubank'), cartao_finais: ['7777'] })
+    expect(escolherConta(ctx, 'itaupers', 0.9)).toMatchObject({ id: null, opcoes: ['itaupers', 'nubank'] })
   })
   it('cartão ambíguo (modelo sem conta) → vazio só no perfil Tudo; com perfil, a favorita marcada "confira"', () => {
     expect(escolherConta(montar(null, 'gastei 30 no cartão'), null, 0)).toMatchObject({ id: null })

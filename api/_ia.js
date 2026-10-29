@@ -79,7 +79,7 @@ export async function montarContexto(user, q = query, { perfilAtivo = null } = {
 
   const contasRows = await q(
     `SELECT id, name, apelido, type, bank, profile_id, COALESCE(active, true) AS active, is_main,
-            is_gerencial, vinculo_tipo, is_reserva, is_investimento, conta_aplicacao
+            is_gerencial, vinculo_tipo, is_reserva, is_investimento, conta_aplicacao, cartao_finais
        FROM contas ORDER BY "order" NULLS LAST, name`)
   const visiveis = contasRows.filter(c => !ctxPerfis || ctxPerfis.contas.has(c.id))
   const perfilValido = perfilAtivo && visiveis.some(c => c.profile_id === perfilAtivo) && (!perfis || perfis.includes(perfilAtivo))
@@ -136,9 +136,10 @@ const USO_CONTA = { sugerivel: 'PODE SUGERIR', citar: 'só se citada', gerencial
 // Bloco de cadastros (texto estável → prompt caching). Sem data nem nada que mude a cada pedido.
 export function textoCadastros(ctx) {
   const linhas = []
-  linhas.push('## CONTAS (id | nome | apelido | tipo | banco | uso)')
+  linhas.push('## CONTAS (id | nome | apelido | tipo | banco | uso | finais do cartão)')
   for (const c of ctx.contas) {
-    linhas.push(`${c.id} | ${c.name} | ${c.apelido || '-'} | ${TIPO_CONTA[c.type] || c.type} | ${c.bank || '-'} | ${USO_CONTA[c.papel]}${c.active === false ? ' (inativa)' : ''}`)
+    const finais = Array.isArray(c.cartao_finais) && c.cartao_finais.length ? c.cartao_finais.join(', ') : '-'
+    linhas.push(`${c.id} | ${c.name} | ${c.apelido || '-'} | ${TIPO_CONTA[c.type] || c.type} | ${c.bank || '-'} | ${USO_CONTA[c.papel]}${c.active === false ? ' (inativa)' : ''} | ${finais}`)
   }
   linhas.push('', '## CATEGORIAS (id | caminho | tipo: expense=despesa, income=receita, both=ambos)')
   for (const c of ctx.categorias) linhas.push(`${c.id} | ${c.caminho} | ${c.tipo}`)

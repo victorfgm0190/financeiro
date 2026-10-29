@@ -329,6 +329,10 @@ ALTER TABLE contas ADD COLUMN IF NOT EXISTS reserva_category_id TEXT;
 
 -- Conta de Aplicação Financeira (netização de transferências + aportes categorizados em relatórios)
 ALTER TABLE contas ADD COLUMN IF NOT EXISTS conta_aplicacao BOOLEAN DEFAULT FALSE;
+-- Subconta gerencial: type 'gerencial' + is_gerencial = true (migração 2026-10-29_subcontas_gerenciais;
+-- o motor já cria assim). Finais do cartão (4 dígitos, titular e adicionais) — Editar Conta / Assistente IA.
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS is_gerencial BOOLEAN DEFAULT FALSE;
+ALTER TABLE contas ADD COLUMN IF NOT EXISTS cartao_finais JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 -- Categoria vinculada a conta de investimento: despesas (de cartão) com essa categoria
 -- geram automaticamente uma receita/aporte na conta de investimento apontada.
