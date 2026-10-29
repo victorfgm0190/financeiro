@@ -7,7 +7,7 @@ const tx = (o) => ({ accountId: CARD, accountType: 'credit', type: 'expense', re
 const linha = (o) => ({ type: 'expense', faturaMonthYear: '2026-11', selected: true, ...o })
 
 // Caso real (Itaupers, fatura 11/2026): lançados à mão antes da importação.
-const AUTO = tx({ id: 'auto', amount: 396.63, date: '2026-10-28', description: 'Compra AUTO SA', categoryId: 'cat_tra_com', grupoGerencial: 'grp_1', origin: 'manual' })
+const AUTO = tx({ id: 'auto', amount: 396.63, date: '2026-10-28', description: 'Compra AUTO SA', payee: 'Auto Posto Sao Pedro', categoryId: 'cat_tra_com', grupoGerencial: 'grp_1', origin: 'manual' })
 const IFOOD = tx({ id: 'ifood', amount: 57.07, date: '2026-10-28', description: 'iFood', payee: 'Ifd*djm Empreendimento', grupoGerencial: 'grp_1', origin: 'manual' })
 // A etapa A que a classificação gerencial 1 já criou (transferência, fica fora dos candidatos).
 const ETAPA_A = { id: 'tx_gerA_ifood', type: 'transfer', accountId: 'acc_principal', cardId: CARD, amount: 57.07, date: '2026-10-28', origin: 'etapa_a' }
@@ -71,5 +71,85 @@ describe('casamento "Já lançado"', () => {
     const r = casarJaLancados([linha({ _id: 'L', amount: 57.07, date: '2026-10-28' })], cand, { closingDay: 13 })
     expect(r.get('L')).toMatchObject({ status: 'casada', tx: { preId: 'pre-pendente', _pre: true } })
     expect(candidatoDoPre({ id: 'x', payload: { tipo: 'transferencia', valor: 10, data: '2026-10-01', conta_id: CARD } })).toBeNull()
+  })
+})
+
+// ─── Integração: resolverLinhasRevisao (lógica atual) + aplicarJaLancados (ativação na tela) ────
+import { aplicarJaLancados, resumoJaLancados, patchJaLancado, favorecidoDaLinha, termoDescricaoFatura, favorecidoSugerido } from './casamentoFatura'
+import { linhasAImportar, idsNoBancoConferidos } from './revisaoImportacao'
+
+const importar = (rows, transactions, extra = {}) => aplicarJaLancados(
+  resolverLinhasRevisao(rows, { accountId: CARD, transactions, closingDay: 13 }),
+  { transactions, accountId: CARD, closingDay: 13, ...extra })
+
+describe('integração na tela — fatura 11/2026 do Itaupers', () => {
+  const rows = [
+    linha({ _id: 'L1', description: 'AUTO SA', amount: 396.63, date: '2026-10-27', _dateCartao: '2026-10-27' }),
+    linha({ _id: 'L2', description: 'IFD*DJM EMPREENDIMENTO', amount: 57.07, date: '2026-10-28', _dateCartao: '2026-10-28' }),
+    linha({ _id: 'L3', description: 'PADARIA CENTRAL', amount: 12.5, date: '2026-10-29', _dateCartao: '2026-10-29' }),
+  ]
+  const out = importar(rows, [AUTO, IFOOD, ETAPA_A])
+  const por = Object.fromEntries(out.map(r => [r._id, r]))
+
+  it('AUTO SA ("Já existe" contra manual não conciliado) e iFood (regra nova) aparecem como "Já lançado"', () => {
+    expect(por.L1._jaLancado).toMatchObject({ origem: 'ja_existe', tx: AUTO })
+    expect(por.L2._jaLancado).toMatchObject({ origem: 'regra_nova', tx: IFOOD })
+    expect(por.L3._jaLancado).toBeUndefined()
+    expect(resumoJaLancados(out)).toEqual({ ja: 2, novos: 1, escolher: 0 })
+  })
+  it('linha casada NÃO gera lançamento novo (logo, nem classificação gerencial nem transferência) e fica conciliada', () => {
+    expect(linhasAImportar(out).map(r => r._id)).toEqual(['L3'])
+    expect(idsNoBancoConferidos(out).sort()).toEqual(['auto', 'ifood'])
+    expect(idsNoBancoConferidos(out)).not.toContain(ETAPA_A.id)
+  })
+  it('UPDATE: valor/data da fatura e favorecido; categoria, grupo gerencial, descrição e origin intactos', () => {
+    const { changes, mudancas } = patchJaLancado(por.L1, AUTO, { saveDate: '2026-10-27', payee: favorecidoDaLinha(por.L1) })
+    expect(changes).toEqual({ date: '2026-10-27', dateCartao: '2026-10-27' })
+    expect(mudancas).toEqual([{ campo: 'date', de: '2026-10-28', para: '2026-10-27' }])
+    for (const campo of ['categoryId', 'grupoGerencial', 'description', 'origin', 'costCenter']) expect(changes).not.toHaveProperty(campo)
+  })
+  it('favorecido: manter (padrão quando há) / sugerido pela fatura / outro; aprendido vira sugestão', () => {
+    expect(favorecidoDaLinha(por.L2)).toBe('Ifd*djm Empreendimento')
+    expect(favorecidoDaLinha({ ...por.L2, _favModo: 'sugerido' })).toBe('IFD*DJM EMPREENDIMENTO')
+    expect(favorecidoDaLinha({ ...por.L2, _favModo: 'outro', _favOutro: 'DJM iFood' })).toBe('DJM iFood')
+    const comApelido = importar(rows, [AUTO, IFOOD], { apelidos: [{ tipo: 'descricao_fatura', termo: 'ifd djm empreendimento', ref_id: 'iFood DJM' }] })
+    const l2 = comApelido.find(r => r._id === 'L2')
+    expect(l2._jaLancado.sugerido).toEqual({ nome: 'iFood DJM', aprendido: true })
+    expect(favorecidoDaLinha(l2)).toBe('iFood DJM') // aprendido e diferente do atual → sugerido já vem marcado
+  })
+  it('termo do apelido sem números de terminal/códigos', () => {
+    expect(termoDescricaoFatura('IFD*DJM EMPREENDIMENTO 4541')).toBe('ifd djm empreendimento')
+    expect(termoDescricaoFatura('YELUMSEG PARC03/12')).toBe('yelumseg')
+    expect(favorecidoSugerido('AUTO SA 0347', []).nome).toBe('AUTO SA')
+  })
+  it('já conciliado ou vindo de importação não vira "Já lançado"', () => {
+    const conc = { ...IFOOD, id: 'ifood2', reconciled: true }
+    const r = importar([rows[1]], [conc])
+    expect(r[0]._jaLancado).toBeUndefined()
+  })
+})
+
+describe('integração — escolher e pré-lançamento', () => {
+  // Descrições bem diferentes da do banco: a lógica atual não pega; a nova acha os dois.
+  const dois = [tx({ id: 'x1', amount: 30, date: '2026-10-20', description: 'Corrida' }), tx({ id: 'x2', amount: 30, date: '2026-10-21', description: 'Corrida' })]
+  const row = linha({ _id: 'U', description: 'UBER *TRIP', amount: 30, date: '2026-10-20', _dateCartao: '2026-10-20' })
+  it('dois candidatos: fica fora da importação até escolher', () => {
+    const out = importar([row], dois)
+    expect(out[0]._jaLancadoOpcoes.map(t => t.id)).toEqual(['x1', 'x2'])
+    expect(linhasAImportar(out)).toEqual([])
+    expect(resumoJaLancados(out)).toEqual({ ja: 0, novos: 0, escolher: 1 })
+  })
+  it('escolheu um → já lançado; escolheu "novo" → importa', () => {
+    const esc = importar([{ ...row, _jaLancadoEscolha: 'x2' }], dois)
+    expect(esc[0]).toMatchObject({ _isDuplicate: true, _dbTx: { id: 'x2' } })
+    expect(idsNoBancoConferidos(esc)).toEqual(['x2'])
+    const novo = importar([{ ...row, _jaLancadoEscolha: 'novo' }], dois)
+    expect(linhasAImportar(novo).map(r => r._id)).toEqual(['U'])
+  })
+  it('pré-lançamento pendente: importa pelo fluxo normal com a classificação do pré e marca _preId', () => {
+    const pre = { id: 'p1', tipo: 'lancamento', status: 'pendente', payload: { tipo: 'despesa', valor: 57.07, data: '2026-10-28', conta_id: CARD, descricao: 'iFood', categoria_id: 'cat_laz', favorecido_novo: 'iFood' } }
+    const out = importar([linha({ _id: 'P', description: 'IFD*DJM EMPREENDIMENTO', amount: 57.07, date: '2026-10-28', categoryId: 'cat_outros' })], [], { preLancamentos: [pre] })
+    expect(linhasAImportar(out).map(r => r._id)).toEqual(['P'])
+    expect(out[0]).toMatchObject({ _preId: 'p1', categoryId: 'cat_laz', payee: 'iFood', _jaLancado: { origem: 'pre' } })
   })
 })

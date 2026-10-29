@@ -36,6 +36,9 @@ import Toast from '../shared/Toast'
 import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
+import { JaLancadoStatus, ResumoJaLancados } from './JaLancadoCelula'
+import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
+import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
 import DateInput from '../shared/DateInput'
 import Modal from '../shared/Modal'
@@ -1350,6 +1353,16 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
 
   // Conciliação inteligente: linhas de nível provável/possível que o usuário FORÇOU a importar.
   const [forcedDupSelect, setForcedDupSelect] = useState(() => new Set())
+  // "Já lançado" (lib/casamentoFatura): pré-lançamentos pendentes do Assistente e apelidos
+  // descricao_fatura → favorecido. Sem internet / sem permissão: listas vazias (a importação segue).
+  const [preLancamentosIa, setPreLancamentosIa] = useState([])
+  const [apelidosIa, setApelidosIa] = useState([])
+  useEffect(() => {
+    let vivo = true
+    listarPreLancamentos().then(l => { if (vivo) setPreLancamentosIa(l) }).catch(() => {})
+    listarApelidos().then(l => { if (vivo) setApelidosIa(l) }).catch(() => {})
+    return () => { vivo = false }
+  }, [])
   const toggleForcedDup = (id) => setForcedDupSelect(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
   })
@@ -1882,11 +1895,45 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   const resolvedRows = useMemo(() => {
     if (editingImport) return rows.map(r => ({ ...r, accountId: selectedAccount, _isDuplicate: false, _collisionTx: null, _dupLevel: null, _tambemEm: [] }))
     if (!selectedAccount) return rows.map(r => ({ ...r, _isDuplicate: false, _collisionTx: null, _dupLevel: null, _tambemEm: [] }))
-    return resolverLinhasRevisao(rows, {
-      accountId: selectedAccount, transactions, closingDay: selectedAcc?.closingDay || 14,
+    const closingDay = selectedAcc?.closingDay || 14
+    const base = resolverLinhasRevisao(rows, {
+      accountId: selectedAccount, transactions, closingDay,
       forcedDupSelect, parcelasPorChave: existingParcelaByKey,
     })
-  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions])
+    // "Já lançado": lançamento do cartão feito antes (manual/Assistente) ou pré-lançamento pendente.
+    return aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa })
+  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa])
+  const resumoJa = useMemo(() => resumoJaLancados(resolvedRows), [resolvedRows])
+
+  // Confirmação das linhas "Já lançado": UPDATE no lançamento existente (nunca delete+insert; origin,
+  // categoria, grupo gerencial, centro de custo e descrição intactos) com valor/data da fatura e o
+  // favorecido escolhido, histórico em historico_alteracoes e o apelido descricao_fatura → favorecido.
+  // Não roda a classificação gerencial nem cria transferência: o updateTransaction só passa pelo
+  // ensure idempotente do gerencial (ids determinísticos — reencontra a etapa A já existente).
+  // A conciliação vem depois, pelo idsNoBancoConferidos (a linha casada é _isDuplicate com _dbTx).
+  const gravarJaLancados = () => {
+    const linhas = resolvedRows.filter(r => r._jaLancado && r._jaLancado.origem !== 'pre')
+    if (!linhas.length) return 0
+    const loteId = novoLoteId()
+    const finais = []
+    const itens = []
+    const apelidos = []
+    for (const row of linhas) {
+      const tx = row._jaLancado.tx
+      const payee = favorecidoDaLinha(row)
+      const { changes, mudancas } = patchJaLancado(row, tx, { saveDate: computeSaveDate(row), payee })
+      if (Object.keys(changes).length) updateTransaction(tx.id, changes)
+      if (payee && !payees.includes(payee)) addPayee(payee)
+      finais.push({ ...tx, ...changes, reconciled: true })
+      itens.push({ id: tx.id, mudancas: [...mudancas, ...(tx.reconciled ? [] : [{ campo: 'reconciled', de: false, para: true }])] })
+      const termo = termoDescricaoFatura(row.description)
+      if (termo && payee) apelidos.push({ tipo: 'descricao_fatura', termo, ref_id: payee })
+    }
+    const historico = linhasHistorico({ entidade: 'lancamento', itens, loteId, motivo: 'Importação de fatura: já lançado (atualizado pela fatura)' })
+    if (historico.length) registrarEdicao({ lancamentos: finais, historico, loteId }).catch(err => console.warn('[importar] histórico do já lançado não gravado:', err.message))
+    for (let i = 0; i < apelidos.length; i += 10) aprenderApelidos(apelidos.slice(i, i + 10)).catch(err => console.warn('[importar] apelidos não gravados:', err.message))
+    return linhas.length
+  }
 
   // Linhas alimentadas ao totalizador por grupo gerencial. O totalizador retrata a fatura
   // INTEIRA (linhas desmarcadas também entram), então quem já está no banco deve pesar no
@@ -2140,6 +2187,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // Fatura fechada bloqueia importação nova (reedição de existentes segue permitida).
     if (!editingImport && isFaturaFechada(selectedAccount, faturaMonthYear)) {
       setError('Esta fatura está fechada. Abra-a antes de importar.')
+      return
+    }
+    // "Já lançado" com mais de um candidato: nunca casa sozinho — o usuário escolhe antes.
+    if (!editingImport && resumoJa.escolher > 0) {
+      const pend = resolvedRows.find(r => r._jaLancadoOpcoes && !r._jaLancadoEscolha)
+      setError(`Escolha ${resumoJa.escolher === 1 ? 'a linha marcada' : `as ${resumoJa.escolher} linhas marcadas`} "Para escolher" (é um lançamento que já existe ou é novo?).`)
+      if (pend) document.getElementById(`ccrow-${pend._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     // 1. Filtrar linhas efetivamente importáveis (selecionadas, sem duplicata/colisão).
@@ -2428,6 +2482,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // que o updateTransaction dispara por lançamento.
     if (serieBackfill.size > 0) atualizarCamposLancamentos(new Map([...serieBackfill].map(([id, serieId]) => [id, { serieId }])))
 
+    // "Já lançado": UPDATE dos existentes (antes da conciliação abaixo) e pré-lançamentos efetivados.
+    gravarJaLancados()
+    for (const row of toImport) {
+      if (!row._preId) continue
+      const txId = rowTxId.get(row._id)
+      if (txId) concluirPreLancamento(row._preId, 'efetivado', txId).catch(err => console.warn('[importar] pré-lançamento não baixado:', err.message))
+    }
+
     // Já gravados que bateram com o arquivo ("já existe" e colisões) → conciliados, pelo mesmo
     // caminho do ✓ da tela do cartão (persistido no sync).
     const conferidosNoBanco = idsNoBancoConferidos(resolvedRows)
@@ -2549,6 +2611,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
   // Nada novo e nada a atualizar: não grava nada — só fecha o fluxo com o resumo e confere a
   // fatura no banco (a mesma conferência da importação).
   const concluirSemImportar = () => {
+    gravarJaLancados()
     const conferidosNoBanco = idsNoBancoConferidos(resolvedRows)
     if (conferidosNoBanco.length > 0) setReconciled(conferidosNoBanco, true)
     iniciarConferencia(selectedAccount, faturaMonthYear, arquivoTotais, totalDeclarado)
@@ -3965,7 +4028,10 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
           {error && <div className="flex items-center gap-2 text-perigo text-sm"><AlertCircle size={14} /> {error}</div>}
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
+            <div className="space-y-1">
+              <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
+              {!editingImport && <ResumoJaLancados resumo={resumoJa} />}
+            </div>
             <div className="flex gap-2">
               {!editingImport && (
                 <button className="btn-secondary flex items-center gap-1.5 text-xs py-1.5" onClick={autoClassify}>
@@ -4024,7 +4090,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                       id={`ccrow-${row._id}`}
                       onClick={(e) => { if (e.target.closest('input,select,button,textarea,label,a')) return; openHistory(row.description) }}
                       title="Ver histórico do fornecedor"
-                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${!row.selected ? 'opacity-40' : ''} ${row._dupLevel === 'certeza' ? 'bg-perigo/5' : row._dupLevel ? 'bg-aviso/5' : ''} ${row._collisionTx ? 'bg-aviso/5' : ''}`}
+                      className={`border-b border-borda/50 cursor-pointer hover:bg-surface-hover/30 ${!row.selected ? 'opacity-40' : ''} ${row._jaLancado ? 'bg-receita/5' : row._jaLancadoOpcoes && !row._jaLancadoEscolha ? 'bg-aviso/5' : row._dupLevel === 'certeza' ? 'bg-perigo/5' : row._dupLevel ? 'bg-aviso/5' : ''} ${row._collisionTx ? 'bg-aviso/5' : ''}`}
                     >
                       <td className="px-3 py-2">
                         <input type="checkbox" className="accent-primary"
@@ -4188,7 +4254,9 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                         {fmt(row.amount)}
                       </td>
                       <td className="px-3 py-2">
-                        {row._collisionTx
+                        {(row._jaLancado || row._jaLancadoOpcoes)
+                          ? <JaLancadoStatus row={row} categories={categories} payees={payees} updateRow={updateRow} />
+                          : row._collisionTx
                           ? (row._mesmoConfirmado
                             ? <span className="text-xs px-1.5 py-0.5 rounded bg-aviso/15 text-aviso" title="Você confirmou que é o mesmo lançamento: ao confirmar, o registro do banco recebe o nome e a parcela do arquivo — ver seção 'atualizar?'">É o mesmo ↻</span>
                             : mudancasColisao(row).length === 0
