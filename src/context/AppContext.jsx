@@ -2018,7 +2018,7 @@ export function AppProvider({ children }) {
         if (!subconta) {
           subconta = {
             id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-            name: subcontaName, type: 'checking', balance: 0,
+            name: subcontaName, type: 'gerencial', isGerencial: true, balance: 0,
             bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
             fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
             grupoGerencial: grupo.id, accountGroupId: contaPrincipal.accountGroupId || null,
@@ -4174,7 +4174,7 @@ export function AppProvider({ children }) {
         subcontaId = 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2)
         const grupoGId = d.gerencialGroups?.find(g => g.number === 1)?.id || null
         accounts = [...accounts, {
-          id: subcontaId, name: subcontaName, type: 'checking', balance: 0,
+          id: subcontaId, name: subcontaName, type: 'gerencial', isGerencial: true, balance: 0,
           bank: contaPrincipal.bank || '', apelido: `G${apelido}`.slice(0, 8),
           fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
           grupoGerencial: grupoGId,

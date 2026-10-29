@@ -62,7 +62,7 @@ export function montarProvisaoGerencial(d, parcela, { id, origin, faturaRef, ago
   if (!subconta) {
     subconta = {
       id: 'acc_ger_' + Date.now() + '_' + Math.random().toString(36).slice(2),
-      name: nomeSubcontaGer(card), type: 'checking', balance: 0,
+      name: nomeSubcontaGer(card), type: 'gerencial', isGerencial: true, balance: 0,
       bank: contaPrincipal.bank || '', apelido: `G${card?.apelido || card?.name?.slice(0, 6) || 'CC'}`.slice(0, 8),
       fluxoCaixaPrincipal: false, isMain: false, contaCorrentePrincipal: false, profileId: contaPrincipal.profileId || null,
       grupoGerencial: g1.id, accountGroupId: contaPrincipal.accountGroupId || null,
