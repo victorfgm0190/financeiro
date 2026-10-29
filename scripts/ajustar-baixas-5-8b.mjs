@@ -4,6 +4,8 @@
 //      `desdePulada: true` a ocorrência hoje está PULADA (skipped): sai de skipped e entra em
 //      registered (paga). Com `descricaoLancamento`, preenche a descrição do lançamento — só se
 //      ela estiver vazia.
+//      `valor` é o valor do LANÇAMENTO (conferido); pode diferir do previsto do agendamento (ex.:
+//      uma transferência que cobriu duas contas) — a prévia mostra os dois.
 //   2. `trocaConta`: troca a conta de origem (account_id) de agendamentos PENDENTES (sem nenhuma
 //      ocorrência registrada) — só a conta.
 // NÃO altera valores, datas nem saldos; next_occurrence fica como está (as datas mexidas são
@@ -66,7 +68,10 @@ function mostrar(titulo, { ags, txs }, contas) {
     const sit = !s ? 'AGENDAMENTO NÃO ENCONTRADO'
       : datas(s.registered).includes(l.data) ? 'paga' : datas(s.skipped).includes(l.data) ? 'pulada' : 'pendente'
     const meta = s?.registered_meta?.[l.data]
-    console.log(`   ${l.rotulo.padEnd(3)} ${l.data} ${String(l.nome).padEnd(36).slice(0, 36)} · ${sit} · meta ${meta ? JSON.stringify(meta) : '—'}`
+    const previsto = s ? Number(s.registered_meta?.[l.data]?.valor_previsto ?? s.amount) : null
+    const difere = tx && previsto != null && Math.abs(Number(tx.amount) - previsto) > 0.005
+    console.log(`   ${l.rotulo.padEnd(3)} ${l.data} ${String(l.nome).padEnd(36).slice(0, 36)} · ${sit}`
+      + `${previsto != null ? ` · previsto R$ ${brl(previsto)}${difere ? ' (≠ lançamento)' : ''}` : ''} · meta ${meta ? JSON.stringify(meta) : '—'}`
       + ` · lanç. ${tx ? `${iso(tx.date)} ${nome(tx.account_id)}${tx.to_account_id ? ' → ' + nome(tx.to_account_id) : ''} R$ ${brl(tx.amount)} "${tx.description ?? ''}"` : 'NÃO ENCONTRADO'}`)
   }
   console.log(`\n── ${titulo}: conta de origem dos agendamentos pendentes`)
