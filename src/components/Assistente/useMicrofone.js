@@ -16,8 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 //     (sem isso, a sessão de gravação corta o som — e a chave do silencioso cala o Web Audio);
 //   • continuous = false: no iOS o modo contínuo encerra sem entregar resultado.
 //
-// LOG TEMPORÁRIO (teste no iPhone): mensagens "[mic]" no console. Remover depois do teste.
-const LOG = true
+// Log de diagnóstico do microfone ("[mic]" no console) — desligado; ligue só para depurar no aparelho.
+const LOG = false
 const log = (...a) => { if (LOG) console.log('[mic]', ...a) }
 
 const Reconhecimento = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
