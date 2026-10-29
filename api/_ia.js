@@ -1,6 +1,8 @@
 import { query } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
 import { contextoPerfis } from './_permissoesApi.js'
+import { normalizarTermo } from '../src/lib/assistente/texto.js'
+import { ACOES, validarAcao } from '../src/lib/assistente/acoes.js'
 
 // ASSISTENTE IA (etapa 1): o que o /api/assistente, o /api/ia-pre-lancamentos e o /api/ia-apelidos
 // compartilham — DDL viva das tabelas ia_*, contexto de cadastros que vai para o modelo, validação
@@ -46,10 +48,8 @@ export async function ensureIaSchema() {
   schemaPronto.marcar()
 }
 
-// Termo de apelido: minúsculo, sem acento, espaços simples. "Combustível " → "combustivel".
-export function normalizarTermo(s) {
-  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 120)
-}
+// Termo de apelido (minúsculo, sem acento): src/lib/assistente/texto.js, compartilhado com o app.
+export { normalizarTermo }
 
 export const TIPOS_APELIDO = ['categoria', 'conta', 'favorecido', 'descricao_fatura']
 
@@ -146,14 +146,11 @@ export function textoCadastros(ctx) {
   return linhas.join('\n')
 }
 
-export const INSTRUCOES = `Você é o assistente de lançamentos do Finup, um app brasileiro de controle financeiro.
-O usuário descreve em português (texto, voz transcrita ou foto de comprovante/boleto) algo que quer registrar ou consultar.
-Responda SEMPRE chamando exatamente UMA ferramenta, sem texto fora dela:
-- registrar_lancamento: despesa, receita ou transferência que já aconteceu ("gastei", "paguei", "recebi", "lance").
-- criar_agendamento: algo a pagar/receber no futuro ou recorrente. "Contas a pagar" e "contas a receber" = agendamento.
-- baixar_agendamento: dar baixa (pagar/receber) num agendamento que JÁ EXISTE ("dá baixa", "o Carlos me pagou", "paguei o aluguel", "recebi a parcela do X"). Informe o nome citado (favorecido ou descrição, só o nome: "Carlos") e o valor: um valor em valor_informado, ou faixa em valor_min/valor_max ("uns 200, 220" → 200 e 220). valor_exato = true SÓ quando o valor foi dito exato ("de 250"); com "uns", "próximo de", "mais ou menos", "algo assim" → false. Tipo só se o pedido deixar claro: "me pagou/recebi" = receita; "paguei" = despesa; senão null.
-- consultar_saldo: o usuário quer saber o saldo de uma conta. Você NÃO sabe saldos: só indique a conta.
-- perguntar: falta algo essencial (ex.: o valor) ou há ambiguidade real (ex.: duas contas Itaú). Dê de 2 a 6 opções curtas; quando forem contas/categorias, use os nomes do cadastro.
+// Instruções gerais (estáveis → cache). O que cada ferramenta faz está na descrição dela, no
+// registro central (src/lib/assistente/acoes.js); o backend só oferece as do contexto do pedido.
+export const INSTRUCOES = `Você é o assistente do Finup, um app brasileiro de controle financeiro.
+O usuário descreve em português (texto, voz transcrita ou foto de comprovante/boleto) algo que quer registrar, consultar ou fazer.
+Responda SEMPRE chamando exatamente UMA das ferramentas disponíveis, sem texto fora dela.
 
 Regras:
 1. Use SÓ ids que existem nos cadastros abaixo. Favorecido e centro de custo: o id é o nome exato da lista.
@@ -165,174 +162,17 @@ Regras:
 7. Em "termos", copie o trecho EXATO do pedido que levou a cada escolha (ex.: categoria: "combustível").
 8. Descrição: curta e clara (ex.: "Combustível", "Conta de luz"), sem o valor.
 9. Valor sempre positivo, em reais (ponto como separador decimal no JSON).
-10. Você NUNCA exclui, apaga ou estorna nada, e não há ferramenta para isso. Se pedirem exclusão, use perguntar dizendo que você não exclui e que o item pode ser aberto na tela (Lançamentos ou Agendamentos) para o usuário decidir; opcoes vazio.
-11. Não dê conselho financeiro nem de investimento e não responda assuntos fora de lançamentos/saldos. Se pedirem, use perguntar explicando que você só registra lançamentos, agendamentos e consulta saldos.`
+10. CONSULTAS (saldo, saldo principal, fatura, vencimentos, gastos, busca): você NÃO sabe valores — só escolha os filtros; o app calcula e mostra.
+11. Você NUNCA exclui nem apaga nada, e não há ferramenta para isso. Se pedirem exclusão, use perguntar dizendo que você não exclui e que o item pode ser aberto na tela para o usuário decidir; opcoes vazio.
+12. Operações críticas (estornar, pagar/fechar/abrir/revisar fatura, importar, virada de saldo, ajustes de reserva, gerenciais, baixa em lote, edição em massa, integridade, contratos, patrimônio, configurações) e EDITAR itens existentes: você não executa — use abrir_tela com o destino certo e o filtro citado.
+13. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.`
 
-const NUM_CONF = { type: 'number', minimum: 0, maximum: 1 }
-const CAMPOS_BASE = {
-  tipo: { type: 'string', enum: ['despesa', 'receita', 'transferencia'] },
-  valor: { type: ['number', 'null'], description: 'Valor em reais, positivo' },
-  data: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
-  conta_id: { type: ['string', 'null'] },
-  conta_destino_id: { type: ['string', 'null'], description: 'Só em transferência' },
-  categoria_id: { type: ['string', 'null'] },
-  centro_custo_id: { type: ['string', 'null'], description: 'Nome do centro de custo' },
-  favorecido_id: { type: ['string', 'null'], description: 'Nome exato de um favorecido existente' },
-  favorecido_novo: { type: ['string', 'null'], description: 'Nome de favorecido que ainda não existe' },
-  descricao: { type: ['string', 'null'] },
-  confianca: {
-    type: 'object',
-    description: 'Confiança de 0 a 1 em cada campo',
-    properties: { valor: NUM_CONF, data: NUM_CONF, conta: NUM_CONF, conta_destino: NUM_CONF, categoria: NUM_CONF, favorecido: NUM_CONF, centro_custo: NUM_CONF, descricao: NUM_CONF },
-  },
-  termos: {
-    type: 'object',
-    description: 'Trecho do pedido que levou a cada escolha',
-    properties: { categoria: { type: ['string', 'null'] }, conta: { type: ['string', 'null'] }, favorecido: { type: ['string', 'null'] } },
-  },
-}
-export const RECORRENCIAS = ['once', 'weekly', 'biweekly', 'monthly', 'bimonthly', 'quarterly', 'semiannual', 'annual']
+// Todas as ferramentas do registro (o pedido usa só as do contexto: acoesDoPedido).
+export const FERRAMENTAS = ACOES.filter(a => a.ferramenta).map(a => ({ name: a.id, ...a.ferramenta }))
+export { RECORRENCIAS } from '../src/lib/assistente/acoes.js'
 
-export const FERRAMENTAS = [
-  {
-    name: 'registrar_lancamento',
-    description: 'Prepara um lançamento (despesa, receita ou transferência) para o usuário revisar. Não grava nada.',
-    input_schema: { type: 'object', properties: CAMPOS_BASE, required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'] },
-  },
-  {
-    name: 'criar_agendamento',
-    description: 'Prepara um agendamento (conta a pagar/receber, recorrente ou única) para o usuário revisar. Não grava nada.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        ...CAMPOS_BASE,
-        vencimento: { type: ['string', 'null'], description: 'Primeiro vencimento, YYYY-MM-DD' },
-        recorrencia: { type: 'string', enum: RECORRENCIAS, description: 'once = única' },
-        parcelas: { type: ['integer', 'null'], description: 'Número de parcelas, se for parcelado; null = contínuo' },
-      },
-      required: ['tipo', 'valor', 'vencimento', 'recorrencia', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
-    },
-  },
-  {
-    name: 'baixar_agendamento',
-    description: 'Dar baixa (registrar o pagamento/recebimento) num agendamento pendente que já existe. O app procura o agendamento e abre a prévia; não grava nada.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        favorecido: { type: ['string', 'null'], description: 'Nome citado, como o usuário disse' },
-        descricao: { type: ['string', 'null'], description: 'Descrição citada do agendamento (ex.: "aluguel")' },
-        valor_informado: { type: ['number', 'null'], description: 'Valor pago/recebido citado' },
-        valor_exato: { type: 'boolean', description: 'true só se o valor foi dito exato (sem "uns", "próximo de", "mais ou menos")' },
-        valor_min: { type: ['number', 'null'] },
-        valor_max: { type: ['number', 'null'] },
-        tipo: { type: ['string', 'null'], enum: ['despesa', 'receita', null] },
-        data_pagamento: { type: ['string', 'null'], description: 'YYYY-MM-DD; padrão hoje' },
-        conta_id: { type: ['string', 'null'], description: 'Conta onde entrou/saiu o dinheiro, se citada' },
-      },
-      required: ['favorecido', 'tipo'],
-    },
-  },
-  {
-    name: 'consultar_saldo',
-    description: 'O usuário quer ver o saldo de uma conta. O app calcula o saldo; você só indica a conta.',
-    input_schema: { type: 'object', properties: { conta_id: { type: ['string', 'null'] } }, required: ['conta_id'] },
-  },
-  {
-    name: 'perguntar',
-    description: 'Pergunta ao usuário quando falta algo essencial ou há ambiguidade.',
-    input_schema: {
-      type: 'object',
-      properties: { pergunta: { type: 'string' }, opcoes: { type: 'array', items: { type: 'string' }, maxItems: 6 } },
-      required: ['pergunta', 'opcoes'],
-    },
-  },
-]
-
-const DATA = /^\d{4}-\d{2}-\d{2}$/
-const txt = (v, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
-const conf = (v) => (Number.isFinite(Number(v)) ? Math.min(1, Math.max(0, Number(v))) : 0)
-const TIPO_CAT = { despesa: 'expense', receita: 'income' }
-
-// Apelido cujo termo é exatamente o trecho que o modelo citou → vence o palpite.
-function porApelido(ctx, tipo, termo) {
-  const t = normalizarTermo(termo)
-  if (!t) return null
-  return ctx.apelidos.find(a => a.tipo === tipo && a.termo === t)?.ref_id || null
-}
-
-// Valida a saída do modelo: id que não existe (ou não é visível ao usuário) vira null com confiança 0.
-export function validarParametros(ferramenta, input, ctx, hoje = hojeSaoPaulo()) {
-  const p = input && typeof input === 'object' ? input : {}
-  if (ferramenta === 'perguntar') {
-    const opcoes = Array.isArray(p.opcoes) ? p.opcoes.map(o => txt(o, 80)).filter(Boolean).slice(0, 6) : []
-    return { pergunta: txt(p.pergunta, 300) || 'Pode detalhar o que você quer registrar?', opcoes }
-  }
-  if (ferramenta === 'consultar_saldo') {
-    return { conta_id: ctx.idx.contas.has(p.conta_id) ? p.conta_id : null }
-  }
-  if (ferramenta === 'baixar_agendamento') {
-    const num = (v) => (Number(v) > 0 ? Math.round(Number(v) * 100) / 100 : null)
-    let min = num(p.valor_min)
-    let max = num(p.valor_max)
-    if (min && max && min > max) [min, max] = [max, min]
-    return {
-      favorecido: txt(p.favorecido, 80), descricao: txt(p.descricao, 80),
-      valor_informado: num(p.valor_informado), valor_min: min, valor_max: max,
-      valor_exato: p.valor_exato === true && !!num(p.valor_informado) && !(min && max && min !== max),
-      tipo: ['despesa', 'receita'].includes(p.tipo) ? p.tipo : null,
-      data_pagamento: DATA.test(String(p.data_pagamento || '')) ? p.data_pagamento : hoje,
-      conta_id: ctx.idx.contas.has(p.conta_id) ? p.conta_id : null,
-    }
-  }
-
-  const termos = {
-    categoria: txt(p.termos?.categoria, 60), conta: txt(p.termos?.conta, 60), favorecido: txt(p.termos?.favorecido, 60),
-  }
-  const c = p.confianca || {}
-  const confianca = {
-    valor: conf(c.valor), data: conf(c.data), conta: conf(c.conta), conta_destino: conf(c.conta_destino),
-    categoria: conf(c.categoria), favorecido: conf(c.favorecido), centro_custo: conf(c.centro_custo), descricao: conf(c.descricao),
-  }
-  const tipo = ['despesa', 'receita', 'transferencia'].includes(p.tipo) ? p.tipo : 'despesa'
-  const zera = (chave) => { confianca[chave] = 0; return null }
-
-  const valor = Number(p.valor) > 0 ? Math.round(Number(p.valor) * 100) / 100 : zera('valor')
-  const data = DATA.test(String(p.data || '')) ? p.data : hoje
-
-  let contaId = porApelido(ctx, 'conta', termos.conta) || p.conta_id
-  if (!ctx.idx.contas.has(contaId)) contaId = zera('conta')
-  let destinoId = tipo === 'transferencia' ? p.conta_destino_id : null
-  if (destinoId && (!ctx.idx.contas.has(destinoId) || destinoId === contaId)) destinoId = zera('conta_destino')
-
-  let categoriaId = tipo === 'transferencia' ? null : (porApelido(ctx, 'categoria', termos.categoria) || p.categoria_id)
-  const cat = categoriaId ? ctx.idx.categorias.get(categoriaId) : null
-  if (categoriaId && (!cat || (cat.tipo !== 'both' && cat.tipo !== TIPO_CAT[tipo]))) categoriaId = zera('categoria')
-
-  const favApelido = porApelido(ctx, 'favorecido', termos.favorecido)
-  let favorecido = favApelido || (p.favorecido_id ? ctx.idx.favorecidos.get(normalizarTermo(p.favorecido_id)) || null : null)
-  let favorecidoNovo = null
-  if (!favorecido && p.favorecido_id) confianca.favorecido = 0
-  const novo = txt(p.favorecido_novo, 80)
-  if (!favorecido && novo) {
-    const existente = ctx.idx.favorecidos.get(normalizarTermo(novo))
-    if (existente) favorecido = existente
-    else favorecidoNovo = novo
-  }
-
-  const centro = p.centro_custo_id ? ctx.idx.centros.get(normalizarTermo(p.centro_custo_id)) || zera('centro_custo') : null
-
-  const out = {
-    tipo, valor, data, conta_id: contaId || null, conta_destino_id: destinoId || null, categoria_id: categoriaId || null,
-    centro_custo_id: centro, favorecido_id: favorecido, favorecido_novo: favorecidoNovo,
-    descricao: txt(p.descricao, 120), confianca, termos,
-  }
-  if (ferramenta === 'criar_agendamento') {
-    out.vencimento = DATA.test(String(p.vencimento || '')) ? p.vencimento : data
-    out.recorrencia = RECORRENCIAS.includes(p.recorrencia) ? p.recorrencia : 'once'
-    out.parcelas = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 360 ? p.parcelas : null
-  }
-  return out
-}
+// Valida a saída do modelo pelo registro: id que não existe (ou não é visível) vira null.
+export const validarParametros = (ferramenta, input, ctx, hoje = hojeSaoPaulo()) => validarAcao(ferramenta, input, ctx, hoje)
 
 // Consumo da chamada (ia_uso). Falha aqui não derruba a resposta.
 export async function registrarUso({ ambiente, ferramenta, usage }, q = query) {

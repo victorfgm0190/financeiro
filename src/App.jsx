@@ -37,6 +37,7 @@ import FaixaOffline from './components/Offline/FaixaOffline'
 import SoComInternet from './components/Offline/SoComInternet'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import { ehHashConfig } from './lib/configRota'
+import { EVENTO_NAVEGAR } from './lib/abrirTela'
 import PatrimonioPanel from './components/Patrimonio/PatrimonioPanel'
 import ContratosPanel from './components/Contratos/ContratosPanel'
 import ContratoFichaHost from './components/Contratos/ContratoFichaHost'
@@ -106,6 +107,12 @@ function AppContent() {
   // do mobile (Início, Mais) só troca o módulo.
   useAtalho('nav.fluxoCaixa', () => navigate('cashflow'))
   useAtalho('nav.envelopes', () => navigate('envelopes'))
+  // Navegação pedida por quem está fora dos painéis (Assistente IA: abrir_tela, "Abrir a fatura").
+  useEffect(() => {
+    const ir = (e) => { if (e.detail?.page) navigate(e.detail.page) }
+    window.addEventListener(EVENTO_NAVEGAR, ir)
+    return () => window.removeEventListener(EVENTO_NAVEGAR, ir)
+  }, [navigate])
   const irParaModulo = useCallback((id) => {
     const m = mobileModules.find(x => x.id === moduloMobile(mobileModules, id))
     if (m.page) navigate(m.page)

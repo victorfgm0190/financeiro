@@ -11,6 +11,8 @@ import { normalizarTermo, hojeSaoPaulo } from './_ia.js'
 // ESTORNO não é exclusão (cria o lançamento inverso): não entra aqui — vira abrir_tela (🔴).
 const PEDIDO_EXCLUSAO = /\b(exclu\w*|apag\w*|delet\w*|remov\w*)\b/
 export const ehPedidoDeExclusao = (texto) => PEDIDO_EXCLUSAO.test(normalizarTermo(texto))
+// Estorno é 🔴: nunca executado pela IA — o backend responde abrir_tela('estornar') direto.
+export const ehPedidoDeEstorno = (texto) => /\bestorn\w*/.test(normalizarTermo(texto))
 export const RESPOSTA_EXCLUSAO = {
   pergunta: 'Eu não excluo lançamentos nem agendamentos. Para excluir, abra o item na tela de Lançamentos ou de Agendamentos (ou pela busca 🔍) e decida por lá.',
   opcoes: [],

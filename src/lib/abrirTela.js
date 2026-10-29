@@ -15,3 +15,15 @@ export function lerHandoff(key) {
     return v
   } catch { return null }
 }
+
+// Navegação pedida de fora do App (ex.: Assistente IA, que roda dentro de um modal/sheet): deixa o
+// handoff (opcional) e pede ao App para trocar de tela. O App escuta EVENTO_NAVEGAR e chama o
+// mesmo navigate() dos menus. `hash` (opcional) = rota de Configurações (#config/<aba>/<seção>).
+export const EVENTO_NAVEGAR = 'finup:navegar'
+export function navegarPara(page, { handoff = null, hash = null } = {}) {
+  if (handoff) deixarHandoff(handoff.key, handoff.valor)
+  try {
+    if (hash) window.history.replaceState(null, '', window.location.pathname + window.location.search + hash)
+    window.dispatchEvent(new CustomEvent(EVENTO_NAVEGAR, { detail: { page } }))
+  } catch { /* sem window */ }
+}

@@ -3,24 +3,36 @@ import Anthropic from '@anthropic-ai/sdk'
 import { parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
+import { pode } from '../src/lib/permissoes.js'
+import { acoesDoPedido, definicaoFerramenta } from '../src/lib/assistente/acoes.js'
 import {
-  ensureIaSchema, montarContexto, textoCadastros, INSTRUCOES, FERRAMENTAS, validarParametros, registrarUso, hojeSaoPaulo,
+  ensureIaSchema, montarContexto, textoCadastros, INSTRUCOES, validarParametros, registrarUso, hojeSaoPaulo,
 } from './_ia.js'
-import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
+import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 
-// ASSISTENTE IA (etapa 1/1.1). POST { texto?, imagemBase64?, mimeType?, respostaPergunta?, pergunta? }
-//   → { ferramenta, parametros, candidatos? } — registrar_lancamento | criar_agendamento |
-//     baixar_agendamento (+ até 5 candidatos pendentes) | consultar_saldo | perguntar.
+// ASSISTENTE IA. POST { texto?, imagemBase64?, mimeType?, respostaPergunta?, pergunta? }
+//   → { ferramenta, parametros, candidatos? }. As ferramentas vêm do REGISTRO CENTRAL
+//     (src/lib/assistente/acoes.js): núcleo fixo + o grupo do domínio do pedido (pelas palavras),
+//     só as que o usuário pode usar (permissoes.js). Mesmo grupo → mesmo prefixo → cache por grupo.
 // NUNCA exclui: pedido de exclusão volta como `perguntar` recusando, sem chamar o modelo.
+// Estorno (🔴) vira abrir_tela, também sem chamar o modelo.
 // NÃO grava lançamento nem agendamento: o app abre a prévia e salva pelo fluxo manual do AppContext.
-// Saldo nunca vem daqui (o app calcula). Grava só o consumo em ia_uso, no banco do ambiente.
-// A chave (ANTHROPIC_API_KEY) fica só no servidor: nunca na resposta nem nos logs.
+// Consultas: o app calcula (saldo, fatura, vencimentos, gastos, busca) — a IA só escolhe os filtros.
+// Grava só o consumo em ia_uso, no banco do ambiente. A chave fica só no servidor.
 
 const MODELO = 'claude-haiku-5-5'
 const MAX_TEXTO = 1000
 const MAX_IMAGEM_BYTES = 2.2 * 1024 * 1024 // ~2 MB (o app comprime para ~1600 px antes)
 const MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-const FERRAMENTAS_VALIDAS = new Set(FERRAMENTAS.map(f => f.name))
+
+// Resolvedores do backend (campo `resolver` do registro): dados que só o banco tem.
+const RESOLVEDORES = {
+  candidatosBaixa: async ({ req, parametros, hoje, textoPedido }) => {
+    // "uns/próximo de/mais ou menos" no texto: o valor nunca filtra, mesmo que o modelo diga exato.
+    if (valorDitoAproximado(textoPedido)) parametros.valor_exato = false
+    return { candidatos: await buscarCandidatosBaixa(req.user, parametros, hoje) }
+  },
+}
 
 let cliente = null
 const anthropic = () => (cliente ||= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 25_000 }))
@@ -46,11 +58,18 @@ async function handler(req, res) {
       if (Math.floor(imagem.length * 3 / 4) > MAX_IMAGEM_BYTES) return res.status(413).json({ error: 'Imagem muito grande (máximo ~2 MB).' })
     }
 
+    const textoPedido = `${texto} ${pergunta} ${resposta}`
     if (ehPedidoDeExclusao(`${texto} ${resposta}`)) return res.json({ ferramenta: 'perguntar', parametros: RESPOSTA_EXCLUSAO })
+    if (ehPedidoDeEstorno(`${texto} ${resposta}`)) {
+      return res.json({ ferramenta: 'abrir_tela', parametros: { destino: 'estornar', filtro: texto.slice(0, 80) || null, cartao_id: null, mes: null } })
+    }
 
     await ensureIaSchema()
     const ctx = await montarContexto(req.user)
     const hoje = hojeSaoPaulo()
+    const podeFn = (modulo, acao) => pode(req.user, modulo, acao)
+    const acoes = acoesDoPedido(textoPedido, podeFn)
+    const disponiveis = new Set(acoes.map(a => a.id))
 
     const partes = [`Hoje é ${hoje}.`, texto ? `Pedido: ${texto}` : 'Pedido: (veja a imagem)']
     if (resposta) partes.push(`Você perguntou: ${pergunta || '(pergunta anterior)'}`, `Resposta do usuário: ${resposta}`)
@@ -63,7 +82,7 @@ async function handler(req, res) {
       model: MODELO,
       max_tokens: 1536,
       output_config: { effort: 'low' },
-      tools: FERRAMENTAS,
+      tools: acoes.map(a => definicaoFerramenta(a, podeFn)),
       tool_choice: { type: 'auto' },
       // Bloco estável (instruções + cadastros) com cache; a data e o pedido vão na mensagem.
       system: [
@@ -73,24 +92,21 @@ async function handler(req, res) {
       messages: [{ role: 'user', content }],
     })
 
-    const bloco = msg.content.find(b => b.type === 'tool_use' && FERRAMENTAS_VALIDAS.has(b.name))
+    const bloco = msg.content.find(b => b.type === 'tool_use' && disponiveis.has(b.name))
     const ferramenta = bloco ? bloco.name : 'perguntar'
     await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage })
 
     if (msg.stop_reason === 'refusal') {
-      return res.json({ ferramenta: 'perguntar', parametros: { pergunta: 'Não consegui ajudar com esse pedido. Posso registrar lançamentos, agendamentos ou consultar saldos.', opcoes: [] } })
+      return res.json({ ferramenta: 'perguntar', parametros: { pergunta: 'Não consegui ajudar com esse pedido. Posso registrar, consultar ou abrir a tela certa no Finup.', opcoes: [] } })
     }
     if (!bloco) {
       const t = msg.content.find(b => b.type === 'text')?.text
       return res.json({ ferramenta: 'perguntar', parametros: validarParametros('perguntar', { pergunta: t, opcoes: [] }, ctx, hoje) })
     }
     const parametros = validarParametros(ferramenta, bloco.input, ctx, hoje)
-    if (ferramenta === 'baixar_agendamento') {
-      // "uns/próximo de/mais ou menos" no texto: o valor nunca filtra, mesmo que o modelo diga exato.
-      if (valorDitoAproximado(`${texto} ${resposta}`)) parametros.valor_exato = false
-      return res.json({ ferramenta, parametros, candidatos: await buscarCandidatosBaixa(req.user, parametros, hoje) })
-    }
-    return res.json({ ferramenta, parametros })
+    const resolver = RESOLVEDORES[acoes.find(a => a.id === ferramenta)?.resolver]
+    const extra = resolver ? await resolver({ req, parametros, hoje, textoPedido }) : {}
+    return res.json({ ferramenta, parametros, ...extra })
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) return res.status(429).json({ error: 'Muitos pedidos ao assistente agora. Tente de novo em instantes.' })
     if (err instanceof Anthropic.APIError) {
