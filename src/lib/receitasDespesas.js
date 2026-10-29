@@ -2,7 +2,7 @@
 // do Painel e card do Início mobile). Extraído de DashboardPanel sem mudança de regra — as duas
 // telas usam esta mesma função para mostrar os mesmos números.
 import {
-  isReservaDepositoDespesa, isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
+  isReservaMovimentoExcluido, isResgateReservaSombra, reservaDespesaFuncIds,
 } from '../components/shared/utils.js'
 import { isInvestAutoOrigin } from './origins.js'
 import { isoLocal } from './hoje.js'
@@ -29,7 +29,9 @@ export function criarClassificadores(reserveFunctions, accounts) {
     if (isReservaMovimentoExcluido(t, reservaDespesaFuncSet, reservaSet)) return false
     // Perna de despesa do RESGATE de reserva não conta (o resgate é receita de compensação).
     if (isResgateReservaSombra(t)) return false
-    return t.type === 'expense' || isReservaDepositoDespesa(t, reservaDespesaFuncSet, reservaSet)
+    // O depósito na reserva conta UMA vez: pelo espelho "Reserva: X" (despesa, na categoria da
+    // função). A transferência conta → reserva não entra (contava de novo, sem categoria).
+    return t.type === 'expense'
   }
   // Receita: exclui as sombras de reserva de função não-despesa (ex.: "Resgate Reserva: X"
   // income), mantendo o par receita+despesa neutro quando a reserva é poupança.

@@ -108,21 +108,6 @@ export function isAplicacaoAporte(tx, aplicSet) {
   return tx.type === 'transfer' && !!tx.categoryId && aplicSet.has(tx.toAccountId)
 }
 
-// Depósito numa conta de reserva (transferência cuja conta-DESTINO é de reserva) vinculado
-// a uma função marcada como "exibir como despesa" (exibirComoDespesa). Estas devem contar
-// como despesa nos relatórios/dashboard. O resgate (saída da reserva, destino = principal)
-// NÃO casa aqui mesmo tendo reservaFuncaoId — só o depósito (entrada) conta.
-//   reservaDespesaFuncSet: Set de reservaFuncaoId cujas funções têm exibirComoDespesa=true
-//   reservaSet: Set de ids de contas isReserva
-export function isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet) {
-  if (tx.type !== 'transfer' || !tx.reservaFuncaoId) return false
-  // Só conta como despesa se a função estiver EXPLICITAMENTE marcada (set presente e contém a
-  // função) e o destino for conta de reserva. Sets ausentes → nunca inclui (seguro).
-  const ehFuncaoDespesa = reservaDespesaFuncSet instanceof Set && reservaDespesaFuncSet.has(tx.reservaFuncaoId)
-  const destinoEhReserva = reservaSet instanceof Set && reservaSet.has(tx.toAccountId)
-  return ehFuncaoDespesa && destinoEhReserva
-}
-
 // Conjunto de reservaFuncaoId cujas funções estão marcadas como "exibir como despesa".
 export function reservaDespesaFuncIds(reserveFunctions) {
   return new Set((reserveFunctions || []).filter(f => f.exibirComoDespesa).map(f => f.id))
@@ -160,18 +145,18 @@ export function isResgateReservaSombra(tx) {
     || (typeof tx.description === 'string' && tx.description.startsWith('Resgate Reserva:'))
 }
 
-// Conta como despesa nos relatórios: despesas normais + aportes categorizados + depósitos
-// em reserva de funções marcadas como "exibir como despesa" (args opcionais; quando ausentes,
-// mantém o comportamento anterior — só expense + aporte).
+// Conta como despesa nos relatórios: despesas normais (inclusive o espelho "Reserva: X" do
+// depósito em função "exibir como despesa") + aportes categorizados.
 // PRIORIDADE: movimento de reserva de função NÃO-despesa é sempre excluído primeiro; a perna
 // de despesa do RESGATE de reserva também nunca conta (o resgate é receita de compensação).
 export function countsAsReportExpense(tx, aplicSet, reservaDespesaFuncSet, reservaSet) {
   if (isReportExcluded(tx)) return false
   if (isReservaMovimentoExcluido(tx, reservaDespesaFuncSet, reservaSet)) return false
   if (isResgateReservaSombra(tx)) return false
+  // O depósito na reserva conta UMA vez, pelo espelho "Reserva: X" (despesa na categoria da
+  // função); a transferência conta → reserva não entra (contava de novo, sem categoria).
   return tx.type === 'expense'
     || isAplicacaoAporte(tx, aplicSet)
-    || isReservaDepositoDespesa(tx, reservaDespesaFuncSet, reservaSet)
 }
 
 // 0 = Conta Principal / Cartão, 1 = appPriority, 2 = rest

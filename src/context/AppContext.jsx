@@ -38,6 +38,7 @@ import { ocorrenciasVencidas, tocaCartao, buscarPossivelDuplicado, mapaPossiveis
 import { tentarReconectar } from '../lib/syncSeguro'
 import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemota'
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
+import { espelhoNoPerfil } from '../lib/espelhoReserva'
 import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -1363,13 +1364,22 @@ export function AppProvider({ children }) {
 
   const profileAccountIds = useMemo(() => new Set(profileAccounts.map(a => a.id)), [profileAccounts])
 
+  // Espelho de reserva (reservaAuto, sem conta): só no perfil dono da conta da reserva
+  // (lib/espelhoReserva); sem dono identificável, em todos.
   const profileTransactions = useMemo(() => {
     if (!activeProfileId) return data.transactions
+    const ctx = {
+      txById: new Map(data.transactions.map(t => [t.id, t])),
+      funcAccById: new Map((data.reserveFunctions || []).map(f => [f.id, f.accountId])),
+      accById: new Map(data.accounts.map(a => [a.id, a])),
+      profileAccountIds,
+    }
     return data.transactions.filter(t =>
-      t.reservaAuto === true ||
-      profileAccountIds.has(t.accountId) || profileAccountIds.has(t.toAccountId)
+      t.reservaAuto === true
+        ? espelhoNoPerfil(t, ctx)
+        : profileAccountIds.has(t.accountId) || profileAccountIds.has(t.toAccountId)
     )
-  }, [data.transactions, profileAccountIds, activeProfileId])
+  }, [data.transactions, data.reserveFunctions, data.accounts, profileAccountIds, activeProfileId])
 
   // Um agendamento pertence ao perfil quando QUALQUER das pontas (origem ou destino) é conta
   // do perfil — mesma regra de pool do getSaldoPrincipalBreakdown/getAccountSaldos. Casando só

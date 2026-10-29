@@ -55,7 +55,8 @@ const TABELAS_CLIENTE = `
     ('t3', 'credit_payment', '2026-10-19', 400, 'Pagamento fatura', NULL, NULL, 'cartao', NULL, NULL, NULL, NULL, 'manual'),
     ('t4', 'transfer', '2026-10-22', 700, 'Entre perfis', NULL, NULL, 'pj1', 'cc', NULL, NULL, NULL, 'manual'),
     ('s1', 'expense', '2026-10-23', 80, 'Reserva: Poupança', NULL, NULL, NULL, NULL, NULL, true, 'f_poup', 'reserva_auto'),
-    ('s2', 'transfer', '2026-10-24', 60, 'Reserva IPVA', NULL, NULL, 'cc', 'poup', 'c_ipva', NULL, 'f_ipva', 'manual');
+    ('s2', 'transfer', '2026-10-24', 60, 'Reserva IPVA', NULL, NULL, 'cc', 'poup', 'c_ipva', NULL, 'f_ipva', 'manual'),
+    ('s3', 'expense', '2026-10-24', 60, 'Reserva: Poupança', NULL, NULL, NULL, NULL, 'c_ipva', true, 'f_ipva', 'reserva_auto');
 `
 
 const bancos = {}
@@ -129,7 +130,8 @@ describe('análise do banco (regra do Painel)', () => {
   it('receita e despesa sem transferências, fatura, entre perfis, reserva-poupança e investimento', () => {
     expect(a.periodo).toEqual({ inicio: '2026-10-15', fim: '2026-11-14' })
     expect(a.receita).toBe(10200)
-    // 300 + 200 (cartão, último dia) + 100 + 50 + 60 (depósito em reserva marcada como despesa)
+    // 300 + 200 (cartão, último dia) + 100 + 50 + 60 (depósito em reserva marcada como despesa:
+    // conta UMA vez, pelo espelho "Reserva: X"; a transferência não entra)
     expect(a.despesa).toBe(710)
     expect(a.resultado).toBe(9490)
   })
