@@ -10,7 +10,7 @@ import {
   fetchTiposDocumento, createTipoDocumento, updateTipoDocumentoApi, reordenarTiposDocumentoApi,
   deleteTipoDocumentoApi, setTipoDocumentoAgendamentosApi,
   aplicarEdicaoApi, fetchHistoricoResumo,
-  fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi,
+  fetchReserveAdjustments, createReserveAdjustment, updateReserveAdjustmentApi, deleteReserveAdjustmentApi, deleteAjustesDoRendimentoApi,
   fetchReserveSnapshots, createReserveSnapshots,
   createReserveLedgerRows,
 } from '../lib/db'
@@ -40,6 +40,7 @@ import { podeRecarregar, criarJanela, textoNovidades } from '../lib/recargaRemot
 import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { espelhoNoPerfil } from '../lib/espelhoReserva'
 import { faturaParaCriacao, faturaParaEdicao } from '../lib/faturaAberta'
+import { ehRendimentoDeReserva, rateioDoRendimento } from '../lib/rendimentoReserva'
 import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -795,6 +796,8 @@ export function AppProvider({ children }) {
   // Recalcula contas a pagar de fatura a partir de addTransaction/updateTransaction
   // (definido mais abaixo); usamos ref p/ contornar a ordem de declaração.
   const recalcFaturaRef = useRef(null)
+  // (lancamentoId, tx|null) → refaz/apaga o rateio de um rendimento de reserva entre as funções.
+  const rateioRendimentoRef = useRef(null)
   // Recálculo dos agendamentos acumulativos de fatura (definido mais abaixo); ref p/ contornar
   // a ordem de declaração — chamado por deleteTransaction/reverseTransaction/revertCardImport.
   const recalcAgendamentosRef = useRef(null)
@@ -1825,6 +1828,8 @@ export function AppProvider({ children }) {
       const fMesAno = faturaMesAnoOf(card, newTx.date, newTx.faturaMonthYear)
       reconcileGerencialRef.current?.(newTx.accountId, fMesAno ? [fMesAno] : null)
     }
+    // Rendimento em conta de reserva → rateio entre as funções (lib/rendimentoReserva).
+    rateioRendimentoRef.current?.(id, newTx)
     return id
   }, [update])
 
@@ -2245,6 +2250,8 @@ export function AppProvider({ children }) {
     if (old && old.type === 'expense' && old.accountType === 'credit') {
       ensureGerencialState(id)
     }
+    // Rendimento de reserva editado → refaz o rateio entre as funções (ou apaga, se deixou de ser).
+    if (old) rateioRendimentoRef.current?.(id, { ...old, ...changes })
   }, [update, ensureGerencialState])
 
   // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
@@ -2382,6 +2389,8 @@ export function AppProvider({ children }) {
     for (const cardId of new Set(faturasParaRecalcular.map(([c]) => c))) {
       reconcileGerencialRef.current?.(cardId)
     }
+    // Rendimento de reserva apagado → apaga o rateio dele.
+    rateioRendimentoRef.current?.(id, null)
   }, [update])
 
   const reverseTransaction = useCallback((id) => {
@@ -3655,6 +3664,31 @@ export function AppProvider({ children }) {
     })
     return createReserveLedgerRows(rows)
   }, [data, reservePeriods, reserveAdjustments])
+
+  // Rendimento em conta de RESERVA: rateio entre as funções (reserve_adjustments com lancamento_id).
+  // Apaga as partes antigas do lançamento e, se ele é (ainda) rendimento de reserva, grava as novas.
+  // O lançamento em si não muda: receita, saldo da conta e totais seguem como sempre.
+  useEffect(() => {
+    rateioRendimentoRef.current = async (lancamentoId, tx) => {
+      const d = dataRef.current
+      const tinha = reserveAdjustments.some(a => a.lancamento_id === lancamentoId)
+      const novos = tx && ehRendimentoDeReserva(tx, d.accounts)
+        ? rateioDoRendimento(tx, { functions: d.reserveFunctions, periods: reservePeriods, adjustments: reserveAdjustments, transactions: d.transactions })
+        : []
+      if (!tinha && !novos.length) return
+      try {
+        if (tinha) await deleteAjustesDoRendimentoApi(lancamentoId)
+        for (const a of novos) await createReserveAdjustment(a)
+        setReserveAdjustments(prev => [
+          ...prev.filter(a => a.lancamento_id !== lancamentoId),
+          ...novos.map(a => ({ ...a, valor: Number(a.valor) || 0 })),
+        ])
+      } catch (err) {
+        console.error('[reservas] rateio do rendimento não gravado:', err.message)
+        setSyncError(`O rendimento foi lançado, mas o rateio entre as funções não foi gravado: ${err.message}`)
+      }
+    }
+  }, [reservePeriods, reserveAdjustments])
 
   // Uma gravação por dia: a chave em localStorage evita reescrever a janela a cada F5.
   const ledgerRunRef = useRef(false)

@@ -170,7 +170,7 @@ export async function createReserveLedgerRows(rows) {
   return { ok: true, upserted }
 }
 
-// Ajustes por função: { id, function_id, data, valor, observacao }.
+// Ajustes por função: { id, function_id, data, valor, observacao, lancamento_id }.
 export async function fetchReserveAdjustments() {
   return apiGet('/api/reserve-adjustments')
 }
@@ -182,6 +182,10 @@ export async function updateReserveAdjustmentApi(adj) {
 }
 export async function deleteReserveAdjustmentApi(id) {
   return apiDelete(`/api/reserve-adjustments?id=${encodeURIComponent(id)}`)
+}
+// Todos os ajustes do rateio de um rendimento (reserve_adjustments.lancamento_id).
+export async function deleteAjustesDoRendimentoApi(lancamentoId) {
+  return apiDelete(`/api/reserve-adjustments?lancamento_id=${encodeURIComponent(lancamentoId)}`)
 }
 
 // ─── Fluxo de Caixa: lançamentos provisórios (simulação) ──────────────────────

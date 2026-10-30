@@ -220,7 +220,8 @@ async function handler(req, res) {
       data DATE NOT NULL,
       valor NUMERIC NOT NULL,
       observacao TEXT,
-      created_at TIMESTAMPTZ DEFAULT now()
+      created_at TIMESTAMPTZ DEFAULT now(),
+      lancamento_id TEXT
     )`)
     // Índices para os filtros por função das duas tabelas de histórico de reservas.
     await query(`CREATE INDEX IF NOT EXISTS idx_reserve_periods_function ON reserve_periods (function_id)`)

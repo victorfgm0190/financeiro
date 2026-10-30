@@ -19,6 +19,7 @@ import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
 import { ratearProporcional, erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
+import { ehAjusteDeRendimento } from '../../lib/rendimentoReserva'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -655,6 +656,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
         const diff = saldoReal !== null ? Math.round((saldoReal - totalSaldo) * 100) / 100 : null
         const accLabel = account ? (account.apelido || account.name) : null
         const totalDistrib = Math.round(fns.reduce((s, f) => s + (parseValorBR(distrib[f.id]) || 0), 0) * 100) / 100
+        const totalRendimentos = Math.round(fns.reduce((s, f) => s + (f.rendimentos || 0), 0) * 100) / 100
 
         return (
           <div key={accountId || '__none__'}>
@@ -763,6 +765,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           </button>
                           {podeEditar && <button onClick={() => setAdjFn(f)} title="Adicionar ajuste" className="text-texto-3 hover:text-primary-fg shrink-0"><Plus size={12} /></button>}
                           {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
+                          {f.rendimentos ? <span className="ml-2 text-texto-3 shrink-0">Rend.: <span className="font-semibold text-receita">{fmtSinal(f.rendimentos)}</span></span> : null}
                         </div>
                         <div className="flex items-center gap-0.5 shrink-0">
                           {podeEditar && (
@@ -814,7 +817,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm" style={{ minWidth: 700 }}>
+                <table className="w-full text-sm" style={{ minWidth: 780 }}>
                   <thead>
                     <tr className="border-b border-borda">
                       <th className="text-left px-4 py-2 text-xs text-texto-2 font-medium">Despesa Anual</th>
@@ -823,6 +826,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28" title="Parte do saldo a distribuir que vai para a função (grava um ajuste)">Distribuir</th>
+                      <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28" title="Parte da função nos rendimentos da conta (rateio automático pelo saldo)">Rendimentos</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Mov. Futuros</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo Futuro</th>
@@ -884,6 +888,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                               />
                             ) : <span className="text-xs text-texto-3">—</span>}
                           </td>
+                          <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
+                            {f.rendimentos ? fmtSinal(f.rendimentos) : <span className="text-texto-3">0,00</span>}
+                          </td>
                           <td className={`px-4 py-2 text-right text-xs font-bold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
                             {fmt(saldo)}
                           </td>
@@ -936,6 +943,9 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">
                         {totalDistrib !== 0 ? fmtSinal(totalDistrib) : ''}
                       </td>
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-receita">
+                        {totalRendimentos ? fmtSinal(totalRendimentos) : <span className="text-texto-3">0,00</span>}
+                      </td>
                       <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
                         {fmt(totalSaldo)}
                       </td>
@@ -950,7 +960,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     {/* Saldo a distribuir = saldo real − Σ saldos das funções (pode ser negativo). */}
                     {accountId && diff !== null && (
                       <tr className="bg-surface-2/10">
-                        <td colSpan={6} className="px-4 py-2 text-xs font-semibold text-texto-2">
+                        <td colSpan={7} className="px-4 py-2 text-xs font-semibold text-texto-2">
                           Saldo a distribuir <span className="font-normal text-texto-3">(saldo real {fmt(saldoReal)} − Σ funções)</span>
                         </td>
                         <td className={`px-4 py-2 text-right text-xs font-bold ${diff < 0 ? 'text-despesa' : diff > 0 ? 'text-receita' : 'text-texto-3'}`}>
@@ -961,7 +971,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     )}
                     {accountId && podeEditar && diff ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-2">
+                        <td colSpan={11} className="px-4 py-2">
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             <button type="button" className="btn-secondary text-xs py-1" onClick={() => ratear(accountId, fns, diff)}>Ratear proporcional</button>
                             <button type="button" className="btn-secondary text-xs py-1" onClick={() => limparDistrib(accountId, fns)}>Limpar</button>
@@ -993,7 +1003,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
       {adjFn && (
         <AjusteHistoricoModal
           fn={adjFn}
-          adjustments={adjustmentsByFn[adjFn.id] || []}
+          adjustments={(adjustmentsByFn[adjFn.id] || []).filter(a => !ehAjusteDeRendimento(a))}
           activePeriod={activePeriodByFn[adjFn.id]}
           todayStr={todayStr}
           onAdd={podeEditar ? onAddAdjustment : null}
@@ -2091,7 +2101,8 @@ export default function ReservasPanel() {
   const openVirada = () => { setLastViradaIds([]); setVirarModal(true) }
 
   // Saldo = Saldo Inicial + Entradas − Saídas + Ajuste (ajuste do período, pode ser ±).
-  const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0)) * 100) / 100
+  // Saldo = inicial + entradas − saídas + ajustes + rendimentos (rateio dos juros da conta).
+  const computeSaldo = (f) => Math.round((f.saldoInicial + f.entradas - f.saidas + (f.ajuste || 0) + (f.rendimentos || 0)) * 100) / 100
 
   const period = getFinancialPeriod()
   const periodStart = isoLocal(period.start)
@@ -2170,10 +2181,15 @@ export default function ReservasPanel() {
 
     // Ajuste: soma dos adjustments (dentro do período ativo, se houver). Sem nenhum adjustment
     // para a função → fallback no ajuste_override legado do mês atual.
-    const adjs = adjustmentsByFn[f.id]
+    // Rendimentos: as partes do rateio dos juros da conta (ajustes ligados ao lançamento do
+    // rendimento) — coluna própria, fora do "Ajuste".
+    const todosAdjs = adjustmentsByFn[f.id] || []
+    const adjs = todosAdjs.filter(a => !ehAjusteDeRendimento(a))
+    const startPeriodo = ap ? ap.data_inicio : null
+    const rendimentos = Math.round(todosAdjs.reduce((s, a) => (ehAjusteDeRendimento(a) && (!startPeriodo || a.data >= startPeriodo)) ? s + (Number(a.valor) || 0) : s, 0) * 100) / 100
     let ajuste, ajusteObs
-    if (adjs && adjs.length > 0) {
-      const start = ap ? ap.data_inicio : null
+    if (todosAdjs.length > 0) {
+      const start = startPeriodo
       ajuste = Math.round(adjs.reduce((s, a) => (!start || a.data >= start) ? s + (Number(a.valor) || 0) : s, 0) * 100) / 100
       ajusteObs = ''  // observações vivem na lista/modal de ajustes
     } else {
@@ -2190,6 +2206,7 @@ export default function ReservasPanel() {
       saidas: comp.saidas,
       ajuste,
       ajusteObs,
+      rendimentos,
       hasPeriod: !!ap,
       hasAdjustments: !!(adjs && adjs.length > 0),
     }
@@ -2265,7 +2282,7 @@ export default function ReservasPanel() {
     const snapshots = effectiveFunctions.map(f => {
       const inicio = activePeriodByFn[f.id]?.data_inicio ?? '0001-01-01'
       const row = ledgerByFn[f.id]
-      const tot = row ? totaisAte(f.id, inicio, dataFim) : { entradas: f.entradas, saidas: f.saidas, ajuste: f.ajuste }
+      const tot = row ? totaisAte(f.id, inicio, dataFim) : { entradas: f.entradas, saidas: f.saidas, ajuste: Math.round(((f.ajuste || 0) + (f.rendimentos || 0)) * 100) / 100 }
       return {
         id: newId('snap'),
         periodo_id: activePeriodByFn[f.id]?.id ?? 'legacy',
