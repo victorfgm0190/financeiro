@@ -126,10 +126,14 @@ describe('FilterBar — status × período (substitui os chips sem perder combin
     expect(lerFiltrosAba('conta', raw)).toEqual({
       status: 'pagos', periodos: { apagar: 'next30', provisoes: 'futuros', pagos: 'tudo' },
       avancados: { desc: 'TV', payee: '', cat: '', min: '', max: '', tipos: ['CC'], valores: [150], agenda: '' },
-      datas: { from: '', to: '' },
+      datas: { from: '', to: '' }, contaReserva: '',
     })
     expect(lerFiltrosAba('anuais', raw)).toMatchObject({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes', resgates: 'tudo' }, avancados: AVANCADOS_VAZIOS })
     expect(lerFiltrosAba('cartao', 'lixo{')).toMatchObject({ status: 'apagar', periodos: { apagar: 'futuros', pagos: 'mes' } })
+  })
+  it('persistência da conta de reserva (aba Contas Anuais)', () => {
+    expect(lerFiltrosAba('anuais', JSON.stringify({ anuais: { status: 'pagos', contaReserva: 'res1' } })).contaReserva).toBe('res1')
+    expect(lerFiltrosAba('anuais', JSON.stringify({ anuais: { contaReserva: 42 } })).contaReserva).toBe('')
   })
   it('etiquetas dos filtros ativos (removíveis pela chave)', () => {
     const av = { ...AVANCADOS_VAZIOS, desc: ' TV ', cat: 'c1', tipos: ['CC', 'RES'], min: '10', valores: [150] }

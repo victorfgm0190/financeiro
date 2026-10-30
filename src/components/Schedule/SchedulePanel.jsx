@@ -49,7 +49,7 @@ import { resolverTipoDocumento, filtrarPorTipoDocumento, ehSintetico, SEM_TIPO }
 import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
 import { novoLoteId } from '../../lib/historico'
-import { contasEnvolvidas, filtrarPorContas } from '../../lib/filtroContasEnvolvidas'
+import { contasEnvolvidas, filtrarPorContas, contasReservaDaAba, filtrarPorContaReserva } from '../../lib/filtroContasEnvolvidas'
 import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO, transferenciasDaDiferenca } from '../../lib/resumoSelecao'
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -1729,7 +1729,7 @@ function ResumoLote({ resumo, deFato = null, onDeFato = null }) {
   )
 }
 
-function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
+function BatchRegisterModal({ selectedRows, accounts, reservaFoco = null, onConfirm, onClose }) {
   const { scheduleReservaFuncoes } = useApp()
   // Vencimento de cada linha = data efetiva da ocorrência pendente (a mesma do registro
   // individual); a data geral só tem vencimento quando todas as linhas vencem no mesmo dia.
@@ -1763,7 +1763,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   }
   const algumInvalido = selectedRows.some(invalido)
   // Recalculado a cada edição de valor (mesma função do painel de seleção).
-  const resumo = resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorItem(r) })), accounts)
+  const resumo = resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorItem(r) })), accounts, { reservaFoco })
   // "Valor transferido de fato" por par conta ↔ reserva (texto do input). Vazio = o líquido.
   const [deFato, setDeFato] = useState({})
   const deFatoInput = Object.fromEntries(resumo.pares.map(p => {
@@ -1819,7 +1819,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
               const it = itens[schedule.id]
               const detalhado = comDetalhe.has(schedule.id)
               const ruim = invalido(r)
-              const grupo = classificarAgendamento(schedule, accounts)
+              const grupo = classificarAgendamento(schedule, accounts, reservaFoco)
               const seta = grupo === 'aplicacao' ? { g: '↑', cls: 'text-reserva', t: 'Aplicação' }
                 : grupo === 'resgate' ? { g: '↓', cls: 'text-despesa', t: 'Resgate' }
                 : null
@@ -1917,7 +1917,8 @@ const SELECTION_GROUP_ORDER = GRUPOS_SELECAO
 
 // `calendario` ({ status, faturas, pagosLinhas, renderFatura }): mostra a Visão Calendário em vez da
 // tabela, com as MESMAS linhas (buildScheduleGroups) e a mesma linha de ações (ScheduleRow).
-function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null }) {
+// reservaFoco: conta de reserva filtrada na aba Contas Anuais (o resumo da seleção conta pelo lado dela).
+function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addTransaction, markScheduleRegistered, deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence, getNextOccurrences, efetivarProvisao, onNewSchedule, onEditSchedule, agruparSeries = true, pagosLinhas = null, calendario = null, reservaFoco = null }) {
   const { profiles, setAvisoOperacao, scheduleReservaFuncoes, reserveFunctions, toggleScheduleConfirmado, getProximaProvisaoOccurrence, rateiosByLancamento, tiposDocumento, setTipoDocumentoEmMassa, pode, definirSincronizarAgenda } = useApp()
   // Seleção (registrar/pular/definir tipo em massa) só para quem edita agendamentos.
   const podeSelecionar = pode('agendamentos', 'editar')
@@ -1995,8 +1996,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   // fora do saldo. Atualiza em tempo real conforme a seleção muda.
   // Valor = efetivo da próxima ocorrência (o mesmo que o modal de registro em lote pré-preenche).
   const selectionTotals = useMemo(
-    () => resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorOcorrencia(r) })), accounts),
-    [selectedRows, accounts]
+    () => resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorOcorrencia(r) })), accounts, { reservaFoco }),
+    [selectedRows, accounts, reservaFoco]
   )
 
   const toggleSelect = (id) => setSelected(prev => {
@@ -2406,6 +2407,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
         <BatchRegisterModal
           selectedRows={selectedRows}
           accounts={accounts}
+          reservaFoco={reservaFoco}
           onConfirm={handleBatchRegister}
           onClose={() => setShowBatchRegister(false)}
         />
@@ -2810,7 +2812,8 @@ export default function SchedulePanel() {
   )
 
   const displayContasAnuais = showZeroed ? contasAnuais : contasAnuais.filter(s => !isZeroed(s))
-  const pendingContasAnuais = displayContasAnuais.filter(s => getNextOccurrences(s, 1).length > 0).length
+  const pendentesAnuais = displayContasAnuais.filter(s => getNextOccurrences(s, 1).length > 0)
+  const pendingContasAnuais = pendentesAnuais.length
 
   // ── Lista da ABA ATIVA: base da aba → zerados → status/período → filtros avançados ──────────
   // Resgates anuais (antes um chip da aba Agendamentos, hoje status da aba Contas Anuais):
@@ -2821,11 +2824,20 @@ export default function SchedulePanel() {
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const raVisiveis = useMemo(() => showZeroed ? raSchedules : raSchedules.filter(s => !isZeroed(s)), [raSchedules, showZeroed, getNextOccurrences])
+  // Filtro por CONTA DE RESERVA (aba Contas Anuais, nos três status): origem OU destino na conta.
+  // Escolha lembrada com os filtros da aba (por aparelho); com menos de 2 contas de reserva na aba o
+  // seletor some e vale Todas. Conta salva que saiu da aba também volta a Todas.
+  const todosAnuais = useMemo(() => [...contasAnuais, ...raSchedules], [contasAnuais, raSchedules])
+  const reservasDaAba = useMemo(() => contasReservaDaAba(todosAnuais, [], allAccounts), [todosAnuais, allAccounts])
+  const seletorReserva = activeTab === 'anuais' && reservasDaAba.length > 1
+  const reservaSalva = filtrosPorAba.anuais.contaReserva || ''
+  const contaReserva = seletorReserva && reservasDaAba.some(c => c.accountId === reservaSalva) ? reservaSalva : ''
+  const escolherContaReserva = (id) => atualizarFiltrosAba(f => ({ ...f, contaReserva: id }))
   const faturaPaymentsDoCartao = cartaoFiltroId ? faturaPaymentSchedules.filter(s => faturaPaymentCardId(s) === cartaoFiltroId) : faturaPaymentSchedules
   const baseDaAba = activeTab === 'conta' ? schedules
     : activeTab === 'cartao' ? faturaPaymentsDoCartao
       : activeTab === 'gerencial' ? gerencialSomente
-        : statusAtual === 'resgates' ? raSchedules : contasAnuais
+        : filtrarPorContaReserva(statusAtual === 'resgates' ? raSchedules : contasAnuais, contaReserva)
 
   const displaySchedules = useMemo(
     () => showZeroed ? baseDaAba : baseDaAba.filter(s => !isZeroed(s)),
@@ -2858,7 +2870,11 @@ export default function SchedulePanel() {
   const basePagos = activeTab === 'conta' ? schedules
     : activeTab === 'cartao' ? faturaPaymentsDoCartao
       : activeTab === 'gerencial' ? gerencialSomente : contasAnuais
-  const pagosLinhas = useMemo(() => pagamentosDosAgendamentos(basePagos, transactions), [basePagos, transactions])
+  const pagosLinhasTodas = useMemo(() => pagamentosDosAgendamentos(basePagos, transactions), [basePagos, transactions])
+  const pagosLinhas = useMemo(
+    () => filtrarPorContaReserva(pagosLinhasTodas, contaReserva, l => l.schedule),
+    [pagosLinhasTodas, contaReserva]
+  )
   const pagosBuscados = useMemo(() => filtrarPagamentos(
     abaPagos ? filtrarPagosPorPeriodo(pagosLinhas, periodoAtual, hojeStr) : [], {
       desc: fltDesc, payee: fltPayee, categoryId: fltCat, from: dataDe, to: dataAte,
@@ -2924,8 +2940,18 @@ export default function SchedulePanel() {
     conta: { apagar: allPending.length, provisoes: allPending.filter(s => s.isProvisao).length, pagos: nPagos },
     cartao: { apagar: pendingInvoice + pendingFaturaPayments, pagos: nPagos },
     gerencial: { apagar: pendingGerencial, pagos: nPagos },
-    anuais: { apagar: pendingContasAnuais, pagos: nPagos, resgates: raVisiveis.length },
+    anuais: {
+      apagar: filtrarPorContaReserva(pendentesAnuais, contaReserva).length, pagos: nPagos,
+      resgates: filtrarPorContaReserva(raVisiveis, contaReserva).length,
+    },
   }[activeTab]
+  // Chips do seletor de conta de reserva: contagem do status atual (sem período nem filtros, como
+  // os contadores do status). "Todas" = o total do status.
+  const itensDoStatusAnuais = statusAtual === 'pagos' ? pagosLinhasTodas.filter(l => !l.semLancamento)
+    : statusAtual === 'resgates' ? raVisiveis : pendentesAnuais
+  const chipsReserva = seletorReserva
+    ? contasReservaDaAba(todosAnuais, itensDoStatusAnuais, allAccounts, statusAtual === 'pagos' ? (l => l.schedule) : undefined)
+    : []
   const ICONE_STATUS = { apagar: Calendar, provisoes: Hourglass, pagos: History, resgates: ArrowLeftRight }
   const opcoesStatus = [
     ...STATUS_POR_ABA[activeTab].map(id => ({ id, label: STATUS[id].label, count: contagemStatus[id], icon: ICONE_STATUS[id] })),
@@ -3013,7 +3039,7 @@ export default function SchedulePanel() {
   // Aba sem nada (antes de status/período/filtros): mostra o vazio próprio da aba.
   const abaSemNada = activeTab === 'cartao' ? (displayInvoice.length === 0 && displayFaturaPayments.length === 0)
     : activeTab === 'gerencial' ? displayGerencial.length === 0
-      : activeTab === 'anuais' ? (statusAtual === 'resgates' ? raVisiveis.length === 0 : displayContasAnuais.length === 0)
+      : activeTab === 'anuais' ? filtrarPorContaReserva(statusAtual === 'resgates' ? raVisiveis : displayContasAnuais, contaReserva).length === 0
         : false
 
   return (
@@ -3183,6 +3209,33 @@ export default function SchedulePanel() {
         )}
       </div>
 
+      {/* Conta de reserva (aba Contas Anuais, todos os status): Todas | uma conta (origem ou destino) */}
+      {seletorReserva && (
+        <div className="flex items-center gap-2 -mt-1">
+          <span className="text-xs text-texto-3 shrink-0">Conta de reserva:</span>
+          <div role="radiogroup" aria-label="Conta de reserva" className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1">
+            {[{ accountId: '', nome: 'Todas', count: itensDoStatusAnuais.length }, ...chipsReserva].map(c => {
+              const ativo = contaReserva === c.accountId
+              return (
+                <button
+                  key={c.accountId || 'todas'}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => escolherContaReserva(c.accountId)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg font-medium whitespace-nowrap transition-colors ${
+                    ativo ? 'bg-primary text-white' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'
+                  }`}
+                >
+                  {c.nome}
+                  <span className="opacity-70">{c.count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Contas envolvidas (Resgates anuais): 0 contas = tudo; 1 = origem ou destino; 2+ = entre elas */}
       {filtroContasAtivo && contasChips.length > 0 && (
         <div className="flex items-center gap-2 -mt-1">
@@ -3227,6 +3280,7 @@ export default function SchedulePanel() {
           agruparSeries={false}
           accounts={activeTab === 'conta' ? accounts : allAccounts}
           efetivarProvisao={activeTab === 'conta' ? efetivarProvisao : undefined}
+          reservaFoco={contaReserva || null}
           calendario={{
             status: statusCal,
             faturas: calFaturas,
@@ -3268,6 +3322,7 @@ export default function SchedulePanel() {
           agruparSeries={!hasActiveFilter && selContas.size === 0}
           accounts={activeTab === 'conta' ? accounts : allAccounts}
           efetivarProvisao={activeTab === 'conta' ? efetivarProvisao : undefined}
+          reservaFoco={contaReserva || null}
           {...propsTabela}
         />
       )}

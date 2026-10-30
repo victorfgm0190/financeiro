@@ -26,3 +26,33 @@ export function filtrarPorContas(schedules, selecionadas) {
   if (sel.size === 1) return schedules.filter(s => sel.has(s.accountId) || sel.has(s.toAccountId))
   return schedules.filter(s => sel.has(s.accountId) && sel.has(s.toAccountId))
 }
+
+// ─── Filtro por CONTA DE RESERVA (aba Contas Anuais: A pagar, Pagos e Resgates anuais) ────────
+const ehContaReserva = (a) => !!a && (a.isReserva || a.vinculoTipo === 'reserva')
+
+// Opções do seletor: as contas de reserva presentes (origem ou destino) em `todos` (a aba inteira,
+// para a lista não mudar ao trocar de status), com a quantidade de itens de `doStatus` (o status
+// atual) em que cada uma aparece. Ordem: nome. agendamentoDe: item → agendamento (linhas de Pagos
+// trazem o agendamento em .schedule).
+export function contasReservaDaAba(todos, doStatus, accounts = [], agendamentoDe = (s) => s) {
+  const reservas = new Map()
+  for (const s of todos || []) {
+    for (const id of [s.accountId, s.toAccountId]) {
+      if (!id || reservas.has(id)) continue
+      const acc = accounts.find(a => a.id === id)
+      if (ehContaReserva(acc)) reservas.set(id, acc.apelido || acc.name || '?')
+    }
+  }
+  return [...reservas]
+    .map(([accountId, nome]) => ({
+      accountId, nome,
+      count: (doStatus || []).filter(i => { const s = agendamentoDe(i); return s?.accountId === accountId || s?.toAccountId === accountId }).length,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
+// '' (Todas) → tudo; senão, os itens com a conta na origem OU no destino (aplicação e resgate).
+export function filtrarPorContaReserva(itens, contaId, agendamentoDe = (s) => s) {
+  if (!contaId) return itens
+  return (itens || []).filter(i => { const s = agendamentoDe(i); return s?.accountId === contaId || s?.toAccountId === contaId })
+}

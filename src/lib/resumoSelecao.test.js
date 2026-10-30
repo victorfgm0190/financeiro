@@ -83,3 +83,14 @@ describe('valor transferido de fato → transferência da diferença (saldo a di
     expect(transferenciasDaDiferenca([par('aplicacao', -952.75)], {}, {})).toEqual([])
   })
 })
+
+describe('resumoSelecao com reservaFoco (aba Contas Anuais filtrada)', () => {
+  it('transferência entre duas reservas conta pelo lado da reserva filtrada', () => {
+    const entre = apl('x', 'ca', 'rx')
+    expect(classificarAgendamento(entre, accounts)).toBe('aplicacao')
+    expect(classificarAgendamento(entre, accounts, 'ca')).toBe('resgate')
+    const r = resumoSelecao([{ schedule: entre, amount: 100 }, { schedule: apl('y', 'itau', 'ca'), amount: 30 }], accounts, { reservaFoco: 'ca' })
+    expect(r.liquidoReserva).toBe(70)
+    expect(r.pares.map(p => p.reservaId)).toEqual(['ca', 'ca'])
+  })
+})

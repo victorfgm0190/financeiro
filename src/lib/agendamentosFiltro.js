@@ -204,12 +204,17 @@ export function lerFiltrosAba(aba, raw) {
     const p = salvo?.periodos?.[st]
     periodos[st] = p && p !== 'custom' && opcoesPeriodo(st).includes(p) ? p : periodoPadrao(st)
   }
-  return { status, periodos, avancados: avancadosValidos(salvo?.avancados), datas: { from: '', to: '' } }
+  // contaReserva (aba Contas Anuais): id da conta de reserva escolhida; '' = Todas. Conta que não
+  // existe mais vira Todas na tela (ela só aceita ids presentes nas opções).
+  return {
+    status, periodos, avancados: avancadosValidos(salvo?.avancados), datas: { from: '', to: '' },
+    contaReserva: str(salvo?.contaReserva),
+  }
 }
-export function salvarFiltrosAba(aba, { status, periodos, avancados }) {
+export function salvarFiltrosAba(aba, { status, periodos, avancados, contaReserva = '' }) {
   try {
     const todos = JSON.parse(localStorage.getItem(FILTROS_AGENDA_KEY) || '{}') || {}
-    todos[aba] = { status, periodos, avancados }
+    todos[aba] = { status, periodos, avancados, ...(contaReserva ? { contaReserva } : {}) }
     localStorage.setItem(FILTROS_AGENDA_KEY, JSON.stringify(todos))
   } catch { /* storage indisponível: só não lembra */ }
 }

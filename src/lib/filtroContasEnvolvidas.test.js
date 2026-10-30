@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { contasEnvolvidas, filtrarPorContas } from './filtroContasEnvolvidas'
+import { contasEnvolvidas, filtrarPorContas, contasReservaDaAba, filtrarPorContaReserva } from './filtroContasEnvolvidas'
 
 const accounts = [
   { id: 'itau', name: 'Itaú Conta Corrente' },
@@ -46,5 +46,30 @@ describe('filtrarPorContas', () => {
   })
   it('3 contas → ambas as pontas entre as três', () => {
     expect(ids(filtrarPorContas(lista, new Set(['itau', 'ca', 'imp'])))).toEqual(['1', '2', '3', '4'])
+  })
+})
+
+describe('filtro por conta de reserva', () => {
+  const contas = [
+    { id: 'cc', name: 'Conta Corrente' },
+    { id: 'r1', name: 'Reserva B', isReserva: true },
+    { id: 'r2', name: 'Reserva A', apelido: 'RA', vinculoTipo: 'reserva' },
+    { id: 'poup', name: 'Poupança comum', type: 'savings' },
+  ]
+  const todos = [t('1', 'cc', 'r1'), t('2', 'r1', 'cc'), t('3', 'cc', 'r2'), t('4', 'cc', 'poup')]
+  it('opções = contas de reserva da aba (origem ou destino), por nome; contagem do status atual', () => {
+    expect(contasReservaDaAba(todos, [todos[0], todos[1]], contas)).toEqual([
+      { accountId: 'r2', nome: 'RA', count: 0 },
+      { accountId: 'r1', nome: 'Reserva B', count: 2 },
+    ])
+  })
+  it('itens com o agendamento dentro (linhas de Pagos)', () => {
+    const linhas = [{ schedule: todos[2] }, { schedule: todos[0] }]
+    expect(contasReservaDaAba(todos, linhas, contas, l => l.schedule).find(c => c.accountId === 'r2').count).toBe(1)
+    expect(filtrarPorContaReserva(linhas, 'r2', l => l.schedule)).toEqual([linhas[0]])
+  })
+  it('filtro: origem OU destino; Todas devolve a lista', () => {
+    expect(ids(filtrarPorContaReserva(todos, 'r1'))).toEqual(['1', '2'])
+    expect(filtrarPorContaReserva(todos, '')).toBe(todos)
   })
 })

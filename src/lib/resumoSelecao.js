@@ -14,12 +14,15 @@ export function nomeConta(acc) {
   return acc?.apelido || acc?.name || '?'
 }
 
-// Grupo de movimentação de um agendamento (null = não entra no resumo).
-export function classificarAgendamento(schedule, accounts) {
+// Grupo de movimentação de um agendamento (null = não entra no resumo). reservaFoco (aba Contas
+// Anuais filtrada por uma conta de reserva): transferência entre duas reservas conta pelo lado dela.
+export function classificarAgendamento(schedule, accounts, reservaFoco = null) {
   const s = schedule
   if (!s) return null
   if (s.tipo === 'pagamento_fatura') return 'fatura'
   if (s.transactionType === 'transfer') {
+    if (reservaFoco && s.toAccountId === reservaFoco) return 'aplicacao'
+    if (reservaFoco && s.accountId === reservaFoco) return 'resgate'
     if (accounts.find(a => a.id === s.toAccountId)?.isReserva) return 'aplicacao'
     if (accounts.find(a => a.id === s.accountId)?.isReserva) return 'resgate'
     return 'transferencia'
@@ -30,14 +33,14 @@ export function classificarAgendamento(schedule, accounts) {
 }
 
 // itens: [{ schedule, amount }]. Valores não finitos contam como 0.
-export function resumoSelecao(itens, accounts = []) {
+export function resumoSelecao(itens, accounts = [], { reservaFoco = null } = {}) {
   const g = Object.fromEntries(GRUPOS_SELECAO.map(k => [k, { items: [], total: 0 }]))
   const pares = new Map()   // `${contaId}|${reservaId}` → par
   const impacto = new Map() // accountId → delta (só aplicações/resgates)
   const somaImpacto = (id, v) => impacto.set(id, r2((impacto.get(id) || 0) + v))
 
   for (const { schedule: s, amount } of itens) {
-    const key = classificarAgendamento(s, accounts)
+    const key = classificarAgendamento(s, accounts, reservaFoco)
     if (!key) continue
     const amt = Number.isFinite(Number(amount)) ? Number(amount) : 0
     g[key].items.push({ id: s.id, description: s.description || '—', amount: amt })
