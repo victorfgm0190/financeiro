@@ -23,6 +23,7 @@ import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import SeloParcela from '../shared/SeloParcela'
 import Modal from '../shared/Modal'
+import { escolherContaReserva, desligarReserva, escolherGrupo, grupoTravadoPelaReserva, divergenciaReserva, reservaInicial } from '../../lib/reservaGerencialForm'
 import MoedaEstrangeira from './MoedaEstrangeira'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import { faturaAbertaDoCartao, avisoFaturaFechada, rotuloFatura, faturaPelaData, faturaInicialDaEdicao } from '../../lib/faturaAberta'
@@ -171,6 +172,16 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const initialReservaContaId = initial?.type === 'expense'
     ? (initial.reservaContaId || initialResgate?.accountId || '')
     : ''
+  // Despesa de cartão com grupo de conta de reserva abre com "Será pago com reserva" ligado nessa
+  // conta (src/lib/reservaGerencialForm.js). A edição abre como gravada (divergente: só avisa).
+  const [reservaIni] = useState(() => {
+    const cartao = (initial?.type || 'expense') === 'expense' && controleGerencialAtivo(settings)
+      && accounts.find(a => a.id === initial?.accountId)?.type === 'credit'
+    return reservaInicial({
+      contaVinculada: initialReservaContaId, grupoGerencial: initial?.grupoGerencial, novo: !initial?.id,
+      reservaFuncaoId: initial?.reservaFuncaoId || (initialReservaContaId ? (initialResgate?.reservaFuncaoId || '') : ''),
+    }, { cartao, gerencialGroups, accounts, reserveFunctions })
+  })
 
   const [form, setForm] = useState({
     type: initial?.type || 'expense',
@@ -190,7 +201,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     // a fatura em que ele está hoje (pela data). "(automático)" fica como opção de recalcular.
     faturaMonthYear: initial?.faturaMonthYear || faturaInicialDaEdicao(initial, accounts) || '',
     faturaRef: initial?.faturaRef || '',
-    reservaFuncaoId: initial?.reservaFuncaoId || (initialReservaContaId ? (initialResgate?.reservaFuncaoId || '') : ''),
+    reservaFuncaoId: reservaIni.reservaFuncaoId,
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
     tipoDocumentoId: initial?.tipoDocumentoId || '',
@@ -199,8 +210,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     repeatOccurrenceType: 'continuous',
     repeatInstallments: 2,
     repeatRemindDaysBefore: 0,
-    useReserva: !!initialReservaContaId,
-    reservaAccountId: initialReservaContaId,
+    useReserva: reservaIni.useReserva,
+    reservaMemo: {},
+    reservaAccountId: reservaIni.reservaAccountId,
     reservaExpenseCategoryId: '',
     // Lançamento novo pode vir parcelado (prévia do Assistente: SMS "em 3x"); valor = TOTAL.
     installments: !initial?.id && Number(initial?.installments) > 1 ? Number(initial.installments) : 1,
@@ -321,6 +333,25 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const gerencialLigado = controleGerencialAtivo(settings)
   const showGerencial = isCredit && form.type === 'expense' && gerencialLigado
   const trava = travaGerencial(initial, { ativo: gerencialLigado, gerencialGroups })
+  // Reserva × classificação (cartão): a função escolhida em cada conta de reserva fica lembrada
+  // (form.reservaMemo), para trocar de conta e voltar sem perder a escolha.
+  const ctxReserva = { cartao: showGerencial, gerencialGroups, accounts, reserveFunctions, defaultGrupoId }
+  const aplicarReserva = (fn) => setForm(f => {
+    const memo = { ...f.reservaMemo, ...(f.reservaAccountId && f.reservaFuncaoId ? { [f.reservaAccountId]: f.reservaFuncaoId } : {}) }
+    return { ...fn(f, { ...ctxReserva, memo }), reservaMemo: memo }
+  })
+  const grupoTravado = grupoTravadoPelaReserva(form, ctxReserva)
+  const avisoDivergencia = divergenciaReserva(form, ctxReserva)
+  // Virou despesa de cartão (conta/tipo trocados) com reserva de grupo ligada: a classificação
+  // acompanha a reserva. Só na troca — ao abrir, um lançamento divergente fica como gravado.
+  const showGerencialAntes = useRef(showGerencial)
+  useEffect(() => {
+    if (showGerencial && !showGerencialAntes.current && form.useReserva && form.reservaAccountId) {
+      aplicarReserva((f, c) => escolherContaReserva(f, f.reservaAccountId, c))
+    }
+    showGerencialAntes.current = showGerencial
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGerencial])
 
   // Seleção de categoria: além de gravar a categoria, aplica o grupo gerencial PADRÃO da categoria
   // quando o gerencial é aplicável (showGerencial) e o grupo atual está vazio ou no padrão D
@@ -329,7 +360,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     set('categoryId', id)
     const cat = id ? categories.find(c => c.id === id) : null
     if (cat?.defaultGerencialGroup && showGerencial && (!form.grupoGerencial || form.grupoGerencial === defaultGrupoId)) {
-      set('grupoGerencial', cat.defaultGerencialGroup)
+      aplicarReserva((f, c) => escolherGrupo(f, cat.defaultGerencialGroup, c))
     }
   }
 
@@ -350,28 +381,23 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       : [],
     [reservaFuncaoMode, selectedGerencialGroup, reserveFunctions]
   )
-  const reservaGroupAccount = useMemo(
-    () => (reservaFuncaoMode && selectedGerencialGroup?.defaultAccountId)
-      ? accounts.find(a => a.id === selectedGerencialGroup.defaultAccountId)
-      : null,
-    [reservaFuncaoMode, selectedGerencialGroup, accounts]
-  )
-  // Só exibe o SELECT de função quando o grupo numerado tem MAIS DE 1 função vinculada.
-  // Com 1 única (ex.: PharmaLog), o resgate usa a conta do grupo automaticamente (sem select).
-  const showFuncaoReservaSelect = reservaGroupFuncs.length > 1
 
   const isMobile = useIsMobile()
   // A reserva já vinculada ao lançamento em edição entra na lista mesmo se inativa/oculta no
   // mobile — senão o select não a mostraria e salvar apagaria o vínculo.
   const reservaAccounts = useMemo(
-    () => accounts.filter(a => a.isReserva && (a.id === initialReservaContaId || (a.active !== false && (!isMobile || !a.hideOnMobile)))),
-    [accounts, isMobile, initialReservaContaId]
+    () => accounts.filter(a => a.isReserva && (a.id === initialReservaContaId || a.id === form.reservaAccountId || (a.active !== false && (!isMobile || !a.hideOnMobile)))),
+    [accounts, isMobile, initialReservaContaId, form.reservaAccountId]
   )
   // Funções da conta de reserva escolhida em "Será pago com reserva" (despesa de conta corrente).
   const reservaContaFuncs = useMemo(
     () => form.reservaAccountId ? (reserveFunctions || []).filter(f => f.accountId === form.reservaAccountId) : [],
     [form.reservaAccountId, reserveFunctions]
   )
+  // Função gravada que não é da conta de reserva (lançamento antigo divergente): continua no select.
+  const funcaoForaDaConta = form.reservaFuncaoId && !reservaContaFuncs.some(f => f.id === form.reservaFuncaoId)
+    ? (reserveFunctions || []).find(f => f.id === form.reservaFuncaoId) || null
+    : null
   const matchingSpecificReserva = useMemo(
     () => form.type === 'expense' && form.categoryId
       ? reservaAccounts.find(a => a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId)
@@ -585,7 +611,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const serieId = isParcelado ? newSerieId() : null
 
     // eslint-disable-next-line no-unused-vars
-    const { useReserva: _ur, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
+    const { useReserva: _ur, reservaMemo: _rm, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
     const txData = {
       ...formFields,
       amount: installmentAmount,
@@ -1866,7 +1892,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
 
-      {form.type === 'expense' && reservaAccounts.length > 0 && !reservaFuncaoMode && (
+      {form.type === 'expense' && reservaAccounts.length > 0 && (
         <div data-bloco-switch className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
@@ -1876,16 +1902,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                 checked={form.useReserva}
                 onChange={e => {
                   const checked = e.target.checked
-                  setForm(f => ({
-                    ...f,
-                    useReserva: checked,
-                    reservaAccountId: checked && !reservaFuncaoMode
-                      ? (matchingSpecificReserva?.id || reservaAccounts[0]?.id || '')
-                      : '',
-                    reservaFuncaoId: checked && reservaFuncaoMode
-                      ? (reservaGroupFuncs.length === 1 ? reservaGroupFuncs[0].id : f.reservaFuncaoId)
-                      : '',
-                  }))
+                  aplicarReserva((f, c) => checked
+                    ? escolherContaReserva(f, matchingSpecificReserva?.id || reservaAccounts[0]?.id || '', c)
+                    : desligarReserva(f, c))
                 }}
                 className="sr-only peer"
               />
@@ -1895,73 +1914,62 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <PiggyBank size={14} className="text-reserva shrink-0" />
             <span className="text-sm text-reserva select-none">Será pago com reserva</span>
             <ShortcutHint actionId="lancamento.toggleReserva" habilitado={atalhosForm} className="text-reserva" />
-            {matchingSpecificReserva && !form.useReserva && !reservaFuncaoMode && (
+            {matchingSpecificReserva && !form.useReserva && (
               <span className="text-xs text-texto-2 ml-1">sugerida: {matchingSpecificReserva.apelido || matchingSpecificReserva.name}</span>
             )}
           </label>
           {form.useReserva && (
-            reservaFuncaoMode ? (
-              <div className="space-y-2">
-                {reservaGroupFuncs.length > 0 ? (
-                  <>
-                    <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
-                    <select
-                      className="input"
-                      value={form.reservaFuncaoId}
-                      onChange={e => set('reservaFuncaoId', e.target.value)}
-                    >
-                      <option value="">Selecione a função...</option>
-                      {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
-                    <p className="text-xs text-texto-2 leading-relaxed">
-                      De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sairá
-                      o resgate desta despesa. O agendamento de resgate é gerado no vencimento de cada fatura afetada.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs text-aviso leading-relaxed">
-                    ⚠ Nenhuma função de reserva configurada para {reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'a conta de reserva'} deste grupo.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva</label>
-                <select
-                  className="input"
-                  value={form.reservaAccountId}
-                  onChange={e => setForm(f => ({ ...f, reservaAccountId: e.target.value, reservaFuncaoId: '' }))}
-                >
-                  <option value="">Selecione a reserva...</option>
-                  {reservaAccounts.map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId ? '★ ' : ''}{a.apelido || a.name}
-                    </option>
-                  ))}
-                </select>
-                {form.reservaAccountId && reservaContaFuncs.length > 0 && (
-                  <>
-                    <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
-                    <select
-                      className="input"
-                      value={form.reservaFuncaoId}
-                      onChange={e => set('reservaFuncaoId', e.target.value)}
-                    >
-                      <option value="">Selecione a função...</option>
-                      {reservaContaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
-                  </>
-                )}
-                {form.reservaAccountId && (
+            <div className="space-y-2">
+              <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva</label>
+              <select
+                className="input"
+                value={form.reservaAccountId}
+                onChange={e => {
+                  const id = e.target.value
+                  aplicarReserva((f, c) => id ? escolherContaReserva(f, id, c) : { ...desligarReserva(f, c), useReserva: true })
+                }}
+              >
+                <option value="">Selecione a reserva...</option>
+                {reservaAccounts.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.reservaType === 'especifica' && a.reservaCategoryId === form.categoryId ? '★ ' : ''}{a.apelido || a.name}
+                  </option>
+                ))}
+              </select>
+              {form.reservaAccountId && (reservaContaFuncs.length > 0 || funcaoForaDaConta) && (
+                <>
+                  <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                  <select
+                    className="input"
+                    value={form.reservaFuncaoId}
+                    onChange={e => set('reservaFuncaoId', e.target.value)}
+                    required={!!grupoTravado && reservaContaFuncs.length > 1}
+                  >
+                    <option value="" disabled={!!grupoTravado}>Selecione a função...</option>
+                    {funcaoForaDaConta && <option value={funcaoForaDaConta.id}>{funcaoForaDaConta.name} (de outra conta)</option>}
+                    {reservaContaFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </>
+              )}
+              {grupoTravado ? (
+                reservaContaFuncs.length > 0 ? (
                   <p className="text-xs text-texto-2 leading-relaxed">
-                    {initialResgate
-                      ? 'A despesa registra o vínculo com a reserva. O agendamento de resgate vinculado será atualizado ao salvar.'
-                      : 'A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o resgate desta reserva para a conta principal.'}
+                    A classificação gerencial fica definida pela reserva. O resgate sai desta função no vencimento
+                    de cada fatura afetada.
                   </p>
-                )}
-              </div>
-            )
+                ) : (
+                  <p className="text-xs text-aviso leading-relaxed">⚠ Nenhuma função de reserva configurada para esta conta.</p>
+                )
+              ) : form.reservaAccountId && (
+                <p className="text-xs text-texto-2 leading-relaxed">
+                  {initialResgate
+                    ? 'A despesa registra o vínculo com a reserva. O agendamento de resgate vinculado será atualizado ao salvar.'
+                    : 'A despesa registra o vínculo com a reserva. Após salvar, você poderá agendar o resgate desta reserva para a conta principal.'}
+                </p>
+              )}
+            </div>
           )}
+          {avisoDivergencia && <p className="text-xs text-aviso leading-relaxed">⚠ {avisoDivergencia}</p>}
         </div>
       )}
 
@@ -2037,11 +2045,18 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       {showGerencial && (
         <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
           <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
-          <GerencialSelect
-            value={form.grupoGerencial}
-            onChange={v => setForm(f => ({ ...f, grupoGerencial: v, reservaFuncaoId: '' }))}
-            grupos={gerencialGroups}
-          />
+          {grupoTravado ? (
+            <div className="input flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90 cursor-default" aria-readonly="true">
+              <span className="text-texto-1">{selectedGerencialGroup?.number} · {selectedGerencialGroup?.name}</span>
+              <span className="text-xs text-reserva">definida pela reserva</span>
+            </div>
+          ) : (
+            <GerencialSelect
+              value={form.grupoGerencial}
+              onChange={v => aplicarReserva((f, c) => escolherGrupo(f, v, c))}
+              grupos={gerencialGroups}
+            />
+          )}
 
           {form.grupoGerencial && (() => {
             const g = gerencialGroups.find(x => x.id === form.grupoGerencial)
@@ -2124,25 +2139,6 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   </p>
                 )}
 
-                {/* Função de reserva específica deste lançamento (novo e edição). Só quando o grupo
-                    tem MAIS DE 1 função; com 1 única, o resgate usa a conta do grupo automaticamente. */}
-                {showFuncaoReservaSelect && (
-                  <div>
-                    <label className="label text-xs uppercase tracking-wide text-reserva">Função de Reserva</label>
-                    <select
-                      className="input"
-                      value={form.reservaFuncaoId || ''}
-                      onChange={e => set('reservaFuncaoId', e.target.value)}
-                    >
-                      <option value="">Sem função específica</option>
-                      {reservaGroupFuncs.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                    </select>
-                    <p className="text-xs text-texto-3 mt-1 leading-relaxed">
-                      De qual função de <strong>{reservaGroupAccount?.apelido || reservaGroupAccount?.name || 'reserva'}</strong> sai
-                      o resgate desta despesa.
-                    </p>
-                  </div>
-                )}
               </div>
             )
           })()}
