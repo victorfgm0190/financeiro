@@ -4,12 +4,15 @@ import { useApp } from '../../context/AppContext'
 import TransactionForm from '../Transactions/TransactionForm'
 import AvisoParecidos from '../Transactions/AvisoParecidos'
 import EscolherConta from './EscolherConta'
+import EscolherCartaoParcelado from './EscolherCartaoParcelado'
 import { parecidosNaCriacao } from '../../lib/casamentoFatura'
 import { finaisDoCartao } from '../../lib/cartaoFinais'
 import ScheduleForm from '../Schedule/ScheduleForm'
 import {
   initialDaSugestao, camposParaConferir, apelidosAprendidos, ROTULO_CAMPO, tipoPreLancamento,
+  cartoesParaParcelado, agendamentoParceladoDaSugestao,
 } from '../../lib/assistente'
+import { papelDaContaApp } from '../../lib/assistente/contas'
 import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 
@@ -25,11 +28,22 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 //     a checagem ao salvar (valores editados), ignorando o que já foi aceito aqui.
 export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
   const { transactions, accounts, activeProfileId, updateAccount, pode } = useApp()
-  const agendamento = ferramenta === 'criar_agendamento'
+  // Compra parcelada sem conta citada: "Em qual cartão?" antes do formulário. "Não foi no cartão" →
+  // pergunta a conta e abre a prévia de AGENDAMENTO parcelado (N × valor/N, centavos na última).
+  const [semCartao, setSemCartao] = useState(false)
+  const perguntaCartao = !!sugestao.pergunta_cartao
+  const agendamento = ferramenta === 'criar_agendamento' || semCartao
   const destaques = camposParaConferir(ferramenta, sugestao)
   // Sem conta na sugestão → "Em qual conta?" (EscolherConta) antes do formulário.
   const [contaEscolhida, setContaEscolhida] = useState(null)
-  const initial = { ...initialDaSugestao(ferramenta, sugestao), ...(contaEscolhida ? { accountId: contaEscolhida } : {}) }
+  const initial = semCartao && contaEscolhida
+    ? agendamentoParceladoDaSugestao(sugestao, contaEscolhida)
+    : { ...initialDaSugestao(ferramenta, sugestao), ...(contaEscolhida ? { accountId: contaEscolhida } : {}) }
+  const cartoes = perguntaCartao ? cartoesParaParcelado(accounts, activeProfileId, transactions) : []
+  // "Não foi no cartão": só as contas sugeríveis que não são cartão.
+  const contasSemCartao = semCartao
+    ? accounts.filter(a => a.type !== 'credit' && papelDaContaApp(a, activeProfileId) === 'sugerivel').map(a => a.id)
+    : null
   const { marcar } = usePreLancamentoAoFechar({
     tipo: tipoPreLancamento(ferramenta), payload: { ...sugestao, ferramenta }, textoOriginal, preId, onToast,
   })
@@ -120,9 +134,13 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
           </button>
         </div>
       )}
-      {!initial.accountId
+      {perguntaCartao && !contaEscolhida && !semCartao
+        ? <EscolherCartaoParcelado valor={sugestao.valor} parcelas={sugestao.parcelas} cartoes={cartoes}
+            onCartao={setContaEscolhida} onSemCartao={() => setSemCartao(true)} />
+        : !initial.accountId
         ? <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaEscolhida}
-            opcoes={sugestao.contas_opcoes || null} finalSemCartao={sugestao.final_sem_cartao || null} />
+            opcoes={semCartao ? contasSemCartao : (sugestao.contas_opcoes || null)} finalSemCartao={sugestao.final_sem_cartao || null}
+            titulo={semCartao ? `Em qual conta? Vira um agendamento de ${sugestao.parcelas} parcelas mensais.` : null} />
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
         : <TransactionForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}

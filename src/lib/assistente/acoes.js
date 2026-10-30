@@ -161,6 +161,13 @@ function validarRegistro(p, ctx, hoje) {
       }
     }
   }
+  // Compra PARCELADA sem conta/cartão/final citados: não escolhe conta sozinho (a favorita costuma
+  // ser conta corrente, onde o Parcelado não existe) — a prévia pergunta "Em qual cartão?".
+  if (out.parcelas && out.confianca.conta < 1 && !out.contas_opcoes && !out.final_sem_cartao) {
+    out.conta_id = null
+    out.confianca.conta = 0
+    out.pergunta_cartao = true
+  }
   const estabelecimento = out.favorecido_id || out.favorecido_novo
   if (estabelecimento && descricaoGenericaDeCompra(out.descricao)) out.descricao = estabelecimento
   return out

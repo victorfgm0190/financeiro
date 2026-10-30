@@ -81,3 +81,31 @@ describe('baixa de agendamento', () => {
       .toMatchObject({ ferramenta: 'baixar_agendamento', descricao: 'Mensalidade', valor: 220, data: '2026-10-29', conta_id: 'itau' })
   })
 })
+
+describe('compra parcelada: "Em qual cartão?" e "Não foi no cartão"', () => {
+  it('cartões do perfil, ativos, mais usados primeiro', async () => {
+    const { cartoesParaParcelado } = await import('./assistente')
+    const accounts = [
+      { id: 'a', name: 'Azul', type: 'credit', profileId: 'P1' },
+      { id: 'b', name: 'Black', type: 'credit', profileId: 'P1' },
+      { id: 'c', name: 'Cora', type: 'checking', profileId: 'P1' },
+      { id: 'd', name: 'Inativo', type: 'credit', profileId: 'P1', active: false },
+      { id: 'e', name: 'Outro perfil', type: 'credit', profileId: 'P2' },
+    ]
+    const txs = [{ accountId: 'b' }, { accountId: 'b' }, { accountId: 'a' }]
+    expect(cartoesParaParcelado(accounts, 'P1', txs).map(a => a.id)).toEqual(['b', 'a'])
+    expect(cartoesParaParcelado(accounts, null, []).map(a => a.id)).toEqual(['a', 'b', 'e'])
+  })
+  it('"Não foi no cartão": agendamento 3 × 150, mensal, 1ª na data informada', async () => {
+    const { agendamentoParceladoDaSugestao } = await import('./assistente')
+    const r = agendamentoParceladoDaSugestao({ tipo: 'despesa', valor: 450, parcelas: 3, data: '2026-10-29', descricao: 'Posto' }, 'itau')
+    expect(r).toMatchObject({ amount: '150', installments: 3, frequency: 'monthly', occurrenceType: 'installment', startDate: '2026-10-29', accountId: 'itau', transactionType: 'expense' })
+    expect(r.overrides).toBeUndefined()
+  })
+  it('100 em 3x: 33,33 + 33,33 + 33,34 (a última vira exceção da 3ª ocorrência)', async () => {
+    const { agendamentoParceladoDaSugestao } = await import('./assistente')
+    const r = agendamentoParceladoDaSugestao({ tipo: 'despesa', valor: 100, parcelas: 3, data: '2026-10-29' }, 'itau')
+    expect(r.amount).toBe('33.33')
+    expect(r.overrides).toEqual({ '2026-12-29': { amount: 33.34 } })
+  })
+})

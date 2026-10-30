@@ -109,3 +109,27 @@ describe('parcelado por frase livre (voz/texto)', () => {
     expect(r.confianca.valor).toBeLessThan(0.5)
   })
 })
+
+describe('compra parcelada sem conta citada → pergunta "Em qual cartão?"', () => {
+  // Resposta típica do modelo: sem conta (ou a favorita) e categoria de mercado.
+  const semConta = { tipo: 'despesa', valor: 300, data: '2026-10-29', conta_id: null, categoria_id: 'cat_far', descricao: 'Mercado', confianca: { valor: 1, conta: 0.2, categoria: 0.8 } }
+  it('"Lançar R$300 em três vezes no mercado": 3x reconhecido; pergunta o cartão (não escolhe conta)', () => {
+    const texto = 'Lançar R$300 em três vezes no mercado'
+    expect(parcelamentoDoTexto(texto)).toEqual({ n: 3, valorParcela: null, claro: true })
+    const r = validarAcao('registrar_lancamento', { ...semConta, conta_id: 'itau' }, montar(texto), '2026-10-29')
+    expect(r).toMatchObject({ parcelas: 3, valor: 300, conta_id: null, pergunta_cartao: true })
+  })
+  it('"comprei 450 em 3x no posto" → pergunta', () => {
+    const r = validarAcao('registrar_lancamento', { ...semConta, valor: 450 }, montar('comprei 450 em 3x no posto'), '2026-10-29')
+    expect(r).toMatchObject({ parcelas: 3, valor: 450, conta_id: null, pergunta_cartao: true })
+  })
+  it('"450 em 3x no Itaupers" → não pergunta (cartão citado); final citado também não', () => {
+    const r = validarAcao('registrar_lancamento', { ...semConta, valor: 450, conta_id: 'itaupers' }, montar('450 em 3x no Itaupers'), '2026-10-29')
+    expect(r).toMatchObject({ parcelas: 3, conta_id: 'itaupers' })
+    expect(r.pergunta_cartao).toBeUndefined()
+    expect(validarAcao('registrar_lancamento', doModelo, montar(SMS.itau), '2026-10-29').pergunta_cartao).toBeUndefined()
+  })
+  it('à vista não pergunta', () => {
+    expect(validarAcao('registrar_lancamento', semConta, montar('gastei 300 no mercado'), '2026-10-29').pergunta_cartao).toBeUndefined()
+  })
+})

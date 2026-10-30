@@ -1,6 +1,8 @@
 // Assistente IA (etapa 1) — regras puras da prévia: sugestão do /api/assistente → `initial` dos
 // formulários existentes (TransactionForm / ScheduleForm), campos a conferir e apelidos a aprender
 // com as correções do usuário. Nenhuma gravação aqui: o formulário salva pelo fluxo do AppContext.
+import { valoresDasParcelas } from './parcelas.js'
+import { computeOccurrences } from './occurrences.js'
 
 export const TIPO_MOV = { despesa: 'expense', receita: 'income', transferencia: 'transfer' }
 
@@ -163,4 +165,28 @@ export async function comprimirImagem(arquivo, { lado = 1600, maxBytes = 1.9 * 1
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+// ─── Compra parcelada sem conta citada (pergunta "Em qual cartão?") ──────────────────────────────
+// Cartões oferecidos: de crédito, ativos, do perfil ativo (Tudo → todos), mais usados primeiro.
+export function cartoesParaParcelado(accounts, activeProfileId, transactions = []) {
+  const uso = new Map()
+  for (const t of transactions) if (t.accountId) uso.set(t.accountId, (uso.get(t.accountId) || 0) + 1)
+  return (accounts || [])
+    .filter(a => a.type === 'credit' && a.active !== false && (!activeProfileId || a.profileId === activeProfileId))
+    .sort((a, b) => (uso.get(b.id) || 0) - (uso.get(a.id) || 0) || (a.apelido || a.name).localeCompare(b.apelido || b.name, 'pt-BR'))
+}
+
+// "Não foi no cartão" → AGENDAMENTO parcelado: N parcelas mensais de valor/N (centavos na última),
+// a 1ª na data informada. A última parcela diferente vira exceção (overrides) da sua ocorrência.
+export function agendamentoParceladoDaSugestao(p, contaId) {
+  const n = Number(p.parcelas)
+  const { parcela, ultima } = valoresDasParcelas(p.valor, n)
+  const initial = {
+    ...initialDaSugestao('criar_agendamento', { ...p, valor: parcela, vencimento: p.data, recorrencia: 'monthly', parcelas: n }),
+    accountId: contaId,
+  }
+  const dataUltima = computeOccurrences({ ...initial, registered: [], skipped: [] }, n)[n - 1]
+  if (ultima !== parcela && dataUltima) initial.overrides = { [dataUltima]: { amount: ultima } }
+  return initial
 }

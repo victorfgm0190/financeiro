@@ -7,7 +7,8 @@ import { papelDaContaApp } from '../../lib/assistente/contas'
 // "Outra conta…", que abre todas as contas ativas — nunca as subcontas gerenciais.
 // `opcoes` (ids): "final 4541" de mais de um cartão → pergunta só entre eles.
 // `finalSemCartao`: nenhum cartão tem esse final → avisa (a prévia oferece salvar depois).
-export default function EscolherConta({ accounts, activeProfileId, onEscolher, opcoes = null, finalSemCartao = null }) {
+// `titulo`: pergunta própria (ex.: "Não foi no cartão" → em qual conta, só entre `opcoes`).
+export default function EscolherConta({ accounts, activeProfileId, onEscolher, opcoes = null, finalSemCartao = null, titulo = null }) {
   const [outra, setOutra] = useState(false)
   const nome = (a) => a.apelido || a.name
   const sugeriveis = (opcoes?.length ? accounts.filter(a => opcoes.includes(a.id)) : accounts.filter(a => papelDaContaApp(a, activeProfileId) === 'sugerivel'))
@@ -17,7 +18,7 @@ export default function EscolherConta({ accounts, activeProfileId, onEscolher, o
   return (
     <div className="rounded-lg border border-aviso/50 bg-aviso/10 px-3 py-2.5 space-y-2">
       <p className="text-sm font-medium text-texto-1">
-        {opcoes?.length ? 'Mais de um cartão tem esse final. Qual foi?' : 'Em qual conta?'}
+        {titulo || (opcoes?.length ? 'Mais de um cartão tem esse final. Qual foi?' : 'Em qual conta?')}
       </p>
       {finalSemCartao && <p className="text-xs text-texto-2">Nenhum cartão tem o final {finalSemCartao} cadastrado.</p>}
       <div className="flex flex-wrap gap-2">
