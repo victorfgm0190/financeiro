@@ -2,7 +2,7 @@
 // gravação direta de um item ("Salvar selecionados") e o lançamento gravado direto. PURO.
 import { camposParaConferir, ROTULO_CAMPO } from '../assistente'
 import { parecidosNaCriacao } from '../casamentoFatura'
-import { agendamentosDoLancamento } from './agendamentoDoLancamento'
+import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos } from './agendamentoDoLancamento'
 
 // ─── App: pendências e gravação direta ────────────────────────────────────────────────────────────
 // Motivos que exigem revisar o item na prévia normal (o "Salvar selecionados" não grava). Campo com
@@ -12,6 +12,8 @@ export const MOTIVOS = {
   conta: 'falta a conta',
   duplicado: 'possível duplicado',
   agendamento: 'bate com agendamento',
+  agendamentoParecido: 'parecido com agendamento',
+  favorecido: 'favorecido',
   cartao: 'em qual cartão?',
   parcelado: 'parcelado',
   moeda: 'compra em dólar',
@@ -46,6 +48,9 @@ export function pendenciasDoItem(item, ctx) {
   const conta = (ctx.accounts || []).find(a => a.id === p.conta_id)
   if (parecidosNaCriacao(lanc, { transactions: ctx.transactions, preLancamentos: ctx.preLancamentos || [], closingDay: conta?.closingDay || 14 }).length) out.push(MOTIVOS.duplicado)
   if (ctx.getNextOccurrences && agendamentosDoLancamento(lanc, ctx).length) out.push(MOTIVOS.agendamento)
+  else if (ctx.getNextOccurrences && agendamentosParecidos(lanc, ctx).length) out.push(MOTIVOS.agendamentoParecido)
+  // Só sugestão: favorecido cadastrado parecido com o nome que veio → revisar ("Usar?" na prévia).
+  if (favorecidosParecidos(p, ctx.payees || []).length) out.push(MOTIVOS.favorecido)
   if (conta?.type === 'credit' && lanc.type === 'expense' && grupoGeridoDaCategoria(p.categoria_id, ctx)) out.push(MOTIVOS.gerencial)
   return [...new Set(out)]
 }

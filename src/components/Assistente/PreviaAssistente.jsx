@@ -15,8 +15,9 @@ import {
 import { papelDaContaApp } from '../../lib/assistente/contas'
 import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
-import { agendamentosDoLancamento, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
+import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomeDoFavorecidoNovo, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
 import AgendamentoQueBate from './AgendamentoQueBate'
+import AgendamentoParecido from './AgendamentoParecido'
 import PreviaBaixa from './PreviaBaixa'
 import CompraEmDolar from './CompraEmDolar'
 import { cotacaoDolar } from '../../lib/assistenteApi'
@@ -43,8 +44,19 @@ import {
 //     IOF estimado ligado a ela. Sem cotação → o R$ fica para o usuário digitar.
 // Item de um LOTE (LoteAssistente): `guardarAoFechar` false (a lista guarda os não salvos) e
 // `onConcluido('salvo' | 'mesmo' | 'descartado')` avisa a lista do desfecho.
-export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
-  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories } = useApp()
+export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
+  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees } = useApp()
+  // Favorecido cadastrado PARECIDO com o nome que veio (a IA não escolheu um existente): só sugere.
+  // "Usar" troca o favorecido da prévia e aprende o apelido (ia_apelidos) para casar direto depois.
+  const [favorecidoUsado, setFavorecidoUsado] = useState(null)
+  const [favorecidoRecusado, setFavorecidoRecusado] = useState(false)
+  const favParecidos = ferramenta === 'registrar_lancamento' && !favorecidoUsado && !favorecidoRecusado ? favorecidosParecidos(sugestaoIA, payees || []) : []
+  const sugestao = favorecidoUsado ? { ...sugestaoIA, favorecido_id: favorecidoUsado, favorecido_novo: null } : sugestaoIA
+  const usarFavorecido = (nome) => {
+    const termo = nomeDoFavorecidoNovo(sugestaoIA)
+    setFavorecidoUsado(nome)
+    if (termo) aprenderApelidos([{ tipo: 'favorecido', termo, ref_id: nome }]).catch(err => console.warn('[assistente] apelido não salvo:', err.message))
+  }
   // Compra parcelada sem conta citada: "Em qual cartão?" antes do formulário. "Não foi no cartão" →
   // pergunta a conta e abre a prévia de AGENDAMENTO parcelado (N × valor/N, centavos na última).
   const [semCartao, setSemCartao] = useState(false)
@@ -121,14 +133,22 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
 
   // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
   const [agendDispensado, setAgendDispensado] = useState(false)
+  const [parecidoDispensado, setParecidoDispensado] = useState(false)
   const [baixa, setBaixa] = useState(null)
+  const [valorNasProximas, setValorNasProximas] = useState(false)
   const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}) }
   const agendamentosQueBatem = useMemo(() => {
     if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return []
     return agendamentosDoLancamento(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences, ptax])
-  const darBaixa = (candidato) => { marcar('baixa'); setBaixa(candidato) }
+  // Sem casamento certo: agendamento PARECIDO (qualquer valor, até 15 dias) → só a pergunta "É ele?".
+  const agendamentosParecidosLista = useMemo(() => {
+    if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return []
+    return agendamentosParecidos(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences, ptax])
+  const darBaixa = (candidato, { usarNasProximas = false } = {}) => { marcar('baixa'); setValorNasProximas(usarNasProximas); setBaixa(candidato) }
 
   // "É o mesmo": nada é criado; o pré-lançamento que estava sendo efetivado é baixado contra o
   // existente (ou descartado, se o parecido é outro pré-lançamento).
@@ -170,13 +190,20 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   if (baixa) {
     return (
       <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast}
-        extrasLancamento={extrasCompra} onBaixaSalva={cambio ? criarIof : null} guardarAoFechar={guardarAoFechar} onConcluido={onConcluido} />
+        extrasLancamento={extrasCompra} onBaixaSalva={cambio ? criarIof : null} guardarAoFechar={guardarAoFechar} onConcluido={onConcluido}
+        valorNasProximas={valorNasProximas} />
     )
   }
   if (!agendDispensado && agendamentosQueBatem.length > 0) {
     return (
       <AgendamentoQueBate candidatos={agendamentosQueBatem} textoOriginal={textoOriginal}
         onBaixa={darBaixa} onOutro={() => setAgendDispensado(true)} onDescartar={descartar} />
+    )
+  }
+  if (!parecidoDispensado && !agendamentosQueBatem.length && agendamentosParecidosLista.length > 0) {
+    return (
+      <AgendamentoParecido candidato={agendamentosParecidosLista[0]} valor={lancAgend.amount} textoOriginal={textoOriginal}
+        onBaixa={darBaixa} onNaoE={() => setParecidoDispensado(true)} onDescartar={descartar} />
     )
   }
 
@@ -211,6 +238,19 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
           <Trash2 size={13} /> Descartar
         </button>
       </div>
+      {favParecidos.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1" role="status">
+          <span className="flex-1 min-w-0 break-words">
+            <strong>{nomeDoFavorecidoNovo(sugestaoIA)}</strong> pode ser o favorecido {favParecidos.map((f, k) => <span key={f}>{k ? ' ou ' : ''}<strong>{f}</strong></span>)}. Usar?
+          </span>
+          {favParecidos.map(f => (
+            <button key={f} type="button" className="btn-secondary text-xs min-h-[36px]" onClick={() => usarFavorecido(f)}>
+              {favParecidos.length > 1 ? `Usar ${f}` : 'Usar'}
+            </button>
+          ))}
+          <button type="button" className="text-xs text-texto-2 hover:text-texto-1 min-h-[36px] px-2" onClick={() => setFavorecidoRecusado(true)}>Não</button>
+        </div>
+      )}
       {finalNovo && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-borda-forte bg-surface-2 px-3 py-2 text-xs text-texto-2">
           <span className="flex-1 min-w-0">O final {finalNovo} não está cadastrado em {cartaoEscolhido.apelido || cartaoEscolhido.name}.</span>
@@ -234,7 +274,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
         ? null
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
-        : <TransactionForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+        : <TransactionForm key={favorecidoUsado || ''} initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}
     </div>

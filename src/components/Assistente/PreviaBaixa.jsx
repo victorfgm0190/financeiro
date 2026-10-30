@@ -13,8 +13,10 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 // Fechar sem confirmar → pré-lançamento tipo 'baixa'; Descartar → nada.
 // Compra em dólar (prévia do Assistente): `extrasLancamento` vai no lançamento da baixa (estimado, moeda…)
 // e `onBaixaSalva(pago)` cria o IOF ligado a ele.
-export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId = null, onClose, onToast, extrasLancamento = null, onBaixaSalva = null, guardarAoFechar = true, onConcluido = null }) {
-  const { schedules, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, getNextOccurrences } = useApp()
+// `valorNasProximas` (agendamento PARECIDO, "Baixar e usar R$ X nas próximas"): o valor pago vira o
+// valor do agendamento para as próximas ocorrências.
+export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId = null, onClose, onToast, extrasLancamento = null, onBaixaSalva = null, guardarAoFechar = true, onConcluido = null, valorNasProximas = false }) {
+  const { schedules, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, getNextOccurrences, updateSchedule } = useApp()
   // Só a PRÓXIMA pendente (o que o Pagar baixaria): já baixada/pulada depois → não abre o modal.
   const achado = (schedules || []).find(s => s.id === candidato.schedule_id) || null
   const schedule = achado && getNextOccurrences(achado, 1)[0] === candidato.ocorrencia ? achado : null
@@ -32,6 +34,10 @@ export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId 
     marcar('salvo')
     onConcluido?.('salvo')
     if (pago?.id) onBaixaSalva?.(pago)
+    if (valorNasProximas && schedule && Number(pago?.amount) > 0) {
+      updateSchedule(schedule.id, { amount: Number(pago.amount) })
+      onToast?.(`Próximas ocorrências de ${schedule.description} passam a ${fmt(Number(pago.amount))}.`)
+    }
     if (preId) concluirPreLancamento(preId, 'efetivado').catch(err => onToast?.(`Baixa salva, mas o pré-lançamento não foi baixado: ${err.message}`))
   }
 
@@ -58,7 +64,7 @@ export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId 
         <p className="mt-0.5 text-texto-2">
           {schedule.description}{parcela ? ` · parcela ${parcela}` : ''} · vence {fmtDate(candidato.data)} · previsto {fmt(candidato.valor)}
         </p>
-        {diferente && <p className="mt-0.5 text-aviso">Baixa pelo valor informado: {fmt(valor)}. Confira antes de confirmar.</p>}
+        {diferente && <p className="mt-0.5 text-aviso">Baixa pelo valor informado: {fmt(valor)}{valorNasProximas ? ', que passa a valer nas próximas ocorrências' : ''}. Confira antes de confirmar.</p>}
         {textoOriginal && <p className="mt-0.5 whitespace-pre-wrap text-texto-3">“{textoOriginal}”</p>}
       </div>
       <button type="button" onClick={descartar} className="inline-flex shrink-0 items-center gap-1 rounded px-2 min-h-[32px] text-texto-2 hover:text-perigo" title="Descartar a sugestão (não guarda nada)">

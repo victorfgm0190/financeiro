@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { agendamentosDoLancamento, nomesParecidos, valorVariavel, criterioDoLancamento } from './agendamentoDoLancamento.js'
+import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomesParecidos, valorVariavel, criterioDoLancamento } from './agendamentoDoLancamento.js'
+import { nomeCompacto, prefixoParecido, semIntermediador } from './nomeParecido.js'
 import { computeOccurrences } from '../occurrences.js'
 
 const accounts = [
@@ -63,5 +64,65 @@ describe('agendamento pendente que o lançamento do assistente paga', () => {
     expect(buscar(compra, [vercel])).toHaveLength(1)
     expect(buscar({ ...compra, amount: 123 }, [vercel])).toHaveLength(0)
     expect(buscar({ ...compra, estimado: false }, [vercel])).toHaveLength(0)
+  })
+})
+
+// Caso real (dados trocados): SMS "... final 4541 - MP *BARBEARIACONS valor RS 70,00 em 23/10" ×
+// agendamento quinzenal "BARBEARIA CONSTANCIA" R$ 120 no mesmo cartão, vencido em 24/10.
+const barbearia = (extra) => ({
+  id: 'barb', description: 'BARBEARIA CONSTANCIA', payee: 'Barbearia Constância', transactionType: 'expense', accountId: 'cartao', amount: 120,
+  frequency: 'biweekly', startDate: '2026-10-10', occurrenceType: 'continuous', registered: ['2026-10-10'], skipped: [], overrides: {}, ...extra,
+})
+const smsBarb = { type: 'expense', amount: 70, date: '2026-10-23', accountId: 'cartao', payee: '', description: 'MP *BARBEARIACONS' }
+const ctxB = (schedules, transactions = []) => ({ schedules, accounts, transactions, getNextOccurrences })
+
+describe('nome parecido (genérico)', () => {
+  it('tira o intermediador pelo formato, acentos, espaços e símbolos', () => {
+    expect(semIntermediador('MP *BARBEARIACONS')).toBe('BARBEARIACONS')
+    expect(nomeCompacto('PG*Loja Ávila-Centro')).toBe('lojaavilacentro')
+    expect(nomeCompacto('IFD*Restaurante')).toBe('restaurante')
+    expect(nomeCompacto('SPG * Posto X')).toBe('postox')
+  })
+  it('prefixo de um no outro com 6+ letras', () => {
+    expect(prefixoParecido('MP *BARBEARIACONS', 'BARBEARIA CONSTANCIA')).toBe(true)
+    expect(prefixoParecido('BARBE', 'BARBEARIA CONSTANCIA')).toBe(false)
+    expect(prefixoParecido('BARBEARIA X', 'BARBEARIA CONSTANCIA')).toBe(false)
+  })
+})
+
+describe('agendamento PARECIDO (só sugere)', () => {
+  it('caso real: avisa (valor fora de 10%), não bate certo', () => {
+    expect(agendamentosDoLancamento(smsBarb, ctxB([barbearia()]))).toEqual([])
+    const r = agendamentosParecidos(smsBarb, ctxB([barbearia()]))
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ schedule_id: 'barb', data: '2026-10-24', valor: 120, parecido: true, atrasado: false })
+  })
+  it('mesmo nome em OUTRO cartão não avisa', () => {
+    expect(agendamentosParecidos(smsBarb, ctxB([barbearia({ accountId: 'cartao2' })]))).toEqual([])
+  })
+  it('menos de 6 letras em comum não avisa', () => {
+    expect(agendamentosParecidos({ ...smsBarb, description: 'MP *BARBE' }, ctxB([barbearia()]))).toEqual([])
+  })
+  it('valor dentro de 10% (variável) continua "bate com agendamento", e sai dos parecidos', () => {
+    const pago = [{ scheduleId: 'barb', amount: 110 }]
+    const lanc = { ...smsBarb, amount: 115 }
+    expect(agendamentosDoLancamento(lanc, ctxB([barbearia()], pago))).toHaveLength(1)
+    expect(agendamentosParecidos(lanc, ctxB([barbearia()], pago))).toEqual([])
+  })
+  it('ocorrência a mais de 15 dias não avisa', () => {
+    expect(agendamentosParecidos({ ...smsBarb, date: '2026-11-09' }, ctxB([barbearia({ registered: ['2026-10-10', '2026-10-24'] })]))).toHaveLength(1)
+    expect(agendamentosParecidos({ ...smsBarb, date: '2026-10-08' }, ctxB([barbearia({ registered: ['2026-10-10', '2026-10-24'] })]))).toEqual([])
+  })
+})
+
+describe('favorecido parecido (só sugere)', () => {
+  const payees = ['Barbearia Constância', 'Barbearia X', 'Posto Central']
+  it('nome do SMS × favoritos cadastrados', () => {
+    expect(favorecidosParecidos({ favorecido_novo: 'MP *BARBEARIACONS' }, payees)).toEqual(['Barbearia Constância'])
+    expect(favorecidosParecidos({ favorecido_novo: null, descricao: 'MP *BARBEARIACONS' }, payees)).toEqual(['Barbearia Constância'])
+  })
+  it('IA já escolheu um existente, ou nome curto → nada', () => {
+    expect(favorecidosParecidos({ favorecido_id: 'Posto Central', descricao: 'BARBEARIACONS' }, payees)).toEqual([])
+    expect(favorecidosParecidos({ favorecido_novo: 'BARB' }, payees)).toEqual([])
   })
 })

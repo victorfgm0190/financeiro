@@ -18,6 +18,7 @@
 //
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
+import { semIntermediador } from './nomeParecido.js'
 import { contaParaGravar, escolherConta } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
 import {
@@ -121,7 +122,11 @@ function validarLancamento(p, ctx, hoje) {
   const cat = categoriaId ? ctx.idx.categorias.get(categoriaId) : null
   if (categoriaId && (!cat || (cat.tipo !== 'both' && cat.tipo !== TIPO_CAT[tipo]))) categoriaId = zera('categoria')
 
+  // Apelido aprendido ("Usar" no aviso de favorecido parecido): pelo termo citado ou pelo nome que
+  // veio sem o intermediador ("MP *BARBEARIACONS" → "barbeariacons").
   const favApelido = porApelido(ctx, 'favorecido', termos.favorecido)
+    || porApelido(ctx, 'favorecido', semIntermediador(p.favorecido_novo))
+    || (!p.favorecido_id && !p.favorecido_novo ? porApelido(ctx, 'favorecido', semIntermediador(p.descricao)) : null)
   let favorecido = favApelido || (p.favorecido_id ? ctx.idx.favorecidos.get(normalizarTermo(p.favorecido_id)) || null : null)
   let favorecidoNovo = null
   if (!favorecido && p.favorecido_id) confianca.favorecido = 0

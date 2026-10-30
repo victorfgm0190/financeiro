@@ -173,3 +173,25 @@ describe('texto restante: nunca um trecho errado', () => {
     expect(restanteDoPedido(blocos, [50, 30], 1)).toBe('Compra R$ 20\nCinema')
   })
 })
+
+describe('lote: parecidos ficam para revisão', () => {
+  const accounts = [{ id: 'nubank', name: 'Nubank', type: 'credit', closingDay: 1 }, { id: 'outro', name: 'Outro', type: 'credit', closingDay: 1 }]
+  const barb = { id: 'barb', description: 'BARBEARIA CONSTANCIA', payee: 'Barbearia Constância', transactionType: 'expense', accountId: 'nubank', amount: 120, frequency: 'biweekly', startDate: '2026-10-10', occurrenceType: 'continuous', registered: ['2026-10-10'], skipped: [], overrides: {} }
+  const ctxP = (extra = {}) => ({ accounts, transactions: [], preLancamentos: [], schedules: [barb], getNextOccurrences: computeOccurrences, categories: [], gerencialGroups: [], payees: ['Barbearia Constância'], ...extra })
+  const it70 = { ferramenta: 'registrar_lancamento', sugestao: { tipo: 'despesa', valor: 70, data: '2026-10-23', conta_id: 'nubank', categoria_id: 'c', descricao: 'MP *BARBEARIACONS', favorecido_novo: 'MP *BARBEARIACONS', confianca: { valor: 1, data: 1, conta: 1, categoria: 1, descricao: 1, favorecido: 1 } } }
+  it('caso real: "parecido com agendamento" e "favorecido"', () => {
+    expect(pendenciasDoItem(it70, ctxP())).toEqual(expect.arrayContaining([MOTIVOS.agendamentoParecido, MOTIVOS.favorecido]))
+  })
+  it('em outro cartão: nenhum aviso de agendamento', () => {
+    expect(pendenciasDoItem(it70, ctxP({ schedules: [{ ...barb, accountId: 'outro' }] }))).not.toContain(MOTIVOS.agendamentoParecido)
+  })
+})
+
+describe('apelido de favorecido aprendido ("Usar") casa direto no validador', () => {
+  it('"MP *BARBEARIACONS" com o apelido barbeariacons → o favorecido cadastrado', () => {
+    const ctx = montar('MP *BARBEARIACONS valor RS 70,00', '')
+    ctx.apelidos = [{ tipo: 'favorecido', termo: 'barbeariacons', ref_id: 'Barbearia Constância' }]
+    const p = validarAcao('registrar_lancamento', doModelo({ valor: 70, favorecido_novo: 'MP *BARBEARIACONS', descricao: 'Barbearia' }), ctx, '2026-10-30')
+    expect(p).toMatchObject({ favorecido_id: 'Barbearia Constância', favorecido_novo: null })
+  })
+})

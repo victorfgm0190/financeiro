@@ -7,7 +7,8 @@
 //   • valor: ±R$ 0,05; recorrente de valor VARIÁVEL (valor projetado, ou já pago com valor
 //     diferente do agendado) → ±10% do valor da ocorrência; lançamento ESTIMADO (compra em dólar) → ±15%;
 //   • nome parecido: as palavras de um lado (favorecido ou descrição) contidas no texto do outro,
-//     sem acento/maiúsculas ("CONTA VIVO" × "Conta Vivo");
+//     sem acento/maiúsculas ("CONTA VIVO" × "Conta Vivo"), ou um nome prefixo do outro com 6+
+//     letras, sem o intermediador ("MP *BARBEARIACONS" × "BARBEARIA CONSTANCIA", lib nomeParecido);
 //   • a PRÓXIMA ocorrência pendente (a que o Pagar baixaria) com data efetiva a até ±7 dias da
 //     data do lançamento (atrasadas inclusive);
 //   • mesma conta, OU lançamento de cartão e agendamento sem cartão definido (débito automático
@@ -16,8 +17,11 @@
 // valor, descricao, favorecido, conta_id, tipo, atrasado }, o mais parecido primeiro.
 import { normalizarTermo } from './texto.js'
 import { occEfetiva } from '../fluxoCaixa.js'
+import { algumParecido, prefixoParecido, semIntermediador } from './nomeParecido.js'
 
 export const JANELA_DIAS_AGENDAMENTO = 7
+// PARECIDO (só sugere): ocorrência pendente ou em atraso a até ~15 dias, qualquer valor.
+export const JANELA_DIAS_PARECIDO = 15
 export const TOLERANCIA_VALOR = 0.05
 export const TOLERANCIA_VARIAVEL = 0.10
 // Lançamento ESTIMADO (compra em moeda estrangeira, src/lib/cambio.js): o R$ só fecha na fatura.
@@ -40,7 +44,7 @@ function contidas(textos, alvo) {
 export function nomesParecidos(lanc, schedule) {
   const doLanc = [lanc.payee, lanc.description].filter(Boolean)
   const doAgend = [schedule.payee, schedule.description].filter(Boolean)
-  return contidas(doLanc, doAgend.flatMap(palavras)) || contidas(doAgend, doLanc.flatMap(palavras))
+  return contidas(doLanc, doAgend.flatMap(palavras)) || contidas(doAgend, doLanc.flatMap(palavras)) || algumParecido(doLanc, doAgend)
 }
 
 // Valor variável: projetado, ou algum pagamento ligado com valor diferente do agendado.
@@ -50,10 +54,10 @@ export function valorVariavel(schedule, transactions = []) {
   return transactions.some(t => t.scheduleId === schedule.id && Math.abs((Number(t.amount) || 0) - schedule.amount) > TOLERANCIA_VALOR)
 }
 
-// lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description, estimado? }.
-export function agendamentosDoLancamento(lanc, { schedules = [], accounts = [], transactions = [], getNextOccurrences }) {
-  const valor = Number(lanc?.amount)
-  if (!(valor > 0) || !lanc.date || !lanc.accountId) return []
+// Agendamentos do mesmo tipo e da mesma conta (ou cartão × agendamento sem cartão), com a PRÓXIMA
+// ocorrência pendente: [{ s, base, e, dias, mesmaConta }].
+function pendentesDaConta(lanc, { schedules = [], accounts = [], getNextOccurrences }) {
+  if (!(Number(lanc?.amount) > 0) || !lanc.date || !lanc.accountId) return []
   if (lanc.type !== 'expense' && lanc.type !== 'income') return []
   const tipoDe = (id) => accounts.find(a => a.id === id)?.type
   const lancNoCartao = tipoDe(lanc.accountId) === 'credit'
@@ -62,26 +66,65 @@ export function agendamentosDoLancamento(lanc, { schedules = [], accounts = [], 
     if (s.transactionType !== lanc.type || s.isProvisao || s.tipo === 'pagamento_fatura') continue
     const mesmaConta = s.accountId === lanc.accountId
     if (!mesmaConta && !(lancNoCartao && tipoDe(s.accountId) !== 'credit')) continue
-    if (!nomesParecidos(lanc, s)) continue
     const base = getNextOccurrences(s, 1)[0]
     if (!base) continue
     const e = occEfetiva(s, base)
-    const dias = diasEntre(lanc.date, e.date)
+    out.push({ s, base, e, dias: diasEntre(lanc.date, e.date), mesmaConta })
+  }
+  return out
+}
+const candidato = (lanc, { s, base, e }) => ({
+  schedule_id: s.id, ocorrencia: base, data: e.date, valor: r2(Number(e.amount) || 0),
+  descricao: s.description, favorecido: s.payee, conta_id: s.accountId || null,
+  tipo: s.transactionType === 'income' ? 'receita' : 'despesa',
+  atrasado: e.date < lanc.date,
+})
+
+// lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description, estimado? }.
+export function agendamentosDoLancamento(lanc, ctx) {
+  const valor = Number(lanc?.amount)
+  const out = []
+  for (const p of pendentesDaConta(lanc, ctx)) {
+    const { s, e, dias, mesmaConta } = p
+    if (!nomesParecidos(lanc, s)) continue
     if (Math.abs(dias) > JANELA_DIAS_AGENDAMENTO) continue
     const dif = Math.abs((Number(e.amount) || 0) - valor)
-    const pct = lanc.estimado ? TOLERANCIA_ESTIMADO : valorVariavel(s, transactions) ? TOLERANCIA_VARIAVEL : 0
+    const pct = lanc.estimado ? TOLERANCIA_ESTIMADO : valorVariavel(s, ctx.transactions || []) ? TOLERANCIA_VARIAVEL : 0
     const tolerancia = Math.max(TOLERANCIA_VALOR, (Number(e.amount) || 0) * pct)
     if (dif > tolerancia + 1e-9) continue
-    out.push({
-      schedule_id: s.id, ocorrencia: base, data: e.date, valor: r2(Number(e.amount) || 0),
-      descricao: s.description, favorecido: s.payee, conta_id: s.accountId || null,
-      tipo: s.transactionType === 'income' ? 'receita' : 'despesa',
-      atrasado: e.date < lanc.date,
-      ordem: [mesmaConta ? 0 : 1, dif, Math.abs(dias)],
-    })
+    out.push({ ...candidato(lanc, p), ordem: [mesmaConta ? 0 : 1, dif, Math.abs(dias)] })
   }
   const cmp = (a, b) => a.ordem[0] - b.ordem[0] || a.ordem[1] - b.ordem[1] || a.ordem[2] - b.ordem[2]
   return out.sort(cmp).map(c => { delete c.ordem; return c })
+}
+
+// PARECIDO (não é casamento certo — só a pergunta "É ele?"): nome parecido (palavras, ou um prefixo
+// do outro com 6+ letras, sem o intermediador: "MP *BARBEARIACONS" × "BARBEARIA CONSTANCIA") + mesma
+// conta/cartão + próxima ocorrência pendente ou em atraso a até 15 dias, QUALQUER valor. Os que já
+// batem certo (agendamentosDoLancamento) ficam de fora.
+export function agendamentosParecidos(lanc, ctx) {
+  const certos = new Set(agendamentosDoLancamento(lanc, ctx).map(c => c.schedule_id))
+  const out = []
+  for (const p of pendentesDaConta(lanc, ctx)) {
+    const { s, dias, mesmaConta } = p
+    if (certos.has(s.id) || Math.abs(dias) > JANELA_DIAS_PARECIDO) continue
+    if (!nomesParecidos(lanc, s)) continue
+    out.push({ ...candidato(lanc, p), parecido: true, ordem: [mesmaConta ? 0 : 1, Math.abs(dias)] })
+  }
+  return out.sort((a, b) => a.ordem[0] - b.ordem[0] || a.ordem[1] - b.ordem[1]).map(c => { delete c.ordem; return c })
+}
+
+// Favorecido cadastrado PARECIDO com o nome que veio (a IA não escolheu um existente): até 3 nomes.
+// sugestao: { favorecido_id, favorecido_novo, descricao }; payees: nomes cadastrados.
+export function nomeDoFavorecidoNovo(sugestao) {
+  if (!sugestao || sugestao.favorecido_id) return null
+  return semIntermediador(sugestao.favorecido_novo || sugestao.descricao || '').trim() || null
+}
+export function favorecidosParecidos(sugestao, payees = []) {
+  const nome = nomeDoFavorecidoNovo(sugestao)
+  if (!nome) return []
+  const alvo = normalizarTermo(nome)
+  return payees.filter(p => p && normalizarTermo(p) !== alvo && prefixoParecido(nome, p)).slice(0, 3)
 }
 
 // Critério para a PreviaBaixa: baixa com a conta, a data e o valor do lançamento (SMS/foto/texto).

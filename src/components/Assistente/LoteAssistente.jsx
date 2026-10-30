@@ -43,9 +43,9 @@ export default function LoteAssistente({ itens: itensIniciais, faltantes = null,
   const mudar = (i, patch) => setItens(prev => prev.map(it => (it.i === i ? { ...it, ...patch } : it)))
   const sugestaoDe = (it) => sugestaoComConta(it.parametros, it.conta || (it.parametros.pergunta_cartao ? '' : contaGeral))
   const ctx = useMemo(() => ({
-    accounts, transactions, preLancamentos: pres, schedules, getNextOccurrences, categories, gerencialGroups,
+    accounts, transactions, preLancamentos: pres, schedules, getNextOccurrences, categories, gerencialGroups, payees,
     gerencialLigado: controleGerencialAtivo(settings),
-  }), [accounts, transactions, pres, schedules, getNextOccurrences, categories, gerencialGroups, settings])
+  }), [accounts, transactions, pres, schedules, getNextOccurrences, categories, gerencialGroups, payees, settings])
   const linhas = itens.map(it => ({ ...it, sugestao: sugestaoDe(it), pend: it.status === 'aberto' ? pendenciasDoItem({ ferramenta: it.ferramenta, sugestao: sugestaoDe(it) }, ctx) : [] }))
   const abertos = linhas.filter(l => l.status === 'aberto')
   const semConta = abertos.some(l => l.ferramenta === 'registrar_lancamento' && !l.parametros.conta_id && !l.parametros.pergunta_cartao)
