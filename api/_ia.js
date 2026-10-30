@@ -46,7 +46,12 @@ export async function ensureIaSchema() {
     tokens_saida INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     com_imagem BOOLEAN NOT NULL DEFAULT false,
-    usuario TEXT
+    usuario TEXT,
+    modelo TEXT,
+    duracao_ms INTEGER,
+    stop_reason TEXT,
+    tokens_cache_leitura INTEGER,
+    tokens_cache_criacao INTEGER
   )`)
   schemaPronto.marcar()
 }
@@ -224,18 +229,26 @@ export const validarParametros = (ferramenta, input, ctx, hoje = hojeSaoPaulo())
 
 // Consumo da chamada (ia_uso). Falha aqui não derruba a resposta.
 // comImagem: o pedido teve foto/print (só a marca — a imagem nunca é gravada). usuario: id do
-// usuário (limite diário por usuário).
-export async function registrarUso({ ambiente, ferramenta, usage, comImagem = false, usuario = null }, q = query) {
-  const entrada = (usage?.input_tokens || 0) + (usage?.cache_read_input_tokens || 0) + (usage?.cache_creation_input_tokens || 0)
+// usuário (limite diário por usuário). tokens_entrada = TOTAL de entrada (inclui o cache);
+// tokens_cache_* = a parte lida do / gravada no cache de prompt (tela Consumo de IA).
+export async function registrarUso({ ambiente, ferramenta, usage, comImagem = false, usuario = null, modelo = null, duracaoMs = null, stopReason = null }, q = query) {
+  const leitura = usage?.cache_read_input_tokens || 0
+  const criacao = usage?.cache_creation_input_tokens || 0
+  const entrada = (usage?.input_tokens || 0) + leitura + criacao
   const base = [ambiente || null, ferramenta || null, entrada, usage?.output_tokens || 0]
-  try {
-    await q('INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida, com_imagem, usuario) VALUES ($1, $2, $3, $4, $5, $6)', [...base, !!comImagem, usuario || null])
-  } catch (err) {
+  const tentativas = [
+    ['INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida, com_imagem, usuario, modelo, duracao_ms, stop_reason, tokens_cache_leitura, tokens_cache_criacao) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [...base, !!comImagem, usuario || null, modelo, duracaoMs == null ? null : Math.round(duracaoMs), stopReason, leitura, criacao]],
     // Banco sem as colunas novas (migrações 2026-10-30 pendentes): grava sem elas.
-    let erro = err
-    if (err?.code === '42703') {
-      try { await q('INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida) VALUES ($1, $2, $3, $4)', base); return } catch (e2) { erro = e2 }
+    ['INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida, com_imagem, usuario) VALUES ($1, $2, $3, $4, $5, $6)', [...base, !!comImagem, usuario || null]],
+    ['INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida) VALUES ($1, $2, $3, $4)', base],
+  ]
+  for (const [sql, params] of tentativas) {
+    try { await q(sql, params); return } catch (err) {
+      if (err?.code === '42703') continue
+      console.error('[ia] uso não registrado:', err.message)
+      return
     }
-    console.error('[ia] uso não registrado:', erro.message)
   }
+  console.error('[ia] uso não registrado: ia_uso sem as colunas esperadas')
 }

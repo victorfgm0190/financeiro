@@ -131,7 +131,10 @@ async function handler(req, res) {
     const bloco = blocos[0]
     const ferramenta = lote ? 'lote' : bloco ? bloco.name : 'perguntar'
     // Só a marca "teve imagem" — a imagem não é gravada nem logada em lugar nenhum.
-    await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem, usuario: req.user?.id })
+    await registrarUso({
+      ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem, usuario: req.user?.id,
+      modelo: msg.model || MODELO, duracaoMs: Date.now() - inicio, stopReason: msg.stop_reason || null,
+    })
     // Só números (sem texto do pedido): tempo e tamanho da resposta, para acompanhar o lote.
     if (lote || cortada) console.info(`[api/assistente] ${ferramenta} ${blocos.length} item(ns), ${msg.usage?.output_tokens} tokens de saída, ${Date.now() - inicio} ms${cortada ? ', CORTADA' : ''}`)
 

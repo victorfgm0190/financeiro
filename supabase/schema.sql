@@ -1146,5 +1146,12 @@ CREATE TABLE IF NOT EXISTS ia_uso (
   ferramenta TEXT,
   tokens_entrada INTEGER NOT NULL DEFAULT 0,
   tokens_saida INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  com_imagem BOOLEAN NOT NULL DEFAULT false,
+  usuario TEXT,
+  modelo TEXT,
+  duracao_ms INTEGER,
+  stop_reason TEXT,
+  tokens_cache_leitura INTEGER,
+  tokens_cache_criacao INTEGER
 );

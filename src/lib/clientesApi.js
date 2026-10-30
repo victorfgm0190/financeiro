@@ -55,3 +55,8 @@ export const checarSiglaAdmin = (sigla, nome, id) => chamar(`/api/clientes?${qs(
 
 export const checarSiglaPublica = (sigla, nome) => chamar(`/api/sigla-disponivel?${qs({ sigla, nome })}`, { autenticado: false })
 export const enviarPedidoPublico = (dados) => chamar('/api/cadastro-publico', { method: 'POST', body: dados, autenticado: false })
+
+// Consumo de IA (todos os ambientes; só o administrador da plataforma) e o cadastro de preços.
+export const consumoIa = (inicio, fim, ambiente) => chamar(`/api/admin/consumo-ia?${qs({ inicio, fim, ambiente })}`)
+export const salvarPrecoIa = (dados) => chamar('/api/admin/consumo-ia?acao=preco', { method: 'POST', body: dados })
+export const excluirPrecoIa = (id) => chamar('/api/admin/consumo-ia?acao=excluir-preco', { method: 'POST', body: { id } })

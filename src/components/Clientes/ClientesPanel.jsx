@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Check, X, Pause, Play, Ban, Copy, MessageCircle, Penci
 import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import AnaliseCliente from './AnaliseCliente'
+import ConsumoIa from './ConsumoIa'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
   andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi, salvarLimitesIa,
@@ -552,7 +553,23 @@ function ProvisionamentoModal({ id, onFechar, onMudou }) {
   )
 }
 
+// Abas: Clientes (o controle de sempre) e Consumo de IA (todos os ambientes; ConsumoIa.jsx).
 export default function ClientesPanel({ onMudou = () => {} }) {
+  const [aba, setAba] = useState('clientes')
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 border-b border-borda" role="tablist" aria-label="Clientes Finup">
+        {[['clientes', 'Clientes'], ['consumo', 'Consumo de IA']].map(([v, r]) => (
+          <button key={v} type="button" role="tab" aria-selected={aba === v} onClick={() => setAba(v)}
+            className={`px-3 py-2 min-h-[40px] text-sm font-medium border-b-2 -mb-px ${aba === v ? 'border-primary text-primary-fg' : 'border-transparent text-texto-2 hover:text-texto-1'}`}>{r}</button>
+        ))}
+      </div>
+      {aba === 'clientes' ? <ControleDeClientes onMudou={onMudou} /> : <ConsumoIa />}
+    </div>
+  )
+}
+
+function ControleDeClientes({ onMudou }) {
   const [clientes, setClientes] = useState(null)
   const [filtro, setFiltro] = useState('pedido')
   const [aberto, setAberto] = useState(null)

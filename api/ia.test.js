@@ -74,7 +74,7 @@ describe('ia_uso: marca de imagem (a imagem nunca é gravada)', () => {
     const q = async (sql, params) => { chamadas.push({ sql, params }) }
     await registrarUso({ ambiente: 'vm', ferramenta: 'registrar_lancamento', usage: { input_tokens: 100, output_tokens: 20 }, comImagem: true }, q)
     expect(chamadas[0].sql).toMatch(/com_imagem/)
-    expect(chamadas[0].params).toEqual(['vm', 'registrar_lancamento', 100, 20, true, null])
+    expect(chamadas[0].params).toEqual(['vm', 'registrar_lancamento', 100, 20, true, null, null, null, null, 0, 0])
     expect(JSON.stringify(chamadas)).not.toMatch(/base64|data:image/)
     const semColuna = []
     const q2 = async (sql, params) => {
@@ -82,8 +82,28 @@ describe('ia_uso: marca de imagem (a imagem nunca é gravada)', () => {
       if (/com_imagem/.test(sql)) { const e = new Error('coluna'); e.code = '42703'; throw e }
     }
     await registrarUso({ ambiente: 'vm', ferramenta: 'x', usage: {}, comImagem: true }, q2)
-    expect(semColuna).toHaveLength(2)
-    expect(semColuna[1]).not.toMatch(/com_imagem/)
+    expect(semColuna).toHaveLength(3)
+    expect(semColuna[2]).not.toMatch(/com_imagem/)
+  })
+  it('consumo: modelo, tempo, stop_reason e a parte de cache (tokens_entrada continua o total)', async () => {
+    const { registrarUso } = await import('./_ia.js')
+    const chamadas = []
+    await registrarUso({
+      ambiente: 'vm', ferramenta: 'lote', usage: { input_tokens: 300, cache_read_input_tokens: 25000, cache_creation_input_tokens: 0, output_tokens: 4000 },
+      usuario: 'u1', modelo: 'modelo-x', duracaoMs: 18234.6, stopReason: 'max_tokens',
+    }, async (sql, params) => { chamadas.push({ sql, params }) })
+    expect(chamadas).toHaveLength(1)
+    expect(chamadas[0].params).toEqual(['vm', 'lote', 25300, 4000, false, 'u1', 'modelo-x', 18235, 'max_tokens', 25000, 0])
+  })
+  it('sem as colunas de consumo (migração pendente) grava como antes', async () => {
+    const { registrarUso } = await import('./_ia.js')
+    const sqls = []
+    await registrarUso({ ambiente: 'vm', ferramenta: 'x', usage: {}, usuario: 'u1' }, async (sql) => {
+      sqls.push(sql)
+      if (/duracao_ms/.test(sql)) { const e = new Error('coluna'); e.code = '42703'; throw e }
+    })
+    expect(sqls).toHaveLength(2)
+    expect(sqls[1]).toMatch(/usuario/)
   })
 })
 
