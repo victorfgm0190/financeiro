@@ -87,3 +87,29 @@ export function resumoSelecao(itens, accounts = []) {
 
   return { g, saldo, showSaldo: hasInflow && hasOutflow, liquidoReserva, pares: listaPares, impactoPorConta }
 }
+
+// "Valor transferido de fato" (modal Registrar selecionados): por par (conta ↔ reserva), a
+// diferença entre o valor movido no banco e o líquido dos agendamentos vira UMA transferência SEM
+// função e sem categoria (origem reserva_a_distribuir: sem espelho, fora dos totais) — o "Saldo a
+// distribuir" da reserva. Sentido do par: resgate = reserva → conta; aplicação (ou zero) = conta →
+// reserva. Transferiu MAIS → a diferença segue o sentido; MENOS → volta no sentido contrário.
+// deFato: { [`${contaId}|${reservaId}`]: número }. Devolve os lançamentos a criar.
+export const DESCRICAO_A_DISTRIBUIR = 'Diferença da operação da reserva (saldo a distribuir)'
+export function transferenciasDaDiferenca(pares, deFato, { date, origin = 'reserva_a_distribuir' } = {}) {
+  const out = []
+  for (const p of pares || []) {
+    const fato = deFato?.[`${p.contaId}|${p.reservaId}`]
+    if (!Number.isFinite(fato) || fato < 0) continue
+    const diff = r2(fato - Math.abs(p.liquido))
+    if (diff === 0) continue
+    const paraReserva = (p.sentido !== 'resgate') === (diff > 0)
+    out.push({
+      type: 'transfer',
+      accountId: paraReserva ? p.contaId : p.reservaId,
+      toAccountId: paraReserva ? p.reservaId : p.contaId,
+      amount: Math.abs(diff), date, description: DESCRICAO_A_DISTRIBUIR,
+      categoryId: null, reservaFuncaoId: null, origin,
+    })
+  }
+  return out
+}

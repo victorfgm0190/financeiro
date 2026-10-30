@@ -282,22 +282,17 @@ export function buildDailyLedgerRows({
       saldo[f.id] = round2((saldo[f.id] || 0) + entrada - saida + a)
     }
 
-    // 2. Rateio por conta — MESMA fórmula do ReservasPanel (saldosAtualizados).
+    // 2. Saldo Atualizado = saldo acumulado (29/10: sem a reescala pelo saldo real — a diferença é
+    //    o "Saldo a distribuir" da conta, como no ReservasPanel). Grava o saldo real da conta do dia.
     const atualizado = {}
     const fatorOf = {}
     const realOf = {}
     for (const [accId, fns] of Object.entries(byAccount)) {
-      const ativos = fns.filter(f => startOf[f.id] <= d)
-      const totalSaldo = ativos.reduce((s, f) => s + (saldo[f.id] || 0), 0)
       const serie = saldoRealByAccDay[accId]
       const saldoReal = serie ? serie[d] : undefined
-      for (const f of ativos) {
-        if (saldoReal === undefined) { atualizado[f.id] = saldo[f.id]; continue }
-        realOf[f.id] = saldoReal
-        fatorOf[f.id] = totalSaldo === 0 ? 0 : saldoReal / totalSaldo
-        atualizado[f.id] = totalSaldo === 0
-          ? 0
-          : round2((saldo[f.id] || 0) * (saldoReal / totalSaldo))
+      for (const f of fns.filter(x => startOf[x.id] <= d)) {
+        atualizado[f.id] = saldo[f.id]
+        if (saldoReal !== undefined) realOf[f.id] = saldoReal
       }
     }
 

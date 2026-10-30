@@ -26,6 +26,10 @@ export const ORIGIN = {
   RENDIMENTO_MANUAL: 'rendimento_manual',
   // Importação padrão de lançamentos (Excel gerado pelo Finup, .csv ou OFX) — um lote por arquivo.
   IMPORTACAO_PADRAO: 'importacao_padrao',
+  // Diferença entre o líquido da operação da reserva (Registrar selecionados) e o valor
+  // transferido de fato: transferência SEM função e sem categoria, sem espelho, fora dos totais —
+  // vira "Saldo a distribuir" da conta de reserva.
+  RESERVA_A_DISTRIBUIR: 'reserva_a_distribuir',
 }
 
 // Equivalências canônico ⇄ legado (valor antigo ainda gravado em linhas históricas).

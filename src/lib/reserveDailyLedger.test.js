@@ -62,15 +62,16 @@ describe('activePeriodByFunction', () => {
 })
 
 describe('buildDailyLedgerRows — rateio', () => {
-  it('reproduz a fórmula da tela: saldo × (saldo real ÷ soma dos saldos da conta)', () => {
+  it('Saldo Atualizado = saldo (sem reescala); o saldo real da conta fica gravado', () => {
     const { rows } = buildDailyLedgerRows(cenarioBase())
-    // acc1 hoje: saldos 1100 + 500 = 1600 teóricos contra 1560 reais → fator 0,975.
+    // acc1 hoje: saldos 1100 + 500 = 1600 contra 1560 reais → −40 "a distribuir", visível na tela.
     const f1 = at(rows, 'f1', TODAY)
     const f2 = at(rows, 'f2', TODAY)
     expect(f1.saldo_acumulado).toBe(1100)
-    expect(f1.saldo_atualizado).toBe(Math.round(1100 * (1560 / 1600) * 100) / 100)
-    expect(f2.saldo_atualizado).toBe(Math.round(500 * (1560 / 1600) * 100) / 100)
-    expect(f1.fator_rateio).toBeCloseTo(0.975, 8)
+    expect(f1.saldo_atualizado).toBe(1100)
+    expect(f2.saldo_atualizado).toBe(500)
+    expect(f1.saldo_real_conta).toBe(1560)
+    expect(f1.fator_rateio).toBeNull()
   })
 
   it('função em conta sem divergência fica com Saldo Atualizado igual ao Saldo', () => {
@@ -133,7 +134,7 @@ describe('buildDailyLedgerRows — viradas encadeadas', () => {
     const antes = buildDailyLedgerRows({ ...cenario, periods: base }).rows
     const fech = at(antes, 'f1', '2026-08-13')
     expect(fech.saldo_acumulado).toBe(1000)
-    expect(fech.saldo_atualizado).toBe(975) // fator 0,975 pelo órfão de 50 em 10/08
+    expect(fech.saldo_atualizado).toBe(1000) // sem reescala: o órfão de 50 fica "a distribuir"
 
     const virada1 = [
       { id: 'p3', function_id: 'f1', data_inicio: '2026-08-14', saldo_inicial: 975 },

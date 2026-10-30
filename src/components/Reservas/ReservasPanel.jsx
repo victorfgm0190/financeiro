@@ -18,6 +18,8 @@ import ViradaModal from './ViradaModal'
 import RazaoDiarioTab from './RazaoDiarioTab'
 import InputMoeda from '../shared/InputMoeda'
 import { isoLocal } from '../../lib/hoje'
+import { ratearProporcional, erroDistribuicao, OBS_DISTRIBUICAO } from '../../lib/reservaDistribuir'
+import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -541,6 +543,36 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
   const grandTotal = Object.values(saldosAtualizados).reduce((s, v) => s + v, 0)
 
   const [dragId, setDragId] = useState(null)
+  // Coluna "Distribuir": valor (texto) por função; erro e gravação por conta de reserva.
+  const [distrib, setDistrib] = useState({})
+  const [distErro, setDistErro] = useState({})
+  const [distSalvando, setDistSalvando] = useState(null)
+  const ratear = (accountId, fns, aDistribuir) => {
+    const r = ratearProporcional(fns.map(f => ({ id: f.id, saldo: computeSaldo(f) })), aDistribuir)
+    setDistrib(prev => ({ ...prev, ...Object.fromEntries(fns.map(f => [f.id, r[f.id] ? valorParaInput(r[f.id]) : ''])) }))
+    setDistErro(e => ({ ...e, [accountId]: null }))
+  }
+  const limparDistrib = (accountId, fns) => {
+    setDistrib(prev => ({ ...prev, ...Object.fromEntries(fns.map(f => [f.id, ''])) }))
+    setDistErro(e => ({ ...e, [accountId]: null }))
+  }
+  // Grava um AJUSTE por função (reserve_adjustments): não move dinheiro, não conta em total nenhum.
+  const confirmarDistrib = async (accountId, fns, aDistribuir) => {
+    const valores = Object.fromEntries(fns.map(f => [f.id, parseValorBR(distrib[f.id])]).filter(([, v]) => Number.isFinite(v) && v !== 0))
+    const erro = erroDistribuicao(fns.map(f => ({ id: f.id, nome: f.name, saldo: computeSaldo(f) })), valores, aDistribuir)
+    if (erro) { setDistErro(e => ({ ...e, [accountId]: erro })); return }
+    setDistSalvando(accountId)
+    try {
+      for (const [functionId, v] of Object.entries(valores)) {
+        await onAddAdjustment({ id: newId('adj'), function_id: functionId, data: todayStr, valor: Math.round(v * 100) / 100, observacao: OBS_DISTRIBUICAO })
+      }
+      limparDistrib(accountId, fns)
+    } catch (err) {
+      setDistErro(e => ({ ...e, [accountId]: `Não foi possível gravar: ${err.message}` }))
+    } finally {
+      setDistSalvando(null)
+    }
+  }
   const handleDropOn = (targetFn) => {
     const dragged = functions.find(f => f.id === dragId)
     setDragId(null)
@@ -622,6 +654,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
           : null
         const diff = saldoReal !== null ? Math.round((saldoReal - totalSaldo) * 100) / 100 : null
         const accLabel = account ? (account.apelido || account.name) : null
+        const totalDistrib = Math.round(fns.reduce((s, f) => s + (parseValorBR(distrib[f.id]) || 0), 0) * 100) / 100
 
         return (
           <div key={accountId || '__none__'}>
@@ -652,7 +685,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                     />
                     {diff !== null && diff !== 0 && (
                       <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                        {diff > 0 ? '+' : ''}{fmtSinal(diff)}
+                        {diff > 0 ? '+' : ''}{fmtSinal(diff)} a distribuir
                       </span>
                     )}
                   </div>
@@ -770,7 +803,7 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       />
                       {diff !== null && diff !== 0 && (
                         <span className={`text-xs font-medium shrink-0 ${diff >= 0 ? 'text-receita' : 'text-despesa'}`}>
-                          {diff > 0 ? '+' : ''}{fmtSinal(diff)}
+                          {diff > 0 ? '+' : ''}{fmtSinal(diff)} a distribuir
                         </span>
                       )}
                     </div>
@@ -789,8 +822,8 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       <th className="text-right px-4 py-2 text-xs text-receita font-medium w-28">Entradas (+)</th>
                       <th className="text-right px-4 py-2 text-xs text-despesa font-medium w-28">Saídas (−)</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-24">Ajuste</th>
+                      <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28" title="Parte do saldo a distribuir que vai para a função (grava um ajuste)">Distribuir</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo</th>
-                      <th className="text-right px-4 py-2 text-xs text-receita font-medium w-32">Saldo Atualizado</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Mov. Futuros</th>
                       <th className="text-right px-4 py-2 text-xs text-texto-2 font-medium w-28">Saldo Futuro</th>
                       <th className="w-14" />
@@ -841,11 +874,18 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                               {f.ajusteObs && <ObsIndicator text={f.ajusteObs} />}
                             </span>
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-semibold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
-                            {fmt(saldo)}
+                          <td className="px-2 py-1 text-right">
+                            {podeEditar && accountId && diff ? (
+                              <InputMoeda negativo
+                                className="input w-24 !py-1 !px-2 text-xs text-right"
+                                value={distrib[f.id] ?? ''}
+                                onChange={e => { const v = e.target.value; setDistrib(prev => ({ ...prev, [f.id]: v })); setDistErro(x => ({ ...x, [accountId]: null })) }}
+                                aria-label={`Distribuir para ${f.name}`}
+                              />
+                            ) : <span className="text-xs text-texto-3">—</span>}
                           </td>
-                          <td className={`px-4 py-2 text-right text-xs font-bold ${atualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
-                            {fmt(atualizado)}
+                          <td className={`px-4 py-2 text-right text-xs font-bold ${saldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
+                            {fmt(saldo)}
                           </td>
                           <td className="px-4 py-2 text-right text-xs font-semibold">
                             <button
@@ -893,11 +933,11 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                           {ta !== 0 ? (ta > 0 ? '+' : '') + fmt(ta) : <span className="text-texto-3">0,00</span>}
                         </td>
                       ) })()}
+                      <td className="px-4 py-2 text-right text-xs font-semibold text-texto-2">
+                        {totalDistrib !== 0 ? fmtSinal(totalDistrib) : ''}
+                      </td>
                       <td className={`px-4 py-2 text-right text-xs font-semibold ${totalSaldo < 0 ? 'text-despesa' : 'text-texto-1'}`}>
                         {fmt(totalSaldo)}
-                      </td>
-                      <td className={`px-4 py-2 text-right text-xs font-bold ${totalAtualizado < 0 ? 'text-despesa' : 'text-receita'}`}>
-                        {fmt(totalAtualizado)}
                       </td>
                       <td className={`px-4 py-2 text-right text-xs font-semibold ${totalLiquido > 0 ? 'text-receita' : totalLiquido < 0 ? 'text-despesa' : 'text-texto-3'}`}>
                         {totalLiquido !== 0 ? (totalLiquido > 0 ? '+' : '') + fmt(totalLiquido) : <span className="text-texto-3">0,00</span>}
@@ -907,6 +947,41 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
                       </td>
                       <td />
                     </tr>
+                    {/* Saldo a distribuir = saldo real − Σ saldos das funções (pode ser negativo). */}
+                    {accountId && diff !== null && (
+                      <tr className="bg-surface-2/10">
+                        <td colSpan={6} className="px-4 py-2 text-xs font-semibold text-texto-2">
+                          Saldo a distribuir <span className="font-normal text-texto-3">(saldo real {fmt(saldoReal)} − Σ funções)</span>
+                        </td>
+                        <td className={`px-4 py-2 text-right text-xs font-bold ${diff < 0 ? 'text-despesa' : diff > 0 ? 'text-receita' : 'text-texto-3'}`}>
+                          {fmtSinal(diff)}
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    )}
+                    {accountId && podeEditar && diff ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-2">
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <button type="button" className="btn-secondary text-xs py-1" onClick={() => ratear(accountId, fns, diff)}>Ratear proporcional</button>
+                            <button type="button" className="btn-secondary text-xs py-1" onClick={() => limparDistrib(accountId, fns)}>Limpar</button>
+                            <span className="text-texto-3">
+                              Distribuindo <span className="font-semibold text-texto-2">{fmtSinal(totalDistrib)}</span> de {fmtSinal(diff)}
+                              {totalDistrib !== 0 && Math.abs(totalDistrib - diff) > 0.001 ? ' (parcial)' : ''}
+                            </span>
+                            <button type="button" className="btn-primary text-xs py-1 ml-auto disabled:opacity-40"
+                              disabled={!totalDistrib || distSalvando === accountId}
+                              onClick={() => confirmarDistrib(accountId, fns, diff)}>
+                              {distSalvando === accountId ? 'Gravando…' : 'Confirmar distribuição'}
+                            </button>
+                          </div>
+                          {distErro[accountId] && <p className="mt-1 text-xs text-perigo">{distErro[accountId]}</p>}
+                          <p className="mt-1 text-[11px] text-texto-3">
+                            A distribuição grava um ajuste em cada função: não move dinheiro entre contas e não conta como despesa nem receita. Pode ficar parada; nada obriga a distribuir.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -2120,27 +2195,14 @@ export default function ReservasPanel() {
     }
   }), [functions, computedMovs, currentMonthKey, activePeriodByFn, adjustmentsByFn])
 
-  const saldosAtualizados = useMemo(() => {
-    const result = {}
-    const byAccount = {}
-    effectiveFunctions.forEach(f => {
-      if (!f.accountId) return
-      ;(byAccount[f.accountId] = byAccount[f.accountId] || []).push(f)
-    })
-    Object.entries(byAccount).forEach(([accId, fns]) => {
-      const account = accounts.find(a => a.id === accId)
-      const totalSaldo = fns.reduce((s, f) => s + computeSaldo(f), 0)
-      const saldoReal = accountBalances[accId] !== undefined
-        ? accountBalances[accId]
-        : (account?.balance || 0)
-      fns.forEach(f => {
-        const saldo = computeSaldo(f)
-        result[f.id] = totalSaldo === 0 ? 0 : Math.round(saldo * (saldoReal / totalSaldo) * 100) / 100
-      })
-    })
-    effectiveFunctions.filter(f => !f.accountId).forEach(f => { result[f.id] = computeSaldo(f) })
-    return result
-  }, [effectiveFunctions, accounts, accountBalances])
+  // Saldo Atualizado = Saldo (29/10): sem a reescala pelo saldo real da conta, que espalhava a
+  // diferença sem mostrar (e piorava as funções negativas). A diferença agora é o "Saldo a
+  // distribuir" da conta (lib/reservaDistribuir), visível e distribuído só quando o usuário quiser.
+  // Virada, Saldo Futuro, Fluxo Futuro e Investimentos usam este valor.
+  const saldosAtualizados = useMemo(
+    () => Object.fromEntries(effectiveFunctions.map(f => [f.id, computeSaldo(f)])),
+    [effectiveFunctions],
+  )
 
   // Movimentos FUTUROS por função — mesma lógica/janela do Fluxo Futuro. { [fid]: { liquido,
   // deps, ress, totalDeps, totalRess } }. Alimenta as colunas Mov. Futuros / Saldo Futuro e o modal.
@@ -2191,10 +2253,12 @@ export default function ReservasPanel() {
     const [y, m, d] = dataCorte.split('-').map(Number)
     const dataFim = ledgerDate || localDateStr(new Date(y, m - 1, d - 1))
 
+    // Novo saldo inicial = o SALDO da função no corte (sem reescala): o saldo a distribuir da
+    // conta passa para o período seguinte como está.
     const saldoInicialDe = (f) => {
       const row = ledgerByFn[f.id]
-      if (row) return Number(row.saldo_atualizado) || 0
-      return saldosAtualizados[f.id] ?? computeSaldo(f)
+      if (row) return Number(row.saldo_acumulado) || 0
+      return computeSaldo(f)
     }
 
     // 2. Snapshot do período que fecha — ANTES de criar os novos períodos.

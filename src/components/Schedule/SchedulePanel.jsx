@@ -50,7 +50,7 @@ import { camposHerdadosNoPagamento } from '../../lib/herancaCampos'
 import { comCamposDaOcorrencia, occCampos, serieKeyDe } from '../../lib/camposSerie'
 import { novoLoteId } from '../../lib/historico'
 import { contasEnvolvidas, filtrarPorContas } from '../../lib/filtroContasEnvolvidas'
-import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO } from '../../lib/resumoSelecao'
+import { resumoSelecao, classificarAgendamento, GRUPOS_SELECAO, transferenciasDaDiferenca } from '../../lib/resumoSelecao'
 import HistoricoModal from '../shared/HistoricoPainel'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import AgendaMobile from './AgendaMobile'
@@ -1653,7 +1653,9 @@ function ResumoLinha({ glyph, label, n, valor, cls }) {
   )
 }
 
-function ResumoLote({ resumo }) {
+// deFato/onDeFato (só no modal de registro): "Valor transferido de fato" por par conta ↔ reserva;
+// a diferença para o líquido vira o "Saldo a distribuir" da reserva (transferenciasDaDiferenca).
+function ResumoLote({ resumo, deFato = null, onDeFato = null }) {
   const { g, pares, liquidoReserva, impactoPorConta } = resumo
   const temReserva = g.aplicacao.items.length > 0 || g.resgate.items.length > 0
   const frase = (p) => p.sentido === 'zero'
@@ -1676,11 +1678,34 @@ function ResumoLote({ resumo }) {
             <span className="text-sm font-semibold text-texto-1">Líquido</span>
             <span className="text-sm font-bold text-primary-fg tabular-nums">{fmt(Math.abs(liquidoReserva))}</span>
           </div>
-          {pares.map(p => (
-            <p key={`${p.contaId}|${p.reservaId}`} className={`leading-snug ${p.sentido === 'resgate' ? 'text-despesa' : p.sentido === 'aplicacao' ? 'text-reserva' : 'text-texto-3'}`}>
-              → {frase(p)}
-            </p>
-          ))}
+          {pares.map(p => {
+            const pk = `${p.contaId}|${p.reservaId}`
+            const fato = deFato ? parseValorBR(deFato[pk]) : NaN
+            const diff = Number.isFinite(fato) ? Math.round((fato - Math.abs(p.liquido)) * 100) / 100 : 0
+            return (
+              <div key={pk} className="space-y-1">
+                <p className={`leading-snug ${p.sentido === 'resgate' ? 'text-despesa' : p.sentido === 'aplicacao' ? 'text-reserva' : 'text-texto-3'}`}>
+                  → {frase(p)}
+                </p>
+                {onDeFato && (
+                  <div className="flex items-center justify-between gap-3 pl-3">
+                    <label className="text-texto-2" htmlFor={`fato-${pk}`}>Valor transferido de fato</label>
+                    <div className="relative w-28 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-texto-3 pointer-events-none">R$</span>
+                      <InputMoeda id={`fato-${pk}`} className="input !py-1 !pl-7 !pr-2 text-xs text-right font-bold"
+                        value={deFato[pk] ?? ''} onChange={e => onDeFato(pk, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }} />
+                    </div>
+                  </div>
+                )}
+                {onDeFato && diff !== 0 && (
+                  <p className="pl-3 text-[11px] text-aviso leading-snug">
+                    Diferença {fmtSinal(diff)} → 1 transferência {(p.sentido !== 'resgate') === (diff > 0) ? `${p.contaNome} → ${p.reservaNome}` : `${p.reservaNome} → ${p.contaNome}`} de {fmt(Math.abs(diff))}, sem função (fica como saldo a distribuir da reserva).
+                  </p>
+                )}
+              </div>
+            )
+          })}
           {impactoPorConta.length > 0 && (
             <p className="text-[11px] text-texto-3 leading-snug break-words">
               Impacto por conta:{' '}
@@ -1739,15 +1764,25 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
   const algumInvalido = selectedRows.some(invalido)
   // Recalculado a cada edição de valor (mesma função do painel de seleção).
   const resumo = resumoSelecao(selectedRows.map(r => ({ schedule: r.schedule, amount: valorItem(r) })), accounts)
+  // "Valor transferido de fato" por par conta ↔ reserva (texto do input). Vazio = o líquido.
+  const [deFato, setDeFato] = useState({})
+  const deFatoInput = Object.fromEntries(resumo.pares.map(p => {
+    const pk = `${p.contaId}|${p.reservaId}`
+    return [pk, deFato[pk] ?? valorParaInput(Math.abs(p.liquido))]
+  }))
 
   const confirmar = () => {
     if (algumInvalido) return
+    const numeros = Object.fromEntries(Object.entries(deFatoInput).map(([k, v]) => [k, parseValorBR(v)]))
+    const diferencas = transferenciasDaDiferenca(resumo.pares, numeros, {
+      date: date || format(new Date(), 'yyyy-MM-dd'), origin: ORIGIN.RESERVA_A_DISTRIBUIR,
+    })
     onConfirm(selectedRows.map(r => ({
       scheduleId: r.schedule.id,
       // Detalhado: null → registerScheduleOccurrence usa o detalhamento.
       amount: comDetalhe.has(r.schedule.id) ? null : Math.round(valorItem(r) * 100) / 100,
       date: itens[r.schedule.id].date,
-    })))
+    })), diferencas)
   }
 
   return (
@@ -1841,7 +1876,7 @@ function BatchRegisterModal({ selectedRows, accounts, onConfirm, onClose }) {
 
         {/* Resumo (fixo acima dos botões; rola sozinho se crescer demais) */}
         <div className="px-5 pt-3 shrink-0 max-h-[40vh] overflow-y-auto border-t border-borda">
-          <ResumoLote resumo={resumo} />
+          <ResumoLote resumo={resumo} deFato={deFatoInput} onDeFato={(pk, v) => setDeFato(prev => ({ ...prev, [pk]: v }))} />
         </div>
 
         {/* Footer */}
@@ -2020,7 +2055,8 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
   }
 
   // itens: [{ scheduleId, amount, date }] — valor e data por linha, editados no modal.
-  const handleBatchRegister = (itens) => {
+  // diferencas: transferências da diferença "valor transferido de fato" × líquido (sem função).
+  const handleBatchRegister = (itens, diferencas = []) => {
     const count = selectedRows.length
     const porId = new Map(itens.map(it => [it.scheduleId, it]))
     selectedRows.forEach(({ schedule, nextDate }) => {
@@ -2028,6 +2064,7 @@ function SchedulesTable({ schedules, categories, accounts, gerencialGroups, addT
       if (!it) return
       registerWithGerencial(schedule, nextDate || it.date, it.date, it.amount)
     })
+    for (const t of diferencas) addTransaction(t)
     cancelSelection()
     setShowBatchRegister(false)
     showToastMsg(`${count} lançamento${count !== 1 ? 's' : ''} registrado${count !== 1 ? 's' : ''} com sucesso`)

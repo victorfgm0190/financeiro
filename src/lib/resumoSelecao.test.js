@@ -59,3 +59,27 @@ describe('resumoSelecao', () => {
     expect(r.g.receita.total).toBe(0)
   })
 })
+
+describe('valor transferido de fato → transferência da diferença (saldo a distribuir)', () => {
+  const par = (sentido, liquido) => ({ contaId: 'itau', reservaId: 'ca', sentido, liquido })
+  it('aplicação líquida 952,75, transferido 1.500,00 → Itaú → CA 547,25, sem função/categoria', async () => {
+    const { transferenciasDaDiferenca } = await import('./resumoSelecao')
+    const [t, ...resto] = transferenciasDaDiferenca([par('aplicacao', -952.75)], { 'itau|ca': 1500 }, { date: '2026-10-15' })
+    expect(resto).toHaveLength(0)
+    expect(t).toMatchObject({ type: 'transfer', accountId: 'itau', toAccountId: 'ca', amount: 547.25, date: '2026-10-15', categoryId: null, reservaFuncaoId: null, origin: 'reserva_a_distribuir' })
+  })
+  it('transferiu MENOS que a aplicação líquida → a diferença volta (CA → Itaú)', async () => {
+    const { transferenciasDaDiferenca } = await import('./resumoSelecao')
+    expect(transferenciasDaDiferenca([par('aplicacao', -952.75)], { 'itau|ca': 900 }, {})[0]).toMatchObject({ accountId: 'ca', toAccountId: 'itau', amount: 52.75 })
+  })
+  it('resgate líquido 600: resgatou 700 → CA → Itaú 100; resgatou 500 → Itaú → CA 100', async () => {
+    const { transferenciasDaDiferenca } = await import('./resumoSelecao')
+    expect(transferenciasDaDiferenca([par('resgate', 600)], { 'itau|ca': 700 }, {})[0]).toMatchObject({ accountId: 'ca', toAccountId: 'itau', amount: 100 })
+    expect(transferenciasDaDiferenca([par('resgate', 600)], { 'itau|ca': 500 }, {})[0]).toMatchObject({ accountId: 'itau', toAccountId: 'ca', amount: 100 })
+  })
+  it('igual ao líquido ou não informado → nada', async () => {
+    const { transferenciasDaDiferenca } = await import('./resumoSelecao')
+    expect(transferenciasDaDiferenca([par('aplicacao', -952.75)], { 'itau|ca': 952.75 }, {})).toEqual([])
+    expect(transferenciasDaDiferenca([par('aplicacao', -952.75)], {}, {})).toEqual([])
+  })
+})
