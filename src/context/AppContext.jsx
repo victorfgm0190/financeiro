@@ -41,6 +41,7 @@ import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { espelhoNoPerfil } from '../lib/espelhoReserva'
 import { faturaParaCriacao, faturaParaEdicao } from '../lib/faturaAberta'
 import { ehRendimentoDeReserva, rateioDoRendimento } from '../lib/rendimentoReserva'
+import { funcaoPadraoDoLancamento } from '../lib/funcaoReserva'
 import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
@@ -1738,6 +1739,9 @@ export function AppProvider({ children }) {
     // calculada pelo fechamento do cartão; fechada → a próxima aberta (lib/faturaAberta).
     const faturaNova = faturaParaCriacao(newTx, dataRef.current.accounts, dataRef.current.settings?.faturasFechadas)
     if (faturaNova) newTx.faturaMonthYear = faturaNova
+    // Sem função numa reserva de UMA função (transferência ou gasto do grupo dela) → essa função.
+    const funcaoPadrao = funcaoPadraoDoLancamento(newTx, dataRef.current)
+    if (funcaoPadrao) newTx.reservaFuncaoId = funcaoPadrao
     update(d => {
       let accounts = [...d.accounts]
 
@@ -2218,7 +2222,10 @@ export function AppProvider({ children }) {
     update(d => {
       const oldTx = d.transactions.find(t => t.id === id)
       if (!oldTx) return d
-      const newTx = sanitizeReservaFuncao({ ...oldTx, ...changes }, d.gerencialGroups, d.reserveFunctions)
+      const sanitizado = sanitizeReservaFuncao({ ...oldTx, ...changes }, d.gerencialGroups, d.reserveFunctions)
+      // Sem função numa reserva de UMA função → essa função (mesma regra do addTransaction).
+      const funcaoPadrao = funcaoPadraoDoLancamento(sanitizado, d)
+      const newTx = funcaoPadrao ? { ...sanitizado, reservaFuncaoId: funcaoPadrao } : sanitizado
       // Atualiza os saldos das contas igual a adicionar/excluir: reverte o efeito do lançamento
       // ANTIGO e aplica o do NOVO. Cobre mudança de valor, conta, tipo, destino e fatura vinculada
       // (saldo das contas comuns, dívida do cartão e abatimento de pagamento de fatura). Quando os
@@ -2949,13 +2956,15 @@ export function AppProvider({ children }) {
           toAccountId: schedule.toAccountId,
           amount: Number(srf.valor) || 0,
           categoryId: schedule.categoryId,
-          description: `${schedule.description} — ${funcName.get(srf.reservaFuncaoId) || 'Função'}`,
+          description: `${schedule.description} — ${funcName.get(srf.reservaFuncaoId || funcaoPadraoDoLancamento({ type: 'transfer', accountId: schedule.accountId, toAccountId: schedule.toAccountId }, d)) || 'Função'}`,
           payee: schedule.payee,
           costCenter: schedule.costCenter,
           date,
           scheduleId,
           dataOcorrencia: occurrenceDate,
-          reservaFuncaoId: srf.reservaFuncaoId,
+          // Linha do detalhamento sem função (gasto do cartão classificado sem ela): numa reserva de
+          // UMA função, essa função — senão o resgate ficava "sem função" ("… — Função").
+          reservaFuncaoId: srf.reservaFuncaoId || funcaoPadraoDoLancamento({ type: 'transfer', accountId: schedule.accountId, toAccountId: schedule.toAccountId }, d),
           tipoDocumentoId: schedule.tipoDocumentoId || null,
           ...categoriasPerfis,
           origin: ORIGIN.AGENDAMENTO,
@@ -3003,7 +3012,9 @@ export function AppProvider({ children }) {
         date,
         scheduleId,
         dataOcorrencia: occurrenceDate,
-        reservaFuncaoId: schedule.reservaFuncaoId || null,
+        reservaFuncaoId: schedule.reservaFuncaoId
+          || (schedule.transactionType === 'transfer' ? funcaoPadraoDoLancamento({ type: 'transfer', accountId: schedule.accountId, toAccountId: schedule.toAccountId }, d) : null)
+          || null,
         // O lançamento efetivado herda o tipo de documento do agendamento.
         tipoDocumentoId: schedule.tipoDocumentoId || null,
         ...categoriasPerfis,
