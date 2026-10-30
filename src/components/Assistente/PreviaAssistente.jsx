@@ -41,7 +41,9 @@ import {
 //     (/api/cotacao) × (1 + spread do cartão) = R$ ESTIMADO no formulário; ao salvar, a compra leva
 //     moeda/valor original/cotação/spread/estimado e, com IOF em linha separada no cartão, nasce o
 //     IOF estimado ligado a ela. Sem cotação → o R$ fica para o usuário digitar.
-export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
+// Item de um LOTE (LoteAssistente): `guardarAoFechar` false (a lista guarda os não salvos) e
+// `onConcluido('salvo' | 'mesmo' | 'descartado')` avisa a lista do desfecho.
+export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
   const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories } = useApp()
   // Compra parcelada sem conta citada: "Em qual cartão?" antes do formulário. "Não foi no cartão" →
   // pergunta a conta e abre a prévia de AGENDAMENTO parcelado (N × valor/N, centavos na última).
@@ -95,7 +97,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
     ? accounts.filter(a => a.type !== 'credit' && papelDaContaApp(a, activeProfileId) === 'sugerivel').map(a => a.id)
     : null
   const { marcar } = usePreLancamentoAoFechar({
-    tipo: tipoPreLancamento(ferramenta), payload: { ...sugestao, ferramenta }, textoOriginal, preId, onToast,
+    tipo: tipoPreLancamento(ferramenta), payload: { ...sugestao, ferramenta }, textoOriginal, preId, onToast, ativo: guardarAoFechar,
   })
 
   const [pres, setPres] = useState(null)
@@ -132,6 +134,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   // existente (ou descartado, se o parecido é outro pré-lançamento).
   const ehOMesmo = (tx) => {
     marcar('mesmo')
+    onConcluido?.('mesmo')
     if (preId) {
       const req = tx && !tx._pre ? concluirPreLancamento(preId, 'efetivado', tx.id) : concluirPreLancamento(preId, 'descartado')
       req.catch(err => onToast?.(`Não consegui baixar o pré-lançamento: ${err.message}`))
@@ -140,6 +143,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
 
   const onSalvo = (form, id) => {
     marcar('salvo')
+    onConcluido?.('salvo')
     if (cambio && id) criarIof({ id, accountId: form.accountId, date: form.date, amount: form.amount, payee: form.payee, description: form.description })
     const itens = apelidosAprendidos(sugestao, form)
     if (itens.length) aprenderApelidos(itens).catch(err => console.warn('[assistente] apelidos não salvos:', err.message))
@@ -148,6 +152,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
 
   const descartar = () => {
     marcar('descartado')
+    onConcluido?.('descartado')
     if (preId) concluirPreLancamento(preId, 'descartado').catch(err => onToast?.(`Não consegui descartar: ${err.message}`))
     onClose()
   }
@@ -165,7 +170,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   if (baixa) {
     return (
       <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast}
-        extrasLancamento={extrasCompra} onBaixaSalva={cambio ? criarIof : null} />
+        extrasLancamento={extrasCompra} onBaixaSalva={cambio ? criarIof : null} guardarAoFechar={guardarAoFechar} onConcluido={onConcluido} />
     )
   }
   if (!agendDispensado && agendamentosQueBatem.length > 0) {

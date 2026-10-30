@@ -153,7 +153,8 @@ function validarRegistro(p, ctx, hoje) {
   const out = validarLancamento(p, ctx, hoje)
   if (out.tipo === 'despesa') {
     const doModelo = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 48 ? p.parcelas : null
-    const lido = parcelamentoDoTexto(ctx.textoPedido)
+    // Lote (vários lançamentos num pedido): parcelas e moeda saem do TRECHO do item (lote.js).
+    const lido = parcelamentoDoTexto(ctx.trechoItem ?? ctx.textoPedido)
     const n = lido?.n || doModelo
     if (n) {
       out.parcelas = n
@@ -179,7 +180,7 @@ function validarRegistro(p, ctx, hoje) {
   // Compra em moeda estrangeira (src/lib/cambio.js): valor ORIGINAL, sem converter — o texto manda
   // ("US 20,00" lido aqui vale mais que o número do modelo); o valor em R$ a prévia calcula pela PTAX.
   // Parcelado em dólar fica fora (o cartão converte cada parcela): segue como real.
-  const lidoMoeda = out.tipo === 'despesa' ? moedaDoTexto(ctx.textoPedido) : null
+  const lidoMoeda = out.tipo === 'despesa' ? moedaDoTexto(ctx.trechoItem ?? ctx.textoPedido) : null
   if (out.tipo === 'despesa' && !out.parcelas && (lidoMoeda || p.moeda === 'USD')) {
     const original = lidoMoeda?.valor || out.valor
     if (original) {

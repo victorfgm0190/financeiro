@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL } from '../../lib/assistente'
 import { interpretar } from '../../lib/assistenteApi'
 import { EXECUTORES } from './executores'
+import LoteAssistente from './LoteAssistente'
 import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 
@@ -68,7 +69,8 @@ export default function Assistente({ onClose, onToast }) {
         ...extra,
       })
       const { ferramenta, parametros, ...resto } = r
-      setFase({ tipo: 'resultado', ferramenta: EXECUTORES[ferramenta] ? ferramenta : 'perguntar', parametros: parametros || {}, extra: resto })
+      // 'lote': vários lançamentos/agendamentos num pedido (LoteAssistente) — não é ação do registro.
+      setFase({ tipo: 'resultado', ferramenta: EXECUTORES[ferramenta] || ferramenta === 'lote' ? ferramenta : 'perguntar', parametros: parametros || {}, extra: resto })
     } catch (err) {
       setErro(err.message)
       setFase({ tipo: 'entrada' })
@@ -108,6 +110,9 @@ export default function Assistente({ onClose, onToast }) {
 
   const novoPedido = () => { setTexto(''); setImagem(null); setFase({ tipo: 'entrada' }) }
 
+  if (fase.tipo === 'resultado' && fase.ferramenta === 'lote') {
+    return <LoteAssistente itens={fase.extra?.itens || []} textoOriginal={texto.trim()} onClose={onClose} onToast={onToast} onNovo={novoPedido} />
+  }
   if (fase.tipo === 'resultado' && fase.ferramenta !== 'perguntar') {
     const Executor = EXECUTORES[fase.ferramenta]
     return (

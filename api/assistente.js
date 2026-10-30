@@ -9,6 +9,7 @@ import {
   ensureIaSchema, montarContexto, textoCadastros, instrucoes, validarParametros, registrarUso, hojeSaoPaulo, usoDoDia,
 } from './_ia.js'
 import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente/contas.js'
+import { blocosDoPedido, trechosDosItens } from '../src/lib/assistente/lote.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 import { centralQuery } from './_central.js'
 import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
@@ -108,7 +109,7 @@ async function handler(req, res) {
 
     const msg = await anthropic().messages.create({
       model: MODELO,
-      max_tokens: 1536,
+      max_tokens: 3072, // lote: até 10 chamadas
       output_config: { effort: 'low' },
       tools: acoes.map(a => definicaoFerramenta(a, podeFn, { gerencial: ctx.gerencialLigado })),
       tool_choice: { type: 'auto' },
@@ -120,8 +121,11 @@ async function handler(req, res) {
       messages: [{ role: 'user', content }],
     })
 
-    const bloco = msg.content.find(b => b.type === 'tool_use' && disponiveis.has(b.name))
-    const ferramenta = bloco ? bloco.name : 'perguntar'
+    // Vários lançamentos/agendamentos no mesmo pedido → lote (src/lib/assistente/lote.js); senão o
+    // 1º bloco, como sempre. Um pedido só no limite diário, com ou sem lote.
+    const { lote, blocos } = blocosDoPedido(msg.content, disponiveis)
+    const bloco = blocos[0]
+    const ferramenta = lote ? 'lote' : bloco ? bloco.name : 'perguntar'
     // Só a marca "teve imagem" — a imagem não é gravada nem logada em lugar nenhum.
     await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem, usuario: req.user?.id })
 
@@ -131,6 +135,22 @@ async function handler(req, res) {
     if (!bloco) {
       const t = msg.content.find(b => b.type === 'text')?.text
       return res.json({ ferramenta: 'perguntar', parametros: validarParametros('perguntar', { pergunta: t, opcoes: [] }, ctx, hoje) })
+    }
+    if (lote) {
+      // Cada item pelo validador de sempre, com o trecho do pedido que é dele (parcelas/moeda).
+      const trechos = trechosDosItens(textoPedido, blocos.map(b => b.input?.valor))
+      const itens = blocos.map((b, i) => ({ ferramenta: b.name, parametros: validarParametros(b.name, b.input, { ...ctx, trechoItem: trechos[i] }, hoje) }))
+      const comGerencial = blocos.find((b, i) => itens[i].parametros?.conta_gerencial
+        || [b.input?.conta_id, b.input?.conta_destino_id].some(id => ctx.idx.contas.get(id)?.papel === 'gerencial'))
+      if (!comGerencial && !gerencialCitada(ctx, `${texto} ${resposta}`)) {
+        for (const it of itens) delete it.parametros.conta_gerencial
+        return res.json({ ferramenta: 'lote', itens })
+      }
+      // Conta gerencial em algum item: mesma resposta do pedido de 1 item (abrir a tela da conta).
+      return res.json({
+        ferramenta: 'abrir_tela',
+        parametros: { destino: 'tela_contas', filtro: null, cartao_id: null, mes: null, motivo: 'conta_gerencial', conta_id: null, mensagem: MENSAGEM_CONTA_GERENCIAL(null) },
+      })
     }
     const parametros = validarParametros(ferramenta, bloco.input, ctx, hoje)
     if (GRAVAM.has(ferramenta)) {
