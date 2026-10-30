@@ -41,6 +41,7 @@ import { publicarAgendaJa } from '../lib/agendaFeedApi'
 import { espelhoNoPerfil } from '../lib/espelhoReserva'
 import { faturaParaCriacao, faturaParaEdicao } from '../lib/faturaAberta'
 import { ehRendimentoDeReserva, rateioDoRendimento } from '../lib/rendimentoReserva'
+import { iofAposMudancaDaCompra, aliquotaIof } from '../lib/cambio'
 import { funcaoPadraoDoLancamento } from '../lib/funcaoReserva'
 import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../lib/saldos'
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
@@ -799,6 +800,9 @@ export function AppProvider({ children }) {
   const recalcFaturaRef = useRef(null)
   // (lancamentoId, tx|null) → refaz/apaga o rateio de um rendimento de reserva entre as funções.
   const rateioRendimentoRef = useRef(null)
+  // (compraId, compra|null) → IOF estimado ligado à compra em moeda estrangeira (compraIofId):
+  // acompanha a compra editada; apagado com ela (src/lib/cambio.js).
+  const iofLigadoRef = useRef(null)
   // Recálculo dos agendamentos acumulativos de fatura (definido mais abaixo); ref p/ contornar
   // a ordem de declaração — chamado por deleteTransaction/reverseTransaction/revertCardImport.
   const recalcAgendamentosRef = useRef(null)
@@ -2259,6 +2263,7 @@ export function AppProvider({ children }) {
     }
     // Rendimento de reserva editado → refaz o rateio entre as funções (ou apaga, se deixou de ser).
     if (old) rateioRendimentoRef.current?.(id, { ...old, ...changes })
+    if (old) iofLigadoRef.current?.(id)
   }, [update, ensureGerencialState])
 
   // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
@@ -2398,6 +2403,7 @@ export function AppProvider({ children }) {
     }
     // Rendimento de reserva apagado → apaga o rateio dele.
     rateioRendimentoRef.current?.(id, null)
+    iofLigadoRef.current?.(id)
   }, [update])
 
   const reverseTransaction = useCallback((id) => {
@@ -3700,6 +3706,21 @@ export function AppProvider({ children }) {
       }
     }
   }, [reservePeriods, reserveAdjustments])
+
+  // IOF estimado ligado à compra: roda DEPOIS do estado aplicado (setTimeout) e relê a compra e os
+  // IOFs dela — assim a importação que confirma a compra e o IOF no mesmo lote não recalcula um IOF
+  // que já virou real. Compra apagada → apaga os IOFs; editada → IOF estimado acompanha.
+  useEffect(() => {
+    iofLigadoRef.current = (compraId) => setTimeout(() => {
+      const d = dataRef.current
+      const iofs = d.transactions.filter(t => t.compraIofId === compraId)
+      if (!iofs.length) return
+      const compra = d.transactions.find(t => t.id === compraId) || null
+      const { apagar, mudar } = iofAposMudancaDaCompra(compra, iofs, aliquotaIof(d.settings))
+      for (const iofId of apagar) deleteTransaction(iofId)
+      for (const m of mudar) updateTransaction(m.id, m.changes)
+    }, 0)
+  }, [deleteTransaction, updateTransaction])
 
   // Uma gravação por dia: a chave em localStorage evita reescrever a janela a cada F5.
   const ledgerRunRef = useRef(false)

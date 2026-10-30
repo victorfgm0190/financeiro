@@ -5,7 +5,7 @@
 // Bate quando TUDO vale:
 //   • mesmo tipo (despesa/receita); fora provisões, transferências e pagamento de fatura;
 //   • valor: ±R$ 0,05; recorrente de valor VARIÁVEL (valor projetado, ou já pago com valor
-//     diferente do agendado) → ±10% do valor da ocorrência;
+//     diferente do agendado) → ±10% do valor da ocorrência; lançamento ESTIMADO (compra em dólar) → ±15%;
 //   • nome parecido: as palavras de um lado (favorecido ou descrição) contidas no texto do outro,
 //     sem acento/maiúsculas ("CONTA VIVO" × "Conta Vivo");
 //   • a PRÓXIMA ocorrência pendente (a que o Pagar baixaria) com data efetiva a até ±7 dias da
@@ -20,6 +20,8 @@ import { occEfetiva } from '../fluxoCaixa.js'
 export const JANELA_DIAS_AGENDAMENTO = 7
 export const TOLERANCIA_VALOR = 0.05
 export const TOLERANCIA_VARIAVEL = 0.10
+// Lançamento ESTIMADO (compra em moeda estrangeira, src/lib/cambio.js): o R$ só fecha na fatura.
+export const TOLERANCIA_ESTIMADO = 0.15
 
 const r2 = (n) => Math.round(n * 100) / 100
 const diasEntre = (a, b) => Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 86_400_000)
@@ -48,7 +50,7 @@ export function valorVariavel(schedule, transactions = []) {
   return transactions.some(t => t.scheduleId === schedule.id && Math.abs((Number(t.amount) || 0) - schedule.amount) > TOLERANCIA_VALOR)
 }
 
-// lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description }.
+// lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description, estimado? }.
 export function agendamentosDoLancamento(lanc, { schedules = [], accounts = [], transactions = [], getNextOccurrences }) {
   const valor = Number(lanc?.amount)
   if (!(valor > 0) || !lanc.date || !lanc.accountId) return []
@@ -67,7 +69,8 @@ export function agendamentosDoLancamento(lanc, { schedules = [], accounts = [], 
     const dias = diasEntre(lanc.date, e.date)
     if (Math.abs(dias) > JANELA_DIAS_AGENDAMENTO) continue
     const dif = Math.abs((Number(e.amount) || 0) - valor)
-    const tolerancia = valorVariavel(s, transactions) ? Math.max(TOLERANCIA_VALOR, (Number(e.amount) || 0) * TOLERANCIA_VARIAVEL) : TOLERANCIA_VALOR
+    const pct = lanc.estimado ? TOLERANCIA_ESTIMADO : valorVariavel(s, transactions) ? TOLERANCIA_VARIAVEL : 0
+    const tolerancia = Math.max(TOLERANCIA_VALOR, (Number(e.amount) || 0) * pct)
     if (dif > tolerancia + 1e-9) continue
     out.push({
       schedule_id: s.id, ocorrencia: base, data: e.date, valor: r2(Number(e.amount) || 0),

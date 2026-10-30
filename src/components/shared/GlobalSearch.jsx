@@ -5,6 +5,7 @@ import DateInput from './DateInput'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from './utils'
 import { searchEntries } from '../../lib/db'
+import SeloCambio from './SeloCambio'
 import { occEfetiva } from '../../lib/fluxoCaixa'
 import { getEffectiveStatus, STATUS } from '../../lib/statusEfetivo'
 import { itensVisiveisBusca, selosReservaPorPai, ehSombraAutomatica, faixaValorCentavos, valorNaFaixa } from '../../lib/buscaGlobal'
@@ -223,6 +224,7 @@ export default function GlobalSearch({ open, onClose }) {
       </div>
       <div className="text-right shrink-0">
         <p className={`text-sm font-bold ${amountColor(r.type)}`}>{fmt(r.amount)}</p>
+        {r.kind === 'tx' && (r.obj?.moeda || r.obj?.estimado) && <div className="mt-0.5"><SeloCambio tx={r.obj} /></div>}
         <ArrowRight size={14} className="text-texto-3 group-hover:text-texto-2 ml-auto mt-1 transition-colors" />
       </div>
     </button>

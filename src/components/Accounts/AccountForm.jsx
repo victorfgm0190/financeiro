@@ -125,6 +125,9 @@ export default function AccountForm({ initial, onClose }) {
     rendimentoCategoriaId: initial?.rendimentoCategoriaId || null,
     rendimentoModo: initial?.rendimentoModo || 'conta',
     cartaoFinais: finaisDoCartao(initial).join(', '),
+    // Compra em dólar (src/lib/cambio.js): spread sem histórico (%; vazio = padrão 2,5%) e IOF em linha separada.
+    spreadCambio: initial?.spreadCambio != null ? String(Math.round(initial.spreadCambio * 10000) / 100) : '',
+    iofLinhaSeparada: initial?.iofLinhaSeparada !== false,
   })
   const [finaisErro, setFinaisErro] = useState('')
   const [diasErro, setDiasErro] = useState('')
@@ -270,6 +273,9 @@ export default function AccountForm({ initial, onClose }) {
       rendimentoCategoriaId: form.rendimentoCategoriaId || null,
       rendimentoModo: form.rendimentoModo === 'grupo' ? 'grupo' : 'conta',
       cartaoFinais: isCredit ? finais.finais : [],
+      spreadCambio: isCredit && form.spreadCambio !== '' && Number(String(form.spreadCambio).replace(',', '.')) >= 0
+        ? Math.round(Number(String(form.spreadCambio).replace(',', '.')) * 100) / 10000 : null,
+      iofLinhaSeparada: isCredit ? !!form.iofLinhaSeparada : null,
     }
 
     if (initial) {
@@ -515,6 +521,22 @@ export default function AccountForm({ initial, onClose }) {
               ? <p className="text-xs text-perigo mt-0.5">{finaisErro}</p>
               : <p className="text-xs text-texto-3 mt-0.5">Últimos 4 dígitos. O assistente usa para reconhecer "final 4541".</p>}
           </div>
+          <div className="grid grid-cols-2 gap-3 items-end">
+            <div>
+              <label className="label">Spread do dólar (%)</label>
+              <input className="input" inputMode="decimal" value={form.spreadCambio}
+                onChange={e => set('spreadCambio', e.target.value.replace(/[^\d.,]/g, ''))} placeholder="2,5" />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[40px] cursor-pointer">
+              <input type="checkbox" className="w-4 h-4 accent-primary" checked={form.iofLinhaSeparada}
+                onChange={e => set('iofLinhaSeparada', e.target.checked)} />
+              IOF em linha separada na fatura
+            </label>
+          </div>
+          <p className="text-xs text-texto-3 -mt-2">
+            Compra em dólar pelo Assistente: R$ = US$ × PTAX × (1 + spread). O spread usado é a média das últimas 3 compras
+            em dólar já conferidas pela fatura; sem elas, este (vazio = 2,5%).
+          </p>
           <div>
             <label className="label">Conta Pagadora</label>
             <select

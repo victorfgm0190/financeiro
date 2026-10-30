@@ -38,7 +38,7 @@ import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
 import { JaLancadoStatus, ResumoJaLancados } from './JaLancadoCelula'
-import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
+import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
 import DateInput from '../shared/DateInput'
@@ -1925,13 +1925,14 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     const itens = []
     const apelidos = []
     for (const row of linhas) {
-      const tx = row._jaLancado.tx
       const payee = favorecidoDaLinha(row)
-      const { changes, mudancas } = patchJaLancado(row, tx, { saveDate: computeSaveDate(row), payee })
-      if (Object.keys(changes).length) updateTransaction(tx.id, changes)
+      // Um lançamento por linha; IOF agrupado pelo banco → os IOFs estimados do grupo (lib/casamentoFatura).
+      for (const { tx, changes, mudancas } of patchesJaLancado(row, { saveDate: computeSaveDate(row), payee })) {
+        if (Object.keys(changes).length) updateTransaction(tx.id, changes)
+        finais.push({ ...tx, ...changes, reconciled: true })
+        itens.push({ id: tx.id, mudancas: [...mudancas, ...(tx.reconciled ? [] : [{ campo: 'reconciled', de: false, para: true }])] })
+      }
       if (payee && !payees.includes(payee)) addPayee(payee)
-      finais.push({ ...tx, ...changes, reconciled: true })
-      itens.push({ id: tx.id, mudancas: [...mudancas, ...(tx.reconciled ? [] : [{ campo: 'reconciled', de: false, para: true }])] })
       const termo = termoDescricaoFatura(row.description)
       if (termo && payee) apelidos.push({ tipo: 'descricao_fatura', termo, ref_id: payee })
     }

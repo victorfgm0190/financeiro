@@ -37,3 +37,14 @@ export const listarApelidos = () => chamar('/api/ia-apelidos').then(r => r.apeli
 export const aprenderApelidos = (itens) => chamar('/api/ia-apelidos', { method: 'POST', body: { itens } })
 export const editarApelido = (id, mudancas) => chamar('/api/ia-apelidos', { method: 'PUT', body: { id, ...mudancas } })
 export const excluirApelido = (id) => chamar(`/api/ia-apelidos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+// PTAX venda do dólar do dia da compra (recua até 7 dias) → { data, venda }. Cache por data na sessão.
+const cotacoes = new Map()
+export function cotacaoDolar(data) {
+  if (!cotacoes.has(data)) {
+    const req = chamar(`/api/cotacao?data=${encodeURIComponent(data)}`)
+    req.catch(() => cotacoes.delete(data))
+    cotacoes.set(data, req)
+  }
+  return cotacoes.get(data)
+}

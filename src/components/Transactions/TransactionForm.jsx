@@ -22,6 +22,8 @@ import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/heranca
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
 import SeloParcela from '../shared/SeloParcela'
+import Modal from '../shared/Modal'
+import MoedaEstrangeira from './MoedaEstrangeira'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import { faturaAbertaDoCartao, avisoFaturaFechada, rotuloFatura, faturaPelaData, faturaInicialDaEdicao } from '../../lib/faturaAberta'
 import { faturaEstaFechada } from '../../lib/faturasFechadas'
@@ -126,8 +128,10 @@ function buildCatOpts(categories, type) {
 // Duplicidade na criação (AvisoParecidos): `preLancamentos` (sem ele, busca os pendentes),
 // `parecidosAceitos` (ids já confirmados como "É outro" — ex.: no aviso do topo da prévia),
 // `onMesmo(tx)` avisa que o usuário disse "É o mesmo" / abriu o existente (nada foi gravado).
+// `extrasNovo`: campos a mais do lançamento NOVO que o formulário não edita (ex.: compra em dólar
+// do Assistente — moeda, valor original, cotação, spread, estimado; src/lib/cambio.js).
 export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null,
-  preLancamentos = null, parecidosAceitos = null, onMesmo = null }) {
+  preLancamentos = null, parecidosAceitos = null, onMesmo = null, extrasNovo = null }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -258,6 +262,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  // Compra em moeda estrangeira (MoedaEstrangeira): valor na moeda reeditado → vai junto no Salvar.
+  const [extrasEdicao, setExtrasEdicao] = useState(null)
+  // Lançamento ligado (IOF ↔ compra) aberto por cima deste.
+  const [ligadoAberto, setLigadoAberto] = useState(null)
 
   // Atalhos do modal de lançamento: os mesmos handlers do botão/switch (só no formulário completo).
   const formRef = useRef(null)
@@ -646,7 +654,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         mudancas, escopo, irmas, ehPendente: parcelaPendente, ordem: t => t.installmentNum || 0,
         numParcela: initial.installmentNum, total: initial.installmentTotal,
       })
-      updateTransaction(initial.id, txData)
+      updateTransaction(initial.id, extrasEdicao ? { ...txData, ...extrasEdicao } : txData)
       aplicarSerieEHistorico(plano, mudancas, escopo, decisao?.motivo || null, { ...initial, ...txData })
 
       // Rateio: grava/atualiza ou remove os rateios deste lançamento.
@@ -811,6 +819,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     // carimba 'duplicado'). Lançamento novo comum (initial sem origin) cai no default 'manual'
     // do addTransaction. Nunca chega no updateTransaction (edição só passa por cima, acima).
     if (initial?.origin) txData.origin = initial.origin
+    if (extrasNovo) Object.assign(txData, extrasNovo)
 
     if (form.type === 'transfer' && form.toAccountId && !initial?.id) {
       const toAcc = accounts.find(a => a.id === form.toAccountId)
@@ -1423,6 +1432,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   }
 
   return (
+    <>
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {initial?.id && (
         <div className="flex items-center justify-end gap-2 -mb-2">
@@ -1436,6 +1446,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
           </button>
         </div>
+      )}
+      {initial?.id && (
+        <MoedaEstrangeira tx={initial} onAbrir={setLigadoAberto}
+          onRecalcular={(amount, valorOriginal) => { set('amount', String(amount)); setExtrasEdicao({ valorOriginal }) }} />
       )}
       {initial?.id && initial.contratoId && (
         // Composição editada aqui muda o valor do lançamento: o campo Valor acompanha, para o
@@ -2253,5 +2267,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ) : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>
+    {/* Fora do <form>: o Salvar do lançamento vinculado não pode submeter este. */}
+    <Modal open={!!ligadoAberto} onClose={() => setLigadoAberto(null)} title="Lançamento vinculado" size="lg">
+      {ligadoAberto && <TransactionForm initial={ligadoAberto} onClose={() => setLigadoAberto(null)} onToast={onToast} />}
+    </Modal>
+    </>
   )
 }

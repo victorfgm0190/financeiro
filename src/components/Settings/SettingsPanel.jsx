@@ -32,6 +32,7 @@ import { saldosDaConta, contaRecalculavel } from '../../lib/saldos'
 import { CORES_PERFIL } from '../../lib/chartPalette'
 import InputMoeda from '../shared/InputMoeda'
 import { hojeSP } from '../../lib/hoje'
+import { aliquotaIof } from '../../lib/cambio'
 
 const PROFILE_COLORS = CORES_PERFIL
 
@@ -781,6 +782,26 @@ export default function SettingsPanel() {
             />
           </div>
         )}
+      </div>
+      )}
+
+      {/* Compra internacional no cartão (src/lib/cambio.js): alíquota do IOF do ambiente */}
+      {secao === 'estornos' && (
+      <div className="card">
+        <h2 className="text-sm font-semibold text-texto-2 mb-1">Compras internacionais (IOF)</h2>
+        <p className="text-xs text-texto-3 mb-3">
+          Compra em dólar lançada pelo Assistente (SMS/foto): o valor em R$ é estimado pela PTAX do dia e
+          o IOF é calculado com esta alíquota. Na importação da fatura, compra e IOF recebem o valor real.
+          Spread e "IOF em linha separada" ficam em cada cartão (Editar Conta).
+        </p>
+        <label className="label" htmlFor="iof-aliquota">Alíquota do IOF (%)</label>
+        <input id="iof-aliquota" className="input w-32" type="number" min="0" max="20" step="0.01"
+          defaultValue={((aliquotaIof(settings)) * 100).toFixed(2)}
+          onBlur={e => {
+            const v = Number(String(e.target.value).replace(',', '.'))
+            if (Number.isFinite(v) && v >= 0 && v < 100 && Math.abs(v / 100 - aliquotaIof(settings)) > 1e-9) updateSettings({ iofCompraInternacional: Math.round(v * 100) / 10000 })
+          }} />
+        <p className="text-xs text-texto-3 mt-1">Padrão 3,5%.</p>
       </div>
       )}
 

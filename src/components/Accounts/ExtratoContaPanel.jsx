@@ -26,6 +26,7 @@ import ShortcutHint from '../shared/ShortcutHint'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
 import { hojeSP } from '../../lib/hoje'
+import SeloCambio from '../shared/SeloCambio'
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
@@ -274,6 +275,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           }
           <span className="text-xs text-texto-1 truncate" title={historico}>{historico}</span>
           <SeloParcela rotulo={seloParcela} />
+          <SeloCambio tx={tx} />
           {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">

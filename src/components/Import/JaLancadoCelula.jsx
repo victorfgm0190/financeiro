@@ -18,7 +18,12 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
         <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita"
           title={pre ? 'Casa com um pré-lançamento do Assistente: será gravado pela importação com a classificação dele, e o pré-lançamento sai da lista.' : 'Já está no cartão (lançado à mão ou pelo Assistente): não cria outro lançamento nem outra transferência gerencial — o existente recebe valor/data da fatura e fica conciliado.'}>
           ✔ {pre ? 'Pré-lançamento' : 'Já lançado'}
+          {/* Estimado (compra em dólar / IOF): o valor real da fatura substitui o estimado. */}
+          {tx.estimado && Math.round(Number(row.amount) * 100) !== Math.round((j.grupo ? j.grupo.reduce((s, t) => s + Number(t.amount), 0) : Number(tx.amount)) * 100) && (
+            <> (valor ajustado {fmt(j.grupo ? j.grupo.reduce((s, t) => s + Number(t.amount), 0) : tx.amount)} → {fmt(row.amount)})</>
+          )}
         </span>
+        {j.grupo && <p className="text-[10px] text-texto-3">IOF agrupado pelo banco: {j.grupo.length} IOFs estimados somados, repartidos na proporção.</p>}
         <p className="text-[10px] text-texto-3 break-words">
           {pre ? 'Pré-lançamento' : 'Existente'}: <span className="text-texto-2">{tx.description || '—'}</span> · {fmtDate(tx.date)} · {fmt(tx.amount)}{cat ? ` · ${cat.icon || ''} ${cat.name}` : ''}
         </p>

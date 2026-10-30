@@ -11,11 +11,21 @@
 // Resultado por linha: 1 candidato (que não é o único de outra linha) → 'casada'; mais de um, ou
 // disputado por duas linhas → 'escolher' (nunca casa sozinho); nenhum → 'nova'.
 // PURO: sem React, sem I/O (usado pela tela e pelo preview somente leitura). Imports com .js.
+// ESTIMADOS (compra em moeda estrangeira e o IOF dela — src/lib/cambio.js): o valor em R$ só fecha
+// na fatura, então o critério é outro — compra: estabelecimento parecido, data ±5 dias e valor ±15%
+// (ou o mesmo valor na moeda, se a linha trouxer); IOF: linha de IOF, data ±5 dias e valor ±20%, ou a
+// SOMA dos IOFs estimados da fatura quando o banco agrupa numa linha só. Ao casar, o lançamento
+// recebe o valor real e deixa de ser estimado (a compra grava o spread real do cartão).
 import { faturaDoLancamento } from './scheduleBaixa.js'
 import { numeroParcelaDoTx, totalParcelasDoTx } from './revisaoImportacao.js'
+import { ehIof, ajusteDaCompraEstimada } from './cambio.js'
+import { normalizarTermo } from './assistente/texto.js'
 
 export const TOL_VALOR_JA_LANCADO = 0.01
 export const JANELA_DIAS_JA_LANCADO = 3
+export const JANELA_DIAS_ESTIMADO = 5
+export const TOL_COMPRA_ESTIMADA = 0.15
+export const TOL_IOF_ESTIMADO = 0.20
 
 const tipoDe = (x) => x.type || 'expense'
 const centavos = (v) => Math.round((Number(v) || 0) * 100)
@@ -64,8 +74,32 @@ export function candidatosJaLancado({ transactions, preLancamentos = [], account
   return [...doCartao, ...pres]
 }
 
+// Estabelecimento parecido: alguma palavra (4+ letras) de um lado aparece no outro
+// ("VERCEL INC." × "Vercel *Pro"; o banco corta e junta nomes, então basta uma palavra forte).
+const palavrasFortes = (s) => normalizarTermo(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(w => w.length >= 4)
+export function estabelecimentoParecido(descricaoLinha, t) {
+  const daLinha = palavrasFortes(descricaoLinha)
+  const doTx = palavrasFortes(`${t.payee || ''} ${t.description || ''}`)
+  return daLinha.some(w => doTx.some(x => x.startsWith(w) || w.startsWith(x)))
+}
+const dentroDe = (real, estimado, pct) => Math.abs(Number(real) - Number(estimado)) <= Math.max(0.05, Number(estimado) * pct) + 1e-9
+const iofEstimado = (t) => t.estimado && (!!t.compraIofId || ehIof(t))
+
+// Lançamento ESTIMADO `t` pode ser a linha `r`? (a fatura pode diferir: a data real da compra pode
+// cair do outro lado do fechamento — a janela de dias é que manda.)
+export function casaEstimado(r, t) {
+  if (tipoDe(r) !== 'expense' || tipoDe(t) !== 'expense' || parcelaDaLinha(r)) return false
+  if (diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)) > JANELA_DIAS_ESTIMADO) return false
+  if (iofEstimado(t)) return ehIof(r) && dentroDe(r.amount, t.amount, TOL_IOF_ESTIMADO)
+  if (ehIof(r)) return false
+  if (!estabelecimentoParecido(r.description, t)) return false
+  if (Number(r._valorOriginal) > 0 && Number(t.valorOriginal) > 0) return Math.round(r._valorOriginal * 100) === Math.round(t.valorOriginal * 100)
+  return dentroDe(r.amount, t.amount, TOL_COMPRA_ESTIMADA)
+}
+
 // O lançamento `t` pode ser a linha `r`?
 export function casaComLinha(r, t, closingDay = 14) {
+  if (t.estimado) return casaEstimado(r, t)
   if (tipoDe(r) !== tipoDe(t)) return false
   if (Math.abs(centavos(r.amount) - centavos(t.amount)) > TOL_VALOR_JA_LANCADO * 100) return false
   if (faturaDoLancamento(t, closingDay) !== r.faturaMonthYear) return false
@@ -222,7 +256,26 @@ export function aplicarJaLancados(rows, { transactions, preLancamentos = [], acc
     }
     if (v.status === 'escolher') r._jaLancadoOpcoes = v.candidatos
   }
+  agruparIofs(out, livres, cands, closingDay)
   return out
+}
+
+// Linha de IOF que não casou sozinha: o banco pode AGRUPAR os IOFs do período numa linha só. Soma
+// dos IOFs estimados do cartão ainda livres, da mesma fatura (ou a ±5 dias da linha), dentro de ±20%
+// → casa com todos (_jaLancado.grupo); o valor real é repartido na gravação (patchesJaLancado).
+function agruparIofs(out, livres, cands, closingDay = 14) {
+  const tomados = new Set(out.flatMap(r => [r._jaLancado?.tx?.id, ...(r._jaLancado?.grupo || []).map(t => t.id)]).filter(Boolean))
+  for (const r of livres) {
+    if (r._jaLancado || r._jaLancadoOpcoes || r._jaLancadoEscolha === 'novo' || !ehIof(r) || tipoDe(r) !== 'expense') continue
+    const iofs = cands.filter(t => !t._pre && iofEstimado(t) && !tomados.has(t.id)
+      && (faturaDoLancamento(t, closingDay) === r.faturaMonthYear || diasEntre(dataCompraDaLinha(r), dataCompraDoTx(t)) <= JANELA_DIAS_ESTIMADO))
+    if (iofs.length < 2) continue
+    const soma = iofs.reduce((s, t) => s + Number(t.amount), 0)
+    if (!dentroDe(r.amount, soma, TOL_IOF_ESTIMADO)) continue
+    Object.assign(r, { _isDuplicate: true, _dupLevel: 'certeza', _dbTx: iofs[0], selected: false })
+    r._jaLancado = { tx: iofs[0], grupo: iofs, origem: 'regra_nova', sugerido: { nome: '', aprendido: false }, favModoPadrao: 'manter' }
+    for (const t of iofs) tomados.add(t.id)
+  }
 }
 
 // Contador do topo: "X já lançados · Y novos · Z para escolher".
@@ -240,6 +293,32 @@ export function resumoJaLancados(rows) {
 // UPDATE do lançamento existente: valor e data vêm da fatura; categoria, grupo gerencial, centro de
 // custo, descrição e origin ficam como estão. → { changes, mudancas } (mudancas p/ o histórico).
 export function patchJaLancado(r, tx, { saveDate, payee }) {
+  const base = patchJaLancadoSimples(r, tx, { saveDate, payee })
+  if (!tx.estimado) return base
+  // Estimado confirmado pela fatura: deixa de ser estimado (compra: + spread real) e vai para a
+  // fatura da linha.
+  const aj = iofEstimado(tx) ? { estimado: false } : ajusteDaCompraEstimada(tx, r.amount)
+  delete aj.amount
+  const changes = { ...base.changes, ...aj }
+  if (r.faturaMonthYear && r.faturaMonthYear !== tx.faturaMonthYear) changes.faturaMonthYear = r.faturaMonthYear
+  return { changes, mudancas: [...base.mudancas, { campo: 'estimado', de: true, para: false }] }
+}
+
+// Gravação da linha "Já lançado" → [{ tx, changes, mudancas }]. Grupo de IOFs: o valor real da linha
+// repartido na proporção dos estimados (o último leva os centavos).
+export function patchesJaLancado(r, { saveDate, payee }) {
+  const j = r._jaLancado
+  if (!j?.grupo) return [{ tx: j.tx, ...patchJaLancado(r, j.tx, { saveDate, payee }) }]
+  const soma = j.grupo.reduce((s, t) => s + Number(t.amount), 0)
+  let resto = Math.round(Number(r.amount) * 100)
+  return j.grupo.map((t, i) => {
+    const cent = i === j.grupo.length - 1 ? resto : Math.round(Number(r.amount) * 100 * Number(t.amount) / soma)
+    resto -= cent
+    return { tx: t, ...patchJaLancado({ ...r, amount: cent / 100 }, t, { saveDate: t.date, payee: t.payee }) }
+  })
+}
+
+function patchJaLancadoSimples(r, tx, { saveDate, payee }) {
   const novo = {
     amount: Math.round((Number(r.amount) || 0) * 100) / 100,
     date: saveDate || tx.date,

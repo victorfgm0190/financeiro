@@ -324,7 +324,8 @@ export function textoResumoImportacao(r) {
 export function idsNoBancoConferidos(rows) {
   return [...new Set((rows || [])
     .filter(r => !r._generated && (r._isDuplicate || r._collisionTx) && r._dbTx?.id)
-    .map(r => r._dbTx.id))]
+    // Linha de IOF agrupado (lib/casamentoFatura): confere TODOS os IOFs estimados do grupo.
+    .flatMap(r => (r._jaLancado?.grupo ? r._jaLancado.grupo.map(t => t.id) : [r._dbTx.id])))]
 }
 
 // Reedição de uma importação: as linhas são os próprios lançamentos gravados por ela. Vieram do

@@ -33,6 +33,7 @@ import DuplicateButton from '../shared/DuplicateButton'
 import ExtratoGerencial from './ExtratoGerencial'
 import RelatorioFatura from './RelatorioFatura'
 import InputMoeda from '../shared/InputMoeda'
+import SeloCambio from '../shared/SeloCambio'
 
 // ─── Helpers (mirrors TransactionsPanel) ─────────────────────────────────────
 
@@ -1090,7 +1091,7 @@ export default function CreditCardPanel() {
                   type={tx.type === 'income' ? 'income' : 'expense'}
                   typeLabel={tx.type === 'income' ? 'Estorno' : undefined}
                   title={tx.payee || tx.description || (tx.type === 'income' ? 'Estorno' : 'Despesa')}
-                  subtitle={tx.payee ? tx.description : null}
+                  subtitle={tx.payee || tx.estimado || tx.moeda ? <>{tx.payee ? tx.description : null} <SeloCambio tx={tx} /></> : null}
                   dateLabel={fmtDate(tx.date)}
                   amount={tx.type === 'income' ? -tx.amount : tx.amount}
                   onClick={selectMode ? () => toggleSelect(tx.id) : () => setEditTx(tx)}
@@ -1203,6 +1204,7 @@ export default function CreditCardPanel() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <p className={`text-sm ${tx.reconciled ? 'text-texto-1' : 'text-texto-1 font-medium'}`}>{tx.description}</p>
+                            <SeloCambio tx={tx} />
                             {isEstorno && (
                               <span className="text-[10px] font-bold bg-receita/20 text-receita px-1.5 py-0.5 rounded shrink-0">ESTORNO</span>
                             )}

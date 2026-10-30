@@ -11,7 +11,9 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 // Agendamentos (PayModal — grava registered/data_ocorrencia e avança a série), pré-preenchido com o
 // valor efetivo (o realmente pago/recebido), a data e a conta citados — todos editáveis.
 // Fechar sem confirmar → pré-lançamento tipo 'baixa'; Descartar → nada.
-export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId = null, onClose, onToast }) {
+// Compra em dólar (prévia do Assistente): `extrasLancamento` vai no lançamento da baixa (estimado, moeda…)
+// e `onBaixaSalva(pago)` cria o IOF ligado a ele.
+export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId = null, onClose, onToast, extrasLancamento = null, onBaixaSalva = null }) {
   const { schedules, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, getNextOccurrences } = useApp()
   // Só a PRÓXIMA pendente (o que o Pagar baixaria): já baixada/pulada depois → não abre o modal.
   const achado = (schedules || []).find(s => s.id === candidato.schedule_id) || null
@@ -25,8 +27,9 @@ export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId 
     if (preId) concluirPreLancamento(preId, 'descartado').catch(err => onToast?.(`Não consegui descartar: ${err.message}`))
     onClose()
   }
-  const onSalvo = () => {
+  const onSalvo = (pago) => {
     marcar('salvo')
+    if (pago?.id) onBaixaSalva?.(pago)
     if (preId) concluirPreLancamento(preId, 'efetivado').catch(err => onToast?.(`Baixa salva, mas o pré-lançamento não foi baixado: ${err.message}`))
   }
 
@@ -73,6 +76,7 @@ export default function PreviaBaixa({ criterio, candidato, textoOriginal, preId 
       markScheduleRegistered={markScheduleRegistered}
       inicial={{ amount: valor, date: criterio.data_pagamento, accountId: criterio.conta_id }}
       aviso={aviso}
+      extrasLancamento={extrasLancamento}
       onSalvo={onSalvo}
       onClose={onClose}
     />

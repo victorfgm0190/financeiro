@@ -24,6 +24,7 @@ import TransactionForm from './TransactionForm'
 import ExtratoContaPanel from '../Accounts/ExtratoContaPanel'
 import SeloParcela from '../shared/SeloParcela'
 import { criarSeloParcela } from '../../lib/numeroParcela'
+import SeloCambio from '../shared/SeloCambio'
 
 // ─── Credit fatura helpers ──────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                     <tr key={tx.id} className="border-b border-borda/50 hover:bg-surface-hover/30 transition-colors">
                       <td className="px-4 py-3 text-texto-2 text-xs whitespace-nowrap">{fmtDate(tx.date)}</td>
                       <td className="px-4 py-3">
-                        <p className="text-texto-1 text-sm">{tx.description}{seloDe(tx) && <span className="ml-1.5 align-middle"><SeloParcela rotulo={seloDe(tx)} /></span>}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
+                        <p className="text-texto-1 text-sm">{tx.description}{seloDe(tx) && <span className="ml-1.5 align-middle"><SeloParcela rotulo={seloDe(tx)} /></span>}{(tx.estimado || tx.moeda) && <span className="ml-1.5"><SeloCambio tx={tx} /></span>}{temHistorico('lancamento', tx.id) && <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-fg/80 align-middle" title="Tem histórico de alterações" />}</p>
                         {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">

@@ -19,6 +19,7 @@
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
 import { contaParaGravar, escolherConta } from './contas.js'
+import { moedaDoTexto } from '../cambio.js'
 import {
   normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
 } from './texto.js'
@@ -175,6 +176,18 @@ function validarRegistro(p, ctx, hoje) {
   }
   const estabelecimento = out.favorecido_id || out.favorecido_novo
   if (estabelecimento && descricaoGenericaDeCompra(out.descricao)) out.descricao = estabelecimento
+  // Compra em moeda estrangeira (src/lib/cambio.js): valor ORIGINAL, sem converter — o texto manda
+  // ("US 20,00" lido aqui vale mais que o número do modelo); o valor em R$ a prévia calcula pela PTAX.
+  // Parcelado em dólar fica fora (o cartão converte cada parcela): segue como real.
+  const lidoMoeda = out.tipo === 'despesa' ? moedaDoTexto(ctx.textoPedido) : null
+  if (out.tipo === 'despesa' && !out.parcelas && (lidoMoeda || p.moeda === 'USD')) {
+    const original = lidoMoeda?.valor || out.valor
+    if (original) {
+      out.moeda = 'USD'
+      out.valor_original = original
+      out.valor = null
+    }
+  }
   return out
 }
 
@@ -228,6 +241,7 @@ export const ACOES = [
         properties: {
           ...CAMPOS_LANCAMENTO,
           parcelas: { type: ['integer', 'null'], description: 'Compra parcelada no cartão ("em 3x", "3 parcelas"): número de parcelas; o valor é o TOTAL da compra. À vista = null' },
+          moeda: { type: 'string', enum: ['BRL', 'USD'], description: 'Moeda do valor citado: "US", "US$", "USD", "U$", "dólares" → USD (valor = o número em dólar, SEM converter); senão BRL' },
         },
         required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
       },

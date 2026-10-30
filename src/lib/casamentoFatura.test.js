@@ -201,3 +201,52 @@ describe('parecidosNaCriacao — caso real Skina da Carne', () => {
     expect(parecidosNaCriacao({ ...novo, installmentTotal: 4 }, { transactions: [p1], closingDay: 13 })).toEqual([])
   })
 })
+
+// ─── Compra em dólar ESTIMADA e o IOF ligado (src/lib/cambio.js) ──────────────────────────────────
+import { patchesJaLancado } from './casamentoFatura'
+describe('importação: compra em dólar estimada e IOF estimado', () => {
+  const COMPRA = tx({ id: 'vercel', amount: 106.6, date: '2026-10-23', description: 'VERCEL INC.', payee: 'VERCEL INC.', moeda: 'USD', valorOriginal: 20, cotacao: 106.6 / 20.5, spread: 0.025, estimado: true })
+  const IOF = tx({ id: 'iof', amount: 3.73, date: '2026-10-23', description: 'IOF compra internacional — VERCEL INC.', compraIofId: 'vercel', estimado: true })
+  const rows = [
+    linha({ _id: 'C', description: 'VERCEL INC', amount: 108.2, date: '2026-10-24', _dateCartao: '2026-10-24' }),
+    linha({ _id: 'I', description: 'IOF COMPRA INTERNACIONAL', amount: 3.79, date: '2026-10-24', _dateCartao: '2026-10-24' }),
+  ]
+  const out = importar(rows, [COMPRA, IOF])
+  const por = Object.fromEntries(out.map(r => [r._id, r]))
+
+  it('compra com valor diferente (±15%) casa pelo estabelecimento; IOF (±20%) casa com o IOF', () => {
+    expect(por.C._jaLancado).toMatchObject({ tx: COMPRA })
+    expect(por.I._jaLancado).toMatchObject({ tx: IOF })
+    expect(linhasAImportar(out)).toEqual([])
+    expect(idsNoBancoConferidos(out).sort()).toEqual(['iof', 'vercel'])
+  })
+  it('ao casar: valor real, deixa de ser estimado e grava o spread real; IOF idem', () => {
+    const [c] = patchesJaLancado(por.C, { saveDate: '2026-10-24', payee: 'VERCEL INC.' })
+    expect(c.changes).toMatchObject({ amount: 108.2, estimado: false })
+    expect(c.changes.spread).toBeCloseTo(108.2 / 106.6 * 1.025 - 1, 4)
+    const [i] = patchesJaLancado(por.I, { saveDate: '2026-10-24', payee: '' })
+    expect(i.changes).toMatchObject({ amount: 3.79, estimado: false })
+    expect(i.changes).not.toHaveProperty('spread')
+  })
+  it('fora da janela: valor além de 15%, outro estabelecimento ou data a mais de 5 dias → nova', () => {
+    const casa = (o) => importar([linha({ _id: 'X', description: 'VERCEL INC', amount: 108.2, date: '2026-10-24', _dateCartao: '2026-10-24', ...o })], [COMPRA])[0]._jaLancado
+    expect(casa({ amount: 125 })).toBeUndefined()
+    expect(casa({ description: 'NETFLIX.COM' })).toBeUndefined()
+    expect(casa({ date: '2026-10-29', _dateCartao: '2026-10-29' })).toBeUndefined()
+    expect(casa({})).toBeDefined()
+  })
+  it('banco agrupa os IOFs numa linha: casa com a soma e reparte o valor real', () => {
+    const IOF2 = tx({ id: 'iof2', amount: 0.7, date: '2026-10-10', description: 'IOF compra internacional — OPENAI', compraIofId: 'openai', estimado: true })
+    const [r] = importar([linha({ _id: 'G', description: 'IOF COMPRA INTERNACIONAL', amount: 4.6, date: '2026-11-02', _dateCartao: '2026-11-02' })], [IOF, IOF2])
+    expect(r._jaLancado.grupo.map(t => t.id)).toEqual(['iof', 'iof2'])
+    expect(idsNoBancoConferidos([r]).sort()).toEqual(['iof', 'iof2'])
+    const ps = patchesJaLancado(r, { saveDate: '2026-11-02', payee: '' })
+    expect(ps.map(p => p.changes.amount)).toEqual([3.87, 0.73])
+    expect(ps.every(p => p.changes.estimado === false)).toBe(true)
+  })
+  it('compra em real não muda nada: continua exigindo valor ±0,01 e não vira estimado', () => {
+    const REAL = tx({ id: 'real', amount: 50, date: '2026-10-23', description: 'VERCEL INC.' })
+    const [r] = importar([linha({ _id: 'R', description: 'VERCEL INC', amount: 52, date: '2026-10-23', _dateCartao: '2026-10-23' })], [REAL])
+    expect(r._jaLancado).toBeUndefined()
+  })
+})

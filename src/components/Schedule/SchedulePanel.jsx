@@ -172,7 +172,9 @@ function SectionHeader({ label, count, variant = 'default', cols = 8 }) {
 // Exportado para a prévia de BAIXA do Assistente IA (mesmo fluxo, sem caminho paralelo). Opcionais:
 // `inicial` { amount, date, accountId } pré-preenche os campos; `aviso` aparece no topo;
 // `onSalvo()` avisa que a baixa foi gravada (antes do onClose).
-export function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose, inicial = null, aviso = null, onSalvo = null }) {
+// `extrasLancamento` (prévia do Assistente: compra em dólar estimada) entra no lançamento do Pagamento;
+// `onSalvo(pago)` recebe { id, accountId, date, amount, payee, description } do lançamento do Pagamento.
+export function PayModal({ schedule: scheduleProp, nextDate, accounts, categories, gerencialGroups, addTransaction, markScheduleRegistered, onClose, inicial = null, aviso = null, onSalvo = null, extrasLancamento = null }) {
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
@@ -239,7 +241,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // (sem ocorrência pendente não há vencimento — o campo nasce em hoje, como antes).
   const occVenc = nextDate ? occDataVenc : null
 
-  const concluir = () => { onSalvo?.(); onClose() }
+  const concluir = (pago = null) => { onSalvo?.(pago); onClose() }
   const [payAccountId, setPayAccountId] = useState(inicial?.accountId || schedule.accountId || '')
   const [payPayee, setPayPayee] = useState(schedule.payee || '')
   const [payAmount, setPayAmount] = useState(occAmount)
@@ -392,10 +394,12 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     const central = precisaCentral ? centralPagamento(payAccountId) : { conta: null, erro: null }
     if (central.erro) { setAvisoOperacao(central.erro); return }
     const contaPrincipal = central.conta
+    let pago = null
     if (tab === 'pagamento') {
       const amount = valorAba
       if (payPayee && !payees.includes(payPayee)) addPayee(payPayee)
       const txId = addTransaction({
+        ...(extrasLancamento || {}),
         type: 'expense', accountId: payAccountId, payee: payPayee,
         amount, date: payDate, categoryId: payCategoryId,
         grupoGerencial: (gerencialLigado ? payGrupo : null) || undefined,
@@ -439,6 +443,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, escalarRateios(scheduleRateios, amount))
+      pago = { id: txId, accountId: payAccountId, date: payDate, amount, payee: payPayee, description: schedule.description }
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
       // e marca a ocorrência. Não usa o valor/contas do formulário (fixos pelo detalhamento).
@@ -464,7 +469,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
       })
       markScheduleRegistered(schedule.id, regDate, metaBaixaGerada(txId))
     }
-    concluir()
+    concluir(pago)
   }
 
   const TAB_LABELS = { pagamento: 'Pagamento', recebimento: 'Recebimento', transferencia: 'Transferência' }

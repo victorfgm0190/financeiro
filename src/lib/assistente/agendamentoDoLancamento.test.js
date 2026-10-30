@@ -57,4 +57,11 @@ describe('agendamento pendente que o lançamento do assistente paga', () => {
     const r = buscar(sms, [ag(), ag({ id: 'vivo2', accountId: 'cartao' })])
     expect(r.map(c => c.schedule_id)).toEqual(['vivo2', 'vivo'])
   })
+  it('compra em dólar ESTIMADA (VERCEL R$ 106,60 no mesmo cartão): ±15%', () => {
+    const vercel = ag({ id: 'vercel', description: 'VERCEL', payee: 'Vercel', amount: 106.6, accountId: 'cartao', startDate: '2026-09-23', registered: ['2026-09-23'] })
+    const compra = { type: 'expense', amount: 118, date: '2026-10-23', accountId: 'cartao', payee: 'VERCEL INC.', description: 'VERCEL INC.', estimado: true }
+    expect(buscar(compra, [vercel])).toHaveLength(1)
+    expect(buscar({ ...compra, amount: 123 }, [vercel])).toHaveLength(0)
+    expect(buscar({ ...compra, estimado: false }, [vercel])).toHaveLength(0)
+  })
 })

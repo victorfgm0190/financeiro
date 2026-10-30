@@ -5,6 +5,7 @@ import { useScrollScope } from '../../hooks/useScrollRestoration'
 import { fmt, fmtDate } from '../shared/utils'
 import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
+import SeloCambio from '../shared/SeloCambio'
 
 // Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
 // G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
@@ -418,7 +419,10 @@ export default function RelatorioFatura({ initialCardId }) {
                       <GerBadge grupoId={gid || grpD?.id} gerencialGroups={gerencialGroups} />
                     </td>
                     )}
-                    <td className="px-3 py-2.5 text-right font-semibold text-despesa whitespace-nowrap align-top">{fmt(tx.amount)}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-despesa whitespace-nowrap align-top">
+                      {fmt(tx.amount)}
+                      {(tx.moeda || tx.estimado) && <div className="mt-0.5 font-normal"><SeloCambio tx={tx} /></div>}
+                    </td>
                   </tr>
                 )
               })}

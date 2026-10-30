@@ -436,6 +436,9 @@ export const accountToRow = (a) => ({
   acquisition_date: a.acquisitionDate || null,
   value_history: a.valueHistory || [],
   cartao_finais: Array.isArray(a.cartaoFinais) ? a.cartaoFinais : [],
+  // Cartão: spread de câmbio sem histórico (fração) e IOF em linha separada (null = sim).
+  spread_cambio: a.spreadCambio ?? null,
+  iof_linha_separada: typeof a.iofLinhaSeparada === 'boolean' ? a.iofLinhaSeparada : null,
   is_reserva: !!a.isReserva,
   reserva_type: a.reservaType || null,
   reserva_category_id: a.reservaCategoryId || null,
@@ -481,6 +484,8 @@ export const rowToAccount = (r) => ({
   acquisitionDate: r.acquisition_date || null,
   valueHistory: r.value_history || [],
   cartaoFinais: Array.isArray(r.cartao_finais) ? r.cartao_finais.map(String) : [],
+  spreadCambio: r.spread_cambio != null ? Number(r.spread_cambio) : null,
+  iofLinhaSeparada: typeof r.iof_linha_separada === 'boolean' ? r.iof_linha_separada : null,
   // Módulo de bem imobilizado (colunas criadas por ensureBemSchema em api/_bem.js). Somente
   // leitura: quem grava é POST /api/bem/criar, e lá valor_nota_fiscal é imutável (COALESCE).
   // De propósito FORA de accountToRow — upsertRows deriva as colunas das chaves da row e faz
@@ -572,6 +577,14 @@ export const txToRow = (tx) => ({
   // Contratos: lançamento de uma parcela de contrato e a composição do valor pago.
   contrato_id: tx.contratoId || null,
   composicao: tx.composicao || null,
+  // Compra em moeda estrangeira (src/lib/cambio.js) e o IOF estimado ligado a ela.
+  moeda: tx.moeda || null,
+  valor_original: tx.valorOriginal ?? null,
+  cotacao: tx.cotacao ?? null,
+  data_cotacao: tx.dataCotacao || null,
+  spread: tx.spread ?? null,
+  estimado: tx.estimado ? true : null,
+  compra_iof_id: tx.compraIofId || null,
   created_at: tx.createdAt || new Date().toISOString(),
   // Não é coluna: o upsert (api/_db.js) só deixa um NULL apagar campos de parcela já gravados
   // quando a limpeza foi pedida ("Marcar como à vista"). Retirada antes do SQL.
@@ -627,6 +640,13 @@ export const rowToTx = (r) => ({
   dataOcorrencia: r.data_ocorrencia || null,
   contratoId: r.contrato_id || null,
   composicao: r.composicao || null,
+  moeda: r.moeda || null,
+  valorOriginal: r.valor_original != null ? Number(r.valor_original) : null,
+  cotacao: r.cotacao != null ? Number(r.cotacao) : null,
+  dataCotacao: r.data_cotacao || null,
+  spread: r.spread != null ? Number(r.spread) : null,
+  estimado: !!r.estimado,
+  compraIofId: r.compra_iof_id || null,
   createdAt: r.created_at,
 })
 
@@ -1012,6 +1032,7 @@ export async function loadFromDb(defaultData) {
               mobileHomeCards: d.cfg.mobile_home_cards ?? null,
               // Controle gerencial do ambiente (lib/controleGerencial.js); null = ligado.
               controleGerencial: d.cfg.controle_gerencial ?? null,
+              iofCompraInternacional: d.cfg.iof_compra_internacional != null ? Number(d.cfg.iof_compra_internacional) : null,
               // Rodapé da barra lateral do ambiente (vazio no 'vm' = texto de sempre). Só leitura:
               // o syncSettings não grava estas colunas.
               rodapeTitulo: d.cfg.rodape_titulo ?? null,
@@ -1382,6 +1403,8 @@ export const settingsToRow = (settings, costCenters) => ({
   faturas_fechadas: settings.faturasFechadas ?? {},
   mobile_home_cards: settings.mobileHomeCards ?? null,
   controle_gerencial: typeof settings.controleGerencial === 'boolean' ? settings.controleGerencial : null,
+  // Alíquota do IOF de compra internacional (fração); null = padrão 3,5% (src/lib/cambio.js).
+  iof_compra_internacional: settings.iofCompraInternacional ?? null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1399,6 +1422,7 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   faturas_fechadas: 'faturasFechadas',
   mobile_home_cards: 'mobileHomeCards',
   controle_gerencial: 'controleGerencial',
+  iof_compra_internacional: 'iofCompraInternacional',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

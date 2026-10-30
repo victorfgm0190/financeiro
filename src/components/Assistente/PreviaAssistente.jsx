@@ -18,6 +18,11 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 import { agendamentosDoLancamento, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
 import AgendamentoQueBate from './AgendamentoQueBate'
 import PreviaBaixa from './PreviaBaixa'
+import CompraEmDolar from './CompraEmDolar'
+import { cotacaoDolar } from '../../lib/assistenteApi'
+import {
+  spreadDoCartao, aliquotaIof, iofEmLinhaSeparada, planoCompraEstrangeira, camposDaCompra, categoriaDoIof, iofDe, lancamentoDoIof,
+} from '../../lib/cambio'
 
 // PRÉVIA do Assistente IA: o formulário EXISTENTE (TransactionForm / ScheduleForm) pré-preenchido.
 //   Confirmar (salvar no formulário) → gravação do próprio formulário (addTransaction/addSchedule do
@@ -32,8 +37,12 @@ import PreviaBaixa from './PreviaBaixa'
 //   Agendamento pendente que bate (lib/assistente/agendamentoDoLancamento: valor, nome, ±7 dias,
 //     conta) → antes do formulário: "Dar baixa" abre a PreviaBaixa (fluxo normal do Pagar, com a
 //     conta, a data e o valor do lançamento); "É outro" segue para criar o lançamento.
+//   Compra em DÓLAR (sugestao.moeda 'USD', valor_original — src/lib/cambio.js): PTAX do dia da compra
+//     (/api/cotacao) × (1 + spread do cartão) = R$ ESTIMADO no formulário; ao salvar, a compra leva
+//     moeda/valor original/cotação/spread/estimado e, com IOF em linha separada no cartão, nasce o
+//     IOF estimado ligado a ela. Sem cotação → o R$ fica para o usuário digitar.
 export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
-  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences } = useApp()
+  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories } = useApp()
   // Compra parcelada sem conta citada: "Em qual cartão?" antes do formulário. "Não foi no cartão" →
   // pergunta a conta e abre a prévia de AGENDAMENTO parcelado (N × valor/N, centavos na última).
   const [semCartao, setSemCartao] = useState(false)
@@ -42,9 +51,44 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   const destaques = camposParaConferir(ferramenta, sugestao)
   // Sem conta na sugestão → "Em qual conta?" (EscolherConta) antes do formulário.
   const [contaEscolhida, setContaEscolhida] = useState(null)
-  const initial = semCartao && contaEscolhida
+  const initialBase = semCartao && contaEscolhida
     ? agendamentoParceladoDaSugestao(sugestao, contaEscolhida)
     : { ...initialDaSugestao(ferramenta, sugestao), ...(contaEscolhida ? { accountId: contaEscolhida } : {}) }
+
+  // Compra em dólar: cotação → valor estimado em R$ (+ IOF).
+  const emDolar = !agendamento && sugestao.moeda === 'USD' && Number(sugestao.valor_original) > 0
+  const [ptax, setPtax] = useState(() => (emDolar ? { status: 'carregando' } : null))
+  useEffect(() => {
+    if (!emDolar) return
+    let vivo = true
+    cotacaoDolar(sugestao.data || new Date().toISOString().slice(0, 10))
+      .then(r => { if (vivo) setPtax({ status: 'ok', data: r.data, venda: Number(r.venda) }) })
+      .catch(err => { if (vivo) setPtax({ status: 'erro', erro: err.message }) })
+    return () => { vivo = false }
+  }, [emDolar, sugestao.data])
+  const cartaoDaCompra = emDolar ? accounts.find(a => a.id === initialBase.accountId) || null : null
+  const cambio = emDolar && ptax?.status !== 'carregando' ? (() => {
+    const sp = spreadDoCartao(cartaoDaCompra, transactions)
+    const aliquota = aliquotaIof(settings)
+    const separada = iofEmLinhaSeparada(cartaoDaCompra)
+    const cotacao = ptax?.status === 'ok' ? ptax.venda : null
+    const plano = planoCompraEstrangeira({ valorOriginal: sugestao.valor_original, cotacao, spread: sp.spread, aliquota, separada })
+    return { ...sp, aliquota, separada, cotacao, dataCotacao: ptax?.data || null, erro: ptax?.erro || null, ...plano }
+  })() : null
+  const [catIofEscolhida, setCatIofEscolhida] = useState('')
+  const catIof = catIofEscolhida || (emDolar ? categoriaDoIof(transactions) : null) || ''
+  const initial = cambio
+    ? { ...initialBase, amount: cambio.valorCompra ? String(cambio.valorCompra) : '' }
+    : initialBase
+  const extrasCompra = cambio
+    ? camposDaCompra({ moeda: 'USD', valorOriginal: sugestao.valor_original, cotacao: cambio.cotacao, spread: cambio.spread, dataCotacao: cambio.dataCotacao })
+    : null
+  // IOF estimado da compra salva (mesmo cartão e data; a fatura sai da data, como a da compra).
+  const criarIof = (compra) => {
+    if (!cambio?.separada || !compra.id) return
+    const valor = iofDe(Number(compra.amount), cambio.aliquota)
+    if (valor > 0) addTransaction(lancamentoDoIof(compra, { valor, categoryId: catIof }))
+  }
   const cartoes = perguntaCartao ? cartoesParaParcelado(accounts, activeProfileId, transactions) : []
   // "Não foi no cartão": só as contas sugeríveis que não são cartão.
   const contasSemCartao = semCartao
@@ -76,12 +120,12 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
   const [agendDispensado, setAgendDispensado] = useState(false)
   const [baixa, setBaixa] = useState(null)
-  const lancAgend = { ...initial, amount: Number(initial.amount) }
+  const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}) }
   const agendamentosQueBatem = useMemo(() => {
-    if (agendamento || perguntaCartao || Number(initial.installments) > 1) return []
+    if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return []
     return agendamentosDoLancamento(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences])
+  }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences, ptax])
   const darBaixa = (candidato) => { marcar('baixa'); setBaixa(candidato) }
 
   // "É o mesmo": nada é criado; o pré-lançamento que estava sendo efetivado é baixado contra o
@@ -96,6 +140,7 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
 
   const onSalvo = (form, id) => {
     marcar('salvo')
+    if (cambio && id) criarIof({ id, accountId: form.accountId, date: form.date, amount: form.amount, payee: form.payee, description: form.description })
     const itens = apelidosAprendidos(sugestao, form)
     if (itens.length) aprenderApelidos(itens).catch(err => console.warn('[assistente] apelidos não salvos:', err.message))
     if (preId) concluirPreLancamento(preId, 'efetivado', id || null).catch(err => onToast?.(`Lançamento salvo, mas o pré-lançamento não foi baixado: ${err.message}`))
@@ -118,7 +163,10 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
 
   if (existente) return <TransactionForm initial={existente} onClose={onClose} onToast={onToast} />
   if (baixa) {
-    return <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast} />
+    return (
+      <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast}
+        extrasLancamento={extrasCompra} onBaixaSalva={cambio ? criarIof : null} />
+    )
   }
   if (!agendDispensado && agendamentosQueBatem.length > 0) {
     return (
@@ -166,6 +214,10 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
           </button>
         </div>
       )}
+      {emDolar && initial.accountId && (
+        <CompraEmDolar valorOriginal={sugestao.valor_original} cambio={cambio} carregando={ptax?.status === 'carregando'}
+          categories={categories} catIof={catIof} onCatIof={setCatIofEscolhida} />
+      )}
       {perguntaCartao && !contaEscolhida && !semCartao
         ? <EscolherCartaoParcelado valor={sugestao.valor} parcelas={sugestao.parcelas} cartoes={cartoes}
             onCartao={setContaEscolhida} onSemCartao={() => setSemCartao(true)} />
@@ -173,10 +225,13 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
         ? <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaEscolhida}
             opcoes={semCartao ? contasSemCartao : (sugestao.contas_opcoes || null)} finalSemCartao={sugestao.final_sem_cartao || null}
             titulo={semCartao ? `Em qual conta? Vira um agendamento de ${sugestao.parcelas} parcelas mensais.` : null} />
+        : emDolar && ptax?.status === 'carregando'
+        ? null
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
         : <TransactionForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
-            preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo} />}
+            preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
+            extrasNovo={extrasCompra} />}
     </div>
   )
 }
