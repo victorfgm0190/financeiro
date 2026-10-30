@@ -22,6 +22,12 @@ const juntar = (...partes) => partes.map(p => (p || '').trim()).filter(Boolean).
 export default function Assistente({ onClose, onToast }) {
   // entrada | carregando | resultado { ferramenta, parametros, extra }
   const [fase, setFase] = useState({ tipo: 'entrada' })
+  const [demorando, setDemorando] = useState(false)
+  useEffect(() => {
+    if (fase.tipo !== 'carregando') return
+    const t = setTimeout(() => setDemorando(true), 5000)
+    return () => { clearTimeout(t); setDemorando(false) }
+  }, [fase.tipo])
   // Perfil ativo: a Conta favorita dele é a conta que a IA pode sugerir sozinha (além dos cartões).
   const { activeProfileId } = useApp()
   const [texto, setTexto] = useState('')
@@ -111,7 +117,7 @@ export default function Assistente({ onClose, onToast }) {
   const novoPedido = () => { setTexto(''); setImagem(null); setFase({ tipo: 'entrada' }) }
 
   if (fase.tipo === 'resultado' && fase.ferramenta === 'lote') {
-    return <LoteAssistente itens={fase.extra?.itens || []} textoOriginal={texto.trim()} onClose={onClose} onToast={onToast} onNovo={novoPedido} />
+    return <LoteAssistente itens={fase.extra?.itens || []} faltantes={fase.extra?.faltantes || null} textoOriginal={texto.trim()} onClose={onClose} onToast={onToast} onNovo={novoPedido} />
   }
   if (fase.tipo === 'resultado' && fase.ferramenta !== 'perguntar') {
     const Executor = EXECUTORES[fase.ferramenta]
@@ -125,6 +131,8 @@ export default function Assistente({ onClose, onToast }) {
   }
 
   const carregando = fase.tipo === 'carregando'
+  // Pedido com vários movimentos demora mais (até ~1 min): passado o tempo de um pedido simples,
+  // o botão troca "Entendendo…" por "Lendo…".
   const ehPergunta = fase.tipo === 'resultado' && fase.ferramenta === 'perguntar'
   return (
     <div className="space-y-3 min-w-0">
@@ -209,7 +217,7 @@ export default function Assistente({ onClose, onToast }) {
             </>
           )}
           <button type="button" onClick={() => enviar()} disabled={carregando || (!texto.trim() && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">
-            {carregando ? <><Loader2 size={16} className="animate-spin" /> Entendendo…</> : <><Sparkles size={16} /> Enviar</>}
+            {carregando ? <><Loader2 size={16} className="animate-spin" /> {demorando ? 'Lendo…' : 'Entendendo…'}</> : <><Sparkles size={16} /> Enviar</>}
           </button>
         </div>
       )}

@@ -66,13 +66,15 @@ const CAMPOS_LANCAMENTO = {
     description: 'Confiança de 0 a 1 em cada campo',
     properties: { valor: NUM_CONF, data: NUM_CONF, conta: NUM_CONF, conta_destino: NUM_CONF, categoria: NUM_CONF, favorecido: NUM_CONF, centro_custo: NUM_CONF, descricao: NUM_CONF },
   },
+  total_encontrado: { type: ['integer', 'null'], description: 'Só com VÁRIOS movimentos no pedido: quantos movimentos há no pedido INTEIRO (mesmo acima de 10). Repita em cada chamada.' },
   termos: {
     type: 'object',
-    description: 'Trecho do pedido que levou a cada escolha',
+    description: 'Trecho do pedido que levou a cada escolha (omita quando houver vários movimentos)',
     properties: { categoria: { type: ['string', 'null'] }, conta: { type: ['string', 'null'] }, favorecido: { type: ['string', 'null'] } },
   },
 }
 const TIPO_CAT = { despesa: 'expense', receita: 'income' }
+const CONFIANCA_CERTA = { valor: 1, data: 1, conta: 1, conta_destino: 1, categoria: 1, favorecido: 1, centro_custo: 1, descricao: 1 }
 const contaValida = (ctx, id) => (ctx.idx.contas.has(id) ? id : null)
 const cartaoValido = (ctx, id) => (ctx.idx.contas.get(id)?.type === 'credit' ? id : null)
 const categoriaValida = (ctx, id) => (ctx.idx.categorias.has(id) ? id : null)
@@ -90,7 +92,8 @@ function validarLancamento(p, ctx, hoje) {
   const termos = {
     categoria: txt(p.termos?.categoria, 60), conta: txt(p.termos?.conta, 60), favorecido: txt(p.termos?.favorecido, 60),
   }
-  const c = p.confianca || {}
+  // Lote: a IA manda em `confianca` só os campos com dúvida — o que não veio é certeza (1).
+  const c = ctx.lote ? { ...CONFIANCA_CERTA, ...p.confianca } : (p.confianca || {})
   const confianca = {
     valor: conf(c.valor), data: conf(c.data), conta: conf(c.conta), conta_destino: conf(c.conta_destino),
     categoria: conf(c.categoria), favorecido: conf(c.favorecido), centro_custo: conf(c.centro_custo), descricao: conf(c.descricao),
@@ -244,7 +247,7 @@ export const ACOES = [
           parcelas: { type: ['integer', 'null'], description: 'Compra parcelada no cartão ("em 3x", "3 parcelas"): número de parcelas; o valor é o TOTAL da compra. À vista = null' },
           moeda: { type: 'string', enum: ['BRL', 'USD'], description: 'Moeda do valor citado: "US", "US$", "USD", "U$", "dólares" → USD (valor = o número em dólar, SEM converter); senão BRL' },
         },
-        required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
+        required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca'],
       },
     },
     validar: (p, ctx, hoje) => validarRegistro(p, ctx, hoje),
@@ -262,7 +265,7 @@ export const ACOES = [
           parcelas: { type: ['integer', 'null'], description: 'Número de parcelas, se for parcelado; null = contínuo' },
           linha_digitavel: { type: ['string', 'null'], description: 'Boleto: a linha digitável (só os dígitos), se legível' },
         },
-        required: ['tipo', 'valor', 'vencimento', 'recorrencia', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
+        required: ['tipo', 'valor', 'vencimento', 'recorrencia', 'conta_id', 'categoria_id', 'descricao', 'confianca'],
       },
     },
     validar: (p, ctx, hoje) => {

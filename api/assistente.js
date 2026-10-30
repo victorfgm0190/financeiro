@@ -9,7 +9,7 @@ import {
   ensureIaSchema, montarContexto, textoCadastros, instrucoes, validarParametros, registrarUso, hojeSaoPaulo, usoDoDia,
 } from './_ia.js'
 import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente/contas.js'
-import { blocosDoPedido, trechosDosItens } from '../src/lib/assistente/lote.js'
+import { blocosDoPedido, trechosDosItens, faltantesDoLote } from '../src/lib/assistente/lote.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
 import { centralQuery } from './_central.js'
 import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
@@ -57,7 +57,7 @@ const RESOLVEDORES = {
 }
 
 let cliente = null
-const anthropic = () => (cliente ||= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 25_000 }))
+const anthropic = () => (cliente ||= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 50_000 }))
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -107,9 +107,12 @@ async function handler(req, res) {
       { type: 'text', text: partes.join('\n') },
     ]
 
+    const inicio = Date.now()
     const msg = await anthropic().messages.create({
       model: MODELO,
-      max_tokens: 3072, // lote: até 10 chamadas
+      // Lote: até 10 chamadas enxutas (regra 17). Só se paga o que sai; 1 item custa o mesmo.
+      // Tempo: SDK 50 s, função 60 s (vercel.json).
+      max_tokens: 12_000,
       output_config: { effort: 'low' },
       tools: acoes.map(a => definicaoFerramenta(a, podeFn, { gerencial: ctx.gerencialLigado })),
       tool_choice: { type: 'auto' },
@@ -123,11 +126,14 @@ async function handler(req, res) {
 
     // Vários lançamentos/agendamentos no mesmo pedido → lote (src/lib/assistente/lote.js); senão o
     // 1º bloco, como sempre. Um pedido só no limite diário, com ou sem lote.
-    const { lote, blocos } = blocosDoPedido(msg.content, disponiveis)
+    const cortada = msg.stop_reason === 'max_tokens'
+    const { lote, blocos, total } = blocosDoPedido(msg.content, disponiveis, { cortada })
     const bloco = blocos[0]
     const ferramenta = lote ? 'lote' : bloco ? bloco.name : 'perguntar'
     // Só a marca "teve imagem" — a imagem não é gravada nem logada em lugar nenhum.
     await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem, usuario: req.user?.id })
+    // Só números (sem texto do pedido): tempo e tamanho da resposta, para acompanhar o lote.
+    if (lote || cortada) console.info(`[api/assistente] ${ferramenta} ${blocos.length} item(ns), ${msg.usage?.output_tokens} tokens de saída, ${Date.now() - inicio} ms${cortada ? ', CORTADA' : ''}`)
 
     if (msg.stop_reason === 'refusal') {
       return res.json({ ferramenta: 'perguntar', parametros: { pergunta: 'Não consegui ajudar com esse pedido. Posso registrar, consultar ou abrir a tela certa no Finup.', opcoes: [] } })
@@ -138,13 +144,16 @@ async function handler(req, res) {
     }
     if (lote) {
       // Cada item pelo validador de sempre, com o trecho do pedido que é dele (parcelas/moeda).
-      const trechos = trechosDosItens(textoPedido, blocos.map(b => b.input?.valor))
-      const itens = blocos.map((b, i) => ({ ferramenta: b.name, parametros: validarParametros(b.name, b.input, { ...ctx, trechoItem: trechos[i] }, hoje) }))
+      const valores = blocos.map(b => b.input?.valor)
+      const trechos = trechosDosItens(textoPedido, valores)
+      const itens = blocos.map((b, i) => ({ ferramenta: b.name, parametros: validarParametros(b.name, b.input, { ...ctx, lote: true, trechoItem: trechos[i] }, hoje) }))
+      // Nunca perder em silêncio: resposta cortada ou a IA contou mais movimentos do que leu.
+      const faltantes = faltantesDoLote({ texto: texto || textoPedido, valores, total, cortada })
       const comGerencial = blocos.find((b, i) => itens[i].parametros?.conta_gerencial
         || [b.input?.conta_id, b.input?.conta_destino_id].some(id => ctx.idx.contas.get(id)?.papel === 'gerencial'))
       if (!comGerencial && !gerencialCitada(ctx, `${texto} ${resposta}`)) {
         for (const it of itens) delete it.parametros.conta_gerencial
-        return res.json({ ferramenta: 'lote', itens })
+        return res.json({ ferramenta: 'lote', itens, faltantes })
       }
       // Conta gerencial em algum item: mesma resposta do pedido de 1 item (abrir a tela da conta).
       return res.json({

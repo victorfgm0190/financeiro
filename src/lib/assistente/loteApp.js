@@ -1,13 +1,14 @@
 // Assistente IA — lote de lançamentos (src/lib/assistente/lote.js), parte do APP: o que impede a
 // gravação direta de um item ("Salvar selecionados") e o lançamento gravado direto. PURO.
-import { camposParaConferir } from '../assistente'
+import { camposParaConferir, ROTULO_CAMPO } from '../assistente'
 import { parecidosNaCriacao } from '../casamentoFatura'
 import { agendamentosDoLancamento } from './agendamentoDoLancamento'
 
 // ─── App: pendências e gravação direta ────────────────────────────────────────────────────────────
-// Motivos que exigem revisar o item na prévia normal (o "Salvar selecionados" não grava):
+// Motivos que exigem revisar o item na prévia normal (o "Salvar selecionados" não grava). Campo com
+// dúvida aparece pelo nome (rotuloConferir: "categoria", "data", "valor"…).
+export const rotuloConferir = (campo) => ROTULO_CAMPO[campo] || campo
 export const MOTIVOS = {
-  conferir: 'campo a conferir',
   conta: 'falta a conta',
   duplicado: 'possível duplicado',
   agendamento: 'bate com agendamento',
@@ -39,7 +40,7 @@ export function pendenciasDoItem(item, ctx) {
   if (Number(p.parcelas) > 1) out.push(MOTIVOS.parcelado)
   if (p.moeda && p.moeda !== 'BRL') out.push(MOTIVOS.moeda)
   // A conta aparece e se troca na própria lista: não conta como campo a conferir.
-  if (camposParaConferir(ferramenta, p).some(c => c !== 'accountId')) out.push(MOTIVOS.conferir)
+  for (const c of camposParaConferir(ferramenta, p)) if (c !== 'accountId') out.push(rotuloConferir(c))
   if (!p.conta_id || out.includes(MOTIVOS.moeda)) return [...new Set(out)]
   const lanc = { type: TIPO[p.tipo] || 'expense', amount: Number(p.valor), date: p.data, accountId: p.conta_id, payee: p.favorecido_id || p.favorecido_novo || '', description: p.descricao || '' }
   const conta = (ctx.accounts || []).find(a => a.id === p.conta_id)

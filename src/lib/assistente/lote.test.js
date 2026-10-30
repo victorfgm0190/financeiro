@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { blocosDoPedido, segmentosDoPedido, trechosDosItens, MAX_ITENS_LOTE } from './lote.js'
+import { blocosDoPedido, segmentosDoPedido, trechosDosItens, faltantesDoLote, restanteDoPedido, MAX_ITENS_LOTE } from './lote.js'
 import { pendenciasDoItem, lancamentoDireto, sugestaoComConta, MOTIVOS } from './loteApp.js'
 import { classificarContas } from './contas.js'
 import { validarAcao } from './acoes.js'
@@ -14,8 +14,8 @@ describe('lote no backend', () => {
     const tres = [uso('registrar_lancamento', { valor: 100 }), uso('registrar_lancamento', { valor: 200 }), uso('registrar_lancamento', { valor: 150 })]
     expect(blocosDoPedido(tres, disp)).toMatchObject({ lote: true })
     expect(blocosDoPedido(tres, disp).blocos).toHaveLength(3)
-    expect(blocosDoPedido([tres[0]], disp)).toEqual({ lote: false, blocos: [tres[0]] })
-    expect(blocosDoPedido([tres[0], uso('consultar_saldo', {})], disp)).toEqual({ lote: false, blocos: [tres[0]] })
+    expect(blocosDoPedido([tres[0]], disp)).toMatchObject({ lote: false, blocos: [tres[0]] })
+    expect(blocosDoPedido([tres[0], uso('consultar_saldo', {})], disp)).toMatchObject({ lote: false, blocos: [tres[0]] })
     const doze = Array.from({ length: 12 }, (_, i) => uso('registrar_lancamento', { valor: i + 1 }))
     expect(blocosDoPedido(doze, disp).blocos).toHaveLength(MAX_ITENS_LOTE)
   })
@@ -92,7 +92,8 @@ describe('lote no app: pendências e gravação direta', () => {
   it('duplicado, campo a conferir, parcelado, dólar, transferência, agendamento e grupo gerido → revisão', () => {
     const tx = { id: 't', type: 'expense', accountId: 'itau', amount: 100, date: '2026-10-29' }
     expect(pendenciasDoItem(item(), ctx({ transactions: [tx] }))).toContain(MOTIVOS.duplicado)
-    expect(pendenciasDoItem(item({ categoria_id: null }), ctx())).toContain(MOTIVOS.conferir)
+    expect(pendenciasDoItem(item({ categoria_id: null }), ctx())).toEqual(['categoria'])
+    expect(pendenciasDoItem(item({ confianca: { valor: 1, data: 0.3, conta: 1, categoria: 1, descricao: 1 } }), ctx())).toEqual(['data'])
     expect(pendenciasDoItem(item({ parcelas: 3 }), ctx())).toContain(MOTIVOS.parcelado)
     expect(pendenciasDoItem(item({ moeda: 'USD', valor: null, valor_original: 20 }), ctx())).toContain(MOTIVOS.moeda)
     expect(pendenciasDoItem(item({ tipo: 'transferencia', conta_destino_id: 'nubank' }), ctx())).toContain(MOTIVOS.transferencia)
@@ -100,5 +101,75 @@ describe('lote no app: pendências e gravação direta', () => {
     const cats = [{ id: 'comb', defaultGerencialGroup: 'grp_1' }]
     expect(pendenciasDoItem(item({ conta_id: 'nubank' }), ctx({ categories: cats }))).toContain(MOTIVOS.gerencial)
     expect(pendenciasDoItem(item({ conta_id: 'nubank' }), ctx({ categories: cats, gerencialLigado: false }))).toEqual([])
+  })
+})
+
+// ─── Lote grande: nunca perder em silêncio ───────────────────────────────────────────────────────
+// SMS genéricos (um por linha), sem formato de banco: só o valor de cada um importa.
+const LOJAS = ['Posto A', 'Barbearia B', 'Loja C', 'Delivery D', 'Mercado E', 'Farmácia F', 'Livraria G', 'Padaria H', 'Cinema I', 'Pet J', 'Ótica K', 'Bazar L']
+const VALORES = [298.16, 70, 405.98, 12.9, 153.4, 61.25, 88.8, 23.45, 47.5, 131.07, 245.6, 39.99]
+const sms = (n) => Array.from({ length: n }, (_, k) => `Compra aprovada CARTAO final 4321 R$ ${VALORES[k].toFixed(2).replace('.', ',')} em ${LOJAS[k]} 2${k % 9}/10 às 1${k % 9}h`).join('\n')
+const chamada = (k, total) => uso('registrar_lancamento', { tipo: 'despesa', valor: VALORES[k], data: '2026-10-29', conta_id: 'nubank', categoria_id: 'comb', descricao: LOJAS[k], confianca: {}, total_encontrado: total })
+// O caminho do /api/assistente: blocos → validador de cada item (lote) → faltantes.
+function pipeline(texto, content, stop = 'tool_use') {
+  const cortada = stop === 'max_tokens'
+  const { lote, blocos, total } = blocosDoPedido(content, disp, { cortada })
+  const valores = blocos.map(b => b.input?.valor)
+  const trechos = trechosDosItens(texto, valores)
+  const itens = blocos.map((b, i) => validarAcao(b.name, b.input, { ...montar(texto, trechos[i]), lote: true }, '2026-10-30'))
+  return { lote, itens, faltantes: faltantesDoLote({ texto, valores, total, cortada }) }
+}
+
+describe('lote grande', () => {
+  it('8 compras → as 8, sem aviso', () => {
+    const r = pipeline(sms(8), Array.from({ length: 8 }, (_, k) => chamada(k, 8)))
+    expect(r.lote).toBe(true)
+    expect(r.itens.map(i => i.valor)).toEqual(VALORES.slice(0, 8))
+    expect(r.faltantes).toBeNull()
+  })
+  it('12 compras → 10 + aviso das 2 restantes com o trecho delas (IA parou em 10 ou mandou 12)', () => {
+    const texto = sms(12)
+    const linhas = texto.split('\n')
+    for (const n of [10, 12]) {
+      const r = pipeline(texto, Array.from({ length: n }, (_, k) => chamada(k, 12)))
+      expect(r.itens).toHaveLength(MAX_ITENS_LOTE)
+      expect(r.faltantes).toEqual({ lidos: 10, total: 12, trecho: linhas.slice(10).join('\n') })
+    }
+  })
+  it('resposta cortada no meio do 5º: 4 itens, aviso "4 de 8" e o trecho do 5º ao 8º', () => {
+    const texto = sms(8)
+    const quinto = { ...chamada(4, 8), input: { tipo: 'despesa', valor: 153.4 } } // incompleto
+    const r = pipeline(texto, [...Array.from({ length: 4 }, (_, k) => chamada(k, 8)), quinto], 'max_tokens')
+    expect(r.itens.map(i => i.valor)).toEqual(VALORES.slice(0, 4))
+    expect(r.faltantes).toEqual({ lidos: 4, total: 8, trecho: texto.split('\n').slice(4).join('\n') })
+  })
+  it('cortada sem a IA ter contado o total: avisa sem trecho', () => {
+    const r = pipeline(sms(8), [chamada(0), chamada(1), chamada(2)], 'max_tokens')
+    expect(r.faltantes).toEqual({ lidos: 2, total: null, trecho: null })
+  })
+  it('lote: confianca só com as dúvidas; o resto é certeza', () => {
+    const r = pipeline(sms(2), [chamada(0, 2), { ...chamada(1, 2), input: { ...chamada(1, 2).input, confianca: { categoria: 0.4 } } }])
+    expect(r.itens[0].confianca).toMatchObject({ valor: 1, data: 1, categoria: 1, descricao: 1 })
+    expect(r.itens[1].confianca.categoria).toBe(0.4)
+  })
+})
+
+describe('texto restante: nunca um trecho errado', () => {
+  const t = 'gastei 50 no posto\n30 na padaria\n20 no cinema\n15 no pão'
+  it('acha o último lido e devolve as linhas seguintes', () => {
+    expect(restanteDoPedido(t, [50, 30], 2)).toBe('20 no cinema\n15 no pão')
+  })
+  it('valor do último item não está no texto → null', () => {
+    expect(restanteDoPedido(t, [50, 31], 2)).toBeNull()
+  })
+  it('valor do último item aparece duas vezes dali em diante → ambíguo → null', () => {
+    expect(restanteDoPedido('50 posto\n30 padaria\n30 cinema\n15 pão', [50, 30], 2)).toBeNull()
+  })
+  it('número de linhas depois não bate com o que faltou (SMS em várias linhas) → null', () => {
+    expect(restanteDoPedido('Compra R$ 50\nPosto A\nCompra R$ 30\nPadaria\nCompra R$ 20\nCinema', [50, 30], 1)).toBeNull()
+  })
+  it('SMS em várias linhas separados por linha em branco → recorta pelos blocos', () => {
+    const blocos = 'Compra R$ 50\nPosto A\n\nCompra R$ 30\nPadaria\n\nCompra R$ 20\nCinema'
+    expect(restanteDoPedido(blocos, [50, 30], 1)).toBe('Compra R$ 20\nCinema')
   })
 })

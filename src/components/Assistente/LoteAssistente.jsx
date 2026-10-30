@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Sparkles, Pencil, X, CheckCircle2, ListChecks, Save } from 'lucide-react'
+import { Sparkles, Pencil, X, CheckCircle2, ListChecks, Save, AlertTriangle, Loader2, Send } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate } from '../shared/utils'
 import { tipoPreLancamento } from '../../lib/assistente'
 import { papelDaContaApp } from '../../lib/assistente/contas'
 import { sugestaoComConta, pendenciasDoItem, lancamentoDireto, rotuloTipo } from '../../lib/assistente/loteApp'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
-import { listarPreLancamentos, guardarPreLancamento } from '../../lib/assistenteApi'
+import { listarPreLancamentos, guardarPreLancamento, interpretar } from '../../lib/assistenteApi'
 import EscolherConta from './EscolherConta'
 import PreviaAssistente from './PreviaAssistente'
 
@@ -17,7 +17,11 @@ import PreviaAssistente from './PreviaAssistente'
 //   • Salvar selecionados: grava direto SÓ os itens sem pendência (loteApp.pendenciasDoItem); os
 //     outros ficam marcados e exigem a revisão individual.
 //   • Fechar sem salvar: cada item ainda aberto vira pré-lançamento (como na prévia de 1 item).
-export default function LoteAssistente({ itens: itensIniciais, textoOriginal, onClose, onToast, onNovo }) {
+//   • `faltantes` ({ lidos, total, trecho }): a IA não leu tudo (resposta cortada ou mais de 10).
+//     Aviso no topo; com o trecho recortado com certeza, "Enviar o restante" manda só ele (um uso
+//     normal no limite diário) e os itens novos entram nesta mesma lista.
+const LOTE_DE = new Set(['registrar_lancamento', 'criar_agendamento'])
+export default function LoteAssistente({ itens: itensIniciais, faltantes = null, textoOriginal, onClose, onToast, onNovo }) {
   const {
     accounts, activeProfileId, transactions, schedules, getNextOccurrences, categories, gerencialGroups, settings,
     addTransaction, payees, addPayee,
@@ -27,6 +31,9 @@ export default function LoteAssistente({ itens: itensIniciais, textoOriginal, on
   const [contaGeral, setContaGeral] = useState('')
   const [pres, setPres] = useState([])
   const [aberto, setAberto] = useState(null) // { fila: [i...], pos }
+  const [falta, setFalta] = useState(faltantes)
+  const [lendoResto, setLendoResto] = useState(false)
+  const [erroResto, setErroResto] = useState('')
   useEffect(() => {
     let vivo = true
     listarPreLancamentos().then(l => { if (vivo) setPres(l) }).catch(() => {})
@@ -75,6 +82,24 @@ export default function LoteAssistente({ itens: itensIniciais, textoOriginal, on
   }
   const revisar = (fila) => fila.length && setAberto({ fila, pos: 0 })
 
+  const enviarResto = async () => {
+    setLendoResto(true)
+    setErroResto('')
+    try {
+      const r = await interpretar({ texto: falta.trecho, perfilAtivo: activeProfileId || undefined })
+      const novos = r.ferramenta === 'lote' ? (r.itens || []) : LOTE_DE.has(r.ferramenta) ? [{ ferramenta: r.ferramenta, parametros: r.parametros }] : []
+      if (!novos.length) { setErroResto('Não consegui ler o restante. Envie esse trecho num pedido novo.'); return }
+      setItens(prev => [...prev, ...novos.map((it, k) => ({ ...it, i: prev.length + k, sel: true, status: 'aberto', conta: '' }))])
+      // Contagem do restante somada à do pedido original.
+      const f = r.ferramenta === 'lote' ? r.faltantes : null
+      setFalta(f ? { ...f, lidos: falta.lidos + f.lidos, total: f.total ? falta.lidos + f.total : null } : null)
+    } catch (err) {
+      setErroResto(err.message)
+    } finally {
+      setLendoResto(false)
+    }
+  }
+
   // ── Prévia normal de um item (editar ou "revisar um a um") ──
   if (aberto) {
     const i = aberto.fila[aberto.pos]
@@ -109,6 +134,29 @@ export default function LoteAssistente({ itens: itensIniciais, textoOriginal, on
           {textoOriginal && <p className="mt-0.5 whitespace-pre-wrap break-words text-texto-3">“{textoOriginal}”</p>}
         </div>
       </div>
+
+      {falta && (
+        <div className="rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1 space-y-1.5" role="status">
+          <p className="flex items-start gap-1.5 font-medium">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0 text-aviso" />
+            {falta.total ? `Li ${falta.lidos} de ${falta.total} movimentos.` : `Li ${falta.lidos} movimentos; a resposta parou antes do fim do texto.`}
+          </p>
+          {falta.trecho ? (
+            <>
+              <p className="text-texto-2">Os que faltaram:</p>
+              <p className="whitespace-pre-wrap break-words rounded border border-borda bg-surface-2/60 px-2 py-1 text-texto-2">{falta.trecho}</p>
+              <button type="button" className="btn-secondary w-full inline-flex items-center justify-center gap-1.5 min-h-[40px]" disabled={lendoResto} onClick={enviarResto}>
+                {lendoResto
+                  ? <><Loader2 size={14} className="animate-spin" /> {falta.total ? `Lendo ${falta.total - falta.lidos} movimentos…` : 'Lendo…'}</>
+                  : <><Send size={14} /> Enviar o restante</>}
+              </button>
+            </>
+          ) : (
+            <p className="text-texto-2">Não deu para separar com certeza o trecho que faltou: confira o texto e envie o que ficou de fora num pedido novo.</p>
+          )}
+          {erroResto && <p className="text-perigo">{erroResto}</p>}
+        </div>
+      )}
 
       {semConta && !contaGeral && (
         <EscolherConta accounts={accounts} activeProfileId={activeProfileId} onEscolher={setContaGeral}
