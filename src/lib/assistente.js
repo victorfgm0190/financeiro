@@ -142,6 +142,17 @@ export const payloadDaBaixa = (criterio, candidato) => ({
 
 // Redimensiona a foto para no máximo `lado` px (maior lado) em JPEG, baixando a qualidade até caber
 // em `maxBytes`. → { base64, mimeType } (base64 sem o prefixo data:).
+// Original aceito (antes de reduzir): fotos de celular costumam ter 3–12 MB.
+export const MAX_IMAGEM_ORIGINAL = 20 * 1024 * 1024
+
+// Imagem colada (Ctrl+V) → File, ou null quando o que foi colado não é imagem.
+export function imagemDoClipboard(clipboardData) {
+  for (const item of clipboardData?.items || []) {
+    if (item.kind === 'file' && item.type?.startsWith('image/')) return item.getAsFile()
+  }
+  return null
+}
+
 export async function comprimirImagem(arquivo, { lado = 1600, maxBytes = 1.9 * 1024 * 1024 } = {}) {
   const url = URL.createObjectURL(arquivo)
   try {
@@ -156,7 +167,7 @@ export async function comprimirImagem(arquivo, { lado = 1600, maxBytes = 1.9 * 1
     canvas.width = Math.round(img.naturalWidth * escala)
     canvas.height = Math.round(img.naturalHeight * escala)
     canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-    for (const q of [0.82, 0.7, 0.55, 0.4]) {
+    for (const q of [0.8, 0.7, 0.55, 0.4]) {
       const dataUrl = canvas.toDataURL('image/jpeg', q)
       const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
       if (base64.length * 0.75 <= maxBytes) return { base64, mimeType: 'image/jpeg' }

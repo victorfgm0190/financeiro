@@ -104,7 +104,8 @@ async function handler(req, res) {
 
     const bloco = msg.content.find(b => b.type === 'tool_use' && disponiveis.has(b.name))
     const ferramenta = bloco ? bloco.name : 'perguntar'
-    await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage })
+    // Só a marca "teve imagem" — a imagem não é gravada nem logada em lugar nenhum.
+    await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem })
 
     if (msg.stop_reason === 'refusal') {
       return res.json({ ferramenta: 'perguntar', parametros: { pergunta: 'Não consegui ajudar com esse pedido. Posso registrar, consultar ou abrir a tela certa no Finup.', opcoes: [] } })

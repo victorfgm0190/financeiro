@@ -59,6 +59,7 @@ const CAMPOS_LANCAMENTO = {
   favorecido_id: { type: ['string', 'null'], description: 'Nome exato de um favorecido existente' },
   favorecido_novo: { type: ['string', 'null'], description: 'Nome de favorecido que ainda não existe' },
   descricao: { type: ['string', 'null'] },
+  final_cartao: { type: ['string', 'null'], description: 'Imagem: os 4 últimos dígitos do cartão, se aparecem (ex.: "final 4541")' },
   confianca: {
     type: 'object',
     description: 'Confiança de 0 a 1 em cada campo',
@@ -100,7 +101,11 @@ function validarLancamento(p, ctx, hoje) {
   const data = DATA_ISO.test(String(p.data || '')) ? p.data : hoje
 
   // Contas (lib/assistente/contas.js): gerencial nunca; fora das sugeríveis, só se o pedido citou.
-  const origem = escolherConta(ctx, porApelido(ctx, 'conta', termos.conta) || p.conta_id, confianca.conta)
+  // Imagem (cupom, notificação): o final do cartão lido nela vale como se estivesse no texto.
+  const finalDaImagem = ctx.temImagem && /^\d{4}$/.test(String(p.final_cartao || '')) && !/\bfinal \d{4}\b/i.test(ctx.textoPedido || '')
+    ? ` final ${p.final_cartao}` : ''
+  const ctxConta = finalDaImagem ? { ...ctx, textoPedido: `${ctx.textoPedido || ''}${finalDaImagem}` } : ctx
+  const origem = escolherConta(ctxConta, porApelido(ctx, 'conta', termos.conta) || p.conta_id, confianca.conta)
   confianca.conta = origem.confianca
   const contaId = origem.id
   const destino = tipo === 'transferencia' ? contaParaGravar(ctx, p.conta_destino_id, { destino: true }) : { id: null }
@@ -240,6 +245,7 @@ export const ACOES = [
           vencimento: { type: ['string', 'null'], description: 'Primeiro vencimento, YYYY-MM-DD' },
           recorrencia: { type: 'string', enum: RECORRENCIAS, description: 'once = única' },
           parcelas: { type: ['integer', 'null'], description: 'Número de parcelas, se for parcelado; null = contínuo' },
+          linha_digitavel: { type: ['string', 'null'], description: 'Boleto: a linha digitável (só os dígitos), se legível' },
         },
         required: ['tipo', 'valor', 'vencimento', 'recorrencia', 'conta_id', 'categoria_id', 'descricao', 'confianca', 'termos'],
       },
@@ -249,6 +255,9 @@ export const ACOES = [
       out.vencimento = DATA_ISO.test(String(p.vencimento || '')) ? p.vencimento : out.data
       out.recorrencia = doEnum(RECORRENCIAS, p.recorrencia, 'once')
       out.parcelas = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 360 ? p.parcelas : null
+      // Boleto: linha digitável (47/48 dígitos; 44 = código de barras) — a prévia SEMPRE pede conferência.
+      const linha = String(p.linha_digitavel || '').replace(/\D/g, '')
+      if ([44, 47, 48].includes(linha.length)) out.linha_digitavel = linha
       return out
     },
   },

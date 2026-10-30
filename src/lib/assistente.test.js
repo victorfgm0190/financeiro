@@ -109,3 +109,14 @@ describe('compra parcelada: "Em qual cartão?" e "Não foi no cartão"', () => {
     expect(r.overrides).toEqual({ '2026-12-29': { amount: 33.34 } })
   })
 })
+
+describe('imagem colada (Ctrl+V)', () => {
+  it('pega o 1º arquivo de imagem do clipboard; texto colado → null', async () => {
+    const { imagemDoClipboard } = await import('./assistente')
+    const arq = { name: 'print.png', type: 'image/png' }
+    const cb = (items) => ({ items })
+    expect(imagemDoClipboard(cb([{ kind: 'string', type: 'text/plain' }, { kind: 'file', type: 'image/png', getAsFile: () => arq }]))).toBe(arq)
+    expect(imagemDoClipboard(cb([{ kind: 'string', type: 'text/plain' }]))).toBeNull()
+    expect(imagemDoClipboard(null)).toBeNull()
+  })
+})

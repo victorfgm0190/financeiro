@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sparkles, Mic, Square, Camera, X, Loader2 } from 'lucide-react'
+import { Sparkles, Mic, Square, Camera, ImagePlus, X, Loader2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
-import { comprimirImagem } from '../../lib/assistente'
+import { comprimirImagem, imagemDoClipboard, MAX_IMAGEM_ORIGINAL } from '../../lib/assistente'
 import { interpretar } from '../../lib/assistenteApi'
 import { EXECUTORES } from './executores'
 import { Pergunta } from './respostas'
 import { useMicrofone, BARRAS, mensagemSemSuporte } from './useMicrofone'
 
-// ASSISTENTE IA: texto, voz (Web Speech API, pt-BR) ou foto → /api/assistente, que só devolve a
-// ferramenta e os parâmetros (registro central: src/lib/assistente/acoes.js). A resposta é
+// ASSISTENTE IA: texto, voz (Web Speech API, pt-BR) ou imagem (câmera, galeria ou Ctrl+V de um
+// print) → /api/assistente. A imagem é reduzida no aparelho (lado maior ~1600 px, JPEG ~0,8) e NÃO é
+// gravada em lugar nenhum: vai só ao modelo, para ler o lançamento. Texto junto é opcional.
+// O backend só devolve a ferramenta e os parâmetros (registro central: src/lib/assistente/acoes.js). A resposta é
 // renderizada pelo executor da ferramenta (executores.jsx): prévia nos formulários existentes,
 // consulta calculada AQUI com as funções das telas (nunca valor da IA), ou abrir a tela certa
 // (operações 🔴). NUNCA exclui nada. Recebe { onClose, onToast } (ação do "+" e modal do desktop).
@@ -28,6 +30,7 @@ export default function Assistente({ onClose, onToast }) {
   const [imagem, setImagem] = useState(null) // { base64, mimeType, preview }
   const [erro, setErro] = useState('')
   const arquivoRef = useRef(null)
+  const galeriaRef = useRef(null)
   const baseFala = useRef('')
 
   // Ditado → o MESMO estado do campo: texto digitado antes + final + provisório (o Safari às vezes
@@ -77,11 +80,11 @@ export default function Assistente({ onClose, onToast }) {
     enviar({ pergunta, respostaPergunta: resposta.trim() })
   }
 
-  const escolherFoto = async (e) => {
-    const arq = e.target.files?.[0]
-    e.target.value = ''
+  // Uma imagem por vez (câmera, galeria ou colada): reduz no aparelho e mostra a miniatura.
+  const carregarImagem = async (arq) => {
     if (!arq) return
-    if (!arq.type.startsWith('image/')) { setErro('Envie uma imagem (foto do comprovante ou boleto).'); return }
+    if (!arq.type.startsWith('image/')) { setErro('Envie uma imagem (foto do comprovante, cupom, boleto ou print).'); return }
+    if (arq.size > MAX_IMAGEM_ORIGINAL) { setErro('Imagem muito grande (máximo 20 MB). Tire outra foto ou recorte o print.'); return }
     try {
       const c = await comprimirImagem(arq)
       setImagem({ ...c, preview: URL.createObjectURL(arq) })
@@ -89,6 +92,18 @@ export default function Assistente({ onClose, onToast }) {
     } catch (err) {
       setErro(err.message)
     }
+  }
+  const escolherFoto = (e) => {
+    const arq = e.target.files?.[0]
+    e.target.value = ''
+    carregarImagem(arq)
+  }
+  // Ctrl+V de um print no campo de texto (desktop); colar texto segue normal.
+  const colar = (e) => {
+    const arq = imagemDoClipboard(e.clipboardData)
+    if (!arq) return
+    e.preventDefault()
+    carregarImagem(arq)
   }
 
   const novoPedido = () => { setTexto(''); setImagem(null); setFase({ tipo: 'entrada' }) }
@@ -133,7 +148,8 @@ export default function Assistente({ onClose, onToast }) {
                 value={texto}
                 onChange={e => setTexto(e.target.value.slice(0, MAX_TEXTO))}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !carregando) { e.preventDefault(); enviar() } }}
-                placeholder="Digite o que você quer lançar ou consultar"
+                onPaste={colar}
+                placeholder="Digite o que você quer lançar ou consultar (ou cole um print)"
                 disabled={carregando}
                 autoFocus
               />
@@ -175,10 +191,16 @@ export default function Assistente({ onClose, onToast }) {
             <>
               <button type="button" onClick={() => arquivoRef.current?.click()} disabled={carregando}
                 className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border border-borda text-texto-2 bg-surface-2"
-                aria-label="Foto ou arquivo" title="Foto do comprovante ou boleto">
+                aria-label="Tirar foto" title="Tirar foto (cupom, nota, comprovante, boleto)">
                 <Camera size={18} />
               </button>
               <input ref={arquivoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={escolherFoto} />
+              <button type="button" onClick={() => galeriaRef.current?.click()} disabled={carregando}
+                className="w-11 h-11 shrink-0 rounded-full flex items-center justify-center border border-borda text-texto-2 bg-surface-2"
+                aria-label="Anexar imagem" title="Anexar da galeria (print de notificação, comprovante Pix…)">
+                <ImagePlus size={18} />
+              </button>
+              <input ref={galeriaRef} type="file" accept="image/*" className="hidden" onChange={escolherFoto} />
             </>
           )}
           <button type="button" onClick={() => enviar()} disabled={carregando || (!texto.trim() && !imagem)} className="btn-primary flex-1 min-w-0 min-h-[44px] inline-flex items-center justify-center gap-2">

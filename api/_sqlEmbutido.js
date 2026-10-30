@@ -83,5 +83,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-10-29_subcontas_gerenciais.sql",
   "sql": "-- SUBCONTAS GERENCIAIS identificadas pelo VÍNCULO (não pelo nome): as contas que recebem a etapa A\n-- (tx_gerA_* / origin 'etapa_a') ou a provisão gerencial ('auto-provisao'), ou que são a conta das\n-- devoluções gerenciais (agendamentos tipo 'gerencial_devolucao'), passam a ter type 'gerencial' e\n-- is_gerencial = true — a marca que o Assistente IA usa para nunca gravar nelas. Desde 29/10 o\n-- próprio motor já cria a subconta assim. Cartão de crédito nunca é marcado. Idempotente.\nUPDATE contas SET type = 'gerencial', is_gerencial = true\n WHERE type <> 'credit'\n   AND (type IS DISTINCT FROM 'gerencial' OR is_gerencial IS NOT TRUE)\n   AND id IN (\n     SELECT to_account_id FROM lancamentos\n      WHERE to_account_id IS NOT NULL AND (id LIKE 'tx\\_gerA\\_%' OR origin IN ('etapa_a', 'auto-provisao'))\n     UNION\n     SELECT account_id FROM agendamentos WHERE tipo = 'gerencial_devolucao' AND account_id IS NOT NULL\n   );\n"
+ },
+ {
+  "nome": "2026-10-30_ia_uso_imagem.sql",
+  "sql": "-- Assistente: marca no consumo (ia_uso) quando o pedido teve IMAGEM (foto/print). A imagem em si\n-- nunca é gravada — só o lançamento que o usuário confirmar. Tabela criada pelo app\n-- (api/_ia.js ensureIaSchema); banco que ainda não a tem recebe a coluna lá.\nDO $$\nBEGIN\n  IF to_regclass('ia_uso') IS NOT NULL THEN\n    ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS com_imagem BOOLEAN NOT NULL DEFAULT false;\n  END IF;\nEND $$;\n"
  }
 ]

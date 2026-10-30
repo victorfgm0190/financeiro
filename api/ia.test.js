@@ -66,3 +66,23 @@ describe('textoCadastros', () => {
     expect(t).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 })
+
+describe('ia_uso: marca de imagem (a imagem nunca é gravada)', () => {
+  it('grava com_imagem; sem a coluna (migração pendente) grava sem ela', async () => {
+    const { registrarUso } = await import('./_ia.js')
+    const chamadas = []
+    const q = async (sql, params) => { chamadas.push({ sql, params }) }
+    await registrarUso({ ambiente: 'vm', ferramenta: 'registrar_lancamento', usage: { input_tokens: 100, output_tokens: 20 }, comImagem: true }, q)
+    expect(chamadas[0].sql).toMatch(/com_imagem/)
+    expect(chamadas[0].params).toEqual(['vm', 'registrar_lancamento', 100, 20, true])
+    expect(JSON.stringify(chamadas)).not.toMatch(/base64|data:image/)
+    const semColuna = []
+    const q2 = async (sql, params) => {
+      semColuna.push(sql)
+      if (/com_imagem/.test(sql)) { const e = new Error('coluna'); e.code = '42703'; throw e }
+    }
+    await registrarUso({ ambiente: 'vm', ferramenta: 'x', usage: {}, comImagem: true }, q2)
+    expect(semColuna).toHaveLength(2)
+    expect(semColuna[1]).not.toMatch(/com_imagem/)
+  })
+})

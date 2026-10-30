@@ -120,6 +120,12 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
             <p className="mt-0.5 text-aviso">Confira: {destaques.map(c => ROTULO_CAMPO[c] || c).join(', ')}.</p>
           )}
           {sugestao.aviso_parcelas && <p className="mt-0.5 text-aviso">Parcelado: {sugestao.aviso_parcelas} (valor total).</p>}
+          {sugestao.linha_digitavel && (
+            <p className="mt-0.5 text-aviso break-all">
+              Confira a linha digitável com o boleto: <span className="font-mono">{sugestao.linha_digitavel}</span>{' '}
+              <button type="button" className="underline text-primary-fg" onClick={() => navigator.clipboard?.writeText(sugestao.linha_digitavel)}>copiar</button>
+            </p>
+          )}
           {textoOriginal && <p className="mt-0.5 whitespace-pre-wrap break-words text-texto-3">“{textoOriginal}”</p>}
         </div>
         <button type="button" onClick={descartar} className="inline-flex shrink-0 items-center gap-1 rounded px-2 min-h-[32px] text-texto-2 hover:text-perigo" title="Descartar a sugestão (não guarda nada)">

@@ -133,3 +133,41 @@ describe('compra parcelada sem conta citada → pergunta "Em qual cartão?"', ()
     expect(validarAcao('registrar_lancamento', semConta, montar('gastei 300 no mercado'), '2026-10-29').pergunta_cartao).toBeUndefined()
   })
 })
+
+// IMAGEM (foto/print) — exemplos FICTÍCIOS do que o modelo lê de cada tipo de imagem. O texto do
+// pedido pode vir vazio: o final do cartão lido na imagem (final_cartao) vale como citado.
+describe('imagem: cupom, comprovante Pix, notificação parcelada, boleto (fictícios)', () => {
+  const comImagem = (texto = '') => ({ ...montar(texto), temImagem: true })
+  it('cupom fiscal com "final 4541" impresso → cartão certo, sem perguntar', () => {
+    const cupom = { tipo: 'despesa', valor: 87.45, data: '2026-10-28', conta_id: null, categoria_id: 'cat_far', favorecido_novo: 'MERCADO EXEMPLO LTDA', descricao: 'MERCADO EXEMPLO LTDA', final_cartao: '4541', confianca: { valor: 0.95, data: 0.9, conta: 0.6, categoria: 0.7 } }
+    const r = validarAcao('registrar_lancamento', cupom, comImagem(), '2026-10-29')
+    expect(r).toMatchObject({ conta_id: 'itaupers', valor: 87.45, data: '2026-10-28', favorecido_novo: 'MERCADO EXEMPLO LTDA' })
+    expect(r.confianca.conta).toBe(1)
+  })
+  it('final lido na imagem só vale com imagem; sem imagem, nada muda', () => {
+    const p = { tipo: 'despesa', valor: 10, data: '2026-10-28', conta_id: null, categoria_id: 'cat_far', final_cartao: '4541', confianca: {} }
+    expect(validarAcao('registrar_lancamento', p, montar('gastei 10'), '2026-10-29').conta_id).not.toBe('itaupers')
+  })
+  it('comprovante Pix recebido (fictício) → receita com o pagador como favorecido', () => {
+    const pix = { tipo: 'receita', valor: 250, data: '2026-10-27', conta_id: 'itau', categoria_id: null, favorecido_novo: 'FULANO FICTICIO', descricao: 'Pix recebido', confianca: { valor: 0.95, data: 0.95, conta: 0.5 } }
+    const r = validarAcao('registrar_lancamento', pix, comImagem(), '2026-10-29')
+    expect(r).toMatchObject({ tipo: 'receita', valor: 250, favorecido_novo: 'FULANO FICTICIO' })
+  })
+  it('print de notificação parcelada com final → parcelado no cartão, sem "Em qual cartão?"', () => {
+    const notif = { tipo: 'despesa', valor: 446.99, data: '2026-10-29', conta_id: 'itaupers', categoria_id: 'cat_far', favorecido_novo: 'LOJA FICTICIA', descricao: 'Compra em 3x', parcelas: 3, final_cartao: '4541', confianca: { valor: 1, conta: 0.8 } }
+    const r = validarAcao('registrar_lancamento', notif, comImagem(), '2026-10-29')
+    expect(r).toMatchObject({ conta_id: 'itaupers', parcelas: 3, valor: 446.99, descricao: 'LOJA FICTICIA' })
+    expect(r.pergunta_cartao).toBeUndefined()
+    expect(initialDaSugestao('registrar_lancamento', r)).toMatchObject({ installments: 3, accountId: 'itaupers' })
+  })
+  it('notificação parcelada SEM final legível → pergunta o cartão', () => {
+    const notif = { tipo: 'despesa', valor: 300, data: '2026-10-29', conta_id: null, categoria_id: 'cat_far', parcelas: 3, confianca: { conta: 0.2 } }
+    expect(validarAcao('registrar_lancamento', notif, comImagem(), '2026-10-29').pergunta_cartao).toBe(true)
+  })
+  it('boleto: linha digitável (47 dígitos) vai para a prévia; ilegível/curta é descartada', () => {
+    const linha = '23790123456789012345678901234567890123456789012'
+    const b = { tipo: 'despesa', valor: 189.9, vencimento: '2026-11-10', recorrencia: 'once', conta_id: 'itau', categoria_id: 'cat_far', descricao: 'ENERGIA FICTICIA', linha_digitavel: linha.replace(/(\d{5})/g, '$1.'), confianca: {} }
+    expect(validarAcao('criar_agendamento', b, comImagem(), '2026-10-29').linha_digitavel).toBe(linha)
+    expect(validarAcao('criar_agendamento', { ...b, linha_digitavel: '1234' }, comImagem(), '2026-10-29').linha_digitavel).toBeUndefined()
+  })
+})
