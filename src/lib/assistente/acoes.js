@@ -132,9 +132,12 @@ function validarLancamento(p, ctx, hoje) {
   if (!favorecido && p.favorecido_id) confianca.favorecido = 0
   const novo = txt(p.favorecido_novo, 80)
   if (!favorecido && novo) {
-    const existente = ctx.idx.favorecidos.get(normalizarTermo(novo))
+    // Favorecido cadastrado: pelo nome como veio ou sem o intermediador. Novo: sem o intermediador
+    // do SMS ("MP *BARBEARIACONS" → "BARBEARIACONS").
+    const limpo = txt(semIntermediador(novo), 80) || novo
+    const existente = ctx.idx.favorecidos.get(normalizarTermo(novo)) || ctx.idx.favorecidos.get(normalizarTermo(limpo))
     if (existente) favorecido = existente
-    else favorecidoNovo = novo
+    else favorecidoNovo = limpo
   }
 
   const centro = p.centro_custo_id ? ctx.idx.centros.get(normalizarTermo(p.centro_custo_id)) || zera('centro_custo') : null
@@ -142,7 +145,7 @@ function validarLancamento(p, ctx, hoje) {
   return {
     tipo, valor, data, conta_id: contaId || null, conta_destino_id: destinoId || null, categoria_id: categoriaId || null,
     centro_custo_id: centro, favorecido_id: favorecido, favorecido_novo: favorecidoNovo,
-    descricao: txt(p.descricao, 120), confianca, termos,
+    descricao: txt(semIntermediador(p.descricao), 120) || txt(p.descricao, 120), confianca, termos,
     ...(contaGerencial ? { conta_gerencial: true } : {}),
     ...(origem.opcoes ? { contas_opcoes: origem.opcoes } : {}),
     ...(origem.finalSemCartao ? { final_sem_cartao: origem.finalSemCartao } : {}),

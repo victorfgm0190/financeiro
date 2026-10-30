@@ -195,3 +195,15 @@ describe('apelido de favorecido aprendido ("Usar") casa direto no validador', ()
     expect(p).toMatchObject({ favorecido_id: 'Barbearia Constância', favorecido_novo: null })
   })
 })
+
+describe('SMS com intermediador: favorecido novo e descrição sem o prefixo', () => {
+  it('"MP *BARBEARIACONS" → "BARBEARIACONS"; favorecido cadastrado continua o cadastrado', () => {
+    const ctx = montar('MP *BARBEARIACONS valor RS 70,00', '')
+    const p = validarAcao('registrar_lancamento', doModelo({ valor: 70, favorecido_novo: 'MP *BARBEARIACONS', descricao: 'MP *BARBEARIACONS' }), ctx, '2026-10-30')
+    expect(p).toMatchObject({ favorecido_id: null, favorecido_novo: 'BARBEARIACONS', descricao: 'BARBEARIACONS' })
+    const ctx2 = montar('PG*Loja X 50', '')
+    ctx2.idx.favorecidos = new Map([['loja x', 'Loja X']])
+    expect(validarAcao('registrar_lancamento', doModelo({ valor: 50, favorecido_novo: 'PG*Loja X', descricao: 'Compra' }), ctx2, '2026-10-30'))
+      .toMatchObject({ favorecido_id: 'Loja X', favorecido_novo: null })
+  })
+})
