@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import BottomSheet from '../components/shared/BottomSheet'
 import { acoes } from './navegacao'
 
 // Menu do botão "+": grid 2x2 com as ações primárias e o resto em lista (tudo de modules.js).
 // Escolher uma ação abre o formulário existente dela dentro do próprio sheet.
-// `acaoDaTela`: ação contextual registrada pela tela aberta (useRegisterFab — ex.: novo lançamento
-// no cartão selecionado); continua disponível como item da lista.
+// `acaoDaTela`: { run, label } registrada pela tela aberta (useRegisterFab — ex.: novo lançamento
+// no cartão selecionado), como item da lista com ícone + (a estrela é só do Assistente).
 export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTela }) {
   const [ativa, setAtiva] = useState(null)
   const { primarias, outras } = acoes(modules)
@@ -50,9 +50,9 @@ export default function ActionSheet({ open, onClose, modules, onToast, acaoDaTel
         <ul className="divide-y divide-borda rounded-xl border border-borda overflow-hidden">
           {acaoDaTela && (
             <li>
-              <button type="button" onClick={() => { fechar(); acaoDaTela() }} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
-                <Sparkles size={18} className="text-primary-fg" />
-                <span className="flex-1">Novo nesta tela</span>
+              <button type="button" onClick={() => { fechar(); acaoDaTela.run() }} className="w-full flex items-center gap-3 px-4 min-h-[52px] text-left text-sm text-texto-1">
+                <Plus size={18} className="text-primary-fg" />
+                <span className="flex-1">{acaoDaTela.label || 'Novo nesta tela'}</span>
                 <ChevronRight size={16} className="text-texto-3" />
               </button>
             </li>

@@ -741,11 +741,14 @@ export default function CreditCardPanel() {
     setToast(`${n} ${n !== 1 ? 'lançamentos' : 'lançamento'} ${value ? (n !== 1 ? 'conciliados' : 'conciliado') : (n !== 1 ? 'desconciliados' : 'desconciliado')}`)
   }
 
-  // FAB mobile: novo lançamento no cartão/fatura selecionados (inativo nas
-  // subtelas de extrato/relatório, onde o modal não está montado).
+  // FAB mobile: novo lançamento no cartão/fatura selecionados — não repete o card "Lançamento"
+  // (já vem no cartão). Sem item nas subtelas de extrato/relatório (o modal não está montado) e
+  // com a fatura fechada.
+  const fabCartao = podeIncluir && selectedCard && !showExtrato && !showRelatorio && !faturaFechada
   useRegisterFab(
-    podeIncluir ? () => { if (!showExtrato && !showRelatorio && !faturaFechada) setShowNewTx(true) } : null,
-    [showExtrato, showRelatorio, faturaFechada, podeIncluir]
+    fabCartao ? () => setShowNewTx(true) : null,
+    [fabCartao, selectedCard?.id],
+    `Novo lançamento no cartão ${selectedCard?.apelido || selectedCard?.name || ''}`.trim()
   )
 
   // ── Pay invoice ──────────────────────────────────────────────────────────

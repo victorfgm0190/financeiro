@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
-import { useRegisterFab } from '../../context/FabContext'
 import { fmt, fmtSinal, fmtDate } from '../shared/utils'
 import { rateioComQuitacao, quitarPorPadrao, podeQuitarComDesconto } from '../../lib/financiamento'
 import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
@@ -2587,8 +2586,6 @@ export default function SchedulePanel() {
     else { setEditSchedule(s); setShowForm(true) }
   }
 
-  // FAB mobile: abre o formulário de novo agendamento.
-  useRegisterFab(podeIncluirAgend ? () => { setEditSchedule(null); setShowForm(true) } : null, [podeIncluirAgend])
 
   // Filtros avançados e datas De/Até: POR ABA (independentes), dentro de filtrosPorAba; os
   // avançados vão para o localStorage junto com status e período (lib/agendamentosFiltro).

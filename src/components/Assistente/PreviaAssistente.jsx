@@ -15,6 +15,9 @@ import {
 import { papelDaContaApp } from '../../lib/assistente/contas'
 import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
+import { agendamentosDoLancamento, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
+import AgendamentoQueBate from './AgendamentoQueBate'
+import PreviaBaixa from './PreviaBaixa'
 
 // PRÉVIA do Assistente IA: o formulário EXISTENTE (TransactionForm / ScheduleForm) pré-preenchido.
 //   Confirmar (salvar no formulário) → gravação do próprio formulário (addTransaction/addSchedule do
@@ -26,8 +29,11 @@ import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 //     ±R$ 0,01, data ±3 dias) → aviso no topo. "É o mesmo" não cria nada nem guarda pré-lançamento
 //     (o que estava sendo efetivado sai da lista); "É outro" libera o salvar. O formulário repete
 //     a checagem ao salvar (valores editados), ignorando o que já foi aceito aqui.
+//   Agendamento pendente que bate (lib/assistente/agendamentoDoLancamento: valor, nome, ±7 dias,
+//     conta) → antes do formulário: "Dar baixa" abre a PreviaBaixa (fluxo normal do Pagar, com a
+//     conta, a data e o valor do lançamento); "É outro" segue para criar o lançamento.
 export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, preId = null, onClose, onToast }) {
-  const { transactions, accounts, activeProfileId, updateAccount, pode } = useApp()
+  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences } = useApp()
   // Compra parcelada sem conta citada: "Em qual cartão?" antes do formulário. "Não foi no cartão" →
   // pergunta a conta e abre a prévia de AGENDAMENTO parcelado (N × valor/N, centavos na última).
   const [semCartao, setSemCartao] = useState(false)
@@ -67,6 +73,17 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamento, sugestao, contaEscolhida, transactions, accounts, pres, preId])
 
+  // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
+  const [agendDispensado, setAgendDispensado] = useState(false)
+  const [baixa, setBaixa] = useState(null)
+  const lancAgend = { ...initial, amount: Number(initial.amount) }
+  const agendamentosQueBatem = useMemo(() => {
+    if (agendamento || perguntaCartao || Number(initial.installments) > 1) return []
+    return agendamentosDoLancamento(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences])
+  const darBaixa = (candidato) => { marcar('baixa'); setBaixa(candidato) }
+
   // "É o mesmo": nada é criado; o pré-lançamento que estava sendo efetivado é baixado contra o
   // existente (ou descartado, se o parecido é outro pré-lançamento).
   const ehOMesmo = (tx) => {
@@ -100,6 +117,15 @@ export default function PreviaAssistente({ ferramenta, sugestao, textoOriginal, 
   }
 
   if (existente) return <TransactionForm initial={existente} onClose={onClose} onToast={onToast} />
+  if (baixa) {
+    return <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast} />
+  }
+  if (!agendDispensado && agendamentosQueBatem.length > 0) {
+    return (
+      <AgendamentoQueBate candidatos={agendamentosQueBatem} textoOriginal={textoOriginal}
+        onBaixa={darBaixa} onOutro={() => setAgendDispensado(true)} onDescartar={descartar} />
+    )
+  }
 
   return (
     <div className="space-y-3">

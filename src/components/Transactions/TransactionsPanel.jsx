@@ -607,13 +607,14 @@ export default function TransactionsPanel() {
     setModalStep('pick')
   }
 
-  // FAB mobile: abre o novo lançamento já no contexto da view atual
-  // (conta em extrato, cartão em fatura) ou no seletor de conta na lista.
-  useRegisterFab(podeIncluirTx ? () => {
-    if (view?.type === 'account') openNewTx(view.account)
-    else if (view?.type === 'fatura') openNewTx(view.card)
-    else openNewTx()
-  } : null, [view, accounts.length, podeIncluirTx])
+  // FAB mobile: novo lançamento já na conta (extrato) ou no cartão (fatura) aberto. Na lista não
+  // há item: repetiria o card "Lançamento" do menu do +.
+  const contaDaView = view?.type === 'account' ? view.account : view?.type === 'fatura' ? view.card : null
+  useRegisterFab(
+    podeIncluirTx && contaDaView ? () => openNewTx(contaDaView) : null,
+    [contaDaView?.id, accounts.length, podeIncluirTx],
+    `Novo lançamento em ${contaDaView?.apelido || contaDaView?.name || ''}`.trim()
+  )
 
   // Account extrato view
   if (view?.type === 'account') {
