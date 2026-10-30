@@ -6,10 +6,24 @@ import { comAmbiente } from './_ambiente.js'
 import { pode } from '../src/lib/permissoes.js'
 import { acoesDoPedido, definicaoFerramenta } from '../src/lib/assistente/acoes.js'
 import {
-  ensureIaSchema, montarContexto, textoCadastros, instrucoes, validarParametros, registrarUso, hojeSaoPaulo,
+  ensureIaSchema, montarContexto, textoCadastros, instrucoes, validarParametros, registrarUso, hojeSaoPaulo, usoDoDia,
 } from './_ia.js'
 import { gerencialCitada, MENSAGEM_CONTA_GERENCIAL } from '../src/lib/assistente/contas.js'
 import { ehPedidoDeExclusao, RESPOSTA_EXCLUSAO, ehPedidoDeEstorno, buscarCandidatosBaixa, valorDitoAproximado } from './_iaBaixa.js'
+import { centralQuery } from './_central.js'
+import { limitesDoAmbiente, bloqueioDoLimite } from '../src/lib/assistente/limiteIa.js'
+
+// Limites do cliente (central). Sem as colunas (central não migrado) → o padrão.
+async function limitesDoCliente(ambienteId) {
+  if (!ambienteId) return limitesDoAmbiente(null)
+  try {
+    const [row] = await centralQuery('SELECT ia_limite_diario, ia_limite_imagem FROM ambientes WHERE id = $1', [ambienteId])
+    return limitesDoAmbiente(row)
+  } catch (err) {
+    if (err?.code !== '42703') console.error('[api/assistente] limites do cliente:', err.message)
+    return limitesDoAmbiente(null)
+  }
+}
 
 // ASSISTENTE IA. POST { texto?, imagemBase64?, mimeType?, respostaPergunta?, pergunta? }
 //   → { ferramenta, parametros, candidatos? }. As ferramentas vêm do REGISTRO CENTRAL
@@ -73,6 +87,10 @@ async function handler(req, res) {
     }
 
     await ensureIaSchema()
+    // Limite diário por usuário (configurável por cliente): antes de chamar o modelo.
+    const bloqueio = bloqueioDoLimite(await usoDoDia(req.user?.id), await limitesDoCliente(req.ambiente?.id), !!imagem)
+    if (bloqueio) return res.status(429).json({ error: bloqueio, codigo: 'limite_ia' })
+
     const ctx = await montarContexto(req.user, undefined, { perfilAtivo })
     ctx.textoPedido = textoPedido
     ctx.temImagem = !!imagem
@@ -105,7 +123,7 @@ async function handler(req, res) {
     const bloco = msg.content.find(b => b.type === 'tool_use' && disponiveis.has(b.name))
     const ferramenta = bloco ? bloco.name : 'perguntar'
     // Só a marca "teve imagem" — a imagem não é gravada nem logada em lugar nenhum.
-    await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem })
+    await registrarUso({ ambiente: req.ambiente?.sigla, ferramenta, usage: msg.usage, comImagem: !!imagem, usuario: req.user?.id })
 
     if (msg.stop_reason === 'refusal') {
       return res.json({ ferramenta: 'perguntar', parametros: { pergunta: 'Não consegui ajudar com esse pedido. Posso registrar, consultar ou abrir a tela certa no Finup.', opcoes: [] } })

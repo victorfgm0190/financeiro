@@ -45,9 +45,26 @@ export async function ensureIaSchema() {
     tokens_entrada INTEGER NOT NULL DEFAULT 0,
     tokens_saida INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    com_imagem BOOLEAN NOT NULL DEFAULT false
+    com_imagem BOOLEAN NOT NULL DEFAULT false,
+    usuario TEXT
   )`)
   schemaPronto.marcar()
+}
+
+// Uso do DIA (fuso de São Paulo) de um usuário → { total, imagem }; null se o banco ainda não tem
+// as colunas (sem contagem, sem bloqueio).
+export async function usoDoDia(usuario, q = query) {
+  if (!usuario) return null
+  try {
+    const [r] = await q(`SELECT count(*)::int AS total, count(*) FILTER (WHERE com_imagem)::int AS imagem
+                           FROM ia_uso
+                          WHERE usuario = $1
+                            AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Sao_Paulo') AT TIME ZONE 'America/Sao_Paulo')`, [usuario])
+    return { total: r?.total || 0, imagem: r?.imagem || 0 }
+  } catch (err) {
+    if (err?.code === '42703') return null
+    throw err
+  }
 }
 
 // Termo de apelido (minúsculo, sem acento): src/lib/assistente/texto.js, compartilhado com o app.
@@ -204,14 +221,15 @@ export { RECORRENCIAS } from '../src/lib/assistente/acoes.js'
 export const validarParametros = (ferramenta, input, ctx, hoje = hojeSaoPaulo()) => validarAcao(ferramenta, input, ctx, hoje)
 
 // Consumo da chamada (ia_uso). Falha aqui não derruba a resposta.
-// comImagem: o pedido teve foto/print (só a marca — a imagem nunca é gravada).
-export async function registrarUso({ ambiente, ferramenta, usage, comImagem = false }, q = query) {
+// comImagem: o pedido teve foto/print (só a marca — a imagem nunca é gravada). usuario: id do
+// usuário (limite diário por usuário).
+export async function registrarUso({ ambiente, ferramenta, usage, comImagem = false, usuario = null }, q = query) {
   const entrada = (usage?.input_tokens || 0) + (usage?.cache_read_input_tokens || 0) + (usage?.cache_creation_input_tokens || 0)
   const base = [ambiente || null, ferramenta || null, entrada, usage?.output_tokens || 0]
   try {
-    await q('INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida, com_imagem) VALUES ($1, $2, $3, $4, $5)', [...base, !!comImagem])
+    await q('INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida, com_imagem, usuario) VALUES ($1, $2, $3, $4, $5, $6)', [...base, !!comImagem, usuario || null])
   } catch (err) {
-    // Banco sem a coluna com_imagem (migração 2026-10-30_ia_uso_imagem pendente): grava sem ela.
+    // Banco sem as colunas novas (migrações 2026-10-30 pendentes): grava sem elas.
     let erro = err
     if (err?.code === '42703') {
       try { await q('INSERT INTO ia_uso (ambiente, ferramenta, tokens_entrada, tokens_saida) VALUES ($1, $2, $3, $4)', base); return } catch (e2) { erro = e2 }

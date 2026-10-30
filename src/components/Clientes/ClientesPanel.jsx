@@ -5,7 +5,7 @@ import Toast from '../shared/Toast'
 import AnaliseCliente from './AnaliseCliente'
 import {
   listarClientes, detalheCliente, criarCliente, editarCliente, aprovarCliente, mudarStatusCliente, checarSiglaAdmin,
-  andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi,
+  andamentoProvisionamento, reenviarConviteCliente, tentativasSenha, liberarSenha, excluirClienteApi, salvarLimitesIa,
 } from '../../lib/clientesApi'
 import {
   STATUS_CLIENTE, ROTULO_STATUS, DOMINIO_CLIENTES, formatarDocumento, linkWhatsApp, candidatasSigla, normalizarSigla,
@@ -184,6 +184,43 @@ const ROTULO_RESULTADO = {
   enviado: 'Enviado', nao_encontrado: 'Login não encontrado', bloqueado_ip: 'Bloqueado (limite por IP)',
   bloqueado_usuario: 'Bloqueado (limite por usuário)', falha_envio: 'Falha no envio do e-mail', em_andamento: 'Em andamento',
 }
+// Limite diário do Assistente IA por usuário deste cliente (padrão 100/dia, 30 com imagem).
+function LimiteIa({ id, limites, onMudou, onToast }) {
+  const [diario, setDiario] = useState(String(limites?.diario ?? 100))
+  const [imagem, setImagem] = useState(String(limites?.imagem ?? 30))
+  const [salvando, setSalvando] = useState(false)
+  const salvar = async () => {
+    setSalvando(true)
+    try {
+      await salvarLimitesIa(id, Number(diario), Number(imagem))
+      onToast({ message: 'Limite do assistente salvo' })
+      onMudou()
+    } catch (e) {
+      onToast({ message: `Falha ao salvar: ${e.message}`, variant: 'error' })
+    } finally {
+      setSalvando(false)
+    }
+  }
+  const mudou = String(limites?.diario) !== diario || String(limites?.imagem) !== imagem
+  return (
+    <div className="border border-borda rounded-lg p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-texto-1">Assistente IA: limite por usuário por dia</h3>
+      <div className="flex flex-wrap items-end gap-3 text-xs">
+        <label className="space-y-1">
+          <span className="text-texto-3">Pedidos por dia</span>
+          <input className="input w-24 !py-1 text-right" inputMode="numeric" value={diario} onChange={e => setDiario(e.target.value.replace(/\D/g, ''))} />
+        </label>
+        <label className="space-y-1">
+          <span className="text-texto-3">Dos quais com imagem</span>
+          <input className="input w-24 !py-1 text-right" inputMode="numeric" value={imagem} onChange={e => setImagem(e.target.value.replace(/\D/g, ''))} />
+        </label>
+        <button className="btn-secondary !py-1 text-xs" onClick={salvar} disabled={salvando || !mudou}>Salvar</button>
+      </div>
+      {limites?.semColuna && <p className="text-[11px] text-aviso">Central sem a migração do limite: valendo o padrão (100/30). Rode scripts/migrar-central.js.</p>}
+    </div>
+  )
+}
+
 const COR_RESULTADO = { enviado: 'text-receita', bloqueado_ip: 'text-perigo', bloqueado_usuario: 'text-perigo', falha_envio: 'text-perigo' }
 
 // Quadro "Tentativas de senha" (pedidos de "Esqueci minha senha" da última hora neste ambiente).
@@ -390,6 +427,9 @@ function DetalheCliente({ id, onMudou, onProvisionar, onToast, onExcluido, onAna
       {erro && <p className="text-xs text-perigo bg-perigo-bg border border-perigo/30 rounded-lg px-3 py-2">{erro}</p>}
 
       {dados.ambiente && <TentativasSenha id={id} onMudou={carregar} onToast={onToast} />}
+      {dados.ambiente && dados.iaLimites && (
+        <LimiteIa key={`${dados.iaLimites.diario}-${dados.iaLimites.imagem}`} id={id} limites={dados.iaLimites} onMudou={carregar} onToast={onToast} />
+      )}
 
       {dados.exclusao?.pode ? (
         <div className="flex justify-end">

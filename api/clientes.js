@@ -11,6 +11,19 @@ import { tentativasDoAmbiente, liberarLimiteDoAmbiente } from './_senhaLimite.js
 import { excluirCliente, situacaoExclusaoDoCliente } from './_excluirCliente.js'
 import { comAmbiente } from './_ambiente.js'
 import { AMBIENTE_PRINCIPAL } from '../src/lib/ambienteHost.js'
+import { limitesDoAmbiente, validarLimites } from '../src/lib/assistente/limiteIa.js'
+
+// Limites do Assistente IA do ambiente do cliente (central). Sem as colunas (migração
+// 2026-10-30_ambientes_ia_limite pendente) → o padrão, e a edição avisa.
+async function limitesIaDoAmbiente(clienteId) {
+  try {
+    const [row] = await query('SELECT ia_limite_diario, ia_limite_imagem FROM ambientes WHERE cliente_id = $1', [clienteId])
+    return row ? limitesDoAmbiente(row) : null
+  } catch (err) {
+    if (err?.code === '42703') return { ...limitesDoAmbiente(null), semColuna: true }
+    throw err
+  }
+}
 
 // CONTROLE DE CLIENTES da plataforma — só o administrador da plataforma (PLATAFORMA_ADMIN), nunca
 // o nível 'admin' comum.
@@ -149,7 +162,10 @@ async function handler(req, res) {
         if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' })
         const historico = await query('SELECT * FROM plataforma_historico WHERE cliente_id = $1 ORDER BY created_at DESC, id', [id])
         const [ambiente] = await query('SELECT sigla, database_name, status FROM ambientes WHERE cliente_id = $1', [cliente.id])
-        return res.json({ cliente, historico, ambiente: ambiente || null, exclusao: await situacaoExclusaoDoCliente(query, cliente) })
+        return res.json({
+          cliente, historico, ambiente: ambiente || null, exclusao: await situacaoExclusaoDoCliente(query, cliente),
+          iaLimites: ambiente ? await limitesIaDoAmbiente(cliente.id) : null,
+        })
       }
       const clientes = (await query('SELECT * FROM plataforma_clientes ORDER BY created_at DESC'))
         .map(c => ({ ...c, valor_mensal: c.valor_mensal == null ? null : Number(c.valor_mensal) }))
@@ -180,6 +196,21 @@ async function handler(req, res) {
     if (req.method === 'POST' && acao === 'excluir') {
       if (!body?.id) return res.status(400).json({ error: 'id é obrigatório' })
       return res.json(await excluirCliente(String(body.id), { confirmacao: body.confirmacao, autor }))
+    }
+    // Limite diário do Assistente IA (por usuário) do ambiente do cliente.
+    if (req.method === 'POST' && acao === 'limite-ia') {
+      const v = validarLimites(body || {})
+      if (v.erro) return res.status(400).json({ error: v.erro })
+      const amb = await ambienteDoClienteId(String(body?.id || ''))
+      if (!amb) return res.status(404).json({ error: 'Cliente sem ambiente' })
+      try {
+        await query('UPDATE ambientes SET ia_limite_diario = $2, ia_limite_imagem = $3 WHERE id = $1', [amb.id, v.diario, v.imagem])
+      } catch (err) {
+        if (err?.code === '42703') return res.status(409).json({ error: 'Central sem a migração 2026-10-30_ambientes_ia_limite (rode scripts/migrar-central.js).' })
+        throw err
+      }
+      await withTransaction(q => registrarHistorico(q, String(body.id), 'editado', `Limite do assistente: ${v.diario}/dia, ${v.imagem} com imagem`, autor))
+      return res.json({ ok: true, iaLimites: { diario: v.diario, imagem: v.imagem } })
     }
     if (req.method === 'POST' && acao) return res.status(400).json({ error: 'Ação inválida' })
     if (req.method === 'POST') return res.json({ ok: true, cliente: await withTransaction(q => criarClienteManual(q, body, autor)) })

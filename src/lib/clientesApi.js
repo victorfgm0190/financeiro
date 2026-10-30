@@ -42,6 +42,8 @@ export const andamentoProvisionamento = (id) => chamar(`/api/clientes?${qs({ aca
 // Tentativas de "Esqueci minha senha" do ambiente do cliente e o "Liberar agora".
 export const tentativasSenha = (id) => chamar(`/api/clientes?${qs({ acao: 'tentativas-senha', id })}`)
 export const liberarSenha = (id) => chamar('/api/clientes?acao=liberar-senha', { method: 'POST', body: { id } })
+// Limite diário do Assistente IA por usuário (do ambiente do cliente).
+export const salvarLimitesIa = (id, diario, imagem) => chamar('/api/clientes?acao=limite-ia', { method: 'POST', body: { id, diario, imagem } })
 // Exclusão definitiva (só cancelado ou nunca aprovado; `confirmacao` = a sigla exata).
 export const excluirClienteApi = (id, confirmacao) => chamar('/api/clientes?acao=excluir', { method: 'POST', body: { id, confirmacao } })
 export const reenviarConviteCliente = (id) => chamar('/api/clientes?acao=reenviar-convite', { method: 'POST', body: { id } })

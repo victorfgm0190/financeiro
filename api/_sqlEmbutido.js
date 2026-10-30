@@ -87,5 +87,9 @@ export const MIGRACOES = [
  {
   "nome": "2026-10-30_ia_uso_imagem.sql",
   "sql": "-- Assistente: marca no consumo (ia_uso) quando o pedido teve IMAGEM (foto/print). A imagem em si\n-- nunca é gravada — só o lançamento que o usuário confirmar. Tabela criada pelo app\n-- (api/_ia.js ensureIaSchema); banco que ainda não a tem recebe a coluna lá.\nDO $$\nBEGIN\n  IF to_regclass('ia_uso') IS NOT NULL THEN\n    ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS com_imagem BOOLEAN NOT NULL DEFAULT false;\n  END IF;\nEND $$;\n"
+ },
+ {
+  "nome": "2026-10-30_ia_uso_usuario.sql",
+  "sql": "-- Assistente: quem fez o pedido (ia_uso.usuario = id do usuário do token) para o LIMITE DIÁRIO por\n-- usuário (src/lib/assistente/limiteIa.js). Linhas antigas ficam NULL (não contam para ninguém).\n-- Tabela criada pelo app (api/_ia.js ensureIaSchema); banco que ainda não a tem recebe a coluna lá.\nDO $$\nBEGIN\n  IF to_regclass('ia_uso') IS NOT NULL THEN\n    ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS usuario TEXT;\n    CREATE INDEX IF NOT EXISTS idx_ia_uso_usuario_dia ON ia_uso (usuario, created_at);\n  END IF;\nEND $$;\n"
  }
 ]
