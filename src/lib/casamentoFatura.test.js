@@ -102,15 +102,15 @@ describe('integração na tela — fatura 11/2026 do Itaupers', () => {
     expect(idsNoBancoConferidos(out).sort()).toEqual(['auto', 'ifood'])
     expect(idsNoBancoConferidos(out)).not.toContain(ETAPA_A.id)
   })
-  it('UPDATE: valor/data da fatura e favorecido; categoria, grupo gerencial, descrição e origin intactos', () => {
+  it('UPDATE: valor/data da fatura e favorecido (o da fatura por padrão); categoria, grupo gerencial, descrição e origin intactos', () => {
     const { changes, mudancas } = patchJaLancado(por.L1, AUTO, { saveDate: '2026-10-27', payee: favorecidoDaLinha(por.L1) })
-    expect(changes).toEqual({ date: '2026-10-27', dateCartao: '2026-10-27' })
-    expect(mudancas).toEqual([{ campo: 'date', de: '2026-10-28', para: '2026-10-27' }])
+    expect(changes).toEqual({ date: '2026-10-27', dateCartao: '2026-10-27', payee: 'AUTO SA' })
+    expect(mudancas).toEqual([{ campo: 'date', de: '2026-10-28', para: '2026-10-27' }, { campo: 'payee', de: 'Auto Posto Sao Pedro', para: 'AUTO SA' }])
     for (const campo of ['categoryId', 'grupoGerencial', 'description', 'origin', 'costCenter']) expect(changes).not.toHaveProperty(campo)
   })
-  it('favorecido: manter (padrão quando há) / sugerido pela fatura / outro; aprendido vira sugestão', () => {
-    expect(favorecidoDaLinha(por.L2)).toBe('Ifd*djm Empreendimento')
-    expect(favorecidoDaLinha({ ...por.L2, _favModo: 'sugerido' })).toBe('IFD*DJM EMPREENDIMENTO')
+  it('favorecido: o da fatura por padrão quando difere / manter / outro; aprendido vira sugestão', () => {
+    expect(favorecidoDaLinha(por.L2)).toBe('IFD*DJM EMPREENDIMENTO')
+    expect(favorecidoDaLinha({ ...por.L2, _favModo: 'manter' })).toBe('Ifd*djm Empreendimento')
     expect(favorecidoDaLinha({ ...por.L2, _favModo: 'outro', _favOutro: 'DJM iFood' })).toBe('DJM iFood')
     const comApelido = importar(rows, [AUTO, IFOOD], { apelidos: [{ tipo: 'descricao_fatura', termo: 'ifd djm empreendimento', ref_id: 'iFood DJM' }] })
     const l2 = comApelido.find(r => r._id === 'L2')

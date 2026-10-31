@@ -38,7 +38,8 @@ import Toast from '../shared/Toast'
 import { camposHerdadosProjecao } from '../../lib/herancaCampos'
 import { agendamentoQueManda, aplicarAgendamentoNaLinha, divergenciasDaEdicao, mudancasNoAgendamento, patchLancamentoDoAgendamento, CAMPOS_DO_AGENDAMENTO } from '../../lib/agendamentoManda'
 import { linhasHistorico, novoLoteId } from '../../lib/historico'
-import { JaLancadoStatus, ResumoJaLancados } from './JaLancadoCelula'
+import { JaLancadoStatus, ResumoRevisao } from './JaLancadoCelula'
+import { aplicarCorrespondencias, resumoRevisao } from '../../lib/importacaoCorrespondencias'
 import { aplicarJaLancados, resumoJaLancados, favorecidoDaLinha, patchesJaLancado, termoDescricaoFatura } from '../../lib/casamentoFatura'
 import { listarPreLancamentos, listarApelidos, aprenderApelidos, concluirPreLancamento } from '../../lib/assistenteApi'
 import { ESCOPO } from '../../lib/camposSerie'
@@ -1908,9 +1909,13 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
       forcedDupSelect, parcelasPorChave: existingParcelaByKey,
     })
     // "Já lançado": lançamento do cartão feito antes (manual/Assistente) ou pré-lançamento pendente.
-    return aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa })
-  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa])
+    const ja = aplicarJaLancados(base, { transactions, preLancamentos: preLancamentosIa, accountId: selectedAccount, closingDay, apelidos: apelidosIa })
+    // Lançado à mão/Assistente com outro nome, parcela projetada com outra data, valor diferente ou
+    // em fatura vizinha (lib/importacaoCorrespondencias): só nas linhas que ainda são novas.
+    return aplicarCorrespondencias(ja, { transactions, accounts, accountId: selectedAccount, apelidos: apelidosIa, faturasFechadas: settings?.faturasFechadas })
+  }, [rows, selectedAccount, selectedAcc, editingImport, existingParcelaByKey, forcedDupSelect, transactions, preLancamentosIa, apelidosIa, accounts, settings?.faturasFechadas])
   const resumoJa = useMemo(() => resumoJaLancados(resolvedRows), [resolvedRows])
+  const resumoRev = useMemo(() => resumoRevisao(resolvedRows), [resolvedRows])
 
   // Confirmação das linhas "Já lançado": UPDATE no lançamento existente (nunca delete+insert; origin,
   // categoria, grupo gerencial, centro de custo e descrição intactos) com valor/data da fatura e o
@@ -2200,7 +2205,7 @@ function CartaoCreditoTab({ accounts, accountGroups, transactions }) {
     // "Já lançado" com mais de um candidato: nunca casa sozinho — o usuário escolhe antes.
     if (!editingImport && resumoJa.escolher > 0) {
       const pend = resolvedRows.find(r => r._jaLancadoOpcoes && !r._jaLancadoEscolha)
-      setError(`Escolha ${resumoJa.escolher === 1 ? 'a linha marcada' : `as ${resumoJa.escolher} linhas marcadas`} "Para escolher" (é um lançamento que já existe ou é novo?).`)
+      setError(`Escolha ${resumoJa.escolher === 1 ? 'a linha marcada' : `as ${resumoJa.escolher} linhas marcadas`} "Para escolher" ou "Parecido" (é um lançamento que já existe ou é novo?).`)
       if (pend) document.getElementById(`ccrow-${pend._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
@@ -4063,7 +4068,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="space-y-1">
               <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
-              {!editingImport && <ResumoJaLancados resumo={resumoJa} />}
+              {!editingImport && <ResumoRevisao resumo={resumoRev} />}
               {comFiltro && filtroRevisao === 'pendentes' && contagemRevisao.conciliados > 0 && (
                 <p className="text-xs text-texto-2">
                   {contagemRevisao.conciliados} conciliado{contagemRevisao.conciliados !== 1 ? 's' : ''} oculto{contagemRevisao.conciliados !== 1 ? 's' : ''}

@@ -13,6 +13,31 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
     const cat = categories.find(c => c.id === tx.categoryId)
     const modo = row._favModo || j.favModoPadrao
     const pre = j.origem === 'pre'
+    const d = j.divergente
+    if (j.origem === 'match') {
+      const divergente = !!(d?.valor || d?.data)
+      const fat = (ym) => ym.split('-').reverse().join('/')
+      const partes = [
+        d?.valor && `de ${fmt(d.valor.de)} para ${fmt(d.valor.para)}`,
+        d?.data && `data ${fmtDate(d.data.de)} → ${fmtDate(d.data.para)}`,
+        j.fatura && `fatura ${fat(j.fatura.de)} → ${fat(j.fatura.para)}`,
+      ].filter(Boolean)
+      return (
+        <div className="space-y-1 max-w-[18rem]">
+          <span className={`text-xs px-1.5 py-0.5 rounded ${divergente ? 'bg-aviso/15 text-aviso' : 'bg-receita/15 text-receita'}`}
+            title="Já está no cartão (lançado à mão, pelo Assistente ou projetado): não cria outro lançamento; o existente é atualizado com o que a fatura diz e fica conciliado.">
+            ✔ {divergente ? 'Já existe — valor diferente' : 'Já existe'}
+          </span>
+          {partes.length > 0 && <p className="text-[10px] text-aviso">Atualizar o existente: {partes.join('; ')}</p>}
+          <Existente tx={tx} categories={categories} />
+          {j.atualizarDescricao && <p className="text-[10px] text-texto-3">Descrição passa a ser a da fatura (a atual fica no histórico).</p>}
+          <SeletorFavorecido row={row} j={j} modo={modo} payees={payees} updateRow={updateRow} />
+          <button type="button" className="text-[10px] text-primary-fg hover:text-texto-1" onClick={() => updateRow(row._id, { _jaLancadoEscolha: 'novo', selected: true })}>
+            Não é este — importar como novo
+          </button>
+        </div>
+      )
+    }
     return (
       <div className="space-y-1 max-w-[18rem]">
         <span className="text-xs px-1.5 py-0.5 rounded bg-receita/15 text-receita"
@@ -61,8 +86,10 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
     return (
       <div className="space-y-1 max-w-[18rem]">
         <span className={`text-xs px-1.5 py-0.5 rounded ${pendente ? 'bg-aviso/15 text-aviso' : 'bg-primary/15 text-primary-fg'}`}
-          title="Mais de um lançamento do cartão com o mesmo valor e data próxima: escolha qual é (ou se é novo)">
-          {pendente ? '⚠ Para escolher' : 'Novo (escolhido)'}
+          title={row._parecido
+            ? 'Só o nome é parecido com um lançamento do cartão: diga se é ele (vincula e atualiza) ou se é novo'
+            : 'Mais de um lançamento do cartão com o mesmo valor e data próxima: escolha qual é (ou se é novo)'}>
+          {pendente ? (row._parecido ? '⚠ Parecido — é este?' : '⚠ Para escolher') : 'Novo (escolhido)'}
         </span>
         {row._jaLancadoOpcoes.map(tx => (
           <label key={tx.id} className="flex items-start gap-1 text-[10px] text-texto-2 cursor-pointer">
@@ -80,6 +107,56 @@ export function JaLancadoStatus({ row, categories, payees, updateRow }) {
     )
   }
   return null
+}
+
+function Existente({ tx, categories }) {
+  const cat = categories.find(c => c.id === tx.categoryId)
+  const num = Number(tx.installmentNum) || null
+  return (
+    <p className="text-[10px] text-texto-3 break-words">
+      Existente: <span className="text-texto-2">{tx.description || '—'}</span>
+      {num && tx.installmentTotal ? ` · parcela ${num}/${tx.installmentTotal}` : ''} · {fmtDate(tx.date)} · {fmt(tx.amount)}
+      {cat ? ` · ${cat.icon || ''} ${cat.name}` : ''}{tx.reconciled ? ' · conciliado' : ' · pendente'}
+    </p>
+  )
+}
+
+function SeletorFavorecido({ row, j, modo, payees, updateRow }) {
+  const tx = j.tx
+  return (
+    <div className="text-[10px] text-texto-3 space-y-0.5">
+      <span>Favorecido:</span>
+      <select className="ml-1 bg-surface-2 border border-borda-campo text-texto-1 rounded px-1 py-0.5 text-[10px] max-w-[12rem]"
+        value={modo} onChange={e => updateRow(row._id, { _favModo: e.target.value })}>
+        <option value="manter">Manter: {tx.payee || '(sem favorecido)'}</option>
+        <option value="sugerido">Da fatura{j.sugerido.aprendido ? ' (aprendido)' : ''}: {j.sugerido.nome || '—'}</option>
+        <option value="outro">Outro…</option>
+      </select>
+      {modo === 'outro' && (
+        <>
+          <input list="ja-lancado-favorecidos" className="input !py-0.5 !text-[11px] mt-0.5" placeholder="Digite o favorecido"
+            value={row._favOutro || ''} onChange={e => updateRow(row._id, { _favOutro: e.target.value })} />
+          <datalist id="ja-lancado-favorecidos">{payees.slice(0, 500).map(p => <option key={p} value={p} />)}</datalist>
+        </>
+      )}
+      {modo !== 'manter' && <p className="text-texto-3">Fica: <span className="text-texto-2">{favorecidoDaLinha(row) || '—'}</span> (o atual vai para o histórico)</p>}
+    </div>
+  )
+}
+
+// Resumo do topo da revisão (lib/importacaoCorrespondencias resumoRevisao).
+export function ResumoRevisao({ resumo }) {
+  const { novos, jaExistem, valorDiferente, parecidos } = resumo
+  if (!novos && !jaExistem && !valorDiferente && !parecidos) return null
+  const p = (n, um, varios) => `${n} ${n === 1 ? um : varios}`
+  return (
+    <p className="text-xs text-texto-2" aria-label="Resumo da revisão">
+      {p(novos, 'novo', 'novos')}
+      {' · '}<span className="text-receita font-medium">{p(jaExistem, 'já existe', 'já existem')}</span>
+      {' · '}<span className={valorDiferente ? 'text-aviso font-medium' : ''}>{valorDiferente} com valor diferente</span>
+      {' · '}<span className={parecidos ? 'text-aviso font-medium' : ''}>{p(parecidos, 'parecido', 'parecidos')}</span>
+    </p>
+  )
 }
 
 // Contador do topo: "X já lançados · Y novos · Z para escolher".

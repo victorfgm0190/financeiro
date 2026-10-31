@@ -218,7 +218,8 @@ export function aplicarJaLancados(rows, { transactions, preLancamentos = [], acc
   for (const r of rows) for (const t of [r._dbTx, r._collisionTx, r._dupTx]) if (t?.id) usados.add(t.id)
   const marcar = (r, tx, origem) => {
     const sugerido = favorecidoSugerido(r.description, apelidos)
-    const favModoPadrao = tx.payee ? (sugerido.aprendido && sugerido.nome !== tx.payee ? 'sugerido' : 'manter') : 'sugerido'
+    // A fatura manda: favorecido diferente do existente → o da fatura (o atual vai para o histórico).
+    const favModoPadrao = sugerido.nome && sugerido.nome !== (tx.payee || '') ? 'sugerido' : 'manter'
     r._jaLancado = { tx, origem, sugerido, favModoPadrao }
   }
   const out = rows.map(r => ({ ...r }))
@@ -308,7 +309,20 @@ export function patchJaLancado(r, tx, { saveDate, payee }) {
 // repartido na proporção dos estimados (o último leva os centavos).
 export function patchesJaLancado(r, { saveDate, payee }) {
   const j = r._jaLancado
-  if (!j?.grupo) return [{ tx: j.tx, ...patchJaLancado(r, j.tx, { saveDate, payee }) }]
+  if (!j?.grupo) {
+    const p = patchJaLancado(r, j.tx, { saveDate, payee })
+    // Casamento por lib/importacaoCorrespondencias: a descrição da fatura e a fatura do arquivo.
+    if (j.atualizarDescricao && (r.description || '') !== (j.tx.description || '')) {
+      p.changes.description = r.description
+      p.mudancas.push({ campo: 'description', de: j.tx.description || null, para: r.description })
+    }
+    if (j.fatura) {
+      p.changes.faturaMonthYear = j.fatura.para
+      p.changes.faturaRef = `${j.fatura.para.slice(5, 7)}/${j.fatura.para.slice(0, 4)}`
+      p.mudancas.push({ campo: 'faturaMonthYear', de: j.fatura.de, para: j.fatura.para })
+    }
+    return [{ tx: j.tx, ...p }]
+  }
   const soma = j.grupo.reduce((s, t) => s + Number(t.amount), 0)
   let resto = Math.round(Number(r.amount) * 100)
   return j.grupo.map((t, i) => {

@@ -23,6 +23,9 @@ export const TOL_VALOR_IGUAL = 0.01
 export const TOL_VALOR_PROXIMO = 0.05
 export const SIMILARIDADE_MINIMA = 0.6
 export const MAX_CORRESPONDENCIAS = 3
+// À vista / parcela 1: a data da compra é comparável — além disto é outra compra (assinatura do mês
+// seguinte, mesma loja noutro dia). Parcela N > 1 casa pelo número, sem olhar a data.
+export const JANELA_DIAS_COMPRA = 5
 
 const centavos = (v) => Math.round(Math.abs(Number(v) || 0) * 100)
 const diasEntre = (a, b) => Math.abs(Math.round((new Date(`${String(a).slice(0, 10)}T12:00:00Z`) - new Date(`${String(b).slice(0, 10)}T12:00:00Z`)) / 86_400_000))
@@ -111,9 +114,13 @@ export const rotuloFatura = (ym) => (ym ? `${ym.slice(5, 7)}/${ym.slice(0, 4)}` 
 // ─── Busca ───────────────────────────────────────────────────────────────────────────────────────
 // novo: { accountId, type, amount, date, payee?, description?, faturaMonthYear?, parcela? ({num,total}),
 //         textoOriginal? }. ctx: { transactions, accounts, apelidos, faturasFechadas }.
+// opcoes: excluirIds (já casados com outra linha), janelaDias (à vista), conciliadosSoNaFatura (um
+//   conciliado de OUTRA fatura já foi conferido contra ela — Importar Fatura), fracosSoPendentes.
 // → { fortes: [m], fracos: [m] }, m = { tx, forca, fatura, simNome, valorIgual, valorProximo,
 //     parcelaIgual, diferencaValor, dataDiverge, pendente }.
-export function buscarCorrespondencias(novo, { transactions = [], accounts = [], apelidos = [], faturasFechadas = null } = {}) {
+export function buscarCorrespondencias(novo, { transactions = [], accounts = [], apelidos = [], faturasFechadas = null } = {}, {
+  excluirIds = null, janelaDias = JANELA_DIAS_COMPRA, conciliadosSoNaFatura = false, fracosSoPendentes = false,
+} = {}) {
   const vazio = { fortes: [], fracos: [] }
   if (!novo?.accountId || !(Number(novo.amount) > 0)) return vazio
   const cartao = accounts.find(a => a.id === novo.accountId)
@@ -133,8 +140,10 @@ export function buscarCorrespondencias(novo, { transactions = [], accounts = [],
   const out = []
   for (const t of transactions) {
     if (t.accountId !== cartao.id || (t.type || 'expense') !== tipo || t.isEspelho || t.reservaAuto) continue
+    if (excluirIds?.has(t.id)) continue
     const fatura = faturaDoLancamento(t, closingDay)
     if (!faturas.has(fatura)) continue
+    if (conciliadosSoNaFatura && t.reconciled && fatura !== ref) continue
     const simNome = apelidoLeva(nomes, t, apelidos) ? 1 : simNomes(nomes, t)
     const nomeOk = simNome >= SIMILARIDADE_MINIMA
     const vt = centavos(t.amount)
@@ -144,11 +153,13 @@ export function buscarCorrespondencias(novo, { transactions = [], accounts = [],
     const pt = parcelaDoExistente(t)
     const parcelaIgual = !!(pn && pt && pn.num === pt.num && (!pn.total || !pt.total || pn.total === pt.total))
     const parcelaConflita = !!(pn && pt && !parcelaIgual)
-    const forte = !parcelaConflita && ((nomeOk && (valorIgual || valorProximo)) || (valorIgual && parcelaIgual))
-    if (!forte && !nomeOk) continue
     // Parcela N > 1 tem a data do dia financeiro: não é comparável com a data da compra.
-    const ehParcelaSeguinte = (pt?.num || 0) > 1
+    const ehParcelaSeguinte = (pt?.num || 0) > 1 || (pn?.num || 0) > 1
     const dataDoTx = t.dateCartao ? String(t.dateCartao).slice(0, 10) : t.date
+    const longeDemais = !ehParcelaSeguinte && janelaDias != null && !!novo.date && !!dataDoTx && diasEntre(novo.date, dataDoTx) > janelaDias
+    const forte = !parcelaConflita && !longeDemais && ((nomeOk && (valorIgual || valorProximo)) || (valorIgual && parcelaIgual))
+    if (!forte && !nomeOk) continue
+    if (!forte && fracosSoPendentes && t.reconciled) continue
     const dataDiverge = !ehParcelaSeguinte && !!novo.date && !!dataDoTx && dataDoTx !== novo.date
     const score = (forte ? 100 : 0) + (parcelaIgual ? 40 : 0) + (valorIgual ? 20 : valorProximo ? 8 : 0)
       + simNome * 10 + (t.reconciled ? 0 : 15) + (fatura === ref ? 3 : 0)
