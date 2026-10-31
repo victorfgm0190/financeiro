@@ -416,6 +416,7 @@ async function handler(req, res) {
       categoria_id TEXT,
       valor NUMERIC DEFAULT 0,
       descricao TEXT,
+      grupo_gerencial TEXT,
       created_at TIMESTAMPTZ DEFAULT now()
     )`)
     await query(`CREATE INDEX IF NOT EXISTS idx_rateios_lancamento ON lancamento_rateios (lancamento_id)`)

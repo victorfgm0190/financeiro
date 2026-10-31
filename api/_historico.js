@@ -31,6 +31,10 @@ export const DDL_HISTORICO = [
   'CREATE INDEX IF NOT EXISTS idx_historico_serie ON historico_alteracoes (serie_key)',
   'CREATE INDEX IF NOT EXISTS idx_historico_lote ON historico_alteracoes (lote_id)',
   'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS origem TEXT',
+  // Quem alterou (migração 2026-10-31_pendencias): usuário do login e autor usuario|assistente|sistema.
+  'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS usuario_id TEXT',
+  'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS usuario_nome TEXT',
+  'ALTER TABLE historico_alteracoes ADD COLUMN IF NOT EXISTS autor TEXT',
 ]
 
 // "Já rodei" POR BANCO (um database por ambiente). Só o pool memoriza; um q de transação sempre executa.

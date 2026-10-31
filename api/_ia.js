@@ -30,7 +30,7 @@ export async function ensureIaSchema() {
   )`)
   await query(`CREATE TABLE IF NOT EXISTS ia_apelidos (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tipo TEXT NOT NULL CHECK (tipo IN ('categoria', 'conta', 'favorecido', 'descricao_fatura')),
+    tipo TEXT NOT NULL CHECK (tipo IN ('categoria', 'conta', 'favorecido', 'descricao_fatura', 'acao_despesa', 'recorrencia')),
     termo TEXT NOT NULL,
     ref_id TEXT NOT NULL,
     usos INTEGER NOT NULL DEFAULT 1,
