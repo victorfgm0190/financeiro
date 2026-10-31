@@ -29,7 +29,7 @@ function buildGroups(categories, type) {
 
 // ── Com busca: o SearchableSelect do sistema (mesmo teclado e foco em todas as telas) ─────────
 
-function SearchableDropdown({ categories, type, value, onChange, className, placeholder }) {
+function SearchableDropdown({ categories, type, value, onChange, className, placeholder, quebrarRotulo }) {
   const options = useMemo(() => buildGroups(categories, type).filtered.map(c => ({
     id: c.id, label: [c.icon, c.name].filter(Boolean).join(' '), group: c.group || undefined,
   })), [categories, type])
@@ -44,6 +44,7 @@ function SearchableDropdown({ categories, type, value, onChange, className, plac
       ungroupedLabel="Sem grupo"
       triggerClassName={className}
       compacto={/text-xs/.test(className || '')}
+      quebrarRotulo={quebrarRotulo}
     />
   )
 }
@@ -63,6 +64,7 @@ export default function CategorySelect({
   required = false,
   searchable = false,
   perfilId,
+  quebrarRotulo = false,
 }) {
   const { activeProfileId, categoryGroupOrder } = useApp()
   const perfil = perfilId === undefined ? activeProfileId : perfilId
@@ -86,6 +88,7 @@ export default function CategorySelect({
           onChange={onChange}
           className={className}
           placeholder={placeholder}
+          quebrarRotulo={quebrarRotulo}
         />
         {aviso}
       </>

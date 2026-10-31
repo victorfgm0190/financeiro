@@ -102,6 +102,7 @@ export default function SearchableSelect({
                               // agrupamento por `group` é o de sempre.
   triggerClassName = 'input', // classe do gatilho (tabelas usam versões compactas)
   compacto = false,           // itens do menu em texto pequeno (tabelas de importação)
+  quebrarRotulo = false,      // escolhido aparece inteiro, em mais de uma linha se preciso (nunca "…")
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -301,7 +302,7 @@ export default function SearchableSelect({
         aria-expanded={open}
         className={`${triggerClassName} flex items-center justify-between gap-2 text-left w-full ${!selected ? 'text-texto-3' : ''}`}
       >
-        <span className="flex-1 truncate min-w-0">{selected ? selected.label : placeholder}</span>
+        <span className={`flex-1 min-w-0 ${quebrarRotulo ? 'whitespace-normal break-words' : 'truncate'}`}>{selected ? selected.label : placeholder}</span>
         <div className="flex items-center gap-1 shrink-0">
           {value && !required && (
             <span
