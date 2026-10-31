@@ -45,7 +45,7 @@ export function linhasDoLancamento(tx, rateios) {
   if (!rateios?.length || (tx.type !== 'income' && tx.type !== 'expense')) return [{ categoriaId: tx.categoryId || null, valor: total }]
   const soma = r2(rateios.reduce((s, r) => s + (Number(r.valor) || 0), 0))
   const base = soma > total + TOLERANCIA ? escalarRateios(rateios, total) : rateios
-  const out = base.map(r => ({ categoriaId: r.categoriaId, valor: r2(r.valor), descricao: r.descricao || '' }))
+  const out = base.map(r => ({ categoriaId: r.categoriaId, valor: r2(r.valor), descricao: r.descricao || '', ...(r.grupoGerencial ? { grupoGerencial: r.grupoGerencial } : {}) }))
   const sobra = r2(total - out.reduce((s, r) => s + r.valor, 0))
   if (sobra > TOLERANCIA) out.push({ categoriaId: tx.categoryId || null, valor: sobra, sobra: true })
   return out
@@ -150,4 +150,15 @@ export function rateioHerdado({ tx, schedule, data, rateiosPorId = new Map() }) 
   const base = rateioDaOcorrencia(schedule, data, rateiosPorId.get(schedule.id) || [])
   if (base.length < 2) return []
   return ajustarRateio(base, Number(tx.amount) || 0, { modo: 'proporcional' })
+}
+
+// Quanto do lançamento vai para cada GRUPO GERENCIAL: linha com grupo próprio → o dela; sem → o do
+// lançamento. Sem rateio (ou nenhuma linha com grupo), o lançamento inteiro no grupo dele — o de hoje.
+//   → Map(grupoId → valor). Lançamento sem grupo e linha sem grupo não entram.
+export function partesPorGrupo(tx, rateios) {
+  const m = new Map()
+  const soma = (g, v) => { if (g && v) m.set(g, r2((m.get(g) || 0) + v)) }
+  if (!rateios?.some?.(r => r.grupoGerencial)) { soma(tx.grupoGerencial, r2(tx.amount)); return m }
+  for (const l of linhasDoLancamento(tx, rateios)) soma(l.grupoGerencial || tx.grupoGerencial, l.valor)
+  return m
 }

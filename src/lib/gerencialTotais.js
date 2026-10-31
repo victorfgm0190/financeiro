@@ -11,6 +11,8 @@
 //     são devolvidos também em separado, para o total poder mostrar a quebra realizado/previsto.
 //   • Sem grupo → não entra em token nenhum, nem lançamento nem previsto.
 
+import { partesPorGrupo } from './rateio.js'
+
 const round2 = n => Math.round(n * 100) / 100
 
 // Ordem de exibição: G primeiro, numerados em ordem, D por último.
@@ -25,7 +27,9 @@ export function sortKey(g) {
 //   Quem as calcula é o dono da fatura (tem cartão, período e getNextOccurrences); aqui só se
 //   soma. getNextOccurrences exclui ocorrências registradas/puladas, então uma parcela já
 //   efetivada entra pelo lado dos lançamentos e nunca pelos previstos — sem dupla contagem.
-export function totaisGerenciais({ txs = [], previstos = [], gerencialGroups = [] }) {
+// rateios (Map lançamento → linhas, opcional): linha com grupo gerencial próprio soma no grupo dela
+// (lib/rateio partesPorGrupo); sem isso, o lançamento inteiro no grupo dele — como sempre foi.
+export function totaisGerenciais({ txs = [], previstos = [], gerencialGroups = [], rateios = null }) {
   const totals = new Map()
   const previstoPorGrupo = new Map()
   let estornos = 0
@@ -35,8 +39,14 @@ export function totaisGerenciais({ txs = [], previstos = [], gerencialGroups = [
       estornos = round2(estornos + Math.abs(Number(tx.amount) || 0))
       continue
     }
-    if (tx.type !== 'expense' || !tx.grupoGerencial) continue
-    totals.set(tx.grupoGerencial, round2((totals.get(tx.grupoGerencial) || 0) + (Number(tx.amount) || 0)))
+    if (tx.type !== 'expense') continue
+    const linhas = rateios?.get?.(tx.id)
+    if (!linhas?.some(l => l.grupoGerencial)) {
+      if (!tx.grupoGerencial) continue
+      totals.set(tx.grupoGerencial, round2((totals.get(tx.grupoGerencial) || 0) + (Number(tx.amount) || 0)))
+      continue
+    }
+    for (const [g, v] of partesPorGrupo(tx, linhas)) totals.set(g, round2((totals.get(g) || 0) + v))
   }
 
   for (const p of previstos) {

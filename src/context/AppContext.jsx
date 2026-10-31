@@ -1471,6 +1471,7 @@ export function AppProvider({ children }) {
       categoriaId: r.categoriaId || '',
       valor: Number(r.valor) || 0,
       descricao: r.descricao || '',
+      grupoGerencial: r.grupoGerencial || null,
     }))
     persistirRateiosRef.current(lancamentoId, lista)
     update(d => {
@@ -5009,7 +5010,7 @@ export function AppProvider({ children }) {
       if (!herdado.length) return d
       if (!lista) {
         lista = herdado
-          .map((r, i) => ({ id: `rat_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 5)}`, categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '' }))
+          .map((r, i) => ({ id: `rat_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 5)}`, categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '', grupoGerencial: r.grupoGerencial || null }))
         persistirRateiosRef.current(txId, lista)
       }
       return { ...d, rateios: [...(d.rateios || []), ...lista.map(r => ({ ...r, lancamentoId: txId }))] }
@@ -5101,7 +5102,7 @@ export function AppProvider({ children }) {
     plano.mudancas.push({ campo: 'mesclagem', de: retrato, para: { avulsoId } })
     if (Object.keys(plano.changes).length) updateTransaction(parcelaId, plano.changes)
     if (plano.copiarRateio) {
-      if (rateiosAvulso.length) saveRateiosFor(parcelaId, rateiosAvulso.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || null })))
+      if (rateiosAvulso.length) saveRateiosFor(parcelaId, rateiosAvulso.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || null, grupoGerencial: r.grupoGerencial || null })))
       plano.mudancas.push({ campo: 'rateio', de: (rateiosByLancamento.get(parcelaId) || []).length, para: rateiosAvulso.length })
     }
     const loteId = novoLoteId()

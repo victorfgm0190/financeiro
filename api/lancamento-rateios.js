@@ -47,8 +47,8 @@ async function handler(req, res) {
       await query('DELETE FROM lancamento_rateios WHERE lancamento_id = $1', [lancamentoId])
       for (const r of rateios) {
         await query(
-          'INSERT INTO lancamento_rateios (id, lancamento_id, categoria_id, valor, descricao) VALUES ($1,$2,$3,$4,$5)',
-          [r.id, lancamentoId, r.categoriaId ?? r.categoria_id ?? null, Number(r.valor) || 0, r.descricao || null],
+          'INSERT INTO lancamento_rateios (id, lancamento_id, categoria_id, valor, descricao, grupo_gerencial) VALUES ($1,$2,$3,$4,$5,$6)',
+          [r.id, lancamentoId, r.categoriaId ?? r.categoria_id ?? null, Number(r.valor) || 0, r.descricao || null, r.grupoGerencial ?? r.grupo_gerencial ?? null],
         )
       }
       return res.json({ ok: true, count: rateios.length })

@@ -1144,6 +1144,8 @@ export const rowToRateio = (r) => ({
   categoriaId: r.categoria_id || '',
   valor: Number(r.valor) || 0,
   descricao: r.descricao || '',
+  // Grupo gerencial da linha (NULL = o do lançamento).
+  grupoGerencial: r.grupo_gerencial || null,
 })
 
 // ─── Detalhamento por função do agendamento de resgate ───────────────────────
