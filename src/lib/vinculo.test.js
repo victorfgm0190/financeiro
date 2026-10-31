@@ -116,3 +116,32 @@ describe('5) Importar a fatura depois de mesclar', () => {
     expect(out[0]._dbTx?.id || out[0]._collisionTx?.id).toBe('seg_10')
   })
 })
+
+import { retratoDaMesclagem, planejarDesfazerMesclagem } from './vinculo'
+describe('2) desfazer mesclagem', () => {
+  const P10 = { id: 'seg_10', type: 'expense', accountId: 'card', accountType: 'credit', amount: 150, date: '2026-11-15', description: 'SEGURO X 10/12', payee: 'Seguro X', installmentNum: 10, installmentTotal: 12, faturaMonthYear: '2026-12' }
+  const AV = { id: 'av', type: 'expense', accountId: 'card', accountType: 'credit', amount: 150.01, date: '2026-11-28', description: 'SEGURO X', payee: 'Seguradora X', faturaMonthYear: '2026-12', origin: 'manual', notes: 'via SMS' }
+  const ag = { id: 'ag', registered: ['2026-11-15'], registeredMeta: { '2026-11-15': { tipo: 'pago', lancamento_id: 'av' } } }
+  const mesclar = () => {
+    const plano = planejarMesclagem({ transactions: [P10, AV], schedules: [ag] }, { avulsoId: 'av', parcelaId: 'seg_10', campos: ['amount', 'payee', 'rateio'] })
+    const retrato = retratoDaMesclagem(plano, { rateiosAvulso: [{ categoriaId: 'a', valor: 100 }, { categoriaId: 'b', valor: 50.01 }], rateiosParcela: [] })
+    return { plano, retrato, depois: { transactions: [{ ...P10, ...plano.changes }], schedules: plano.schedules } }
+  }
+  it('recria o avulso como era (com rateio) e devolve à parcela os valores e as baixas', () => {
+    const { retrato, depois } = mesclar()
+    const u = planejarDesfazerMesclagem(depois, retrato)
+    expect(u.ok).toBe(true)
+    expect(u.avulso).toEqual(AV)
+    expect(u.rateiosAvulso.map(r => r.valor)).toEqual([100, 50.01])
+    expect(u.parcelaChanges).toEqual({ amount: 150, payee: 'Seguro X' })
+    expect(u.rateioParcela).toEqual([])
+    expect(u.schedules[0].registeredMeta['2026-11-15'].lancamento_id).toBe('av')
+    expect(u.sobrescritos).toEqual([])
+  })
+  it('parcela alterada depois da mesclagem: avisa o que será sobrescrito; já desfeita: recusa', () => {
+    const { retrato, depois } = mesclar()
+    const mudou = { ...depois, transactions: [{ ...depois.transactions[0], amount: 160 }] }
+    expect(planejarDesfazerMesclagem(mudou, retrato).sobrescritos).toEqual([{ campo: 'amount', atual: 160, volta: 150 }])
+    expect(planejarDesfazerMesclagem({ ...depois, transactions: [...depois.transactions, AV] }, retrato).ok).toBe(false)
+  })
+})

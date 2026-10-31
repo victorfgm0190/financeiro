@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext'
 import Modal from './Modal'
 import { fetchHistorico } from '../../lib/db'
 import { agruparPorLote, formatarValorHistorico, rotuloCampo, ROTULO_ESCOPO } from '../../lib/historico'
+import DesfazerMesclagem from './DesfazerMesclagem'
 
 const quando = (iso) => {
   try { return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return iso }
@@ -96,6 +97,7 @@ export function HistoricoPainel({ entidade, entidadeId, serieKey = null, origem 
         )}
       </div>
       {erro && <p className="text-xs text-perigo">{erro}</p>}
+      {entidade === 'lancamento' && <div className="flex justify-end"><DesfazerMesclagem txId={entidadeId} onFeito={onVoltar} /></div>}
       {linhas === null ? (
         <p className="text-xs text-texto-3 flex items-center gap-1.5 py-6 justify-center"><Loader2 size={13} className="animate-spin" /> Carregando…</p>
       ) : lotes.length === 0 ? (

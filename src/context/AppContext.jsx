@@ -49,7 +49,7 @@ import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { definirIdentidadeExport } from '../lib/exportExcel'
-import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos } from '../lib/vinculo'
+import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos, retratoDaMesclagem, planejarDesfazerMesclagem } from '../lib/vinculo'
 import { linhasDoLancamento, rateioDaOcorrencia, linhasParaAutomaticos, rateioHerdado } from '../lib/rateio'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
@@ -5091,6 +5091,10 @@ export function AppProvider({ children }) {
     if (!plano.ok) return plano
     update(d => ({ ...d, schedules: plano.schedules }))
     const rateiosAvulso = rateiosByLancamento.get(avulsoId) || []
+    // Retrato para "Desfazer mesclagem": o avulso inteiro (com rateio), os campos da parcela antes e
+    // as baixas re-apontadas — fica no histórico da parcela (valor_anterior do campo 'mesclagem').
+    const retrato = retratoDaMesclagem(plano, { rateiosAvulso, rateiosParcela: rateiosByLancamento.get(parcelaId) || [] })
+    plano.mudancas.push({ campo: 'mesclagem', de: retrato, para: { avulsoId } })
     if (Object.keys(plano.changes).length) updateTransaction(parcelaId, plano.changes)
     if (plano.copiarRateio) {
       if (rateiosAvulso.length) saveRateiosFor(parcelaId, rateiosAvulso.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || null })))
@@ -5105,6 +5109,37 @@ export function AppProvider({ children }) {
     deleteTransaction(avulsoId)
     return plano
   }, [update, registrarEdicao, updateTransaction, deleteTransaction, rateiosByLancamento, saveRateiosFor])
+
+  // Desfaz uma mesclagem pelo retrato gravado no histórico: o avulso volta como era (mesmo id, com o
+  // rateio), a parcela recebe de volta os valores anteriores e as baixas voltam a apontar o avulso.
+  // Só pela tela, depois da confirmação (o Assistente nunca chama isto).
+  const desfazerMesclagem = useCallback((retrato, { loteOrigem = null } = {}) => {
+    const plano = planejarDesfazerMesclagem(dataRef.current, retrato)
+    if (!plano.ok) return plano
+    const parcelaId = plano.parcela.id
+    addTransaction({ ...plano.avulso })
+    if (plano.rateiosAvulso.length) saveRateiosFor(plano.avulso.id, plano.rateiosAvulso)
+    update(d => ({ ...d, schedules: plano.schedules }))
+    if (Object.keys(plano.parcelaChanges).length) updateTransaction(parcelaId, plano.parcelaChanges)
+    if (plano.rateioParcela) {
+      if (plano.rateioParcela.length) saveRateiosFor(parcelaId, plano.rateioParcela)
+      else deleteRateiosFor(parcelaId)
+    }
+    const loteId = novoLoteId()
+    const atual = plano.parcela
+    const mudancasParcela = [
+      { campo: 'desfazer_mesclagem', de: { avulsoId: plano.avulso.id }, para: { loteOrigem } },
+      ...Object.entries(plano.parcelaChanges).map(([campo, volta]) => ({ campo, de: atual[campo] ?? null, para: volta })),
+    ]
+    registrarEdicao({
+      lancamentos: [{ ...atual, ...plano.parcelaChanges }], loteId,
+      historico: [
+        ...linhasHistorico({ entidade: 'lancamento', itens: [{ id: parcelaId, mudancas: mudancasParcela }], loteId, motivo: 'Mesclagem desfeita' }),
+        ...linhasHistorico({ entidade: 'lancamento', itens: [{ id: plano.avulso.id, mudancas: [{ campo: 'desfazer_mesclagem', de: null, para: { recriado: true, parcelaId } }] }], loteId, motivo: 'Mesclagem desfeita' }),
+      ],
+    }).catch(e => console.error('[mescla] histórico do desfazer:', e?.message || e))
+    return plano
+  }, [update, registrarEdicao, updateTransaction, addTransaction, saveRateiosFor, deleteRateiosFor])
 
   // Agenda no celular (em lote): marca/desmarca "Sincronizar com a agenda do celular" e regera o
   // feed na hora. Devolve quantos mudaram.
@@ -6085,7 +6120,7 @@ export function AppProvider({ children }) {
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, marcarDataOcorrencia, baixarCobrancaRecorrente, definirSincronizarAgenda,
-      vincularLancamento, desvincularLancamento, mesclarComParcela, vinculosPorLancamento,
+      vincularLancamento, desvincularLancamento, mesclarComParcela, desfazerMesclagem, vinculosPorLancamento,
       addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,

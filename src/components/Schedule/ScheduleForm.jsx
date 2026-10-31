@@ -27,6 +27,7 @@ import {
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
+import FimRepeticao from '../shared/FimRepeticao'
 import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -1224,43 +1225,19 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           </div>
         )}
 
-        {/* Ocorrência — habilitada só com frequência recorrente escolhida */}
-        {form.frequency !== 'once' && (() => {
-          const occDisabled = !form.frequency
-          return (
-            <div className={form.occurrenceType === 'installment' && !occDisabled ? '' : 'sm:col-span-2'}>
-              <LabelTip tip={TIPS.occurrence}>Ocorrência</LabelTip>
-              <div className={`flex rounded-lg overflow-hidden border border-borda-forte ${occDisabled ? 'opacity-40' : ''}`}>
-                {[['continuous', 'Contínua'], ['installment', 'Parcelada']].map(([v, l]) => (
-                  <button
-                    type="button"
-                    key={v}
-                    disabled={occDisabled}
-                    onClick={() => set('occurrenceType', v)}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${occDisabled ? 'cursor-not-allowed' : ''} ${
-                      form.occurrenceType === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
-                    }`}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-              {occDisabled && <p className="sm:hidden text-[11px] text-texto-3 mt-1">Escolha a frequência primeiro</p>}
-            </div>
-          )
-        })()}
-
-        {form.frequency && form.frequency !== 'once' && form.occurrenceType === 'installment' && (
-          <div>
-            <LabelTip tip={TIPS.installments}>Nº de Parcelas</LabelTip>
-            <input
-              className="input"
-              type="number"
-              min="1"
-              max="360"
-              value={form.installments}
-              onChange={e => set('installments', e.target.value)}
+        {/* Até quando — Sem fim | Número de vezes | Até a data (só com frequência recorrente escolhida) */}
+        {form.frequency !== 'once' && (
+          <div className={`sm:col-span-2 ${!form.frequency ? 'opacity-40 pointer-events-none' : ''}`}>
+            <LabelTip tip={TIPS.occurrence}>Até quando</LabelTip>
+            <FimRepeticao
+              inicio={form.startDate}
+              recorrencia={form.frequency}
+              occurrenceType={form.occurrenceType}
+              installments={form.installments}
+              rotuloVezes="Nº de parcelas"
+              onChange={({ occurrenceType, installments }) => setForm(f => ({ ...f, occurrenceType, installments: installments || f.installments }))}
             />
+            {!form.frequency && <p className="sm:hidden text-[11px] text-texto-3 mt-1">Escolha a frequência primeiro</p>}
           </div>
         )}
 

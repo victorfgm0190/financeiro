@@ -3,6 +3,8 @@ import ComposicaoCard from '../Contratos/ComposicaoCard'
 import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
 import VinculoPainel from '../shared/VinculoPainel'
 import SeloVinculo from '../shared/SeloVinculo'
+import DesfazerMesclagem from '../shared/DesfazerMesclagem'
+import FimRepeticao from '../shared/FimRepeticao'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -1503,6 +1505,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             </span>
           )}
           <SeloVinculo tx={initial} desvincular onToast={onToast} className={seloParcela ? '' : 'mr-auto'} />
+          <DesfazerMesclagem txId={initial.id} onToast={onToast} onFeito={onClose} />
           {podeGravarForm && (initial.type === 'expense' || initial.type === 'income') && !initial.scheduleId && (
             <button type="button" onClick={() => setVinculoAberto(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5"
               title="Ligar a uma ocorrência pendente de agendamento ou a uma parcela já existente">
@@ -2234,37 +2237,15 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </div>
 
               {form.repeatFrequency !== 'once' && (
-                <div className="flex items-end gap-3">
-                  <div className="flex-1">
-                    <label className="label">Tipo</label>
-                    <div className="flex rounded-lg overflow-hidden border border-borda-forte">
-                      {[['continuous', 'Contínuo'], ['installment', 'Por parcelas']].map(([v, l]) => (
-                        <button
-                          type="button"
-                          key={v}
-                          onClick={() => set('repeatOccurrenceType', v)}
-                          className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                            form.repeatOccurrenceType === v ? 'bg-primary/15 text-primary-fg' : 'bg-surface-2 text-texto-2 hover:bg-surface-hover'
-                          }`}
-                        >
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {form.repeatOccurrenceType === 'installment' && (
-                    <div className="w-24">
-                      <label className="label">Parcelas</label>
-                      <input
-                        className="input text-center"
-                        type="number"
-                        min="1"
-                        max="360"
-                        value={form.repeatInstallments}
-                        onChange={e => set('repeatInstallments', Math.max(1, Number(e.target.value) || 1))}
-                      />
-                    </div>
-                  )}
+                <div>
+                  <label className="label">Até quando</label>
+                  <FimRepeticao
+                    inicio={form.repeatStartDate || form.date}
+                    recorrencia={form.repeatFrequency}
+                    occurrenceType={form.repeatOccurrenceType}
+                    installments={form.repeatInstallments}
+                    onChange={({ occurrenceType, installments }) => setForm(f => ({ ...f, repeatOccurrenceType: occurrenceType, repeatInstallments: installments || f.repeatInstallments }))}
+                  />
                 </div>
               )}
 

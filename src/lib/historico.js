@@ -58,6 +58,12 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
       return t ? `${t.sigla} — ${t.nome}` : '(tipo removido)'
     }
     case 'faturaMonthYear': return /^\d{4}-\d{2}$/.test(v) ? `${v.slice(5, 7)}/${v.slice(0, 4)}` : String(v)
+    // Mesclagem: o retrato (avulso + parcela antes) e o desfazer.
+    case 'mesclagem':
+      return v?.avulso ? `avulso "${v.avulso.description || v.avulso.payee || v.avulso.id}" ${brl(v.avulso.amount)} (${ddmmyyyy(v.avulso.date)})` : (v?.avulsoId ? 'mesclado' : '—')
+    case 'desfazer_mesclagem':
+      return v?.recriado ? 'avulso recriado' : v?.avulsoId ? 'mesclagem ativa' : 'mesclagem desfeita'
+    case 'reconciled': return v ? 'Sim' : 'Não'
     // Exclusão (revisão automática): foto do lançamento removido.
     case 'exclusao': return typeof v === 'object'
       ? `${v.description || v.id} · ${brl(v.amount)} · ${ddmmyyyy(v.date)}${v.faturaMonthYear ? ` · fatura ${v.faturaMonthYear.slice(5, 7)}/${v.faturaMonthYear.slice(0, 4)}` : ''}`

@@ -211,16 +211,58 @@ export function planejarMesclagem(d, { avulsoId, parcelaId, campos = [] }) {
   if (campos.includes('date') && av.dateCartao && av.dateCartao !== p.dateCartao) changes.dateCartao = av.dateCartao
   if (av.reconciled && !p.reconciled) { changes.reconciled = true; mudancas.push({ campo: 'reconciled', de: false, para: true }) }
   mudancas.push({ campo: 'mesclado_de', de: null, para: av.id })
+  const metasMovidas = []
   const schedules = d.schedules.map(s => {
     const metas = Object.entries(s.registeredMeta || {}).filter(([, m]) => m?.lancamento_id === av.id)
     if (!metas.length) return s
     const registeredMeta = { ...s.registeredMeta }
-    for (const [data, m] of metas) registeredMeta[data] = { ...m, lancamento_id: p.id }
+    for (const [data, m] of metas) { registeredMeta[data] = { ...m, lancamento_id: p.id }; metasMovidas.push({ scheduleId: s.id, data }) }
     return { ...s, registeredMeta }
   })
   return {
     ok: true, avulso: av, parcela: p, changes, mudancas, schedules,
     copiarRateio: campos.includes('rateio'),
     rotulo: `${numeroParcelaDoTx(p)}/${totalParcelasDoTx(p)}`,
+    metasMovidas,
   }
+}
+
+// ── Desfazer mesclagem ───────────────────────────────────────────────────────────────────────────
+// Retrato gravado no histórico da parcela (campo 'mesclagem', valor_anterior): tudo para refazer o
+// avulso como era e devolver à parcela os valores anteriores.
+export function retratoDaMesclagem(plano, { rateiosAvulso = [], rateiosParcela = [] } = {}) {
+  const limpar = (o) => JSON.parse(JSON.stringify(o ?? null))
+  return {
+    versao: 1,
+    avulso: limpar(plano.avulso),
+    rateiosAvulso: limpar(rateiosAvulso.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '' }))),
+    parcelaId: plano.parcela.id,
+    parcelaAntes: limpar(Object.fromEntries(Object.keys(plano.changes).map(k => [k, plano.parcela[k] ?? null]))),
+    parcelaDepois: limpar(plano.changes),
+    rateiosParcelaAntes: plano.copiarRateio ? limpar(rateiosParcela.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '' }))) : null,
+    metasMovidas: limpar(plano.metasMovidas || []),
+  }
+}
+
+const igualCampo = (campo, a, b) => (campo === 'amount' ? r2(a) === r2(b) : String(a ?? '') === String(b ?? ''))
+
+// → { ok, avulso, parcelaChanges, sobrescritos: [{ campo, atual, volta }], rateioParcela, schedules } | { ok: false, motivo }
+export function planejarDesfazerMesclagem(d, retrato) {
+  if (!retrato?.avulso?.id || !retrato.parcelaId) return { ok: false, motivo: 'Retrato da mesclagem incompleto.' }
+  const p = d.transactions.find(t => t.id === retrato.parcelaId)
+  if (!p) return { ok: false, motivo: 'A parcela não existe mais.' }
+  if (d.transactions.some(t => t.id === retrato.avulso.id)) return { ok: false, motivo: 'O lançamento avulso já existe — a mesclagem já foi desfeita.' }
+  // Mudou depois da mesclagem: o valor atual difere do que a mesclagem deixou → será sobrescrito.
+  const sobrescritos = Object.entries(retrato.parcelaAntes || {})
+    .filter(([campo]) => !igualCampo(campo, p[campo], retrato.parcelaDepois?.[campo]))
+    .map(([campo, volta]) => ({ campo, atual: p[campo] ?? null, volta }))
+  const parcelaChanges = { ...(retrato.parcelaAntes || {}) }
+  const schedules = d.schedules.map(s => {
+    const minhas = (retrato.metasMovidas || []).filter(m => m.scheduleId === s.id && s.registeredMeta?.[m.data]?.lancamento_id === p.id)
+    if (!minhas.length) return s
+    const registeredMeta = { ...s.registeredMeta }
+    for (const m of minhas) registeredMeta[m.data] = { ...registeredMeta[m.data], lancamento_id: retrato.avulso.id }
+    return { ...s, registeredMeta }
+  })
+  return { ok: true, avulso: retrato.avulso, parcela: p, parcelaChanges, sobrescritos, rateioParcela: retrato.rateiosParcelaAntes, rateiosAvulso: retrato.rateiosAvulso || [], schedules }
 }
