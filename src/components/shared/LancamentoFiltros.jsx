@@ -17,7 +17,7 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
   const inputCls = 'bg-surface-2 border border-borda-campo text-texto-1 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-primary placeholder:text-texto-3'
 
   const textInputs = [
-    { key: 'data', placeholder: 'DD/MM/AAAA', w: 'w-28' },
+    { key: 'data', placeholder: 'Data', w: 'w-28' },
     { key: 'historico', placeholder: 'Histórico', w: 'flex-1 min-w-[110px]' },
     { key: 'favorecido', placeholder: 'Favorecido', w: 'flex-1 min-w-[110px]' },
     { key: 'de', placeholder: 'Conta De', w: 'flex-1 min-w-[100px]' },
@@ -92,6 +92,28 @@ export default function LancamentoFiltros({ filtros, setFiltros, fields, categor
             className={`w-24 ${inputCls}`}
           />
         </>
+      )}
+
+      {show.includes('valorBusca') && (
+        <div className="flex items-center gap-1 flex-1 min-w-[150px] sm:flex-none">
+          <InputMoeda
+            value={filtros.valor || ''}
+            onChange={e => set('valor', e.target.value)}
+            placeholder="Valor"
+            aria-label="Valor"
+            className={`flex-1 min-w-0 sm:w-24 sm:flex-none ${inputCls}`}
+          />
+          <select
+            value={filtros.valorModo || 'exato'}
+            onChange={e => set('valorModo', e.target.value)}
+            aria-label="Modo do filtro de valor"
+            title="Exato: mesmo valor · Aproximado: mesma parte inteira (200,00 a 200,99)"
+            className={`shrink-0 ${inputCls}`}
+          >
+            <option value="exato">Exato</option>
+            <option value="aproximado">Aprox.</option>
+          </select>
+        </div>
       )}
 
       {extra}

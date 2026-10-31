@@ -1049,7 +1049,7 @@ export default function CreditCardPanel() {
         </div>
 
         {billLancamentos.length > 0 && (
-          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} />
+          <LancamentoFiltros filtros={filtros} setFiltros={setFiltros} fields={['data', 'historico', 'favorecido', 'de', 'para', 'valorBusca']} />
         )}
 
         {billLancamentos.length === 0 ? (

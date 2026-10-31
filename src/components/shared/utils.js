@@ -1,6 +1,7 @@
 import { isInvestAutoOrigin } from '../../lib/origins.js'
 import { hojeSP } from '../../lib/hoje.js'
 import { faturaDoCartao } from '../../lib/fatura.js'
+import { faixaValorCentavos, valorNaFaixa } from '../../lib/buscaGlobal.js'
 
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
@@ -35,10 +36,10 @@ export function today() {
 }
 
 // ─── Filtros de lançamentos (barra de filtros em tempo real) ────────────────
-export const EMPTY_LANC_FILTROS = { data: '', historico: '', favorecido: '', de: '', para: '', categoria: '', valorDe: '', valorAte: '' }
+export const EMPTY_LANC_FILTROS = { data: '', historico: '', favorecido: '', de: '', para: '', categoria: '', valorDe: '', valorAte: '', valor: '', valorModo: 'exato' }
 
 export function hasLancFiltros(f) {
-  return !!(f && (f.data || f.historico || f.favorecido || f.de || f.para || f.categoria || f.valorDe || f.valorAte))
+  return !!(f && (f.data || f.historico || f.favorecido || f.de || f.para || f.categoria || f.valorDe || f.valorAte || f.valor))
 }
 
 // Nomes "Conta De" / "Conta Para" de um lançamento (absoluto, não relativo à
@@ -52,13 +53,30 @@ export function txDeParaNames(tx, accounts) {
   return { de: name(tx.accountId), para: tx.payee || '' } // expense
 }
 
+// Filtro de data: "dd/mm/aaaa", "dd/mm/aa" ou "dd/mm" comparam dia/mês(/ano) da data do lançamento
+// ou da data do cartão; qualquer outro texto (digitação em andamento, "/10/2026") casa por trecho.
+const DATA_FILTRO_RE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/
+export function matchDataFiltro(f, ...datas) {
+  const q = String(f || '').trim()
+  if (!q) return true
+  const iso = datas.filter(Boolean).map(d => String(d).slice(0, 10))
+  const m = q.match(DATA_FILTRO_RE)
+  if (!m) return iso.some(d => fmtDate(d).includes(q))
+  const dia = Number(m[1]), mes = Number(m[2])
+  const ano = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : null
+  return iso.some(d => {
+    const [y, mo, da] = d.split('-').map(Number)
+    return da === dia && mo === mes && (ano == null || y === ano)
+  })
+}
+
 // True se o lançamento satisfaz TODOS os filtros preenchidos (AND). Campo vazio
 // não filtra. Data casa parcialmente contra DD/MM/AAAA; demais são substring
 // case-insensitive.
 export function matchLancFiltros(tx, f, accounts) {
   if (!hasLancFiltros(f)) return true
   const norm = s => (s ?? '').toString().toLowerCase()
-  if (f.data && !fmtDate(tx.date).includes(f.data.trim())) return false
+  if (f.data && !matchDataFiltro(f.data, tx.date, tx.dateCartao)) return false
   if (f.historico && !norm(tx.description).includes(norm(f.historico))) return false
   if (f.favorecido && !norm(tx.payee).includes(norm(f.favorecido))) return false
   if (f.de || f.para) {
@@ -73,6 +91,8 @@ export function matchLancFiltros(tx, f, accounts) {
     if (de != null && tx.amount < de) return false
     if (ate != null && tx.amount > ate) return false
   }
+  // Valor: mesma regra da busca global (exato = mesmo valor; aproximado = mesma parte inteira).
+  if (f.valor !== '' && f.valor != null && !valorNaFaixa(tx.amount, faixaValorCentavos(f.valor, f.valorModo))) return false
   return true
 }
 
