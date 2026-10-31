@@ -219,14 +219,14 @@ export default function FluxoCaixaPorConta() {
       transactions, schedules: schedulesRelatorio, envelopes, reserveFunctions, provisorios,
       etapaAPrevistas: projetarEtapaA(schedulesRelatorio),
       getNextOccurrences, includeSchedules,
-      hideReserva, hidePatrimonio, reservaSet, patrimonioSet, fluxoPrincipal,
+      hideReserva, hidePatrimonio, reservaSet, patrimonioSet, fluxoPrincipal, rateios: rateiosByLancamento,
     })
     return {
       rows: anotarLinhasProvisorias(r.rows, dpPorChave, scheduleById, occEfetiva),
       saldoAnteriorRealizado: r.saldoAnteriorRealizado,
       saldoAnteriorComAgendamentos: r.saldoAnteriorComAgendamentos,
     }
-  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios, projetarEtapaA, fluxoPrincipal])
+  }, [transactions, schedulesRelatorio, dpPorChave, scheduleById, accountIds, start, end, includeSchedules, currentBalance, getNextOccurrences, hideReserva, reservaSet, hidePatrimonio, patrimonioSet, envelopes, reserveFunctions, provisorios, projetarEtapaA, fluxoPrincipal, rateiosByLancamento])
 
   // Linhas da tela + totais. O saldo acumulado que vem da lib considera TODAS as linhas, então
   // é refeito aqui sobre as ativas: a linha desmarcada continua visível (esmaecida) mas não move

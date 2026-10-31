@@ -50,7 +50,7 @@ import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { definirIdentidadeExport } from '../lib/exportExcel'
 import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos, retratoDaMesclagem, planejarDesfazerMesclagem } from '../lib/vinculo'
-import { linhasDoLancamento, rateioDaOcorrencia, linhasParaAutomaticos, rateioHerdado } from '../lib/rateio'
+import { linhasDoLancamento, rateioDaOcorrencia, linhasParaAutomaticos, rateioHerdado, parteDoEnvelope } from '../lib/rateio'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -3489,9 +3489,10 @@ export function AppProvider({ children }) {
       let spent = 0
       for (const tx of data.transactions) {
         if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
-        if (!env.categoryIds?.includes(tx.categoryId)) continue
+        const parte = parteDoEnvelope(tx, rateiosByLancamento, env.categoryIds)
+        if (!parte) continue
         if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
-        spent += tx.amount
+        spent += parte
       }
       envelopesRestante = rb(envelopesRestante + Math.max(0, rb((env.limitAmount || 0) - spent)))
     }
@@ -3522,7 +3523,7 @@ export function AppProvider({ children }) {
       saldoAtualCalendario, saldoFinalCalendario,
       cycleEnd: cycleEndStr, calendarEnd: calendarEndStr, today: todayStr,
     }
-  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod, etapaAPrevistasTodas])
+  }, [data.transactions, data.schedules, data.envelopes, data.settings, getNextOccurrences, getFinancialPeriod, etapaAPrevistasTodas, rateiosByLancamento])
 
   // FINAL CICLO / PROJETADO do Saldo Principal usando EXATAMENTE a engine do relatório
   // Fluxo de Caixa por Conta (computeFluxoCaixa) — ancorada no saldo REAL das contas. Pool:
@@ -3542,7 +3543,7 @@ export function AppProvider({ children }) {
       accountIds, currentBalance, start, end,
       transactions: data.transactions, schedules: data.schedules,
       envelopes: data.envelopes, reserveFunctions: data.reserveFunctions,
-      getNextOccurrences, includeSchedules: true, etapaAPrevistas,
+      getNextOccurrences, includeSchedules: true, etapaAPrevistas, rateios: rateiosByLancamento,
     })
     return {
       saldoAnterior: r.saldoAnterior,
@@ -3550,15 +3551,15 @@ export function AppProvider({ children }) {
       saldoFinalCiclo: r.saldoFinalSemEnvelopes, // sem subtrair envelopes
       envelopesTotal: r.envelopesTotal,
     }
-  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod, etapaAPrevistas])
+  }, [data.accounts, data.transactions, data.schedules, data.envelopes, data.reserveFunctions, activeProfileId, getNextOccurrences, getFinancialPeriod, etapaAPrevistas, rateiosByLancamento])
 
   // Breakdown detalhado ("Como chegamos aqui") do Saldo Principal. ⚠ PROTEGIDA: o cálculo mora
   // em calcularSaldoPrincipalBreakdown (src/lib/saldoPrincipal.js); este wrapper só repassa os dados.
   const getSaldoPrincipalBreakdown = useCallback((referenceDate = new Date()) => calcularSaldoPrincipalBreakdown({
     accounts: data.accounts, transactions: data.transactions, schedules: data.schedules,
     envelopes: data.envelopes, settings: data.settings, gerencialGroups: data.gerencialGroups,
-    profileId: activeProfileId, getNextOccurrences, getFinancialPeriod,
-  }, referenceDate), [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod])
+    profileId: activeProfileId, getNextOccurrences, getFinancialPeriod, rateios: rateiosByLancamento,
+  }, referenceDate), [data.accounts, data.transactions, data.schedules, data.envelopes, data.settings, data.gerencialGroups, activeProfileId, getNextOccurrences, getFinancialPeriod, rateiosByLancamento])
 
   // Saldo Principal exibido no Painel: o breakdown protegido + a etapa A prevista, somada POR FORA.
   const getSaldoPrincipal = useCallback(

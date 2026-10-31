@@ -1,7 +1,7 @@
 // Gasto dos envelopes por competência (mês financeiro). Extraído de EnvelopesPanel sem mudança de
 // regra — a tela Envelopes e o card do Início mobile usam a mesma função.
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
-import { valorNasCategorias } from './rateio.js'
+import { parteDoEnvelope } from './rateio.js'
 
 // Chave comparável (ano*12 + mês0) da competência de uma data, aplicando o dia de
 // início do mês financeiro: date.day >= startDay → mês da data; senão → mês anterior.
@@ -29,13 +29,10 @@ export function gastoEnvelopes(envelopes, transactions, compKey, startDay, ratei
     for (const tx of transactions || []) {
       if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
       if (competenciaKeyOf(tx.date, startDay) !== compKey) continue
-      const linhas = rateios?.get(tx.id)
-      if (!linhas?.length) {
-        if (env.categoryIds.includes(tx.categoryId)) txs.push(tx)
-        continue
-      }
-      const parte = valorNasCategorias(tx, linhas, env.categoryIds)
-      if (parte > 0) txs.push({ ...tx, amount: parte, _amountTotal: tx.amount })
+      // Mesma regra dos cálculos de saldo (lib/rateio parteDoEnvelope).
+      const parte = parteDoEnvelope(tx, rateios, env.categoryIds)
+      if (!parte) continue
+      txs.push(rateios?.get(tx.id)?.length ? { ...tx, amount: parte, _amountTotal: tx.amount } : tx)
     }
     const spent = txs.reduce((s, t) => s + t.amount, 0)
     return { env, txs, spent }

@@ -5,6 +5,7 @@
 import { occEfetiva } from './fluxoCaixa.js'
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
 import { escopoFluxoPrincipal, agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
+import { parteDoEnvelope } from './rateio.js'
 
 const rb = v => Math.round(v * 100) / 100
 
@@ -16,7 +17,7 @@ const rb = v => Math.round(v * 100) / 100
 // vêm do AppContext, para usar exatamente as mesmas ocorrências e o mesmo ciclo da tela.
 export function calcularSaldoPrincipalBreakdown({
   accounts, transactions, schedules, envelopes, settings, gerencialGroups,
-  profileId, getNextOccurrences, getFinancialPeriod,
+  profileId, getNextOccurrences, getFinancialPeriod, rateios = null,
 }, referenceDate = new Date()) {
   const toStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
   const period = getFinancialPeriod(referenceDate)
@@ -163,9 +164,10 @@ export function calcularSaldoPrincipalBreakdown({
     let spent = 0
     for (const tx of transactions) {
       if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
-      if (!env.categoryIds?.includes(tx.categoryId)) continue
+      const parte = parteDoEnvelope(tx, rateios, env.categoryIds)
+      if (!parte) continue
       if (!tx.date || competenciaKeyOf(tx.date) !== currentComp) continue
-      spent += tx.amount
+      spent += parte
     }
     const restante = Math.max(0, rb((env.limitAmount || 0) - spent))
     if (restante <= 0) continue

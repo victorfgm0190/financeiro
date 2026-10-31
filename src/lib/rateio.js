@@ -2,9 +2,23 @@
 // { categoriaId, valor, descricao }. Tabela lancamento_rateios (lancamento_id guarda o id de
 // lançamento OU de agendamento). O saldo da conta e a fatura usam sempre o TOTAL; relatórios,
 // totais por categoria e filtros usam as linhas. Lançamento sem rateio = como sempre. PURO.
-import { escalarRateios } from './fluxoCaixa.js'
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+
+// Reescala as linhas para um novo total, mantendo as proporções (o último leva os centavos).
+export function escalarRateios(rateios, total) {
+  const soma = Math.round(rateios.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100
+  const alvo = Math.round((Number(total) || 0) * 100) / 100
+  if (rateios.length === 0 || soma === 0 || soma === alvo) return rateios
+  let acumulado = 0
+  return rateios.map((r, i) => {
+    const valor = i === rateios.length - 1
+      ? Math.round((alvo - acumulado) * 100) / 100
+      : Math.round((Number(r.valor) || 0) * alvo / soma * 100) / 100
+    acumulado = Math.round((acumulado + valor) * 100) / 100
+    return { ...r, valor }
+  })
+}
 export const TOLERANCIA = 0.005
 
 // Soma × total: { atribuido, restante, ok, motivo }. ok = cada linha com categoria e valor > 0 e a
@@ -150,6 +164,15 @@ export function rateioHerdado({ tx, schedule, data, rateiosPorId = new Map() }) 
   const base = rateioDaOcorrencia(schedule, data, rateiosPorId.get(schedule.id) || [])
   if (base.length < 2) return []
   return ajustarRateio(base, Number(tx.amount) || 0, { modo: 'proporcional' })
+}
+
+// Quanto de um lançamento desconta de um ENVELOPE: sem rateio, o valor inteiro se a categoria é do
+// envelope (exatamente a regra de antes); com rateio, só as linhas das categorias do envelope.
+// Usado pelos quatro cálculos de saldo/projeção e pela tela Envelopes.
+export function parteDoEnvelope(tx, rateios, categoryIds) {
+  const linhas = rateios?.get?.(tx.id)
+  if (!linhas?.length) return categoryIds?.includes(tx.categoryId) ? tx.amount : 0
+  return valorNasCategorias(tx, linhas, categoryIds)
 }
 
 // Quanto do lançamento vai para cada GRUPO GERENCIAL: linha com grupo próprio → o dela; sem → o do

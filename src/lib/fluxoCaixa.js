@@ -12,6 +12,7 @@ import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from '.
 import { occCampos } from './camposSerie.js'
 import { dueDateInMonth } from './fatura.js'
 import { agendamentoNoFluxoPrincipal, valorNoFluxoPrincipal } from './fluxoPrincipal.js'
+import { parteDoEnvelope } from './rateio.js'
 
 const round2 = n => Math.round(n * 100) / 100
 
@@ -66,19 +67,8 @@ export function proximaEfetiva(schedule, getNextOccurrences) {
 // gravadas contra o valor BASE; com override de valor na ocorrência (ou valor digitado no
 // modal), copiá-las como estão faria o rateio não fechar com o lançamento. Proporcional por
 // linha, resíduo de arredondamento na última. Soma igual (ou zero) → devolve as linhas intactas.
-export function escalarRateios(rateios, total) {
-  const soma = Math.round(rateios.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100
-  const alvo = Math.round((Number(total) || 0) * 100) / 100
-  if (rateios.length === 0 || soma === 0 || soma === alvo) return rateios
-  let acumulado = 0
-  return rateios.map((r, i) => {
-    const valor = i === rateios.length - 1
-      ? Math.round((alvo - acumulado) * 100) / 100
-      : Math.round((Number(r.valor) || 0) * alvo / soma * 100) / 100
-    acumulado = Math.round((acumulado + valor) * 100) / 100
-    return { ...r, valor }
-  })
-}
+// Reescala as linhas de um rateio para um novo total: mora em lib/rateio (reexportada aqui).
+export { escalarRateios } from './rateio.js'
 
 // Computa as linhas e os saldos do fluxo de caixa de `accountIds` no período [start, end].
 // Devolve { rows, saldoAnterior, saldoFinal, saldoFinalSemEnvelopes, totalEntrada, totalSaida,
@@ -96,6 +86,8 @@ export function computeFluxoCaixa({
   // como vêm de /api/fluxo-provisorios. Default [] de propósito: só o relatório passa esta
   // lista — os KPIs FINAL CICLO / PROJETADO do Painel Geral chamam sem ela e seguem idênticos.
   provisorios = [],
+  // Rateios (Map lançamento → linhas): o envelope desconta só a parte das categorias dele.
+  rateios = null,
   // Etapa A PREVISTA do Grupo G (projecoesEtapaA, gerencialPrevistos.js): saída Conta Principal →
   // Ger.<apelido> por ocorrência pendente de despesa agendada de cartão. Default [] — só o Fluxo
   // de Caixa Futuro passa.
@@ -292,9 +284,10 @@ export function computeFluxoCaixa({
         let spent = 0
         for (const tx of transactions) {
           if (!isEnvExpense(tx)) continue
-          if (!env.categoryIds?.includes(tx.categoryId)) continue
+          const parte = parteDoEnvelope(tx, rateios, env.categoryIds)
+          if (!parte) continue
           if (!tx.date || tx.date < cyc.from || tx.date > cyc.to) continue
-          spent += tx.amount
+          spent += parte
         }
         const restante = round2(Math.max(0, (env.limitAmount || 0) - spent))
         if (restante <= 0) continue

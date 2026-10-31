@@ -272,7 +272,7 @@ export default function CashFlowPanel({ setActivePage }) {
     const comum = {
       accountIds, currentBalance: saldoInicial, reserveFunctions, getNextOccurrences,
       includeSchedules: true, hideReserva: ocultarReserva, hidePatrimonio: consulta.ocultar_patrimonio,
-      reservaSet, patrimonioSet, fluxoPrincipal,
+      reservaSet, patrimonioSet, fluxoPrincipal, rateios: rateiosByLancamento,
     }
     const agds = consulta.incluir_agendamentos ? schedulesFluxo : []
     // includeSchedules fica sempre true (ele também liga os envelopes); "sem agendamentos" é a
@@ -292,7 +292,7 @@ export default function CashFlowPanel({ setActivePage }) {
       rows: anotarLinhasProvisorias(futuras, dpPorChave, scheduleById, occEfetiva),
       atraso: anotarLinhasProvisorias(a, dpPorChave, scheduleById, occEfetiva),
     }
-  }, [accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
+  }, [rateiosByLancamento, accountIds, saldoInicial, reserveFunctions, getNextOccurrences, ocultarReserva, consulta, reservaSet, patrimonioSet,
     schedulesFluxo, hoje, fim, transactions, incluirEnvelopes, envelopes, provisorios, dpPorChave, scheduleById, projetarEtapaA, fluxoPrincipal])
 
   const { atrasoTotal, atrasoAtivas, base } = useMemo(() => {
