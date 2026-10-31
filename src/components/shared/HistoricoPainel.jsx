@@ -110,6 +110,7 @@ export function HistoricoPainel({ entidade, entidadeId, serieKey = null, origem 
               <button type="button" onClick={() => abrirLote(g.loteId)} className="w-full text-left rounded-lg p-2 hover:bg-surface-hover/60" title="Ver todas as parcelas alteradas nesta edição">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-texto-3">
                   <span>{quando(g.quando)}</span>
+                  <span className="text-texto-2" title="Quem alterou">{g.quem}</span>
                   <span className="px-1.5 py-0.5 rounded bg-surface-hover/60 text-texto-2">{ROTULO_ESCOPO[g.escopo] || g.escopo}</span>
                   {g.nItens > 1 && <span>{g.nItens} itens</span>}
                   {g.linhas.some(l => l._origem) && <span className="text-texto-2">parcela de origem</span>}

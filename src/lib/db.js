@@ -283,8 +283,9 @@ export async function setTipoDocumentoAgendamentosApi(ids, tipoId, { loteId = nu
 // ─── Histórico de alterações ─────────────────────────────────────────────────
 // Edição do USUÁRIO: grava as linhas alteradas (rows snake_case, as mesmas do sync) e o histórico
 // numa transação só. O sync/motor nunca chamam isto.
-export async function aplicarEdicaoApi({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null }) {
-  return apiPost('/api/historico', { agendamentos, lancamentos, historico, lote_id: loteId, motivo })
+// autor: 'sistema' em rotinas automáticas; sem ele vale o header (assistente) ou 'usuario'.
+export async function aplicarEdicaoApi({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null, autor = null }) {
+  return apiPost('/api/historico', { agendamentos, lancamentos, historico, lote_id: loteId, motivo, ...(autor ? { autor } : {}) })
 }
 // params: { entidade, entidade_id } | { serie_key } | { lote_id }
 export async function fetchHistorico(params) {

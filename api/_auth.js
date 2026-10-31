@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { regraDaRota, atendeRegra, normalizarPerfis } from '../src/lib/permissoes.js'
 import { nivelDoPapel } from './_usuarios.js'
+import { definirQuem } from './_quem.js'
 
 // Extrai e valida o Bearer token do header Authorization. Retorna o payload decodificado
 // ou null (token ausente/inválido/expirado, ou JWT_SECRET não configurado no ambiente).
@@ -55,6 +56,8 @@ export function requireAuth(req, res) {
   req.user = usuarioDoToken(payload)
   // Plano do ambiente: vale o do central (comAmbiente), não o do token — que só muda no próximo login.
   if (req.ambiente) req.user.modulos = req.ambiente.modulos || {}
+  // Quem alterou (histórico): o usuário do token + o autor declarado pelo app.
+  definirQuem(req)
   const regra = regraDaRota(rotaDoReq(req), req.method)
   if (!atendeRegra(req.user, regra)) {
     res.status(403).json({ error: 'Sem permissão para esta operação', modulo: regra.modulo, acao: regra.acao })

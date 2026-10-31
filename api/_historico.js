@@ -1,5 +1,6 @@
 import { query } from './_db.js'
 import { registroPorBanco } from './_conexao.js'
+import { quemAtual, AUTORES } from './_quem.js'
 
 // HISTÓRICO DE ALTERAÇÕES feitas pelo USUÁRIO em agendamentos e lançamentos (edição individual,
 // em série ou em massa). Uma linha por campo e por item; `lote_id` agrupa as linhas de uma mesma
@@ -47,7 +48,7 @@ export async function ensureHistoricoSchema(q = query) {
 }
 
 // Valida/normaliza uma linha vinda do app. Devolve { erro } ou { linha }.
-export function normalizarLinhaHistorico(l, { loteId, motivo } = {}) {
+export function normalizarLinhaHistorico(l, { loteId, motivo, autor } = {}) {
   const entidade = String(l?.entidade || '')
   const escopo = String(l?.escopo || 'parcela')
   const campo = String(l?.campo || '').trim()
@@ -71,17 +72,33 @@ export function normalizarLinhaHistorico(l, { loteId, motivo } = {}) {
       valor_novo: l?.valor_novo === undefined ? null : l.valor_novo,
       motivo: m ? String(m).trim().slice(0, 500) || null : null,
       origem,
+      // O app só declara o AUTOR (assistente/sistema); o usuário vem sempre do login (servidor).
+      ...(AUTORES.includes(l?.autor ?? autor) ? { autor: l?.autor ?? autor } : {}),
     },
   }
 }
 
-const COLS = ['entidade', 'entidade_id', 'ocorrencia_data', 'serie_key', 'lote_id', 'escopo', 'campo', 'valor_anterior', 'valor_novo', 'motivo', 'origem']
+const COLS = ['entidade', 'entidade_id', 'ocorrencia_data', 'serie_key', 'lote_id', 'escopo', 'campo', 'valor_anterior', 'valor_novo', 'motivo', 'origem', 'usuario_id', 'usuario_nome', 'autor']
 
 // INSERT das linhas (já normalizadas) com o `q` da transação de quem chama. Devolve quantas.
+// Quem alterou: o que vier na linha (rotinas/scripts) ou o da requisição (requireAuth → _quem.js).
+// Sem nada (teste, rotina sem login) fica NULL e a tela mostra "—".
+export function comQuemAlterou(l, quem = quemAtual()) {
+  const autor = AUTORES.includes(l.autor) ? l.autor : (quem?.autor || null)
+  return {
+    ...l,
+    usuario_id: l.usuario_id ?? quem?.usuarioId ?? null,
+    usuario_nome: l.usuario_nome ?? quem?.usuarioNome ?? null,
+    autor,
+  }
+}
+
 export async function inserirHistorico(q, linhas) {
   if (!linhas?.length) return 0
+  const quem = quemAtual()
   const params = []
-  const values = linhas.map(l => {
+  const values = linhas.map(l0 => {
+    const l = comQuemAlterou(l0, quem)
     const ph = COLS.map(c => {
       params.push(c === 'valor_anterior' || c === 'valor_novo' ? JSON.stringify(l[c] ?? null) : l[c])
       return c === 'valor_anterior' || c === 'valor_novo' ? `$${params.length}::jsonb` : `$${params.length}`
@@ -92,4 +109,4 @@ export async function inserirHistorico(q, linhas) {
   return linhas.length
 }
 
-export const SQL_HISTORICO_COLS = 'id, entidade, entidade_id, ocorrencia_data, serie_key, lote_id, escopo, campo, valor_anterior, valor_novo, motivo, origem, created_at'
+export const SQL_HISTORICO_COLS = 'id, entidade, entidade_id, ocorrencia_data, serie_key, lote_id, escopo, campo, valor_anterior, valor_novo, motivo, origem, usuario_id, usuario_nome, autor, created_at'

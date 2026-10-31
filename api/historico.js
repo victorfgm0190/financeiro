@@ -24,7 +24,7 @@ function queryParam(req, nome) {
 export async function aplicarEdicao(q, client, body, upsert = upsertRowsNoClient) {
   const linhas = []
   for (const l of body?.historico || []) {
-    const { erro, linha } = normalizarLinhaHistorico(l, { loteId: body.lote_id, motivo: body.motivo })
+    const { erro, linha } = normalizarLinhaHistorico(l, { loteId: body.lote_id, motivo: body.motivo, autor: body.autor })
     if (erro) throw Object.assign(new Error(erro), { status: 400 })
     linhas.push(linha)
   }

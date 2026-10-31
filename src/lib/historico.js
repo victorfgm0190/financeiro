@@ -84,10 +84,19 @@ const ROTULO_EXTRA = {
 export const rotuloCampo = (campo) => ROTULO_CAMPO[campo] || ROTULO_EXTRA[campo] || campo
 
 // Agrupa as linhas por lote (uma edição) para a linha do tempo, mais recente primeiro.
+// Quem fez a alteração, para a tela: "Assistente IA · Fulano", "Sistema", "Fulano" ou "—" (linhas
+// antigas, gravadas antes de o histórico guardar o usuário).
+export function quemAlterou(l) {
+  const nome = l?.usuario_nome || null
+  if (l?.autor === 'assistente') return nome ? `Assistente IA · ${nome}` : 'Assistente IA'
+  if (l?.autor === 'sistema') return nome ? `Sistema · ${nome}` : 'Sistema'
+  return nome || '—'
+}
+
 export function agruparPorLote(linhas) {
   const m = new Map()
   for (const l of linhas || []) {
-    if (!m.has(l.lote_id)) m.set(l.lote_id, { loteId: l.lote_id, quando: l.created_at, motivo: l.motivo, escopo: l.escopo, linhas: [], itens: new Set() })
+    if (!m.has(l.lote_id)) m.set(l.lote_id, { loteId: l.lote_id, quando: l.created_at, motivo: l.motivo, escopo: l.escopo, quem: quemAlterou(l), linhas: [], itens: new Set() })
     const g = m.get(l.lote_id)
     g.linhas.push(l)
     g.itens.add(l.entidade_id)

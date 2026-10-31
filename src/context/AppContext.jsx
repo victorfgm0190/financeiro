@@ -923,12 +923,12 @@ export function AppProvider({ children }) {
   // Grava uma edição do USUÁRIO + o histórico numa transação (POST /api/historico). Recebe os
   // registros JÁ alterados (objetos do app); converte para as rows do sync. Sem linhas de
   // histórico (nada mudou) não chama o banco.
-  const registrarEdicao = useCallback(async ({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null }) => {
+  const registrarEdicao = useCallback(async ({ agendamentos = [], lancamentos = [], historico = [], loteId, motivo = null, autor = null }) => {
     if (!historico.length) return { historico: 0 }
     const r = await aplicarEdicaoApi({
       agendamentos: agendamentos.map(scheduleToRow),
       lancamentos: lancamentos.map(txToRow),
-      historico, loteId, motivo,
+      historico, loteId, motivo, autor,
     })
     marcarHistorico(historico)
     return r

@@ -148,3 +148,46 @@ describe('motor/sync não gravam histórico', () => {
     expect((await q('SELECT COUNT(*)::int AS n FROM historico_alteracoes'))[0].n).toBe(0)
   })
 })
+
+// Cenário 1 (pendências 31/10): quem alterou. O usuário vem do login (req.user, via requireAuth →
+// _quem.js); o app só declara o autor (header X-Finup-Autor / body.autor).
+describe('histórico — quem alterou', () => {
+  const linha = { entidade: 'agendamento', entidade_id: 'sch_dia', escopo: 'parcela', campo: 'amount', valor_anterior: 200, valor_novo: 250 }
+  const reqDe = (autor) => ({ user: { id: 'usr_1', nome: 'Maria Teste' }, headers: autor ? { 'x-finup-autor': autor } : {} })
+
+  it('alteração comum: grava o usuário do login, autor usuario', async () => {
+    const { comQuem, quemDoReq } = await import('./_quem.js')
+    await upsertRowsNoClient(client(), 'agendamentos', [scheduleToRow(diarista)])
+    await comQuem(quemDoReq(reqDe(null)), () => aplicarEdicao(q, client(), { lote_id: 'L1', historico: [linha] }, upsertRowsNoClient))
+    const [h] = await q('SELECT usuario_id, usuario_nome, autor FROM historico_alteracoes')
+    expect(h).toEqual({ usuario_id: 'usr_1', usuario_nome: 'Maria Teste', autor: 'usuario' })
+  })
+
+  it('pelo Assistente: autor assistente + o usuário; o corpo não consegue trocar o usuário', async () => {
+    const { comQuem, quemDoReq } = await import('./_quem.js')
+    await comQuem(quemDoReq(reqDe('assistente')), () => aplicarEdicao(q, client(), {
+      lote_id: 'L2', historico: [{ ...linha, usuario_id: 'outro', usuario_nome: 'Intruso' }],
+    }, upsertRowsNoClient))
+    const [h] = await q('SELECT usuario_id, usuario_nome, autor FROM historico_alteracoes')
+    expect(h).toEqual({ usuario_id: 'usr_1', usuario_nome: 'Maria Teste', autor: 'assistente' })
+  })
+
+  it('rotina automática (body.autor sistema) e header inválido vira usuario', async () => {
+    const { comQuem, quemDoReq } = await import('./_quem.js')
+    await comQuem(quemDoReq(reqDe('hacker')), () => aplicarEdicao(q, client(), { lote_id: 'L3', historico: [linha] }, upsertRowsNoClient))
+    await comQuem(quemDoReq(reqDe(null)), () => aplicarEdicao(q, client(), { lote_id: 'L4', autor: 'sistema', historico: [linha] }, upsertRowsNoClient))
+    const h = await q('SELECT lote_id, autor FROM historico_alteracoes ORDER BY lote_id')
+    expect(h).toEqual([{ lote_id: 'L3', autor: 'usuario' }, { lote_id: 'L4', autor: 'sistema' }])
+  })
+
+  it('sem requisição (linha antiga/rotina sem login): tudo NULL, e a tela mostra "—"', async () => {
+    const { quemAlterou } = await import('../src/lib/historico.js')
+    await aplicarEdicao(q, client(), { lote_id: 'L5', historico: [linha] }, upsertRowsNoClient)
+    const [h] = await q('SELECT usuario_id, usuario_nome, autor FROM historico_alteracoes')
+    expect(h).toEqual({ usuario_id: null, usuario_nome: null, autor: null })
+    expect(quemAlterou(h)).toBe('—')
+    expect(quemAlterou({ usuario_nome: 'Maria Teste', autor: 'usuario' })).toBe('Maria Teste')
+    expect(quemAlterou({ usuario_nome: 'Maria Teste', autor: 'assistente' })).toBe('Assistente IA · Maria Teste')
+    expect(quemAlterou({ autor: 'sistema' })).toBe('Sistema')
+  })
+})

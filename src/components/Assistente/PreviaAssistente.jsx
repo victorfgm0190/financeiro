@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sparkles, Trash2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
+import { entrarAutorAssistente } from '../../lib/api'
 import TransactionForm from '../Transactions/TransactionForm'
 import AvisoParecidos from '../Transactions/AvisoParecidos'
 import EscolherConta from './EscolherConta'
@@ -61,6 +62,8 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
     transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees,
     gerencialGroups, reserveFunctions, tiposDocumento, setReconciled,
   } = useApp()
+  // Enquanto a prévia está aberta, as alterações vão para o histórico como "Assistente IA" + usuário.
+  useEffect(() => entrarAutorAssistente(), [])
   // Favorecido cadastrado PARECIDO com o nome que veio (a IA não escolheu um existente): só sugere.
   // "Usar" troca o favorecido da prévia e aprende o apelido (ia_apelidos) para casar direto depois.
   const [favorecidoUsado, setFavorecidoUsado] = useState(null)

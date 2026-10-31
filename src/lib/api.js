@@ -19,8 +19,23 @@ export function getToken() {
 // token — espalhe em qualquer fetch autenticado: `{ ...authHeaders() }`.
 export function authHeaders() {
   const token = getToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  if (!token) return {}
+  return autorAtual ? { Authorization: `Bearer ${token}`, 'X-Finup-Autor': autorAtual } : { Authorization: `Bearer ${token}` }
 }
+
+// AUTOR das alterações para o histórico (o usuário vem do login, no servidor): 'assistente' enquanto
+// a prévia do Assistente IA está aberta. Contador: duas prévias abertas não se desligam uma à outra.
+let autorAtual = null
+let assistenteAbertos = 0
+export function entrarAutorAssistente() {
+  assistenteAbertos += 1
+  autorAtual = 'assistente'
+  return () => {
+    assistenteAbertos = Math.max(0, assistenteAbertos - 1)
+    if (!assistenteAbertos) autorAtual = null
+  }
+}
+export const autorDasRequisicoes = () => autorAtual
 
 // Modo sem internet (AppContext liga quando o banco não responde). Gravações que dependem do
 // servidor — importações, financiamento, usuários, edição em massa… — avisam em vez de tentar. As
