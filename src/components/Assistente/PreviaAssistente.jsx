@@ -24,6 +24,7 @@ import PreviaBaixa from './PreviaBaixa'
 import CompraEmDolar from './CompraEmDolar'
 import JaNaFatura from './JaNaFatura'
 import EscolhaAcaoDespesa from './EscolhaAcaoDespesa'
+import CartaoAgendamentoPrevia from './CartaoAgendamentoPrevia'
 import RateioFaltando from './RateioFaltando'
 import { sugerirAcaoDespesa, repeticaoDaPrevia, categoriasProvaveis, ACAO } from '../../lib/assistente/prontidao'
 import { categoriaPrincipal } from '../../lib/rateio'
@@ -206,13 +207,20 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal])
   const jaPediuAgendar = !!sugestao.repetir
   const perguntarAcao = despesaCandidata && !jaPediuAgendar && !parcelaNoCartao
-  const [acaoDespesa, setAcaoDespesa] = useState(null)
-  const acaoEfetiva = jaPediuAgendar ? ACAO.DESPESA_AGENDAMENTO : acaoDespesa
+  // "e agende…" no pedido já começa em Despesa + agendamento (os dois cartões, sem a pergunta).
+  const [acaoDespesa, setAcaoDespesa] = useState(jaPediuAgendar ? ACAO.DESPESA_AGENDAMENTO : null)
+  const acaoEfetiva = acaoDespesa
+  // Cartão do agendamento (edições do usuário); sem edição, o que a prévia calculou.
+  const [cartaoAg, setCartaoAg] = useState(null)
+  const [veioDosCartoes, setVeioDosCartoes] = useState(false)
   const recorrencia = sugestao.repetir || prontidao?.recorrenciaSugerida || null
   const diaRepeticao = sugestao.repetir_dia || (doc.vencimento ? Number(doc.vencimento.slice(8, 10)) : null)
-  const repeticao = acaoEfetiva === ACAO.DESPESA_AGENDAMENTO
-    ? repeticaoDaPrevia({ data: initialFormBase.date || hojeIso, recorrencia: recorrencia || 'monthly', dia: diaRepeticao, ate: sugestao.repetir_ate, vezes: sugestao.repetir_vezes, parcelasRestantes: prontidao?.parcelasRestantes })
-    : null
+  const repeticaoCalculada = repeticaoDaPrevia({ data: initialFormBase.date || hojeIso, recorrencia: recorrencia || 'monthly', dia: diaRepeticao, ate: sugestao.repetir_ate, vezes: sugestao.repetir_vezes, parcelasRestantes: prontidao?.parcelasRestantes })
+  const cfgAgendamento = cartaoAg || (repeticaoCalculada ? {
+    ativo: true, repeatFrequency: repeticaoCalculada.repeatFrequency, repeatOccurrenceType: repeticaoCalculada.repeatOccurrenceType,
+    repeatInstallments: repeticaoCalculada.repeatInstallments || 2, repeatStartDate: repeticaoCalculada.repeatStartDate,
+  } : null)
+  const repeticao = acaoEfetiva === ACAO.DESPESA_AGENDAMENTO ? repeticaoCalculada : null
   const contrato = prontidao?.numeroContrato || doc.numero_contrato || null
   const reaproveitar = prontidao?.reaproveitar || null
   // Rateio citado (regra 22): linhas editáveis; soma ≠ total → pergunta onde vai a diferença.
@@ -236,7 +244,11 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   }
   // "Só agendamento" (conta ainda a pagar): o agendamento a partir do vencimento, com a recorrência sugerida.
   const initialSoAgendamento = acaoEfetiva === ACAO.SO_AGENDAMENTO ? {
-    ...initialDaSugestao('criar_agendamento', {
+    ...initialDaSugestao('criar_agendamento', veioDosCartoes && cfgAgendamento ? {
+      // Despesa desmarcada nos cartões: o agendamento com o que estava no cartão dele.
+      ...sugestao, vencimento: cfgAgendamento.repeatStartDate, recorrencia: cfgAgendamento.repeatFrequency,
+      parcelas: cfgAgendamento.repeatOccurrenceType === 'installment' ? cfgAgendamento.repeatInstallments : null,
+    } : {
       ...sugestao, vencimento: doc.vencimento || sugestao.data,
       recorrencia: recorrencia === 'installment' ? 'monthly' : (recorrencia || 'once'),
       parcelas: recorrencia === 'installment' && prontidao?.parcelasRestantes ? prontidao.parcelasRestantes + 1 : null,
@@ -363,13 +375,6 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           onDescartar={descartar} />
       )}
       {perguntarAcao && <EscolhaAcaoDespesa prontidao={prontidao} acao={acaoDespesa} onEscolher={setAcaoDespesa} />}
-      {repeticao && (
-        <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-texto-2">
-          {jaPediuAgendar ? 'Você pediu para agendar: ' : ''}a despesa conta como a ocorrência deste período; o agendamento
-          {' '}{repeticao.repeatOccurrenceType === 'installment' ? `(${repeticao.repeatInstallments} vezes) ` : ''}começa em <strong>{repeticao.primeira.split('-').reverse().join('/')}</strong> (1ª ocorrência).
-          {rateioLinhas.length > 0 ? ' O agendamento herda o rateio.' : ''}
-        </p>
-      )}
       {parcelaNoCartao && correspondencias.fortes.length === 0 && correspondencias.fracos.length === 0 && (() => {
         // Sem a parcela nas faturas abertas: pode estar numa fatura já FECHADA — avisa e deixa decidir.
         const naFechada = buscarCorrespondencias(novoDoCartao, { transactions, accounts, apelidos, faturasFechadas: null }).fortes.find(m => m.parcelaIgual)
@@ -463,7 +468,41 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
         : initialSoAgendamento
-        ? <ScheduleForm key="so-agendamento" initial={initialSoAgendamento} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
+        ? (
+          <div className="space-y-3">
+            {veioDosCartoes && (
+              <label className="flex items-center gap-2.5 rounded-xl border-2 border-borda bg-surface px-3 min-h-[48px] cursor-pointer opacity-70">
+                <input type="checkbox" className="accent-primary w-5 h-5" checked={false}
+                  onChange={() => { setAcaoDespesa(ACAO.DESPESA_AGENDAMENTO); setVeioDosCartoes(false) }} />
+                <span className="text-sm font-semibold text-texto-1">Despesa</span>
+                <span className="text-xs text-texto-3">desmarcada — só o agendamento será gravado</span>
+              </label>
+            )}
+            <ScheduleForm key="so-agendamento" initial={initialSoAgendamento} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
+          </div>
+        )
+        : acaoEfetiva === ACAO.DESPESA_AGENDAMENTO && cfgAgendamento
+        ? (
+          // Cartões separados: Despesa (o formulário) + Agendamento; "Confirmar tudo" grava só os marcados.
+          <div className="space-y-3">
+            <section className="rounded-xl border-2 border-primary/50 bg-surface p-3 space-y-3" aria-label="Cartão da despesa">
+              <label className="flex items-center gap-2.5 cursor-pointer min-h-[40px]">
+                <input type="checkbox" className="accent-primary w-5 h-5" checked
+                  onChange={() => { setCartaoAg({ ...cfgAgendamento, ativo: true }); setVeioDosCartoes(true); setAcaoDespesa(ACAO.SO_AGENDAMENTO) }} />
+                <span className="text-sm font-semibold text-texto-1">Despesa</span>
+              </label>
+              <TransactionForm key={`${favorecidoUsado || ''}|cartoes|${rateioResolvido ? 'r' : ''}`} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+                preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
+                extrasNovo={extrasCompra} rotuloGravar="Confirmar tudo"
+                repeticaoExterna={{
+                  repeat: cfgAgendamento.ativo, repeatFrequency: cfgAgendamento.repeatFrequency, repeatOccurrenceType: cfgAgendamento.repeatOccurrenceType,
+                  repeatInstallments: cfgAgendamento.repeatInstallments, repeatStartDate: cfgAgendamento.repeatStartDate,
+                  repeatSufixo: contrato ? `Contrato nº ${contrato}` : '',
+                }} />
+            </section>
+            <CartaoAgendamentoPrevia cfg={cfgAgendamento} onChange={setCartaoAg} rateio={rateioLinhas} categories={categories} motivo={prontidao?.motivo} />
+          </div>
+        )
         : <TransactionForm key={`${favorecidoUsado || ''}|${acaoEfetiva || ''}|${rateioResolvido ? 'r' : ''}`} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}

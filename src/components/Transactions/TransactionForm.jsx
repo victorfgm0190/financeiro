@@ -138,7 +138,10 @@ function buildCatOpts(categories, type) {
 // `extrasNovo`: campos a mais do lançamento NOVO que o formulário não edita (ex.: compra em dólar
 // do Assistente — moeda, valor original, cotação, spread, estimado; src/lib/cambio.js).
 export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null,
-  preLancamentos = null, parecidosAceitos = null, onMesmo = null, extrasNovo = null, ajustes = null }) {
+  preLancamentos = null, parecidosAceitos = null, onMesmo = null, extrasNovo = null, ajustes = null,
+  // Prévia do Assistente com cartões separados: o cartão do agendamento controla a repetição (o painel
+  // "Repetir" some daqui) e o botão vira "Confirmar tudo".
+  repeticaoExterna = null, rotuloGravar = null }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -235,6 +238,14 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   })
 
   const [step, setStep] = useState('form')
+  // Repetição vinda do cartão do agendamento: aplicada ao estado durante o render quando muda, sem
+  // recriar o formulário (o que foi digitado na despesa fica).
+  const chaveRepExt = repeticaoExterna ? JSON.stringify(repeticaoExterna) : ''
+  const [repExtAplicada, setRepExtAplicada] = useState(null)
+  if (repeticaoExterna && repExtAplicada !== chaveRepExt) {
+    setRepExtAplicada(chaveRepExt)
+    setForm(f => ({ ...f, ...repeticaoExterna }))
+  }
   // Duplicidade na criação: lançamentos/pré-lançamentos parecidos → passo 'parecidos' ao salvar.
   const [preBuscados, setPreBuscados] = useState([])
   const [parecidos, setParecidos] = useState(null)
@@ -2197,8 +2208,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         </div>
       )}
 
-      {/* Repetir este lançamento — só no formulário de NOVO lançamento */}
-      {!initial?.id && (
+      {/* Repetir este lançamento — só no formulário de NOVO lançamento (fora da prévia com cartões) */}
+      {!initial?.id && !repeticaoExterna && (
         <div data-bloco-switch className="p-3 bg-surface-2/60 border border-borda-forte rounded-lg space-y-3">
           <label className="flex items-center gap-2.5 cursor-pointer">
             <div className="relative shrink-0">
@@ -2288,7 +2299,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <button type="button" className="btn-secondary flex-1" onClick={onClose}>Cancelar</button>
         {podeGravarForm ? (
           <button type="submit" className="btn-primary flex-1" title={tituloGravar}>
-            {initial ? 'Salvar' : 'Registrar'}
+            {rotuloGravar || (initial ? 'Salvar' : 'Registrar')}
             <ShortcutHint actionId="lancamento.gravar" habilitado={atalhosForm} className="ml-2" />
           </button>
         ) : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
