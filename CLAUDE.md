@@ -32,3 +32,14 @@ Invariantes que valem para qualquer mudança:
 - `lancamentos.origin` é gravado na criação e nunca alterado.
 - SELECT de preview antes de qualquer DELETE/UPDATE no banco; ajustes de saldo atômicos.
 - Acesso ao Neon sempre via `/api` (o navegador nunca fala com o banco).
+
+## Pendências aguardando autorização
+
+- **Item 6 — grupo gerencial por linha do rateio (parado desde 31/10/2026).** A base está no ar
+  (b7b26d1): `lancamento_rateios.grupo_gerencial` é gravado/lido, `partesPorGrupo` (`src/lib/rateio.js`)
+  e `totaisGerenciais` (`src/lib/gerencialTotais.js`) sabem somar por linha. O campo NÃO aparece na
+  tela e nada o preenche; sem grupo nas linhas, tudo é igual ao de antes. **Motivo da parada:** a
+  movimentação gerencial (etapa A, reservas, resgates) é feita por `applyEnsureGerencial`,
+  `reconcileFaturaState` e `recalcularAgendamentosFatura` (protegidas), que usam o grupo do
+  lançamento inteiro. Mostrar o campo sem mudá-las faria os totais por linha divergirem do dinheiro
+  movido nas subcontas. Só retomar com autorização explícita do usuário para alterar essas funções.
