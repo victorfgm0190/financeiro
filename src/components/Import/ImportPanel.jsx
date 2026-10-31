@@ -5,7 +5,8 @@ import {
 } from 'lucide-react'
 import { parseFile, fuzzyMatchAccount, parseDindinCC, parseDindinCartao } from '../../lib/dindinParse'
 import { useApp } from '../../context/AppContext'
-import { noAmbientePrincipal } from '../../lib/api'
+import { noAmbientePrincipal, getSessao } from '../../lib/api'
+import { contarRevisao, filtrarRevisao, filtroAoAbrir, lerFiltroLembrado, lembrarFiltro } from '../../lib/filtroRevisaoFatura'
 import { fmt, fmtDate } from '../shared/utils'
 import { loadAccountMappings, fetchTransactionHistory, fetchFaturaConferencia } from '../../lib/db'
 import { computeFaturaRef } from '../../lib/fatura'
@@ -2739,6 +2740,29 @@ Importar mesmo assim no mês selecionado?`)) return
   // Só as que mudam algo no banco: idênticas não entram no "+N↻" nem são gravadas.
   const collisionsToApplyCount = collisionRows.filter(r => !collisionSkip.has(r._id) && mudancasColisao(r).length > 0).length
 
+  // Filtro de EXIBIÇÃO da revisão (lib/filtroRevisaoFatura): Pendentes × Conciliados × Todos.
+  // Totais, seleção e gravação continuam sobre TODAS as linhas; só a tabela é recortada. A linha
+  // muda de grupo na hora (é derivado de resolvedRows). Reedição de importação: sem filtro.
+  const comFiltro = !editingImport && resolvedRows.length > 0
+  const contagemRevisao = contarRevisao(resolvedRows, { mudancas: mudancasColisao })
+  const [filtroRevisao, setFiltroRevisao] = useState('pendentes')
+  // Ao abrir uma fatura (arquivo carregado, cartão ou fatura trocados): Pendentes se houver
+  // pendência; senão o último filtro do usuário.
+  const aberturaRevisao = comFiltro ? `${selectedAccount}|${faturaMonthYear}|${filename}` : null
+  useEffect(() => {
+    if (!aberturaRevisao) return
+    setFiltroRevisao(filtroAoAbrir(contagemRevisao.pendentes, lerFiltroLembrado(getSessao())))
+  // Só na abertura: depois, o filtro é do usuário.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberturaRevisao])
+  const escolherFiltroRevisao = (f) => { setFiltroRevisao(f); lembrarFiltro(getSessao(), f) }
+  const linhasVisiveis = comFiltro ? filtrarRevisao(resolvedRows, filtroRevisao, { mudancas: mudancasColisao }) : resolvedRows
+  // Linha citada fora do filtro atual (ex.: lista da diferença): mostra todas e rola até ela.
+  const irParaLinha = (id) => {
+    if (comFiltro && !linhasVisiveis.some(r => r._id === id)) setFiltroRevisao('todos')
+    setTimeout(() => document.getElementById(`ccrow-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0)
+  }
+
   // ── Corrigir Datas (modo reedição) ───────────────────────────────────────
   // Para cada lançamento do lote (tx_ids da importação) com date_cartao preenchida,
   // calcula a data corrigida = dia de fechamento do mês/ano da fatura_ref. Lançamentos
@@ -4021,7 +4045,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                             type="button"
                             className="truncate text-left hover:text-texto-1 disabled:cursor-default"
                             disabled={!it.linha}
-                            onClick={() => document.getElementById(`ccrow-${it.linha._id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                            onClick={() => irParaLinha(it.linha._id)}
                           >
                             {ref.description} <span className="text-texto-3">({fmtDate(it.linha?._dateCartao || ref.dateCartao || ref.date)})</span>
                           </button>
@@ -4040,6 +4064,12 @@ Conciliar mesmo assim com o mês selecionado?`)) return
             <div className="space-y-1">
               <SummaryBar found={found} toImport={toImportCount} duplicates={dups} />
               {!editingImport && <ResumoJaLancados resumo={resumoJa} />}
+              {comFiltro && filtroRevisao === 'pendentes' && contagemRevisao.conciliados > 0 && (
+                <p className="text-xs text-texto-2">
+                  {contagemRevisao.conciliados} conciliado{contagemRevisao.conciliados !== 1 ? 's' : ''} oculto{contagemRevisao.conciliados !== 1 ? 's' : ''}
+                  {' · '}<button type="button" className="text-primary-fg hover:text-texto-1 underline" onClick={() => escolherFiltroRevisao('conciliados')}>ver</button>
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               {!editingImport && (
@@ -4073,6 +4103,27 @@ Conciliar mesmo assim com o mês selecionado?`)) return
 
           <div className="card p-0 overflow-hidden">
             {gerencialLigado && <GerencialTotalizer txs={totalizerRows} gerencialGroups={gerencialGroups} />}
+            {comFiltro && (
+              <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-borda" role="tablist" aria-label="Filtrar linhas da fatura">
+                {[['pendentes', 'Pendentes'], ['conciliados', 'Conciliados'], ['todos', 'Todos']].map(([f, rotulo]) => (
+                  <button key={f} type="button" role="tab" aria-selected={filtroRevisao === f} onClick={() => escolherFiltroRevisao(f)}
+                    className={`text-xs px-3 min-h-[32px] rounded-full border transition-colors ${filtroRevisao === f
+                      ? 'bg-primary/15 border-primary/40 text-primary-fg font-medium'
+                      : 'bg-surface-2 border-borda-campo text-texto-2 hover:text-texto-1'}`}>
+                    {rotulo} ({contagemRevisao[f]})
+                  </button>
+                ))}
+              </div>
+            )}
+            {comFiltro && filtroRevisao === 'pendentes' && contagemRevisao.pendentes === 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-texto-2">
+                <Check size={16} className="text-receita shrink-0" />
+                <span>Tudo conciliado nesta fatura.</span>
+                <button type="button" className="text-xs text-primary-fg hover:text-texto-1 underline" onClick={() => escolherFiltroRevisao('conciliados')}>
+                  Ver os {contagemRevisao.conciliados} conciliado{contagemRevisao.conciliados !== 1 ? 's' : ''}
+                </button>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -4093,7 +4144,7 @@ Conciliar mesmo assim com o mês selecionado?`)) return
                   </tr>
                 </thead>
                 <tbody>
-                  {resolvedRows.map(row => (
+                  {linhasVisiveis.map(row => (
                     <tr
                       key={row._id}
                       id={`ccrow-${row._id}`}
