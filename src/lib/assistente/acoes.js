@@ -19,7 +19,7 @@
 // REGRA FIXA: o Assistente NUNCA exclui. Nenhuma ação exclui, e nenhum id/descrição fala nisso
 // (src/lib/assistente/acoes.test.js garante). Estorno não é exclusão: é 🔴 (abrir_tela).
 import { semIntermediador } from './nomeParecido.js'
-import { contaParaGravar, escolherConta } from './contas.js'
+import { contaParaGravar, escolherConta, contaCitada } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
 import {
   normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
@@ -64,7 +64,7 @@ const CAMPOS_LANCAMENTO = {
   final_cartao: { type: ['string', 'null'], description: 'Imagem: os 4 últimos dígitos do cartão, se aparecem (ex.: "final 4541")' },
   confianca: {
     type: 'object',
-    description: 'Confiança de 0 a 1 em cada campo',
+    description: 'Confiança de 0 a 1 SÓ nos campos com dúvida (< 1); campo ausente = certeza. {} quando não há dúvida',
     properties: { valor: NUM_CONF, data: NUM_CONF, conta: NUM_CONF, conta_destino: NUM_CONF, categoria: NUM_CONF, favorecido: NUM_CONF, centro_custo: NUM_CONF, descricao: NUM_CONF },
   },
   total_encontrado: { type: ['integer', 'null'], description: 'Só com VÁRIOS movimentos no pedido: quantos movimentos há no pedido INTEIRO (mesmo acima de 10). Repita em cada chamada.' },
@@ -73,7 +73,17 @@ const CAMPOS_LANCAMENTO = {
     description: 'Trecho do pedido que levou a cada escolha (omita quando houver vários movimentos)',
     properties: { categoria: { type: ['string', 'null'] }, conta: { type: ['string', 'null'] }, favorecido: { type: ['string', 'null'] } },
   },
+  // Instruções explícitas do pedido (regra 19): todas opcionais; null = o padrão do formulário.
+  grupo_gerencial_id: { type: ['string', 'null'], description: 'CLASSIFICAÇÃO gerencial citada ("despesa gerencial", "lançar como gerencial", "grupo 2", nome do grupo): id da lista GRUPOS GERENCIAIS. Só despesa no cartão. Não é conta.' },
+  conta_devolucao_id: { type: ['string', 'null'], description: 'Grupo 1 · Gerencial: conta corrente citada para a devolução ("devolver no Nubank"). Só se citada.' },
+  reserva_conta_id: { type: ['string', 'null'], description: '"Pago com a reserva X": id da conta de reserva citada' },
+  reserva_funcao_id: { type: ['string', 'null'], description: 'Função de reserva citada ("função IPVA"): id da lista FUNÇÕES DE RESERVA' },
+  tipo_documento_id: { type: ['string', 'null'], description: 'Tipo de documento citado ("NF", "recibo", "boleto"): id da lista TIPOS DE DOCUMENTO' },
+  observacoes: { type: ['string', 'null'], description: 'Observação citada ("observação: presente" → "presente")' },
+  fatura: { type: ['string', 'null'], description: 'Fatura do cartão citada ("na fatura de dezembro", "fatura 12/2026"): YYYY-MM' },
 }
+// Campos que só existem com o controle gerencial ligado (desligado: nem aparecem na ferramenta).
+const CAMPOS_GERENCIAIS = ['grupo_gerencial_id', 'conta_devolucao_id']
 const TIPO_CAT = { despesa: 'expense', receita: 'income' }
 const CONFIANCA_CERTA = { valor: 1, data: 1, conta: 1, conta_destino: 1, categoria: 1, favorecido: 1, centro_custo: 1, descricao: 1 }
 const contaValida = (ctx, id) => (ctx.idx.contas.has(id) ? id : null)
@@ -93,8 +103,9 @@ function validarLancamento(p, ctx, hoje) {
   const termos = {
     categoria: txt(p.termos?.categoria, 60), conta: txt(p.termos?.conta, 60), favorecido: txt(p.termos?.favorecido, 60),
   }
-  // Lote: a IA manda em `confianca` só os campos com dúvida — o que não veio é certeza (1).
-  const c = ctx.lote ? { ...CONFIANCA_CERTA, ...p.confianca } : (p.confianca || {})
+  // A IA manda em `confianca` só os campos com dúvida — o que não veio é certeza (1), com ou sem
+  // lote (antes, fora do lote, o ausente virava 0 e a prévia pedia "confira" em campo certo).
+  const c = { ...CONFIANCA_CERTA, ...(p.confianca && typeof p.confianca === 'object' ? p.confianca : {}) }
   const confianca = {
     valor: conf(c.valor), data: conf(c.data), conta: conf(c.conta), conta_destino: conf(c.conta_destino),
     categoria: conf(c.categoria), favorecido: conf(c.favorecido), centro_custo: conf(c.centro_custo), descricao: conf(c.descricao),
@@ -146,10 +157,61 @@ function validarLancamento(p, ctx, hoje) {
     tipo, valor, data, conta_id: contaId || null, conta_destino_id: destinoId || null, categoria_id: categoriaId || null,
     centro_custo_id: centro, favorecido_id: favorecido, favorecido_novo: favorecidoNovo,
     descricao: txt(semIntermediador(p.descricao), 120) || txt(p.descricao, 120), confianca, termos,
+    ...extrasDoPedido(p, ctx, tipo),
     ...(contaGerencial ? { conta_gerencial: true } : {}),
     ...(origem.opcoes ? { contas_opcoes: origem.opcoes } : {}),
     ...(origem.finalSemCartao ? { final_sem_cartao: origem.finalSemCartao } : {}),
   }
+}
+
+// Instruções explícitas do pedido (grupo gerencial, reserva, tipo de documento, observação, fatura),
+// validadas contra o cadastro: inválido ou fora do caso → some (o formulário usa o padrão). Só os
+// campos que valeram entram na saída. O app confere de novo com a conta final
+// (src/lib/assistente/camposDoPedido.js): grupo e fatura só valem em despesa de cartão.
+const ehReserva = (c) => !!c && c.papel !== 'gerencial' && (!!c.is_reserva || c.vinculo_tipo === 'reserva')
+export function grupoDoPedido(ctx, v) {
+  const grupos = ctx.idx.grupos
+  if (!v || !grupos?.size) return null
+  if (grupos.has(v)) return grupos.get(v)
+  const t = normalizarTermo(String(v)).replace(/^grupo /, '')
+  return [...grupos.values()].find(g => normalizarTermo(String(g.number)) === t || normalizarTermo(g.name) === t || (g.alias && normalizarTermo(g.alias) === t)) || null
+}
+function tipoDocumentoDoPedido(ctx, v, tipo) {
+  const tipos = ctx.idx.tiposDocumento
+  if (!v || !tipos?.size) return null
+  const t = normalizarTermo(String(v))
+  const d = tipos.get(v) || [...tipos.values()].find(x => normalizarTermo(x.sigla) === t || normalizarTermo(x.nome) === t)
+  if (!d || d.ativo === false) return null
+  const natureza = { despesa: 'pagar', receita: 'receber' }[tipo]
+  return natureza && d.natureza !== 'ambos' && d.natureza !== natureza ? null : d.id
+}
+function extrasDoPedido(p, ctx, tipo) {
+  const out = {}
+  const despesa = tipo === 'despesa'
+  const grupo = despesa && ctx.gerencialLigado !== false ? grupoDoPedido(ctx, p.grupo_gerencial_id) : null
+  if (grupo) out.grupo_gerencial_id = grupo.id
+  // Conta da devolução do grupo 1: só a conta corrente que o pedido citou (senão, o padrão do formulário).
+  if (grupo?.number === 1 && p.conta_devolucao_id) {
+    const c = ctx.idx.contas.get(p.conta_devolucao_id)
+    if (c && c.type === 'checking' && c.papel !== 'gerencial' && c.active !== false && contaCitada(c, ctx.textoPedido, ctx.apelidos)) {
+      out.conta_devolucao_id = c.id
+    }
+  }
+  if (despesa) {
+    const funcao = p.reserva_funcao_id ? ctx.idx.funcoesReserva?.get(p.reserva_funcao_id) || null : null
+    const citada = p.reserva_conta_id ? ctx.idx.contas.get(p.reserva_conta_id) : null
+    // Só a função citada: a conta de reserva é a dela (se o grupo citado não tiver conta própria).
+    const daFuncao = funcao && !grupo?.default_account_id && ehReserva(ctx.idx.contas.get(funcao.account_id)) ? funcao.account_id : null
+    const reserva = ehReserva(citada) ? citada.id : daFuncao
+    if (reserva) out.reserva_conta_id = reserva
+    if (funcao && funcao.account_id === (reserva || grupo?.default_account_id)) out.reserva_funcao_id = funcao.id
+    if (MES_ISO.test(String(p.fatura || ''))) out.fatura = p.fatura
+  }
+  const doc = tipoDocumentoDoPedido(ctx, p.tipo_documento_id, tipo)
+  if (doc) out.tipo_documento_id = doc
+  const obs = txt(p.observacoes, 300)
+  if (obs) out.observacoes = obs
+  return out
 }
 
 const brl = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -254,11 +316,16 @@ export const ACOES = [
           ...CAMPOS_LANCAMENTO,
           parcelas: { type: ['integer', 'null'], description: 'Compra parcelada no cartão ("em 3x", "3 parcelas"): número de parcelas; o valor é o TOTAL da compra. À vista = null' },
           moeda: { type: 'string', enum: ['BRL', 'USD'], description: 'Moeda do valor citado: "US", "US$", "USD", "U$", "dólares" → USD (valor = o número em dólar, SEM converter); senão BRL' },
+          repetir: { type: ['string', 'null'], enum: [...RECORRENCIAS.filter(r => r !== 'once'), null], description: 'Lançamento que se repete, se citado ("todo mês" → monthly, "quinzenal" → biweekly); senão null' },
         },
         required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca'],
       },
     },
-    validar: (p, ctx, hoje) => validarRegistro(p, ctx, hoje),
+    validar: (p, ctx, hoje) => {
+      const out = validarRegistro(p, ctx, hoje)
+      if (RECORRENCIAS.includes(p.repetir) && p.repetir !== 'once' && !out.parcelas) out.repetir = p.repetir
+      return out
+    },
   },
   {
     id: 'criar_agendamento', nivel: 'criacao', dominio: 'nucleo', permissao: ['agendamentos', 'incluir'],
@@ -471,7 +538,12 @@ export function acoesDoPedido(texto, podeFn) {
 // `gerencial: false` (controle gerencial desligado no ambiente): nem o destino nem a menção a
 // "gerenciais" aparecem.
 export function definicaoFerramenta(acao, podeFn, { gerencial = true } = {}) {
-  if (acao.id !== 'abrir_tela') return { name: acao.id, ...acao.ferramenta }
+  if (acao.id !== 'abrir_tela') {
+    const props = acao.ferramenta?.input_schema?.properties
+    if (gerencial || !props?.grupo_gerencial_id) return { name: acao.id, ...acao.ferramenta }
+    const sem = Object.fromEntries(Object.entries(props).filter(([k]) => !CAMPOS_GERENCIAIS.includes(k)))
+    return { name: acao.id, ...acao.ferramenta, input_schema: { ...acao.ferramenta.input_schema, properties: sem } }
+  }
   const destinos = Object.entries(DESTINOS)
     .filter(([id, d]) => (!podeFn || podeFn(d.permissao[0], d.permissao[1])) && (gerencial || id !== 'gerenciais'))
     .map(([id]) => id)

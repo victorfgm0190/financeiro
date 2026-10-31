@@ -13,6 +13,8 @@ import {
   cartoesParaParcelado, agendamentoParceladoDaSugestao,
 } from '../../lib/assistente'
 import { papelDaContaApp } from '../../lib/assistente/contas'
+import { camposDoPedido, ROTULO_CITADO } from '../../lib/assistente/camposDoPedido'
+import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomeDoFavorecidoNovo, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
@@ -45,7 +47,10 @@ import {
 // Item de um LOTE (LoteAssistente): `guardarAoFechar` false (a lista guarda os não salvos) e
 // `onConcluido('salvo' | 'mesmo' | 'descartado')` avisa a lista do desfecho.
 export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
-  const { transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees } = useApp()
+  const {
+    transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees,
+    gerencialGroups, reserveFunctions, tiposDocumento,
+  } = useApp()
   // Favorecido cadastrado PARECIDO com o nome que veio (a IA não escolheu um existente): só sugere.
   // "Usar" troca o favorecido da prévia e aprende o apelido (ia_apelidos) para casar direto depois.
   const [favorecidoUsado, setFavorecidoUsado] = useState(null)
@@ -65,9 +70,16 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const destaques = camposParaConferir(ferramenta, sugestao)
   // Sem conta na sugestão → "Em qual conta?" (EscolherConta) antes do formulário.
   const [contaEscolhida, setContaEscolhida] = useState(null)
-  const initialBase = semCartao && contaEscolhida
+  const initialSugestao = semCartao && contaEscolhida
     ? agendamentoParceladoDaSugestao(sugestao, contaEscolhida)
     : { ...initialDaSugestao(ferramenta, sugestao), ...(contaEscolhida ? { accountId: contaEscolhida } : {}) }
+  // O que o pedido citou e o formulário tem campo (grupo gerencial, reserva, tipo de documento,
+  // observação, fatura, repetir…), conferido com a conta final; selo "confira" nesses campos.
+  const doPedido = camposDoPedido(sugestao, initialSugestao.accountId, {
+    accounts, categories, gerencialGroups, reserveFunctions, tiposDocumento, gerencialLigado: controleGerencialAtivo(settings),
+  }, { agendamento })
+  const initialBase = { ...initialSugestao, ...doPedido.initial }
+  const destaquesForm = [...destaques, ...doPedido.citados.filter(c => !destaques.includes(c))]
 
   // Compra em dólar: cotação → valor estimado em R$ (+ IOF).
   const emDolar = !agendamento && sugestao.moeda === 'USD' && Number(sugestao.valor_original) > 0
@@ -225,6 +237,9 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           {destaques.length > 0 && (
             <p className="mt-0.5 text-aviso">Confira: {destaques.map(c => ROTULO_CAMPO[c] || c).join(', ')}.</p>
           )}
+          {doPedido.citados.length > 0 && (
+            <p className="mt-0.5 text-texto-2">Do seu pedido: {doPedido.citados.map(c => ROTULO_CITADO[c] || c).join(', ')}.</p>
+          )}
           {sugestao.aviso_parcelas && <p className="mt-0.5 text-aviso">Parcelado: {sugestao.aviso_parcelas} (valor total).</p>}
           {sugestao.linha_digitavel && (
             <p className="mt-0.5 text-aviso break-all">
@@ -273,8 +288,8 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         : emDolar && ptax?.status === 'carregando'
         ? null
         : agendamento
-        ? <ScheduleForm initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
-        : <TransactionForm key={favorecidoUsado || ''} initial={initial} destaques={destaques} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+        ? <ScheduleForm initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
+        : <TransactionForm key={favorecidoUsado || ''} initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}
     </div>

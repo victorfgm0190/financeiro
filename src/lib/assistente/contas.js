@@ -11,10 +11,11 @@
 //                 correntes, inativas): só se o pedido CITOU a conta (nome, apelido ou apelido
 //                 aprendido em ia_apelidos); senão o campo volta vazio e a prévia pergunta.
 // Reservas NÃO são gerenciais: transferir para uma reserva citada é permitido.
-import { normalizarTermo } from './texto.js'
 import { finalCitado, cartoesComFinal } from '../cartaoFinais.js'
 
-const limpo = (s) => normalizarTermo(s).replace(/[^a-z0-9]+/g, ' ').trim()
+// Sem o corte de 120 caracteres do normalizarTermo: num SMS longo a conta citada no fim ("…, devolver
+// no Nubank") também conta.
+const limpo = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 
 // O termo aparece no texto como palavra(s) inteira(s)? "Ger. Itaupers" ~ "no ger itaupers".
 export function citado(texto, termo) {

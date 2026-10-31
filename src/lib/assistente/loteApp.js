@@ -20,6 +20,9 @@ export const MOTIVOS = {
   transferencia: 'transferência',
   agendamentoNovo: 'agendamento',
   gerencial: 'grupo gerencial',
+  reserva: 'reserva',
+  fatura: 'fatura de referência',
+  repetir: 'repetir',
 }
 
 // Sugestão do item com a conta escolhida na lista (vale como citada).
@@ -51,7 +54,13 @@ export function pendenciasDoItem(item, ctx) {
   else if (ctx.getNextOccurrences && agendamentosParecidos(lanc, ctx).length) out.push(MOTIVOS.agendamentoParecido)
   // Só sugestão: favorecido cadastrado parecido com o nome que veio → revisar ("Usar?" na prévia).
   if (favorecidosParecidos(p, ctx.payees || []).length) out.push(MOTIVOS.favorecido)
-  if (conta?.type === 'credit' && lanc.type === 'expense' && grupoGeridoDaCategoria(p.categoria_id, ctx)) out.push(MOTIVOS.gerencial)
+  const cartaoDespesa = conta?.type === 'credit' && lanc.type === 'expense'
+  if (cartaoDespesa && grupoGeridoDaCategoria(p.categoria_id, ctx)) out.push(MOTIVOS.gerencial)
+  // Instruções do pedido que só o formulário aplica (lib/assistente/camposDoPedido.js): revisão.
+  if (cartaoDespesa && ctx.gerencialLigado !== false && p.grupo_gerencial_id && grupoGerido(p.grupo_gerencial_id, ctx)) out.push(MOTIVOS.gerencial)
+  if (lanc.type === 'expense' && (p.reserva_conta_id || p.reserva_funcao_id)) out.push(MOTIVOS.reserva)
+  if (cartaoDespesa && p.fatura) out.push(MOTIVOS.fatura)
+  if (p.repetir) out.push(MOTIVOS.repetir)
   return [...new Set(out)]
 }
 
@@ -60,7 +69,10 @@ export function pendenciasDoItem(item, ctx) {
 function grupoGeridoDaCategoria(categoriaId, ctx) {
   if (ctx.gerencialLigado === false) return false
   const cat = (ctx.categories || []).find(c => c.id === categoriaId)
-  const g = cat?.defaultGerencialGroup ? (ctx.gerencialGroups || []).find(x => x.id === cat.defaultGerencialGroup) : null
+  return cat?.defaultGerencialGroup ? grupoGerido(cat.defaultGerencialGroup, ctx) : false
+}
+const grupoGerido = (grupoId, ctx) => {
+  const g = (ctx.gerencialGroups || []).find(x => x.id === grupoId)
   return !!g && g.number !== 'D'
 }
 
@@ -74,6 +86,8 @@ export function lancamentoDireto(sugestao, { accounts = [], gerencialGroups = []
     type, accountId: p.conta_id, amount: Math.round(Number(p.valor) * 100) / 100, date: p.data,
     description: p.descricao || p.favorecido_novo || '', payee: p.favorecido_id || p.favorecido_novo || '',
     categoryId: p.categoria_id || '', costCenter: p.centro_custo_id || '', accountType: conta?.type,
+    ...(p.tipo_documento_id ? { tipoDocumentoId: p.tipo_documento_id } : {}),
+    ...(p.observacoes ? { notes: p.observacoes } : {}),
     ...(cartaoGerencial ? { grupoGerencial: gerencialGroups.find(g => g.number === 'D')?.id || 'grp_D' } : {}),
   }
 }

@@ -5,7 +5,8 @@ import { opcoesTipoDocumento, naturezaDoMovimento } from '../../lib/tiposDocumen
 // Select "Tipo de documento" dos formulários de agendamento e lançamento. Filtra pela natureza
 // (despesa → pagar/ambos; receita → receber/ambos; transferência → todos). O valor já gravado
 // aparece sempre, mesmo inativo. Vazio = "Sem tipo" (permitido na edição).
-export default function TipoDocumentoSelect({ value, onChange, tipoMov, required = false, erro = '', label = 'Tipo de documento' }) {
+// `confira`: selo da prévia do Assistente (campo preenchido pelo pedido).
+export default function TipoDocumentoSelect({ value, onChange, tipoMov, required = false, erro = '', label = 'Tipo de documento', confira = false }) {
   const { tiposDocumento } = useApp()
   const opcoes = useMemo(
     () => opcoesTipoDocumento(tiposDocumento, naturezaDoMovimento(tipoMov), value || null),
@@ -13,7 +14,10 @@ export default function TipoDocumentoSelect({ value, onChange, tipoMov, required
   )
   return (
     <div>
-      <label className="label">{label}{required ? ' *' : ''}</label>
+      <label className="label">
+        {label}{required ? ' *' : ''}
+        {confira && <span className="ml-1.5 text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}
+      </label>
       <select
         className={`input ${erro ? 'border-perigo' : ''}`}
         value={value || ''}

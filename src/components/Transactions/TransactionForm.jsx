@@ -160,6 +160,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   )
 
   const [gerencialContaId, setGerencialContaId] = useState(() => {
+    // Prévia do Assistente: a conta da devolução citada no pedido vence a última usada.
+    if (initial?.gerencialContaId && accounts.some(a => a.id === initial.gerencialContaId)) return initial.gerencialContaId
     const saved = localStorage.getItem(GERENCIAL_CONTA_KEY)
     if (saved && accounts.some(a => a.id === saved)) return saved
     // Conta central do perfil do cartão do lançamento; sem ela, vazio (o aviso aparece no bloco G).
@@ -205,8 +207,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
     tipoDocumentoId: initial?.tipoDocumentoId || '',
-    repeat: false,
-    repeatFrequency: 'monthly',
+    // Lançamento novo pode vir repetindo (prévia do Assistente: "todo mês").
+    repeat: !initial?.id && !!initial?.repeatFrequency,
+    repeatFrequency: (!initial?.id && initial?.repeatFrequency) || 'monthly',
     repeatOccurrenceType: 'continuous',
     repeatInstallments: 2,
     repeatRemindDaysBefore: 0,
@@ -1711,6 +1714,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         tipoMov={form.type}
         required={tipoDocObrigatorio}
         erro={erroTipoDoc}
+        confira={!!destaques?.includes('tipoDocumentoId')}
       />
 
       <div>
@@ -1888,7 +1892,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       )}
 
       <div>
-        <label className="label">Observações</label>
+        <label className="label">Observações{confira('notes')}</label>
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
 
@@ -1920,7 +1924,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           </label>
           {form.useReserva && (
             <div className="space-y-2">
-              <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva</label>
+              <label className="label" style={{ marginBottom: 0 }}>Conta de Reserva{confira('reservaAccountId')}</label>
               <select
                 className="input"
                 value={form.reservaAccountId}
@@ -1938,7 +1942,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </select>
               {form.reservaAccountId && (reservaContaFuncs.length > 0 || funcaoForaDaConta) && (
                 <>
-                  <label className="label" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                  <label className="label" style={{ marginBottom: 0 }}>Função de Reserva{confira('reservaFuncaoId')}</label>
                   <select
                     className="input"
                     value={form.reservaFuncaoId}
@@ -2014,7 +2018,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {isCredit && form.type === 'expense' && (
         <div>
-          <label className="label">Fatura de referência</label>
+          <label className="label">Fatura de referência{confira('faturaMonthYear')}</label>
           <select
             className="input disabled:opacity-60"
             value={form.faturaMonthYear}
@@ -2044,7 +2048,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
 
       {showGerencial && (
         <div className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">
-          <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial</label>
+          <label className="label" style={{ marginBottom: 0 }}>Classificação Gerencial{confira('grupoGerencial')}</label>
           {grupoTravado ? (
             <div className="input flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90 cursor-default" aria-readonly="true">
               <span className="text-texto-1">{selectedGerencialGroup?.number} · {selectedGerencialGroup?.name}</span>
@@ -2078,7 +2082,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                     <p className="text-xs text-aviso">{contaCentralPara(accounts, profiles, selectedAccount).erro}</p>
                   )}
                   <div>
-                    <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino</label>
+                    <label className="label text-xs uppercase tracking-wide text-reserva">Conta Destino{confira('gerencialContaId')}</label>
                     <select
                       className="input"
                       value={gerencialContaId}
@@ -2161,7 +2165,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
             </div>
             <Repeat size={14} className="text-texto-2 shrink-0" />
-            <span className="text-sm text-texto-2 select-none">Repetir este lançamento</span>
+            <span className="text-sm text-texto-2 select-none">Repetir este lançamento{confira('repeat')}</span>
             <ShortcutHint actionId="lancamento.toggleRepetir" habilitado={atalhosForm} className="text-texto-2" />
           </label>
 

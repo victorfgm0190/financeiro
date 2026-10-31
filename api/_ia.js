@@ -91,6 +91,12 @@ const somaDias = (ymd, dias) => {
 const categoriaDosPerfis = (perfilIds, perfis) =>
   !perfis || !Array.isArray(perfilIds) || perfilIds.length === 0 || perfilIds.some(p => perfis.includes(p))
 
+// Mesmos padrões do app (AppContext defaultData) quando o ambiente ainda não gravou os grupos.
+const GRUPOS_PADRAO = [
+  { id: 'grp_1', number: 1, name: 'Gerencial', alias: 'G', default_account_id: null },
+  { id: 'grp_D', number: 'D', name: 'Despesa', alias: 'D', default_account_id: null },
+]
+
 // Cadastros do ambiente, já recortados pelos perfis permitidos do usuário.
 // Contas: todas as visíveis (inclusive inativas), cada uma com `papel` (lib/assistente/contas.js):
 // gerencial (nunca grava) | sugerivel (cartões "Uso comum" + favorita do perfil ativo) | citar.
@@ -118,11 +124,32 @@ export async function montarContexto(user, q = query, { perfilAtivo = null } = {
   const [cfg] = await q('SELECT cost_centers, controle_gerencial FROM configuracoes WHERE id = 1')
   const centros = Array.isArray(cfg?.cost_centers) ? cfg.cost_centers.filter(x => typeof x === 'string' && x.trim()) : []
 
+  // Controle gerencial do ambiente (null = ligado, como no app): desligado, o prompt não fala dele.
+  const gerencialLigado = cfg?.controle_gerencial !== false
+  // Grupos gerenciais (tabela reservas_funcoes; vazia → os padrões do app), funções de reserva das
+  // contas visíveis e tipos de documento ativos: instruções do pedido (regra 19).
+  const opcional = async (sql) => {
+    try { return await q(sql) } catch (err) {
+      if (err?.code === '42P01' || err?.code === '42703') return []
+      throw err
+    }
+  }
+  const gruposRows = gerencialLigado ? await opcional('SELECT id, number, name, alias, default_account_id FROM reservas_funcoes') : []
+  const grupos = gerencialLigado ? (gruposRows.length ? gruposRows : GRUPOS_PADRAO) : []
+  const visivel = new Set(contas.map(c => c.id))
+  const funcoesReserva = (await opcional('SELECT id, name, account_id FROM reserve_functions ORDER BY ordem, name'))
+    .filter(f => visivel.has(f.account_id))
+  const tiposDocumento = (await opcional('SELECT id, nome, sigla, natureza, ativo FROM tipos_documento ORDER BY ordem, nome'))
+    .filter(t => t.ativo !== false)
+
   const idx = {
     contas: new Map(contas.map(c => [c.id, c])),
     categorias: new Map(categorias.map(c => [c.id, c])),
     favorecidos: new Map(favorecidos.map(n => [normalizarTermo(n), n])),
     centros: new Map(centros.map(n => [normalizarTermo(n), n])),
+    grupos: new Map(grupos.map(g => [g.id, g])),
+    funcoesReserva: new Map(funcoesReserva.map(f => [f.id, f])),
+    tiposDocumento: new Map(tiposDocumento.map(t => [t.id, t])),
   }
 
   // Apelidos aprendidos: só os que ainda apontam para um cadastro existente e visível
@@ -142,9 +169,10 @@ export async function montarContexto(user, q = query, { perfilAtivo = null } = {
     favorecidos: (await top('payee')).map(r => idx.favorecidos.get(normalizarTermo(r.ref))).filter(Boolean).slice(0, 30),
   }
 
-  // Controle gerencial do ambiente (null = ligado, como no app): desligado, o prompt não fala dele.
-  const gerencialLigado = cfg?.controle_gerencial !== false
-  return { contas, categorias, favorecidos, centros, apelidos, maisUsados, idx, perfilAtivo: perfilValido ? perfilAtivo : null, gerencialLigado }
+  return {
+    contas, categorias, favorecidos, centros, apelidos, maisUsados, idx, perfilAtivo: perfilValido ? perfilAtivo : null, gerencialLigado,
+    grupos, funcoesReserva, tiposDocumento,
+  }
 }
 
 // ref_id de um apelido ainda válido? Devolve o valor canônico (nome exato do favorecido) ou null.
@@ -174,6 +202,19 @@ export function textoCadastros(ctx) {
   linhas.push(ctx.favorecidos.join(' ; ') || '(nenhum)')
   linhas.push('', '## CENTROS DE CUSTO (o id é o próprio nome)')
   linhas.push(ctx.centros.join(' ; ') || '(nenhum)')
+  if (ctx.gerencialLigado !== false && ctx.grupos?.length) {
+    const nomeConta = (id) => { const c = ctx.idx?.contas?.get(id); return c ? (c.apelido || c.name) : '-' }
+    linhas.push('', '## GRUPOS GERENCIAIS — classificação da despesa no cartão (id | número | nome | apelido | conta de origem)')
+    for (const g of ctx.grupos) linhas.push(`${g.id} | ${g.number} | ${g.name} | ${g.alias || '-'} | ${g.default_account_id ? nomeConta(g.default_account_id) : '-'}`)
+  }
+  if (ctx.funcoesReserva?.length) {
+    linhas.push('', '## FUNÇÕES DE RESERVA (id | nome | conta de reserva id)')
+    for (const f of ctx.funcoesReserva) linhas.push(`${f.id} | ${f.name} | ${f.account_id}`)
+  }
+  if (ctx.tiposDocumento?.length) {
+    linhas.push('', '## TIPOS DE DOCUMENTO (id | sigla | nome | natureza)')
+    for (const t of ctx.tiposDocumento) linhas.push(`${t.id} | ${t.sigla || '-'} | ${t.nome} | ${t.natureza}`)
+  }
   linhas.push('', '## APELIDOS APRENDIDOS (tipo | termo | id) — têm prioridade sobre o seu palpite')
   for (const a of ctx.apelidos) linhas.push(`${a.tipo} | ${a.termo} | ${a.ref_id}`)
   if (!ctx.apelidos.length) linhas.push('(nenhum)')
@@ -183,6 +224,10 @@ export function textoCadastros(ctx) {
   linhas.push(`favorecidos: ${ctx.maisUsados.favorecidos.join(' ; ') || '-'}`)
   return linhas.join('\n')
 }
+
+// Regra 19: instruções explícitas do pedido preenchem o formulário (variante sem gerencial abaixo).
+const REGRA_19 = `19. USE TODA INSTRUÇÃO EXPLÍCITA do usuário para preencher os campos — não ignore pedidos como "lançar como gerencial", "despesa gerencial", "grupo 2", "centro de custo X", "tipo de documento NF", "na fatura de dezembro", "observação: …", "todo mês", "pago com a reserva X", "função IPVA". "Despesa gerencial", "como gerencial", o nome ou o número de um grupo da lista GRUPOS GERENCIAIS = grupo_gerencial_id: é a CLASSIFICAÇÃO da despesa, NÃO uma conta (a conta/cartão continua o da compra; nunca use uma conta gerencial por causa disso). Grupo 1 com "devolver no <conta>" → conta_devolucao_id. Em vários movimentos, uma instrução geral ("todos como gerencial", "tudo no centro de custo X") vale para TODOS os itens. O que não foi citado fica null: o app usa o padrão.`
+const REGRA_19_SEM = `19. USE TODA INSTRUÇÃO EXPLÍCITA do usuário para preencher os campos — não ignore pedidos como "centro de custo X", "tipo de documento NF", "na fatura de dezembro", "observação: …", "todo mês", "pago com a reserva X", "função IPVA". Em vários movimentos, uma instrução geral ("tudo no centro de custo X") vale para TODOS os itens. O que não foi citado fica null: o app usa o padrão.`
 
 // Instruções gerais (estáveis → cache). O que cada ferramenta faz está na descrição dela, no
 // registro central (src/lib/assistente/acoes.js); o backend só oferece as do contexto do pedido.
@@ -195,7 +240,7 @@ Regras:
 2. Os APELIDOS APRENDIDOS têm prioridade sobre o seu palpite: se o termo do apelido aparece no pedido, use o id dele.
 3. Entenda sinônimos e variações (ex.: "combustível", "abastecer", "posto" → categoria de Gasolina/Combustível; "mercado" → Supermercado). Na dúvida entre categorias parecidas, prefira a mais usada nos últimos 90 dias.
 4. Data padrão = a data de hoje informada no pedido. "Ontem", "dia 5" etc. são relativos a ela. Formato YYYY-MM-DD.
-5. Se não tiver certeza de um campo, deixe null e dê confiança baixa (< 0.5). Não invente.
+5. Se não tiver certeza de um campo, deixe null e dê confiança baixa (< 0.5). Não invente. Em confianca mande SÓ os campos com confiança menor que 1 ({} quando não há dúvida): campo ausente = certeza.
 6. Favorecido que não existe no cadastro: deixe favorecido_id null e coloque o nome em favorecido_novo.
 7. Em "termos", copie o trecho EXATO do pedido que levou a cada escolha (ex.: categoria: "combustível").
 8. Descrição: curta e clara (ex.: "Combustível", "Conta de luz"), sem o valor.
@@ -213,11 +258,12 @@ Regras:
 15. COMPRA PARCELADA (SMS/notificação de cartão do Itaú, Nubank, BB… ou frase livre): é registrar_lancamento (despesa); SMS → o cartão do "final NNNN" e a data da mensagem. Parcelas = N quando o texto diz "em 3x", "3 parcelas", "parcelado em 3", "parcelei em 4", "em 4 vezes", "4 vezes", "4x", "dividi em 4", "em quatro vezes" (à vista → null). Valor = o TOTAL da compra: "R$ 350 em 4 vezes", "parcelei 350 em 4x" e o valor do SMS são o TOTAL (350); "4 vezes de 350", "4 parcelas de R$ 350", "4x de 350" dão o valor DA PARCELA → valor = 4 × 350 = 1400. Na dúvida, use o TOTAL com confiança de valor baixa. Ex.: "parcelei R$350 no posto de gasolina em 4 vezes" → valor 350, parcelas 4, categoria de Combustível; "comprei um tênis 4x de 150 na Centauro" → valor 600, parcelas 4, favorecido Centauro. Descrição e favorecido = o estabelecimento (ex.: "RAIA1476"), nunca "Compra em 3x" ou "Compra aprovada".
 16. COMPRA EM MOEDA ESTRANGEIRA (SMS/foto de cartão "valor US 20,00", "US$ 20", "USD 20", "U$ 20", "20 dólares"): registrar_lancamento com moeda "USD" e valor = o número NA MOEDA ORIGINAL, como escrito (US 20,00 → valor 20). NUNCA converta para real nem some IOF: o app busca a cotação e calcula. Sem moeda estrangeira citada → moeda "BRL". Ex.: "Compra aprovada no seu PERSON BLACK PONTOS final 2122 - VERCEL INC. valor US 20,00 em 23/10" → despesa, moeda USD, valor 20, final_cartao 2122, data 23/10, favorecido/descrição "VERCEL INC.".
 17. VÁRIOS MOVIMENTOS NUM PEDIDO (em linhas, separados por vírgula, "/" ou "e"): chame registrar_lancamento (ou criar_agendamento) UMA VEZ POR MOVIMENTO citado, todas na mesma resposta (até 10), cada uma com o seu valor, categoria e descrição. Conta ou cartão citado uma vez vale para todos ("gastei 50 no uber e 80 no ifood no nubank" → os dois no Nubank). Um movimento só → uma chamada, como sempre. Com vários movimentos, em CADA chamada: total_encontrado = quantos movimentos há no pedido inteiro (mesmo acima de 10); chamadas na ordem em que os movimentos aparecem no texto; SEM termos; em confianca SÓ os campos com confiança menor que 1 ({} quando não há dúvida).
-18. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.`
+18. Não dê conselho financeiro nem de investimento e não responda assuntos fora do Finup. Se pedirem, use perguntar explicando o que você faz.
+${REGRA_19}`
 
 // Instruções conforme o controle gerencial do ambiente: desligado, nenhuma menção a gerencial
 // (duas variantes estáveis → o cache de prompt continua valendo por variante).
-const SEM_GERENCIAL = INSTRUCOES.replace(', gerenciais,', ',').replace(' "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido.', '')
+const SEM_GERENCIAL = INSTRUCOES.replace(', gerenciais,', ',').replace(REGRA_19, REGRA_19_SEM).replace(' "GERENCIAL": NUNCA use em registrar_lancamento, criar_agendamento, baixar_agendamento nem como origem/destino de transferência — são movimentadas só pela classificação gerencial; nunca troque uma conta gerencial citada pelo cartão de nome parecido.', '')
 export const instrucoes = (gerencialLigado = true) => (gerencialLigado ? INSTRUCOES : SEM_GERENCIAL)
 
 // Todas as ferramentas do registro (o pedido usa só as do contexto: acoesDoPedido).

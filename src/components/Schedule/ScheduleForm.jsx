@@ -1080,6 +1080,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             tipoMov={form.transactionType}
             required={tipoDocObrigatorio}
             erro={erroTipoDoc}
+            confira={!!destaques?.includes('tipoDocumentoId')}
           />
         </div>
 
@@ -1256,6 +1257,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
           <div className="sm:col-span-2 bg-surface-2/40 rounded-xl p-3.5 space-y-2">
             <p className="text-[11px] font-medium text-texto-3 uppercase tracking-wider flex items-center">
               Classificação Gerencial <Tooltip text={TIPS.gerencial} />
+              {destaques?.includes('grupoGerencial') && <span className="ml-1.5 normal-case tracking-normal text-[11px] font-medium text-aviso" title="Sugestão do assistente: confira">● confira</span>}
             </p>
             <select
               className="input"
@@ -1293,7 +1295,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             {/* Função de reserva do bucket a resgatar — só p/ despesa em cartão com grupo numerado */}
             {showFuncaoReserva && (
               <div>
-                <label className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>Função de Reserva</label>
+                <label className="label text-xs uppercase tracking-wide text-reserva" style={{ marginBottom: 0 }}>Função de Reserva{destaques?.includes('reservaFuncaoId') && <span className="ml-1.5 normal-case tracking-normal text-[11px] font-medium text-aviso">● confira</span>}</label>
                 <select
                   className="input"
                   value={form.reservaFuncaoId || ''}
