@@ -1154,6 +1154,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             onNumero={v => set('numeroContrato', v)}
             schedule={initial?.id ? schedules.find(s => s.id === initial.id) || initial : null}
             confira={!!destaques?.includes('numeroContrato')}
+            tipoDocumentoId={form.tipoDocumentoId}
           />
         )}
 

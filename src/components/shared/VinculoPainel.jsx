@@ -65,7 +65,7 @@ export default function VinculoPainel({ tx, onClose, onToast }) {
       </p>
       <div className="relative">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-texto-3" />
-        <input className="input pl-8 text-sm" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar agendamento ou parcela" aria-label="Buscar" />
+        <input className="input pl-8 text-sm" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar agendamento ou parcela por descrição ou favorecido" aria-label="Buscar" />
       </div>
       {!escolhido && (
         candidatos.length === 0

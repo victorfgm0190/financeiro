@@ -21,7 +21,7 @@ import FavorecidoAutocomplete from '../shared/FavorecidoAutocomplete'
 import TipoDocumentoSelect from '../shared/TipoDocumentoSelect'
 import TransferenciaPerfisCategorias from '../shared/TransferenciaPerfisCategorias'
 import { isTransferenciaEntrePerfis } from '../../lib/transferenciaPerfis'
-import { tipoDocumentoObrigatorio } from '../../lib/tiposDocumento'
+import { tipoDocumentoObrigatorio, mostrarNumeroContrato } from '../../lib/tiposDocumento'
 import { camposHerdadosParcelaFilha, novoIdAgendamento } from '../../lib/herancaCampos'
 import EscopoSerieDialog from '../shared/EscopoSerieDialog'
 import { HistoricoPainel } from '../shared/HistoricoPainel'
@@ -265,6 +265,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     : null)
   // Modo rápido (mobile): "Mais opções" troca para o formulário completo.
   const [maisOpcoes, setMaisOpcoes] = useState(false)
+  const [pedeNumeroContrato, setPedeNumeroContrato] = useState(false)
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
   const [erroRateio, setErroRateio] = useState('')
@@ -1962,12 +1963,16 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
 
-      {form.type !== 'transfer' && (
+      {form.type !== 'transfer' && (mostrarNumeroContrato({ tipoDocumentoId: form.tipoDocumentoId, numeroContrato: form.numeroContrato, tipos: tiposDocumento, pedido: pedeNumeroContrato }) ? (
         <div>
           <label className="label" htmlFor="tx-numero-contrato">Nº do contrato{confira('numeroContrato')}</label>
-          <input id="tx-numero-contrato" className="input" value={form.numeroContrato} maxLength={40} onChange={e => set('numeroContrato', e.target.value)} placeholder="Opcional — ex.: o nº impresso no boleto" />
+          <input id="tx-numero-contrato" className="input" value={form.numeroContrato} maxLength={40} onChange={e => set('numeroContrato', e.target.value)} placeholder="Número do contrato do documento (opcional)" />
         </div>
-      )}
+      ) : (
+        <button type="button" className="text-xs text-primary-fg hover:underline min-h-[32px]" onClick={() => setPedeNumeroContrato(true)}>
+          + Nº do contrato
+        </button>
+      ))}
 
       {form.type === 'expense' && reservaAccounts.length > 0 && (
         <div data-bloco-switch className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">

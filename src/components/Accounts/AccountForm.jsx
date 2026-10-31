@@ -525,7 +525,7 @@ export default function AccountForm({ initial, onClose }) {
             <div>
               <label className="label">Spread do dólar (%)</label>
               <input className="input" inputMode="decimal" value={form.spreadCambio}
-                onChange={e => set('spreadCambio', e.target.value.replace(/[^\d.,]/g, ''))} placeholder="2,5" />
+                onChange={e => set('spreadCambio', e.target.value.replace(/[^\d.,]/g, ''))} placeholder="Percentual sobre a cotação (opcional)" />
             </div>
             <label className="flex items-center gap-2 text-sm text-texto-2 min-h-[40px] cursor-pointer">
               <input type="checkbox" className="w-4 h-4 accent-primary" checked={form.iofLinhaSeparada}

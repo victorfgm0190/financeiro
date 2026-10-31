@@ -5,14 +5,18 @@ import VinculoModal from '../Contratos/VinculoModal'
 import { PAPEIS } from '../../lib/contratos/parcelas'
 import { contratoPorNumero } from '../../lib/contratos/numero'
 import { computeOccurrences } from '../../lib/occurrences'
+import { mostrarNumeroContrato } from '../../lib/tiposDocumento'
 
 const rotulo = (c) => [c.numero ? `nº ${c.numero}` : null, c.objeto || c.favorecido].filter(Boolean).join(' · ') || 'Contrato'
 
 // Nº do contrato do agendamento (campo próprio) + vínculo MANUAL a um contrato cadastrado. O vínculo
 // reaproveita o do módulo Contratos (VinculoModal → vincularEGerarContrato): mesma prévia das parcelas,
 // mesmo evento na linha do tempo do contrato. Só em agendamento já salvo e com permissão de contratos.
-export default function ContratoDoAgendamento({ numero, onNumero, schedule = null, confira = false }) {
-  const { contratos = [], contratosHabilitado, contratoPorId, abrirFichaContrato, pode } = useApp()
+export default function ContratoDoAgendamento({ numero, onNumero, schedule = null, confira = false, tipoDocumentoId = null }) {
+  const { contratos = [], contratosHabilitado, contratoPorId, abrirFichaContrato, pode, tiposDocumento = [] } = useApp()
+  // Nº do contrato: só com tipo de documento que costuma tê-lo, já preenchido ou pedido (mesma regra do lançamento).
+  const [pedido, setPedido] = useState(false)
+  const mostrar = mostrarNumeroContrato({ tipoDocumentoId, numeroContrato: numero, tipos: tiposDocumento, pedido })
   const tipo = schedule?.transactionType === 'income' ? 'receber' : 'pagar'
   const opcoes = useMemo(() => (contratos || []).filter(c => !c.tipo || c.tipo === tipo), [contratos, tipo])
   const sugerido = contratoPorNumero(numero, opcoes, { tipoMov: schedule?.transactionType })
@@ -40,13 +44,19 @@ export default function ContratoDoAgendamento({ numero, onNumero, schedule = nul
 
   return (
     <div className="space-y-2">
-      <div>
-        <label className="label" htmlFor="ag-numero-contrato">
-          Nº do contrato{confira && <span className="ml-1 text-[10px] font-semibold text-aviso">confira</span>}
-        </label>
-        <input id="ag-numero-contrato" className="input" value={numero || ''} maxLength={40}
-          onChange={e => onNumero(e.target.value)} placeholder="Opcional — ex.: o nº impresso no boleto" />
-      </div>
+      {mostrar ? (
+        <div>
+          <label className="label" htmlFor="ag-numero-contrato">
+            Nº do contrato{confira && <span className="ml-1 text-[10px] font-semibold text-aviso">confira</span>}
+          </label>
+          <input id="ag-numero-contrato" className="input" value={numero || ''} maxLength={40}
+            onChange={e => onNumero(e.target.value)} placeholder="Número do contrato do documento (opcional)" />
+        </div>
+      ) : (
+        <button type="button" className="text-xs text-primary-fg hover:underline min-h-[32px]" onClick={() => setPedido(true)}>
+          + Nº do contrato
+        </button>
+      )}
       {vinculado && (
         <p className="text-xs text-texto-2 flex flex-wrap items-center gap-1.5">
           <FileSignature size={13} className="text-primary-fg" /> Vinculado ao contrato

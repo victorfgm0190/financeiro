@@ -160,3 +160,20 @@ export function itemDaLinhaFluxo(r, { txPorId, agPorId, contaPorId } = {}) {
   }
   return null
 }
+
+// Tipo de documento que costuma trazer nº de contrato (boleto, fatura, carnê, cobrança…), pelo NOME
+// ou SIGLA do cadastro do cliente — vocabulário genérico, nenhum tipo fixo. A fatura de CARTÃO (tipo
+// sistema CC) não tem contrato.
+const RE_TIPO_COM_CONTRATO = /\b(boletos?|faturas?|carnes?|contratos?|cobrancas?|mensalidades?|duplicatas?|bol|fat|car)\b/
+export function tipoDocumentoComContrato(tipoId, tipos = []) {
+  const t = tipoId ? (tipos || []).find(x => x.id === tipoId) : null
+  if (!t || t.sigla === 'CC') return false
+  const nome = `${t.nome || ''} ${t.sigla || ''}`.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  return RE_TIPO_COM_CONTRATO.test(nome)
+}
+
+// "Nº do contrato" no formulário: aparece com tipo de documento que costuma tê-lo, já preenchido
+// (Assistente/edição) ou quando o usuário pede ("+ Nº do contrato"). Mesma regra no lançamento e
+// no agendamento.
+export const mostrarNumeroContrato = ({ tipoDocumentoId, numeroContrato, tipos, pedido = false }) =>
+  !!(pedido || String(numeroContrato || '').trim() || tipoDocumentoComContrato(tipoDocumentoId, tipos))

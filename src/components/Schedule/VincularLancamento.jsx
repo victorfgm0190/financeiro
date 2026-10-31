@@ -35,7 +35,7 @@ export default function VincularLancamento({ schedule, data, transactions, sched
         <div className="px-3 pb-2.5 space-y-1.5">
           <div className="relative">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-texto-3" />
-            <input className="input pl-7 py-1.5 text-xs" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar lançamento" aria-label="Buscar lançamento" />
+            <input className="input pl-7 py-1.5 text-xs" value={busca} onChange={e => { setBusca(e.target.value); setEscolhido(null) }} placeholder="Buscar lançamento por descrição ou favorecido" aria-label="Buscar lançamento" />
           </div>
           {escolhido ? (
             <div className="rounded border border-aviso/40 bg-aviso/10 p-2 space-y-1.5 text-xs">
