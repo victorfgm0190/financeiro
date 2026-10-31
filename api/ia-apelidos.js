@@ -1,7 +1,7 @@
 import { query, parseBody } from './_db.js'
 import { requireAuth } from './_auth.js'
 import { comAmbiente } from './_ambiente.js'
-import { ensureIaSchema, normalizarTermo, TIPOS_APELIDO } from './_ia.js'
+import { ensureIaSchema, normalizarTermo, TIPOS_APELIDO, TIPOS_PREFERENCIA } from './_ia.js'
 
 // APELIDOS DA IA: termo do usuário → cadastro (categoria/conta: id; favorecido: nome). O assistente
 // os usa com prioridade sobre o palpite; apelido que aponta para cadastro apagado/renomeado é
@@ -19,6 +19,23 @@ function queryParam(req, nome) {
 }
 
 const refLimpo = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null)
+
+// Upsert dos apelidos ({ tipo, termo, ref } já normalizados). Apelido comum: usos + 1 e o ref novo.
+// Preferência (acao_despesa/recorrencia): escolha DIFERENTE da gravada recomeça a contagem em 1.
+export async function upsertApelidos(q, itens) {
+  const salvos = []
+  for (const i of itens) {
+    const [row] = await q(
+      `INSERT INTO ia_apelidos (tipo, termo, ref_id) VALUES ($1, $2, $3)
+       ON CONFLICT (tipo, termo) DO UPDATE
+         SET ref_id = EXCLUDED.ref_id,
+             usos = CASE WHEN $4::boolean AND ia_apelidos.ref_id IS DISTINCT FROM EXCLUDED.ref_id THEN 1 ELSE ia_apelidos.usos + 1 END,
+             updated_at = now()
+       RETURNING ${COLS}`, [i.tipo, i.termo, i.ref, TIPOS_PREFERENCIA.includes(i.tipo)])
+    salvos.push(row)
+  }
+  return salvos
+}
 
 async function handler(req, res) {
   if (!requireAuth(req, res)) return
@@ -38,15 +55,7 @@ async function handler(req, res) {
         .filter(i => TIPOS_APELIDO.includes(i.tipo) && i.termo && i.ref)
         .slice(0, 10)
       if (!itens.length) return res.status(400).json({ error: 'Nenhum apelido válido' })
-      const salvos = []
-      for (const i of itens) {
-        const [row] = await query(
-          `INSERT INTO ia_apelidos (tipo, termo, ref_id) VALUES ($1, $2, $3)
-           ON CONFLICT (tipo, termo) DO UPDATE
-             SET ref_id = EXCLUDED.ref_id, usos = ia_apelidos.usos + 1, updated_at = now()
-           RETURNING ${COLS}`, [i.tipo, i.termo, i.ref])
-        salvos.push(row)
-      }
+      const salvos = await upsertApelidos(query, itens)
       return res.json({ ok: true, apelidos: salvos })
     }
 

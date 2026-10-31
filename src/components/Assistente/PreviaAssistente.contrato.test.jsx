@@ -6,10 +6,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
 const app = vi.hoisted(() => ({}))
+const ia = vi.hoisted(() => ({ apelidos: [], aprender: null }))
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
 vi.mock('../../lib/assistenteApi', () => ({
-  aprenderApelidos: async () => ({}), concluirPreLancamento: async () => ({}), listarPreLancamentos: async () => [],
-  guardarPreLancamento: async () => ({}), cotacaoDolar: async () => ({}), listarApelidos: async () => [],
+  aprenderApelidos: (...a) => ia.aprender(...a), concluirPreLancamento: async () => ({}), listarPreLancamentos: async () => [],
+  guardarPreLancamento: async () => ({}), cotacaoDolar: async () => ({}), listarApelidos: async () => ia.apelidos,
 }))
 vi.mock('../Transactions/TransactionForm', () => ({
   default: ({ initial, onSalvo, rotuloGravar }) => (
@@ -38,7 +39,8 @@ const abrir = (s, texto = 'foto do boleto') =>
   render(<PreviaAssistente ferramenta="registrar_lancamento" sugestao={s} textoOriginal={texto} onClose={() => {}} onToast={() => {}} guardarAoFechar={false} />)
 const boleto = { natureza: 'boleto', numero_contrato: '12345', vencimento: '2026-11-12', pago: true }
 
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); ia.apelidos = [] })
+ia.aprender = vi.fn(async () => ({}))
 
 describe('Prévia: nº do contrato e contrato cadastrado (cenário 8)', () => {
   it('contrato cadastrado com o nº → cartão "Vincular ao contrato X" marcado; nº no campo próprio, descrição/observação limpas', () => {
@@ -85,5 +87,27 @@ describe('Prévia: baixa sugerida como cartão (item 9)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Dar baixa no agendamento/ }))
     fireEvent.click(screen.getByRole('button', { name: /Registrar|Confirmar tudo/ }))
     expect(app.vincularLancamento).not.toHaveBeenCalled()
+  })
+})
+
+describe('Prévia: preferência aprendida (cenário 10)', () => {
+  const academia = () => sug({ descricao: 'Mensalidade', favorecido_novo: null, documento: { natureza: 'boleto', pago: true } })
+  it('preferência ativa do perfil → "Só despesa" vem sugerido, com o motivo', async () => {
+    base({ activeProfileId: 'perfil_pf' })
+    ia.apelidos = [{ tipo: 'acao_despesa', termo: 'perfil_pf|f:academia x', ref_id: 'so_despesa', usos: 2 }]
+    render(<PreviaAssistente ferramenta="registrar_lancamento" sugestao={{ ...academia(), favorecido_id: 'Academia X' }} textoOriginal="boleto academia" onClose={() => {}} onToast={() => {}} guardarAoFechar={false} />)
+    expect((await screen.findByText(/costuma escolher "Só despesa"/))).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Só despesa/ }).textContent).toMatch(/sugerido/)
+  })
+  it('outro perfil: a preferência não vale; escolher "Só despesa" grava a preferência deste perfil', async () => {
+    base({ activeProfileId: 'perfil_pj' })
+    ia.apelidos = [{ tipo: 'acao_despesa', termo: 'perfil_pf|f:academia x', ref_id: 'so_despesa', usos: 2 }]
+    render(<PreviaAssistente ferramenta="registrar_lancamento" sugestao={{ ...academia(), favorecido_id: 'Academia X' }} textoOriginal="boleto academia" onClose={() => {}} onToast={() => {}} guardarAoFechar={false} />)
+    await screen.findByRole('button', { name: /Despesa \+ agendamento/ })
+    expect(screen.getByRole('button', { name: /Despesa \+ agendamento/ }).textContent).toMatch(/sugerido/)
+    fireEvent.click(screen.getByRole('button', { name: /Só despesa/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar' }))
+    const itens = ia.aprender.mock.calls.flatMap(c => c[0])
+    expect(itens).toContainEqual({ tipo: 'acao_despesa', termo: 'perfil_pj|f:academia x', ref_id: 'so_despesa' })
   })
 })

@@ -75,7 +75,10 @@ export async function usoDoDia(usuario, q = query) {
 // Termo de apelido (minúsculo, sem acento): src/lib/assistente/texto.js, compartilhado com o app.
 export { normalizarTermo }
 
-export const TIPOS_APELIDO = ['categoria', 'conta', 'favorecido', 'descricao_fatura']
+export const TIPOS_APELIDO = ['categoria', 'conta', 'favorecido', 'descricao_fatura', 'acao_despesa', 'recorrencia']
+// Preferências aprendidas da prévia (src/lib/assistente/preferencias.js): a contagem recomeça quando a
+// escolha muda (só vale como sugestão depois de N escolhas iguais seguidas).
+export const TIPOS_PREFERENCIA = ['acao_despesa', 'recorrencia']
 
 // Hoje em America/Sao_Paulo (YYYY-MM-DD).
 export const hojeSaoPaulo = (d = new Date()) =>

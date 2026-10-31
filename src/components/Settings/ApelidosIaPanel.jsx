@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trash2, RefreshCw } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { rotulosCategorias } from '../../lib/importacaoPadrao/comum'
+import { TIPOS_PREFERENCIA } from '../../lib/assistente/preferencias'
 import { listarApelidos, editarApelido, excluirApelido } from '../../lib/assistenteApi'
 
 // Configurações › Cadastros › Apelidos da IA: termo do usuário → cadastro, aprendido quando ele
@@ -23,7 +24,8 @@ export default function ApelidosIaPanel() {
   const [erro, setErro] = useState('')
   const [editando, setEditando] = useState({}) // id → termo em edição
 
-  const carregar = useCallback(() => listarApelidos().then(l => { setItens(l); setErro('') }).catch(e => setErro(e.message)), [])
+  // Preferências da prévia (acao_despesa/recorrencia) são internas do Assistente: não entram nesta lista.
+  const carregar = useCallback(() => listarApelidos().then(l => { setItens(l.filter(a => !TIPOS_PREFERENCIA.includes(a.tipo))); setErro('') }).catch(e => setErro(e.message)), [])
   useEffect(() => { carregar() }, [carregar])
   const agir = async (fn) => { try { await fn(); await carregar() } catch (e) { setErro(e.message) } }
 

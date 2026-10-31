@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Sparkles, Trash2 } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { entrarAutorAssistente } from '../../lib/api'
+import { termosPreferencia, preferenciaDe, aplicarPreferencias, preferenciasParaAprender, TIPO_ACAO, TIPO_RECORRENCIA } from '../../lib/assistente/preferencias'
 import TransactionForm from '../Transactions/TransactionForm'
 import AvisoParecidos from '../Transactions/AvisoParecidos'
 import EscolherConta from './EscolherConta'
@@ -199,15 +200,20 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const parcelaNoCartao = !!sugestao.parcela_atual && ehCartaoDaPrevia
   const despesaCandidata = !agendamento && ferramenta === 'registrar_lancamento' && (initial.type || 'expense') === 'expense'
     && !(Number(initial.installments) > 1) && !perguntaCartao && !emDolar
-  const prontidao = useMemo(() => (despesaCandidata ? sugerirAcaoDespesa({
+  // Preferência aprendida deste perfil para o favorecido/contrato (item 8): acima das regras de
+  // palavra-chave; "e agende…" na frase (jaPediuAgendar) continua mandando.
+  const termosPref = termosPreferencia({ perfilId: activeProfileId, favorecido: initialFormBase.payee || nomeDoFavorecidoNovo(sugestao) || '', contrato: doc.numero_contrato || '' })
+  const prefAcao = preferenciaDe(apelidos, TIPO_ACAO, termosPref)
+  const prefRec = preferenciaDe(apelidos, TIPO_RECORRENCIA, termosPref)
+  const prontidao = useMemo(() => (despesaCandidata ? aplicarPreferencias(sugerirAcaoDespesa({
     natureza: doc.natureza, tipoDocumento: (tiposDocumento || []).find(t => t.id === initialFormBase.tipoDocumentoId) || null,
     descricao: initialFormBase.description, favorecido: initialFormBase.payee,
     categoriaNome: categories.find(c => c.id === initialFormBase.categoryId)?.name || '', texto: textoOriginal || '',
     numeroContrato: doc.numero_contrato, parcelaAtual: sugestao.parcela_atual, vencimento: doc.vencimento, pago: doc.pago,
     hoje: hojeIso, historico: { transactions, schedules }, contratos: contratos || [],
-  }) : null),
+  }), { acao: prefAcao, recorrencia: prefRec, nome: initialFormBase.payee || '' }) : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal, contratos])
+  [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal, contratos, apelidos, activeProfileId])
   const jaPediuAgendar = !!sugestao.repetir
   const perguntarAcaoBase = despesaCandidata && !jaPediuAgendar && !parcelaNoCartao
   // "e agende…" no pedido já começa em Despesa + agendamento (os dois cartões, sem a pergunta).
@@ -316,7 +322,16 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
       if (r?.ok === false) onToast?.(`Lançamento salvo, mas a baixa não foi feita: ${r.motivo}`)
     }
     if (cambio && id) criarIof({ id, accountId: form.accountId, date: form.date, amount: form.amount, payee: form.payee, description: form.description })
-    const itens = apelidosAprendidos(sugestao, form)
+    // Preferência (item 8): a escolha feita na pergunta, quando diferente do que as regras sugeriram.
+    const soAgendamento = acaoEfetiva === ACAO.SO_AGENDAMENTO
+    const prefs = perguntarAcao && prontidao ? preferenciasParaAprender({
+      termos: termosPref, prefAcao, prefRec,
+      acaoEscolhida: soAgendamento ? ACAO.SO_AGENDAMENTO : (form?.repeat ? ACAO.DESPESA_AGENDAMENTO : ACAO.SO_DESPESA),
+      acaoDasRegras: prontidao.acaoDasRegras,
+      recEscolhida: soAgendamento ? (form?.frequency || null) : (form?.repeat ? (form.repeatOccurrenceType === 'installment' ? 'installment' : form.repeatFrequency) : null),
+      recDasRegras: prontidao.recorrenciaDasRegras,
+    }) : []
+    const itens = [...apelidosAprendidos(sugestao, form), ...prefs]
     if (itens.length) aprenderApelidos(itens).catch(err => console.warn('[assistente] apelidos não salvos:', err.message))
     if (preId) concluirPreLancamento(preId, 'efetivado', id || null).catch(err => onToast?.(`Lançamento salvo, mas o pré-lançamento não foi baixado: ${err.message}`))
   }
