@@ -27,7 +27,7 @@ import { LancamentoAcao, AgendamentoAcao, TransferenciaAcao, ReservaAcao, Assist
 export const mobileModules = [
   { id: 'inicio',        label: 'Início',          icon: Home,           place: 'tab', component: InicioMobile, perfil: true },
   { id: 'fluxo',         label: 'Fluxo',           icon: TrendingUp,     place: 'tab', page: 'cashflow', saldo: true, perfil: true },
-  { id: 'agenda',        label: 'Agenda',          icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true, perfil: true },
+  { id: 'agenda',        label: 'Agendamentos',    icon: Calendar,       place: 'tab', page: 'schedule', card: true, cardTitle: 'Próximos 7 dias', saldo: true, perfil: true },
   { id: 'mais',          label: 'Mais',            icon: LayoutGrid,     place: 'tab', component: MaisMobile },
 
   { id: 'reservas',      label: 'Reservas',        icon: PiggyBank,      place: 'more', group: 'Dinheiro guardado', card: true, cardTitle: 'Saldo em reservas', page: 'reservas', saldo: true },

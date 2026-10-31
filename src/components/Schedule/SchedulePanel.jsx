@@ -19,6 +19,7 @@ import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import { TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
 import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, exportarAgendamentosExcel } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
@@ -2557,6 +2558,9 @@ export default function SchedulePanel() {
   // Status "Todos" (pendentes + pagos, totais separados) existe só no calendário.
   const [calTodos, setCalTodos] = useState(false)
   const [activeTab, setActiveTab] = useState('conta')
+  // Tipo (Todos · Entradas · Saídas · Transferências): soma com os demais filtros, lembrado no aparelho.
+  const [tipoMov, setTipoMov] = useState(lerTipoAgendamento)
+  const escolherTipo = (t) => { setTipoMov(t); salvarTipoAgendamento(t) }
   // Status e período POR ABA (FilterBar), lembrados no localStorage (lib/agendamentosFiltro).
   const [filtrosPorAba, setFiltrosPorAba] = useState(
     () => Object.fromEntries(Object.keys(STATUS_POR_ABA).map(aba => [aba, lerFiltrosAba(aba)]))
@@ -2884,10 +2888,11 @@ export default function SchedulePanel() {
       min: fltMin !== '' ? parseFloat(fltMin) : null,
       max: fltMax !== '' ? parseFloat(fltMax) : null,
     }), [abaPagos, pagosLinhas, periodoAtual, hojeStr, fltDesc, fltPayee, fltCat, dataDe, dataAte, fltMin, fltMax])
-  const pagosVisiveis = useMemo(
+  const pagosAntesDoTipo = useMemo(
     () => filtrarPorTipoDocumento(filtrarPagamentos(pagosBuscados, { valores: selValores }), selTipos, tiposDocumento),
     [pagosBuscados, selValores, selTipos, tiposDocumento]
   )
+  const pagosVisiveis = useMemo(() => filtrarPorTipo(pagosAntesDoTipo, tipoMov), [pagosAntesDoTipo, tipoMov])
 
   // Valores reais (distintos) dos itens visíveis (já filtrados por data/etc.), maior → menor.
   const valorOptions = useMemo(() => {
@@ -2918,14 +2923,15 @@ export default function SchedulePanel() {
     }
     return chips
   }, [filtroContasAtivo, finalSchedules, allAccounts, selContas])
-  const visibleSchedules = useMemo(
+  const visiveisAntesDoTipo = useMemo(
     () => (filtroContasAtivo ? filtrarPorContas(finalSchedules, selContas) : finalSchedules),
     [filtroContasAtivo, finalSchedules, selContas]
   )
+  const visibleSchedules = useMemo(() => filtrarPorTipo(visiveisAntesDoTipo, tipoMov), [visiveisAntesDoTipo, tipoMov])
 
   // Aba Cartão: contas a pagar de fatura (cards) seguem o período (vencimento) e os filtros de
   // data/descrição/valor que se aplicam a elas.
-  const invoiceVisiveis = useMemo(() => {
+  const invoiceAntesDoTipo = useMemo(() => {
     const de = dataDe || null
     const ate = dataAte || null
     const d = fltDesc.trim().toLowerCase()
@@ -2936,16 +2942,23 @@ export default function SchedulePanel() {
       (!d || (p.description || '').toLowerCase().includes(d)) &&
       (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
   }, [viewInvoice, periodoAtual, hojeStr, dataDe, dataAte, fltDesc, fltMin, fltMax])
+  // Fatura a pagar é sempre saída.
+  const invoiceVisiveis = useMemo(() => filtrarPorTipo(invoiceAntesDoTipo, tipoMov), [invoiceAntesDoTipo, tipoMov])
 
   // Contadores do segmentado: total de cada status na aba (sem período nem filtros).
-  const nPagos = totaisPagamentos(pagosLinhas).nPagos
+  // Contadores do segmentado: respeitam o tipo escolhido (Entradas/Saídas/Transferências).
+  const nT = (lista) => filtrarPorTipo(lista, tipoMov).length
+  const nPagos = totaisPagamentos(filtrarPorTipo(pagosLinhas, tipoMov)).nPagos
   const contagemStatus = {
-    conta: { apagar: allPending.length, provisoes: allPending.filter(s => s.isProvisao).length, pagos: nPagos },
-    cartao: { apagar: pendingInvoice + pendingFaturaPayments, pagos: nPagos },
-    gerencial: { apagar: pendingGerencial, pagos: nPagos },
+    conta: { apagar: nT(allPending), provisoes: nT(allPending.filter(s => s.isProvisao)), pagos: nPagos },
+    cartao: {
+      apagar: nT(displayInvoice.filter(p => p.status === 'pending')) + nT(displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0)),
+      pagos: nPagos,
+    },
+    gerencial: { apagar: nT(displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0)), pagos: nPagos },
     anuais: {
-      apagar: filtrarPorContaReserva(pendentesAnuais, contaReserva).length, pagos: nPagos,
-      resgates: filtrarPorContaReserva(raVisiveis, contaReserva).length,
+      apagar: nT(filtrarPorContaReserva(pendentesAnuais, contaReserva)), pagos: nPagos,
+      resgates: nT(filtrarPorContaReserva(raVisiveis, contaReserva)),
     },
   }[activeTab]
   // Chips do seletor de conta de reserva: contagem do status atual (sem período nem filtros, como
@@ -2985,6 +2998,7 @@ export default function SchedulePanel() {
     const porTipo = filtrarPorTipoDocumento(porValor, selTipos, tiposDocumento)
     return filtroContasAtivo ? filtrarPorContas(porTipo, selContas) : porTipo
   }, [emCalendario, statusCal, displaySchedules, getNextOccurrences, hojeStr, fltDesc, fltPayee, fltCat, fltMin, fltMax, fltAgenda, selValores, selTipos, tiposDocumento, filtroContasAtivo, selContas])
+  const calSchedulesTipo = useMemo(() => filtrarPorTipo(calSchedules, tipoMov), [calSchedules, tipoMov])
   const calPagos = useMemo(() => {
     if (!emCalendario || (statusCal !== 'pagos' && statusCal !== 'todos')) return []
     const buscados = filtrarPagamentos(pagosLinhas, {
@@ -2994,6 +3008,7 @@ export default function SchedulePanel() {
     })
     return filtrarPorTipoDocumento(filtrarPagamentos(buscados, { valores: selValores }), selTipos, tiposDocumento)
   }, [emCalendario, statusCal, pagosLinhas, fltDesc, fltPayee, fltCat, fltMin, fltMax, selValores, selTipos, tiposDocumento])
+  const calPagosTipo = useMemo(() => filtrarPorTipo(calPagos, tipoMov), [calPagos, tipoMov])
   // Faturas do contas_a_pagar (aba Cartão), pelo vencimento — menos as que já têm o agendamento
   // pagamento_fatura da mesma fatura (senão a fatura apareceria duas vezes no dia).
   const calFaturas = useMemo(() => {
@@ -3004,14 +3019,21 @@ export default function SchedulePanel() {
     const filtradas = viewInvoice.filter(p =>
       (!d || (p.description || '').toLowerCase().includes(d)) &&
       (min === null || Number(p.amount) >= min) && (max === null || Number(p.amount) <= max))
-    return faturasSemAgendamento(filtradas, faturaPaymentSchedules)
-  }, [emCalendario, activeTab, statusCal, viewInvoice, faturaPaymentSchedules, fltDesc, fltMin, fltMax])
+    return filtrarPorTipo(faturasSemAgendamento(filtradas, faturaPaymentSchedules), tipoMov)
+  }, [tipoMov, emCalendario, activeTab, statusCal, viewInvoice, faturaPaymentSchedules, fltDesc, fltMin, fltMax])
 
   // Opções extras do filtro: o que só existe como fallback (CC sem cadastro, RES).
   const extrasTipoFiltro = useMemo(() => [
     ...(tiposDocumento.some(t => t.sigla === 'CC') ? [] : [{ id: 'CC', sigla: 'CC', nome: 'Fatura de Cartão (automático)', cor: '#8b5cf6' }]),
     { id: 'RES', sigla: 'RES', nome: 'Resgate de reserva (automático)', cor: '#14b8a6' },
   ], [tiposDocumento])
+
+  // Contagem por tipo sobre o que os OUTROS filtros deixaram na tela (sem o próprio tipo).
+  const contagemTipo = contarPorTipo(
+    emCalendario ? [...calSchedules, ...calPagos, ...calFaturas]
+      : abaPagos ? pagosAntesDoTipo
+        : [...(activeTab === 'cartao' ? invoiceAntesDoTipo : []), ...visiveisAntesDoTipo]
+  )
 
   // Exportar Excel: o que a lista mostra agora (aba, status, período, filtros e ordem da tabela).
   const exportarExcel = () => {
@@ -3064,8 +3086,8 @@ export default function SchedulePanel() {
           espremer o título/subtítulo contra a linha das abas. */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-texto-2 whitespace-nowrap">Agendamentos & Contas a Pagar</h2>
-          <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{allPending.length} pendentes · {pendingInvoice + pendingFaturaPayments} faturas · {pendingGerencial} resgates</p>
+          <h2 className="text-sm font-semibold text-texto-2 whitespace-nowrap">Agendamentos</h2>
+          <p className="text-xs text-texto-3 mt-0.5 leading-5 whitespace-nowrap">{nT(allPending)} pendentes · {nT(displayInvoice.filter(p => p.status === 'pending')) + nT(displayFaturaPayments.filter(s => getNextOccurrences(s, 1).length > 0))} faturas · {nT(displayGerencial.filter(s => getNextOccurrences(s, 1).length > 0))} resgates</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div role="radiogroup" aria-label="Visão" className="flex rounded-lg border border-borda-forte bg-surface-2 p-0.5">
@@ -3295,9 +3317,23 @@ export default function SchedulePanel() {
         </div>
       )}
 
+      <div role="radiogroup" aria-label="Tipo" className="flex items-center gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5">
+        {TIPOS_AGENDAMENTO.map(t => {
+          const ativo = tipoMov === t.id
+          const cor = t.id === 'entradas' ? 'bg-receita text-page' : t.id === 'saidas' ? 'bg-despesa text-page' : t.id === 'transferencias' ? 'bg-transferencia text-page' : 'bg-primary text-white'
+          return (
+            <button key={t.id} type="button" role="radio" aria-checked={ativo} onClick={() => escolherTipo(t.id)}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${ativo ? cor : 'bg-surface-2 text-texto-2 hover:bg-surface-hover hover:text-texto-1'}`}>
+              {t.label}
+              <span className="opacity-75">{contagemTipo[t.id]}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {emCalendario ? (
         <SchedulesTable
-          schedules={calSchedules}
+          schedules={calSchedulesTipo}
           agruparSeries={false}
           accounts={activeTab === 'conta' ? accounts : allAccounts}
           efetivarProvisao={activeTab === 'conta' ? efetivarProvisao : undefined}
@@ -3305,7 +3341,7 @@ export default function SchedulePanel() {
           calendario={{
             status: statusCal,
             faturas: calFaturas,
-            pagosLinhas: calPagos,
+            pagosLinhas: calPagosTipo,
             renderFatura: (p) => (
               <PayableCard payable={p} gerencialGroups={gerencialGroups} accounts={allAccounts} onMarkPaid={handleMarkPaid} onDelete={() => setConfirmDeletePayable(p)} />
             ),

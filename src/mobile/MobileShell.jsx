@@ -71,7 +71,7 @@ export default function MobileShell({ modules, panels, ativo, irPara, saldosPrin
         className={`flex-1 flex flex-col items-center justify-center gap-1 min-h-[44px] min-w-[44px] ${aceso ? 'text-primary-fg' : 'text-texto-3'}`}
       >
         {Icon && <Icon size={22} strokeWidth={aceso ? 2.4 : 2} />}
-        <span className={`text-[11px] leading-none ${aceso ? 'font-semibold' : ''}`}>{m.label}</span>
+        <span className={`max-w-full truncate px-0.5 text-[11px] leading-none tracking-tight ${aceso ? 'font-semibold' : ''}`}>{m.label}</span>
       </button>
     )
   }
