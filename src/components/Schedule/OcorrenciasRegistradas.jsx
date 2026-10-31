@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, ChevronDown, ChevronUp, Link2 } from 'lucide-react'
 import { fmt, fmtDate } from '../shared/utils'
 import { historicoOcorrencias, resumoRegistradas, STATUS_OCORRENCIA as ST } from '../../lib/ocorrenciasRegistradas'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -29,7 +29,22 @@ const Dif = ({ v }) => (v ? <span className={v > 0 ? 'text-despesa' : 'text-rece
 
 export default function OcorrenciasRegistradas({ schedule, transactions, accounts }) {
   const isMobile = useIsMobile()
-  const { schedules: todosAgendamentos, markScheduleRegistered, marcarDataOcorrencia, pode } = useApp()
+  const { schedules: todosAgendamentos, markScheduleRegistered, marcarDataOcorrencia, pode, desvincularLancamento } = useApp()
+  // Paga por um lançamento que NÃO foi gerado pelo agendamento (vínculo manual): corrente + Desvincular.
+  const vinculada = (l) => l.status === ST.PAGA && l.txId && !transactions.find(t => t.id === l.txId)?.scheduleId
+  const Corrente = ({ l }) => (vinculada(l) ? (
+    <span className="inline-flex items-center gap-1 ml-1.5">
+      <Link2 size={11} className="text-primary-fg" aria-label="Vinculada a um lançamento existente">
+        <title>Vinculada a um lançamento existente</title>
+      </Link2>
+      {podeVincular && (
+        <button type="button" className="text-[10px] text-texto-2 underline hover:text-texto-1"
+          onClick={(e) => { e.stopPropagation(); desvincularLancamento({ scheduleId: schedule.id, data: l.dataRegistro }) }}>
+          Desvincular
+        </button>
+      )}
+    </span>
+  ) : null)
   // Vincular grava a baixa: só com permissão de editar agendamentos.
   const podeVincular = pode('agendamentos', 'editar')
   const resumo = useMemo(() => resumoRegistradas(schedule, transactions), [schedule, transactions])
@@ -90,7 +105,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-semibold text-texto-1">Parc. {parc(l)}</span>
                         <span className="flex items-center gap-1.5">
-                          <Selo l={l} />
+                          <Selo l={l} /><Corrente l={l} />
                           {l.status === ST.BAIXADA && podeVincular && (
                             <span role="button" tabIndex={0} className="text-[10px] text-primary-fg underline"
                               onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}
@@ -140,7 +155,7 @@ export default function OcorrenciasRegistradas({ schedule, transactions, account
                           <td className="px-2 py-1.5 text-texto-2 max-w-[8rem] truncate">{l.accountId ? accName(l.accountId) : '—'}</td>
                           <td className="px-2 py-1.5 text-texto-2 max-w-[9rem] truncate">{l.payee || '—'}</td>
                           <td className="px-2 py-1.5 whitespace-nowrap">
-                            <Selo l={l} />
+                            <Selo l={l} /><Corrente l={l} />
                             {l.status === ST.BAIXADA && podeVincular && (
                               <button type="button" className="ml-1.5 text-[10px] text-primary-fg underline"
                                 onClick={(e) => { e.stopPropagation(); setVinculando(l.dataRegistro) }}>

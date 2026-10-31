@@ -49,6 +49,7 @@ import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { definirIdentidadeExport } from '../lib/exportExcel'
+import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos } from '../lib/vinculo'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -1434,6 +1435,9 @@ export function AppProvider({ children }) {
       frase: data.settings?.rodapeFrase, perfil: activeProfile?.name || '',
     })
   }, [data.settings?.rodapeTitulo, data.settings?.rodapeFrase, usuario, activeProfile])
+
+  // Vínculos lançamento → ocorrências que ele baixou (ícone de corrente, desvincular).
+  const vinculosPorLancamento = useMemo(() => mapaVinculos(data.schedules), [data.schedules])
 
   // Rateios indexados por lançamento (lancamento_id → [rateios]).
   const rateiosByLancamento = useMemo(() => {
@@ -5006,6 +5010,71 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // ── Vínculo manual (lib/vinculo) — função central da tela e do Assistente ────────────────────
+  // Histórico do vínculo: uma linha por campo, agendamento e lançamento no mesmo lote.
+  const historicoDoPlano = (itens, loteId, motivo) => [
+    ...linhasHistorico({ entidade: 'agendamento', itens: itens.filter(i => i.entidade === 'agendamento'), loteId, motivo }),
+    ...linhasHistorico({ entidade: 'lancamento', itens: itens.filter(i => i.entidade === 'lancamento'), loteId, motivo }),
+  ]
+
+  // Caso 1: lançamento avulso × ocorrência pendente. Baixa pelo mesmo caminho da baixa normal
+  // (aplicarBaixa) apontando o lançamento — sem criar outro, então o saldo conta uma vez.
+  // `manter`: 'lancamento' (padrão) | 'agendamento' — o que fica gravado na ocorrência.
+  const vincularLancamento = useCallback(({ txId, scheduleId, data, manter = 'lancamento' }) => {
+    const plano = planejarVinculo(dataRef.current, { txId, scheduleId, data, manter })
+    if (!plano.ok) return plano
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => (s.id === scheduleId ? plano.schedule : s)),
+      transactions: d.transactions.map(t => (t.id === txId ? { ...t, dataOcorrencia: plano.tx.dataOcorrencia } : t)),
+    }))
+    posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate: plano.tx.dataOcorrencia, lancamentoId: txId }])
+    const loteId = novoLoteId()
+    registrarEdicao({ agendamentos: [plano.schedule], lancamentos: [plano.tx], historico: historicoDoPlano(plano.historico, loteId, 'Vínculo manual'), loteId })
+      .catch(e => console.error('[vinculo] histórico:', e?.message || e))
+    return plano
+  }, [update, registrarEdicao])
+
+  // Desfaz o caso 1: a ocorrência volta a pendente (com a exceção que tinha antes) e o lançamento
+  // volta a avulso. Nada é apagado.
+  const desvincularLancamento = useCallback(({ scheduleId, data }) => {
+    const plano = planejarDesvinculo(dataRef.current, { scheduleId, data })
+    if (!plano.ok) return plano
+    update(d => ({
+      ...d,
+      schedules: d.schedules.map(s => (s.id === scheduleId ? plano.schedule : s)),
+      transactions: plano.tx ? d.transactions.map(t => (t.id === plano.tx.id ? { ...t, dataOcorrencia: plano.tx.dataOcorrencia } : t)) : d.transactions,
+    }))
+    if (plano.tx) reverterEfetivacaoRef.current?.(plano.tx)
+    const loteId = novoLoteId()
+    registrarEdicao({ agendamentos: [plano.schedule], lancamentos: plano.tx ? [plano.tx] : [], historico: historicoDoPlano(plano.historico, loteId, 'Desvínculo manual'), loteId })
+      .catch(e => console.error('[vinculo] histórico:', e?.message || e))
+    return plano
+  }, [update, registrarEdicao])
+
+  // Caso 2: mescla o avulso NA parcela existente da série — a parcela fica (numeração/série), recebe
+  // os campos escolhidos, as baixas que apontavam o avulso passam para ela e o avulso é removido.
+  // Só pela tela, depois da confirmação do usuário (o Assistente nunca chama isto).
+  const mesclarComParcela = useCallback(({ avulsoId, parcelaId, campos }) => {
+    const plano = planejarMesclagem(dataRef.current, { avulsoId, parcelaId, campos })
+    if (!plano.ok) return plano
+    update(d => ({ ...d, schedules: plano.schedules }))
+    const rateiosAvulso = rateiosByLancamento.get(avulsoId) || []
+    if (Object.keys(plano.changes).length) updateTransaction(parcelaId, plano.changes)
+    if (plano.copiarRateio) {
+      if (rateiosAvulso.length) saveRateiosFor(parcelaId, rateiosAvulso.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || null })))
+      plano.mudancas.push({ campo: 'rateio', de: (rateiosByLancamento.get(parcelaId) || []).length, para: rateiosAvulso.length })
+    }
+    const loteId = novoLoteId()
+    const final = { ...plano.parcela, ...plano.changes }
+    registrarEdicao({
+      lancamentos: [final], loteId,
+      historico: linhasHistorico({ entidade: 'lancamento', itens: [{ id: parcelaId, mudancas: plano.mudancas }], loteId, motivo: `Mesclado com o avulso "${plano.avulso.description || plano.avulso.id}" (${plano.avulso.amount})` }),
+    }).catch(e => console.error('[mescla] histórico:', e?.message || e))
+    deleteTransaction(avulsoId)
+    return plano
+  }, [update, registrarEdicao, updateTransaction, deleteTransaction, rateiosByLancamento, saveRateiosFor])
+
   // Agenda no celular (em lote): marca/desmarca "Sincronizar com a agenda do celular" e regera o
   // feed na hora. Devolve quantos mudaram.
   const definirSincronizarAgenda = useCallback((ids, valor) => {
@@ -5983,6 +6052,7 @@ export function AppProvider({ children }) {
       setDebtPlan, payDebtInstallment,
       addPayable, updatePayable, deletePayable, gerarContasPagarFatura, recalcContasPagarFatura,
       findMatchingSchedule, addRecurringMatchException, markScheduleRegistered, marcarDataOcorrencia, baixarCobrancaRecorrente, definirSincronizarAgenda,
+      vincularLancamento, desvincularLancamento, mesclarComParcela, vinculosPorLancamento,
       addPayees, renomearFavorecidos, atualizarCamposLancamentos,
       dbStatus,
       syncError,

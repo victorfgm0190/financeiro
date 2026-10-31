@@ -181,7 +181,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   // Campos da parcela desta ocorrência (override "Só esta parcela" aplicado): conta, categoria,
   // descrição, centro de custo e grupo pré-preenchidos com os da ocorrência, não os da série.
   const schedule = useMemo(() => comCamposDaOcorrencia(scheduleProp, nextDate, accounts), [scheduleProp, nextDate, accounts])
-  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, marcarDataOcorrencia, desfazerPuloOcorrencia, settings } = useApp()
+  const { profiles, setAvisoOperacao, payees, transactions, addPayee, rateiosByLancamento, saveRateiosFor, registerScheduleOccurrence, scheduleReservaFuncoes, reserveFunctions, accountGroups, updateAccount, schedules: todosAgendamentos, possiveisDuplicados, desfazerPuloOcorrencia, settings, vincularLancamento } = useApp()
   const gerencialLigado = controleGerencialAtivo(settings)
   // Lançamento parecido que fez o registro automático parar nesta ocorrência (src/lib/autoRegistro.js).
   const duplicadoId = possiveisDuplicados?.get(scheduleProp.id)?.get(nextDate)
@@ -781,7 +781,12 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
               transactions={transactions}
               schedules={todosAgendamentos}
               accounts={accounts}
-              onVincular={(txId) => { markScheduleRegistered(schedule.id, nextDate || today, metaBaixaGerada(txId)); marcarDataOcorrencia(txId, nextDate || today); concluir() }}
+              perguntarManter
+              onVincular={(txId, manter) => {
+                const r = vincularLancamento({ txId, scheduleId: schedule.id, data: nextDate || today, manter })
+                if (!r?.ok) { setAvisoOperacao(r?.motivo || 'Não foi possível vincular.'); return }
+                concluir()
+              }}
             />
           )}
         </div>

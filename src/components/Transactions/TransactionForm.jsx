@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import ComposicaoCard from '../Contratos/ComposicaoCard'
-import { PiggyBank, Repeat, Pencil, Check, X, History } from 'lucide-react'
+import { PiggyBank, Repeat, Pencil, Check, X, History, Link2 } from 'lucide-react'
+import VinculoPainel from '../shared/VinculoPainel'
+import SeloVinculo from '../shared/SeloVinculo'
 import { useApp, isResgatePago } from '../../context/AppContext'
 import { today, fmt, fmtDate, buildAccountSelectOptions, creditBillKey, creditBillStatus } from '../shared/utils'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -284,6 +286,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const [extrasEdicao, setExtrasEdicao] = useState(null)
   // Lançamento ligado (IOF ↔ compra) aberto por cima deste.
   const [ligadoAberto, setLigadoAberto] = useState(null)
+  const [vinculoAberto, setVinculoAberto] = useState(false)
 
   // Atalhos do modal de lançamento: os mesmos handlers do botão/switch (só no formulário completo).
   const formRef = useRef(null)
@@ -1473,6 +1476,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               Parcela <SeloParcela rotulo={seloParcela} />
             </span>
           )}
+          <SeloVinculo tx={initial} desvincular onToast={onToast} className={seloParcela ? '' : 'mr-auto'} />
+          {podeGravarForm && (initial.type === 'expense' || initial.type === 'income') && !initial.scheduleId && (
+            <button type="button" onClick={() => setVinculoAberto(true)} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5"
+              title="Ligar a uma ocorrência pendente de agendamento ou a uma parcela já existente">
+              <Link2 size={13} /> Vincular
+            </button>
+          )}
           <button type="button" onClick={() => setStep('historico')} className="text-xs text-texto-2 hover:text-texto-1 flex items-center gap-1.5" title="Histórico de alterações">
             <History size={13} /> Histórico
             {(temHistorico('lancamento', initial.id) || (initial.scheduleId && temHistorico('agendamento', initial.scheduleId))) && <span className="w-1.5 h-1.5 rounded-full bg-primary-fg" />}
@@ -2270,6 +2280,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         ) : <p className="flex-1 text-xs text-texto-3 self-center text-center">Somente leitura — seu nível de acesso não permite gravar.</p>}
       </div>
     </form>
+    <Modal open={vinculoAberto} onClose={() => setVinculoAberto(false)} title="Vincular lançamento" size="lg">
+      {vinculoAberto && initial?.id && (
+        <VinculoPainel tx={initial} onToast={onToast} onClose={(feito) => { setVinculoAberto(false); if (feito) onClose?.() }} />
+      )}
+    </Modal>
     {/* Fora do <form>: o Salvar do lançamento vinculado não pode submeter este. */}
     <Modal open={!!ligadoAberto} onClose={() => setLigadoAberto(null)} title="Lançamento vinculado" size="lg">
       {ligadoAberto && <TransactionForm initial={ligadoAberto} onClose={() => setLigadoAberto(null)} onToast={onToast} />}

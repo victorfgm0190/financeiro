@@ -15,6 +15,7 @@ import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
 import { exportarExcel } from '../../lib/exportExcel'
+import SeloVinculo from '../shared/SeloVinculo'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
@@ -277,6 +278,7 @@ function SingleRow({ row, accountId, accounts, balance, onReverse, onEdit, onDup
           <span className="text-xs text-texto-1 truncate" title={historico}>{historico}</span>
           <SeloParcela rotulo={seloParcela} />
           <SeloCambio tx={tx} />
+          <SeloVinculo tx={tx} className="shrink-0" />
           {badge && <span title={badge.title} className={`text-xs px-1.5 py-0.5 rounded shrink-0 font-medium ${badge.cls}`}>{badge.label}</span>}
           {(tx.faturaRef || tx.sourceExpenseId) && (
             <span className="flex items-center gap-1 shrink-0">
