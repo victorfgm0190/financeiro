@@ -3,6 +3,7 @@ import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, L
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
 import IdentidadeAmbiente from './IdentidadeAmbiente'
+import VarreduraRateio from './VarreduraRateio'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -1679,6 +1680,8 @@ export default function SettingsPanel() {
           <RefreshCw size={14} className="text-texto-3" /> Manutenção
         </h2>
         <p className="text-xs text-texto-3 mb-4">Ferramentas para corrigir inconsistências nos dados.</p>
+
+        <div className="mb-3"><VarreduraRateio somenteLeitura={somenteLeitura} /></div>
 
         <div className="bg-surface-2 rounded-xl p-4 space-y-3">
           <div>

@@ -232,15 +232,15 @@ export function EnvelopeDetalhe({ r, compLabel, v = fmtPadrao }) {
 
 // Envelopes da competência ATUAL (a do Painel / Início), perfil ativo, ordenados por % usado.
 function useEnvelopesDoMes() {
-  const { envelopes, profileTransactions, settings } = useApp()
+  const { envelopes, profileTransactions, settings, rateiosByLancamento } = useApp()
   const startDay = settings?.financialMonthStartDay || 1
   const comp = currentCompetencia(startDay)
   const compKey = comp.year * 12 + comp.month0
   return useMemo(() => {
-    const resumos = resumosPorUso(gastoEnvelopes(envelopes, profileTransactions, compKey, startDay))
+    const resumos = resumosPorUso(gastoEnvelopes(envelopes, profileTransactions, compKey, startDay, rateiosByLancamento))
     const compLabel = rotuloCompetencia({ year: Math.floor(compKey / 12), month0: compKey % 12 })
     return { resumos, totais: totaisEnvelopes(resumos), compLabel }
-  }, [envelopes, profileTransactions, compKey, startDay])
+  }, [envelopes, profileTransactions, compKey, startDay, rateiosByLancamento])
 }
 
 // Lista + modal, usada pelo card do Painel e pelo do Início.

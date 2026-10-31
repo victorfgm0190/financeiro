@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { rotuloCategoria } from '../../lib/rateio'
 import { Search, ArrowRight, Loader2 } from 'lucide-react'
 import Modal from './Modal'
 import DateInput from './DateInput'
@@ -42,7 +43,7 @@ const MODO_OPTIONS = [
 export default function GlobalSearch({ open, onClose }) {
   const {
     accounts: allAccounts, profileTransactions: transactions, profileSchedules: schedules,
-    categories, gerencialGroups = [], getNextOccurrences, activeProfileId, payees = [],
+    categories, gerencialGroups = [], getNextOccurrences, activeProfileId, payees = [], rateiosByLancamento,
   } = useApp()
 
   const [value, setValue] = useState('')
@@ -152,7 +153,7 @@ export default function GlobalSearch({ open, onClose }) {
         amount: t.amount,
         desc: t.description || '',
         payee: t.payee || '',
-        categoria: catLabel(t.categoryId),
+        categoria: rateiosByLancamento?.get(t.id)?.length ? rotuloCategoria(t, rateiosByLancamento.get(t.id), categories).curto : catLabel(t.categoryId),
         gerencial: (t.type === 'expense' && t.accountType === 'credit' && t.grupoGerencial) ? (gerById.get(t.grupoGerencial)?.name || null) : null,
         statusLabel: paid ? 'Registrado' : 'Pendente',
         statusCls: paid ? 'bg-receita/15 text-receita' : 'bg-surface-2 text-texto-2',
@@ -173,7 +174,7 @@ export default function GlobalSearch({ open, onClose }) {
         amount: st.amount,
         desc: s.description || '',
         payee: s.payee || '',
-        categoria: catLabel(s.categoryId),
+        categoria: rateiosByLancamento?.get(s.id)?.length ? `Rateado (${rateiosByLancamento.get(s.id).length})` : catLabel(s.categoryId),
         gerencial: null,
         statusLabel: pendente ? 'Pendente' : 'Registrado',
         statusCls: pendente ? 'bg-surface-2 text-texto-2' : 'bg-receita/15 text-receita',

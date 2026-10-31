@@ -50,7 +50,7 @@ import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { definirIdentidadeExport } from '../lib/exportExcel'
 import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos } from '../lib/vinculo'
-import { linhasDoLancamento } from '../lib/rateio'
+import { linhasDoLancamento, rateioDaOcorrencia, linhasParaAutomaticos, rateioHerdado } from '../lib/rateio'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -685,23 +685,28 @@ function buildEspelhoTxs(tx, parentId, categories, accounts) {
     ]
   }
 
-  // CASO A/B: categoria com gera_espelho + conta vinculada.
-  const cat = (categories || []).find(c => c.id === tx.categoryId)
-  if (!cat || !cat.geraEspelho || !cat.contaEspelhoId) return []
-  if (tx.type === 'expense') {
-    // CASO A: despesa → receita na conta-espelho (empréstimo concedido).
-    return [mk('_r', {
-      type: 'income', accountId: cat.contaEspelhoId, toAccountId: null,
-      description: 'Empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
-      espelhoOrigemId: parentId, // vínculo p/ cascata (CASO A — original é salvo)
-    })]
-  }
-  // CASO B: receita → despesa na conta-espelho (recebimento do empréstimo).
-  return [mk('_d', {
-    type: 'expense', accountId: cat.contaEspelhoId, toAccountId: null,
-    description: 'Recebimento empréstimo: ' + (tx.description || ''), categoryId: tx.categoryId || null,
-    espelhoOrigemId: parentId, // vínculo p/ cascata (CASO B — original é salvo)
-  })]
+  // CASO A/B: categoria com gera_espelho + conta vinculada — por LINHA do rateio (tx._rateio), com o
+  // valor da linha; sem rateio, a categoria e o valor do lançamento (como sempre).
+  const out = []
+  linhasParaAutomaticos({ ...tx, amount }).forEach((l, i) => {
+    const cat = (categories || []).find(c => c.id === l.categoriaId)
+    if (!cat || !cat.geraEspelho || !cat.contaEspelhoId || !(l.valor > 0)) return
+    const sufixo = i ? String(i) : ''
+    out.push(tx.type === 'expense'
+      // CASO A: despesa → receita na conta-espelho (empréstimo concedido).
+      ? mk('_r' + sufixo, {
+        type: 'income', accountId: cat.contaEspelhoId, toAccountId: null, amount: l.valor,
+        description: 'Empréstimo: ' + (tx.description || ''), categoryId: l.categoriaId || null,
+        espelhoOrigemId: parentId, // vínculo p/ cascata (CASO A — original é salvo)
+      })
+      // CASO B: receita → despesa na conta-espelho (recebimento do empréstimo).
+      : mk('_d' + sufixo, {
+        type: 'expense', accountId: cat.contaEspelhoId, toAccountId: null, amount: l.valor,
+        description: 'Recebimento empréstimo: ' + (tx.description || ''), categoryId: l.categoriaId || null,
+        espelhoOrigemId: parentId, // vínculo p/ cascata (CASO B — original é salvo)
+      }))
+  })
+  return out
 }
 
 // Gera a receita/aporte automático numa conta de investimento quando uma despesa
@@ -709,16 +714,21 @@ function buildEspelhoTxs(tx, parentId, categories, accounts) {
 // (categoria com investmentAccountId). Retorna o lançamento de entrada (origin: 'invest_auto') ou null.
 function buildInvestAutoIncomeTx(tx, categories, accounts, parentTxId = null) {
   if (tx.type !== 'expense') return null
-  const cat = (categories || []).find(c => c.id === tx.categoryId)
+  // Por linha do rateio (tx._rateio): só a parte das categorias vinculadas à conta de investimento.
+  const linhas = linhasParaAutomaticos(tx)
+  const catDe = (id) => (categories || []).find(c => c.id === id)
+  const primeira = linhas.find(l => catDe(l.categoriaId)?.investmentAccountId)
+  const cat = primeira ? catDe(primeira.categoriaId) : null
   if (!cat?.investmentAccountId) return null
   const invAcc = (accounts || []).find(a => a.id === cat.investmentAccountId)
   if (!invAcc) return null
+  const valorAporte = rb(linhas.filter(l => catDe(l.categoriaId)?.investmentAccountId === cat.investmentAccountId).reduce((s, l) => s + l.valor, 0))
   return {
     id: 'tx_invauto_' + Date.now() + '_' + Math.random().toString(36).slice(2),
     type: 'income',
     accountId: cat.investmentAccountId,
     accountType: invAcc.type || null,
-    amount: Number(tx.amount),
+    amount: valorAporte,
     categoryId: null,
     date: tx.date,
     description: `${tx.description || ''} [aporte auto]`.trim(),
@@ -1564,12 +1574,9 @@ export function AppProvider({ children }) {
           const txId = 'tx_auto_' + Date.now() + '_' + Math.random().toString(36).slice(2)
           // occAmount = valor EFETIVO da ocorrência (sem override, o valor base). Vale para o
           // lançamento, os saldos, as sombras de reserva e o rateio.
-          if (schedRateios.length > 0) {
-            collectedRateios.set(`${schedule.id}|${occurrenceDate}`, {
-              txId,
-              rateios: escalarRateios(schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })), occAmount),
-            })
-          }
+          const rateioOcc = rateioDaOcorrencia(scheduleBase, occurrenceDate, schedRateios)
+          const rateioTx = rateioOcc.length ? escalarRateios(rateioOcc, occAmount) : []
+          if (rateioTx.length > 0) collectedRateios.set(`${schedule.id}|${occurrenceDate}`, { txId, rateios: rateioTx })
           const newTx = {
             id: txId,
             type: schedule.transactionType,
@@ -1621,7 +1628,7 @@ export function AppProvider({ children }) {
             txId,
             prev.reserveFunctions
           )
-          const investIncome = buildInvestAutoIncomeTx(newTx, prev.categories, accounts, txId)
+          const investIncome = buildInvestAutoIncomeTx({ ...newTx, _rateio: rateioTx }, prev.categories, accounts, txId)
           if (investIncome) {
             accounts = accounts.map(a => a.id === investIncome.accountId ? { ...a, balance: rb(a.balance + investIncome.amount) } : a)
           }
@@ -1741,6 +1748,8 @@ export function AppProvider({ children }) {
     // _fromImport: a importação gera as contas a pagar uma vez no fim (com importId);
     // não disparar o recálculo por lançamento aqui para não quebrar esse vínculo.
     const { _fromImport, ...txClean } = tx
+    // _rateio: linhas do rateio só para os automáticos (espelho, aporte); não vai para o estado.
+    delete txClean._rateio
     // Id de fora ganha do gerado — mesma regra (e mesmo motivo) do addAccount: lançamentos que o
     // backend já gravou (o desdobramento principal/juros de POST /api/financiamento/parcela/[id]/
     // pagar) precisam entrar no estado com o id que JÁ existe no banco, senão o upsert do sync
@@ -3107,12 +3116,11 @@ export function AppProvider({ children }) {
         ),
       }
     })
-    // PARTE 1: propaga o rateio do agendamento para o lançamento recém-criado.
-    const schedRateios = (dataRef.current.rateios || []).filter(r => r.lancamentoId === scheduleId)
-    if (schedRateios.length > 0) {
-      const schedRat = dataRef.current.schedules.find(s => s.id === scheduleId)
-      const linhas = schedRateios.map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao }))
-      saveRateiosFor(newTxId, schedRat ? escalarRateios(linhas, amountArg != null ? Number(amountArg) : occEfetiva(schedRat, occurrenceDate).amount) : linhas)
+    // PARTE 1: propaga o rateio do agendamento (ou o "Só esta" da ocorrência) para o lançamento novo.
+    const schedRat = dataRef.current.schedules.find(s => s.id === scheduleId)
+    const linhasOcc = schedRat ? rateioDaOcorrencia(schedRat, occurrenceDate, (dataRef.current.rateios || []).filter(r => r.lancamentoId === scheduleId)) : []
+    if (linhasOcc.length > 0) {
+      saveRateiosFor(newTxId, escalarRateios(linhasOcc, amountArg != null ? Number(amountArg) : occEfetiva(schedRat, occurrenceDate).amount))
     }
     // Despesa registrada em cartão de crédito: recalcula os agendamentos da fatura afetada
     // (pagamento_fatura etc.) — o novo lançamento entra no total da fatura. Mesma via usada pelo
@@ -4987,6 +4995,27 @@ export function AppProvider({ children }) {
     }))
   }, [update])
 
+  // Baixa de agendamento RATEADO apontando um lançamento (importação, conciliação, vínculo, já no
+  // cartão, cobrança recorrente…): o lançamento herda o rateio da ocorrência, ajustado ao valor dele
+  // (proporcional — a mesma regra padrão da baixa manual). Lançamento que já tem rateio (manual,
+  // Assistente, linha da importação) fica com o seu. Feito dentro do updater: lê o estado mais novo.
+  const herdarRateioNaBaixa = useCallback((txId, scheduleId, data) => {
+    if (!txId || !scheduleId || !data) return
+    let lista = null
+    update(d => {
+      const porId = new Map()
+      for (const r of d.rateios || []) if (r.lancamentoId === txId || r.lancamentoId === scheduleId) porId.set(r.lancamentoId, [...(porId.get(r.lancamentoId) || []), r])
+      const herdado = rateioHerdado({ tx: d.transactions.find(t => t.id === txId), schedule: d.schedules.find(x => x.id === scheduleId), data, rateiosPorId: porId })
+      if (!herdado.length) return d
+      if (!lista) {
+        lista = herdado
+          .map((r, i) => ({ id: `rat_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 5)}`, categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '' }))
+        persistirRateiosRef.current(txId, lista)
+      }
+      return { ...d, rateios: [...(d.rateios || []), ...lista.map(r => ({ ...r, lancamentoId: txId }))] }
+    })
+  }, [update])
+
   // Marca a ocorrência do agendamento como cumprida SEM criar nova transação. `meta` (opcional)
   // vai para registered_meta[date] = { tipo, lancamento_id, import_id } — descreve a baixa sem
   // mudar o formato de `registered`, que segue sendo o que computeOccurrences lê.
@@ -4998,7 +5027,8 @@ export function AppProvider({ children }) {
     if (meta?.lancamento_id && meta.tipo !== TIPO_BAIXA.JA_NO_CARTAO && meta.tipo !== TIPO_BAIXA.COBERTA_PARCELA) {
       posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate: date, lancamentoId: meta.lancamento_id }])
     }
-  }, [update])
+    if (meta?.lancamento_id) herdarRateioNaBaixa(meta.lancamento_id, scheduleId, date)
+  }, [update, herdarRateioNaBaixa])
 
   // "Vincular a lançamento existente": grava no lançamento a data-BASE da ocorrência baixada (selo
   // "x/N" dos parcelados). Só esse campo — sem o recálculo de fatura do updateTransaction.
@@ -5029,11 +5059,12 @@ export function AppProvider({ children }) {
       transactions: d.transactions.map(t => (t.id === txId ? { ...t, dataOcorrencia: plano.tx.dataOcorrencia } : t)),
     }))
     posEfetivacaoRef.current?.([{ scheduleId, occurrenceDate: plano.tx.dataOcorrencia, lancamentoId: txId }])
+    herdarRateioNaBaixa(txId, scheduleId, plano.tx.dataOcorrencia)
     const loteId = novoLoteId()
     registrarEdicao({ agendamentos: [plano.schedule], lancamentos: [plano.tx], historico: historicoDoPlano(plano.historico, loteId, 'Vínculo manual'), loteId })
       .catch(e => console.error('[vinculo] histórico:', e?.message || e))
     return plano
-  }, [update, registrarEdicao])
+  }, [update, registrarEdicao, herdarRateioNaBaixa])
 
   // Desfaz o caso 1: a ocorrência volta a pendente (com a exceção que tinha antes) e o lançamento
   // volta a avulso. Nada é apagado.
@@ -5099,6 +5130,7 @@ export function AppProvider({ children }) {
     const novo = baixarPeloValor(atual, { occurrenceDate: occ.date, meta, previsto: occ.amount, realizado, atualizarFuturas })
     update(d => ({ ...d, schedules: d.schedules.map(s => (s.id === atual.id ? novo : s)) }))
     posEfetivacaoRef.current?.([{ scheduleId: atual.id, occurrenceDate: occ.date, lancamentoId: tx.id }])
+    herdarRateioNaBaixa(tx.id, atual.id, occ.date)
 
     const loteId = novoLoteId()
     const itens = [{ id: atual.id, ocorrenciaData: occ.date, escopo: ESCOPO.PARCELA, mudancas: [{ campo: 'amount', de: occ.amount, para: realizado }] }]
@@ -5114,7 +5146,7 @@ export function AppProvider({ children }) {
       reconciliarGerencial(conta.id)
     }
     return { occurrenceDate: occ.date, previsto: occ.amount, realizado }
-  }, [update, registrarEdicao, recalcularAgendamentosFatura, reconciliarGerencial])
+  }, [update, registrarEdicao, recalcularAgendamentosFatura, reconciliarGerencial, herdarRateioNaBaixa])
 
   // Regra C: baixa como "já no cartão" todas as ocorrências pendentes deste agendamento que um
   // lançamento do cartão já cobre. Só por ação do usuário — o índice sozinho nunca altera nada.
@@ -5132,8 +5164,9 @@ export function AppProvider({ children }) {
         return out
       }),
     }))
+    for (const [date, txId] of cobertas) herdarRateioNaBaixa(txId, scheduleId, date)
     return cobertas.size
-  }, [update, coberturaCartao])
+  }, [update, coberturaCartao, herdarRateioNaBaixa])
 
   // ── Parcelado gerencial: cria agendamentos futuros para parcelas startFromInstallment..N ──
   // Parcelado: cria as transações das parcelas FUTURAS (startFromInstallment..N), cada uma na

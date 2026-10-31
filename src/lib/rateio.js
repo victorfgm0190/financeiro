@@ -99,3 +99,55 @@ export function rotuloCategoriaFluxo(r, rateiosPorId, categories = []) {
   const rot = rotuloCategoria(tx, rateios, categories)
   return rot.rateado ? `${rot.curto}: ${rot.detalhe}` : rot.curto
 }
+
+// ── Rateio de agendamento por OCORRÊNCIA ("Só esta"): overrides[data].rateio; senão o da série. ──
+const linhasDe = (lista) => (lista || []).map(r => ({ categoriaId: r.categoriaId, valor: Number(r.valor) || 0, descricao: r.descricao || '' }))
+export function rateioDaOcorrencia(schedule, data, rateiosDaSerie = []) {
+  const ov = data ? schedule?.overrides?.[String(data).slice(0, 10)] : null
+  if (ov && Array.isArray(ov.rateio)) return linhasDe(ov.rateio)
+  return linhasDe(rateiosDaSerie)
+}
+
+// Linhas que um lançamento AUTOMÁTICO (espelho de empréstimo, aporte automático) deve olhar: as do
+// rateio informado junto com o lançamento (tx._rateio) ou a categoria do lançamento inteira.
+export const linhasParaAutomaticos = (tx) => linhasDoLancamento(
+  { type: tx.type, amount: Number(tx.amount) || 0, categoryId: tx.categoryId }, tx._rateio?.length ? tx._rateio : null)
+
+// Quanto do lançamento cai num conjunto de categorias (envelope): a soma das linhas dessas categorias.
+export function valorNasCategorias(tx, rateios, categoryIds = []) {
+  const set = new Set(categoryIds || [])
+  return r2(linhasDoLancamento(tx, rateios).filter(l => set.has(l.categoriaId)).reduce((s, l) => s + l.valor, 0))
+}
+
+// Varredura: lançamentos criados/ligados por BAIXA de agendamento rateado (meta lancamento_id ou
+// scheduleId + data da ocorrência) que ficaram SEM rateio. → [{ tx, schedule, data, linhas }] com as
+// linhas já ajustadas ao valor do lançamento (proporcional). Não altera nada.
+export function baixasSemRateio({ schedules = [], transactions = [], rateiosPorId = new Map() }) {
+  const txById = new Map(transactions.map(t => [t.id, t]))
+  const out = []
+  const vistos = new Set()
+  for (const s of schedules) {
+    const daSerie = rateiosPorId.get(s.id) || []
+    for (const [data, meta] of Object.entries(s.registeredMeta || {})) {
+      const tx = meta?.lancamento_id ? txById.get(meta.lancamento_id) : null
+      if (!tx || vistos.has(tx.id) || (tx.type !== 'expense' && tx.type !== 'income')) continue
+      if ((rateiosPorId.get(tx.id) || []).length) continue
+      const base = rateioDaOcorrencia(s, data, daSerie)
+      if (base.length < 2) continue
+      vistos.add(tx.id)
+      out.push({ tx, schedule: s, data, linhas: ajustarRateio(base, Number(tx.amount) || 0, { modo: 'proporcional' }) })
+    }
+  }
+  return out.sort((a, b) => String(b.tx.date).localeCompare(String(a.tx.date)))
+}
+
+// Rateio que o lançamento `tx` herda ao baixar a ocorrência `data` do agendamento `schedule`
+// (importação, conciliação, vínculo, já no cartão…). [] quando não herda: o lançamento já tem rateio
+// próprio (manual, Assistente, linha da importação), é transferência, ou o agendamento não é rateado.
+export function rateioHerdado({ tx, schedule, data, rateiosPorId = new Map() }) {
+  if (!tx || !schedule || (tx.type !== 'expense' && tx.type !== 'income')) return []
+  if ((rateiosPorId.get(tx.id) || []).length) return []
+  const base = rateioDaOcorrencia(schedule, data, rateiosPorId.get(schedule.id) || [])
+  if (base.length < 2) return []
+  return ajustarRateio(base, Number(tx.amount) || 0, { modo: 'proporcional' })
+}

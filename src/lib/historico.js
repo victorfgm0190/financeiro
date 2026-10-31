@@ -71,7 +71,10 @@ export function formatarValorHistorico(campo, v, ctx = {}) {
 }
 
 // Campos que só aparecem no histórico (correções da revisão automática do cartão).
-const ROTULO_EXTRA = { exclusao: 'Lançamento excluído', faturaMonthYear: 'Fatura' }
+const ROTULO_EXTRA = {
+  exclusao: 'Lançamento excluído', faturaMonthYear: 'Fatura', rateio: 'Rateio', vinculo: 'Vínculo',
+  mesclado_de: 'Mesclado com o avulso', mesclagem: 'Mesclagem', desfazer_mesclagem: 'Mesclagem desfeita', reconciled: 'Conciliado',
+}
 export const rotuloCampo = (campo) => ROTULO_CAMPO[campo] || ROTULO_EXTRA[campo] || campo
 
 // Agrupa as linhas por lote (uma edição) para a linha do tempo, mais recente primeiro.

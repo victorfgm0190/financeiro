@@ -898,7 +898,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const repeatSchId = form.repeat ? novoIdAgendamento() : null
     if (repeatSchId) txData.scheduleId = repeatSchId
 
-    const txId = addTransaction(txData)
+    // _rateio: os automáticos (espelho de empréstimo, aporte) seguem as linhas do rateio.
+    const txId = addTransaction(form.type !== 'transfer' && rateioRows.length > 0
+      ? { ...txData, _rateio: isParcelado ? rateioDaParcela(rateioRows, installmentAmount) : rateioRows } : txData)
     onSalvo?.(form, txId)
 
     // Rateio: salva os rateios para o lançamento recém-criado.

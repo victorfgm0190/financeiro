@@ -26,7 +26,7 @@ import {
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
-import { validarRateio, normalizarRateio, categoriaPrincipal } from '../../lib/rateio'
+import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
 import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -250,9 +250,12 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
 
   // Rateio (divisão em categorias) — keyed pelo id do agendamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
-  const [rateioRows, setRateioRows] = useState(() =>
-    initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })) : []
-  )
+  // Recorrente aberto numa ocorrência: o rateio "Só esta" dela (overrides[data].rateio), senão o da série.
+  const rateioSerieInicial = initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })) : []
+  const occRateioInicial = initial?.id && (initial.frequency || 'once') !== 'once' ? initial.nextOccurrence : null
+  const rateioSoDestaOcorrencia = !!(occRateioInicial && Array.isArray(initial?.overrides?.[occRateioInicial]?.rateio))
+  const rateioInicial = initial?.id ? rateioDaOcorrencia(initial, occRateioInicial, rateioSerieInicial) : []
+  const [rateioRows, setRateioRows] = useState(() => rateioInicial)
   const [showRateio, setShowRateio] = useState(false)
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
   const [erroRateio, setErroRateio] = useState('')
@@ -719,16 +722,46 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     // lançamento de origem, sem id. Com `if (initial)` isso caía em updateSchedule(undefined, …),
     // que não casa com nenhum agendamento — o modal fechava e nada era criado, sem erro.
     let schedId = initial?.id
+    // Rateio editado num agendamento existente segue a regra de séries: "Só esta" grava o rateio da
+    // ocorrência (overrides[data].rateio); "Esta e as próximas" grava o da série. Histórico com o escopo.
+    const resumoRateio = (ls) => (ls || []).map(l => `${categories.find(c => c.id === l.categoriaId)?.name || '?'} ${fmt(l.valor)}`).join(' + ') || null
+    const chaveRateio = (ls) => JSON.stringify((ls || []).map(l => [l.categoriaId, Math.round(Number(l.valor) * 100)]))
+    const rateioMudou = !!schedId && form.transactionType !== 'transfer' && chaveRateio(rateioRows) !== chaveRateio(rateioInicial)
+    let escopoRateio = ESCOPO.SERIE
+    let ctxRateio = null
     if (schedId) {
       // Regra única de séries: campo da PARCELA mudou e há pendentes depois → pergunta o escopo.
       const mudancas = diffCampos(camposAntes, camposDoForm(form))
       const ctx = contextoSerie()
-      if (!decisao && precisaEscolherEscopo(mudancas, ctx.nProximas)) {
+      ctxRateio = ctx
+      const mudancaRateio = rateioMudou ? [{ campo: 'rateio', de: resumoRateio(rateioInicial), para: resumoRateio(rateioRows) }] : []
+      if (!decisao && (precisaEscolherEscopo(mudancas, ctx.nProximas) || (rateioMudou && ctx.nProximas > 0))) {
         setEscopoPendente({
-          mudancas, nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, ocorrencia: ctx.tipo === 'A',
+          mudancas: [...mudancas, ...mudancaRateio], nProximas: ctx.nProximas, nPendentes: ctx.nPendentes, ocorrencia: ctx.tipo === 'A',
           conflitos: ctx.tipo === 'A' ? conflitosProximas(serieBase, { occDate: ctx.occDate, mudancas, pendentes: ctx.pendentes }) : [],
         })
         return
+      }
+      if (rateioMudou) {
+        escopoRateio = ctx.nProximas > 0 ? (decisao?.escopo || ESCOPO.PARCELA) : ESCOPO.SERIE
+        const overrides = { ...(data.overrides || {}) }
+        if (ctx.tipo === 'A' && escopoRateio === ESCOPO.PARCELA) {
+          overrides[ctx.occDate] = { ...(overrides[ctx.occDate] || {}), rateio: rateioRows }
+        } else if (ctx.tipo === 'A') {
+          // Esta e as próximas: as ocorrências daqui em diante seguem o rateio novo da série.
+          for (const [d, ov] of Object.entries(overrides)) {
+            if (d >= ctx.occDate && ov && 'rateio' in ov) { const resto = { ...ov }; delete resto.rateio; overrides[d] = resto }
+          }
+        }
+        data.overrides = overrides
+        const loteR = novoLoteId()
+        registrarEdicao({
+          loteId: loteR,
+          historico: linhasHistorico({
+            entidade: 'agendamento', serieKey: serieKeyDe({ agendamento: initial }), loteId: loteR, motivo: decisao?.motivo || null,
+            itens: [{ id: initial.id, ocorrenciaData: escopoRateio === ESCOPO.PARCELA ? ctx.occDate : null, escopo: escopoRateio === ESCOPO.PARCELA ? ESCOPO.PARCELA : ESCOPO.PROXIMAS, mudancas: mudancaRateio }],
+          }),
+        }).catch(err => console.warn('[rateio] histórico:', err.message))
       }
       // Parcela de financiamento: o favorecido vale para o financiamento e as parcelas PENDENTES —
       // o endpoint vai ANTES do updateSchedule (falha não deixa o estado com um favorecido que o
@@ -749,10 +782,18 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       schedId = addSchedule(data)
       onSalvo?.(form, schedId)
     }
-    // Rateio do agendamento (apenas receita/despesa).
-    if (form.transactionType !== 'transfer' && schedId) {
+    // Rateio da SÉRIE (apenas receita/despesa): agendamento novo, ou editado com escopo além de "Só esta".
+    const soDestaOcorrencia = rateioMudou && ctxRateio?.tipo === 'A' && escopoRateio === ESCOPO.PARCELA
+    if (form.transactionType !== 'transfer' && schedId && !soDestaOcorrencia && (!initial?.id || rateioMudou)) {
       if (rateioRows.length > 0) saveRateiosFor(schedId, rateioRows)
       else if (hadRateio) deleteRateiosFor(schedId)
+      // Parcelas de contrato/financiamento (registros separados): "Esta e as próximas" leva às irmãs pendentes.
+      if (ctxRateio?.tipo === 'F' && escopoRateio !== ESCOPO.PARCELA && rateioMudou) {
+        for (const s of ctxRateio.irmas.filter(x => (x.startDate || '') > (initial.startDate || '') && agendamentoUnicoPendente(x))) {
+          if (rateioRows.length > 0) saveRateiosFor(s.id, rateioRows)
+          else deleteRateiosFor(s.id)
+        }
+      }
     }
     // Agenda no celular: mudou o que vai para o feed → envia já.
     if ((initial?.sincronizarAgenda !== false) !== form.sincronizarAgenda) publicarAgendaJa()
@@ -1050,7 +1091,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
-                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length})</span>
+                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length}){rateioSoDestaOcorrencia ? ' · só desta ocorrência' : ''}</span>
                   <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
                 </div>
               ) : (

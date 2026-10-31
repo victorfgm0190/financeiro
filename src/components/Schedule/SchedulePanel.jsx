@@ -15,7 +15,7 @@ import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { ORIGIN } from '../../lib/origins'
 import { occEfetiva } from '../../lib/fluxoCaixa'
-import { ajustarRateio } from '../../lib/rateio'
+import { ajustarRateio, rateioDaOcorrencia } from '../../lib/rateio'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { PERIODOS, scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
@@ -218,9 +218,10 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
   }, [scheduleReservaFuncoes, reserveFunctions, schedule.id])
   const hasDetalhe = reservaDetalhe.length > 0
   const detalheTotal = useMemo(() => Math.round(reservaDetalhe.reduce((s, d) => s + d.valor, 0) * 100) / 100, [reservaDetalhe])
+  // Rateio da ocorrência paga: o "Só esta" dela (overrides[data].rateio) ou o da série.
   const scheduleRateios = useMemo(
-    () => (rateiosByLancamento?.get(schedule.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })),
-    [rateiosByLancamento, schedule.id],
+    () => rateioDaOcorrencia(schedule, nextDate, rateiosByLancamento?.get(schedule.id) || []),
+    [rateiosByLancamento, schedule, nextDate],
   )
   const sortedPayees = useMemo(() => {
     const counts = {}
@@ -436,8 +437,9 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
       })
-      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
+      // Rateio escolhido ANTES da baixa: a baixa só herda o rateio quando o lançamento não tem um.
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, ajustarRateio(scheduleRateios, amount, ajusteRateio))
+      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
         if (grupo && grupo.number !== 'D') {
@@ -467,8 +469,9 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         dataOcorrencia: regDate,
         origin: ORIGIN.AGENDAMENTO,
       })
-      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
+      // Rateio escolhido ANTES da baixa: a baixa só herda o rateio quando o lançamento não tem um.
       if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, ajustarRateio(scheduleRateios, amount, ajusteRateio))
+      markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
       pago = { id: txId, accountId: payAccountId, date: payDate, amount, payee: payPayee, description: schedule.description }
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)

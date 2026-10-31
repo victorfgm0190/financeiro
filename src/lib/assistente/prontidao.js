@@ -175,13 +175,24 @@ export function primeiraOcorrencia({ data, dia = null, recorrencia = 'monthly' }
 }
 
 // Data final → nº de ocorrências a partir da 1ª (inclusive). null sem data final.
+const DIAS_PASSO = { weekly: 7, biweekly: 14 }
+const MESES_PASSO = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12, installment: 1 }
+const proxima = (d, recorrencia) => {
+  if (DIAS_PASSO[recorrencia]) {
+    const [y, m, dd] = d.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, dd + DIAS_PASSO[recorrencia])).toISOString().slice(0, 10)
+  }
+  return somarMeses(d, MESES_PASSO[recorrencia])
+}
+// Ocorrências de `inicio` (inclusive) até `ate`: { n, ultima } (n = 0 → null). Semanal/quinzenal por dias.
+export function ocorrenciasAte({ inicio, ate, recorrencia = 'monthly' }) {
+  if (!inicio || !ate || ate < inicio || !(DIAS_PASSO[recorrencia] || MESES_PASSO[recorrencia])) return null
+  let n = 0, ultima = null
+  for (let d = inicio; d <= ate && n < 1000; d = proxima(d, recorrencia)) { n++; ultima = d }
+  return n ? { n, ultima } : null
+}
 export function vezesAte({ inicio, ate, recorrencia = 'monthly' }) {
-  if (!inicio || !ate || ate < inicio) return null
-  const passo = { monthly: 1, bimonthly: 2, quarterly: 3, semiannual: 6, annual: 12, installment: 1 }[recorrencia]
-  if (!passo) return null
-  let n = 0
-  for (let d = inicio; d <= ate; d = somarMeses(d, passo)) n++
-  return n
+  return ocorrenciasAte({ inicio, ate, recorrencia })?.n ?? null
 }
 
 // Repetição do "Despesa + agendamento" na prévia → campos do TransactionForm (Repetir este lançamento):

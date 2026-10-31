@@ -15,13 +15,21 @@ export function agruparPorFavorecido(txs) {
   const porChave = new Map()
   const semFavorecido = { total: 0, qtd: 0, txs: [] }
   let total = 0
+  // Lançamento rateado chega explodido em linhas (`_rateioOf`): conta UM lançamento por favorecido.
+  const contados = new Set()
+  const novo = (chave, t) => {
+    const k = `${chave}|${t._rateioOf || t.id}`
+    if (contados.has(k)) return 0
+    contados.add(k)
+    return 1
+  }
   for (const t of txs || []) {
     const valor = Number(t.amount) || 0
     total += valor
     const chave = chaveFavorecido(t.payee)
     if (!chave) {
       semFavorecido.total += valor
-      semFavorecido.qtd++
+      semFavorecido.qtd += novo('', t)
       semFavorecido.txs.push(t)
       continue
     }
@@ -30,7 +38,7 @@ export function agruparPorFavorecido(txs) {
     const grafia = nomeFavorecido(t.payee)
     g.grafias.set(grafia, (g.grafias.get(grafia) || 0) + 1)
     g.total += valor
-    g.qtd++
+    g.qtd += novo(chave, t)
     g.txs.push(t)
   }
   const grupos = [...porChave.values()]

@@ -1,6 +1,7 @@
 // Gasto dos envelopes por competência (mês financeiro). Extraído de EnvelopesPanel sem mudança de
 // regra — a tela Envelopes e o card do Início mobile usam a mesma função.
 import { isReservaShadowOrigin, isPatrimonioOrigin, isInvestAutoOrigin } from './origins.js'
+import { valorNasCategorias } from './rateio.js'
 
 // Chave comparável (ano*12 + mês0) da competência de uma data, aplicando o dia de
 // início do mês financeiro: date.day >= startDay → mês da data; senão → mês anterior.
@@ -19,15 +20,23 @@ export function currentCompetencia(startDay) {
   return { year: p.getFullYear(), month0: p.getMonth() }
 }
 
-// [{ env, txs, spent }] por envelope na competência compKey.
-export function gastoEnvelopes(envelopes, transactions, compKey, startDay) {
+// [{ env, txs, spent }] por envelope na competência compKey. `rateios` (Map lançamento → linhas,
+// opcional): lançamento rateado entra só com a PARTE das categorias do envelope (lib/rateio) — o
+// item da lista leva amount = a parte e _amountTotal = o valor do lançamento.
+export function gastoEnvelopes(envelopes, transactions, compKey, startDay, rateios = null) {
   return (envelopes || []).map(env => {
-    const txs = (transactions || []).filter(tx =>
-      tx.type === 'expense' &&
-      !tx.reservaAuto && !isReservaShadowOrigin(tx) && !isPatrimonioOrigin(tx) && !isInvestAutoOrigin(tx) &&
-      env.categoryIds.includes(tx.categoryId) &&
-      competenciaKeyOf(tx.date, startDay) === compKey
-    )
+    const txs = []
+    for (const tx of transactions || []) {
+      if (tx.type !== 'expense' || tx.reservaAuto || isReservaShadowOrigin(tx) || isPatrimonioOrigin(tx) || isInvestAutoOrigin(tx)) continue
+      if (competenciaKeyOf(tx.date, startDay) !== compKey) continue
+      const linhas = rateios?.get(tx.id)
+      if (!linhas?.length) {
+        if (env.categoryIds.includes(tx.categoryId)) txs.push(tx)
+        continue
+      }
+      const parte = valorNasCategorias(tx, linhas, env.categoryIds)
+      if (parte > 0) txs.push({ ...tx, amount: parte, _amountTotal: tx.amount })
+    }
     const spent = txs.reduce((s, t) => s + t.amount, 0)
     return { env, txs, spent }
   })

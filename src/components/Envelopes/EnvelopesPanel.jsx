@@ -145,7 +145,7 @@ function EnvelopeForm({ initial, onSave, onCancel, categories, accounts, account
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 export default function EnvelopesPanel() {
-  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode } = useApp()
+  const { envelopes, addEnvelope, updateEnvelope, deleteEnvelope, profileTransactions: transactions, categories, profileAccounts: accounts, accountGroups, settings, pode, rateiosByLancamento } = useApp()
   const podeIncluir = pode('envelopes', 'incluir')
   const podeEditar = pode('envelopes', 'editar')
   const podeExcluir = pode('envelopes', 'excluir')
@@ -177,8 +177,8 @@ export default function EnvelopesPanel() {
   const shiftComp = (delta) => setMonthOffset(o => o + delta)
 
   const envelopeData = useMemo(
-    () => gastoEnvelopes(envelopes, transactions, compKey, startDay),
-    [envelopes, transactions, compKey, startDay]
+    () => gastoEnvelopes(envelopes, transactions, compKey, startDay, rateiosByLancamento),
+    [envelopes, transactions, compKey, startDay, rateiosByLancamento]
   )
 
   function handleSave(data) {
