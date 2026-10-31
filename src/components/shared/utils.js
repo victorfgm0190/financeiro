@@ -2,6 +2,7 @@ import { isInvestAutoOrigin } from '../../lib/origins.js'
 import { hojeSP } from '../../lib/hoje.js'
 import { faturaDoCartao } from '../../lib/fatura.js'
 import { faixaValorCentavos, valorNaFaixa } from '../../lib/buscaGlobal.js'
+import { temCategoria } from '../../lib/rateio.js'
 
 export function fmt(value, currency = 'BRL') {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value ?? 0)
@@ -73,7 +74,8 @@ export function matchDataFiltro(f, ...datas) {
 // True se o lançamento satisfaz TODOS os filtros preenchidos (AND). Campo vazio
 // não filtra. Data casa parcialmente contra DD/MM/AAAA; demais são substring
 // case-insensitive.
-export function matchLancFiltros(tx, f, accounts) {
+// `rateios` (Map lançamento → linhas, opcional): o rateado casa com QUALQUER categoria das linhas.
+export function matchLancFiltros(tx, f, accounts, rateios = null) {
   if (!hasLancFiltros(f)) return true
   const norm = s => (s ?? '').toString().toLowerCase()
   if (f.data && !matchDataFiltro(f.data, tx.date, tx.dateCartao)) return false
@@ -84,7 +86,7 @@ export function matchLancFiltros(tx, f, accounts) {
     if (f.de && !norm(de).includes(norm(f.de))) return false
     if (f.para && !norm(para).includes(norm(f.para))) return false
   }
-  if (f.categoria && tx.categoryId !== f.categoria) return false
+  if (f.categoria && tx.categoryId !== f.categoria && !temCategoria(tx, rateios?.get(tx.id), f.categoria)) return false
   if (f.valorDe || f.valorAte) {
     const num = s => { const n = parseFloat(String(s).replace(',', '.')); return isNaN(n) ? null : n }
     const de = num(f.valorDe), ate = num(f.valorAte)

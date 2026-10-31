@@ -14,7 +14,8 @@ import ExecutarGerenciaisModal from './ExecutarGerenciaisModal'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import DataPagamentoField from '../shared/DataPagamentoField'
 import { ORIGIN } from '../../lib/origins'
-import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
+import { occEfetiva } from '../../lib/fluxoCaixa'
+import { ajustarRateio } from '../../lib/rateio'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { PERIODOS, scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
@@ -369,6 +370,28 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
     : parseValorBR(trfAmount)
   const valorOk = usaDetalhe || (Number.isFinite(valorAba) && valorAba > 0)
 
+  // Agendamento rateado pago com outro valor: proporcional entre as linhas ou a diferença numa linha.
+  const [ajusteRateio, setAjusteRateio] = useState({ modo: 'proporcional', idx: 0 })
+  const somaRateioAg = Math.round(scheduleRateios.reduce((s, r) => s + (Number(r.valor) || 0), 0) * 100) / 100
+  const rateioDiverge = tab !== 'transferencia' && scheduleRateios.length > 1 && valorOk && Math.abs(valorAba - somaRateioAg) > 0.004
+  const blocoAjusteRateio = rateioDiverge ? (
+    <div className="sm:col-span-2 rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs space-y-1">
+      <p className="text-texto-1">O valor ({fmt(valorAba)}) difere do previsto ({fmt(somaRateioAg)}). Como ajustar o rateio?</p>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="radio" className="accent-primary" checked={ajusteRateio.modo === 'proporcional'} onChange={() => setAjusteRateio(a => ({ ...a, modo: 'proporcional' }))} />
+        Proporcional entre as linhas
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer flex-wrap">
+        <input type="radio" className="accent-primary" checked={ajusteRateio.modo === 'linha'} onChange={() => setAjusteRateio(a => ({ ...a, modo: 'linha' }))} />
+        A diferença na linha
+        <select className="input py-0.5 text-xs w-auto" value={ajusteRateio.idx}
+          onChange={e => setAjusteRateio({ modo: 'linha', idx: Number(e.target.value) })} aria-label="Linha do rateio que recebe a diferença">
+          {scheduleRateios.map((r, i) => <option key={i} value={i}>{categories.find(c => c.id === r.categoriaId)?.name || 'Categoria'} ({fmt(r.valor)})</option>)}
+        </select>
+      </label>
+    </div>
+  ) : null
+
   // Vencimento do período do PAGAMENTO pulado (ex.: pulou 18/06 e paga em 17/06): a baixa iria
   // para a próxima pendente (18/07) e o mês contaria duas vezes. Avisa e oferece tirar o pulo.
   const [avisoPuloSel, setAvisoPulo] = useState(null) // { pulado, chave }
@@ -414,7 +437,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
-      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, escalarRateios(scheduleRateios, amount))
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, ajustarRateio(scheduleRateios, amount, ajusteRateio))
       if (payGrupo) {
         const grupo = gerencialGroups.find(g => g.id === payGrupo)
         if (grupo && grupo.number !== 'D') {
@@ -445,7 +468,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
         origin: ORIGIN.AGENDAMENTO,
       })
       markScheduleRegistered(schedule.id, regDate, { tipo: TIPO_BAIXA.PAGO, lancamento_id: txId || null, import_id: null })
-      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, escalarRateios(scheduleRateios, amount))
+      if (txId && scheduleRateios.length > 0) saveRateiosFor(txId, ajustarRateio(scheduleRateios, amount, ajusteRateio))
       pago = { id: txId, accountId: payAccountId, date: payDate, amount, payee: payPayee, description: schedule.description }
     } else if (hasDetalhe) {
       // Resgate detalhado: gera uma transferência por função (via registerScheduleOccurrence)
@@ -629,6 +652,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
+              {blocoAjusteRateio}
               <div>
                 <label className="label">Data</label>
                 <DataPagamentoField value={payDate} onChange={e => setPayDate(e.target.value)} vencimento={occVenc} />
@@ -670,6 +694,7 @@ export function PayModal({ schedule: scheduleProp, nextDate, accounts, categorie
                 <InputMoeda className={`input ${valorOk ? '' : '!border-perigo'}`} placeholder="" value={recAmount} onChange={e => setRecAmount(e.target.value)} />
                 {!valorOk && <p className="text-xs text-perigo mt-1">⚠ Valor inválido</p>}
               </div>
+              {blocoAjusteRateio}
               <div>
                 <label className="label">Data</label>
                 <DataPagamentoField value={recDate} onChange={e => setRecDate(e.target.value)} vencimento={occVenc} />
@@ -2540,7 +2565,7 @@ export default function SchedulePanel() {
     deleteSchedule, registerScheduleOccurrence, skipScheduleOccurrence,
     markScheduleRegistered, getNextOccurrences,
     getProvisoesPendentes, getFaturasProvisaoGerencial, executarProvisoesGerenciais, efetivarProvisao,
-    activeProfileId, settings, tiposDocumento, transactions, pode, usuario,
+    activeProfileId, settings, tiposDocumento, transactions, pode, usuario, rateiosByLancamento,
   } = useApp()
   // Nível de acesso: criar agendamento/provisão = incluir; Executar Gerenciais cria lançamentos.
   const podeIncluirAgend = pode('agendamentos', 'incluir')
@@ -3044,7 +3069,7 @@ export default function SchedulePanel() {
   // Exportar Excel: o que a lista mostra agora (aba, status, período, filtros e ordem da tabela).
   const [exportando, setExportando] = useState(false)
   const exportarParaExcel = () => {
-    const ctx = { accounts: allAccounts, categories, gerencialGroups, tiposDocumento, hoje: hojeStr }
+    const ctx = { accounts: allAccounts, categories, gerencialGroups, tiposDocumento, hoje: hojeStr, rateios: rateiosByLancamento }
     const agrupar = activeTab === 'cartao' ? !hasActiveFilter : (!hasActiveFilter && selContas.size === 0)
     const linhas = abaPagos ? linhasDosPagos(pagosVisiveis, ctx)
       : abaSemNada ? []

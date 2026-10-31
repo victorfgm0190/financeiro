@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { rotuloCategoriaFluxo } from '../../lib/rateio'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
 import {
   ArrowDownCircle, ArrowUpCircle, Wallet, AlertTriangle, Calendar, Plus, Pencil, Trash2,
@@ -93,7 +94,7 @@ export default function CashFlowPanel({ setActivePage }) {
     getOccurrencesProjecao: getNextOccurrences, envelopes, accountGroups, reserveFunctions,
     profiles, activeProfileId, updateSchedule, addTransaction, mergeScheduleFromDb,
     datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, tiposDocumento, registrarEdicao,
-    toggleScheduleConfirmado, categories, projetarEtapaA, pode,
+    toggleScheduleConfirmado, categories, projetarEtapaA, pode, rateiosByLancamento,
   } = useApp()
   // Nível de acesso (src/lib/permissoes.js): consultas, provisórios e datas simuladas = fluxo;
   // a flag Confirmado é do agendamento; "Efetivar" grava um agendamento/lançamento.
@@ -712,7 +713,7 @@ export default function CashFlowPanel({ setActivePage }) {
                 horizonte={horizonte}
                 qtdContas={contas.length}
                 corSaldo={corSaldo}
-                subtitulo={(r) => [catName(r.categoryId), accName(contaDaLinha(r, accountIds)), seloDaLinha(r)].filter(Boolean).join(' · ')}
+                subtitulo={(r) => [rotuloCategoriaFluxo(r, rateiosByLancamento, categories) || catName(r.categoryId), accName(contaDaLinha(r, accountIds)), seloDaLinha(r)].filter(Boolean).join(' · ')}
                 statusCelula={statusCelula}
                 docBadge={(r) => <TipoDocumentoBadge tipo={docDaLinha(r)} />}
                 docDaLinha={docDaLinha}

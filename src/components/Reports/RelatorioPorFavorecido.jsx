@@ -108,7 +108,7 @@ function doExport(filtered, totals, accounts, categories, applied, analytic) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function RelatorioPorFavorecido() {
-  const { profileTransactions: transactions, categories, profileAccounts: accounts, settings } = useApp()
+  const { profileTransactions: transactions, categories, profileAccounts: accounts, settings, rateiosByLancamento } = useApp()
   const isMobile = useIsMobile()
   const startDay = settings?.financialMonthStartDay || 1
 
@@ -247,7 +247,7 @@ export default function RelatorioPorFavorecido() {
                     nomes.length && nomes.length < accounts.length ? `Contas: ${nomes.join(', ')}` : 'Contas: todas',
                     ...(search.trim() ? [`Favorecido contém: ${search.trim()}`] : []),
                   ]
-                  exportarExcel(specRelatorioFavorecido(filtered, { accounts, categories, from: applied.from, to: applied.to, filtros }))
+                  exportarExcel(specRelatorioFavorecido(filtered, { accounts, categories, from: applied.from, to: applied.to, filtros, rateios: rateiosByLancamento }))
                     .catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
                 }}
                 className="btn-secondary flex items-center gap-2 text-xs"

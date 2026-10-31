@@ -1,10 +1,12 @@
+import { categoriaParaExportar } from './rateio.js'
+
 // Relatório por Favorecido em Excel (layout em lib/exportExcel). Por favorecido: linha de grupo
 // (fora das somas), os lançamentos e o subtotal por fórmula; TOTAL e cartões por fórmula sobre o
 // detalhe — os subtotais nunca entram em dobro.
 const fmtData = (iso) => (iso ? iso.split('-').reverse().join('/') : '')
 
 // grupos: [{ payee, pago, recebido, txs }] já filtrados e na ordem da tela.
-export function specRelatorioFavorecido(grupos, { accounts = [], categories = [], from, to, filtros = [] }) {
+export function specRelatorioFavorecido(grupos, { accounts = [], categories = [], from, to, filtros = [], rateios = null }) {
   const nomeConta = (id) => { const a = accounts.find(x => x.id === id); return a ? (a.apelido || a.name) : '' }
   const nomeCat = (id) => categories.find(c => c.id === id)?.name || ''
   const linhas = []
@@ -13,7 +15,7 @@ export function specRelatorioFavorecido(grupos, { accounts = [], categories = []
     for (const tx of [...g.txs].sort((a, b) => b.date.localeCompare(a.date))) {
       linhas.push({
         favorecido: g.payee, data: tx.date, descricao: tx.description || '', conta: nomeConta(tx.accountId),
-        categoria: nomeCat(tx.categoryId), tipo: tx.type === 'income' ? 'Receita' : 'Despesa',
+        categoria: rateios?.get(tx.id)?.length ? categoriaParaExportar(tx, rateios.get(tx.id), categories) : nomeCat(tx.categoryId), tipo: tx.type === 'income' ? 'Receita' : 'Despesa',
         pago: tx.type === 'expense' ? tx.amount : null, recebido: tx.type === 'income' ? tx.amount : null,
       })
     }

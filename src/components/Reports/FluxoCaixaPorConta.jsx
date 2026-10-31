@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
+import { rotuloCategoriaFluxo } from '../../lib/rateio'
 import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
 import { serieKeyDe } from '../../lib/camposSerie'
 import { format, addDays } from 'date-fns'
@@ -48,7 +49,7 @@ function loadSelecaoSalva() {
 }
 
 export default function FluxoCaixaPorConta() {
-  const { profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao, pode } = useApp()
+  const { rateiosByLancamento, profileAccounts: accounts, profileTransactions: transactions, profileSchedules: schedules, accountGroups, envelopes, categories, reserveFunctions, getOccurrencesProjecao: getNextOccurrences, projetarEtapaA, mergeScheduleFromDb, updateSchedule, datasProvisorias, salvarDataProvisoria, removerDatasProvisorias, registrarEdicao, pode } = useApp()
   // Nível de acesso (src/lib/permissoes.js): provisórios e datas provisórias gravadas = fluxo;
   // "Aplicar data" altera o agendamento; "Efetivar" cria um agendamento.
   const podeIncluirF = pode('fluxo', 'incluir')
@@ -400,7 +401,7 @@ export default function FluxoCaixaPorConta() {
       { data: prevDayStr || null, descricao: 'Saldo anterior realizado', saldo: round2(saldoAnteriorRealizado), _estilo: 'grupo' },
       { data: prevDayStr || null, descricao: 'Saldo anterior c/ agendamentos', saldo: round2(saldoAnteriorComAgendamentos), _estilo: 'grupo' },
       ...rowsView.filter(r => r.ativa).map(r => ({
-        data: r.date, descricao: r.description, de: contaDe(r), para: contaPara(r), categoria: catName(r.categoryId),
+        data: r.date, descricao: r.description, de: contaDe(r), para: contaPara(r), categoria: rotuloCategoriaFluxo(r, rateiosByLancamento, categories) || catName(r.categoryId),
         reserva: contaReserva(r), entrada: r.entrada > 0 ? round2(r.entrada) : null, saida: r.saida > 0 ? round2(r.saida) : null,
         saldo: round2(r.saldo), status: r.status,
       })),

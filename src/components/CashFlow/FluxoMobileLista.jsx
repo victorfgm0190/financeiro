@@ -152,7 +152,7 @@ export default function FluxoMobileLista({
               {mk.status && <>{iconeStatus(mk.status)}{' '}</>}
               {r.description}
             </p>
-            <p className="text-[11px] text-texto-3 truncate">{subtitulo(r)}</p>
+            <p className="text-[11px] text-texto-3 truncate" title={subtitulo(r)}>{subtitulo(r)}</p>
           </div>
           {valor(r, !ativa, oculto)}
           {expandida ? <ChevronDown size={14} className="text-texto-3 shrink-0" /> : <ChevronRight size={14} className="text-texto-3 shrink-0" />}

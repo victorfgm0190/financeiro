@@ -39,6 +39,7 @@ import { diferencasLancamentoAgendamento, patchLancamentoDoAgendamento, mudancas
 import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 import RateioModal from '../shared/RateioModal'
+import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaParcela } from '../../lib/rateio'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
 import DateInput from '../shared/DateInput'
@@ -246,6 +247,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   const [maisOpcoes, setMaisOpcoes] = useState(false)
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
+  const [erroRateio, setErroRateio] = useState('')
   const tipoDocObrigatorio = tipoDocumentoObrigatorio({ criando: !initial?.id, tipoMov: form.type })
   const [resgateInfo, setResgateInfo] = useState(null)
   const [resgateDate, setResgateDate] = useState(() => today())
@@ -547,6 +549,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     e?.preventDefault?.()
     if (!form.amount || !form.accountId) return
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
+    // Rateio: só grava quando as linhas fecham o valor do lançamento.
+    if (form.type !== 'transfer' && rateioRows.length > 0) {
+      const v = validarRateio(rateioRows, Number(form.amount) || 0)
+      if (!v.ok) { setErroRateio(`Restante a distribuir: ${fmt(v.restante)}. ${v.motivo}`); return }
+    }
+    setErroRateio('')
 
     // Item 2: descrição com "N/Total" e "Parcelado" não marcado → nunca decidir em silêncio.
     // Mostra o passo de confirmação; a decisão volta como `installmentDecision` no re-submit
@@ -623,6 +631,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const { useReserva: _ur, reservaMemo: _rm, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
     const txData = {
       ...formFields,
+      // Com rateio, a categoria gravada no lançamento é a da maior linha (leitores que só olham
+      // categoryId não ficam com uma categoria antiga).
+      ...(form.type !== 'transfer' && rateioRows.length > 0 ? { categoryId: categoriaPrincipal(rateioRows) } : {}),
       amount: installmentAmount,
       accountType: selectedAccount?.type,
       grupoGerencial: showGerencial ? form.grupoGerencial : (gerencialLigado ? null : grupoComChaveDesligada(initial)),
@@ -884,7 +895,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     onSalvo?.(form, txId)
 
     // Rateio: salva os rateios para o lançamento recém-criado.
-    if (form.type !== 'transfer' && rateioRows.length > 0 && txId) saveRateiosFor(txId, rateioRows)
+    // Parcelado: as linhas foram digitadas sobre o TOTAL — cada parcela leva as proporções sobre o seu valor.
+    if (form.type !== 'transfer' && rateioRows.length > 0 && txId) saveRateiosFor(txId, isParcelado ? rateioDaParcela(rateioRows, installmentAmount) : rateioRows)
 
     // Parcelado manual em cartão: cria as parcelas FUTURAS (2..N) como lançamentos reais, cada
     // uma na sua fatura. Roda para QUALQUER grupo gerencial (inclui Grupo D / despesa normal) —
@@ -907,7 +919,10 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         amountUltima: valores.ultima,
       })
       if (rateioRows.length > 0 && parcelaIds?.length) {
-        for (const pid of parcelaIds) saveRateiosFor(pid, rateioRows)
+        parcelaIds.forEach((pid, i) => {
+          const ultima = i === parcelaIds.length - 1 && parcelaIds.length === Number(form.installments) - 1
+          saveRateiosFor(pid, rateioDaParcela(rateioRows, ultima ? valores.ultima : installmentAmount))
+        })
       }
     }
 
@@ -939,6 +954,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         overrides: {},
       })
       markScheduleRegistered(schId, form.date, metaBaixaGerada(txId))
+      // O agendamento herda o rateio do lançamento.
+      if (form.type !== 'transfer' && rateioRows.length > 0 && schId) saveRateiosFor(schId, rateioDaParcela(rateioRows, installmentAmount))
     }
 
     // "Será pago com reserva" (despesa de conta corrente): a despesa já foi salva com o vínculo
@@ -1505,7 +1522,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
           perfilId={perfilCategorias}
           categoryType={form.type === 'income' ? 'income' : form.type === 'expense' ? 'expense' : null}
           initial={rateioRows}
-          onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
+          onSave={rs => {
+            // Uma linha só não é rateio: o lançamento volta a ser comum, com a categoria dela.
+            const { linhas, comum } = normalizarRateio(rs)
+            if (comum) set('categoryId', comum)
+            setRateioRows(linhas); setErroRateio(''); setShowRateio(false)
+          }}
           onDeleteAll={() => { setRateioRows([]); setShowRateio(false) }}
           onClose={() => setShowRateio(false)}
         />
@@ -1753,7 +1775,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
-                  <span>{rateioRows.length} Categorias Separadas</span>
+                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length})</span>
                   <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
                 </div>
               ) : (
@@ -1770,10 +1792,11 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
                   {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
                 </div>
               )}
-              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-                Separar
+              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este lançamento em várias categorias">
+                <span className="hidden sm:inline">Dividir em categorias</span><span className="sm:hidden">Dividir</span>
               </button>
             </div>
+            {erroRateio && <p className="text-[11px] text-aviso mt-1" role="alert">{erroRateio}</p>}
           </div>
 
           <div>

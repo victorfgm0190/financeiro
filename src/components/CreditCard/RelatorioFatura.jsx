@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { categoriaParaExportar } from '../../lib/rateio'
 import { Download, FileBarChart } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { useScrollScope } from '../../hooks/useScrollRestoration'
@@ -76,7 +77,7 @@ function getBillPeriod(dateStr, closingDay) {
 }
 
 export default function RelatorioFatura({ initialCardId }) {
-  const { accounts, transactions, categories, gerencialGroups, reserveFunctions, settings } = useApp()
+  const { accounts, transactions, categories, gerencialGroups, reserveFunctions, settings, rateiosByLancamento } = useApp()
   // Controle gerencial desligado: sem totais por grupo nem coluna Ger. (o grupo gravado fica no banco).
   const gerencialLigado = controleGerencialAtivo(settings)
   useScrollScope('credit:relatorio')
@@ -209,7 +210,7 @@ export default function RelatorioFatura({ initialCardId }) {
       const grupo = grupoOf(tx) || (gerencialLigado ? grpD : null)
       return {
         data: tx.date, desc: tx.description || '', descOrig: tx.notes || '', id: tx.id, fatura: faturaRefOf(tx),
-        categoria: cat ? cat.name : '', favorecido: tx.payee || '', grupo: grupo ? grupo.alias : '', parcela: parcelaOf(tx),
+        categoria: rateiosByLancamento.get(tx.id)?.length ? categoriaParaExportar(tx, rateiosByLancamento.get(tx.id), categories) : (cat ? cat.name : ''), favorecido: tx.payee || '', grupo: grupo ? grupo.alias : '', parcela: parcelaOf(tx),
         valor: tx.amount, _estorno: tx.type === 'income',
       }
     })

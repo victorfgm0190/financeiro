@@ -50,6 +50,7 @@ import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { definirIdentidadeExport } from '../lib/exportExcel'
 import { planejarVinculo, planejarDesvinculo, planejarMesclagem, mapaVinculos } from '../lib/vinculo'
+import { linhasDoLancamento } from '../lib/rateio'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -1506,14 +1507,11 @@ export function AppProvider({ children }) {
       const tx = transferenciaNaVisaoDoPerfil(tx0, activeProfile, accById, profileById)
       const rateios = rateiosByLancamento.get(tx0.id)
       if (rateios && rateios.length > 0 && (tx.type === 'income' || tx.type === 'expense')) {
-        let assigned = 0
-        rateios.forEach((r, i) => {
-          const v = rb(Number(r.valor) || 0)
-          out.push({ ...tx, id: `${tx.id}:r${i}`, categoryId: r.categoriaId, amount: v, _rateioOf: tx0.id })
-          assigned += v
+        // lib/rateio: linhas limitadas ao total (soma acima do total é reescalada, nunca infla; a
+        // sobra de rateio antigo incompleto fica na categoria principal).
+        linhasDoLancamento(tx, rateios).forEach((l, i) => {
+          out.push({ ...tx, id: l.sobra ? `${tx.id}:rem` : `${tx.id}:r${i}`, categoryId: l.categoriaId, amount: l.valor, _rateioOf: tx0.id })
         })
-        const remainder = rb((tx.amount || 0) - assigned)
-        if (remainder > 0.005) out.push({ ...tx, id: `${tx.id}:rem`, amount: remainder, _rateioOf: tx0.id })
       } else {
         out.push(tx)
       }
@@ -2799,7 +2797,9 @@ export function AppProvider({ children }) {
     const antes = dataRef.current.schedules.find(s => s.id === id) || null
     update(d => ({ ...d, schedules: d.schedules.filter(s => s.id !== id) }))
     if (antes) reconciliarPorAgendamento([antes])
-  }, [update, reconciliarPorAgendamento])
+    // Rateio do agendamento (lancamento_rateios guarda também o id do agendamento) não fica órfão.
+    if (rateiosByLancamento.get(id)?.length) deleteRateiosFor(id)
+  }, [update, reconciliarPorAgendamento, rateiosByLancamento, deleteRateiosFor])
 
   // Módulo de Contratos (src/hooks/useContratos.js): ficha via api/contrato*.js, parcelas = agendamentos.
   const contratosCtx = useContratos({

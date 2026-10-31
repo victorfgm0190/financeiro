@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { rotuloCategoria, parteDaCategoria } from '../../lib/rateio'
 import SeloVinculo from '../shared/SeloVinculo'
 import {
   Plus, ArrowLeft, CreditCard, Wallet,
@@ -98,7 +99,7 @@ function AccountPicker({ accounts, accountGroups, onSelect }) {
 // ─── Fatura detail view ─────────────────────────────────────────────────────
 
 function FaturaView({ card, billKey, onBack, onNewTx }) {
-  const { profileTransactions: transactions, schedules, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, temHistorico, pode } = useApp()
+  const { profileTransactions: transactions, schedules, categories, profileAccounts: accounts, deleteTransaction, deleteSchedule, findLinkedResgate, setReconciled, temHistorico, pode, rateiosByLancamento } = useApp()
   // Selo "x/N" dos lançamentos gerados por agendamento parcelado (data_ocorrencia gravada).
   const seloDe = useMemo(() => criarSeloParcela(schedules), [schedules])
   // Nível de acesso (lançamentos): novo/duplicar/estornar = incluir; reconciliar = editar; excluir = excluir.
@@ -140,8 +141,8 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
 
   // Filtros em tempo real — afetam só a exibição; o total da fatura segue completo.
   const displayTxs = useMemo(
-    () => hasLancFiltros(filtros) ? txs.filter(tx => matchLancFiltros(tx, filtros, accounts)) : txs,
-    [txs, filtros, accounts]
+    () => hasLancFiltros(filtros) ? txs.filter(tx => matchLancFiltros(tx, filtros, accounts, rateiosByLancamento)) : txs,
+    [txs, filtros, accounts, rateiosByLancamento]
   )
   const billPending = useMemo(
     () => txs.filter(tx => !tx.reconciled).sort((a, b) => a.date.localeCompare(b.date)),
@@ -274,10 +275,17 @@ function FaturaView({ card, billKey, onBack, onNewTx }) {
                         {tx.payee && <p className="text-xs text-texto-3">{tx.payee}</p>}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
-                        {cat && <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2">{cat.icon} {cat.name}</span>}
+                        {rateiosByLancamento.get(tx.id)?.length
+                          ? (() => { const r = rotuloCategoria(tx, rateiosByLancamento.get(tx.id), categories); return <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2" title={r.detalhe}>{r.curto}</span> })()
+                          : cat && <span className="text-xs bg-surface-2 px-2 py-1 rounded-full text-texto-2">{cat.icon} {cat.name}</span>}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-despesa whitespace-nowrap text-sm">
-                        {fmt(tx.amount)}
+                        {filtros.categoria && rateiosByLancamento.get(tx.id)?.length ? (
+                          <>
+                            {fmt(parteDaCategoria(tx, rateiosByLancamento.get(tx.id), filtros.categoria))}
+                            <span className="block text-[10px] font-normal text-texto-3">de {fmt(tx.amount)}</span>
+                          </>
+                        ) : fmt(tx.amount)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1 justify-end">

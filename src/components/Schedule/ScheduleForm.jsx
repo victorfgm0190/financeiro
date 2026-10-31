@@ -26,6 +26,7 @@ import {
 } from '../../lib/camposSerie'
 import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico'
 import RateioModal from '../shared/RateioModal'
+import { validarRateio, normalizarRateio, categoriaPrincipal } from '../../lib/rateio'
 import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -254,6 +255,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
   )
   const [showRateio, setShowRateio] = useState(false)
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
+  const [erroRateio, setErroRateio] = useState('')
 
   const sortedGerGrupos = [...gerencialGroups].sort((a, b) => {
     if (a.number === 'D') return 1
@@ -687,9 +689,17 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     if (form.transactionType === 'transfer' && !form.toAccountId) return
     if (form.transactionType === 'transfer' && schNeedsReservaCategorySelect && !form.reservaExpenseCategoryId) return
     if (tipoDocObrigatorio && !form.tipoDocumentoId) { setErroTipoDoc('Selecione o tipo de documento.'); return }
+    // Rateio: só grava quando as linhas fecham o valor do agendamento.
+    const comRateio = form.transactionType !== 'transfer' && rateioRows.length > 0
+    if (comRateio) {
+      const v = validarRateio(rateioRows, Number(form.amount) || 0)
+      if (!v.ok) { setErroRateio(`Restante a distribuir: ${fmt(v.restante)}. ${v.motivo}`); return }
+    }
+    setErroRateio('')
     if (form.payee && !payees.includes(form.payee)) addPayee(form.payee)
     const data = {
       ...form,
+      ...(comRateio ? { categoryId: categoriaPrincipal(rateioRows) } : {}),
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
       ...categoriasPerfisDe(form),
@@ -808,7 +818,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             perfilId={perfilCategorias}
             categoryType={form.transactionType === 'income' ? 'income' : form.transactionType === 'expense' ? 'expense' : null}
             initial={rateioRows}
-            onSave={rs => { setRateioRows(rs); setShowRateio(false) }}
+            onSave={rs => {
+              const { linhas, comum } = normalizarRateio(rs)
+              if (comum) set('categoryId', comum)
+              setRateioRows(linhas); setErroRateio(''); setShowRateio(false)
+            }}
             onDeleteAll={() => { setRateioRows([]); setShowRateio(false) }}
             onClose={() => setShowRateio(false)}
           />
@@ -1036,7 +1050,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             <div className="flex items-center gap-2">
               {rateioRows.length > 0 ? (
                 <div className="input flex-1 flex items-center justify-between text-xs text-texto-2">
-                  <span>{rateioRows.length} Categorias Separadas</span>
+                  <span title={rateioRows.map(r => `${categories.find(c => c.id === r.categoriaId)?.name || '?'}: ${fmt(r.valor)}`).join('\n')}>Rateado ({rateioRows.length})</span>
                   <span className="text-texto-3">Total: {fmt(rateioTotal)}</span>
                 </div>
               ) : (
@@ -1053,10 +1067,11 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
                   {categoriaForaDoPerfil && <p className="text-[11px] text-aviso mt-0.5">⚠ Categoria de outro perfil</p>}
                 </div>
               )}
-              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-                Separar
+              <button type="button" onClick={() => setShowRateio(true)} className="btn-secondary text-xs py-1.5 px-3 shrink-0" title="Dividir este agendamento em várias categorias">
+                <span className="hidden sm:inline">Dividir em categorias</span><span className="sm:hidden">Dividir</span>
               </button>
             </div>
+            {erroRateio && <p className="text-[11px] text-aviso mt-1" role="alert">{erroRateio}</p>}
           </div>
         )}
 

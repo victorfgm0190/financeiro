@@ -1,0 +1,101 @@
+// Rateio por categorias — UM lançamento (uma movimentação, um valor total) dividido em linhas
+// { categoriaId, valor, descricao }. Tabela lancamento_rateios (lancamento_id guarda o id de
+// lançamento OU de agendamento). O saldo da conta e a fatura usam sempre o TOTAL; relatórios,
+// totais por categoria e filtros usam as linhas. Lançamento sem rateio = como sempre. PURO.
+import { escalarRateios } from './fluxoCaixa.js'
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+export const TOLERANCIA = 0.005
+
+// Soma × total: { atribuido, restante, ok, motivo }. ok = cada linha com categoria e valor > 0 e a
+// soma igual ao total (±0,005). Uma linha só não é rateio (vira lançamento comum).
+export function validarRateio(linhas = [], total = 0) {
+  const validas = linhas.filter(l => l.categoriaId && Number(l.valor) > 0)
+  const atribuido = r2(linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0))
+  const restante = r2(Number(total) - atribuido)
+  let motivo = null
+  if (validas.length !== linhas.length) motivo = 'Cada linha precisa de categoria e valor.'
+  else if (Math.abs(restante) > TOLERANCIA) motivo = restante > 0 ? 'Ainda há valor a distribuir.' : 'As linhas passam do total.'
+  return { atribuido, restante, ok: !motivo, motivo }
+}
+
+// "Completar com o restante": a linha `idx` recebe o que falta para fechar o total.
+export function completarComRestante(linhas, total, idx = linhas.length - 1) {
+  const outros = r2(linhas.reduce((s, l, i) => (i === idx ? s : s + (Number(l.valor) || 0)), 0))
+  return linhas.map((l, i) => (i === idx ? { ...l, valor: r2(Number(total) - outros) } : l))
+}
+
+// Linhas a gravar: com categoria e valor; uma linha só → não é rateio (devolve { comum: categoria }).
+export function normalizarRateio(linhas = []) {
+  const validas = linhas.filter(l => l.categoriaId && Number(l.valor) > 0)
+    .map(l => ({ categoriaId: l.categoriaId, valor: r2(l.valor), descricao: (l.descricao || '').trim() }))
+  if (validas.length === 1) return { linhas: [], comum: validas[0].categoriaId }
+  return { linhas: validas, comum: null }
+}
+
+// Categoria "principal" gravada no lançamento rateado: a da maior linha (quem ainda lê só
+// categoryId — efeitos automáticos, regras — não fica com uma categoria velha).
+export const categoriaPrincipal = (linhas = []) => (linhas.length ? [...linhas].sort((a, b) => Number(b.valor) - Number(a.valor))[0].categoriaId : null)
+
+// Linhas efetivas de um lançamento para relatórios: as do rateio limitadas ao total (soma acima do
+// total é reescalada — nunca infla; soma abaixo deixa a sobra na categoria principal, legado).
+// Sem rateio: uma linha com a categoria e o valor do lançamento.
+export function linhasDoLancamento(tx, rateios) {
+  const total = r2(tx.amount)
+  if (!rateios?.length || (tx.type !== 'income' && tx.type !== 'expense')) return [{ categoriaId: tx.categoryId || null, valor: total }]
+  const soma = r2(rateios.reduce((s, r) => s + (Number(r.valor) || 0), 0))
+  const base = soma > total + TOLERANCIA ? escalarRateios(rateios, total) : rateios
+  const out = base.map(r => ({ categoriaId: r.categoriaId, valor: r2(r.valor), descricao: r.descricao || '' }))
+  const sobra = r2(total - out.reduce((s, r) => s + r.valor, 0))
+  if (sobra > TOLERANCIA) out.push({ categoriaId: tx.categoryId || null, valor: sobra, sobra: true })
+  return out
+}
+
+// Parte do lançamento numa categoria (filtro por categoria): soma das linhas dela.
+export const parteDaCategoria = (tx, rateios, categoriaId) => r2(linhasDoLancamento(tx, rateios)
+  .filter(l => l.categoriaId === categoriaId).reduce((s, l) => s + l.valor, 0))
+
+export const temCategoria = (tx, rateios, categoriaId) => linhasDoLancamento(tx, rateios).some(l => l.categoriaId === categoriaId)
+
+// Rótulo para listas/exportações: "Rateado (2)" e o detalhe "Mercado R$ 100,00 + Lazer R$ 100,00".
+const brl = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0)
+export function rotuloCategoria(tx, rateios, categories = []) {
+  const nome = (id) => categories.find(c => c.id === id)?.name || 'Sem categoria'
+  if (!rateios?.length) return { curto: tx.categoryId ? nome(tx.categoryId) : '', detalhe: '', rateado: false }
+  const linhas = linhasDoLancamento(tx, rateios)
+  return {
+    curto: `Rateado (${linhas.length})`,
+    detalhe: linhas.map(l => `${nome(l.categoriaId)} ${brl(l.valor)}`).join(' + '),
+    rateado: true,
+  }
+}
+
+// Texto de uma célula de exportação: o nome da categoria ou "Rateado (2): A R$ x + B R$ y".
+export function categoriaParaExportar(tx, rateios, categories = []) {
+  const r = rotuloCategoria(tx, rateios, categories)
+  return r.rateado ? `${r.curto}: ${r.detalhe}` : r.curto
+}
+
+// Rateio de cada parcela de uma compra parcelada: as linhas foram digitadas sobre o TOTAL da compra;
+// cada parcela recebe as mesmas proporções sobre o próprio valor (antes cada parcela levava o total).
+export const rateioDaParcela = (linhas, valorParcela) => escalarRateios(linhas, valorParcela)
+
+// Baixa com valor diferente do previsto: 'proporcional' (todas as linhas na mesma proporção) ou
+// 'linha' (a diferença inteira numa linha escolhida, que não pode ficar ≤ 0).
+export function ajustarRateio(linhas, novoTotal, { modo = 'proporcional', idx = 0 } = {}) {
+  if (!linhas?.length) return linhas
+  if (modo === 'proporcional') return escalarRateios(linhas, novoTotal)
+  const soma = r2(linhas.reduce((s, l) => s + (Number(l.valor) || 0), 0))
+  const dif = r2(Number(novoTotal) - soma)
+  const out = linhas.map((l, i) => (i === idx ? { ...l, valor: r2(Number(l.valor) + dif) } : l))
+  return out[idx].valor > 0 ? out : escalarRateios(linhas, novoTotal)
+}
+
+// Linha do Fluxo de Caixa (lib/fluxoCaixa): lançamento real (`_key` = id) ou ocorrência projetada
+// (`_scheduleId`) — o rateio é do lançamento ou do agendamento. → rótulo da categoria.
+export function rotuloCategoriaFluxo(r, rateiosPorId, categories = []) {
+  const rateios = rateiosPorId?.get(r.real ? r._key : r._scheduleId)
+  const tx = { type: r.entrada > 0 ? 'income' : 'expense', amount: r.entrada > 0 ? r.entrada : r.saida, categoryId: r.categoryId }
+  const rot = rotuloCategoria(tx, rateios, categories)
+  return rot.rateado ? `${rot.curto}: ${rot.detalhe}` : rot.curto
+}

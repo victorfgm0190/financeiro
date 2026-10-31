@@ -5,6 +5,7 @@
 import { occEfetiva } from './fluxoCaixa.js'
 import { occCampos } from './camposSerie.js'
 import { tipoDoItem, TITULO_RELATORIO_TIPO, ARQUIVO_TIPO } from './agendamentosTipo.js'
+import { categoriaParaExportar } from './rateio.js'
 
 const nomeConta = (accounts, id) => {
   const a = (accounts || []).find(x => x.id === id)
@@ -29,7 +30,7 @@ export function ordenarComoTabela(rows) {
 }
 
 // Linhas da lista (A pagar / Provisões / Resgates): uma por linha da tabela (próxima ocorrência).
-export function linhasDosAgendamentos(rows, { accounts, categories, hoje }) {
+export function linhasDosAgendamentos(rows, { accounts, categories, hoje, rateios = null }) {
   return ordenarComoTabela(rows).map(r => {
     const s = r.schedule
     const occ = r.nextDate ? occCampos(s, r.nextDate) : s
@@ -45,7 +46,9 @@ export function linhasDosAgendamentos(rows, { accounts, categories, hoje }) {
       vencimento: vencimento || null,
       favorecido: s.payee || '',
       descricao: occ.description || s.description || '',
-      categoria: nomeCategoria(categories, occ.categoryId),
+      categoria: rateios?.get(s.id)?.length
+        ? categoriaParaExportar({ type: s.transactionType, amount: r.nextDate ? occEfetiva(s, r.nextDate).amount : s.amount, categoryId: occ.categoryId }, rateios.get(s.id), categories)
+        : nomeCategoria(categories, occ.categoryId),
       valor: Number(r.nextDate ? occEfetiva(s, r.nextDate).amount : s.amount) || 0,
       conta,
       status: statusDe(tipo, situacao),
@@ -55,14 +58,16 @@ export function linhasDosAgendamentos(rows, { accounts, categories, hoje }) {
 }
 
 // Linhas da aba Pagos (já filtradas e na ordem da tela).
-export function linhasDosPagos(linhas, { accounts, categories }) {
+export function linhasDosPagos(linhas, { accounts, categories, rateios = null }) {
   return (linhas || []).map(l => {
     const tipo = tipoDoItem(l)
     return {
       vencimento: l.vencimento || l.dataPagamento || null,
       favorecido: l.payee || '',
       descricao: l.description || '',
-      categoria: nomeCategoria(categories, l.categoryId),
+      categoria: l.txId && rateios?.get(l.txId)?.length
+        ? categoriaParaExportar({ type: l.transactionType, amount: l.amount, categoryId: l.categoryId }, rateios.get(l.txId), categories)
+        : nomeCategoria(categories, l.categoryId),
       valor: Number(l.amount) || 0,
       conta: nomeConta(accounts, l.accountId),
       status: statusDe(tipo, 'feito'),

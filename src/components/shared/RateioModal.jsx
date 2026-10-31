@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, X } from 'lucide-react'
 import { fmt } from './utils'
+import { validarRateio } from '../../lib/rateio'
 import CategorySelect from './CategorySelect'
 import InputMoeda from './InputMoeda'
 
@@ -16,8 +17,10 @@ const mkRow = (r = {}) => ({
 const parseV = v => { const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? 0 : n }
 const round2 = n => Math.round(n * 100) / 100
 
-// Modal de rateio: divide o `total` do lançamento em várias categorias.
-// onSave(rateios) recebe [{ categoriaId, valor, descricao }]; onDeleteAll() limpa tudo.
+// Modal "Dividir em categorias": divide o `total` do lançamento em linhas (lib/rateio). Só grava
+// quando a soma fecha o total ("Restante a distribuir" em tempo real; "Completar com o restante"
+// numa linha). onSave(rateios) recebe [{ categoriaId, valor, descricao }] — uma linha só o
+// chamador transforma em lançamento comum; onDeleteAll() limpa tudo.
 export default function RateioModal({ total = 0, categories = [], categoryType = null, initial = [], onSave, onDeleteAll, onClose, perfilId }) {
   const [rows, setRows] = useState(() => (initial.length > 0 ? initial.map(mkRow) : [mkRow(), mkRow()]))
 
@@ -27,6 +30,14 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
 
   const atribuido = round2(rows.reduce((s, r) => s + parseV(r.valor), 0))
   const naoAtribuido = round2(total - atribuido)
+  const preenchidas = rows.filter(r => r.categoriaId || parseV(r.valor) > 0)
+  const validacao = validarRateio(preenchidas.map(r => ({ categoriaId: r.categoriaId, valor: parseV(r.valor) })), total)
+  const podeGravar = preenchidas.length > 0 && validacao.ok
+  const completar = (k) => {
+    const outros = round2(rows.reduce((s, r) => (r._k === k ? s : s + parseV(r.valor)), 0))
+    const v = round2(total - outros)
+    if (v > 0) setRow(k, { valor: String(v) })
+  }
 
   const handleSave = () => {
     const clean = rows
@@ -40,7 +51,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative bg-surface border border-borda-forte rounded-2xl shadow-2xl w-full max-w-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-texto-1">Rateio do lançamento</h3>
+          <h3 className="text-sm font-semibold text-texto-1">Dividir em categorias</h3>
           <button type="button" onClick={onClose} className="text-texto-3 hover:text-texto-2"><X size={16} /></button>
         </div>
         <p className="text-xs text-texto-3">
@@ -76,6 +87,11 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
                 placeholder="Descrição"
                 className="input flex-1 min-w-[90px] text-xs"
               />
+              {naoAtribuido > 0.004 && (
+                <button type="button" onClick={() => completar(r._k)} title="Completar com o restante" className="text-[11px] text-primary-fg underline shrink-0 whitespace-nowrap">
+                  Completar com o restante
+                </button>
+              )}
               <button type="button" onClick={() => removeRow(r._k)} title="Remover" className="p-2 text-texto-3 hover:text-perigo shrink-0">
                 <Trash2 size={14} />
               </button>
@@ -84,7 +100,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
         </div>
 
         <button type="button" onClick={addRow} className="btn-secondary text-xs flex items-center gap-1.5">
-          <Plus size={12} /> Adicionar linha
+          <Plus size={12} /> Categoria
         </button>
 
         <div className="flex items-center justify-between text-xs border-t border-borda pt-3 flex-wrap gap-3">
@@ -92,7 +108,7 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
             Total atribuído: <span className="font-semibold text-receita">{fmt(atribuido)}</span>
           </span>
           <span className="text-texto-2">
-            Não atribuído:{' '}
+            Restante a distribuir:{' '}
             <span className={`font-semibold ${Math.abs(naoAtribuido) < 0.005 ? 'text-texto-2' : naoAtribuido < 0 ? 'text-despesa' : 'text-aviso'}`}>
               {fmt(naoAtribuido)}
             </span>
@@ -103,7 +119,8 @@ export default function RateioModal({ total = 0, categories = [], categoryType =
           <button type="button" onClick={onDeleteAll} className="btn-secondary text-xs text-perigo hover:text-texto-1">
             Excluir Tudo e Sair
           </button>
-          <button type="button" onClick={handleSave} className="btn-primary text-xs">
+          {!podeGravar && preenchidas.length > 0 && <span className="text-[11px] text-aviso self-center">{validacao.motivo}</span>}
+          <button type="button" onClick={handleSave} disabled={!podeGravar} className="btn-primary text-xs disabled:opacity-50">
             Gravar e Sair
           </button>
         </div>
