@@ -17,6 +17,7 @@
 // valor, descricao, favorecido, conta_id, tipo, atrasado }, o mais parecido primeiro.
 import { normalizarTermo } from './texto.js'
 import { occEfetiva } from '../fluxoCaixa.js'
+import { mesmoNumeroContrato } from '../contratos/numero.js'
 import { algumParecido, prefixoParecido, semIntermediador } from './nomeParecido.js'
 
 export const JANELA_DIAS_AGENDAMENTO = 7
@@ -81,12 +82,20 @@ const candidato = (lanc, { s, base, e }) => ({
 })
 
 // lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description, estimado? }.
-// Mesmo nº de contrato (lanc.contrato, lido do boleto/comprovante) na descrição/favorecido do agendamento.
+// Mesmo nº de contrato (lanc.contrato, lido do boleto/comprovante): no campo próprio do agendamento
+// (numeroContrato) ou, nos antigos, na descrição/favorecido.
 const soAlnum = (x) => String(x || '').replace(/[^0-9a-z]/gi, '').toUpperCase()
 export const mesmoContrato = (lanc, s) => {
+  // Parcela de um contrato CADASTRADO cujo nº é o do documento.
+  if (lanc?.contratoId && s.contratoId === lanc.contratoId) return true
   const c = soAlnum(lanc?.contrato)
-  return c.length >= 3 && soAlnum(`${s.description || ''} ${s.payee || ''}`).includes(c)
+  if (c.length < 3) return false
+  if (s.numeroContrato) return mesmoNumeroContrato(s.numeroContrato, lanc.contrato)
+  return soAlnum(`${s.description || ''} ${s.payee || ''}`).includes(c)
 }
+
+// Chave de um candidato (agendamento@ocorrência) — escolha no cartão da baixa da prévia.
+export const chaveCandidato = (c) => `${c.schedule_id}@${c.ocorrencia}`
 
 export function agendamentosDoLancamento(lanc, ctx) {
   const valor = Number(lanc?.amount)

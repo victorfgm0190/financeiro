@@ -16,7 +16,7 @@ vi.mock('../Transactions/TransactionForm', () => ({
     </p>
   ),
 }))
-vi.mock('../Schedule/ScheduleForm', () => ({ default: ({ initial }) => <p data-testid="agendamento">{`AGENDAMENTO ${initial.frequency} ${initial.startDate} ${initial.description}`}</p> }))
+vi.mock('../Schedule/ScheduleForm', () => ({ default: ({ initial }) => <p data-testid="agendamento">{`AGENDAMENTO ${initial.frequency} ${initial.startDate} ${initial.description} nº=${initial.numeroContrato || ''}`}</p> }))
 const { default: PreviaAssistente } = await import('./PreviaAssistente.jsx')
 
 const base = (o = {}) => Object.assign(app, {
@@ -61,7 +61,7 @@ describe('Prévia do Assistente: Só despesa / Despesa + agendamento', () => {
     expect(screen.getByText(/contrato nº 12345 — parece cobrança mensal/)).toBeTruthy()
     expect(botao('Só agendamento').textContent).toMatch(/sugerido/)
     fireEvent.click(botao('Só agendamento'))
-    expect(screen.getByTestId('agendamento').textContent).toBe('AGENDAMENTO monthly 2026-12-10 Financeira · Contrato nº 12345')
+    expect(screen.getByTestId('agendamento').textContent).toBe('AGENDAMENTO monthly 2026-12-10 Financeira nº=12345') // nº no campo próprio, descrição limpa
   })
 
   it('21) "e agende todo dia 10": não pergunta; já vem despesa + agendamento, 1ª ocorrência em 10/12', () => {

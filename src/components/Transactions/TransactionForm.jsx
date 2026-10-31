@@ -216,6 +216,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     categoriaCnpjId: initial?.categoriaCnpjId || '',
     categoriaCpfId: initial?.categoriaCpfId || '',
     tipoDocumentoId: initial?.tipoDocumentoId || '',
+    // Nº do contrato (boleto/comprovante): campo próprio, não vai para descrição/observação.
+    numeroContrato: initial?.numeroContrato || '',
     // Lançamento novo pode vir repetindo (prévia do Assistente: "todo mês").
     repeat: !initial?.id && !!initial?.repeatFrequency,
     repeatFrequency: (!initial?.id && initial?.repeatFrequency) || 'monthly',
@@ -544,6 +546,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     amount: t.amount, date: t.date || null, categoryId: t.categoryId || null,
     description: t.description || null, accountId: t.accountId || null, costCenter: t.costCenter || null,
     grupoGerencial: t.grupoGerencial || null, payee: t.payee || null, tipoDocumentoId: t.tipoDocumentoId || null,
+    numeroContrato: t.numeroContrato || null,
   })
   const parcelaPendente = (t) => parcelaCartaoPendente(t, { faturasFechadas: settings?.faturasFechadas, schedules })
 
@@ -667,6 +670,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
       dateCartao: form.dateCartao || null,
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
+      numeroContrato: (form.numeroContrato || '').trim() || null,
+      // Contrato cadastrado (prévia do Assistente: "Vincular ao contrato X"); na edição, o de sempre.
+      ...(!initial?.id && initial?.contratoId ? { contratoId: initial.contratoId } : {}),
       // Campos de parcela só na CRIAÇÃO. Na edição eles saíam null (isParcelado/decidedInst só valem
       // para lançamento novo) e o updateTransaction gravava installment_num/total, serie_id e,
       // por derivação, installment_key = NULL — o vínculo da série se perdia ao salvar qualquer
@@ -972,6 +978,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         autoRegister: false,
         grupoGerencial: showGerencial ? form.grupoGerencial : null,
         tipoDocumentoId: form.tipoDocumentoId || null,
+        numeroContrato: (form.numeroContrato || '').trim() || null,
         skipped: [],
         overrides: {},
       })
@@ -1954,6 +1961,13 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         <label className="label">Observações{confira('notes')}</label>
         <textarea className="input resize-none" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Digite observações adicionais (opcional)" />
       </div>
+
+      {form.type !== 'transfer' && (
+        <div>
+          <label className="label" htmlFor="tx-numero-contrato">Nº do contrato{confira('numeroContrato')}</label>
+          <input id="tx-numero-contrato" className="input" value={form.numeroContrato} maxLength={40} onChange={e => set('numeroContrato', e.target.value)} placeholder="Opcional — ex.: o nº impresso no boleto" />
+        </div>
+      )}
 
       {form.type === 'expense' && reservaAccounts.length > 0 && (
         <div data-bloco-switch className="p-3 bg-reserva/10 border border-reserva/20 rounded-lg space-y-3">

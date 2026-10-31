@@ -5050,8 +5050,12 @@ export function AppProvider({ children }) {
   // Caso 1: lançamento avulso × ocorrência pendente. Baixa pelo mesmo caminho da baixa normal
   // (aplicarBaixa) apontando o lançamento — sem criar outro, então o saldo conta uma vez.
   // `manter`: 'lancamento' (padrão) | 'agendamento' — o que fica gravado na ocorrência.
-  const vincularLancamento = useCallback(({ txId, scheduleId, data, manter = 'lancamento' }) => {
-    const plano = planejarVinculo(dataRef.current, { txId, scheduleId, data, manter })
+  // `tx`: lançamento recém-criado que ainda não chegou ao dataRef (prévia do Assistente, "Confirmar
+  // tudo" com o cartão da baixa): o plano usa ele; o update() roda depois do addTransaction.
+  const vincularLancamento = useCallback(({ txId, scheduleId, data, manter = 'lancamento', tx = null }) => {
+    const d0 = dataRef.current
+    const base = tx && !d0.transactions.some(t => t.id === txId) ? { ...d0, transactions: [...d0.transactions, tx] } : d0
+    const plano = planejarVinculo(base, { txId, scheduleId, data, manter })
     if (!plano.ok) return plano
     update(d => ({
       ...d,

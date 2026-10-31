@@ -21,7 +21,7 @@ import { somarDias, diasEntre } from './fluxoConsultas.js'
 import { FREQ_MENSAIS, datasDaSerie } from './occurrences.js'
 import { faturaEstaFechada } from './faturasFechadas.js'
 
-export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId']
+export const CAMPOS_SERIE = ['payee', 'tipoDocumentoId', 'numeroContrato']
 export const CAMPOS_PARCELA = ['amount', 'date', 'categoryId', 'categoriaCnpjId', 'categoriaCpfId', 'description', 'accountId', 'costCenter', 'grupoGerencial']
 export const CAMPOS_EDITAVEIS = [...CAMPOS_PARCELA, ...CAMPOS_SERIE]
 
@@ -30,6 +30,7 @@ export const ROTULO_CAMPO = {
   categoriaCpfId: 'Categoria no CPF', description: 'Descrição', accountId: 'Conta',
   costCenter: 'Centro de custo', grupoGerencial: 'Grupo gerencial', payee: 'Favorecido',
   tipoDocumentoId: 'Tipo de documento',
+  numeroContrato: 'Nº do contrato',
 }
 
 export const ESCOPO = { PARCELA: 'parcela', PROXIMAS: 'proximas', SERIE: 'serie' }

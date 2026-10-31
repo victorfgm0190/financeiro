@@ -18,8 +18,8 @@ import { camposDoPedido, ROTULO_CITADO } from '../../lib/assistente/camposDoPedi
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos, listarApelidos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
-import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomeDoFavorecidoNovo, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
-import AgendamentoQueBate from './AgendamentoQueBate'
+import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomeDoFavorecidoNovo, criterioDoLancamento, chaveCandidato } from '../../lib/assistente/agendamentoDoLancamento'
+import CartaoBaixaPrevia, { CartaoContratoPrevia } from './CartaoBaixaPrevia'
 import AgendamentoParecido from './AgendamentoParecido'
 import PreviaBaixa from './PreviaBaixa'
 import CompraEmDolar from './CompraEmDolar'
@@ -60,7 +60,7 @@ const fmtMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', curr
 export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
   const {
     transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees,
-    gerencialGroups, reserveFunctions, tiposDocumento, setReconciled,
+    gerencialGroups, reserveFunctions, tiposDocumento, setReconciled, vincularLancamento, contratos,
   } = useApp()
   // Enquanto a prévia está aberta, as alterações vão para o histórico como "Assistente IA" + usuário.
   useEffect(() => entrarAutorAssistente(), [])
@@ -204,12 +204,12 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
     descricao: initialFormBase.description, favorecido: initialFormBase.payee,
     categoriaNome: categories.find(c => c.id === initialFormBase.categoryId)?.name || '', texto: textoOriginal || '',
     numeroContrato: doc.numero_contrato, parcelaAtual: sugestao.parcela_atual, vencimento: doc.vencimento, pago: doc.pago,
-    hoje: hojeIso, historico: { transactions, schedules },
+    hoje: hojeIso, historico: { transactions, schedules }, contratos: contratos || [],
   }) : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal])
+  [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal, contratos])
   const jaPediuAgendar = !!sugestao.repetir
-  const perguntarAcao = despesaCandidata && !jaPediuAgendar && !parcelaNoCartao
+  const perguntarAcaoBase = despesaCandidata && !jaPediuAgendar && !parcelaNoCartao
   // "e agende…" no pedido já começa em Despesa + agendamento (os dois cartões, sem a pergunta).
   const [acaoDespesa, setAcaoDespesa] = useState(jaPediuAgendar ? ACAO.DESPESA_AGENDAMENTO : null)
   const acaoEfetiva = acaoDespesa
@@ -225,6 +225,10 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   } : null)
   const repeticao = acaoEfetiva === ACAO.DESPESA_AGENDAMENTO ? repeticaoCalculada : null
   const contrato = prontidao?.numeroContrato || doc.numero_contrato || null
+  // Nº de um contrato CADASTRADO → cartão "Vincular ao contrato X" (marcado): o lançamento leva o contrato.
+  const contratoCadastrado = prontidao?.contratoCadastrado || null
+  const [vincularContrato, setVincularContrato] = useState(true)
+  const contratoIdVinculo = contratoCadastrado && vincularContrato ? contratoCadastrado.id : null
   const reaproveitar = prontidao?.reaproveitar || null
   // Rateio citado (regra 22): linhas editáveis; soma ≠ total → pergunta onde vai a diferença.
   const [rateioResolvido, setRateioResolvido] = useState(null)
@@ -236,11 +240,12 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const initialForm = {
     ...initialFormBase,
     ...preencherVazio(reaproveitar),
-    ...(contrato ? { notes: [initialFormBase.notes, `Contrato nº ${contrato}`].filter(Boolean).join(' · ') } : {}),
+    // Nº do contrato no campo próprio (não mais na observação/descrição).
+    ...(contrato ? { numeroContrato: contrato } : {}),
+    ...(contratoIdVinculo ? { contratoId: contratoIdVinculo } : {}),
     ...(repeticao ? {
       repeatFrequency: repeticao.repeatFrequency, repeatOccurrenceType: repeticao.repeatOccurrenceType,
       repeatInstallments: repeticao.repeatInstallments, repeatStartDate: repeticao.repeatStartDate,
-      repeatSufixo: contrato ? `Contrato nº ${contrato}` : '',
     } : (acaoEfetiva === ACAO.SO_DESPESA ? { repeatFrequency: null } : {})),
     ...(rateioLinhas.length ? { rateio: rateioLinhas, categoryId: categoriaPrincipal(rateioLinhas) } : {}),
     ...(rateioResolvido?.amount ? { amount: String(rateioResolvido.amount) } : {}),
@@ -259,15 +264,15 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
     ...preencherVazio(reaproveitar),
     categoryId: initialFormBase.categoryId || reaproveitar?.categoryId || '',
     tipoDocumentoId: initialFormBase.tipoDocumentoId || '',
-    description: `${initialFormBase.description || sugestao.descricao || ''}${contrato ? ` · Contrato nº ${contrato}` : ''}`,
+    description: initialFormBase.description || sugestao.descricao || '',
+    numeroContrato: contrato || '',
   } : null
 
   // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
-  const [agendDispensado, setAgendDispensado] = useState(false)
   const [parecidoDispensado, setParecidoDispensado] = useState(false)
   const [baixa, setBaixa] = useState(null)
   const [valorNasProximas, setValorNasProximas] = useState(false)
-  const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}), contrato }
+  const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}), contrato, contratoId: contratoCadastrado?.id || null }
   const agendamentosQueBatem = useMemo(() => {
     if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return []
     return agendamentosDoLancamento(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
@@ -279,6 +284,13 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
     return agendamentosParecidos(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamento, perguntaCartao, sugestao, contaEscolhida, schedules, accounts, transactions, getNextOccurrences, ptax])
+  // Cartão da baixa sugerida: marcado por padrão no 1º candidato; o usuário troca/desmarca.
+  const [baixaEscolha, setBaixaEscolha] = useState(null) // { on, chave }
+  const baixaAlvo = !agendamentosQueBatem.length || acaoEfetiva === ACAO.SO_AGENDAMENTO ? null
+    : agendamentosQueBatem.find(c => chaveCandidato(c) === baixaEscolha?.chave) || agendamentosQueBatem[0]
+  const baixaMarcada = !!baixaAlvo && (baixaEscolha?.on ?? true)
+  // Despesa que paga um agendamento existente: sem a pergunta "Despesa + agendamento".
+  const perguntarAcao = perguntarAcaoBase && !baixaMarcada
   const darBaixa = (candidato, { usarNasProximas = false } = {}) => { marcar('baixa'); setValorNasProximas(usarNasProximas); setBaixa(candidato) }
 
   // "É o mesmo": nada é criado; o pré-lançamento que estava sendo efetivado é baixado contra o
@@ -295,6 +307,14 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const onSalvo = (form, id) => {
     marcar('salvo')
     onConcluido?.('salvo')
+    // Cartão da baixa marcado: o lançamento recém-criado vira o pagamento da ocorrência (vínculo).
+    if (baixaMarcada && id) {
+      const r = vincularLancamento({
+        txId: id, scheduleId: baixaAlvo.schedule_id, data: baixaAlvo.ocorrencia,
+        tx: { ...form, id, amount: Number(form.amount) || 0 },
+      })
+      if (r?.ok === false) onToast?.(`Lançamento salvo, mas a baixa não foi feita: ${r.motivo}`)
+    }
     if (cambio && id) criarIof({ id, accountId: form.accountId, date: form.date, amount: form.amount, payee: form.payee, description: form.description })
     const itens = apelidosAprendidos(sugestao, form)
     if (itens.length) aprenderApelidos(itens).catch(err => console.warn('[assistente] apelidos não salvos:', err.message))
@@ -342,12 +362,6 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         valorNasProximas={valorNasProximas} />
     )
   }
-  if (!agendDispensado && agendamentosQueBatem.length > 0) {
-    return (
-      <AgendamentoQueBate candidatos={agendamentosQueBatem} textoOriginal={textoOriginal}
-        onBaixa={darBaixa} onOutro={() => setAgendDispensado(true)} onDescartar={descartar} />
-    )
-  }
   if (!parecidoDispensado && !agendamentosQueBatem.length && agendamentosParecidosLista.length > 0) {
     return (
       <AgendamentoParecido candidato={agendamentosParecidosLista[0]} valor={lancAgend.amount} textoOriginal={textoOriginal}
@@ -377,6 +391,13 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           onLancar={(m) => setDecisaoFatura(m)}
           onDescartar={descartar} />
       )}
+      {baixaAlvo && (
+        <CartaoBaixaPrevia candidatos={agendamentosQueBatem} alvo={baixaAlvo} marcado={baixaMarcada}
+          onMarcar={(on) => setBaixaEscolha({ on, chave: chaveCandidato(baixaAlvo) })}
+          onEscolher={(c) => setBaixaEscolha({ on: true, chave: chaveCandidato(c) })}
+          onAbrirCompleta={(c) => darBaixa(c)} />
+      )}
+      {contratoCadastrado && <CartaoContratoPrevia contrato={contratoCadastrado} marcado={vincularContrato} onMarcar={setVincularContrato} />}
       {perguntarAcao && <EscolhaAcaoDespesa prontidao={prontidao} acao={acaoDespesa} onEscolher={setAcaoDespesa} />}
       {parcelaNoCartao && correspondencias.fortes.length === 0 && correspondencias.fracos.length === 0 && (() => {
         // Sem a parcela nas faturas abertas: pode estar numa fatura já FECHADA — avisa e deixa decidir.
@@ -507,6 +528,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           </div>
         )
         : <TransactionForm key={`${favorecidoUsado || ''}|${acaoEfetiva || ''}|${rateioResolvido ? 'r' : ''}`} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+            rotuloGravar={baixaMarcada || contratoIdVinculo ? 'Confirmar tudo' : null}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}
     </div>

@@ -28,6 +28,7 @@ import { novoLoteId, linhasHistorico, itensPorEscopo } from '../../lib/historico
 import RateioModal from '../shared/RateioModal'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaOcorrencia } from '../../lib/rateio'
 import FimRepeticao from '../shared/FimRepeticao'
+import ContratoDoAgendamento from './ContratoDoAgendamento'
 import DateInput from '../shared/DateInput'
 import { controleGerencialAtivo, grupoComChaveDesligada, travaGerencial } from '../../lib/controleGerencial'
 import { filtrarCategoriasPorPerfil, categoriaDisponivelParaPerfil, perfilParaCategorias } from '../../lib/categoriasPerfil'
@@ -341,6 +342,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     skipped: initial?.skipped || [],
     overrides: initial?.overrides || {},
     tipoDocumentoId: initial?.tipoDocumentoId || '',
+    numeroContrato: initial?.numeroContrato || '',
   }))
   // Tipo de documento: obrigatório só ao CRIAR despesa/receita; na edição pode ficar vazio.
   const [erroTipoDoc, setErroTipoDoc] = useState('')
@@ -544,6 +546,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     grupoGerencial: (occInicial ? occInicial.grupoGerencial : serieBase.grupoGerencial) || null,
     payee: serieBase.payee || null,
     tipoDocumentoId: serieBase.tipoDocumentoId || null,
+    numeroContrato: serieBase.numeroContrato || null,
   } : null
   const camposDoForm = (f) => ({
     amount: Number(f.amount),
@@ -558,6 +561,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
     grupoGerencial: f.grupoGerencial || null,
     payee: f.payee || null,
     tipoDocumentoId: f.tipoDocumentoId || null,
+    numeroContrato: (f.numeroContrato || '').trim() || null,
   })
   const mudancasAoVivo = camposAntes ? diffCampos(camposAntes, camposDoForm(form)) : []
   const avisoMotor = ehMotor && mudancasAoVivo.some(m => m.campo !== 'tipoDocumentoId')
@@ -607,6 +611,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
         categoriaCnpjId: serieBase.categoriaCnpjId || null, categoriaCpfId: serieBase.categoriaCpfId || null,
         accountId: serieBase.accountId, accountType: serieBase.accountType, costCenter: serieBase.costCenter,
         grupoGerencial: serieBase.grupoGerencial, payee: serieBase.payee, tipoDocumentoId: serieBase.tipoDocumentoId,
+        numeroContrato: serieBase.numeroContrato || null,
       }
       const plano = planoAgendamento(base, {
         occDate: ctx.occDate, mudancas, escopo: escopoParcela,
@@ -706,6 +711,7 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
       ...(comRateio ? { categoryId: categoriaPrincipal(rateioRows) } : {}),
       // Escolha manual (inclusive "Sem tipo") é o que fica gravado — vence o fallback de exibição.
       tipoDocumentoId: form.tipoDocumentoId || null,
+      numeroContrato: (form.numeroContrato || '').trim() || null,
       ...categoriasPerfisDe(form),
       // Só vale onde a pergunta aparece; noutro caso (conta FC, cartão…) volta a null.
       considerarFluxoPrincipal: considerarFluxoParaGravar(form, accounts),
@@ -1140,6 +1146,16 @@ export default function ScheduleForm({ initial, onClose, onAviso, destaques = nu
             confira={!!destaques?.includes('tipoDocumentoId')}
           />
         </div>
+
+        {/* Nº do contrato (boleto/carnê) e vínculo manual a um contrato cadastrado */}
+        {form.transactionType !== 'transfer' && (
+          <ContratoDoAgendamento
+            numero={form.numeroContrato}
+            onNumero={v => set('numeroContrato', v)}
+            schedule={initial?.id ? schedules.find(s => s.id === initial.id) || initial : null}
+            confira={!!destaques?.includes('numeroContrato')}
+          />
+        )}
 
         {/* Frequência — parcela de contrato: do contrato, só leitura */}
         {ehParcelaContrato ? (

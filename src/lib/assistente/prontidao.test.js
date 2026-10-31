@@ -117,3 +117,16 @@ describe('27) comprovante com agendamento pendente do mesmo contrato', () => {
     expect(agendamentosDoLancamento({ ...lanc, contrato: null }, ctx)).toEqual([])
   })
 })
+
+describe('contrato cadastrado e nº no campo próprio (pendências 31/10)', () => {
+  const C = { id: 'ct_1', numero: '12345', tipo: 'pagar', status: 'ativo', objeto: 'Academia X' }
+  it('nº de contrato cadastrado vence até a regra da parcela: Só despesa + vincular', () => {
+    const r = sugerirAcaoDespesa({ natureza: 'boleto', numeroContrato: '12.345', parcelaAtual: { numero: 3, total: 12 }, hoje: '2026-11-12', contratos: [C] })
+    expect(r).toMatchObject({ regra: 'contrato_cadastrado', acaoSugerida: ACAO.SO_DESPESA, contratoCadastrado: { id: 'ct_1', nome: 'Academia X' } })
+  })
+  it('contratoNoHistorico acha pelo campo próprio (numeroContrato), não só pelo texto', () => {
+    const tx = { id: 't1', type: 'expense', date: '2026-10-12', description: 'Academia', numeroContrato: '12345', payee: 'Academia X', categoryId: 'cat' }
+    expect(contratoNoHistorico('12345', { transactions: [tx] })?.tx?.id).toBe('t1')
+    expect(contratoNoHistorico('12345', { transactions: [{ ...tx, numeroContrato: '999' }] })).toBeNull()
+  })
+})

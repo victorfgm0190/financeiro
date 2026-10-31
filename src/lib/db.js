@@ -569,6 +569,8 @@ export const txToRow = (tx) => ({
   // Tipo de documento (tipos_documento.id). NULL = sem tipo; o fallback de exibição (CC/ENV/RES)
   // nunca é gravado — ver src/lib/tiposDocumento.js.
   tipo_documento_id: tx.tipoDocumentoId || null,
+  // Nº do contrato lido do boleto/comprovante (antes ia na observação/descrição).
+  numero_contrato: tx.numeroContrato || null,
   // Importação padrão (src/lib/importacaoPadrao): lote e FITID do OFX. Ambiente sem as colunas
   // (migração ainda não rodada) → o upsert as descarta (api/_db.js COLUNAS_OPCIONAIS).
   importacao_id: tx.importacaoId || null,
@@ -636,6 +638,7 @@ export const rowToTx = (r) => ({
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
   tipoDocumentoId: r.tipo_documento_id || null,
+  numeroContrato: r.numero_contrato || null,
   importacaoId: r.importacao_id || null,
   fitid: r.fitid || null,
   dataOcorrencia: r.data_ocorrencia || null,
@@ -693,6 +696,8 @@ export const scheduleToRow = (s) => ({
   source_expense_ids: Array.isArray(s.sourceExpenseIds) ? s.sourceExpenseIds : [],
   // Tipo de documento (tipos_documento.id). NULL = sem tipo — fallback só na exibição.
   tipo_documento_id: s.tipoDocumentoId || null,
+  // Nº do contrato (boleto/carnê) — campo próprio, fora da descrição.
+  numero_contrato: s.numeroContrato || null,
   // Transferência entre perfis: categoria na visão do CNPJ e na do CPF (herdadas pelo lançamento).
   categoria_cnpj_id: s.categoriaCnpjId || null,
   categoria_cpf_id: s.categoriaCpfId || null,
@@ -746,6 +751,7 @@ export const rowToSchedule = (r) => ({
   // Fase 1: null/ausente → []. pg devolve JSONB já parseado (array JS).
   sourceExpenseIds: Array.isArray(r.source_expense_ids) ? r.source_expense_ids : [],
   tipoDocumentoId: r.tipo_documento_id || null,
+  numeroContrato: r.numero_contrato || null,
   categoriaCnpjId: r.categoria_cnpj_id || null,
   categoriaCpfId: r.categoria_cpf_id || null,
   sincronizarAgenda: r.sincronizar_agenda !== false,

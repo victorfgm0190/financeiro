@@ -179,11 +179,11 @@ export async function desligarFlagsUnicasAntes(client, rows) {
 // nele): saem do upsert em vez de derrubar o sync daquele ambiente. "Presente" fica em cache por
 // banco; "ausente" é conferido de novo a cada minuto (a migração pode rodar com a instância quente).
 export const COLUNAS_OPCIONAIS = {
-  lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao',
+  lancamentos: ['importacao_id', 'fitid', 'data_ocorrencia', 'contrato_id', 'composicao', 'numero_contrato',
     'moeda', 'valor_original', 'cotacao', 'data_cotacao', 'spread', 'estimado', 'compra_iof_id'],
   contas: ['spread_cambio', 'iof_linha_separada'],
   configuracoes: ['iof_compra_internacional'],
-  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal'],
+  agendamentos: ['sincronizar_agenda', 'contrato_id', 'contrato_papel', 'valor_status', 'composicao', 'considerar_fluxo_principal', 'numero_contrato'],
 }
 const cacheColunasOpcionais = new Map()
 export const _limparCacheColunasOpcionais = () => cacheColunasOpcionais.clear()

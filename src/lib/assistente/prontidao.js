@@ -3,6 +3,8 @@
 // palavras-chave em prontidaoConfig.js. Imports com .js (o backend também usa).
 //
 // Regras, na ordem (a primeira que se aplica decide):
+//   a0) nº de contrato CADASTRADO no módulo Contratos → Só despesa + "Vincular ao contrato X" (o contrato
+//       já gera as parcelas);
 //   a) parcela "3/10", "3 de 10" → Despesa + agendamento Parcelado com as parcelas restantes e o fim
 //      (a parcela de compra JÁ lançada no cartão é tratada antes, pela prévia — lib/matchLancamento);
 //   b) nº de contrato → Despesa + agendamento Mensal; o mesmo contrato no histórico = confirmação forte
@@ -14,6 +16,7 @@
 //   g) sem indícios → nada destacado.
 // Boleto/fatura com vencimento futuro e sem sinal de pagamento → "Só agendamento" (destacado).
 import { normalizarTermo } from './texto.js'
+import { contratoPorNumero, mesmoNumeroContrato } from '../contratos/numero.js'
 import {
   ROTULOS_CONTRATO, PALAVRAS_PARCELA, CONTAS_FIXAS, TRIBUTOS_ANUAIS, NATUREZAS, PEDIDO_AGENDAR, MESES_SEGUIDOS_PARA_MENSAL,
 } from './prontidaoConfig.js'
@@ -75,11 +78,14 @@ const somarMeses = (iso, n) => {
 const mesDe = (iso) => String(iso || '').slice(0, 7)
 const digitos = (s) => String(s || '').replace(/[^0-9a-z]/gi, '').toUpperCase()
 
-// Lançamento ou agendamento anterior com o mesmo nº de contrato (na observação, descrição ou favorecido).
+// Lançamento ou agendamento anterior com o mesmo nº de contrato: no campo próprio (numeroContrato)
+// ou, nos registros antigos, na observação/descrição/favorecido.
 export function contratoNoHistorico(numero, { transactions = [], schedules = [] } = {}) {
   const alvo = digitos(numero)
   if (alvo.length < 3) return null
-  const tem = (x) => digitos(`${x.notes || ''} ${x.description || ''} ${x.payee || ''}`).includes(alvo)
+  const tem = (x) => (x.numeroContrato
+    ? mesmoNumeroContrato(x.numeroContrato, numero)
+    : digitos(`${x.notes || ''} ${x.description || ''} ${x.payee || ''}`).includes(alvo))
   const tx = [...transactions].filter(t => t.type === 'expense' && tem(t)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
   const schedule = schedules.find(tem) || null
   if (!tx && !schedule) return null
@@ -103,7 +109,7 @@ export function recorrenteNoHistorico({ favorecido, descricao }, transactions = 
 export function sugerirAcaoDespesa({
   natureza: natModelo = null, tipoDocumento = null, descricao = '', favorecido = '', categoriaNome = '', texto = '',
   numeroContrato = null, parcelaAtual = null, vencimento = null, pago = null, hoje,
-  historico = { transactions: [], schedules: [] },
+  historico = { transactions: [], schedules: [] }, contratos = [],
 } = {}) {
   const tudo = [texto, descricao, favorecido, categoriaNome].filter(Boolean).join(' \n ')
   const natureza = naturezaDoDocumento({ natureza: natModelo, tipoDocumento, texto: tudo })
@@ -113,6 +119,18 @@ export function sugerirAcaoDespesa({
   const acaoAgendar = contaAPagar ? ACAO.SO_AGENDAMENTO : ACAO.DESPESA_AGENDAMENTO
   const base = { natureza, numeroContrato: contrato || null, parcelasRestantes: null, fimSugerido: null, reaproveitar: null }
 
+  // a0) contrato CADASTRADO no módulo Contratos com o mesmo nº: o contrato já gera as parcelas —
+  //     nada de agendamento novo; a prévia oferece "Vincular ao contrato X" (e a baixa da parcela).
+  const cadastrado = contrato ? contratoPorNumero(contrato, contratos, { tipoMov: 'expense' }) : null
+  if (cadastrado) {
+    const nome = cadastrado.objeto || cadastrado.favorecido || `nº ${cadastrado.numero}`
+    return {
+      ...base, regra: 'contrato_cadastrado', acaoSugerida: ACAO.SO_DESPESA, recorrenciaSugerida: null,
+      contratoCadastrado: { id: cadastrado.id, numero: cadastrado.numero, nome },
+      reaproveitar: { payee: cadastrado.favorecido || null, categoryId: null, accountId: null },
+      motivo: `Contrato nº ${contrato} já cadastrado (${nome}) — ele gera as parcelas, sem agendamento novo`,
+    }
+  }
   // a) parcela
   if (parcela && parcela.numero < parcela.total) {
     const restantes = parcela.total - parcela.numero
