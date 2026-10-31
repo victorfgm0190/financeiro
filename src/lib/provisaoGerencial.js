@@ -86,6 +86,7 @@ export function montarProvisaoGerencial(d, parcela, { id, origin, faturaRef, ago
     cardId: parcela.accountId,
     faturaRef: faturaRef || faturaRefDe(parcela),
     sourceExpenseId: parcela.id,
+    reconciled: !!parcela.reconciled,
     createdAt: agora,
   }
   return { accounts, tx, subcontaCriada }

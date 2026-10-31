@@ -47,6 +47,7 @@ import { saldosDaConta, recalcularSaldosDeContas, contaRecalculavel } from '../l
 import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, projecoesEtapaA, somarEtapaAPrevistaNoSaldoPrincipal, deltaEtapaAPrevistaNaConta } from '../lib/gerencialPrevistos'
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
+import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -2061,7 +2062,7 @@ export function AppProvider({ children }) {
           grupoGerencial: grupo.id, cardId: lanc.accountId, faturaRef, sourceExpenseId: lancId,
         }
         if (!existingEt) {
-          transactions = [...transactions, { ...etFields, origin: ORIGIN.ETAPA_A, createdAt: new Date().toISOString() }]
+          transactions = [...transactions, { ...etFields, origin: ORIGIN.ETAPA_A, reconciled: conciliacaoHerdada(lanc), createdAt: new Date().toISOString() }]
           accounts = accounts.map(a => {
             if (a.id === contaPrincipal.id) return { ...a, balance: rb((a.balance || 0) - amount) }
             if (a.id === subconta.id)       return { ...a, balance: rb((a.balance || 0) + amount) }
@@ -2267,9 +2268,12 @@ export function AppProvider({ children }) {
   }, [update, ensureGerencialState])
 
   // Marca/desmarca reconciliação de um ou vários lançamentos (em lote).
+  // A etapa A dos gastos G acompanha (lib/conciliacaoEtapaA).
   const setReconciled = useCallback((ids, value) => {
-    const idSet = new Set(Array.isArray(ids) ? ids : [ids])
-    update(d => ({ ...d, transactions: d.transactions.map(t => idSet.has(t.id) ? { ...t, reconciled: !!value } : t) }))
+    update(d => {
+      const idSet = idsComEtapaA(d.transactions, ids)
+      return { ...d, transactions: d.transactions.map(t => idSet.has(t.id) ? { ...t, reconciled: !!value } : t) }
+    })
   }, [update])
 
   // Edição em lote de lançamentos: altera Data e/ou Categoria de vários registros.
@@ -4597,6 +4601,7 @@ export function AppProvider({ children }) {
                 amount, date: aDate, description: desc, grupoGerencial: e.grupoGerencial,
                 cardId, faturaRef, sourceExpenseId: e.id,
                 origin: ORIGIN.ETAPA_A,
+                reconciled: conciliacaoHerdada(e),
                 createdAt: new Date().toISOString(),
               })
               principalDelta -= amount

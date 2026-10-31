@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   Plus, Calendar, CheckCircle, SkipForward, Trash2, Edit2,
   Clock, CreditCard, BarChart3, ArrowDownCircle, ArrowUpCircle, AlertTriangle, History, ArrowLeftRight,
-  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone,
+  MousePointer2, X, Eye, RotateCcw, Circle, Hourglass, ChevronRight, ChevronDown, List, CalendarDays, Smartphone, FileSpreadsheet,
 } from 'lucide-react'
 import { addDays, format, differenceInDays, parseISO } from 'date-fns'
 import { useApp } from '../../context/AppContext'
@@ -19,6 +19,7 @@ import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, exportarAgendamentosExcel } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
@@ -3012,6 +3013,19 @@ export default function SchedulePanel() {
     { id: 'RES', sigla: 'RES', nome: 'Resgate de reserva (automático)', cor: '#14b8a6' },
   ], [tiposDocumento])
 
+  // Exportar Excel: o que a lista mostra agora (aba, status, período, filtros e ordem da tabela).
+  const exportarExcel = () => {
+    const ctx = { accounts: allAccounts, categories, gerencialGroups, tiposDocumento, hoje: hojeStr }
+    const agrupar = activeTab === 'cartao' ? !hasActiveFilter : (!hasActiveFilter && selContas.size === 0)
+    const linhas = abaPagos ? linhasDosPagos(pagosVisiveis, ctx)
+      : abaSemNada ? []
+        : [
+          ...(activeTab === 'cartao' ? linhasDasFaturas(invoiceVisiveis, ctx) : []),
+          ...linhasDosAgendamentos(buildScheduleGroups(visibleSchedules, getNextOccurrences, { agruparSeries: agrupar }), ctx),
+        ]
+    exportarAgendamentosExcel(linhas, { gerencial: controleGerencialAtivo(settings) })
+  }
+
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
   const handleDeletePayable = id => { deletePayable(id); setConfirmDeletePayable(null) }
 
@@ -3063,6 +3077,11 @@ export default function SchedulePanel() {
               </button>
             ))}
           </div>
+          {!emCalendario && (
+            <button type="button" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={exportarExcel} title="Exportar a lista filtrada para Excel">
+              <FileSpreadsheet size={14} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
+            </button>
+          )}
           {provisoesPendentes.length > 0 && podeExecutarGer && (
             <button className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={abrirExecutarGer} title={tituloExecutarGer}>
               <BarChart3 size={14} /> Executar Gerenciais ({provisoesPendentes.length})
