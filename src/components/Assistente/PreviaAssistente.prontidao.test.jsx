@@ -119,4 +119,13 @@ describe('Prévia do Assistente: parcela já lançada e rateio', () => {
     fireEvent.click(botao('Ajustar o total'))
     expect(screen.getByTestId('form').textContent).toMatch(/amount=200/)
   })
+
+  it('29b) parte sem categoria reconhecida entra no "Faltam" (não some do rateio)', () => {
+    base({ transactions: [{ type: 'expense', categoryId: 'cat_ali', date: '2026-11-01' }] })
+    abrir(sug({ valor: 250, descricao: 'Posto', rateio: [{ categoria_id: 'cat_gas', valor: 200, termo: 'gasolina' }, { categoria_id: null, valor: 50, termo: 'lanche' }], rateio_faltam: 0 }),
+      'gastei 250 no posto, 200 de gasolina e 50 de lanche')
+    expect(screen.getByText(/Faltam R\$\s?50,00\. Em qual categoria\?/)).toBeTruthy()
+    fireEvent.click(botao('Alimentação'))
+    expect(screen.getByTestId('form').textContent).toMatch(/rateio=cat_gas:200,cat_ali:50 amount=250/)
+  })
 })

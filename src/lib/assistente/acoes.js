@@ -22,6 +22,7 @@ import { semIntermediador } from './nomeParecido.js'
 import { contaParaGravar, escolherConta, contaCitada } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
 import { parcelaAtualDoTexto, numeroContratoDoTexto } from './prontidao.js'
+import { rateioDoTexto } from './rateioTexto.js'
 import {
   normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
 } from './texto.js'
@@ -122,23 +123,48 @@ function extrasDeDocumento(p, ctx, out) {
     ? { numero: p.parcela_atual.numero, total: p.parcela_atual.total } : null
   const parcela = (pa && pa.numero >= 1 && pa.total > 1 && pa.numero <= pa.total ? pa : null) || parcelaAtualDoTexto(texto)
   if (parcela) out.parcela_atual = parcela
-  if (Array.isArray(p.rateio) && out.tipo !== 'transferencia') {
-    const linhas = p.rateio.slice(0, 10).map(r => {
-      const termo = txt(r?.termo, 60)
-      const id = porApelido(ctx, 'categoria', termo) || r?.categoria_id
-      const cat = id ? ctx.idx.categorias.get(id) : null
-      const okCat = cat && (cat.tipo === 'both' || cat.tipo === TIPO_CAT[out.tipo])
-      return { categoria_id: okCat ? id : null, valor: valorPositivo(r?.valor), termo }
-    }).filter(l => l.valor)
-    const somaLinhas = Math.round(linhas.reduce((s, l) => s + l.valor, 0) * 100) / 100
-    // Uma parte só citada ("250 no posto, 200 de gasolina") também é rateio: a prévia pergunta o resto.
-    if (linhas.length >= 2 || (linhas.length === 1 && out.valor && out.valor - somaLinhas > 0.004)) {
-      const soma = somaLinhas
-      out.rateio = linhas
-      if (!out.valor) out.valor = soma
-      out.rateio_faltam = Math.round((out.valor - soma) * 100) / 100
-    }
+  // Rateio: o que o modelo devolveu; sem isso, o lido no TEXTO do pedido (lib/assistente/rateioTexto) —
+  // "gastei 250 no posto 200 de gasolina" vira rateio parcial mesmo que o modelo mande só o total.
+  // Do texto, só fora de parcelado/parcela existente ("4x de 150" não é parte de nada).
+  if (out.tipo === 'transferencia') return
+  const doModelo = Array.isArray(p.rateio) && p.rateio.some(r => valorPositivo(r?.valor))
+  const parcelado = out.parcela_atual || (Number.isInteger(p.parcelas) && p.parcelas > 1) || parcelamentoDoTexto(texto)
+  const lido = doModelo || parcelado ? null : rateioDoTexto(texto)
+  if (!doModelo && !(lido && (!out.valor || Math.abs(out.valor - lido.total) < 0.005))) return
+  const fonte = doModelo ? p.rateio : lido.partes.map(x => ({ categoria_id: null, valor: x.valor, termo: x.termo }))
+  const linhas = fonte.slice(0, 10).map(r => {
+    const termo = txt(r?.termo, 60)
+    const id = porApelido(ctx, 'categoria', termo) || r?.categoria_id || categoriaDoTermo(ctx, termo, out, fonte.length, p.termos?.categoria)
+    const cat = id ? ctx.idx.categorias.get(id) : null
+    const okCat = cat && (cat.tipo === 'both' || cat.tipo === TIPO_CAT[out.tipo])
+    return { categoria_id: okCat ? id : null, valor: valorPositivo(r?.valor), termo }
+  }).filter(l => l.valor)
+  const somaLinhas = Math.round(linhas.reduce((s, l) => s + l.valor, 0) * 100) / 100
+  // Uma parte só citada ("250 no posto, 200 de gasolina") também é rateio: a prévia pergunta o resto.
+  if (linhas.length >= 2 || (linhas.length === 1 && out.valor && out.valor - somaLinhas > 0.004)) {
+    out.rateio = linhas
+    if (!out.valor) out.valor = lido?.total || somaLinhas
+    out.rateio_faltam = Math.round((out.valor - somaLinhas) * 100) / 100
   }
+}
+
+// Categoria de uma parte do rateio pelo termo citado ("gasolina", "mercado"), só com o cadastro do
+// cliente: nome da categoria igual/contido no termo (ou o contrário); senão, o termo que levou o
+// modelo à categoria do lançamento; senão, com uma parte só, a categoria do lançamento (o modelo a
+// escolheu pelo item citado — "posto … gasolina" → Combustível).
+function categoriaDoTermo(ctx, termo, out, nPartes, termoDoModeloBruto) {
+  const t = normalizarTermo(termo)
+  if (!t) return null
+  const tipoOk = (c) => c && (c.tipo === 'both' || c.tipo === TIPO_CAT[out.tipo])
+  const nomeDe = (c) => normalizarTermo(String(c.caminho || c.name || '').split('›').pop())
+  const palavra = (a, b) => b.length >= 3 && ` ${a} `.includes(` ${b} `)
+  for (const [id, c] of ctx.idx.categorias) {
+    const n = nomeDe(c)
+    if (tipoOk(c) && n && (n === t || palavra(t, n) || palavra(n, t))) return id
+  }
+  const termoDoModelo = normalizarTermo(termoDoModeloBruto)
+  if (out.categoria_id && termoDoModelo && (termoDoModelo === t || palavra(termoDoModelo, t) || palavra(t, termoDoModelo))) return out.categoria_id
+  return nPartes === 1 ? out.categoria_id || null : null
 }
 // Campos que só existem com o controle gerencial ligado (desligado: nem aparecem na ferramenta).
 const CAMPOS_GERENCIAIS = ['grupo_gerencial_id', 'conta_devolucao_id']

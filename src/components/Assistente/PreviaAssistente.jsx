@@ -240,7 +240,9 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const [rateioResolvido, setRateioResolvido] = useState(null)
   const rateioBase = (sugestao.rateio || []).filter(l => l.categoria_id && l.valor > 0).map(l => ({ categoriaId: l.categoria_id, valor: l.valor, descricao: l.termo || '' }))
   const rateioLinhas = rateioResolvido?.linhas || rateioBase
-  const faltamRateio = rateioResolvido ? 0 : Math.round((Number(sugestao.rateio_faltam) || 0) * 100) / 100
+  // Parte citada sem categoria reconhecida entra no "Faltam … Em qual categoria?" (senão sumiria).
+  const semCategoriaRateio = (sugestao.rateio || []).filter(l => !l.categoria_id && l.valor > 0).reduce((t, l) => t + Number(l.valor), 0)
+  const faltamRateio = rateioResolvido ? 0 : Math.round(((Number(sugestao.rateio_faltam) || 0) + semCategoriaRateio) * 100) / 100
   const somaRateio = Math.round(rateioLinhas.reduce((s, l) => s + Number(l.valor), 0) * 100) / 100
   const preencherVazio = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => v && !initialFormBase[k]))
   const initialForm = {
