@@ -15,17 +15,22 @@ import {
 import { papelDaContaApp } from '../../lib/assistente/contas'
 import { camposDoPedido, ROTULO_CITADO } from '../../lib/assistente/camposDoPedido'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
-import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos } from '../../lib/assistenteApi'
+import { concluirPreLancamento, aprenderApelidos, listarPreLancamentos, listarApelidos } from '../../lib/assistenteApi'
 import { usePreLancamentoAoFechar } from './usePreLancamentoAoFechar'
 import { agendamentosDoLancamento, agendamentosParecidos, favorecidosParecidos, nomeDoFavorecidoNovo, criterioDoLancamento } from '../../lib/assistente/agendamentoDoLancamento'
 import AgendamentoQueBate from './AgendamentoQueBate'
 import AgendamentoParecido from './AgendamentoParecido'
 import PreviaBaixa from './PreviaBaixa'
 import CompraEmDolar from './CompraEmDolar'
+import JaNaFatura from './JaNaFatura'
+import { buscarCorrespondencias, camposHerdados, categoriaMaisUsada, rotuloFatura } from '../../lib/matchLancamento'
 import { cotacaoDolar } from '../../lib/assistenteApi'
 import {
   spreadDoCartao, aliquotaIof, iofEmLinhaSeparada, planoCompraEstrangeira, camposDaCompra, categoriaDoIof, iofDe, lancamentoDoIof,
 } from '../../lib/cambio'
+
+const ROTULO_HERDADO = { categoryId: 'categoria', costCenter: 'centro de custo', tipoDocumentoId: 'tipo de documento', grupoGerencial: 'grupo gerencial' }
+const fmtMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0)
 
 // PRÉVIA do Assistente IA: o formulário EXISTENTE (TransactionForm / ScheduleForm) pré-preenchido.
 //   Confirmar (salvar no formulário) → gravação do próprio formulário (addTransaction/addSchedule do
@@ -49,7 +54,7 @@ import {
 export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, textoOriginal, preId = null, onClose, onToast, guardarAoFechar = true, onConcluido = null }) {
   const {
     transactions, accounts, activeProfileId, updateAccount, pode, schedules, getNextOccurrences, settings, addTransaction, categories, payees,
-    gerencialGroups, reserveFunctions, tiposDocumento,
+    gerencialGroups, reserveFunctions, tiposDocumento, setReconciled,
   } = useApp()
   // Favorecido cadastrado PARECIDO com o nome que veio (a IA não escolheu um existente): só sugere.
   // "Usar" troca o favorecido da prévia e aprende o apelido (ia_apelidos) para casar direto depois.
@@ -143,6 +148,38 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamento, sugestao, contaEscolhida, transactions, accounts, pres, preId])
 
+  // Lançamento de cartão que já está numa fatura (lib/matchLancamento): fatura de referência e as
+  // vizinhas abertas, nome/parcela/valor. Forte → passo antes do formulário; fraco → só pergunta.
+  const [apelidos, setApelidos] = useState([])
+  useEffect(() => {
+    if (agendamento) return
+    let vivo = true
+    listarApelidos().then(l => { if (vivo) setApelidos(l) }).catch(() => {})
+    return () => { vivo = false }
+  }, [agendamento])
+  const [decisaoFatura, setDecisaoFatura] = useState(null)
+  const [ajustando, setAjustando] = useState(null)
+  const novoDoCartao = {
+    accountId: initial.accountId, type: initial.type, amount: Number(initial.amount), date: initial.date,
+    payee: initial.payee, description: initial.description, textoOriginal,
+  }
+  const correspondencias = useMemo(() => {
+    if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return { fortes: [], fracos: [] }
+    return buscarCorrespondencias(novoDoCartao, { transactions, accounts, apelidos, faturasFechadas: settings?.faturasFechadas })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agendamento, perguntaCartao, sugestao, contaEscolhida, transactions, accounts, apelidos, settings?.faturasFechadas, ptax])
+  // "Parc8" com correspondência: o lançamento herda categoria, centro de custo, tipo de documento e
+  // grupo gerencial do existente (só o que a prévia não trouxe). Sem correspondência e sem categoria:
+  // a categoria mais usada nos lançamentos do favorecido.
+  const herdadoDe = decisaoFatura?.tx || correspondencias.fortes[0]?.tx || null
+  const herdados = herdadoDe ? camposHerdados(herdadoDe) : {}
+  if (!controleGerencialAtivo(settings)) delete herdados.grupoGerencial
+  const preenchidos = Object.fromEntries(Object.entries(herdados).filter(([k]) => !initial[k]))
+  const categoriaSugerida = !initial.categoryId && !preenchidos.categoryId && !agendamento
+    ? categoriaMaisUsada(initial.payee || initial.description, transactions, { tipo: initial.type || 'expense' })
+    : null
+  const initialForm = { ...initial, ...preenchidos, ...(categoriaSugerida ? { categoryId: categoriaSugerida } : {}) }
+
   // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
   const [agendDispensado, setAgendDispensado] = useState(false)
   const [parecidoDispensado, setParecidoDispensado] = useState(false)
@@ -199,6 +236,23 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   }
 
   if (existente) return <TransactionForm initial={existente} onClose={onClose} onToast={onToast} />
+  if (ajustando) {
+    return <TransactionForm initial={ajustando.tx} ajustes={ajustando.ajustes} destaques={Object.keys(ajustando.ajustes)} onClose={onClose} onToast={onToast} />
+  }
+  if (!decisaoFatura && correspondencias.fortes.length > 0) {
+    return (
+      <JaNaFatura fortes={correspondencias.fortes} novo={novoDoCartao} textoOriginal={textoOriginal}
+        onConfirmar={(tx) => {
+          setReconciled([tx.id], true)
+          ehOMesmo(tx)
+          onToast?.('Lançamento existente conferido. Nada novo foi criado.')
+          onClose()
+        }}
+        onAjustar={(tx, ajustes) => { ehOMesmo(tx); setAjustando({ tx, ajustes }) }}
+        onLancar={(m) => setDecisaoFatura(m)}
+        onDescartar={descartar} />
+    )
+  }
   if (baixa) {
     return (
       <PreviaBaixa criterio={criterioDoLancamento(lancAgend)} candidato={baixa} textoOriginal={textoOriginal} preId={preId} onClose={onClose} onToast={onToast}
@@ -221,6 +275,33 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
 
   return (
     <div className="space-y-3">
+      {decisaoFatura && (
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-perigo/40 bg-perigo/10 px-3 py-2 text-xs text-texto-1">
+          <span className="font-semibold text-perigo shrink-0">Possível duplicidade:</span>
+          <span className="break-words">
+            já existe {decisaoFatura.tx.description || decisaoFatura.tx.payee} ({fmtMoeda(decisaoFatura.tx.amount)}) na Fatura {rotuloFatura(decisaoFatura.fatura)}. Confira antes de salvar.
+          </span>
+        </div>
+      )}
+      {!decisaoFatura && correspondencias.fracos.length > 0 && (
+        <JaNaFatura fracos={correspondencias.fracos} novo={novoDoCartao}
+          onConfirmar={(tx) => {
+            setReconciled([tx.id], true)
+            ehOMesmo(tx)
+            onToast?.('Lançamento existente conferido. Nada novo foi criado.')
+            onClose()
+          }}
+          onAjustar={(tx, ajustes) => { ehOMesmo(tx); setAjustando({ tx, ajustes }) }}
+          onLancar={(m) => setDecisaoFatura(m)}
+          onDescartar={descartar} />
+      )}
+      {(Object.keys(preenchidos).length > 0 || categoriaSugerida) && (
+        <p className="rounded-lg border border-borda-forte bg-surface-2 px-3 py-2 text-xs text-texto-2">
+          {Object.keys(preenchidos).length > 0
+            ? `Herdado do lançamento existente: ${Object.keys(preenchidos).map(k => ROTULO_HERDADO[k]).join(', ')}.`
+            : 'Categoria sugerida pela mais usada com este favorecido.'}
+        </p>
+      )}
       {!aceitos && parecidos.length > 0 && (
         <AvisoParecidos
           parecidos={parecidos}
@@ -289,7 +370,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         ? null
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
-        : <TransactionForm key={favorecidoUsado || ''} initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+        : <TransactionForm key={favorecidoUsado || ''} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}
     </div>

@@ -132,7 +132,7 @@ function buildCatOpts(categories, type) {
 // `extrasNovo`: campos a mais do lançamento NOVO que o formulário não edita (ex.: compra em dólar
 // do Assistente — moeda, valor original, cotação, spread, estimado; src/lib/cambio.js).
 export default function TransactionForm({ initial, onClose, onToast, rapido = false, destaques = null, onSalvo = null,
-  preLancamentos = null, parecidosAceitos = null, onMesmo = null, extrasNovo = null }) {
+  preLancamentos = null, parecidosAceitos = null, onMesmo = null, extrasNovo = null, ajustes = null }) {
   const {
     accounts, accountGroups, categories, costCenters, payees, transactions, schedules,
     gerencialGroups, criarParcelasGerencial, criarLancamentoDiferenca, reverseGerencialCascadeOnly, recalcularAgendamentosFatura, ensureGerencialState,
@@ -219,6 +219,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     reservaExpenseCategoryId: '',
     // Lançamento novo pode vir parcelado (prévia do Assistente: SMS "em 3x"); valor = TOTAL.
     installments: !initial?.id && Number(initial?.installments) > 1 ? Number(initial.installments) : 1,
+    // Edição já com valor/data propostos (Assistente: "Ajustar o existente"). `initial` segue o
+    // original, então o diff, a pergunta de escopo da série e o histórico são os de sempre.
+    ...(initial?.id && ajustes ? Object.fromEntries(Object.entries(ajustes).filter(([k]) => ['amount', 'date', 'dateCartao'].includes(k))) : {}),
   })
 
   const [step, setStep] = useState('form')

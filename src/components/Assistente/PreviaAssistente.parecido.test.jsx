@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({ aprenderApelidos: vi.fn(async () => ({})) }))
 vi.mock('../../context/AppContext', () => ({ useApp: () => app }))
 vi.mock('../../lib/assistenteApi', () => ({
   aprenderApelidos: (...a) => api.aprenderApelidos(...a), concluirPreLancamento: async () => ({}), listarPreLancamentos: async () => [],
-  guardarPreLancamento: async () => ({}), cotacaoDolar: async () => ({}),
+  guardarPreLancamento: async () => ({}), cotacaoDolar: async () => ({}), listarApelidos: async () => [],
 }))
 vi.mock('../Transactions/TransactionForm', () => ({ default: ({ initial }) => <p>FORMULÁRIO payee={initial.payee || '(vazio)'}</p> }))
 vi.mock('./PreviaBaixa', () => ({ default: ({ candidato, valorNasProximas }) => <p>BAIXA {candidato.schedule_id} próximas={String(valorNasProximas)}</p> }))
