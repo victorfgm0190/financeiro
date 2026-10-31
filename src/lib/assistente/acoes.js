@@ -21,6 +21,7 @@
 import { semIntermediador } from './nomeParecido.js'
 import { contaParaGravar, escolherConta, contaCitada } from './contas.js'
 import { moedaDoTexto } from '../cambio.js'
+import { parcelaAtualDoTexto, numeroContratoDoTexto } from './prontidao.js'
 import {
   normalizarTermo, DATA_ISO, MES_ISO, txt, conf, valorPositivo, contemPalavra, parcelamentoDoTexto, descricaoGenericaDeCompra,
 } from './texto.js'
@@ -81,6 +82,63 @@ const CAMPOS_LANCAMENTO = {
   tipo_documento_id: { type: ['string', 'null'], description: 'Tipo de documento citado ("NF", "recibo", "boleto"): id da lista TIPOS DE DOCUMENTO' },
   observacoes: { type: ['string', 'null'], description: 'Observação citada ("observação: presente" → "presente")' },
   fatura: { type: ['string', 'null'], description: 'Fatura do cartão citada ("na fatura de dezembro", "fatura 12/2026"): YYYY-MM' },
+  // Prontidão (regra 20): o que o documento/texto mostra.
+  documento: {
+    type: ['object', 'null'],
+    description: 'Foto/texto de documento: natureza (boleto, fatura, nota_fiscal, cupom, recibo, comprovante), nº de contrato, vencimento e se já foi pago',
+    properties: {
+      natureza: { type: ['string', 'null'], enum: ['boleto', 'fatura', 'nota_fiscal', 'cupom', 'recibo', 'comprovante', 'outro', null] },
+      numero_contrato: { type: ['string', 'null'], description: '"Contrato nº 12345", "nº do contrato", "cód. contrato"' },
+      vencimento: { type: ['string', 'null'], description: 'YYYY-MM-DD' },
+      pago: { type: ['boolean', 'null'], description: 'true = comprovante/pago; false = ainda a pagar; null = não dá para saber' },
+    },
+  },
+  parcela_atual: {
+    type: ['object', 'null'],
+    description: 'Parcela de algo que JÁ existe ("parcela 10/12", "10 de 12", "cota 2/3"): número e total. Não é compra nova parcelada.',
+    properties: { numero: { type: 'integer' }, total: { type: 'integer' } },
+  },
+  rateio: {
+    type: ['array', 'null'],
+    description: 'UM pagamento dividido em categorias ("250 no posto, 200 de gasolina e 50 de alimentação"): uma linha por categoria citada',
+    items: { type: 'object', properties: { categoria_id: { type: ['string', 'null'] }, valor: { type: ['number', 'null'] }, termo: { type: ['string', 'null'] } } },
+  },
+}
+
+// Documento, parcela de algo que já existe e rateio (regras 20–22). O texto do pedido também conta
+// (nº de contrato e "parcela N/M" escritos), independentemente do que o modelo devolveu.
+const NATUREZAS_DOC = ['boleto', 'fatura', 'nota_fiscal', 'cupom', 'recibo', 'comprovante', 'outro']
+function extrasDeDocumento(p, ctx, out) {
+  const texto = ctx.trechoItem ?? ctx.textoPedido
+  const d = p.documento && typeof p.documento === 'object' ? p.documento : {}
+  const documento = {
+    natureza: NATUREZAS_DOC.includes(d.natureza) ? d.natureza : null,
+    numero_contrato: txt(d.numero_contrato, 40) || numeroContratoDoTexto(texto),
+    vencimento: DATA_ISO.test(String(d.vencimento || '')) ? d.vencimento : null,
+    pago: typeof d.pago === 'boolean' ? d.pago : null,
+  }
+  if (Object.values(documento).some(v => v !== null)) out.documento = documento
+  const pa = p.parcela_atual && Number.isInteger(p.parcela_atual.numero) && Number.isInteger(p.parcela_atual.total)
+    ? { numero: p.parcela_atual.numero, total: p.parcela_atual.total } : null
+  const parcela = (pa && pa.numero >= 1 && pa.total > 1 && pa.numero <= pa.total ? pa : null) || parcelaAtualDoTexto(texto)
+  if (parcela) out.parcela_atual = parcela
+  if (Array.isArray(p.rateio) && out.tipo !== 'transferencia') {
+    const linhas = p.rateio.slice(0, 10).map(r => {
+      const termo = txt(r?.termo, 60)
+      const id = porApelido(ctx, 'categoria', termo) || r?.categoria_id
+      const cat = id ? ctx.idx.categorias.get(id) : null
+      const okCat = cat && (cat.tipo === 'both' || cat.tipo === TIPO_CAT[out.tipo])
+      return { categoria_id: okCat ? id : null, valor: valorPositivo(r?.valor), termo }
+    }).filter(l => l.valor)
+    const somaLinhas = Math.round(linhas.reduce((s, l) => s + l.valor, 0) * 100) / 100
+    // Uma parte só citada ("250 no posto, 200 de gasolina") também é rateio: a prévia pergunta o resto.
+    if (linhas.length >= 2 || (linhas.length === 1 && out.valor && out.valor - somaLinhas > 0.004)) {
+      const soma = somaLinhas
+      out.rateio = linhas
+      if (!out.valor) out.valor = soma
+      out.rateio_faltam = Math.round((out.valor - soma) * 100) / 100
+    }
+  }
 }
 // Campos que só existem com o controle gerencial ligado (desligado: nem aparecem na ferramenta).
 const CAMPOS_GERENCIAIS = ['grupo_gerencial_id', 'conta_devolucao_id']
@@ -224,7 +282,11 @@ const brl = (v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, m
 // Descrição genérica ("Compra em 3x") → o estabelecimento.
 function validarRegistro(p, ctx, hoje) {
   const out = validarLancamento(p, ctx, hoje)
-  if (out.tipo === 'despesa') {
+  extrasDeDocumento(p, ctx, out)
+  // "Parcela 10/12" é parcela de compra que JÁ existe (a prévia procura a série no cartão), nunca uma
+  // compra nova de 12x — mesmo que o modelo tenha preenchido parcelas.
+  const parcelaExistente = out.parcela_atual && out.parcela_atual.numero > 1
+  if (out.tipo === 'despesa' && !parcelaExistente) {
     const doModelo = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 48 ? p.parcelas : null
     // Lote (vários lançamentos num pedido): parcelas e moeda saem do TRECHO do item (lote.js).
     const lido = parcelamentoDoTexto(ctx.trechoItem ?? ctx.textoPedido)
@@ -316,14 +378,22 @@ export const ACOES = [
           ...CAMPOS_LANCAMENTO,
           parcelas: { type: ['integer', 'null'], description: 'Compra parcelada no cartão ("em 3x", "3 parcelas"): número de parcelas; o valor é o TOTAL da compra. À vista = null' },
           moeda: { type: 'string', enum: ['BRL', 'USD'], description: 'Moeda do valor citado: "US", "US$", "USD", "U$", "dólares" → USD (valor = o número em dólar, SEM converter); senão BRL' },
-          repetir: { type: ['string', 'null'], enum: [...RECORRENCIAS.filter(r => r !== 'once'), null], description: 'Lançamento que se repete, se citado ("todo mês" → monthly, "quinzenal" → biweekly); senão null' },
+          repetir: { type: ['string', 'null'], enum: [...RECORRENCIAS.filter(r => r !== 'once'), null], description: 'Lançamento que se repete, se citado ("todo mês", "e agende mensal" → monthly, "quinzenal" → biweekly); senão null' },
+          repetir_dia: { type: ['integer', 'null'], description: 'Dia do mês citado para a repetição ("todo dia 10" → 10)' },
+          repetir_ate: { type: ['string', 'null'], description: 'Fim da repetição citado ("até dezembro de 2027" → 2027-12-31), YYYY-MM-DD' },
+          repetir_vezes: { type: ['integer', 'null'], description: 'Quantas vezes, se citado ("por 6 meses" → 6)' },
         },
         required: ['tipo', 'valor', 'data', 'conta_id', 'categoria_id', 'descricao', 'confianca'],
       },
     },
     validar: (p, ctx, hoje) => {
       const out = validarRegistro(p, ctx, hoje)
-      if (RECORRENCIAS.includes(p.repetir) && p.repetir !== 'once' && !out.parcelas) out.repetir = p.repetir
+      if (RECORRENCIAS.includes(p.repetir) && p.repetir !== 'once' && !out.parcelas) {
+        out.repetir = p.repetir
+        if (Number.isInteger(p.repetir_dia) && p.repetir_dia >= 1 && p.repetir_dia <= 31) out.repetir_dia = p.repetir_dia
+        if (DATA_ISO.test(String(p.repetir_ate || ''))) out.repetir_ate = p.repetir_ate
+        if (Number.isInteger(p.repetir_vezes) && p.repetir_vezes >= 2 && p.repetir_vezes <= 360) out.repetir_vezes = p.repetir_vezes
+      }
       return out
     },
   },
@@ -345,6 +415,7 @@ export const ACOES = [
     },
     validar: (p, ctx, hoje) => {
       const out = validarLancamento(p, ctx, hoje)
+      extrasDeDocumento(p, ctx, out)
       out.vencimento = DATA_ISO.test(String(p.vencimento || '')) ? p.vencimento : out.data
       out.recorrencia = doEnum(RECORRENCIAS, p.recorrencia, 'once')
       out.parcelas = Number.isInteger(p.parcelas) && p.parcelas > 1 && p.parcelas <= 360 ? p.parcelas : null

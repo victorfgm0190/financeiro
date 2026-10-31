@@ -23,6 +23,10 @@ import AgendamentoParecido from './AgendamentoParecido'
 import PreviaBaixa from './PreviaBaixa'
 import CompraEmDolar from './CompraEmDolar'
 import JaNaFatura from './JaNaFatura'
+import EscolhaAcaoDespesa from './EscolhaAcaoDespesa'
+import RateioFaltando from './RateioFaltando'
+import { sugerirAcaoDespesa, repeticaoDaPrevia, categoriasProvaveis, ACAO } from '../../lib/assistente/prontidao'
+import { categoriaPrincipal } from '../../lib/rateio'
 import { buscarCorrespondencias, camposHerdados, categoriaMaisUsada, rotuloFatura } from '../../lib/matchLancamento'
 import { cotacaoDolar } from '../../lib/assistenteApi'
 import {
@@ -162,6 +166,8 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const novoDoCartao = {
     accountId: initial.accountId, type: initial.type, amount: Number(initial.amount), date: initial.date,
     payee: initial.payee, description: initial.description, textoOriginal,
+    // "Parcela 10/12" de compra que já existe (regra 21): casa pelo número da parcela.
+    parcela: sugestao.parcela_atual ? { num: sugestao.parcela_atual.numero, total: sugestao.parcela_atual.total } : null,
   }
   const correspondencias = useMemo(() => {
     if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return { fortes: [], fracos: [] }
@@ -178,14 +184,75 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   const categoriaSugerida = !initial.categoryId && !preenchidos.categoryId && !agendamento
     ? categoriaMaisUsada(initial.payee || initial.description, transactions, { tipo: initial.type || 'expense' })
     : null
-  const initialForm = { ...initial, ...preenchidos, ...(categoriaSugerida ? { categoryId: categoriaSugerida } : {}) }
+  const initialFormBase = { ...initial, ...preenchidos, ...(categoriaSugerida ? { categoryId: categoriaSugerida } : {}) }
+
+  // Prontidão (lib/assistente/prontidao): Só despesa | Despesa + agendamento | Só agendamento. Não
+  // pergunta quando o pedido já disse ("e agende", "todo mês"), em compra parcelada nova e em parcela de
+  // compra já existente no cartão (essa é tratada pelo JaNaFatura).
+  const hojeIso = new Date().toISOString().slice(0, 10)
+  const doc = sugestao.documento || {}
+  const ehCartaoDaPrevia = accounts.find(a => a.id === initial.accountId)?.type === 'credit'
+  const parcelaNoCartao = !!sugestao.parcela_atual && ehCartaoDaPrevia
+  const despesaCandidata = !agendamento && ferramenta === 'registrar_lancamento' && (initial.type || 'expense') === 'expense'
+    && !(Number(initial.installments) > 1) && !perguntaCartao && !emDolar
+  const prontidao = useMemo(() => (despesaCandidata ? sugerirAcaoDespesa({
+    natureza: doc.natureza, tipoDocumento: (tiposDocumento || []).find(t => t.id === initialFormBase.tipoDocumentoId) || null,
+    descricao: initialFormBase.description, favorecido: initialFormBase.payee,
+    categoriaNome: categories.find(c => c.id === initialFormBase.categoryId)?.name || '', texto: textoOriginal || '',
+    numeroContrato: doc.numero_contrato, parcelaAtual: sugestao.parcela_atual, vencimento: doc.vencimento, pago: doc.pago,
+    hoje: hojeIso, historico: { transactions, schedules },
+  }) : null),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [despesaCandidata, sugestao, contaEscolhida, favorecidoUsado, transactions, schedules, tiposDocumento, categories, textoOriginal])
+  const jaPediuAgendar = !!sugestao.repetir
+  const perguntarAcao = despesaCandidata && !jaPediuAgendar && !parcelaNoCartao
+  const [acaoDespesa, setAcaoDespesa] = useState(null)
+  const acaoEfetiva = jaPediuAgendar ? ACAO.DESPESA_AGENDAMENTO : acaoDespesa
+  const recorrencia = sugestao.repetir || prontidao?.recorrenciaSugerida || null
+  const diaRepeticao = sugestao.repetir_dia || (doc.vencimento ? Number(doc.vencimento.slice(8, 10)) : null)
+  const repeticao = acaoEfetiva === ACAO.DESPESA_AGENDAMENTO
+    ? repeticaoDaPrevia({ data: initialFormBase.date || hojeIso, recorrencia: recorrencia || 'monthly', dia: diaRepeticao, ate: sugestao.repetir_ate, vezes: sugestao.repetir_vezes, parcelasRestantes: prontidao?.parcelasRestantes })
+    : null
+  const contrato = prontidao?.numeroContrato || doc.numero_contrato || null
+  const reaproveitar = prontidao?.reaproveitar || null
+  // Rateio citado (regra 22): linhas editáveis; soma ≠ total → pergunta onde vai a diferença.
+  const [rateioResolvido, setRateioResolvido] = useState(null)
+  const rateioBase = (sugestao.rateio || []).filter(l => l.categoria_id && l.valor > 0).map(l => ({ categoriaId: l.categoria_id, valor: l.valor, descricao: l.termo || '' }))
+  const rateioLinhas = rateioResolvido?.linhas || rateioBase
+  const faltamRateio = rateioResolvido ? 0 : Math.round((Number(sugestao.rateio_faltam) || 0) * 100) / 100
+  const somaRateio = Math.round(rateioLinhas.reduce((s, l) => s + Number(l.valor), 0) * 100) / 100
+  const preencherVazio = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => v && !initialFormBase[k]))
+  const initialForm = {
+    ...initialFormBase,
+    ...preencherVazio(reaproveitar),
+    ...(contrato ? { notes: [initialFormBase.notes, `Contrato nº ${contrato}`].filter(Boolean).join(' · ') } : {}),
+    ...(repeticao ? {
+      repeatFrequency: repeticao.repeatFrequency, repeatOccurrenceType: repeticao.repeatOccurrenceType,
+      repeatInstallments: repeticao.repeatInstallments, repeatStartDate: repeticao.repeatStartDate,
+      repeatSufixo: contrato ? `Contrato nº ${contrato}` : '',
+    } : (acaoEfetiva === ACAO.SO_DESPESA ? { repeatFrequency: null } : {})),
+    ...(rateioLinhas.length ? { rateio: rateioLinhas, categoryId: categoriaPrincipal(rateioLinhas) } : {}),
+    ...(rateioResolvido?.amount ? { amount: String(rateioResolvido.amount) } : {}),
+  }
+  // "Só agendamento" (conta ainda a pagar): o agendamento a partir do vencimento, com a recorrência sugerida.
+  const initialSoAgendamento = acaoEfetiva === ACAO.SO_AGENDAMENTO ? {
+    ...initialDaSugestao('criar_agendamento', {
+      ...sugestao, vencimento: doc.vencimento || sugestao.data,
+      recorrencia: recorrencia === 'installment' ? 'monthly' : (recorrencia || 'once'),
+      parcelas: recorrencia === 'installment' && prontidao?.parcelasRestantes ? prontidao.parcelasRestantes + 1 : null,
+    }),
+    ...preencherVazio(reaproveitar),
+    categoryId: initialFormBase.categoryId || reaproveitar?.categoryId || '',
+    tipoDocumentoId: initialFormBase.tipoDocumentoId || '',
+    description: `${initialFormBase.description || sugestao.descricao || ''}${contrato ? ` · Contrato nº ${contrato}` : ''}`,
+  } : null
 
   // Agendamento pendente que este lançamento paga (compra parcelada não entra: vira N parcelas).
   const [agendDispensado, setAgendDispensado] = useState(false)
   const [parecidoDispensado, setParecidoDispensado] = useState(false)
   const [baixa, setBaixa] = useState(null)
   const [valorNasProximas, setValorNasProximas] = useState(false)
-  const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}) }
+  const lancAgend = { ...initial, amount: Number(initial.amount), ...(extrasCompra ? { estimado: true } : {}), contrato }
   const agendamentosQueBatem = useMemo(() => {
     if (agendamento || perguntaCartao || Number(initial.installments) > 1 || ptax?.status === 'carregando') return []
     return agendamentosDoLancamento(lancAgend, { schedules, accounts, transactions, getNextOccurrences })
@@ -241,7 +308,7 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
   }
   if (!decisaoFatura && correspondencias.fortes.length > 0) {
     return (
-      <JaNaFatura fortes={correspondencias.fortes} novo={novoDoCartao} textoOriginal={textoOriginal}
+      <JaNaFatura fortes={correspondencias.fortes} novo={novoDoCartao} textoOriginal={textoOriginal} parcela={novoDoCartao.parcela}
         onConfirmar={(tx) => {
           setReconciled([tx.id], true)
           ehOMesmo(tx)
@@ -294,6 +361,31 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
           onAjustar={(tx, ajustes) => { ehOMesmo(tx); setAjustando({ tx, ajustes }) }}
           onLancar={(m) => setDecisaoFatura(m)}
           onDescartar={descartar} />
+      )}
+      {perguntarAcao && <EscolhaAcaoDespesa prontidao={prontidao} acao={acaoDespesa} onEscolher={setAcaoDespesa} />}
+      {repeticao && (
+        <p className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-texto-2">
+          {jaPediuAgendar ? 'Você pediu para agendar: ' : ''}a despesa conta como a ocorrência deste período; o agendamento
+          {' '}{repeticao.repeatOccurrenceType === 'installment' ? `(${repeticao.repeatInstallments} vezes) ` : ''}começa em <strong>{repeticao.primeira.split('-').reverse().join('/')}</strong> (1ª ocorrência).
+          {rateioLinhas.length > 0 ? ' O agendamento herda o rateio.' : ''}
+        </p>
+      )}
+      {parcelaNoCartao && correspondencias.fortes.length === 0 && correspondencias.fracos.length === 0 && (() => {
+        // Sem a parcela nas faturas abertas: pode estar numa fatura já FECHADA — avisa e deixa decidir.
+        const naFechada = buscarCorrespondencias(novoDoCartao, { transactions, accounts, apelidos, faturasFechadas: null }).fortes.find(m => m.parcelaIgual)
+        return (
+          <p className="rounded-lg border border-aviso/40 bg-aviso/10 px-3 py-2 text-xs text-texto-1">
+            {naFechada
+              ? `A parcela ${sugestao.parcela_atual.numero}/${sugestao.parcela_atual.total} já está na fatura ${rotuloFatura(naFechada.fatura)}, que está FECHADA. Lance só se for mesmo outra cobrança.`
+              : `Não achei a parcela ${sugestao.parcela_atual.numero}/${sugestao.parcela_atual.total} desta compra neste cartão (fatura de referência e vizinhas abertas). Confira antes de lançar.`}
+          </p>
+        )
+      })()}
+      {faltamRateio !== 0 && rateioLinhas.length > 0 && (
+        <RateioFaltando faltam={faltamRateio} soma={somaRateio} categories={categories}
+          categorias={categoriasProvaveis(transactions, { hoje: hojeIso, excluir: rateioLinhas.map(l => l.categoriaId) })}
+          onCategoria={(id) => setRateioResolvido({ linhas: [...rateioLinhas, { categoriaId: id, valor: faltamRateio, descricao: '' }] })}
+          onAjustarTotal={() => setRateioResolvido({ linhas: rateioLinhas, amount: somaRateio })} />
       )}
       {(Object.keys(preenchidos).length > 0 || categoriaSugerida) && (
         <p className="rounded-lg border border-borda-forte bg-surface-2 px-3 py-2 text-xs text-texto-2">
@@ -370,7 +462,9 @@ export default function PreviaAssistente({ ferramenta, sugestao: sugestaoIA, tex
         ? null
         : agendamento
         ? <ScheduleForm initial={initial} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
-        : <TransactionForm key={favorecidoUsado || ''} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
+        : initialSoAgendamento
+        ? <ScheduleForm key="so-agendamento" initial={initialSoAgendamento} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onAviso={onToast} />
+        : <TransactionForm key={`${favorecidoUsado || ''}|${acaoEfetiva || ''}|${rateioResolvido ? 'r' : ''}`} initial={initialForm} destaques={destaquesForm} onSalvo={onSalvo} onClose={onClose} onToast={onToast}
             preLancamentos={pres || []} parecidosAceitos={[...(aceitos || []), ...(preId ? [preId] : [])]} onMesmo={ehOMesmo}
             extrasNovo={extrasCompra} />}
     </div>

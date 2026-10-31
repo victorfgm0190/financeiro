@@ -15,13 +15,35 @@ export const FERRAMENTAS_LOTE = new Set(['registrar_lancamento', 'criar_agendame
 // `cortada` (stop_reason max_tokens): o último bloco pode estar incompleto → descartado; o movimento
 // dele volta no "texto restante".
 export function blocosDoPedido(content, disponiveis, { cortada = false } = {}) {
-  let usos = (content || []).filter(b => b.type === 'tool_use' && disponiveis.has(b.name))
+  let usos = fundirLancamentoEAgendamento((content || []).filter(b => b.type === 'tool_use' && disponiveis.has(b.name)))
   const criacao = usos.length > 0 && usos.every(b => FERRAMENTAS_LOTE.has(b.name))
   if (cortada && criacao) usos = usos.slice(0, -1)
   const total = Math.max(0, ...usos.map(b => Math.trunc(Number(b.input?.total_encontrado)) || 0))
   const faltou = cortada || total > Math.min(usos.length, MAX_ITENS_LOTE)
   if (criacao && (usos.length >= 2 || (usos.length === 1 && faltou))) return { lote: true, blocos: usos.slice(0, MAX_ITENS_LOTE), total }
   return { lote: false, blocos: usos.slice(0, 1), total }
+}
+
+// "Registre a despesa X e agende todo dia 10" que veio como DUAS chamadas (registrar + agendar do
+// mesmo item, mesmo valor ou agendamento sem valor) → UMA registrar_lancamento com repetir/dia/fim.
+export function fundirLancamentoEAgendamento(usos) {
+  if (usos.length !== 2) return usos
+  const reg = usos.find(b => b.name === 'registrar_lancamento')
+  const ag = usos.find(b => b.name === 'criar_agendamento')
+  if (!reg || !ag) return usos
+  const vr = Number(reg.input?.valor) || 0
+  const va = Number(ag.input?.valor) || 0
+  if (va && vr && Math.abs(va - vr) > 0.004) return usos
+  const rec = ag.input?.recorrencia
+  if (!rec || rec === 'once') return usos
+  const dia = /^\d{4}-\d{2}-(\d{2})$/.exec(String(ag.input?.vencimento || ''))?.[1]
+  const input = {
+    ...reg.input,
+    repetir: reg.input?.repetir || rec,
+    ...(reg.input?.repetir_dia || !dia ? {} : { repetir_dia: Number(dia) }),
+    ...(Number.isInteger(ag.input?.parcelas) && !reg.input?.repetir_vezes ? { repetir_vezes: ag.input.parcelas } : {}),
+  }
+  return [{ ...reg, input }]
 }
 
 // O que ficou de fora do lote → null (nada faltou) ou { lidos, total, trecho }. `total` = o que a IA

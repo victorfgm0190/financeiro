@@ -9,8 +9,9 @@ import { numeroParcelaDoTx, totalParcelasDoTx } from '../../lib/revisaoImportaca
 // existente" (valor/data divergentes; abre a edição) ou "Lançar mesmo assim". Fraco (só o nome
 // parecido) → só a pergunta "É este?". Nunca exclui nada.
 //   novo: { amount, date }   onConfirmar(tx)   onAjustar(tx, ajustes)   onLancar(m)   onDescartar()
-export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOriginal, onConfirmar, onAjustar, onLancar, onDescartar }) {
+export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOriginal, onConfirmar, onAjustar, onLancar, onDescartar, parcela = null }) {
   const [escolhidoFraco, setEscolhidoFraco] = useState(null)
+  const [confirmandoDobro, setConfirmandoDobro] = useState(false)
   const lista = escolhidoFraco ? [escolhidoFraco] : fortes
   const [sel, setSel] = useState(0)
   const [fracoRecusado, setFracoRecusado] = useState(false)
@@ -38,13 +39,18 @@ export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOrigin
   const temAjuste = Object.keys(ajustes).length > 0
   const ajustesForm = ajustes.date && m.tx.dateCartao ? { ...ajustes, dateCartao: ajustes.date } : ajustes
   const faturas = [...new Set(lista.map(x => rotuloFatura(x.fatura)))]
+  const ehParcela = !!parcela?.num && m.parcelaIgual
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  const mesAno = (ym) => (ym ? `${MESES[Number(ym.slice(5, 7)) - 1]}/${ym.slice(0, 4)}` : '')
 
   return (
     <div className="space-y-3">
       <div role="alert" className="rounded-lg border-2 border-aviso/60 bg-aviso/10 px-3 py-2.5 text-sm text-texto-1 space-y-2">
         <p className="flex items-start gap-2 font-semibold">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-aviso" />
-          Este lançamento parece já estar na Fatura {faturas.join(' / ')}
+          {ehParcela
+            ? `A parcela ${parcela.num}/${parcela.total || m.tx.installmentTotal || '?'} de ${m.tx.description || m.tx.payee || 'esta compra'} já está lançada na fatura de ${mesAno(m.fatura)} (${fmt(m.tx.amount)}).`
+            : `Este lançamento parece já estar na Fatura ${faturas.join(' / ')}`}
         </p>
         {lista.length > 1 && <p className="pl-6 text-xs text-texto-2">Escolha qual é:</p>}
         <ul className="space-y-1.5 pl-6">
@@ -62,13 +68,13 @@ export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOrigin
         {textoOriginal && <p className="pl-6 text-xs text-texto-3 whitespace-pre-wrap break-words">“{textoOriginal}”</p>}
         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 pt-1">
           <button type="button" className="btn-primary flex-1 min-h-[40px] inline-flex items-center justify-center gap-1.5" onClick={() => onConfirmar(m.tx)}>
-            <CheckCircle2 size={14} /> Confirmar o existente
+            <CheckCircle2 size={14} /> {ehParcela ? 'Confirmar vínculo' : 'Confirmar o existente'}
           </button>
           {temAjuste && (
             <button type="button" className="btn-secondary flex-1 min-h-[40px] inline-flex items-center justify-center gap-1.5" onClick={() => onAjustar(m.tx, ajustesForm)}>
               <Pencil size={14} />
               <span>
-                Ajustar o existente
+                {ehParcela ? 'Ajustar valor' : 'Ajustar o existente'}
                 <span className="block text-[11px] font-normal text-texto-2">
                   {ajustes.amount != null && `de ${fmt(m.tx.amount)} para ${fmt(ajustes.amount)}`}
                   {ajustes.amount != null && ajustes.date ? ' · ' : ''}
@@ -77,11 +83,21 @@ export default function JaNaFatura({ fortes = [], fracos = [], novo, textoOrigin
               </span>
             </button>
           )}
-          <button type="button" className="btn-secondary flex-1 min-h-[40px] inline-flex items-center justify-center gap-1.5" onClick={() => onLancar(m)}>
+          <button type="button" className="btn-secondary flex-1 min-h-[40px] inline-flex items-center justify-center gap-1.5"
+            onClick={() => (ehParcela ? setConfirmandoDobro(true) : onLancar(m))}>
             <Plus size={14} /> Lançar mesmo assim
           </button>
         </div>
-        <p className="text-[11px] text-texto-3">Confirmar marca o existente como conferido (o mesmo ✓ da fatura) e não cria nada novo.</p>
+        {confirmandoDobro && (
+          <div className="rounded-lg border border-perigo/40 bg-perigo/10 p-2 space-y-1.5 text-xs">
+            <p>A parcela vai ficar em DOBRO na fatura. Lançar mesmo assim?</p>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary text-xs min-h-[36px]" onClick={() => setConfirmandoDobro(false)}>Voltar</button>
+              <button type="button" className="btn-danger text-xs min-h-[36px]" onClick={() => onLancar(m)}>Sim, lançar em dobro</button>
+            </div>
+          </div>
+        )}
+        <p className="text-[11px] text-texto-3">{ehParcela ? 'Confirmar vínculo' : 'Confirmar'} marca o existente como conferido (o mesmo ✓ da fatura) e não cria nada novo.</p>
       </div>
       <div className="flex justify-end">
         <button type="button" onClick={onDescartar} className="inline-flex items-center gap-1 rounded px-2 min-h-[32px] text-xs text-texto-2 hover:text-perigo" title="Descartar a sugestão (não guarda nada)">

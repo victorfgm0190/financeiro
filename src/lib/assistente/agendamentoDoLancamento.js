@@ -81,12 +81,19 @@ const candidato = (lanc, { s, base, e }) => ({
 })
 
 // lanc: { type: 'expense' | 'income', amount, date, accountId, payee, description, estimado? }.
+// Mesmo nº de contrato (lanc.contrato, lido do boleto/comprovante) na descrição/favorecido do agendamento.
+const soAlnum = (x) => String(x || '').replace(/[^0-9a-z]/gi, '').toUpperCase()
+export const mesmoContrato = (lanc, s) => {
+  const c = soAlnum(lanc?.contrato)
+  return c.length >= 3 && soAlnum(`${s.description || ''} ${s.payee || ''}`).includes(c)
+}
+
 export function agendamentosDoLancamento(lanc, ctx) {
   const valor = Number(lanc?.amount)
   const out = []
   for (const p of pendentesDaConta(lanc, ctx)) {
     const { s, e, dias, mesmaConta } = p
-    if (!nomesParecidos(lanc, s)) continue
+    if (!nomesParecidos(lanc, s) && !mesmoContrato(lanc, s)) continue
     if (Math.abs(dias) > JANELA_DIAS_AGENDAMENTO) continue
     const dif = Math.abs((Number(e.amount) || 0) - valor)
     const pct = lanc.estimado ? TOLERANCIA_ESTIMADO : valorVariavel(s, ctx.transactions || []) ? TOLERANCIA_VARIAVEL : 0

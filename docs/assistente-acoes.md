@@ -90,6 +90,9 @@ cache de prompt por grupo. Domínios atuais: `agenda`, `cartao`, `painel`.
 | `criar_cadastro` | fase 3 | Configurações › Cadastros | `addCategory`, `addPayee`, `addCostCenter`, `addTipoDocumento`, `addRule` | — | nome, tipo |
 | `criar_conta` | fase 3 | Contas | `AccountForm` → `addAccount` | — | nome, tipo, saldo inicial |
 
+
+> 31/10/2026 — `registrar_lancamento`/`criar_agendamento` ganharam `documento` (natureza, nº de contrato, vencimento, pago), `parcela_atual` (parcela de compra já existente — nunca vira compra nova), `rateio` (UM lançamento em várias categorias) e `repetir_dia`/`repetir_ate`/`repetir_vezes` (regras 20–23 do prompt). A prévia pergunta Só despesa / Despesa + agendamento (Só agendamento p/ conta a pagar) com a sugestão de `src/lib/assistente/prontidao.js` (palavras-chave em `prontidaoConfig.js`). Registrar + agendar do mesmo item em duas chamadas são fundidos (`lote.js`).
+
 ## 🟠 Edição (fase 2)
 
 | Ação | Onde hoje | Reaproveita | Protegida? | Dados |

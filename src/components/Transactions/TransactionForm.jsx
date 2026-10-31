@@ -40,6 +40,7 @@ import RenomearFavorecidoModal from '../shared/RenomearFavorecidoModal'
 import { metaBaixaGerada } from '../../lib/scheduleBaixa'
 import RateioModal from '../shared/RateioModal'
 import { validarRateio, normalizarRateio, categoriaPrincipal, rateioDaParcela } from '../../lib/rateio'
+import { primeiraOcorrencia } from '../../lib/assistente/prontidao'
 import DebtPlanModal from './DebtPlanModal'
 import DebtPaymentModal from './DebtPaymentModal'
 import DateInput from '../shared/DateInput'
@@ -213,8 +214,12 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     // Lançamento novo pode vir repetindo (prévia do Assistente: "todo mês").
     repeat: !initial?.id && !!initial?.repeatFrequency,
     repeatFrequency: (!initial?.id && initial?.repeatFrequency) || 'monthly',
-    repeatOccurrenceType: 'continuous',
-    repeatInstallments: 2,
+    repeatOccurrenceType: (!initial?.id && initial?.repeatOccurrenceType) || 'continuous',
+    repeatInstallments: (!initial?.id && Number(initial?.repeatInstallments) > 1) ? Number(initial.repeatInstallments) : 2,
+    // Prévia do Assistente: a ocorrência deste período é a própria despesa (dia informado/vencimento),
+    // e o agendamento começa na seguinte; sufixo na descrição do agendamento (ex.: nº do contrato).
+    repeatStartDate: (!initial?.id && initial?.repeatStartDate) || '',
+    repeatSufixo: (!initial?.id && initial?.repeatSufixo) || '',
     repeatRemindDaysBefore: 0,
     useReserva: reservaIni.useReserva,
     reservaMemo: {},
@@ -278,7 +283,9 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
   // Rateio (divisão em categorias). Em edição, carrega os rateios já salvos do lançamento.
   const hadRateio = !!(initial?.id && (rateiosByLancamento?.get(initial.id)?.length > 0))
   const [rateioRows, setRateioRows] = useState(() =>
-    initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao })) : []
+    initial?.id ? (rateiosByLancamento?.get(initial.id) || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao }))
+      // Lançamento novo pode vir rateado (prévia do Assistente: "200 de gasolina e 50 de alimentação").
+      : (initial?.rateio || []).map(r => ({ categoriaId: r.categoriaId, valor: r.valor, descricao: r.descricao || '' }))
   )
   const [showRateio, setShowRateio] = useState(false)
   const rateioTotal = rateioRows.reduce((s, r) => s + (Number(r.valor) || 0), 0)
@@ -628,7 +635,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     const serieId = isParcelado ? newSerieId() : null
 
     // eslint-disable-next-line no-unused-vars
-    const { useReserva: _ur, reservaMemo: _rm, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, ...formFields } = form
+    const { useReserva: _ur, reservaMemo: _rm, reservaAccountId: _rai, reservaExpenseCategoryId: _reci, installments: _inst, repeat: _rep, repeatFrequency: _rf, repeatOccurrenceType: _rot, repeatInstallments: _ri, repeatRemindDaysBefore: _rrd, repeatStartDate: _rsd, repeatSufixo: _rsx, ...formFields } = form
     const txData = {
       ...formFields,
       // Com rateio, a categoria gravada no lançamento é a da maior linha (leitores que só olham
@@ -933,7 +940,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
     if (form.repeat) {
       const schId = addSchedule({
         id: repeatSchId,
-        description: form.description || form.payee || 'Lançamento recorrente',
+        description: `${form.description || form.payee || 'Lançamento recorrente'}${form.repeatSufixo ? ` · ${form.repeatSufixo}` : ''}`,
         transactionType: form.type,
         accountId: form.accountId,
         toAccountId: form.type === 'transfer' ? form.toAccountId : '',
@@ -943,7 +950,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         payee: form.payee || '',
         costCenter: form.costCenter || '',
         frequency: form.repeatFrequency,
-        startDate: form.date,
+        startDate: form.repeatStartDate || form.date,
         occurrenceType: form.repeatFrequency === 'once' ? 'continuous' : form.repeatOccurrenceType,
         installments: form.repeatOccurrenceType === 'installment' ? Number(form.repeatInstallments) : 0,
         remindDaysBefore: Number(form.repeatRemindDaysBefore) || 0,
@@ -953,7 +960,7 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
         skipped: [],
         overrides: {},
       })
-      markScheduleRegistered(schId, form.date, metaBaixaGerada(txId))
+      markScheduleRegistered(schId, form.repeatStartDate || form.date, metaBaixaGerada(txId))
       // O agendamento herda o rateio do lançamento.
       if (form.type !== 'transfer' && rateioRows.length > 0 && schId) saveRateiosFor(schId, rateioDaParcela(rateioRows, installmentAmount))
     }
@@ -2286,7 +2293,8 @@ export default function TransactionForm({ initial, onClose, onToast, rapido = fa
               </div>
 
               <p className="text-xs text-texto-3 leading-relaxed">
-                Um agendamento será criado em "Agendamentos" com estes dados, começando em {fmtDate(form.date)}.
+                Um agendamento será criado em "Agendamentos" com estes dados. Esta despesa conta como a ocorrência de {fmtDate(form.repeatStartDate || form.date)}
+                {form.repeatFrequency !== 'once' && <> — 1ª ocorrência: {fmtDate(primeiraOcorrencia({ data: form.repeatStartDate || form.date, recorrencia: form.repeatFrequency }))}</>}.
               </p>
             </div>
           )}
