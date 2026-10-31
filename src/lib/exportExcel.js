@@ -12,7 +12,9 @@
 //               cor?: (linha) => 'receita'|'despesa'|null }]
 //   linhas:  objetos com as chaves das colunas (data em 'AAAA-MM-DD' ou Date; moeda em número).
 //            `_estilo`: 'grupo' | 'subtotal' | 'total' → linha de agrupamento (negrito, fora das somas).
-//   resumo:  [{ rotulo, cor?, soma?: chave, onde?: [{ coluna, valor }], contar?: true, valor?: número fixo,
+//            `_subtotal: true` (com _estilo 'subtotal'): valores = SOMA das linhas de detalhe desde o
+//            último 'grupo' (fórmula).
+//   resumo:  [{ rotulo, cor?, soma?: chave, onde?: [{ coluna, valor }], contar?: true, valor?: número fixo, numero?: true,
 //               partes?: [{ sinal: 1|-1, soma | valor, onde }] }] → fórmulas SOMA/SOMASES sobre a tabela.
 //   totais:  { rotulo?: (n) => string, somar: [chaves] } | false
 // exportarExcel({ ...aba, nomeArquivo } | { abas: [aba...], nomeArquivo })
@@ -209,7 +211,7 @@ function montarAba(ws, aba, { logoId, ident, agora }) {
       cel(a, item.rotulo, { font: { size: 8, color: { argb: `FF${CINZA}` } }, fill: CARTAO, alignment: { vertical: 'bottom', indent: 1 }, border: { top: borda, left: borda, right: borda } })
       cel(a2, { formula, result: valor }, {
         font: { bold: true, size: 13, color: { argb: `FF${cor}` } }, fill: CARTAO, alignment: { vertical: 'middle', indent: 1, horizontal: 'left' },
-        numFmt: partes.every(p => p.contar) ? '0' : FMT.moeda, border: { bottom: borda, left: borda, right: borda },
+        numFmt: item.numero || partes.every(p => p.contar) ? '0' : FMT.moeda, border: { bottom: borda, left: borda, right: borda },
       })
       for (let c = c1 + 1; c <= c2; c++) {
         for (const rr of [linhaResumo, linhaResumo + 1]) {
@@ -251,6 +253,17 @@ function montarAba(ws, aba, { logoId, ident, agora }) {
       } else if (c.tipo === 'moeda' || c.tipo === 'numero') {
         const n = num(bruto)
         valor = n == null ? '' : n
+        if (l._subtotal) {
+          // Subtotal por fórmula: as linhas de detalhe desde o último grupo (o grupo fica fora).
+          let ini = k - 1
+          while (ini >= 0 && linhas[ini]._estilo !== 'grupo') ini--
+          const det = linhas.slice(ini + 1, k).filter(x => !x._estilo)
+          const v = Math.round(det.reduce((s, x) => s + (num(x[c.chave]) || 0), 0) * 100) / 100
+          const col = letra(i + 1)
+          valor = k - 1 >= ini + 1
+            ? { formula: `SUM(${col}${primeira + ini + 1}:${col}${primeira + k - 1})`, result: v }
+            : 0
+        }
         estilo.numFmt = c.tipo === 'moeda' ? FMT.moeda : FMT.numero
         estilo.alignment.horizontal = 'right'
         const cor = c.cor?.(l)

@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
-import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users } from 'lucide-react'
+import { Download, RefreshCw, ChevronDown, ChevronRight, Search, Users, FileSpreadsheet } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtDate, accountsForView } from '../shared/utils'
 import { isInvestAutoOrigin } from '../../lib/origins'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import { isoLocal } from '../../lib/hoje'
+import { specRelatorioFavorecido } from '../../lib/relatorioFavorecidoExcel'
+import { exportarExcel } from '../../lib/exportExcel'
 
 // ─── Shared helpers (same pattern as DemonstrativoFinanceiro) ────────────────
 
@@ -237,6 +239,20 @@ export default function RelatorioPorFavorecido() {
               </button>
               <button onClick={() => doExport(filtered, totals, accounts, categories, applied, true)} className="btn-secondary flex items-center gap-2 text-xs">
                 <Download size={12} /> CSV Analítico
+              </button>
+              <button
+                onClick={() => {
+                  const nomes = applied.accs.map(id => accounts.find(a => a.id === id)).filter(Boolean).map(a => a.apelido || a.name)
+                  const filtros = [
+                    nomes.length && nomes.length < accounts.length ? `Contas: ${nomes.join(', ')}` : 'Contas: todas',
+                    ...(search.trim() ? [`Favorecido contém: ${search.trim()}`] : []),
+                  ]
+                  exportarExcel(specRelatorioFavorecido(filtered, { accounts, categories, from: applied.from, to: applied.to, filtros }))
+                    .catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
+                }}
+                className="btn-secondary flex items-center gap-2 text-xs"
+              >
+                <FileSpreadsheet size={12} /> Excel
               </button>
             </>
           )}
