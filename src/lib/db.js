@@ -1033,8 +1033,7 @@ export async function loadFromDb(defaultData) {
               // Controle gerencial do ambiente (lib/controleGerencial.js); null = ligado.
               controleGerencial: d.cfg.controle_gerencial ?? null,
               iofCompraInternacional: d.cfg.iof_compra_internacional != null ? Number(d.cfg.iof_compra_internacional) : null,
-              // Rodapé da barra lateral do ambiente (vazio no 'vm' = texto de sempre). Só leitura:
-              // o syncSettings não grava estas colunas.
+              // Identidade do ambiente (Configurações › Geral › Identidade do ambiente).
               rodapeTitulo: d.cfg.rodape_titulo ?? null,
               rodapeFrase: d.cfg.rodape_frase ?? null,
             }
@@ -1405,6 +1404,9 @@ export const settingsToRow = (settings, costCenters) => ({
   controle_gerencial: typeof settings.controleGerencial === 'boolean' ? settings.controleGerencial : null,
   // Alíquota do IOF de compra internacional (fração); null = padrão 3,5% (src/lib/cambio.js).
   iof_compra_internacional: settings.iofCompraInternacional ?? null,
+  // Identidade do ambiente (Configurações › Geral): rodapé da barra lateral e relatórios exportados.
+  rodape_titulo: settings.rodapeTitulo ?? null,
+  rodape_frase: settings.rodapeFrase ?? null,
 })
 
 // Coluna de configuracoes → chave do estado do app (inverso do settingsToRow; cost_centers mora
@@ -1423,6 +1425,8 @@ export const CHAVE_APP_DA_CONFIGURACAO = {
   mobile_home_cards: 'mobileHomeCards',
   controle_gerencial: 'controleGerencial',
   iof_compra_internacional: 'iofCompraInternacional',
+  rodape_titulo: 'rodapeTitulo',
+  rodape_frase: 'rodapeFrase',
 }
 
 // Só as colunas alteradas, com camposAlterados (o sinal que a trava do servidor exige).

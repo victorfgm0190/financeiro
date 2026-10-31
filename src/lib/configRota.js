@@ -7,6 +7,7 @@ export const CONFIG_ABAS = [
     id: 'geral', label: 'Geral',
     secoes: [
       { id: 'periodo', label: 'Período financeiro' },
+      { id: 'identidade', label: 'Identidade do ambiente', novo: true },
       { id: 'estornos', label: 'Estorno e IOF de cartão' },
       { id: 'perfis', label: 'Perfis' },
       { id: 'agenda-celular', label: 'Agenda no celular', novo: true },

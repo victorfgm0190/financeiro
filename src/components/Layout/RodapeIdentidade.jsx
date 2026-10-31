@@ -1,17 +1,13 @@
 import { useApp } from '../../context/AppContext'
-import { noAmbientePrincipal } from '../../lib/api'
 
-// Identidade no rodapé da barra lateral (e no fim de Configurações no celular). Vem da configuração
-// do AMBIENTE (configuracoes.rodape_titulo / rodape_frase). Vazia no ambiente principal ('vm') = o
-// texto de sempre; num cliente vazia = nada.
-const PADRAO_PRINCIPAL = { titulo: 'Gislaine & Victor Moreira', frase: 'Transformando conhecimento em resultados.' }
-
+// Identidade no rodapé da barra lateral (e no fim de Configurações no celular): nome e frase do
+// AMBIENTE (configuracoes.rodape_titulo / rodape_frase), editados em Configurações › Geral ›
+// Identidade do ambiente. Vazios = nada.
 function useRodape() {
   const { settings } = useApp()
   const titulo = String(settings?.rodapeTitulo || '').trim()
   const frase = String(settings?.rodapeFrase || '').trim()
-  if (titulo || frase) return { titulo, frase }
-  return noAmbientePrincipal() ? PADRAO_PRINCIPAL : null
+  return titulo || frase ? { titulo, frase } : null
 }
 
 export default function RodapeIdentidade({ classeTitulo, classeFrase }) {

@@ -6,6 +6,7 @@ import { fmt, fmtDate } from '../shared/utils'
 import { FECHAMENTO_PADRAO } from '../../lib/fatura'
 import { controleGerencialAtivo } from '../../lib/controleGerencial'
 import SeloCambio from '../shared/SeloCambio'
+import { exportarExcel } from '../../lib/exportExcel'
 
 // Badge do grupo gerencial — mesmas cores do extrato do cartão (CreditCardPanel):
 // G (número 1) = reserva; D = cinza; numerados (2/3/…) = laranja.
@@ -198,65 +199,41 @@ export default function RelatorioFatura({ initialCardId }) {
     URL.revokeObjectURL(url)
   }
 
-  // Exporta o relatório para .xlsx via ExcelJS (lazy-load, mesmo padrão do projeto). Mesmas
-  // colunas do CSV + Valor como número (numFmt R$) para permitir soma/formatação no Excel.
+  // Exporta o relatório para .xlsx (layout em lib/exportExcel). Mesmas colunas do CSV; valor como
+  // número, data como data; com o controle gerencial ligado, o resumo traz o total por grupo
+  // (sem grupo conta no D, como no totalizador da tela).
   const handleExportExcel = async () => {
     if (billTxs.length === 0) return
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    const ws = wb.addWorksheet('Fatura', { views: [{ state: 'frozen', ySplit: 1 }] })
-    ws.columns = [
-      { header: 'Data', key: 'data', width: 12 },
-      { header: 'Descrição', key: 'desc', width: 40 },
-      { header: 'Descrição original', key: 'descOrig', width: 32 },
-      { header: 'ID', key: 'id', width: 26 },
-      { header: 'Fatura', key: 'fatura', width: 10 },
-      { header: 'Categoria', key: 'categoria', width: 26 },
-      { header: 'Favorecido', key: 'favorecido', width: 22 },
-      { header: 'Grupo Gerencial', key: 'grupo', width: 14 },
-      { header: 'Parcela', key: 'parcela', width: 10 },
-      { header: 'Valor', key: 'valor', width: 15 },
-    ]
-
-    for (const tx of billTxs) {
+    const linhas = billTxs.map(tx => {
       const cat = categories.find(c => c.id === tx.categoryId)
-      const grupo = grupoOf(tx)
-      ws.addRow({
-        data: fmtDate(tx.date),
-        desc: tx.description || '',
-        descOrig: tx.notes || '',
-        id: tx.id,
-        fatura: faturaRefOf(tx),
-        categoria: cat ? `${cat.icon} ${cat.name}` : '',
-        favorecido: tx.payee || '',
-        grupo: grupo ? grupo.alias : '',
-        parcela: parcelaOf(tx),
-        valor: tx.amount,
-      })
-    }
-    // Linha de total.
-    ws.addRow({ desc: 'Total', valor: totals.total })
-
-    // Cabeçalho em negrito.
-    const headerRow = ws.getRow(1)
-    headerRow.font = { bold: true }
-    headerRow.alignment = { vertical: 'middle' }
-    // Última linha (Total) em negrito.
-    ws.getRow(ws.rowCount).font = { bold: true }
-    // Valor como número (não texto).
-    ws.getColumn('valor').numFmt = 'R$ #,##0.00'
-
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    // Ex.: Relatorio-Itaupers-Mai2026.xlsx
+      const grupo = grupoOf(tx) || (gerencialLigado ? grpD : null)
+      return {
+        data: tx.date, desc: tx.description || '', descOrig: tx.notes || '', id: tx.id, fatura: faturaRefOf(tx),
+        categoria: cat ? cat.name : '', favorecido: tx.payee || '', grupo: grupo ? grupo.alias : '', parcela: parcelaOf(tx),
+        valor: tx.amount, _estorno: tx.type === 'income',
+      }
+    })
+    const grupos = gerencialLigado ? [grp1, ...customGroups, grpD].filter(g => g && totals[g.id] > 0) : []
     const cartao = card?.apelido || card?.name || 'cartao'
-    const fatura = (selectedBill?.label || 'relatorio').replace('/', '')
-    a.download = `Relatorio-${cartao}-${fatura}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
-    a.click()
-    URL.revokeObjectURL(url)
+    await exportarExcel({
+      titulo: `Relatório de Fatura — ${cartao}`, nome: 'Fatura',
+      filtros: [`Cartão: ${cartao}`, `Fatura: ${selectedBill?.label || ''}`],
+      resumo: [
+        { rotulo: 'Total da fatura', soma: 'valor' },
+        ...grupos.slice(0, 3).map(g => ({ rotulo: `Grupo ${g.alias}`, soma: 'valor', onde: [{ coluna: 'grupo', valor: g.alias }] })),
+      ],
+      colunas: [
+        { chave: 'data', titulo: 'Data', tipo: 'data' }, { chave: 'desc', titulo: 'Descrição' },
+        { chave: 'descOrig', titulo: 'Descrição original' }, { chave: 'id', titulo: 'ID' }, { chave: 'fatura', titulo: 'Fatura' },
+        { chave: 'categoria', titulo: 'Categoria' }, { chave: 'favorecido', titulo: 'Favorecido' },
+        ...(gerencialLigado ? [{ chave: 'grupo', titulo: 'Grupo Gerencial' }] : []),
+        { chave: 'parcela', titulo: 'Parcela' },
+        { chave: 'valor', titulo: 'Valor', tipo: 'moeda', cor: (l) => (l._estorno ? 'receita' : 'despesa') },
+      ],
+      linhas,
+      totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['valor'] },
+      nomeArquivo: { relatorio: `Fatura_${cartao}`, periodo: (selectedBill?.label || '').replace('/', '-') },
+    }).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
   }
 
   return (

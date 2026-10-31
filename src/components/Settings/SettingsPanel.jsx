@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Save, Trash2, Plus, Download, Upload, AlertTriangle, Edit2, Check, X, Lock, ArrowUp, ArrowDown, RotateCcw, User, Building2, ShieldCheck, Clock, EyeOff, Eye, RefreshCw, Anchor, Calculator, ChevronRight, Smartphone } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import RodapeIdentidade from '../Layout/RodapeIdentidade'
+import IdentidadeAmbiente from './IdentidadeAmbiente'
 import { noAmbientePrincipal } from '../../lib/api'
 import { DEFAULT_ACCOUNT_GROUPS } from '../../context/AppContext'
 import { fmt } from '../shared/utils'
@@ -749,6 +750,8 @@ export default function SettingsPanel() {
         </div>
       </div>
       )}
+
+      {secao === 'identidade' && <IdentidadeAmbiente somenteLeitura={somenteLeitura} />}
 
       {/* Estornos de Cartão */}
       {secao === 'estornos' && (

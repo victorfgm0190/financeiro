@@ -1,21 +1,23 @@
-// Exportação da lista de Agendamentos para Excel (SheetJS, mesmo padrão das Reservas). Recebe as
+// Exportação da lista de Agendamentos (layout no utilitário central lib/exportExcel). Recebe as
 // linhas JÁ filtradas pela tela (buildScheduleGroups sobre a lista visível, as linhas da aba Pagos e
-// as faturas da aba Cartão) e devolve exatamente o que está na tela, na mesma ordem.
-import * as XLSX from 'xlsx'
+// as faturas da aba Cartão) e devolve exatamente o que está na tela, na mesma ordem. O filtro de
+// tipo (lib/agendamentosTipo) define título, nome do arquivo, colunas e resumo.
 import { occEfetiva } from './fluxoCaixa.js'
 import { occCampos } from './camposSerie.js'
-import { rotuloParcela } from './numeroParcela.js'
-import { resolverTipoDocumento } from './tiposDocumento.js'
+import { tipoDoItem, TITULO_RELATORIO_TIPO, ARQUIVO_TIPO } from './agendamentosTipo.js'
 
 const nomeConta = (accounts, id) => {
   const a = (accounts || []).find(x => x.id === id)
   return a ? (a.apelido || a.name) : ''
 }
 const nomeCategoria = (categories, id) => (categories || []).find(c => c.id === id)?.name || ''
-const nomeGrupo = (grupos, id) => {
-  const g = (grupos || []).find(x => x.id === id)
-  if (!g) return ''
-  return g.alias ? `${g.alias} - ${g.name}` : (g.name || '')
+const ROTULO_TIPO = { entradas: 'Entrada', saidas: 'Saída', transferencias: 'Transferência' }
+
+// Status no vocabulário do relatório: entrada Recebido/A receber, saída Pago/A pagar, Vencido.
+const statusDe = (tipo, situacao) => {
+  if (situacao === 'vencido') return 'Vencido'
+  if (situacao === 'feito') return tipo === 'entradas' ? 'Recebido' : tipo === 'saidas' ? 'Pago' : 'Realizado'
+  return tipo === 'entradas' ? 'A receber' : tipo === 'saidas' ? 'A pagar' : 'Pendente'
 }
 
 // Mesma ordem da tabela: com data (em atraso → 7 dias → 30 dias → futuros, todos por data) e depois
@@ -27,115 +29,135 @@ export function ordenarComoTabela(rows) {
 }
 
 // Linhas da lista (A pagar / Provisões / Resgates): uma por linha da tabela (próxima ocorrência).
-export function linhasDosAgendamentos(rows, { accounts, categories, gerencialGroups, tiposDocumento, hoje }) {
+export function linhasDosAgendamentos(rows, { accounts, categories, hoje }) {
   return ordenarComoTabela(rows).map(r => {
     const s = r.schedule
     const occ = r.nextDate ? occCampos(s, r.nextDate) : s
-    const valor = Number(r.nextDate ? occEfetiva(s, r.nextDate).amount : s.amount) || 0
+    const tipo = tipoDoItem(s)
     const conta = s.transactionType === 'transfer'
       ? `${nomeConta(accounts, s.accountId) || '?'} → ${nomeConta(accounts, s.toAccountId) || '?'}`
       : nomeConta(accounts, occ.accountId || s.accountId)
-    const isInstallment = s.occurrenceType === 'installment'
-    const nFeitas = (s.registered || []).length + (s.skipped || []).length
-    const parcela = isInstallment
-      ? (r.nextDate ? rotuloParcela(s, r.nextDate) : (s.frequency || 'once') !== 'once' ? `${nFeitas}/${s.installments}` : null)
-      : null
     const vencimento = r.nextDate
       ? r.displayDate
       : ((s.registered || []).length ? s.registered[s.registered.length - 1] : s.startDate)
-    const status = !r.nextDate ? 'Concluído'
-      : (r.displayDate && r.displayDate < hoje) ? 'Em atraso'
-        : s.isProvisao && !s.provisaoEfetivada ? 'Provisão'
-          : 'A pagar'
+    const situacao = !r.nextDate ? 'feito' : (r.displayDate && r.displayDate < hoje) ? 'vencido' : 'pendente'
     return {
       vencimento: vencimento || null,
-      descricao: occ.description || s.description || '',
       favorecido: s.payee || '',
-      conta,
+      descricao: occ.description || s.description || '',
       categoria: nomeCategoria(categories, occ.categoryId),
-      centroCusto: occ.costCenter || '',
-      grupoGerencial: nomeGrupo(gerencialGroups, occ.grupoGerencial),
-      tipoDocumento: resolverTipoDocumento(s, tiposDocumento)?.sigla || '',
-      parcela: parcela || '',
-      valor,
-      status,
+      valor: Number(r.nextDate ? occEfetiva(s, r.nextDate).amount : s.amount) || 0,
+      conta,
+      status: statusDe(tipo, situacao),
+      tipo: ROTULO_TIPO[tipo],
     }
   })
 }
 
 // Linhas da aba Pagos (já filtradas e na ordem da tela).
-export function linhasDosPagos(linhas, { accounts, categories, gerencialGroups, tiposDocumento }) {
-  return (linhas || []).map(l => ({
-    vencimento: l.vencimento || l.dataPagamento || null,
-    descricao: l.description || '',
-    favorecido: l.payee || '',
-    conta: nomeConta(accounts, l.accountId),
-    categoria: nomeCategoria(categories, l.categoryId),
-    centroCusto: l.schedule?.costCenter || '',
-    grupoGerencial: nomeGrupo(gerencialGroups, l.schedule?.grupoGerencial),
-    tipoDocumento: resolverTipoDocumento(l, tiposDocumento)?.sigla || '',
-    parcela: l.avulso ? 'avulso' : l.parcela ? (l.total ? `${l.parcela}/${l.total}` : `${l.parcela}`) : '',
-    valor: Number(l.amount) || 0,
-    status: l.semLancamento ? 'Baixado sem lançamento' : `Pago${l.dataPagamento ? ` em ${l.dataPagamento.split('-').reverse().join('/')}` : ''}`,
-  }))
+export function linhasDosPagos(linhas, { accounts, categories }) {
+  return (linhas || []).map(l => {
+    const tipo = tipoDoItem(l)
+    return {
+      vencimento: l.vencimento || l.dataPagamento || null,
+      favorecido: l.payee || '',
+      descricao: l.description || '',
+      categoria: nomeCategoria(categories, l.categoryId),
+      valor: Number(l.amount) || 0,
+      conta: nomeConta(accounts, l.accountId),
+      status: statusDe(tipo, 'feito'),
+      tipo: ROTULO_TIPO[tipo],
+    }
+  })
 }
 
-// Faturas do contas a pagar (aba Cartão), pelo vencimento.
-export function linhasDasFaturas(payables, { accounts, gerencialGroups }) {
+// Faturas do contas a pagar (aba Cartão), pelo vencimento — sempre saída.
+export function linhasDasFaturas(payables, { accounts, hoje }) {
   return [...(payables || [])].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).map(p => ({
     vencimento: p.dueDate || null,
-    descricao: p.description || '',
     favorecido: '',
-    conta: nomeConta(accounts, p.cartaoId),
+    descricao: p.description || '',
     categoria: '',
-    centroCusto: '',
-    grupoGerencial: nomeGrupo(gerencialGroups, p.grupoGerencial),
-    tipoDocumento: 'CC',
-    parcela: '',
     valor: Number(p.amount) || 0,
-    status: p.status === 'paid' ? 'Pago' : 'A pagar',
+    conta: nomeConta(accounts, p.cartaoId),
+    status: statusDe('saidas', p.status === 'paid' ? 'feito' : (p.dueDate && p.dueDate < hoje ? 'vencido' : 'pendente')),
+    tipo: 'Saída',
   }))
 }
 
-const COLUNAS = [
-  ['vencimento', 'Vencimento'], ['descricao', 'Descrição'], ['favorecido', 'Favorecido'], ['conta', 'Conta'],
-  ['categoria', 'Categoria'], ['centroCusto', 'Centro de custo'], ['grupoGerencial', 'Grupo gerencial'],
-  ['tipoDocumento', 'Tipo de documento'], ['parcela', 'Parcela'], ['valor', 'Valor'], ['status', 'Status'],
-]
+const corDoValor = (l) => (l.tipo === 'Entrada' ? 'receita' : l.tipo === 'Saída' ? 'despesa' : null)
 
-// Grupo gerencial só com o controle gerencial ligado.
-export const colunasExportacao = ({ gerencial }) => COLUNAS.filter(([k]) => gerencial || k !== 'grupoGerencial')
-
-const serialExcel = (iso) => {
-  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
-  if (!y || !m || !d) return null
-  return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000
+// Colunas conforme o tipo: Tipo (selo) só em "Todos".
+export function colunasAgendamentos(tipo) {
+  return [
+    { chave: 'vencimento', titulo: 'Vencimento', tipo: 'data' },
+    { chave: 'favorecido', titulo: 'Cliente/Favorecido' },
+    { chave: 'descricao', titulo: 'Descrição' },
+    { chave: 'categoria', titulo: 'Categoria' },
+    ...(tipo === 'todos' ? [{ chave: 'tipo', titulo: 'Tipo', tipo: 'selo', selo: (v) => (v === 'Entrada' ? 'verde' : v === 'Saída' ? 'vermelho' : 'cinza') }] : []),
+    { chave: 'valor', titulo: 'Valor (R$)', tipo: 'moeda', cor: corDoValor },
+    { chave: 'conta', titulo: 'Conta' },
+    { chave: 'status', titulo: 'Status', tipo: 'status' },
+  ]
 }
 
-// Planilha: data como data (dd/mm/aaaa) e valor como número em R$ com 2 casas.
-export function planilhaAgendamentos(linhas, { gerencial }) {
-  const cols = colunasExportacao({ gerencial })
-  const ws = XLSX.utils.aoa_to_sheet([cols.map(([, h]) => h), ...linhas.map(l => cols.map(([k]) => l[k] ?? ''))])
-  const iData = cols.findIndex(([k]) => k === 'vencimento')
-  const iValor = cols.findIndex(([k]) => k === 'valor')
-  linhas.forEach((l, i) => {
-    const r = i + 1
-    const serial = l.vencimento ? serialExcel(l.vencimento) : null
-    const cData = XLSX.utils.encode_cell({ r, c: iData })
-    ws[cData] = serial != null ? { t: 'n', v: serial, z: 'dd/mm/yyyy' } : { t: 's', v: '' }
-    ws[XLSX.utils.encode_cell({ r, c: iValor })] = { t: 'n', v: Number(l.valor) || 0, z: '"R$" #,##0.00;-"R$" #,##0.00' }
-  })
-  ws['!cols'] = cols.map(([k]) => ({ wch: { descricao: 40, favorecido: 25, conta: 22, categoria: 22, vencimento: 12, valor: 14 }[k] || 16 }))
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Agendamentos')
-  return wb
+const st = (valor) => [{ coluna: 'status', valor }]
+export function resumoAgendamentos(tipo) {
+  if (tipo === 'entradas') {
+    return [
+      { rotulo: 'Total previsto', soma: 'valor' },
+      { rotulo: 'Recebido', soma: 'valor', onde: st('Recebido'), cor: 'verde' },
+      { rotulo: 'A receber', soma: 'valor', onde: st('A receber'), cor: 'ambar' },
+      { rotulo: 'Vencido', soma: 'valor', onde: st('Vencido'), cor: 'vermelho' },
+    ]
+  }
+  if (tipo === 'saidas') {
+    return [
+      { rotulo: 'Total previsto', soma: 'valor' },
+      { rotulo: 'Pago', soma: 'valor', onde: st('Pago'), cor: 'verde' },
+      { rotulo: 'A pagar', soma: 'valor', onde: st('A pagar'), cor: 'ambar' },
+      { rotulo: 'Vencido', soma: 'valor', onde: st('Vencido'), cor: 'vermelho' },
+    ]
+  }
+  if (tipo === 'transferencias') {
+    return [
+      { rotulo: 'Total previsto', soma: 'valor' },
+      { rotulo: 'Realizado', soma: 'valor', onde: st('Realizado'), cor: 'verde' },
+      { rotulo: 'Pendente', soma: 'valor', onde: st('Pendente'), cor: 'ambar' },
+      { rotulo: 'Vencido', soma: 'valor', onde: st('Vencido'), cor: 'vermelho' },
+    ]
+  }
+  // Todos: transferências entram na lista, mas não no saldo.
+  const entrada = [{ coluna: 'tipo', valor: 'Entrada' }]
+  const saida = [{ coluna: 'tipo', valor: 'Saída' }]
+  return [
+    { rotulo: 'Total a receber', soma: 'valor', onde: entrada, cor: 'verde' },
+    { rotulo: 'Total a pagar', soma: 'valor', onde: saida, cor: 'vermelho' },
+    { rotulo: 'Saldo previsto', partes: [{ sinal: 1, soma: 'valor', onde: entrada }, { sinal: -1, soma: 'valor', onde: saida }] },
+  ]
 }
 
-export const nomeArquivoAgendamentos = (data = new Date()) => {
-  const p = (n) => String(n).padStart(2, '0')
-  return `agendamentos-${data.getFullYear()}${p(data.getMonth() + 1)}${p(data.getDate())}.xlsx`
+// Período para o nome do arquivo: mês "AAAA-MM", intervalo "AAAAMMDD-AAAAMMDD" ou o nome do período.
+const compacta = (d) => String(d || '').replace(/-/g, '')
+export function periodoDoArquivo(periodo, { de = '', ate = '', hoje }) {
+  if (periodo === 'custom' && (de || ate)) return `${compacta(de) || 'inicio'}-${compacta(ate) || 'fim'}`
+  if (periodo === 'mes') return hoje.slice(0, 7)
+  if (periodo === 'next30') return `${compacta(hoje)}-30dias`
+  if (periodo === 'ult30') return `30dias-${compacta(hoje)}`
+  if (periodo === 'futuros') return `a-partir-de-${compacta(hoje)}`
+  return 'tudo'
 }
 
-export function exportarAgendamentosExcel(linhas, { gerencial, data = new Date() } = {}) {
-  XLSX.writeFile(planilhaAgendamentos(linhas, { gerencial }), nomeArquivoAgendamentos(data))
+// Spec para exportarExcel.
+export function specAgendamentos(linhas, { tipo = 'todos', filtros = [], periodo = 'tudo' } = {}) {
+  return {
+    titulo: TITULO_RELATORIO_TIPO[tipo] || TITULO_RELATORIO_TIPO.todos,
+    nome: 'Agendamentos',
+    filtros,
+    resumo: resumoAgendamentos(tipo),
+    colunas: colunasAgendamentos(tipo),
+    linhas,
+    totais: { somar: ['valor'] },
+    nomeArquivo: { relatorio: `Agendamentos_${ARQUIVO_TIPO[tipo] || ARQUIVO_TIPO.todos}`, periodo },
+  }
 }

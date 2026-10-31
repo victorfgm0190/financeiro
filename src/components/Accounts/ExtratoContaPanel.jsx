@@ -14,6 +14,7 @@ import Modal from '../shared/Modal'
 import Toast from '../shared/Toast'
 import TxMobileItem from '../shared/TxMobileItem'
 import LancamentoFiltros from '../shared/LancamentoFiltros'
+import { exportarExcel } from '../../lib/exportExcel'
 import ReconciliarModal from '../shared/ReconciliarModal'
 import BulkEditModal from '../shared/BulkEditModal'
 import ValueFilterDropdown from '../shared/ValueFilterDropdown'
@@ -743,9 +744,8 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     return { conciliado, pendente }
   }, [displayRows, account.id])
 
-  // Exporta o extrato atual (mês + filtros aplicados = displayRows) para .xlsx via ExcelJS
-  // (lazy-load, mesmo padrão do Demonstrativo). Uma linha por linha exibida; valores
-  // monetários como número (não texto) para permitir soma/formatação no Excel.
+  // Exporta o extrato atual (mês + filtros aplicados = displayRows) — layout em lib/exportExcel.
+  // Uma linha por linha exibida; valores como número; datas como data.
   const handleExportExcel = async () => {
     if (displayRows.length === 0) { showToast('Nenhum lançamento para exportar'); return }
     const accName = (id) => {
@@ -754,81 +754,57 @@ export default function ExtratoContaPanel({ account: accountProp, onClose, onEdi
     }
     const r2 = (x) => Math.round(x * 100) / 100
     const thisName = account.apelido || account.name
-
-    const ExcelJS = (await import('exceljs')).default
-    const wb = new ExcelJS.Workbook()
-    const ws = wb.addWorksheet('Extrato', { views: [{ state: 'frozen', ySplit: 1 }] })
-    ws.columns = [
-      { header: 'Data', key: 'data', width: 12 },
-      { header: 'Histórico', key: 'hist', width: 44 },
-      { header: 'Fatura', key: 'fatura', width: 10 },
-      { header: 'Origem', key: 'origem', width: 22 },
-      { header: 'Favorecido', key: 'favorecido', width: 22 },
-      { header: 'De', key: 'de', width: 20 },
-      { header: 'Até', key: 'ate', width: 20 },
-      { header: 'Valor Entrada', key: 'entrada', width: 14 },
-      { header: 'Valor Saída', key: 'saida', width: 14 },
-      { header: 'Saldo', key: 'saldo', width: 15 },
-      { header: 'Conciliado', key: 'conc', width: 11 },
-    ]
-
-    for (const row of displayRows) {
+    const linhas = displayRows.map(row => {
       if (row.kind === 'single') {
         const tx = row.tx
         const d = txDelta(tx, account.id)
         const isTransferLike = tx.type === 'transfer' || tx.type === 'credit_payment'
-        ws.addRow({
-          data: fmtDate(tx.date),
-          hist: tx.description || '',
-          fatura: tx.faturaRef || '',
-          origem: tx.sourceExpenseId || '',
-          favorecido: tx.payee || '',
-          de: accName(tx.fromAccountId) || (isTransferLike ? accName(tx.accountId) : ''),
-          ate: accName(tx.toAccountId),
-          entrada: d > 0 ? r2(d) : null,
-          saida: d < 0 ? r2(-d) : null,
-          saldo: row.runningBalance,
-          conc: tx.reconciled ? 'Sim' : 'Não',
-        })
-      } else {
-        // Transferência netizada (par bidirecional): uma linha resumo pelo netFlow.
-        const otherName = accName(row.otherAccountId) || '?'
-        const isIn = row.netFlow > 0
-        const tx0 = row.txs[0] || {}
-        ws.addRow({
-          data: fmtDate(row.date),
-          hist: `Transferência · ${otherName}`,
-          fatura: tx0.faturaRef || '',
-          origem: '',
-          favorecido: '',
-          de: isIn ? otherName : thisName,
-          ate: isIn ? thisName : otherName,
-          entrada: isIn ? r2(row.netFlow) : null,
-          saida: !isIn ? r2(-row.netFlow) : null,
-          saldo: row.runningBalance,
-          conc: row.txs.every(t => t.reconciled) ? 'Sim' : 'Não',
-        })
+        return {
+          data: tx.date, hist: tx.description || '', fatura: tx.faturaRef || '', origem: tx.sourceExpenseId || '',
+          favorecido: tx.payee || '', de: accName(tx.fromAccountId) || (isTransferLike ? accName(tx.accountId) : ''),
+          ate: accName(tx.toAccountId), entrada: d > 0 ? r2(d) : null, saida: d < 0 ? r2(-d) : null,
+          saldo: row.runningBalance, status: tx.reconciled ? 'Conciliado' : 'Pendente',
+        }
       }
+      // Transferência netizada (par bidirecional): uma linha resumo pelo netFlow.
+      const otherName = accName(row.otherAccountId) || '?'
+      const isIn = row.netFlow > 0
+      const tx0 = row.txs[0] || {}
+      return {
+        data: row.date, hist: `Transferência · ${otherName}`, fatura: tx0.faturaRef || '', origem: '', favorecido: '',
+        de: isIn ? otherName : thisName, ate: isIn ? thisName : otherName,
+        entrada: isIn ? r2(row.netFlow) : null, saida: !isIn ? r2(-row.netFlow) : null,
+        saldo: row.runningBalance, status: row.txs.every(t => t.reconciled) ? 'Conciliado' : 'Pendente',
+      }
+    })
+    const rotFiltro = { data: 'Data', historico: 'Histórico', favorecido: 'Favorecido', de: 'Conta De', para: 'Conta Para', valor: 'Valor' }
+    const aplicados = Object.entries(rotFiltro).filter(([k]) => filtros?.[k]).map(([k, r]) => `${r}: ${filtros[k]}`)
+    try {
+      await exportarExcel({
+        titulo: `Extrato — ${thisName}`, nome: 'Extrato',
+        filtros: [`Conta: ${thisName}`, `Mês: ${MONTH_NAMES[month - 1]}/${year}`, ...aplicados],
+        resumo: [
+          { rotulo: 'Entradas', soma: 'entrada', cor: 'verde' },
+          { rotulo: 'Saídas', soma: 'saida', cor: 'vermelho' },
+          { rotulo: 'Conciliados', contar: true, onde: [{ coluna: 'status', valor: 'Conciliado' }] },
+          { rotulo: 'Pendentes', contar: true, onde: [{ coluna: 'status', valor: 'Pendente' }], cor: 'ambar' },
+        ],
+        colunas: [
+          { chave: 'data', titulo: 'Data', tipo: 'data' }, { chave: 'hist', titulo: 'Histórico' }, { chave: 'fatura', titulo: 'Fatura' },
+          { chave: 'origem', titulo: 'Origem' }, { chave: 'favorecido', titulo: 'Favorecido' }, { chave: 'de', titulo: 'De' },
+          { chave: 'ate', titulo: 'Até' },
+          { chave: 'entrada', titulo: 'Valor Entrada', tipo: 'moeda', cor: () => 'receita' },
+          { chave: 'saida', titulo: 'Valor Saída', tipo: 'moeda', cor: () => 'despesa' },
+          { chave: 'saldo', titulo: 'Saldo', tipo: 'moeda', cor: (l) => (l.saldo < 0 ? 'despesa' : null) },
+          { chave: 'status', titulo: 'Conciliação', tipo: 'status' },
+        ],
+        linhas,
+        totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['entrada', 'saida'] },
+        nomeArquivo: { relatorio: `Extrato_${thisName}`, periodo: `${year}-${String(month).padStart(2, '0')}` },
+      })
+    } catch (err) {
+      showToast(`Não consegui exportar: ${err?.message || err}`)
     }
-
-    // Cabeçalho em negrito.
-    const headerRow = ws.getRow(1)
-    headerRow.font = { bold: true }
-    headerRow.alignment = { vertical: 'middle' }
-    // Colunas monetárias como número (não texto).
-    for (const key of ['entrada', 'saida', 'saldo']) {
-      ws.getColumn(key).numFmt = 'R$ #,##0.00'
-    }
-
-    const buf = await wb.xlsx.writeBuffer()
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    // Ex.: Gltauper-Mai2026.xlsx
-    a.download = `${thisName}-${MONTH_NAMES[month - 1]}${year}.xlsx`.replace(/[\\/:*?"<>|]/g, '_')
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   // Totalizador gerencial (só em conta gerencial): resume a fatura ANTERIOR e a ATUAL do ciclo

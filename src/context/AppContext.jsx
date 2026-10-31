@@ -48,6 +48,7 @@ import { previstosDaFatura, faturasDoAgendamento, ehGastoPrevistoDeCartao, proje
 import { isResgatePago, isResgatePagoParaGasto } from '../lib/resgates'
 import { montarProvisaoGerencial } from '../lib/provisaoGerencial'
 import { idsComEtapaA, conciliacaoHerdada } from '../lib/conciliacaoEtapaA'
+import { definirIdentidadeExport } from '../lib/exportExcel'
 import { aplicarAjustes, verificarPendencias } from '../lib/integridade/ajustes'
 import { chaveFaturaFechada, faturaEstaFechada } from '../lib/faturasFechadas'
 import { creditLimitUsage } from '../components/shared/utils'
@@ -1425,6 +1426,14 @@ export function AppProvider({ children }) {
     () => activeProfileId ? (data.profiles || []).find(p => p.id === activeProfileId) || null : null,
     [data.profiles, activeProfileId],
   )
+
+  // Identidade dos relatórios exportados (lib/exportExcel): nome/frase do ambiente e perfil filtrado.
+  useEffect(() => {
+    definirIdentidadeExport({
+      nomeAmbiente: data.settings?.rodapeTitulo, nomeUsuario: usuario?.nome,
+      frase: data.settings?.rodapeFrase, perfil: activeProfile?.name || '',
+    })
+  }, [data.settings?.rodapeTitulo, data.settings?.rodapeFrase, usuario, activeProfile])
 
   // Rateios indexados por lançamento (lancamento_id → [rateios]).
   const rateiosByLancamento = useMemo(() => {

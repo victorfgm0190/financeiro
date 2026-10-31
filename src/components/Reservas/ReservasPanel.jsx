@@ -3,7 +3,7 @@ import {
   Plus, Edit2, Trash2, RotateCcw, CheckCircle, AlertTriangle, Layers,
   ArrowDownCircle, ArrowUpCircle, PiggyBank, ChevronLeft, ChevronRight, FileSpreadsheet, GripVertical, MessageSquare, List,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { exportarExcel } from '../../lib/exportExcel'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate, accountsForView } from '../shared/utils'
 import { fetchReserveFunctionTransactions, fetchReserveLedgerMonths, fetchReserveLedgerBefore } from '../../lib/db'
@@ -24,18 +24,9 @@ import { parseValorBR, valorParaInput } from '../../lib/valorBR'
 
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
-// Salva uma matriz (array de arrays) como .xlsx
-function exportSheet(rows, filename) {
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Reservas')
-  XLSX.writeFile(wb, filename)
-}
-
-function mmYYYY() {
-  const d = new Date()
-  return `${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear()}`
-}
+// Relatórios exportados (layout em lib/exportExcel). Período do arquivo = mês atual (AAAA-MM).
+const mesAtualArquivo = () => isoLocal(new Date()).slice(0, 7)
+const exportarRelatorio = (spec) => exportarExcel(spec).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
 
 // Funções de reserva vivem no estado global (Neon). accountBalances segue local (override
 // de saldo real da conta — específico do dispositivo). O histórico de saldos iniciais e de
@@ -590,15 +581,34 @@ function ResumoTab({ functions, accounts, categories = [], accountBalances, adju
   }
 
   const handleExport = () => {
-    const rows = [['Função', 'Conta', 'Saldo Inicial', 'Entradas', 'Saídas', 'Saldo', 'Saldo Atualizado']]
+    const linhas = []
     groups.forEach(g => g.fns.forEach(f => {
-      rows.push([
-        f.name,
-        g.account ? (g.account.apelido || g.account.name) : 'Sem conta',
-        f.saldoInicial, f.entradas, f.saidas, computeSaldo(f), saldosAtualizados[f.id] ?? computeSaldo(f),
-      ])
+      linhas.push({
+        funcao: f.name,
+        conta: g.account ? (g.account.apelido || g.account.name) : 'Sem conta',
+        inicial: f.saldoInicial, entradas: f.entradas, saidas: f.saidas, saldo: computeSaldo(f),
+        atualizado: saldosAtualizados[f.id] ?? computeSaldo(f),
+      })
     }))
-    exportSheet(rows, `reservas-resumo-${mmYYYY()}.xlsx`)
+    const moeda = (chave, titulo, cor) => ({ chave, titulo, tipo: 'moeda', ...(cor ? { cor: () => cor } : {}) })
+    exportarRelatorio({
+      titulo: 'Reservas — Resumo', nome: 'Resumo',
+      filtros: [`Posição em ${fmtDate(isoLocal(new Date()))}`],
+      resumo: [
+        { rotulo: 'Saldo inicial', soma: 'inicial' },
+        { rotulo: 'Entradas', soma: 'entradas', cor: 'verde' },
+        { rotulo: 'Saídas', soma: 'saidas', cor: 'vermelho' },
+        { rotulo: 'Saldo atualizado', soma: 'atualizado' },
+      ],
+      colunas: [
+        { chave: 'funcao', titulo: 'Função' }, { chave: 'conta', titulo: 'Conta' },
+        moeda('inicial', 'Saldo Inicial'), moeda('entradas', 'Entradas', 'receita'), moeda('saidas', 'Saídas', 'despesa'),
+        moeda('saldo', 'Saldo'), moeda('atualizado', 'Saldo Atualizado'),
+      ],
+      linhas,
+      totais: { rotulo: (n) => `${n} ${n === 1 ? 'função' : 'funções'}`, somar: ['inicial', 'entradas', 'saidas', 'saldo', 'atualizado'] },
+      nomeArquivo: { relatorio: 'Reservas-Resumo', periodo: mesAtualArquivo() },
+    })
   }
 
   return (
@@ -1693,18 +1703,33 @@ function FluxoTab({ functions, accounts, categories, saldosAtualizados, schedule
   const contaReservaOf = (account) => account ? (account.apelido || account.name) : ''
 
   const handleExport = () => {
-    const header = ['Função', 'Conta', 'Categoria', 'Conta Reserva', 'Total Investido']
-    windowMonths.forEach(wm => {
+    const colsMes = []
+    windowMonths.forEach((wm, i) => {
       const lbl = `${wm.label}/${yy(wm.year)}`
-      header.push(`${lbl} Dep`, `${lbl} Res`, `${lbl} Saldo`)
+      colsMes.push(
+        { chave: `dep${i}`, titulo: `${lbl} Dep`, tipo: 'moeda', cor: () => 'receita' },
+        { chave: `res${i}`, titulo: `${lbl} Res`, tipo: 'moeda', cor: () => 'despesa' },
+        { chave: `saldo${i}`, titulo: `${lbl} Saldo`, tipo: 'moeda' },
+      )
     })
-    const rows = [header]
-    projections.forEach(({ f, account, monthly }) => {
-      const row = [f.name, account ? (account.apelido || account.name) : '', catOf(account), contaReservaOf(account), saldosAtualizados[f.id] || 0]
-      monthly.forEach(d => row.push(d.dep, d.res, d.saldo))
-      rows.push(row)
+    const linhas = projections.map(({ f, account, monthly }) => {
+      const l = { funcao: f.name, conta: account ? (account.apelido || account.name) : '', categoria: catOf(account), reserva: contaReservaOf(account), investido: saldosAtualizados[f.id] || 0 }
+      monthly.forEach((d, i) => { l[`dep${i}`] = d.dep; l[`res${i}`] = d.res; l[`saldo${i}`] = d.saldo })
+      return l
     })
-    exportSheet(rows, `reservas-fluxo-${mmYYYY()}.xlsx`)
+    const primeiro = windowMonths[0], ultimo = windowMonths[windowMonths.length - 1]
+    exportarRelatorio({
+      titulo: 'Reservas — Fluxo Futuro', nome: 'Fluxo Futuro',
+      filtros: primeiro ? [`Meses: ${primeiro.label}/${yy(primeiro.year)} a ${ultimo.label}/${yy(ultimo.year)}`] : [],
+      resumo: [{ rotulo: 'Total investido', soma: 'investido' }],
+      colunas: [
+        { chave: 'funcao', titulo: 'Função' }, { chave: 'conta', titulo: 'Conta' }, { chave: 'categoria', titulo: 'Categoria' },
+        { chave: 'reserva', titulo: 'Conta Reserva' }, { chave: 'investido', titulo: 'Total Investido', tipo: 'moeda' }, ...colsMes,
+      ],
+      linhas,
+      totais: { rotulo: (n) => `${n} ${n === 1 ? 'função' : 'funções'}`, somar: ['investido', ...colsMes.map(c => c.chave)] },
+      nomeArquivo: { relatorio: 'Reservas-Fluxo-Futuro', periodo: mesAtualArquivo() },
+    })
   }
 
   if (linked.length === 0) {

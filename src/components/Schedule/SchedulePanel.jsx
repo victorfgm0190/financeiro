@@ -17,10 +17,11 @@ import { ORIGIN } from '../../lib/origins'
 import { occEfetiva, escalarRateios } from '../../lib/fluxoCaixa'
 import { TIPO_BAIXA, metaBaixaGerada } from '../../lib/scheduleBaixa'
 import { parseValorBR, valorParaInput } from '../../lib/valorBR'
-import { scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
+import { PERIODOS, scheduleDisplayDueDate, filtrarAgendamentos, STATUS, STATUS_POR_ABA, opcoesPeriodo, filtrarPorStatusPeriodo, filtrarPagosPorPeriodo, filtrarFaturasPorPeriodo, contarFiltrosAvancados, lerFiltrosAba, salvarFiltrosAba, periodoPadrao, AVANCADOS_VAZIOS, etiquetasFiltros } from '../../lib/agendamentosFiltro'
 import { buildScheduleGroups, rotuloFaturasSeguintes } from '../../lib/agendamentosGrupos'
+import { exportarExcel } from '../../lib/exportExcel'
 import { TIPOS_AGENDAMENTO, filtrarPorTipo, contarPorTipo, lerTipoAgendamento, salvarTipoAgendamento } from '../../lib/agendamentosTipo'
-import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, exportarAgendamentosExcel } from '../../lib/exportarAgendamentos'
+import { linhasDosAgendamentos, linhasDosPagos, linhasDasFaturas, specAgendamentos, periodoDoArquivo } from '../../lib/exportarAgendamentos'
 import SeloContrato from '../Contratos/SeloContrato'
 import { rotuloFrequencia } from '../../lib/contratos/parcelas'
 import ExcluirParcelaContratoModal from '../Contratos/ExcluirParcelaContratoModal'
@@ -3036,7 +3037,8 @@ export default function SchedulePanel() {
   )
 
   // Exportar Excel: o que a lista mostra agora (aba, status, período, filtros e ordem da tabela).
-  const exportarExcel = () => {
+  const [exportando, setExportando] = useState(false)
+  const exportarParaExcel = () => {
     const ctx = { accounts: allAccounts, categories, gerencialGroups, tiposDocumento, hoje: hojeStr }
     const agrupar = activeTab === 'cartao' ? !hasActiveFilter : (!hasActiveFilter && selContas.size === 0)
     const linhas = abaPagos ? linhasDosPagos(pagosVisiveis, ctx)
@@ -3045,7 +3047,25 @@ export default function SchedulePanel() {
           ...(activeTab === 'cartao' ? linhasDasFaturas(invoiceVisiveis, ctx) : []),
           ...linhasDosAgendamentos(buildScheduleGroups(visibleSchedules, getNextOccurrences, { agruparSeries: agrupar }), ctx),
         ]
-    exportarAgendamentosExcel(linhas, { gerencial: controleGerencialAtivo(settings) })
+    const nomeAba = { conta: 'Agendamentos', cartao: 'Cartão de Crédito', gerencial: 'Gerencial', anuais: 'Contas Anuais' }[activeTab]
+    const conta = (id) => { const a = allAccounts.find(x => x.id === id); return a ? (a.apelido || a.name) : id }
+    const filtros = [
+      `Aba: ${nomeAba}`,
+      `Status: ${STATUS[statusAtual]?.label || statusAtual}`,
+      ...(periodoAtual !== 'custom' ? [`Período: ${PERIODOS[periodoAtual] || periodoAtual}`] : []),
+      `Tipo: ${TIPOS_AGENDAMENTO.find(t => t.id === tipoMov)?.label || 'Todos'}`,
+      ...etiquetas.map(e => e.texto),
+      ...(activeTab === 'cartao' && cartaoFiltroId ? [`Cartão: ${conta(cartaoFiltroId)}`] : []),
+      ...(contaReserva ? [`Conta de reserva: ${conta(contaReserva)}`] : []),
+      ...(filtroContasAtivo && selContas.size ? [`Contas envolvidas: ${[...selContas].map(conta).join(', ')}`] : []),
+      ...(showZeroed ? ['Com zerados'] : []),
+    ]
+    setExportando(true)
+    exportarExcel(specAgendamentos(linhas, {
+      tipo: tipoMov, filtros, periodo: periodoDoArquivo(periodoAtual, { de: dataDe, ate: dataAte, hoje: hojeStr }),
+    }))
+      .catch(err => setAvisoForm({ mensagem: `Não consegui exportar: ${err?.message || err}`, variante: 'error' }))
+      .finally(() => setExportando(false))
   }
 
   const handleMarkPaid = id => updatePayable(id, { status: 'paid', paidAt: new Date().toISOString() })
@@ -3100,7 +3120,7 @@ export default function SchedulePanel() {
             ))}
           </div>
           {!emCalendario && (
-            <button type="button" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={exportarExcel} title="Exportar a lista filtrada para Excel">
+            <button type="button" className="btn-secondary flex items-center gap-2 whitespace-nowrap" onClick={exportarParaExcel} disabled={exportando} title="Exportar a lista filtrada para Excel">
               <FileSpreadsheet size={14} /> <span className="hidden sm:inline">Exportar Excel</span><span className="sm:hidden">Excel</span>
             </button>
           )}

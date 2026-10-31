@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { RotateCcw, FileSpreadsheet, ChevronUp, ChevronDown, AlertTriangle, ExternalLink } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { exportarExcel } from '../../lib/exportExcel'
 import { fetchReserveLedgerMonths, fetchReserveLedgerSummary } from '../../lib/db'
 import { fmt, fmtDate } from '../shared/utils'
 import { useThemeColors } from '../../hooks/useTheme'
@@ -231,25 +231,39 @@ export default function RazaoDiarioTab({ functions = [], snapshots = [], onVerPe
   }
 
   const handleExportExcel = () => {
+    const opc = (v) => (v === null || v === undefined ? null : num(v))
     const linhas = sorted.map(r => ({
-      Data: r.snapshot_date,
-      'Função': r._nome,
-      Entrada: num(r.entrada_dia),
-      'Saída': num(r.saida_dia),
-      Ajuste: num(r.ajuste_dia),
-      'Saldo Acumulado': num(r.saldo_acumulado),
-      'Saldo Atualizado': num(r.saldo_atualizado),
-      'Saldo Real da Conta': r.saldo_real_conta === null ? '' : num(r.saldo_real_conta),
-      'Fator de Rateio': r.fator_rateio === null ? '' : num(r.fator_rateio),
-      'Divergência': num(r.divergencia),
-      'Divergência %': r.divergencia_pct === null ? '' : num(r.divergencia_pct),
+      data: r.snapshot_date, funcao: r._nome, entrada: num(r.entrada_dia), saida: num(r.saida_dia), ajuste: num(r.ajuste_dia),
+      acumulado: num(r.saldo_acumulado), atualizado: num(r.saldo_atualizado), real: opc(r.saldo_real_conta),
+      fator: opc(r.fator_rateio), divergencia: num(r.divergencia), divergenciaPct: opc(r.divergencia_pct),
     }))
-    const ws = XLSX.utils.json_to_sheet(linhas)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Razão Diário')
     const hoje = new Date()
     const stamp = `${hoje.getFullYear()}${String(hoje.getMonth() + 1).padStart(2, '0')}${String(hoje.getDate()).padStart(2, '0')}`
-    XLSX.writeFile(wb, `razao-diario-${stamp}.xlsx`)
+    const nomesSel = funcoesNoRazao.filter(f => selectedFunctions.includes(f.id)).map(f => f.name)
+    const moeda = (chave, titulo, cor) => ({ chave, titulo, tipo: 'moeda', ...(cor ? { cor: () => cor } : {}) })
+    exportarExcel({
+      titulo: 'Razão Diário das Reservas', nome: 'Razão Diário',
+      filtros: [
+        selectedMonth ? `Mês: ${selectedMonth.split('-').reverse().join('/')}` : 'Mês: todos',
+        nomesSel.length ? `Funções: ${nomesSel.join(', ')}` : 'Funções: todas',
+      ],
+      resumo: [
+        { rotulo: 'Entradas', soma: 'entrada', cor: 'verde' },
+        { rotulo: 'Saídas', soma: 'saida', cor: 'vermelho' },
+        { rotulo: 'Ajustes', soma: 'ajuste' },
+        { rotulo: 'Lançamentos', contar: true },
+      ],
+      colunas: [
+        { chave: 'data', titulo: 'Data', tipo: 'data' }, { chave: 'funcao', titulo: 'Função' },
+        moeda('entrada', 'Entrada', 'receita'), moeda('saida', 'Saída', 'despesa'), moeda('ajuste', 'Ajuste'),
+        moeda('acumulado', 'Saldo Acumulado'), moeda('atualizado', 'Saldo Atualizado'), moeda('real', 'Saldo Real da Conta'),
+        { chave: 'fator', titulo: 'Fator de Rateio', tipo: 'numero' }, moeda('divergencia', 'Divergência'),
+        { chave: 'divergenciaPct', titulo: 'Divergência %', tipo: 'numero' },
+      ],
+      linhas,
+      totais: { rotulo: (n) => `${n} ${n === 1 ? 'linha' : 'linhas'}`, somar: ['entrada', 'saida', 'ajuste'] },
+      nomeArquivo: { relatorio: 'Razao-Diario', periodo: selectedMonth || stamp },
+    }).catch(err => window.alert(`Não consegui exportar: ${err?.message || err}`))
   }
 
   const temFiltro = !!selectedMonth || selectedFunctions.length > 0

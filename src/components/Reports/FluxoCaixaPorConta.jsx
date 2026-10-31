@@ -3,7 +3,7 @@ import { novoLoteId, historicoDataAgendamento } from '../../lib/historico'
 import { serieKeyDe } from '../../lib/camposSerie'
 import { format, addDays } from 'date-fns'
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calendar, ChevronDown, FileSpreadsheet, Plus, Pencil, Trash2, CheckCircle2, RotateCcw, Pin } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { exportarExcel } from '../../lib/exportExcel'
 import { useApp } from '../../context/AppContext'
 import { fmt, fmtSinal, fmtDate, accountsForView, groupedAccountOptions } from '../shared/utils'
 import { computeFluxoCaixa, occEfetiva } from '../../lib/fluxoCaixa'
@@ -25,14 +25,6 @@ const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
 const SEM_EXCLUSOES = new Set()
 const SEM_DATAS = new Map()
-
-// Salva uma matriz (array de arrays) como .xlsx — mesmo padrão usado em Reservas → Fluxo Futuro.
-function exportSheet(rows, filename) {
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa')
-  XLSX.writeFile(wb, filename)
-}
 
 // Token de visão para o nome do arquivo.
 const VISAO_FILE = { conta: 'PorConta', grupo: 'PorGrupo', principais: 'ContasPrincipais' }
@@ -404,26 +396,46 @@ export default function FluxoCaixaPorConta() {
   // Saldo pular sem explicação. Inclui as linhas de Saldo anterior e o Total. Datas provisórias
   // saem com a data nova (a mesma da tela), para as somas da planilha fecharem com o relatório.
   const handleExport = () => {
-    const header = ['Data', 'Descrição', 'Conta De', 'Conta Para', 'Categoria', 'Conta Reserva', 'Entrada (R$)', 'Saída (R$)', 'Saldo (R$)', 'Status']
-    const aoa = [header]
-    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior realizado', '', '', '', '', '', '', round2(saldoAnteriorRealizado), ''])
-    aoa.push([prevDayStr ? fmtDate(prevDayStr) : '', 'Saldo anterior c/ agendamentos', '', '', '', '', '', '', round2(saldoAnteriorComAgendamentos), ''])
-    rowsView.filter(r => r.ativa).forEach(r => {
-      aoa.push([
-        fmtDate(r.date),
-        r.description,
-        contaDe(r),
-        contaPara(r),
-        catName(r.categoryId),
-        contaReserva(r),
-        r.entrada > 0 ? round2(r.entrada) : '',
-        r.saida > 0 ? round2(r.saida) : '',
-        round2(r.saldo),
-        r.status,
-      ])
-    })
-    aoa.push(['', 'Total', '', '', '', '', round2(totalEntrada), round2(totalSaida), round2(saldoFinal), ''])
-    exportSheet(aoa, `FluxoCaixa_${VISAO_FILE[visao] || visao}_${start}_${end}.xlsx`)
+    const linhas = [
+      { data: prevDayStr || null, descricao: 'Saldo anterior realizado', saldo: round2(saldoAnteriorRealizado), _estilo: 'grupo' },
+      { data: prevDayStr || null, descricao: 'Saldo anterior c/ agendamentos', saldo: round2(saldoAnteriorComAgendamentos), _estilo: 'grupo' },
+      ...rowsView.filter(r => r.ativa).map(r => ({
+        data: r.date, descricao: r.description, de: contaDe(r), para: contaPara(r), categoria: catName(r.categoryId),
+        reserva: contaReserva(r), entrada: r.entrada > 0 ? round2(r.entrada) : null, saida: r.saida > 0 ? round2(r.saida) : null,
+        saldo: round2(r.saldo), status: r.status,
+      })),
+    ]
+    const contas = (visao === 'grupo' ? [] : selectedAccounts.map(a => a.apelido || a.name)).join(', ')
+    const grupo = visao === 'grupo' ? (accountGroups || []).find(g => g.id === groupId)?.name : ''
+    const base = round2(saldoAnteriorComAgendamentos)
+    exportarExcel({
+      titulo: 'Fluxo de Caixa por Conta', nome: 'Fluxo de Caixa',
+      filtros: [
+        `Período: ${fmtDate(start)} a ${fmtDate(end)}`,
+        `Visão: ${VISOES.find(v => v.id === visao)?.label || visao}`,
+        ...(contas ? [`Contas: ${contas}`] : []), ...(grupo ? [`Grupo: ${grupo}`] : []),
+        includeSchedules ? 'Com agendamentos' : 'Sem agendamentos',
+        ...(hideReserva ? ['Sem movimentos de reserva'] : []), ...(hidePatrimonio ? ['Sem movimentos de patrimônio'] : []),
+      ],
+      resumo: [
+        { rotulo: 'Saldo anterior', valor: base },
+        { rotulo: 'Entradas', soma: 'entrada', cor: 'verde' },
+        { rotulo: 'Saídas', soma: 'saida', cor: 'vermelho' },
+        { rotulo: 'Saldo final', partes: [{ sinal: 1, valor: base }, { sinal: 1, soma: 'entrada' }, { sinal: -1, soma: 'saida' }] },
+      ],
+      colunas: [
+        { chave: 'data', titulo: 'Data', tipo: 'data' }, { chave: 'descricao', titulo: 'Descrição' },
+        { chave: 'de', titulo: 'Conta De' }, { chave: 'para', titulo: 'Conta Para' }, { chave: 'categoria', titulo: 'Categoria' },
+        { chave: 'reserva', titulo: 'Conta Reserva' },
+        { chave: 'entrada', titulo: 'Entrada (R$)', tipo: 'moeda', cor: () => 'receita' },
+        { chave: 'saida', titulo: 'Saída (R$)', tipo: 'moeda', cor: () => 'despesa' },
+        { chave: 'saldo', titulo: 'Saldo (R$)', tipo: 'moeda', cor: (l) => (l.saldo < 0 ? 'despesa' : null) },
+        { chave: 'status', titulo: 'Status', tipo: 'status' },
+      ],
+      linhas,
+      totais: { rotulo: (n) => `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`, somar: ['entrada', 'saida'] },
+      nomeArquivo: { relatorio: `Fluxo-de-Caixa_${VISAO_FILE[visao] || visao}`, periodo: `${start}_${end}` },
+    }).catch(err => setToast({ message: `Não consegui exportar: ${err?.message || err}`, variant: 'error' }))
   }
 
   const noSelection = accountIds.size === 0

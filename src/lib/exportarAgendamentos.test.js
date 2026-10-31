@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { filtrarAgendamentos } from './agendamentosFiltro'
 import { buildScheduleGroups } from './agendamentosGrupos'
+import { filtrarPorTipo } from './agendamentosTipo'
+import { montarPlanilha, nomeArquivoFinup } from './exportExcel'
 import {
-  linhasDosAgendamentos, linhasDosPagos, planilhaAgendamentos, colunasExportacao, nomeArquivoAgendamentos,
+  linhasDosAgendamentos, linhasDosPagos, specAgendamentos, periodoDoArquivo,
 } from './exportarAgendamentos'
 
 const HOJE = '2026-10-31'
@@ -14,76 +16,71 @@ const ag = (id, extra) => ({
 })
 const ctx = {
   accounts: [{ id: 'cc', name: 'Conta Corrente', apelido: 'CC1' }, { id: 'res', name: 'Reserva' }],
-  categories: [{ id: 'cat_luz', name: 'Energia' }, { id: 'cat_agua', name: 'Água' }],
-  gerencialGroups: [{ id: 'grp_1', number: 1, alias: 'G', name: 'Gerencial' }],
-  tiposDocumento: [{ id: 'td_bol', sigla: 'BOL', nome: 'Boleto' }],
+  categories: [{ id: 'cat_luz', name: 'Energia' }, { id: 'cat_sal', name: 'Salário' }],
   hoje: HOJE,
 }
-
 const schedules = [
-  ag('LUZ DEZ', { _next: ['2026-12-10'], amount: 210.5, categoryId: 'cat_luz', payee: 'Enel', costCenter: 'Casa', tipoDocumentoId: 'td_bol' }),
-  ag('AGUA', { _next: ['2026-11-05'], amount: 80, categoryId: 'cat_agua' }),
-  ag('LUZ ATRASADA', { _next: ['2026-10-20'], amount: 190, categoryId: 'cat_luz', grupoGerencial: 'grp_1' }),
-  ag('FINANC', {
-    _next: ['2026-11-15'], amount: 500, categoryId: 'cat_luz', frequency: 'monthly', occurrenceType: 'installment',
-    installments: 4, startDate: '2026-10-15', registered: ['2026-10-15'],
-  }),
+  ag('LUZ DEZ', { _next: ['2026-12-10'], amount: 210.5, categoryId: 'cat_luz', payee: 'Enel' }),
+  ag('SALARIO', { _next: ['2026-11-05'], amount: 5000, categoryId: 'cat_sal', transactionType: 'income', payee: 'Empresa' }),
+  ag('LUZ ATRASADA', { _next: ['2026-10-20'], amount: 190, categoryId: 'cat_luz' }),
+  ag('RESERVA', { _next: ['2026-11-15'], amount: 300, transactionType: 'transfer', toAccountId: 'res' }),
   ag('ANTIGA', { _next: [], amount: 50, categoryId: 'cat_luz', startDate: '2026-03-01', registered: ['2026-03-01'] }),
 ]
-
-const exportar = (filtros) => linhasDosAgendamentos(
-  buildScheduleGroups(filtrarAgendamentos(schedules, filtros, next, HOJE), next, { agruparSeries: false }), ctx)
+const linhasDa = (filtros = {}, tipo = 'todos') => linhasDosAgendamentos(
+  buildScheduleGroups(filtrarPorTipo(filtrarAgendamentos(schedules, filtros, next, HOJE), tipo), next, { agruparSeries: false }), ctx)
 
 describe('exportação de agendamentos', () => {
-  it('sem filtro: tudo, na ordem da tabela (por vencimento; concluídos no fim)', () => {
-    const l = exportar({})
-    expect(l.map(x => x.descricao)).toEqual(['LUZ ATRASADA', 'AGUA', 'FINANC', 'LUZ DEZ', 'ANTIGA'])
-    expect(l.map(x => x.status)).toEqual(['Em atraso', 'A pagar', 'A pagar', 'A pagar', 'Concluído'])
+  it('ordem da tabela e status no vocabulário do relatório', () => {
+    const l = linhasDa()
+    expect(l.map(x => x.descricao)).toEqual(['LUZ ATRASADA', 'SALARIO', 'RESERVA', 'LUZ DEZ', 'ANTIGA'])
+    expect(l.map(x => x.status)).toEqual(['Vencido', 'A receber', 'Pendente', 'A pagar', 'Pago'])
+    expect(l.map(x => x.tipo)).toEqual(['Saída', 'Entrada', 'Transferência', 'Saída', 'Saída'])
+    expect(l.find(x => x.descricao === 'RESERVA').conta).toBe('CC1 → Reserva')
   })
 
-  it('respeita os filtros da tela (categoria + faixa de valor + descrição)', () => {
-    expect(exportar({ categoryId: 'cat_luz', min: 200 }).map(x => x.descricao)).toEqual(['FINANC', 'LUZ DEZ'])
-    expect(exportar({ desc: 'luz' }).map(x => x.descricao)).toEqual(['LUZ ATRASADA', 'LUZ DEZ'])
-    expect(exportar({ from: '2026-11-01', to: '2026-11-30' }).map(x => x.descricao)).toEqual(['AGUA', 'FINANC'])
+  it('respeita os filtros da tela (categoria + valor + período + tipo)', () => {
+    expect(linhasDa({ categoryId: 'cat_luz', min: 200 }).map(x => x.descricao)).toEqual(['LUZ DEZ'])
+    expect(linhasDa({ from: '2026-11-01', to: '2026-11-30' }).map(x => x.descricao)).toEqual(['SALARIO', 'RESERVA'])
+    expect(linhasDa({}, 'entradas').map(x => x.descricao)).toEqual(['SALARIO'])
   })
 
-  it('campos: favorecido, conta, categoria, centro de custo, tipo doc., parcela, valor numérico', () => {
-    const l = exportar({})
-    const luz = l.find(x => x.descricao === 'LUZ DEZ')
-    expect(luz).toMatchObject({
-      vencimento: '2026-12-10', favorecido: 'Enel', conta: 'CC1', categoria: 'Energia', centroCusto: 'Casa',
-      tipoDocumento: 'BOL', valor: 210.5,
-    })
-    expect(l.find(x => x.descricao === 'FINANC').parcela).toBe('2/4')
-    expect(l.find(x => x.descricao === 'LUZ ATRASADA').grupoGerencial).toBe('G - Gerencial')
-  })
-
-  it('Grupo gerencial só com o controle gerencial ligado', () => {
-    expect(colunasExportacao({ gerencial: true }).map(([, h]) => h)).toContain('Grupo gerencial')
-    expect(colunasExportacao({ gerencial: false }).map(([, h]) => h)).not.toContain('Grupo gerencial')
-    expect(colunasExportacao({ gerencial: false }).map(([, h]) => h)).toEqual([
-      'Vencimento', 'Descrição', 'Favorecido', 'Conta', 'Categoria', 'Centro de custo', 'Tipo de documento', 'Parcela', 'Valor', 'Status',
+  it.each([
+    ['todos', 'Agendamentos (a pagar e a receber)', 'Finup_Agendamentos_a-pagar-e-receber_2026-10.xlsx', ['Total a receber', 'Total a pagar', 'Saldo previsto'], true],
+    ['entradas', 'Agendamentos (a receber)', 'Finup_Agendamentos_a-receber_2026-10.xlsx', ['Total previsto', 'Recebido', 'A receber', 'Vencido'], false],
+    ['saidas', 'Agendamentos (a pagar)', 'Finup_Agendamentos_a-pagar_2026-10.xlsx', ['Total previsto', 'Pago', 'A pagar', 'Vencido'], false],
+    ['transferencias', 'Agendamentos (transferências)', 'Finup_Agendamentos_transferencias_2026-10.xlsx', ['Total previsto', 'Realizado', 'Pendente', 'Vencido'], false],
+  ])('tipo %s: título, arquivo, resumo e colunas', (tipo, titulo, arquivo, resumo, comTipo) => {
+    const spec = specAgendamentos(linhasDa({}, tipo), { tipo, filtros: [`Tipo: ${tipo}`], periodo: periodoDoArquivo('mes', { hoje: HOJE }) })
+    expect(spec.titulo).toBe(titulo)
+    expect(nomeArquivoFinup(spec.nomeArquivo.relatorio, spec.nomeArquivo.periodo)).toBe(arquivo)
+    expect(spec.resumo.map(r => r.rotulo)).toEqual(resumo)
+    expect(spec.colunas.map(c => c.titulo)).toEqual([
+      'Vencimento', 'Cliente/Favorecido', 'Descrição', 'Categoria', ...(comTipo ? ['Tipo'] : []), 'Valor (R$)', 'Conta', 'Status',
     ])
+    expect(spec.filtros).toContain(`Tipo: ${tipo}`)
   })
 
-  it('planilha: valor é número em R$, vencimento é data', () => {
-    const wb = planilhaAgendamentos(exportar({ desc: 'luz dez' }), { gerencial: true })
-    const ws = wb.Sheets.Agendamentos
-    expect(ws.A1.v).toBe('Vencimento')
-    expect(ws.A2).toMatchObject({ t: 'n', z: 'dd/mm/yyyy' })
-    expect(XLSX.SSF.format('dd/mm/yyyy', ws.A2.v)).toBe('10/12/2026')
-    expect(ws.J2).toMatchObject({ t: 'n', v: 210.5 })
-    expect(ws.J2.z).toContain('R$')
+  it('planilha "Todos": saldo previsto = a receber − a pagar (transferência fora), por fórmula', async () => {
+    const spec = specAgendamentos(linhasDa(), { tipo: 'todos' })
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(await montarPlanilha(ExcelJS, spec, { ident: { nomeAmbiente: 'X', frase: '', perfil: 'Todos os perfis' } }).xlsx.writeBuffer())
+    const ws = wb.worksheets[0]
+    const valores = [1, 2, 3, 4, 5, 6, 7, 8].map(c => ws.getRow(6).getCell(c)).filter(c => c.master.address === c.address).map(c => c.value).filter(v => v && v.formula)
+    expect(valores.map(v => v.result)).toEqual([5000, 450.5, 4549.5])
+    expect(valores[2].formula).toMatch(/^SUMIFS\(.+"Entrada"\)-SUMIFS\(.+"Saída"\)$/)
   })
 
-  it('aba Pagos: linhas já filtradas pela tela', () => {
+  it('aba Pagos: Recebido para entrada, Pago para saída', () => {
     const l = linhasDosPagos([
-      { key: 'a', vencimento: '2026-10-05', dataPagamento: '2026-10-04', description: 'AGUA', payee: 'Sabesp', accountId: 'cc', categoryId: 'cat_agua', amount: 79.9, parcela: 2, total: 12, schedule: { costCenter: 'Casa' } },
+      { vencimento: '2026-10-05', dataPagamento: '2026-10-04', description: 'AGUA', payee: 'Sabesp', accountId: 'cc', amount: 79.9, transactionType: 'expense' },
+      { vencimento: '2026-10-05', dataPagamento: '2026-10-05', description: 'SALARIO', payee: 'Empresa', accountId: 'cc', amount: 5000, transactionType: 'income' },
     ], ctx)
-    expect(l[0]).toMatchObject({ descricao: 'AGUA', parcela: '2/12', valor: 79.9, status: 'Pago em 04/10/2026', centroCusto: 'Casa' })
+    expect(l.map(x => x.status)).toEqual(['Pago', 'Recebido'])
   })
 
-  it('nome do arquivo agendamentos-AAAAMMDD.xlsx', () => {
-    expect(nomeArquivoAgendamentos(new Date(2026, 9, 31))).toBe('agendamentos-20261031.xlsx')
+  it('período do arquivo', () => {
+    expect(periodoDoArquivo('custom', { de: '2026-11-01', ate: '2026-11-30', hoje: HOJE })).toBe('20261101-20261130')
+    expect(periodoDoArquivo('futuros', { hoje: HOJE })).toBe('a-partir-de-20261031')
+    expect(periodoDoArquivo('tudo', { hoje: HOJE })).toBe('tudo')
   })
 })

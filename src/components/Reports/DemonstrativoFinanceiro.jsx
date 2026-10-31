@@ -8,7 +8,8 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import DateInput from '../shared/DateInput'
 import { filtrarCategoriasPorPerfil, categoriasComMovimento } from '../../lib/categoriasPerfil'
 import { ordenarCategorias } from '../../lib/ordemCategorias'
-import { hojeSP, isoLocal } from '../../lib/hoje'
+import { isoLocal } from '../../lib/hoje'
+import { exportarExcel } from '../../lib/exportExcel'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -228,101 +229,59 @@ function exportCSV(report, showTx, from, to) {
   URL.revokeObjectURL(url)
 }
 
-// Exporta o Demonstrativo em .xlsx formatado (hierarquia + cores). Percorre o MESMO
-// objeto `report` na mesma ordem do CSV; lançamentos seguem o toggle "Exibir lançamentos".
+// Exporta o Demonstrativo para Excel (layout em lib/exportExcel). Percorre o MESMO `report` na
+// mesma ordem do CSV: seção, grupo e subcategoria viram linhas de agrupamento (fora das somas);
+// os lançamentos seguem o toggle "Exibir lançamentos". Valores com sinal (despesa negativa).
 const MES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-async function exportExcel(report, showTx, from, to) {
-  const ExcelJS = (await import('exceljs')).default
-  const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet('Demonstrativo', { views: [{ state: 'frozen', ySplit: 2 }] })
-  ws.columns = [{ width: 3 }, { width: 22 }, { width: 20 }, { width: 12 }, { width: 13 }]
-
-  const solid = h => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + h } })
-  const POS = 'FF1A6B3C', NEG = 'FFA61C1C'
-  const fmtD = d => { if (!d) return ''; const [y, m, dd] = d.split('-'); return `${dd}/${m}/${y}` }
-
-  // Aplica fill + fonte em A:E; formata e (opcionalmente) colore o valor da coluna E pelo sinal.
-  const style = (row, { fill, color = '1A1A1A', bold = false, italic = false, size = 10, height, valBySign = false }) => {
-    for (let c = 1; c <= 5; c++) {
-      const cell = row.getCell(c)
-      if (fill) cell.fill = solid(fill)
-      cell.font = { name: 'Calibri', size, bold, italic, color: { argb: 'FF' + color } }
-      cell.alignment = { vertical: 'middle', horizontal: c === 5 ? 'right' : 'left' }
-    }
-    const v = row.getCell(5)
-    if (typeof v.value === 'number') {
-      v.numFmt = 'R$ #,##0.00'
-      if (valBySign) v.font = { ...v.font, color: { argb: v.value < 0 ? NEG : POS } }
-    }
-    if (height) row.height = height
-  }
-
-  // ── Título ──
-  const [ty, tm] = (from || '').split('-')
-  const tRow = ws.addRow([`Demonstrativo Financeiro — ${MES_ABREV[Number(tm) - 1] || ''} ${ty || ''}`.trim()])
-  ws.mergeCells(`A${tRow.number}:E${tRow.number}`)
-  style(tRow, { fill: '1E3A5F', color: 'FFFFFF', bold: true, size: 13, height: 28 })
-
-  // ── Cabeçalho ──
-  style(ws.addRow(['Seção', 'Descrição', 'Favorecido', 'Data', 'Valor']),
-    { fill: '2C4E7A', color: 'FFFFFF', bold: true, size: 9 })
-
-  // ── Linhas auxiliares ──
-  let zebra = 0
-  const detailRow = (desc, fav, date, value) => {
-    const r = ws.addRow(['', desc || '—', fav || '', fmtD(date), value])
-    style(r, { fill: (zebra++ % 2 === 0) ? 'FFFFFF' : 'F7F9FC', size: 8.5, height: 15, valBySign: true })
-  }
-  const sectionRow = (label, total, isExpense) =>
-    style(ws.addRow(['', label, '', '', isExpense ? -total : total]),
-      { fill: isExpense ? '8B1A1A' : '0D5E3F', color: 'FFFFFF', bold: true, size: 10, height: 22 })
-  const groupRow = (name, total, isExpense) =>
-    style(ws.addRow(['', name, '', '', isExpense ? -total : total]),
-      { fill: isExpense ? 'FDEAEA' : 'D6EFE5', bold: true, size: 9.5, valBySign: true })
-  const subcatRow = (name, total, isExpense) =>
-    style(ws.addRow(['', name, '', '', isExpense ? -total : total]),
-      { fill: isExpense ? 'FEF5F5' : 'EEF8F3', italic: true, size: 9, valBySign: true })
-  const totalRow = (label, value, gold = false) =>
-    style(ws.addRow(['', label, '', '', value]), gold
-      ? { fill: 'F5C518', color: '1A1A1A', bold: true, size: 11, height: 22 }
-      : { fill: '1E3A5F', color: 'FFFFFF', bold: true, size: 10, height: 20 })
-
+async function exportExcel(report, showTx, from, to, filtros = []) {
+  const linhas = []
+  const agrup = (estilo, item, sub, valor) => linhas.push({ item, sub, valor, _estilo: estilo })
+  const detalhe = (g, s, tx, valor) => linhas.push({ item: g, sub: s, data: tx.date, desc: tx.description || '—', fav: tx.payee || '', valor })
   const addSection = (label, groups, total, isExpense) => {
     if (!groups.length) return
-    sectionRow(label, total, isExpense)
+    agrup('grupo', label, '', isExpense ? -total : total)
     groups.forEach(g => {
-      groupRow(g.name, g.total, isExpense)
+      agrup('subtotal', g.name, '', isExpense ? -g.total : g.total)
       g.subcats.forEach(s => {
-        if (!g.isFlat) subcatRow(s.name, s.total, isExpense)
+        if (!g.isFlat) agrup('subtotal', g.name, s.name, isExpense ? -s.total : s.total)
         if (showTx) s.txs.forEach(tx => {
           const comp = tx.type === 'income' && isResgateReservaSombra(tx) // compensação abate a despesa
-          detailRow(tx.description, tx.payee, tx.date, isExpense ? (comp ? tx.amount : -tx.amount) : tx.amount)
+          detalhe(g.name, g.isFlat ? '' : s.name, tx, isExpense ? (comp ? tx.amount : -tx.amount) : tx.amount)
         })
       })
     })
   }
-
-  // ── Mesma ordem do CSV: Receitas → Despesas → totais ──
   addSection('RECEITAS', report.income, report.totalIncome, false)
   addSection('DESPESAS', report.expenses, report.totalExpense, true)
-  totalRow('RESULTADO', report.totalIncome - report.totalExpense)
+  const resultado = report.totalIncome - report.totalExpense
+  agrup('total', 'RESULTADO', '', resultado)
   if (report.hasReservas) {
-    totalRow('Reservas Feitas', -report.totalReservasFeitas)
-    if (showTx) report.reservasFeitasTxs.forEach(tx => detailRow(tx.description, tx.payee, tx.date, -tx.amount))
-    totalRow('Reservas Utilizadas', report.totalReservasUtilizadas)
-    if (showTx) report.reservasUtilizadasTxs.forEach(tx => detailRow(tx.description, tx.payee, tx.date, tx.amount))
-    totalRow('Líquido de Reservas', report.liquidoReservas)
-    totalRow('LÍQUIDO GERAL', (report.totalIncome - report.totalExpense) + report.liquidoReservas, true)
+    agrup('total', 'Reservas Feitas', '', -report.totalReservasFeitas)
+    if (showTx) report.reservasFeitasTxs.forEach(tx => detalhe('Reservas Feitas', '', tx, -tx.amount))
+    agrup('total', 'Reservas Utilizadas', '', report.totalReservasUtilizadas)
+    if (showTx) report.reservasUtilizadasTxs.forEach(tx => detalhe('Reservas Utilizadas', '', tx, tx.amount))
+    agrup('total', 'Líquido de Reservas', '', report.liquidoReservas)
+    agrup('total', 'LÍQUIDO GERAL', '', resultado + report.liquidoReservas)
   }
-
-  const buf = await wb.xlsx.writeBuffer()
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `demonstrativo_${hojeSP()}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+  const [ty, tm] = (from || '').split('-')
+  await exportarExcel({
+    titulo: `Demonstrativo Financeiro — ${MES_ABREV[Number(tm) - 1] || ''} ${ty || ''}`.trim(), nome: 'Demonstrativo',
+    filtros: [`Período: ${fmtDate(from)} a ${fmtDate(to)}`, ...filtros, showTx ? 'Com lançamentos' : 'Sem lançamentos'],
+    resumo: [
+      { rotulo: 'Receitas', valor: report.totalIncome, cor: 'verde' },
+      { rotulo: 'Despesas', valor: report.totalExpense, cor: 'vermelho' },
+      { rotulo: 'Resultado', valor: resultado, cor: resultado < 0 ? 'vermelho' : 'verde' },
+      ...(report.hasReservas ? [{ rotulo: 'Líquido geral', valor: resultado + report.liquidoReservas }] : []),
+    ],
+    colunas: [
+      { chave: 'item', titulo: 'Seção / Grupo' }, { chave: 'sub', titulo: 'Subcategoria' }, { chave: 'data', titulo: 'Data', tipo: 'data' },
+      { chave: 'desc', titulo: 'Descrição' }, { chave: 'fav', titulo: 'Favorecido' },
+      { chave: 'valor', titulo: 'Valor', tipo: 'moeda', cor: (l) => (l.valor < 0 ? 'despesa' : 'receita') },
+    ],
+    linhas,
+    totais: false,
+    nomeArquivo: { relatorio: 'Demonstrativo', periodo: `${from}_${to}` },
+  })
 }
 
 // ─── Multi-select panel ──────────────────────────────────────────────────────
@@ -763,7 +722,16 @@ export default function DemonstrativoFinanceiro() {
           )}
           {report && (
             <button
-              onClick={() => exportExcel(report, applied.showTx, applied.from, applied.to).catch(e => console.error('[excel]', e))}
+              onClick={() => {
+                const nomesDe = (ids, lista) => ids.map(id => lista.find(x => x.id === id)).filter(Boolean).map(x => x.apelido || x.name)
+                const filtros = [
+                  applied.accs?.length ? `Contas: ${nomesDe(applied.accs, accounts).join(', ')}` : 'Contas: todas',
+                  applied.cats?.length ? `Categorias: ${nomesDe(applied.cats, categories).join(', ')}` : 'Categorias: todas',
+                  ...(hideReserva ? ['Sem movimentos de reserva'] : []), ...(hidePatrimonio ? ['Sem movimentos de patrimônio'] : []),
+                  ...(includeInterProfile ? ['Com transferências entre perfis'] : []),
+                ]
+                exportExcel(report, applied.showTx, applied.from, applied.to, filtros).catch(e => window.alert(`Não consegui exportar: ${e?.message || e}`))
+              }}
               className="btn-secondary flex items-center gap-2"
             >
               <FileSpreadsheet size={13} /> Exportar Excel
